@@ -185,6 +185,30 @@ public sealed class SqlServerFlightTests : IAsyncLifetime
         Assert.Equal("id", Assert.Single(keys)[3]);
     }
 
+    private async Task<Schema> TableSchemaAsync(ProxyClient client, string dataSource)
+    {
+        await foreach (var batch in await client.Raw.GetTablesAsync(tablePattern: Table, includeSchema: true, options: On(dataSource)))
+            if (batch.Length > 0)
+                return Apache.Arrow.Flight.Sql.SchemaExtensions.DeserializeSchema(((BinaryArray)batch.Column("table_schema")).GetBytes(0).ToArray());
+        throw new InvalidOperationException("The table was not listed.");
+    }
+
+    private static void AssertDeclaredColumns(Schema schema)
+    {
+        var price = Assert.IsType<Apache.Arrow.Types.Decimal128Type>(schema.GetFieldByName("price").DataType);
+        Assert.Equal((10, 2), (price.Precision, price.Scale));
+        Assert.False(schema.GetFieldByName("id").IsNullable);     // primary key
+        Assert.False(schema.GetFieldByName("name").IsNullable);   // declared NOT NULL
+        Assert.True(schema.GetFieldByName("price").IsNullable);
+    }
+
+    [Fact]
+    public async Task Table_schemas_carry_declared_precision_scale_and_nullability()
+    {
+        using var client = await LoginAsync();
+        AssertDeclaredColumns(await TableSchemaAsync(client, "sql"));
+    }
+
     [Fact]
     public async Task Table_schemas_are_included_on_request()
     {
@@ -211,6 +235,8 @@ public sealed class SqlServerFlightTests : IAsyncLifetime
             Assert.Equal("TABLE", table[3]);
             Assert.Equal("dbo", table[1]);
         }
+
+        AssertDeclaredColumns(await TableSchemaAsync(client, "odbc"));   // SQLColumns through the ODBC catalog API
 
         var rows = await RowsAsync(await client.Raw.QueryAsync($"SELECT name FROM dbo.{Table} WHERE id = ?", [2], On("odbc")));
         Assert.Equal("gadget", Assert.Single(rows)[0]);

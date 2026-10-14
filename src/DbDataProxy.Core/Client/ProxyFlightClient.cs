@@ -202,14 +202,26 @@ public sealed class ProxyFlightClient : IDisposable
         }
     }
 
-    private async Task<ByteString> PrepareAsync(string sql, Metadata headers, CancellationToken cancellationToken)
+    /// <summary>Prepares the statement on the server, reads the parameter schema it reports (one field per <c>?</c> marker) and closes it.</summary>
+    public async Task<Schema> DescribeParametersAsync(string sql, QueryOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        var headers = Headers(options);
+        var prepared = await PrepareCoreAsync(sql, headers, cancellationToken).ConfigureAwait(false);
+        try { return Apache.Arrow.Flight.Sql.SchemaExtensions.DeserializeSchema(prepared.ParameterSchema.ToByteArray()); }
+        finally { await CloseAsync(prepared.PreparedStatementHandle, headers).ConfigureAwait(false); }
+    }
+
+    private async Task<ByteString> PrepareAsync(string sql, Metadata headers, CancellationToken cancellationToken) =>
+        (await PrepareCoreAsync(sql, headers, cancellationToken).ConfigureAwait(false)).PreparedStatementHandle;
+
+    private async Task<ActionCreatePreparedStatementResult> PrepareCoreAsync(string sql, Metadata headers, CancellationToken cancellationToken)
     {
         var request = Any.Pack(new ActionCreatePreparedStatementRequest { Query = sql }).ToByteArray();
         using var call = _flight.DoAction(new FlightAction("CreatePreparedStatement", request), headers, null, cancellationToken);
-        ByteString? handle = null;
+        ActionCreatePreparedStatementResult? prepared = null;
         await foreach (var result in call.ResponseStream.ReadAllAsync(cancellationToken).ConfigureAwait(false))
-            handle = Any.Parser.ParseFrom(result.Body).Unpack<ActionCreatePreparedStatementResult>().PreparedStatementHandle;
-        return handle ?? throw new InvalidOperationException("The server did not return a prepared statement handle.");
+            prepared = Any.Parser.ParseFrom(result.Body).Unpack<ActionCreatePreparedStatementResult>();
+        return prepared ?? throw new InvalidOperationException("The server did not return a prepared statement handle.");
     }
 
     private async Task BindAsync(IMessage command, RecordBatch batch, Metadata headers, CancellationToken cancellationToken)

@@ -40,6 +40,9 @@ this for you.
 
 * Mark parameters with `?`, bound in column order. SQL Server sources also accept `@name` markers; the Arrow column
   names are used as the parameter names. Markers inside string literals, quoted identifiers and comments are ignored.
+* `CreatePreparedStatement` reports one parameter-schema field per `?` marker (`parameter_0`, `parameter_1`, ...). The
+  proxy cannot know the types the database expects without running the statement, so the fields are Arrow `Null`
+  ("any"); bind whatever types you have. `@name` markers are matched by the names you send and are not listed.
 * A query takes one row of parameters. An update runs once per row (a batch insert) and returns the summed count.
 * Supported Arrow types: booleans, integers, floats, decimals, strings, dates, timestamps, times, binary and nulls.
 * Values are bound through the provider's parameter API, never spliced into the SQL. ODBC drivers that reject 64-bit
@@ -173,7 +176,8 @@ exe: queries with every compression setting, updates, metadata and wrong-passwor
 * Catalog metadata: SQL Server and DuckDB sources are read from `INFORMATION_SCHEMA`. ODBC sources use the driver's
   catalog API (`SQLTables`, via `GetSchema`), so text/Excel/Access and other drivers without `INFORMATION_SCHEMA` work,
   including through the 32-bit worker. Set a data source's `"Metadata"` to `"odbc"` or `"informationschema"` to
-  override the default (`"auto"`). Per-table schemas quote names with the driver's own identifier character and fall
+  override the default (`"auto"`). Per-table schemas (`include_schema`) take decimal precision/scale and nullability
+  (key columns are NOT NULL) from the database catalog, because a zero-row query cannot always report them. Names are quoted with the driver's own identifier character and fall
   back to shorter names when the driver's catalog is not valid SQL. ODBC sources report no primary keys.
 * `AllowWrites` only gates statements a client sends as *updates*. A client that runs `INSERT`/`DDL` through the query
   path (ADBC's `cursor.execute` does) is limited only by the database account's permissions, so use read-only database

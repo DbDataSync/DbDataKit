@@ -59,6 +59,18 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
         return tables;
     }
 
+    public async Task<IReadOnlyList<ColumnEntry>> ListColumnsAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken)
+    {
+        var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
+        var payload = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new WorkerColumnsRequest(connectionString, catalog, schema, table), WorkerProtocol.Json);
+
+        using var call = client.DoAction(new FlightAction(WorkerProtocol.ListColumnsAction, payload), Headers(secret), null, cancellationToken);
+        var columns = new List<ColumnEntry>();
+        await foreach (var result in call.ResponseStream.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            columns.AddRange(System.Text.Json.JsonSerializer.Deserialize<List<ColumnEntry>>(result.Body.Span, WorkerProtocol.Json) ?? []);
+        return columns;
+    }
+
     public async Task<IdentifierQuote?> GetIdentifierQuoteAsync(CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);

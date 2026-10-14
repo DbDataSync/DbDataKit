@@ -45,6 +45,29 @@ public static class OdbcMetadata
         return quoted == probe || at < 0 ? null : new IdentifierQuote(quoted[..at], quoted[(at + probe.Length)..]);
     }
 
+    /// <summary>Declared columns of one table (SQLColumns). The catalog functions treat names as patterns, so rows are matched exactly here.</summary>
+    public static async Task<IReadOnlyList<ColumnEntry>> ListColumnsAsync(
+        OdbcConnection connection, string? catalog, string? schema, string table, CancellationToken cancellationToken)
+    {
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        var columns = new List<ColumnEntry>();
+        DataTable result;
+        try { result = connection.GetSchema("Columns", [catalog, schema, table, null]); }
+        catch (Exception ex) when (ex is OdbcException or NotSupportedException or InvalidOperationException) { return columns; }
+
+        foreach (DataRow row in result.Rows)
+        {
+            if (!string.Equals(Text(row, "TABLE_NAME"), table, StringComparison.Ordinal)) continue;
+            if (Text(row, "COLUMN_NAME") is not { } name) continue;
+            bool nullable = !string.Equals(Text(row, "IS_NULLABLE"), "NO", StringComparison.OrdinalIgnoreCase);
+            columns.Add(new ColumnEntry(name, nullable, Number(row, "COLUMN_SIZE"), Number(row, "DECIMAL_DIGITS")));
+        }
+        return columns;
+    }
+
+    private static int? Number(DataRow row, string column) =>
+        Text(row, column) is { } text && int.TryParse(text, out int value) ? value : null;
+
     private static string? Text(DataRow row, string column)
     {
         if (!row.Table.Columns.Contains(column) || row[column] is DBNull) return null;

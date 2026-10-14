@@ -12,6 +12,7 @@ public static class WorkerProtocol
     public const string NonQueryAction = "execute-nonquery";
     public const string ListTablesAction = "list-tables";
     public const string IdentifierQuoteAction = "identifier-quote";
+    public const string ListColumnsAction = "list-columns";
 
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -27,3 +28,6 @@ public sealed record WorkerRequest(
 
 /// <summary>Result of a non-query executed by the worker.</summary>
 public sealed record WorkerNonQueryResult(long Affected);
+
+/// <summary>Asks the worker for the declared columns of one table.</summary>
+public sealed record WorkerColumnsRequest(string ConnectionString, string? Catalog, string? Schema, string Table);

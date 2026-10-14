@@ -136,3 +136,20 @@ public class ParameterUnitTests
         Assert.Equal(12.50m, row[7].ToClr().Value);
     }
 }
+
+public class ParameterSchemaTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
+{
+    [Theory]
+    [InlineData("SELECT 1", 0)]
+    [InlineData("SELECT * FROM numbers WHERE id > ? AND id <= ?", 2)]
+    [InlineData("SELECT '?' AS literal, ? AS value -- ? in a comment", 1)]
+    public async Task Prepared_statements_report_one_parameter_field_per_marker(string sql, int expected)
+    {
+        using var client = proxy.Connect();
+        await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+
+        var schema = await client.Raw.DescribeParametersAsync(sql);
+        Assert.Equal(expected, schema.FieldsList.Count);
+        Assert.Equal(Enumerable.Range(0, expected).Select(i => "parameter_" + i), schema.FieldsList.Select(f => f.Name));
+    }
+}

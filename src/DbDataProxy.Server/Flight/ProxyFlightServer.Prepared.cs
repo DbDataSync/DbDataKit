@@ -78,9 +78,20 @@ public sealed partial class ProxyFlightServer
         {
             PreparedStatementHandle = ByteString.CopyFrom(handle),
             DatasetSchema = ByteString.CopyFrom(emptySchema),
-            ParameterSchema = ByteString.CopyFrom(emptySchema),
+            ParameterSchema = ByteString.CopyFrom(SchemaExtensions.SerializeSchema(ParameterSchemaFor(request.Query, source.Options.Provider))),
         };
         await output.WriteAsync(new FlightResult(Any.Pack(result).ToByteString())).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// One field per <c>?</c> marker, named by position. The proxy does not know the database's expected types without
+    /// running the statement, so the fields are Arrow Null ("any"); any value type is accepted when binding. Statements
+    /// with <c>@name</c> markers report no parameters, because those are matched by the names the client sends.
+    /// </summary>
+    internal static Schema ParameterSchemaFor(string sql, string provider)
+    {
+        int count = SqlMarkers.CountPositional(sql, bracketIdentifiers: provider.Equals("sqlserver", StringComparison.OrdinalIgnoreCase));
+        return new Schema(Enumerable.Range(0, count).Select(i => new Apache.Arrow.Field("parameter_" + i, Apache.Arrow.Types.NullType.Default, true)).ToList(), null);
     }
 
     protected override Task ClosePreparedStatement(

@@ -78,6 +78,9 @@ public sealed class ProxyFixture : IAsyncLifetime
               SELECT i::INTEGER AS id, 'name-' || i::VARCHAR AS name, (i * 1.5)::DOUBLE AS score,
                      DATE '2024-01-01' + CAST(i % 365 AS INTEGER) AS day
               FROM range(0, 10000) t(i);
+            CREATE TABLE prices(id INTEGER PRIMARY KEY, amount DECIMAL(12,3), note VARCHAR);
+            INSERT INTO prices VALUES (1, 1.5, 'a');
+            CREATE TABLE scaled AS SELECT i * 1.5 AS amount FROM range(0, 10) t(i);
             """;
         cmd.ExecuteNonQuery();
     }

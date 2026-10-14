@@ -62,6 +62,14 @@ public sealed class DbQueryExecutor(
         return await OdbcMetadata.ListTablesAsync(odbc, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<ColumnEntry>> ListColumnsAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken)
+    {
+        await using var connection = factory.CreateConnection(connectionString);
+        if (connection is not System.Data.Odbc.OdbcConnection odbc)
+            throw new NotSupportedException("Catalog-API metadata is only available for ODBC data sources.");
+        return await OdbcMetadata.ListColumnsAsync(odbc, catalog, schema, table, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<IdentifierQuote?> GetIdentifierQuoteAsync(CancellationToken cancellationToken)
     {
         await using var connection = factory.CreateConnection(connectionString);

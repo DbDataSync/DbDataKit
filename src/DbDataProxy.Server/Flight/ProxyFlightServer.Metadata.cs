@@ -106,9 +106,10 @@ public sealed partial class ProxyFlightServer
         if (command.IncludeSchema)
         {
             var quote = await LoadIdentifierQuoteAsync(source, context.CancellationToken).ConfigureAwait(false);
+            var declared = await LoadDeclaredColumnsAsync(source, context.CancellationToken).ConfigureAwait(false);
             var builder = new BinaryArray.Builder();
             foreach (var r in rows)
-                builder.Append((ReadOnlySpan<byte>)await SerializedTableSchemaAsync(source, quote, r[0], r[1], r[2]!, context.CancellationToken).ConfigureAwait(false));
+                builder.Append((ReadOnlySpan<byte>)await SerializedTableSchemaAsync(source, quote, declared, r[0], r[1], r[2]!, context.CancellationToken).ConfigureAwait(false));
             arrays.Add(builder.Build());
         }
         await WriteAsync(writer, GetTableSchema(command.IncludeSchema), arrays, rows.Count).ConfigureAwait(false);
@@ -312,9 +313,75 @@ public sealed partial class ProxyFlightServer
         }
     }
 
+    /// <summary>Looks up the declared columns of one table, by name; null when the database cannot say.</summary>
+    private delegate Task<IReadOnlyDictionary<string, ColumnEntry>?> DeclaredColumns(
+        string? catalogName, string? schemaName, string table, CancellationToken cancellationToken);
+
+    private const string ColumnsSql =
+        "SELECT table_catalog, table_schema, table_name, column_name, is_nullable, numeric_precision, numeric_scale FROM information_schema.columns";
+
+    /// <summary>
+    /// A zero-row query cannot always say how a column was declared (DuckDB reports every decimal as 0/0, nothing says
+    /// NOT NULL), so precision, scale and nullability come from the catalog: INFORMATION_SCHEMA, or SQLColumns for ODBC.
+    /// </summary>
+    private static async Task<DeclaredColumns> LoadDeclaredColumnsAsync(ResolvedDataSource source, CancellationToken cancellationToken)
+    {
+        if (UseCatalogApi(source))
+        {
+            if (source.Executor is not IMetadataProvider provider) return (_, _, _, _) => Task.FromResult<IReadOnlyDictionary<string, ColumnEntry>?>(null);
+            return async (catalogName, schemaName, table, ct) =>
+            {
+                try { return ByName(await provider.ListColumnsAsync(catalogName, schemaName, table, ct).ConfigureAwait(false)); }
+                catch (Exception ex) when (ex is not OperationCanceledException) { return null; }
+            };
+        }
+
+        Dictionary<(string?, string?, string), List<ColumnEntry>> byTable = [];
+        try
+        {
+            foreach (var r in await QueryRowsAsync(source, ColumnsSql, cancellationToken).ConfigureAwait(false))
+            {
+                if (r[2] is null || r[3] is null) continue;
+                var key = (r[0], r[1], r[2]);
+                if (!byTable.TryGetValue(key, out var list)) byTable[key] = list = [];
+                list.Add(new ColumnEntry(r[3], !string.Equals(r[4], "NO", StringComparison.OrdinalIgnoreCase),
+                    int.TryParse(r[5], out int p) ? p : null, int.TryParse(r[6], out int s) ? s : null));
+            }
+        }
+        catch (RpcException)
+        {
+            // No INFORMATION_SCHEMA.COLUMNS: keep what the zero-row query reported.
+        }
+        return (catalogName, schemaName, table, _) => Task.FromResult<IReadOnlyDictionary<string, ColumnEntry>?>(
+            byTable.TryGetValue((catalogName, schemaName, table), out var columns) ? ByName(columns) : null);
+    }
+
+    private static Dictionary<string, ColumnEntry> ByName(IEnumerable<ColumnEntry> columns)
+    {
+        var map = new Dictionary<string, ColumnEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var c in columns) map[c.Name] = c;
+        return map;
+    }
+
+    /// <summary>Overlays declared nullability and decimal precision/scale on a schema read from a zero-row query.</summary>
+    internal static Schema ApplyDeclaredColumns(Schema schema, IReadOnlyDictionary<string, ColumnEntry>? declared)
+    {
+        if (declared is null) return schema;
+        var fields = schema.FieldsList.Select(field =>
+        {
+            if (!declared.TryGetValue(field.Name, out var column)) return field;
+            var type = field.DataType;
+            if (type is Decimal128Type && column.Precision is > 0 and <= 38 && column.Scale is >= 0 && column.Scale <= column.Precision)
+                type = new Decimal128Type(column.Precision.Value, column.Scale.Value);
+            return new Field(field.Name, type, column.Nullable, field.Metadata);
+        }).ToList();
+        return new Schema(fields, schema.Metadata);
+    }
+
     /// <summary>The Arrow schema of a table (from a zero-row query), serialized the way Flight SQL expects.</summary>
     private static async Task<byte[]> SerializedTableSchemaAsync(
-        ResolvedDataSource source, Func<string, string> quote, string? catalogName, string? schemaName, string table, CancellationToken cancellationToken)
+        ResolvedDataSource source, Func<string, string> quote, DeclaredColumns declared, string? catalogName, string? schemaName, string table,
+        CancellationToken cancellationToken)
     {
         // Some ODBC drivers report a catalog that is not valid in SQL (the text driver reports the directory path), so
         // fall back from the fully qualified name to schema.table and finally the bare table name.
@@ -327,7 +394,8 @@ public sealed partial class ProxyFlightServer
                 await using var result = await source.Executor
                     .ExecuteQueryAsync(new QueryRequest($"SELECT * FROM {name} WHERE 1 = 0", 1, source.Options.CommandTimeoutSeconds), cancellationToken)
                     .ConfigureAwait(false);
-                return SchemaExtensions.SerializeSchema(result.Schema);
+                var columns = await declared(catalogName, schemaName, table, cancellationToken).ConfigureAwait(false);
+                return SchemaExtensions.SerializeSchema(ApplyDeclaredColumns(result.Schema, columns));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

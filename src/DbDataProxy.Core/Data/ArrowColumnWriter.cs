@@ -116,7 +116,8 @@ internal sealed class ArrowColumnWriter
         if (clr == typeof(decimal))
         {
             int precision = meta.Precision is > 0 and <= 38 ? meta.Precision.Value : FallbackPrecision;
-            int scale = meta.Scale is >= 0 and <= 38 && meta.Scale.Value <= precision
+            // DuckDB.NET reports 0/0 for a result with no rows yet; a scale means nothing without a precision.
+            int scale = meta.Precision is > 0 && meta.Scale is >= 0 and <= 38 && meta.Scale.Value <= precision
                 ? meta.Scale.Value
                 : Math.Min(FallbackScale, precision);
             var type = new Decimal128Type(precision, scale);

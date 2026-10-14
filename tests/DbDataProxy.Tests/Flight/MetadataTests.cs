@@ -125,3 +125,48 @@ public class MetadataTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
         Assert.Equal(StatusCode.PermissionDenied, denied.StatusCode);
     }
 }
+
+public class DeclaredColumnTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
+{
+    private async Task<Schema> TableSchemaAsync(string table)
+    {
+        using var client = proxy.Connect();
+        await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+        await foreach (var batch in await client.Raw.GetTablesAsync(tablePattern: table, includeSchema: true))
+        {
+            if (batch.Length == 0) continue;
+            return Apache.Arrow.Flight.Sql.SchemaExtensions.DeserializeSchema(((BinaryArray)batch.Column("table_schema")).GetBytes(0).ToArray());
+        }
+        throw new InvalidOperationException($"Table {table} was not listed.");
+    }
+
+    [Fact]
+    public async Task Table_schemas_report_declared_decimal_precision_and_scale()
+    {
+        var schema = await TableSchemaAsync("prices");
+        var amount = Assert.IsType<Decimal128Type>(schema.GetFieldByName("amount").DataType);
+        Assert.Equal((12, 3), (amount.Precision, amount.Scale));
+
+        // A computed decimal (the shape from the bug report) keeps its fractional digits too.
+        var computed = Assert.IsType<Decimal128Type>((await TableSchemaAsync("scaled")).GetFieldByName("amount").DataType);
+        Assert.Equal(1, computed.Scale);
+    }
+
+    [Fact]
+    public async Task Table_schemas_report_key_columns_as_not_null()
+    {
+        var schema = await TableSchemaAsync("prices");
+        Assert.False(schema.GetFieldByName("id").IsNullable);
+        Assert.True(schema.GetFieldByName("amount").IsNullable);
+        Assert.True(schema.GetFieldByName("note").IsNullable);
+    }
+
+    [Fact]
+    public async Task Zero_row_decimal_results_do_not_collapse_to_scale_zero()
+    {
+        using var client = proxy.Connect();
+        await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+        var (schema, _) = await client.QueryAsync("SELECT amount FROM prices WHERE 1 = 0");
+        Assert.True(Assert.IsType<Decimal128Type>(schema.GetFieldByName("amount").DataType).Scale > 0);
+    }
+}

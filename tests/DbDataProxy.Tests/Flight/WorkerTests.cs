@@ -143,6 +143,17 @@ public sealed class WorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Declared_columns_are_listed_inside_the_worker()
+    {
+        var catalog = _app!.Services.GetRequiredService<DbDataProxy.Server.Data.DataSourceCatalog>();
+        var source = catalog.Resolve(new ProxyPrincipal("alice", "test", ["*"]), "text32");
+        var provider = Assert.IsAssignableFrom<DbDataProxy.Data.IMetadataProvider>(source.Executor);
+
+        var columns = await provider.ListColumnsAsync(_dir, null, "people.csv", default);
+        Assert.Equal(["name", "age"], columns.Select(c => c.Name.ToLowerInvariant()));
+    }
+
+    [Fact]
     public async Task Worker_reports_sql_errors_to_the_client()
     {
         using var client = await LoginAsync();

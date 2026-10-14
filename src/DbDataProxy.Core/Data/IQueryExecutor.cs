@@ -36,6 +36,9 @@ public interface IMetadataProvider
 {
     Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken);
 
+    /// <summary>Declared column metadata for one table through the catalog API (ODBC SQLColumns).</summary>
+    Task<IReadOnlyList<ColumnEntry>> ListColumnsAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken);
+
     /// <summary>The driver's identifier quoting (ODBC SQLGetInfo SQL_IDENTIFIER_QUOTE_CHAR), or null if it has none.</summary>
     Task<IdentifierQuote?> GetIdentifierQuoteAsync(CancellationToken cancellationToken);
 }
@@ -46,3 +49,6 @@ public sealed record IdentifierQuote(string Prefix, string Suffix)
     /// <summary>Quotes one identifier, doubling any embedded suffix so a name cannot escape the quotes.</summary>
     public string Apply(string identifier) => Prefix + identifier.Replace(Suffix, Suffix + Suffix) + Suffix;
 }
+
+/// <summary>A column as declared in the database catalog (nullability and, for decimals, precision and scale).</summary>
+public sealed record ColumnEntry(string Name, bool Nullable, int? Precision, int? Scale);
