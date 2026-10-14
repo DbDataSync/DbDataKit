@@ -908,6 +908,11 @@ public sealed class RunExecutor(
                 // silently exclude it.
                 var passTiming = trace ? new ReaderTimingRecorder() : null;
 
+                await LogPlannedStatementsAsync(
+                    item.RunId, mapping.Name, scope, reader, sourceConnection, readerOptions,
+                    stagingProvider, cacheOptions, writer, writerOptions, targetConnection, source, target,
+                    columnMappings, mapping, previousWatermark, cancellationToken);
+
                 ReadResult read;
                 try
                 {
@@ -1503,12 +1508,25 @@ public sealed class RunExecutor(
         CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(item.SegmentJson))
-            return [SegmentSerializer.Deserialize(item.SegmentJson)];
+        {
+            var requested = SegmentSerializer.Deserialize(item.SegmentJson);
+            Log(item.RunId, LogSeverity.Info,
+                $"'{mapping.Name}': this {item.RunKind} request carries its own segment ({requested?.Describe() ?? "whole table"}); " +
+                "the mapping's default segmenting is not used.");
+            return [requested];
+        }
 
         if (mapping.DefaultSegmenting.Count == 0)
+        {
+            Log(item.RunId, LogSeverity.Info,
+                $"'{mapping.Name}': no default segmenting is configured, so this {item.RunKind} pass reads the whole table in one query.");
             return [null];
+        }
 
         IReadOnlyList<BatchReloadSegment> segments = mapping.DefaultSegmenting;
+        Log(item.RunId, LogSeverity.Info,
+            $"'{mapping.Name}': default segmenting has {segments.Count} entr{(segments.Count == 1 ? "y" : "ies")}: " +
+            $"{DescribeSegments(segments)}.");
 
         // Custom markers first, and every pass, because that is the whole point of one: a strategy
         // flagging "the last three months" has to be re-evaluated against today, not against the day
@@ -1531,7 +1549,81 @@ public sealed class RunExecutor(
                     kv => kv.Key, IReadOnlyList<CachedColumn> (kv) => kv.Value, StringComparer.OrdinalIgnoreCase),
                 cancellationToken);
 
+        // Said every pass, not only when there is more than one: "this pass resolved to nothing" and
+        // "this pass is one query" are both invisible otherwise, and both look like a slow run.
+        if (segments.Count == 0)
+            Log(item.RunId, LogSeverity.Warning,
+                $"'{mapping.Name}': segmenting resolved to no segments (a custom strategy selected none of its candidates), " +
+                "so this pass reads and writes nothing.");
+        else
+            Log(item.RunId, LogSeverity.Info,
+                $"'{mapping.Name}': segmenting resolved to {segments.Count} segment(s) to run in order: {DescribeSegments(segments)}.");
+
         return [.. segments];
+    }
+
+    private static string DescribeSegments(IReadOnlyList<BatchReloadSegment> segments)
+    {
+        const int shown = 20;
+        var text = string.Join("; ", segments.Take(shown).Select(s => s.Describe()));
+        return segments.Count > shown ? $"{text}; … and {segments.Count - shown} more" : text;
+    }
+
+    /// <summary>
+    /// Logs the statements this segment's reader, staging provider and writer are about to run, taken
+    /// from their own <see cref="IStatementPreview"/> — the same descriptions the Preview screen shows,
+    /// built from the same inputs, so the run log says what ran rather than what someone reconstructed.
+    /// Best effort: a component that cannot describe itself, or a failure while describing, is logged
+    /// and never stops the pass.
+    /// </summary>
+    private async Task LogPlannedStatementsAsync(
+        Guid runId, string mappingName, string scope,
+        IChangeReader reader, DbConnection sourceConnection, IReadOnlyDictionary<string, string> readerOptions,
+        IStagingProvider stagingProvider, IReadOnlyDictionary<string, string> cacheOptions,
+        IChangeWriter writer, IReadOnlyDictionary<string, string> writerOptions,
+        DbConnection targetConnection, SourceTableRef source, TableRef target,
+        IReadOnlyList<ColumnMapping> columnMappings, TableMappingConfig mapping, string? previousWatermark,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var sourceColumns = mapping.SourceColumns.Select(c => c.ToColumnMetadata()).ToList();
+            var targetColumns = mapping.TargetColumns.Select(c => c.ToColumnMetadata()).ToList();
+            var relationshipColumns = mapping.RelationshipColumns.ToDictionary(
+                kv => kv.Key, IReadOnlyList<ColumnMetadata> (kv) => kv.Value.Select(c => c.ToColumnMetadata()).ToList(),
+                StringComparer.OrdinalIgnoreCase);
+
+            PreviewRequest Request(DbConnection connection, IReadOnlyDictionary<string, string> options) => new(
+                connection, source, target, columnMappings, options, previousWatermark,
+                sourceColumns, targetColumns, mapping.Relationships, relationshipColumns);
+
+            var stages = new (string Stage, object Component, PreviewRequest Request)[]
+            {
+                ("source read", reader, Request(sourceConnection, readerOptions)),
+                ("staging", stagingProvider, Request(targetConnection, cacheOptions)),
+                ("write", writer, Request(targetConnection, writerOptions)),
+            };
+
+            foreach (var (stage, component, request) in stages)
+            {
+                if (component is not IStatementPreview describable)
+                {
+                    Log(runId, LogSeverity.Info, $"'{mappingName}' ({scope}) {stage}: this component does not describe its statements.");
+                    continue;
+                }
+
+                foreach (var statement in await describable.DescribeAsync(request, cancellationToken))
+                {
+                    if (string.IsNullOrWhiteSpace(statement.Sql))
+                        continue;
+                    Log(runId, LogSeverity.Info, $"'{mappingName}' ({scope}) {stage} — {statement.Title}:\n{statement.Sql}");
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log(runId, LogSeverity.Warning, $"'{mappingName}' ({scope}): the statements could not be listed — {ex.Message}");
+        }
     }
 
     /// <summary>Built from the script host this executor already has, rather than injected: a worker
