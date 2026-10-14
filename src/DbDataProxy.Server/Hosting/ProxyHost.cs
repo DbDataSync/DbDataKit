@@ -54,6 +54,8 @@ public static class ProxyHost
         services.AddSingleton<PendingQueryStore>();
         services.AddSingleton<PreparedStatementStore>();
         services.AddSingleton<IBasicCredentialValidator, LocalUserValidator>();
+        services.AddSingleton<IWindowsLogon, NativeWindowsLogon>();
+        services.AddSingleton<IBasicCredentialValidator, WindowsAccountValidator>();
         services.AddSingleton<IBasicCredentialValidator, PassThroughValidator>();
         services.AddSingleton<ChainedCredentialValidator>();
         services.AddSingleton<RequestAuthenticator>();

@@ -26,7 +26,8 @@ public sealed class LocalUserValidator(IOptionsMonitor<ProxyOptions> options) : 
     public ValueTask<CredentialResult> ValidateAsync(string user, string password, CancellationToken cancellationToken)
     {
         var entry = options.CurrentValue.Users.FirstOrDefault(u => string.Equals(u.Name, user, StringComparison.OrdinalIgnoreCase));
-        if (entry is null) return ValueTask.FromResult(CredentialResult.NotMine);
+        // Windows-account users are handled by WindowsAccountValidator.
+        if (entry is null || entry.AuthType != UserAuthType.Password) return ValueTask.FromResult(CredentialResult.NotMine);
 
         // A configured user is always authoritative: a wrong password must not fall through to pass-through.
         if (entry.PasswordHash is null || !PasswordHasher.Verify(password, entry.PasswordHash))

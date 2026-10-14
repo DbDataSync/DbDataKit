@@ -163,3 +163,75 @@ public class DataSourceCatalogTests
         Assert.Equal(StatusCode.Internal, CodeOf(() => Catalog(Config(), new FakeWorker()).Resolve(user, "badx86")));
     }
 }
+
+public class WindowsAccountValidatorTests
+{
+    private sealed class FakeLogon(string expectedDomain, string expectedUser, string expectedPassword) : IWindowsLogon
+    {
+        public (string, string, string)? Last;
+        public bool Validate(string domain, string user, string password)
+        {
+            Last = (domain, user, password);
+            return string.Equals(domain, expectedDomain, StringComparison.OrdinalIgnoreCase) && string.Equals(user, expectedUser, StringComparison.OrdinalIgnoreCase) && password == expectedPassword;
+        }
+    }
+
+    private static WindowsAccountValidator Create(FakeLogon logon) => new(
+        new StaticMonitor(new ProxyOptions
+        {
+            Users =
+            [
+                new UserOptions { Name = @"CORP\bob", AuthType = UserAuthType.Windows, DataSources = ["erp"], DefaultDataSource = "erp" },
+                new UserOptions { Name = "alice", PasswordHash = PasswordHasher.Hash("pw", 1000), DataSources = ["a"] },
+            ],
+        }),
+        logon,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<WindowsAccountValidator>.Instance);
+
+    [Theory]
+    [InlineData(@"CORP\bob", "CORP", "bob")]
+    [InlineData("bob@corp.local", "corp.local", "bob")]
+    [InlineData("bob", ".", "bob")]
+    [InlineData(@".\bob", ".", "bob")]
+    public void Splits_account_names_into_domain_and_user(string name, string domain, string user)
+    {
+        Assert.Equal((domain, user), WindowsAccountValidator.Split(name));
+    }
+
+    [Fact]
+    public async Task Valid_windows_credentials_map_to_the_configured_user()
+    {
+        var logon = new FakeLogon("CORP", "bob", "secret");
+        var result = await Create(logon).ValidateAsync(@"corp\BOB", "secret", default);
+
+        Assert.NotNull(result.Principal);
+        Assert.Equal("windows", result.Principal.Method);
+        Assert.Equal(@"CORP\bob", result.Principal.Name);
+        Assert.True(result.Principal.CanUse("erp"));
+        Assert.Equal("erp", result.Principal.DefaultDataSource);
+    }
+
+    [Fact]
+    public async Task Wrong_windows_password_is_a_definitive_rejection()
+    {
+        var logon = new FakeLogon("CORP", "bob", "secret");
+        Assert.Equal(CredentialResult.Rejected, await Create(logon).ValidateAsync(@"CORP\bob", "nope", default));
+    }
+
+    [Fact]
+    public async Task Users_not_configured_for_windows_auth_are_ignored()
+    {
+        var logon = new FakeLogon("CORP", "bob", "secret");
+        var validator = Create(logon);
+        Assert.Equal(CredentialResult.NotMine, await validator.ValidateAsync("alice", "pw", default));
+        Assert.Equal(CredentialResult.NotMine, await validator.ValidateAsync("stranger", "x", default));
+        Assert.Null(logon.Last); // the operating system was never asked about accounts that are not configured
+    }
+
+    [Fact]
+    public async Task Password_validator_skips_windows_users()
+    {
+        var monitor = new StaticMonitor(new ProxyOptions { Users = [new UserOptions { Name = "bob", AuthType = UserAuthType.Windows }] });
+        Assert.Equal(CredentialResult.NotMine, await new LocalUserValidator(monitor).ValidateAsync("bob", "x", default));
+    }
+}

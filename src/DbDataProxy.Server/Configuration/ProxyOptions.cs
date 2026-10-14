@@ -130,7 +130,10 @@ public sealed class UserOptions
 {
     public string Name { get; set; } = "";
 
-    /// <summary>PBKDF2 hash as produced by "DbDataProxy hash-password".</summary>
+    /// <summary>How the user proves who they are.</summary>
+    public UserAuthType AuthType { get; set; } = UserAuthType.Password;
+
+    /// <summary>PBKDF2 hash as produced by "DbDataProxy hash-password" (AuthType Password).</summary>
     public string? PasswordHash { get; set; }
 
     /// <summary>Data sources this user may query ("*" for all).</summary>
@@ -138,4 +141,12 @@ public sealed class UserOptions
 
     /// <summary>Used when the client does not name a data source.</summary>
     public string? DefaultDataSource { get; set; }
+}
+
+public enum UserAuthType
+{
+    /// <summary>Password checked against <see cref="UserOptions.PasswordHash"/>.</summary>
+    Password,
+    /// <summary>Windows account (local or domain) checked by the operating system; Name is the account name.</summary>
+    Windows,
 }
