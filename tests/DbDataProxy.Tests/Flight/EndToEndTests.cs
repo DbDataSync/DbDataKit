@@ -78,7 +78,7 @@ public class EndToEndTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
     {
         using var client = await LoginAsync();
         var ex = await Rpc.ExpectAsync(() => client.QueryAsync("SELEKT nonsense"));
-        Assert.Equal(StatusCode.InvalidArgument, ex.StatusCode);
+        Assert.True(ex.StatusCode == StatusCode.InvalidArgument, $"{ex.StatusCode}: {ex.Status.Detail}");
     }
 
     [Fact]
