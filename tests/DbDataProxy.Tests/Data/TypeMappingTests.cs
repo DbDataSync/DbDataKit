@@ -74,3 +74,20 @@ public class TypeMappingTests
         Assert.Empty(batches);
     }
 }
+
+public class NonQueryTests
+{
+    [Fact]
+    public async Task Reports_affected_rows()
+    {
+        string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".duckdb");
+        try
+        {
+            var exec = new DbQueryExecutor(new DelegateConnectionFactory(cs => new DuckDBConnection(cs)), $"Data Source={path}");
+            await exec.ExecuteNonQueryAsync(new QueryRequest("CREATE TABLE t(i INTEGER)"), CancellationToken.None);
+            long n = await exec.ExecuteNonQueryAsync(new QueryRequest("INSERT INTO t SELECT * FROM range(0, 5)"), CancellationToken.None);
+            Assert.Equal(5, n);
+        }
+        finally { File.Delete(path); }
+    }
+}

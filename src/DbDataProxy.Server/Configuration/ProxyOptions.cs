@@ -5,6 +5,9 @@ public sealed class ProxyOptions
 {
     public const string SectionName = "Proxy";
 
+    /// <summary>Where generated files (self-signed certificate) live. Defaults to a "DbDataProxy" folder under the OS common application data directory.</summary>
+    public string? DataDirectory { get; set; }
+
     public ListenOptions Listen { get; set; } = new();
     public TlsOptions Tls { get; set; } = new();
     public CompressionOptions Compression { get; set; } = new();
@@ -107,6 +110,9 @@ public sealed class DataSourceOptions
 
     /// <summary>Connect with the caller's own credentials (UID/PWD injected into the connection string).</summary>
     public bool PassThrough { get; set; }
+
+    /// <summary>Allow statements sent as updates (INSERT/UPDATE/DDL via ExecuteUpdate). Off by default.</summary>
+    public bool AllowWrites { get; set; }
 
     public int BatchSize { get; set; } = 32768;
     public int? CommandTimeoutSeconds { get; set; }
