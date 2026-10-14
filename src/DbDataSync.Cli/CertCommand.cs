@@ -33,7 +33,7 @@ public static class CertCommand
     /// The subcommands that issue or import a certificate into <c>LocalMachine\My</c> and therefore
     /// cannot work without elevation — see the guard in <see cref="Run"/>. <c>bind</c> is absent
     /// deliberately: it only reads the store and writes <c>dbdatasync.config.yaml</c>, so it is usable
-    /// unelevated, as are <c>status</c>, <c>list</c> and <c>templates</c>.
+    /// unelevated, as are <c>status</c>, <c>list</c>, <c>templates</c> and <c>discover</c>.
     /// </summary>
     private static readonly HashSet<string> StoreWritingSubcommands =
         new(["new-self-signed", "enroll", "renew", "retrieve"], StringComparer.Ordinal);
@@ -147,6 +147,7 @@ public static class CertCommand
                 "renew" => Renew(rest),
                 "retrieve" => Retrieve(rest),
                 "templates" => Templates(rest),
+                "discover" => Discover(rest),
                 "bind" => Bind(rest),
                 "use-pem" => UsePem(rest),
                 "use-pfx" => UsePfx(rest),
@@ -160,7 +161,7 @@ public static class CertCommand
             "use-pem" => UsePem(rest),
             "use-pfx" => UsePfx(rest),
             "new-self-signed" => NewSelfSignedFile(rest),
-            "list" or "enroll" or "renew" or "retrieve" or "templates" or "bind" => WindowsOnlyRefusal(),
+            "list" or "enroll" or "renew" or "retrieve" or "templates" or "discover" or "bind" => WindowsOnlyRefusal(),
             var other => Unknown(other),
         };
     }
@@ -435,6 +436,55 @@ public static class CertCommand
         return HandleEnrollmentResult(root, result, pending.KeyName, spec, pending.CaConfig, args);
     }
 
+    /// <summary>
+    /// <c>discover</c>: finds the enterprise CA(s) in AD and the templates they publish, and saves a CA or template
+    /// into <c>dbdatasync.config.yaml</c> when there is exactly one to save. What it decides is
+    /// <see cref="CertDiscovery.Decide"/>'s; this reads the directory and config, prints, and writes.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    private static int Discover(string[] args)
+    {
+        var root = DbDataSyncRoot.Resolve(args);
+        var config = DbDataSyncConfigFile.Read(root);
+
+        var outcome = CertDiscovery.Decide(
+            CaDiscovery.Discover(),
+            config.GetValueOrDefault(CertDiscovery.CaKey),
+            config.GetValueOrDefault(CertDiscovery.TemplateKey));
+
+        var written = new List<string>();
+        if (outcome.WriteCaConfig is not null || outcome.WriteTemplate is not null)
+        {
+            if (!LibGit2Sharp.Repository.IsValid(root))
+            {
+                Console.Error.WriteLine(
+                    $"No DbDataSync configuration at {root}, so nothing was saved. Run `dbdatasync setup` first, or pass --repo <path>.");
+                return 1;
+            }
+
+            if (outcome.WriteCaConfig is not null)
+            {
+                DbDataSyncConfigFile.SetValue(root, "DbDataSync", "Certificates:CaConfig", outcome.WriteCaConfig);
+                written.Add(CertDiscovery.CaKey);
+            }
+
+            if (outcome.WriteTemplate is not null)
+            {
+                DbDataSyncConfigFile.SetValue(root, "DbDataSync", "Certificates:Template", outcome.WriteTemplate);
+                written.Add(CertDiscovery.TemplateKey);
+            }
+
+            new GitCommitService(root).CommitChanges(
+                [DbDataSyncConfigFile.PathIn(root)],
+                $"Set {string.Join(" and ", written.Select(k => $"'{k}'"))} in dbdatasync.config.yaml",
+                CurrentUser.SystemAuthor);
+        }
+
+        foreach (var line in outcome.Lines)
+            Console.WriteLine(line);
+
+        return outcome.Succeeded ? 0 : 1;
+    }
 
     private static int Templates(string[] args)
     {
@@ -798,8 +848,9 @@ public static class CertCommand
         if (requireBoth && (string.IsNullOrWhiteSpace(caConfig) || string.IsNullOrWhiteSpace(template)))
         {
             Console.Error.WriteLine(
-                "Both a CA and a template are needed. Pass --ca/--template, or set " +
-                "DbDataSync:Certificates:CaConfig/Template in dbdatasync.config.yaml.");
+                "Both a CA and a template are needed. Pass --ca/--template, set " +
+                "DbDataSync:Certificates:CaConfig/Template in dbdatasync.config.yaml, or run " +
+                "'dbdatasync config cert discover' to find them.");
             return (null, null);
         }
 
@@ -888,6 +939,7 @@ public static class CertCommand
                    dbdatasync config cert renew [--ca <config>] [--template <name>] [--account <account>] [--days <n>]    (Windows only)
                    dbdatasync config cert retrieve --request-id <id> [--account <account>]        (Windows only)
                    dbdatasync config cert templates [--ca <config>]                                (Windows only)
+                   dbdatasync config cert discover [--repo <path>]                                 (Windows only; finds the CA and template, saves them when there is only one)
                    dbdatasync config cert bind --thumbprint <thumbprint> [--location LocalMachine|CurrentUser] [--allow-invalid|--no-allow-invalid]  (Windows only)
             """);
 }

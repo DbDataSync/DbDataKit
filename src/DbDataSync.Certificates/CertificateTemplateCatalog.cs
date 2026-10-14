@@ -90,6 +90,39 @@ public static class CertificateTemplateCatalog
 
         var caName = caConfig[(separatorIndex + 1)..];
 
+        var (templates, reason, detail) = QueryEnrollmentServices(servicesPath =>
+        {
+            using var enrollmentService = new DirectoryEntry($"LDAP://CN={caName},{servicesPath}");
+            return TemplatesOf(enrollmentService);
+        });
+
+        return reason == TemplateListReason.Available
+            ? new TemplateListResult(templates!, TemplateListReason.Available, null)
+            : TemplateListResult.Empty(reason, detail!);
+    }
+
+    [SupportedOSPlatform("windows")]
+    internal static List<string> TemplatesOf(DirectoryEntry enrollmentService)
+    {
+        var templates = new List<string>();
+        foreach (var value in enrollmentService.Properties["certificateTemplates"])
+        {
+            if (value is string name)
+                templates.Add(name);
+        }
+
+        return templates;
+    }
+
+    /// <summary>
+    /// Runs <paramref name="query"/> against the AD enrollment-services container's distinguished name
+    /// (<c>CN=Enrollment Services,CN=Public Key Services,CN=Services,CN=Configuration,…</c>), turning
+    /// every ordinary failure into a <see cref="TemplateListReason"/> and a message rather than an
+    /// exception. Shared by the template listing and CA discovery, so both fail the same way.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    internal static (T? Value, TemplateListReason Reason, string? Detail) QueryEnrollmentServices<T>(Func<string, T> query)
+    {
         // Checked first, and separately from the LDAP query below: a machine that has never been
         // domain-joined should be told exactly that, not handed a generic directory-unreachable
         // message that sends someone checking their network instead of their domain membership.
@@ -99,7 +132,7 @@ public static class CertificateTemplateCatalog
         }
         catch (Exception ex) when (ex is ActiveDirectoryObjectNotFoundException or ActiveDirectoryOperationException)
         {
-            return TemplateListResult.Empty(TemplateListReason.NotDomainJoined, ex.Message);
+            return (default, TemplateListReason.NotDomainJoined, ex.Message);
         }
 
         try
@@ -107,22 +140,12 @@ public static class CertificateTemplateCatalog
             using var rootDse = new DirectoryEntry("LDAP://RootDSE");
             var configurationNamingContext = (string)rootDse.Properties["configurationNamingContext"].Value!;
 
-            using var enrollmentService = new DirectoryEntry(
-                $"LDAP://CN={caName},CN=Enrollment Services,CN=Public Key Services,CN=Services," +
-                $"{configurationNamingContext}");
-
-            var templates = new List<string>();
-            foreach (var value in enrollmentService.Properties["certificateTemplates"])
-            {
-                if (value is string name)
-                    templates.Add(name);
-            }
-
-            return new TemplateListResult(templates, TemplateListReason.Available, null);
+            var servicesPath = $"CN=Enrollment Services,CN=Public Key Services,CN=Services,{configurationNamingContext}";
+            return (query(servicesPath), TemplateListReason.Available, null);
         }
         catch (Exception ex) when (ex is COMException or UnauthorizedAccessException or DirectoryServicesCOMException)
         {
-            return TemplateListResult.Empty(ClassifyDirectoryFailure(ex), ex.Message);
+            return (default, ClassifyDirectoryFailure(ex), ex.Message);
         }
     }
 

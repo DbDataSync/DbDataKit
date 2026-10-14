@@ -125,6 +125,14 @@ public sealed class AdminConfigService(
             "A snapshot is a development build; its download is only checked against a checksum published " +
             "beside it.",
             SupportsWrite: true),
+        new("DbDataSync:Certificates:CaConfig",
+            "The enterprise CA `dbdatasync config cert enroll`, `renew` and `templates` ask, as `CASERVER\\CA Name`." +
+            "`dbdatasync config cert discover` finds and saves it. Read by the CLI, not the running service.",
+            SupportsWrite: true),
+        new("DbDataSync:Certificates:Template",
+            "The certificate template name `dbdatasync config cert enroll` and `renew` request. " +
+            "`dbdatasync config cert discover` lists the ones the CA publishes. Read by the CLI, not the running service.",
+            SupportsWrite: true),
         new("DbDataSync:Auth:Network:Admin",
             "Trusts an unauthenticated request from loopback as Admin: loopback or disabled. There is no " +
             "\"from anywhere\" option for Admin — only Auth:Network:Viewer ever widens past loopback.",

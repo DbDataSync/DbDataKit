@@ -244,11 +244,15 @@ internal static class SetupSteps
     internal static IReadOnlyList<string> WindowsCertificateInstructions(string certChoice, string? host) =>
     [
         "Run the matching command, then bind the thumbprint it prints:",
-        certChoice switch
+        .. certChoice switch
         {
-            "self-signed" => $"    dbdatasync config cert new-self-signed --dns {host ?? "localhost"}",
-            "enroll" => "    dbdatasync config cert enroll --template <template>",
-            _ => "    dbdatasync config cert bind --thumbprint <thumbprint>",
+            "self-signed" => new[] { $"    dbdatasync config cert new-self-signed --dns {host ?? "localhost"}" },
+            "enroll" =>
+            [
+                "    dbdatasync config cert discover    (finds the CA and template; saves them when there is only one)",
+                "    dbdatasync config cert enroll --dns <names>",
+            ],
+            _ => ["    dbdatasync config cert bind --thumbprint <thumbprint>"],
         },
     ];
 
