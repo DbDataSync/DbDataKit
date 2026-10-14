@@ -151,7 +151,9 @@ protocol. Each dialect is its own `DriverType`, listed in the connection editor 
 | Catalog | Optional. The catalog that table browsing looks in. |
 | Use TLS | On by default. |
 | Skip certificate validation | Off by default. Accepts **any** certificate — self-signed, expired, wrong host — for a proxy you can't give a trusted one. The traffic is still encrypted but the server's identity is not checked, so use it only on a network you trust. |
-| Parameters | **Prepared** (default): values are bound to a prepared statement and never become part of the SQL text. **Inline**: values are written into the statement as literals — only for a proxy that does not implement prepared statements. |
+| Data source | Optional. Sent as the `x-datasource` header, for a proxy that fronts several databases and picks one by it. Empty uses the user's default. |
+| Compression | Optional. Sent as the `x-compression` header (`none`, `gzip`, `zstd`, `lz4`) to override a proxy's default codec. Empty takes the server's choice. |
+| Parameters | **Prepared** (default): values are bound to a prepared statement and never become part of the SQL text. **Inline**: values are written into the statement as literals — set it to skip the prepared attempt for a server that cannot bind parameters. Either way, if a server answers a bound parameter with *Unimplemented* (some proxies prepare only parameterless statements) the driver switches to literals for the rest of that connection. |
 
 **What to expect.** Browsing tables and columns uses Flight SQL's metadata calls, and many proxies implement
 none of them: the lists then come back empty and the mapping editor offers the query editor instead. The

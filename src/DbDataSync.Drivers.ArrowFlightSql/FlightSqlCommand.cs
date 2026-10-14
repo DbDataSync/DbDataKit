@@ -102,18 +102,32 @@ public sealed class FlightSqlCommand : DbCommand
         PreparedStatement? prepared = null;
         try
         {
-            var (sql, ordered) = Statement();
+            var (sql, ordered) = Statement(inline: false);
 
             FlightInfo info;
-            if (ordered.Count == 0 || _connection.Settings.ParameterMode == FlightSqlParameterMode.Inline)
+            if (ordered.Count == 0)
             {
                 info = await _connection.Client.ExecuteAsync(sql, Apache.Arrow.Flight.Sql.Transaction.NoTransaction, options, token);
             }
             else
             {
-                prepared = await _connection.Client.PrepareAsync(sql, Apache.Arrow.Flight.Sql.Transaction.NoTransaction, options, token);
-                prepared.SetParameters(ArrowParameters.Build(ordered));
-                info = await prepared.ExecuteAsync(options, token);
+                try
+                {
+                    prepared = await _connection.Client.PrepareAsync(sql, Apache.Arrow.Flight.Sql.Transaction.NoTransaction, options, token);
+                    prepared.SetParameters(ArrowParameters.Build(ordered));
+                    info = await prepared.ExecuteAsync(options, token);
+                }
+                catch (Exception ex) when (IsUnimplemented(ex))
+                {
+                    // A server that prepares statements but cannot bind values to them (some proxies):
+                    // remember it and send the values as literals instead.
+                    _connection.ServerRefusesParameters = true;
+                    if (prepared is not null)
+                        await CloseQuietlyAsync(prepared, options);
+                    prepared = null;
+                    info = await _connection.Client.ExecuteAsync(
+                        Statement(inline: true).Sql, Apache.Arrow.Flight.Sql.Transaction.NoTransaction, options, token);
+                }
             }
 
             var reader = new FlightSqlDataReader(_connection, info, options, prepared, behavior, token);
@@ -137,7 +151,7 @@ public sealed class FlightSqlCommand : DbCommand
     /// the order their markers appear. Inline mode renders each value as a literal through the
     /// connection's dialect and returns no ordered values.
     /// </summary>
-    private (string Sql, List<object?> Ordered) Statement()
+    private (string Sql, List<object?> Ordered) Statement(bool inline)
     {
         var known = _parameters.Items.Select(p => p.ParameterName.TrimStart('@', ':', '$')).ToList();
         var ordered = new List<object?>();
@@ -148,7 +162,7 @@ public sealed class FlightSqlCommand : DbCommand
         FlightSqlParameter Find(string name) =>
             _parameters.Items.First(p => FlightSqlParameterCollection.Matches(p.ParameterName, name));
 
-        if (_connection.Settings.ParameterMode == FlightSqlParameterMode.Inline)
+        if (inline || _connection.ServerRefusesParameters || _connection.Settings.ParameterMode == FlightSqlParameterMode.Inline)
             return (ParameterMarkers.Replace(CommandText, known, name => _connection.Dialect.RenderLiteral(Find(name).Value)), ordered);
 
         var sql = ParameterMarkers.Replace(CommandText, known, name =>
@@ -158,6 +172,11 @@ public sealed class FlightSqlCommand : DbCommand
         });
         return (sql, ordered);
     }
+
+    private static bool IsUnimplemented(Exception ex) =>
+        ex is RpcException { StatusCode: StatusCode.Unimplemented }
+        || (ex is AggregateException agg && agg.InnerExceptions.Any(IsUnimplemented))
+        || (ex.InnerException is { } inner && IsUnimplemented(inner));
 
     private static async Task CloseQuietlyAsync(PreparedStatement prepared, FlightCallOptions options)
     {

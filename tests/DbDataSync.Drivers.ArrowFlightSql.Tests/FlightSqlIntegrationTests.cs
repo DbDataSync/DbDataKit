@@ -286,6 +286,28 @@ public sealed class FlightSqlIntegrationTests
     }
 
     [Fact]
+    public async Task A_Server_That_Cannot_Bind_Parameters_Falls_Back_To_Inline_Literals()
+    {
+        await using var server = await TestServerHost.StartAsync(s => s.RefuseParameters = true);
+        var driver = new ArrowFlightSqlDriver();
+        await using var connection = await OpenAsync(driver, Config(server, properties: Plain));
+
+        for (var i = 0; i < 2; i++)
+        {
+            using var cmd = connection.CreateTimedCommand();
+            cmd.CommandText = "SELECT * FROM orders WHERE customer = @name";
+            cmd.AddParameter("@name", "o'brien");
+            await using var reader = await cmd.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+        }
+
+        // The first command's bind was refused and it fell back; the second went straight to literals.
+        Assert.Equal(
+            ["SELECT * FROM orders WHERE customer = 'o''brien'", "SELECT * FROM orders WHERE customer = 'o''brien'"],
+            server.State.Executed);
+    }
+
+    [Fact]
     public async Task A_Command_That_Changes_Data_Is_Refused()
     {
         await using var server = await TestServerHost.StartAsync();

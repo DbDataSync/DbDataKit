@@ -116,6 +116,26 @@ public sealed class ArrowFlightSqlDriver : IDriver, IConnectionTester, IDialectP
                         Default = nameof(FlightSqlParameterMode.Prepared),
                         Layout = new ParameterLayout("Driver settings"),
                     });
+                    result.Add(new ParameterDescriptor
+                    {
+                        Name = Key(FlightSqlSettings.DataSourceKey),
+                        Label = "Data source",
+                        Description =
+                            "Optional. Sent as the x-datasource header, for a proxy that fronts several databases. " +
+                            "Leave empty to use the user's default.",
+                        Type = ParameterType.Text,
+                        Layout = new ParameterLayout("Driver settings"),
+                    });
+                    result.Add(new ParameterDescriptor
+                    {
+                        Name = Key(FlightSqlSettings.CompressionKey),
+                        Label = "Compression",
+                        Description =
+                            "Optional. Sent as the x-compression header (none, gzip, zstd or lz4) to override a proxy's " +
+                            "default. Leave empty to take the server's choice.",
+                        Type = ParameterType.Text,
+                        Layout = new ParameterLayout("Driver settings"),
+                    });
                     result.Add(parameter);
                     break;
 

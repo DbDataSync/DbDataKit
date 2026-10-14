@@ -49,6 +49,10 @@ public sealed class FlightSqlConnection : DbConnection
 
     internal FlightSqlSettings Settings => _settings;
 
+    /// <summary>Set once the server has refused bound parameters (Unimplemented): later commands skip
+    /// the prepared round trips and send values inline.</summary>
+    internal volatile bool ServerRefusesParameters;
+
     internal FlightSqlClient Client { get; private set; } = null!;
 
     /// <summary>
@@ -70,6 +74,11 @@ public sealed class FlightSqlConnection : DbConnection
         var options = new FlightCallOptions();
         if (_authorization is not null)
             options.Headers.Add(AuthorizationHeader, _authorization);
+
+        if (_settings.DataSource is { } dataSource)
+            options.Headers.Add(FlightSqlSettings.DataSourceHeader, dataSource);
+        if (_settings.Compression is { } compression)
+            options.Headers.Add(FlightSqlSettings.CompressionHeader, compression);
 
         var effective = timeout ?? _settings.CommandTimeout;
         if (effective > TimeSpan.Zero && effective != Timeout.InfiniteTimeSpan)

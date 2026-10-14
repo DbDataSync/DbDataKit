@@ -80,6 +80,21 @@ public sealed class SettingsTests
         Assert.Equal(expected, FlightSqlSettings.From(Config(connectionString: address), null).Address.ToString());
 
     [Fact]
+    public void Data_Source_And_Compression_Are_Optional_Text_Settings()
+    {
+        var none = FlightSqlSettings.From(Config(), null);
+        Assert.Null(none.DataSource);
+        Assert.Null(none.Compression);
+
+        var set = FlightSqlSettings.From(Config(properties:
+            (FlightSqlSettings.DataSourceKey, " erp ")), null);
+        Assert.Equal("erp", set.DataSource);
+        Assert.Equal("zstd", FlightSqlSettings.From(Config(properties: (FlightSqlSettings.CompressionKey, "zstd")), null).Compression);
+
+        Assert.Null(FlightSqlSettings.From(Config(properties: (FlightSqlSettings.DataSourceKey, "  ")), null).DataSource);
+    }
+
+    [Fact]
     public void Host_And_Port_Use_Tls_By_Default_And_Plain_Text_When_Told_To()
     {
         Assert.Equal("https://flight.example/", FlightSqlSettings.From(Config(), null).Address.ToString());

@@ -41,12 +41,22 @@ public sealed record FlightSqlSettings(
     string? Catalog,
     TimeSpan ConnectTimeout,
     TimeSpan CommandTimeout,
-    FlightSqlParameterMode ParameterMode)
+    FlightSqlParameterMode ParameterMode,
+    string? DataSource = null,
+    string? Compression = null)
 {
     public const string AuthMethodKey = "authMethod";
     public const string UseTlsKey = "useTls";
     public const string SkipCertificateValidationKey = "skipCertificateValidation";
     public const string ParameterModeKey = "parameterMode";
+    public const string DataSourceKey = "dataSource";
+    public const string CompressionKey = "compression";
+
+    /// <summary>Call header a proxy reads to choose which of its data sources runs the statement.</summary>
+    public const string DataSourceHeader = "x-datasource";
+
+    /// <summary>Call header a proxy reads to choose the codec for this call's results.</summary>
+    public const string CompressionHeader = "x-compression";
 
     public static FlightSqlSettings From(ConnectionConfig connection, string? credential)
     {
@@ -87,7 +97,9 @@ public sealed record FlightSqlSettings(
             string.IsNullOrWhiteSpace(connection.Database) ? null : connection.Database,
             Seconds(ConnectionTimeouts.ResolveConnectSeconds(connection)),
             Seconds(ConnectionTimeouts.ResolveCommandSeconds(connection)),
-            mode);
+            mode,
+            Text(properties, DataSourceKey),
+            Text(properties, CompressionKey));
     }
 
     /// <summary>
@@ -129,6 +141,9 @@ public sealed record FlightSqlSettings(
                 $"'{given}://' is not an address scheme Flight SQL uses. Expected grpc://, grpc+tcp://, grpc+tls://, http:// or https://."),
         };
     }
+
+    private static string? Text(IReadOnlyDictionary<string, string> properties, string key) =>
+        properties.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
 
     private static TimeSpan Seconds(int seconds) => seconds <= 0 ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(seconds);
 

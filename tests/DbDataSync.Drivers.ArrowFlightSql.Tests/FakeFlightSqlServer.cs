@@ -54,6 +54,10 @@ public sealed class ServerState
     /// <summary>The FlightInfo carries no schema, so it has to come from the first record batch.</summary>
     public bool OmitInfoSchema { get; set; }
 
+    /// <summary>Statements can be prepared but values cannot be bound to them (Unimplemented), as in a proxy
+    /// that only prepares parameterless statements.</summary>
+    public bool RefuseParameters { get; set; }
+
     public List<string> Executed { get; } = [];
     public List<RecordBatch?> ExecutedParameters { get; } = [];
     public List<string?> AuthorizationSeen { get; } = [];
@@ -256,6 +260,9 @@ internal sealed class FakeFlightSqlServer(ServerState state) : FlightServer
         var any = FlightSqlUtils.Parse(descriptor.Command);
         if (!any.Is(CommandPreparedStatementQuery.Descriptor))
             throw new RpcException(new Status(StatusCode.Unimplemented, "writes are not supported by the fake"));
+
+        if (state.RefuseParameters)
+            throw new RpcException(new Status(StatusCode.Unimplemented, "PutPreparedStatementQuery is not supported."));
 
         var handle = any.Unpack<CommandPreparedStatementQuery>().PreparedStatementHandle.ToStringUtf8();
         RecordBatch? parameters = null;
