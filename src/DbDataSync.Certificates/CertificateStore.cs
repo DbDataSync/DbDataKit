@@ -14,7 +14,7 @@ namespace DbDataSync.Certificates;
 public static class CertificateStore
 {
     /// <summary>
-    /// Installs a certificate into <c>&lt;location&gt;\My</c>, private key non-exportable.
+    /// Installs a certificate into <c>&lt;location&gt;\My</c>, private key non-exportable, friendly name intact.
     /// <para>
     /// **Round-trips through a PFX**, not a direct <c>store.Add(certificate)</c>. A certificate fresh
     /// off <see cref="CertificateBuilder.CreateSelfSigned"/> (or returned from an AD CS submission) has
@@ -57,6 +57,14 @@ public static class CertificateStore
             | (location == StoreLocation.LocalMachine ? X509KeyStorageFlags.MachineKeySet : X509KeyStorageFlags.UserKeySet);
 
         var persisted = X509CertificateLoader.LoadPkcs12(pfxBytes, exportPassword, flags);
+
+        // Carried across by hand, because the round trip above does not carry it. FriendlyName is a Windows *store*
+        // property (CERT_FRIENDLY_NAME_PROP_ID), not a field of the encoded certificate, so Export(Pfx) drops it —
+        // and the name CertificateBuilder had just set went into the store empty. Nothing in this codebase looks a
+        // certificate up by it, which is why it went unnoticed: the cost is paid by a person in certlm.msc, or
+        // reading `dbdatasync config cert list`, trying to tell which certificate is the one this tool issued.
+        persisted.FriendlyName = certificate.FriendlyName;
+
         store.Add(persisted);
 
         return persisted;

@@ -98,4 +98,17 @@ public sealed class CertificateStoreWindowsTests : IDisposable
         // account running this test process, so this is a real negative rather than a tautology.
         Assert.False(PrivateKeyAccess.CanRead(installed, "Guest"));
     }
+
+    /// <summary>Read back out of the store, not off the returned object: the friendly name is a store property that
+    /// <c>Export(Pfx)</c> does not carry, so the in-memory copy kept one the store itself never had — which is how
+    /// every certificate this tool installed ended up nameless in certlm.msc and in `config cert list`.</summary>
+    [WindowsOnlyFact]
+    public void Install_KeepsTheFriendlyName_WhichThePfxRoundTripDoesNotCarry()
+    {
+        var installed = InstallSelfSigned($"dbdatasync-test-{Guid.NewGuid():N}.example.com");
+
+        var found = CertificateStore.FindByThumbprint(installed.Thumbprint, StoreLocation.CurrentUser);
+
+        Assert.Equal("DbDataSync Test", found!.FriendlyName);
+    }
 }
