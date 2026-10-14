@@ -437,10 +437,10 @@ public sealed partial class ProxyFlightServer
         {
             foreach (var r in await QueryRowsAsync(source, ColumnsSql, cancellationToken).ConfigureAwait(false))
             {
-                if (r[2] is null || r[3] is null) continue;
-                var key = (r[0], r[1], r[2]);
+                if (r[2] is not { } tableName || r[3] is not { } columnName) continue;
+                var key = (r[0], r[1], tableName);
                 if (!byTable.TryGetValue(key, out var list)) byTable[key] = list = [];
-                list.Add(new ColumnEntry(r[3], !string.Equals(r[4], "NO", StringComparison.OrdinalIgnoreCase),
+                list.Add(new ColumnEntry(columnName,!string.Equals(r[4], "NO", StringComparison.OrdinalIgnoreCase),
                     int.TryParse(r[5], out int p) ? p : null, int.TryParse(r[6], out int s) ? s : null));
             }
         }
