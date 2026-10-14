@@ -35,7 +35,10 @@ public sealed class RequestAuthenticator(SessionStore sessions, ChainedCredentia
         if (authorization is null || !authorization.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase)) return false;
         try
         {
-            string decoded = Encoding.UTF8.GetString(Convert.FromBase64String(authorization["Basic ".Length..].Trim()));
+            string encoded = authorization["Basic ".Length..].Trim();
+            // Some clients (the Go-based ADBC driver) send base64 without the trailing padding.
+            encoded = encoded.PadRight((encoded.Length + 3) / 4 * 4, '=');
+            string decoded = Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
             int colon = decoded.IndexOf(':');
             if (colon <= 0) return false;
             user = decoded[..colon];

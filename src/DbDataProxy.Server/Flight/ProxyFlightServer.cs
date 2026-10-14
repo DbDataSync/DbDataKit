@@ -36,9 +36,19 @@ public sealed partial class ProxyFlightServer(
         IAsyncStreamWriter<FlightHandshakeResponse> responseStream,
         ServerCallContext context)
     {
+        // Most Flight clients (C++, Java, Python, .NET) send Basic credentials in the "authorization" header; the Go
+        // clients, including the ADBC Flight SQL driver, send them as a BasicAuth message in the handshake payload.
         string? header = context.RequestHeaders.GetValue("authorization");
-        if (!RequestAuthenticator.TryParseBasic(header, out string user, out string password))
+        string user = "", password = "";
+        bool haveCredentials = RequestAuthenticator.TryParseBasic(header, out user, out password);
+        if (!haveCredentials && await requestStream.MoveNext(context.CancellationToken).ConfigureAwait(false))
+            haveCredentials = TryParseBasicAuthPayload(requestStream.Current.Payload.ToByteArray(), out user, out password);
+        if (!haveCredentials)
+        {
+            _log.LogWarning("Handshake without usable credentials from {Peer}: authorization scheme {Scheme} (length {Length}), headers [{Headers}]",
+                context.Peer, header?.Split(' ')[0], header?.Length, string.Join(", ", context.RequestHeaders.Select(h => h.Key)));
             throw new RpcException(new Status(StatusCode.Unauthenticated, "Basic credentials are required."));
+        }
 
         var principal = await credentialValidator.ValidateAsync(user, password, context.CancellationToken, context.ClientAddress()).ConfigureAwait(false);
         if (principal is null)
@@ -53,6 +63,32 @@ public sealed partial class ProxyFlightServer(
         // Standard Flight clients pick the token up from the response "authorization" header.
         await context.WriteResponseHeadersAsync(new Metadata { { "authorization", "Bearer " + token } }).ConfigureAwait(false);
         await responseStream.WriteAsync(new FlightHandshakeResponse(ByteString.CopyFromUtf8(token), 0)).ConfigureAwait(false);
+    }
+
+    /// <summary>Parses the Flight <c>BasicAuth</c> protobuf message (username = field 2, password = field 3).</summary>
+    internal static bool TryParseBasicAuthPayload(byte[] payload, out string user, out string password)
+    {
+        user = password = "";
+        if (payload.Length == 0) return false;
+        try
+        {
+            var input = new CodedInputStream(payload);
+            uint tag;
+            while ((tag = input.ReadTag()) != 0)
+            {
+                switch (WireFormat.GetTagFieldNumber(tag))
+                {
+                    case 2: user = input.ReadString(); break;
+                    case 3: password = input.ReadString(); break;
+                    default: input.SkipLastField(); break;
+                }
+            }
+        }
+        catch (InvalidProtocolBufferException)
+        {
+            return false;
+        }
+        return user.Length > 0;
     }
 
     protected override Task<FlightInfo> GetStatementQueryFlightInfo(

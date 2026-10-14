@@ -117,19 +117,38 @@ var result = await client.QueryAsync("SELECT * FROM sales",
 await foreach (var batch in result) { /* Apache.Arrow.RecordBatch */ }
 ```
 
-Other languages use their normal Flight SQL client: authenticate with Basic credentials (the handshake), send the
-returned bearer token, and add `x-datasource` / `x-compression` as call headers. For example with pyarrow:
-`client.authenticate_basic_token(user, pw)` then `FlightCallOptions(headers=[token_pair, (b"x-datasource", b"erp")])`.
-(Compatibility with non-.NET clients follows from using only standard Flight SQL mechanisms but has not been exercised
-in this repository's tests.)
+Other languages use their normal Flight SQL client. With ADBC (Python shown; the same options exist for the other
+languages):
+
+```python
+import adbc_driver_flightsql.dbapi as fsql
+from adbc_driver_flightsql import DatabaseOptions
+
+conn = fsql.connect("grpc+tls://proxy:8815", db_kwargs={
+    "username": "me", "password": "...",
+    DatabaseOptions.RPC_CALL_HEADER_PREFIX.value + "x-datasource": "erp",
+    DatabaseOptions.RPC_CALL_HEADER_PREFIX.value + "x-compression": "zstd",   # optional
+})
+```
+
+With plain pyarrow Flight: `token = client.authenticate_basic_token(user, pw)` then pass
+`FlightCallOptions(headers=[token, (b"x-datasource", b"erp")])` to `get_flight_info` / `do_get`.
+
+ADBC (Python, Go driver) and pyarrow Flight are exercised by `tests/interop/run-interop.ps1` against the published
+exe: queries with every compression setting, updates, metadata and wrong-password rejection all pass.
 
 ## Not supported yet
 
-* Flight SQL metadata commands (`GetTables`, `GetCatalogs`, `GetSqlInfo`, ...) and prepared-statement parameters.
+* Prepared-statement parameters, `GetExportedKeys`/`GetImportedKeys`/`GetCrossReference` and `GetXdbcTypeInfo`.
   Plain statements and parameterless prepared statements work (the .NET client prepares everything).
+* Catalog metadata is read from `INFORMATION_SCHEMA`, so it works for SQL Server, DuckDB and most ODBC databases that
+  have it; others return an error for those calls (queries are unaffected).
+* `AllowWrites` only gates statements a client sends as *updates*. A client that runs `INSERT`/`DDL` through the query
+  path (ADBC's `cursor.execute` does) is limited only by the database account's permissions, so use read-only database
+  accounts for read-only sources.
 * Transactions, `DoPut` bulk ingestion.
+* Pass-through and Windows-account logon have not been exercised against real accounts.
 * The Linux/Docker path (`Dockerfile`) has not been built or run in this repository's environment.
-* Windows-account logon (`LogonUser`) is covered by tests through a fake; it has not been exercised against a real account.
 
 ## Development
 

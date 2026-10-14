@@ -177,3 +177,21 @@ public class BasicHeaderTests
         Assert.False(RequestAuthenticator.TryParseBasic(header, out _, out _));
     }
 }
+
+public class UnpaddedBasicHeaderTests
+{
+    [Theory]
+    [InlineData("py:interop-pw")]   // 13 bytes: standard base64 needs padding
+    [InlineData("bob:secret")]       // 10 bytes
+    [InlineData("ab:cd")]            // 5 bytes
+    [InlineData("abc:def")]          // 7 bytes
+    public void Accepts_basic_credentials_with_or_without_base64_padding(string credentials)
+    {
+        string padded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(credentials));
+        foreach (string encoded in new[] { padded, padded.TrimEnd('=') })
+        {
+            Assert.True(RequestAuthenticator.TryParseBasic("Basic " + encoded, out var user, out var password));
+            Assert.Equal(credentials, user + ":" + password);
+        }
+    }
+}
