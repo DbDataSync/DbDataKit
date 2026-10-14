@@ -42,13 +42,12 @@ such as `v1.2.3-rc1`, are marked as pre-releases).
 To install or upgrade from a release, run from an elevated PowerShell prompt:
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/<owner>/<repo>/releases/latest/download/install.ps1))) -Repo <owner>/<repo> -InstallService
+& ([scriptblock]::Create((irm https://github.com/DbDataSync/DbDataProxy/releases/latest/download/install.ps1))) -InstallService
 ```
 
 The script verifies the download against `SHA256SUMS`, installs to `%ProgramFiles%\DbDataProxy` (`-InstallDir`),
 keeps an existing `appsettings.json`, stops and restarts a running service around an upgrade, and registers the
-service only with `-InstallService`. `-Version 1.2.3` selects a specific release. Edit the `$Repo` default in
-`scripts/install.ps1` to your repository to make `-Repo` unnecessary.
+service only with `-InstallService`. `-Version 1.2.3` selects a specific release.
 
 ## Configuration
 

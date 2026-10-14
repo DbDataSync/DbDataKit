@@ -6,14 +6,14 @@
   appsettings.json. A running Windows service is stopped for the upgrade and started again afterwards.
 .EXAMPLE
   # Latest release, files only:
-  & ([scriptblock]::Create((irm https://github.com/OWNER/DbDataProxy/releases/latest/download/install.ps1)))
+  & ([scriptblock]::Create((irm https://github.com/DbDataSync/DbDataProxy/releases/latest/download/install.ps1)))
 .EXAMPLE
   # Specific version, registered as a Windows service (run from an elevated prompt):
   ./install.ps1 -Version 1.2.3 -InstallService
 #>
 [CmdletBinding()]
 param(
-  [string]$Repo = 'OWNER/DbDataProxy',
+  [string]$Repo = 'DbDataSync/DbDataProxy',
   [string]$Version = 'latest',
   [string]$InstallDir = (Join-Path $env:ProgramFiles 'DbDataProxy'),
   [string]$ServiceName = 'DbDataProxy',
