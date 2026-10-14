@@ -17,7 +17,7 @@ public sealed class DelegateConnectionFactory(Func<string, DbConnection> create)
 }
 
 /// <summary>Generic ADO.NET executor: any <see cref="DbConnection"/> becomes an Arrow query source.</summary>
-public sealed class DbQueryExecutor(IDbConnectionFactory factory, string connectionString) : IQueryExecutor
+public sealed class DbQueryExecutor(IDbConnectionFactory factory, string connectionString) : IQueryExecutor, IMetadataProvider
 {
     public async Task<IQueryResult> ExecuteQueryAsync(QueryRequest request, CancellationToken cancellationToken)
     {
@@ -50,6 +50,14 @@ public sealed class DbQueryExecutor(IDbConnectionFactory factory, string connect
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = CreateCommand(connection, request);
         return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken)
+    {
+        await using var connection = factory.CreateConnection(connectionString);
+        if (connection is not System.Data.Odbc.OdbcConnection odbc)
+            throw new NotSupportedException("Catalog-API metadata is only available for ODBC data sources.");
+        return await OdbcMetadata.ListTablesAsync(odbc, cancellationToken).ConfigureAwait(false);
     }
 
     private static DbCommand CreateCommand(DbConnection connection, QueryRequest request)

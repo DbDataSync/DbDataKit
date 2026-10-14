@@ -47,6 +47,11 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
     public override async Task DoAction(FlightAction action, IAsyncStreamWriter<FlightResult> responseStream, ServerCallContext context)
     {
         Authorize(context);
+        if (action.Type == WorkerProtocol.ListTablesAction)
+        {
+            await ListTablesAsync(action, responseStream, context).ConfigureAwait(false);
+            return;
+        }
         if (action.Type != WorkerProtocol.NonQueryAction)
             throw new RpcException(new Status(StatusCode.Unimplemented, $"Unknown action '{action.Type}'."));
 
@@ -65,6 +70,23 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
         }
 
         byte[] body = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new WorkerNonQueryResult(affected), WorkerProtocol.Json);
+        await responseStream.WriteAsync(new FlightResult(ByteString.CopyFrom(body))).ConfigureAwait(false);
+    }
+
+    private async Task ListTablesAsync(FlightAction action, IAsyncStreamWriter<FlightResult> responseStream, ServerCallContext context)
+    {
+        var request = WorkerProtocol.Deserialize(action.Body.Span);
+        IReadOnlyList<TableEntry> tables;
+        try
+        {
+            tables = await CreateExecutor(request).ListTablesAsync(request.TimeoutSeconds, context.CancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogWarning(ex, "Worker table listing failed");
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+        byte[] body = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(tables, WorkerProtocol.Json);
         await responseStream.WriteAsync(new FlightResult(ByteString.CopyFrom(body))).ConfigureAwait(false);
     }
 

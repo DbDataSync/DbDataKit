@@ -14,7 +14,7 @@ public interface IWorkerLink
 }
 
 /// <summary>Runs ODBC queries in the 32-bit worker process and streams the Arrow results back.</summary>
-public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionString) : IQueryExecutor
+public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionString) : IQueryExecutor, IMetadataProvider
 {
     public async Task<IQueryResult> ExecuteQueryAsync(QueryRequest request, CancellationToken cancellationToken)
     {
@@ -45,6 +45,18 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
         await foreach (var result in call.ResponseStream.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             affected = System.Text.Json.JsonSerializer.Deserialize<WorkerNonQueryResult>(result.Body.Span, WorkerProtocol.Json)!.Affected;
         return affected;
+    }
+
+    public async Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken)
+    {
+        var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
+        var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, "", 1, commandTimeoutSeconds));
+
+        using var call = client.DoAction(new FlightAction(WorkerProtocol.ListTablesAction, payload), Headers(secret), null, cancellationToken);
+        var tables = new List<TableEntry>();
+        await foreach (var result in call.ResponseStream.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            tables.AddRange(System.Text.Json.JsonSerializer.Deserialize<List<TableEntry>>(result.Body.Span, WorkerProtocol.Json) ?? []);
+        return tables;
     }
 
     private static Metadata Headers(string secret) => new() { { WorkerProtocol.SecretHeader, secret } };

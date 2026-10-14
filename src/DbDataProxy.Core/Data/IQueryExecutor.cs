@@ -23,3 +23,15 @@ public interface IQueryExecutor
     /// <summary>Runs a non-query statement and returns the affected row count (-1 if unknown).</summary>
     Task<long> ExecuteNonQueryAsync(QueryRequest request, CancellationToken cancellationToken);
 }
+
+/// <summary>A table or view as reported by a data source's catalog.</summary>
+public sealed record TableEntry(string? Catalog, string? Schema, string Name, string Type);
+
+/// <summary>
+/// Lists tables through the driver's catalog API rather than SQL. For ODBC this is SQLTables, so it works for sources
+/// that have no INFORMATION_SCHEMA (text files, Excel, Access, older drivers).
+/// </summary>
+public interface IMetadataProvider
+{
+    Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken);
+}

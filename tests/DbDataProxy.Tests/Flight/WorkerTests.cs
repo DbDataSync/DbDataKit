@@ -88,6 +88,30 @@ public sealed class WorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Lists_tables_through_the_odbc_catalog_api_without_information_schema()
+    {
+        using var client = await LoginAsync();
+
+        // The text driver has no INFORMATION_SCHEMA; table listing goes through SQLTables inside the worker.
+        var rows = new List<string?[]>();
+        await foreach (var batch in await client.Raw.GetTablesAsync(options: new DbDataProxy.Client.QueryOptions { DataSource = "text32" }))
+            for (int r = 0; r < batch.Length; r++)
+                rows.Add(Enumerable.Range(0, batch.ColumnCount).Select(c => DbDataProxy.Data.ArrowText.Get(batch.Column(c), r)).ToArray());
+
+        var people = Assert.Single(rows, r => r[2]!.StartsWith("people", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("TABLE", people[3]);
+
+        Assert.Empty(await Flatten(await client.Raw.GetPrimaryKeysAsync("people#csv", options: new DbDataProxy.Client.QueryOptions { DataSource = "text32" })));
+    }
+
+    private static async Task<List<RecordBatch>> Flatten(DbDataProxy.Client.QueryResultStream stream)
+    {
+        var batches = new List<RecordBatch>();
+        await foreach (var batch in stream) if (batch.Length > 0) batches.Add(batch);
+        return batches;
+    }
+
+    [Fact]
     public async Task Worker_reports_sql_errors_to_the_client()
     {
         using var client = await LoginAsync();

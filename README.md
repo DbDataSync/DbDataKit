@@ -141,8 +141,10 @@ exe: queries with every compression setting, updates, metadata and wrong-passwor
 
 * Prepared-statement parameters, `GetExportedKeys`/`GetImportedKeys`/`GetCrossReference` and `GetXdbcTypeInfo`.
   Plain statements and parameterless prepared statements work (the .NET client prepares everything).
-* Catalog metadata is read from `INFORMATION_SCHEMA`, so it works for SQL Server, DuckDB and most ODBC databases that
-  have it; others return an error for those calls (queries are unaffected).
+* Catalog metadata: SQL Server and DuckDB sources are read from `INFORMATION_SCHEMA`. ODBC sources use the driver's
+  catalog API (`SQLTables`, via `GetSchema`), so text/Excel/Access and other drivers without `INFORMATION_SCHEMA` work,
+  including through the 32-bit worker. Set a data source's `"Metadata"` to `"odbc"` or `"informationschema"` to
+  override the default (`"auto"`). ODBC sources report no primary keys, and driver quality varies.
 * `AllowWrites` only gates statements a client sends as *updates*. A client that runs `INSERT`/`DDL` through the query
   path (ADBC's `cursor.execute` does) is limited only by the database account's permissions, so use read-only database
   accounts for read-only sources.

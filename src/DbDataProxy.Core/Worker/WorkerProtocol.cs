@@ -10,6 +10,7 @@ public static class WorkerProtocol
 {
     public const string SecretHeader = "x-worker-secret";
     public const string NonQueryAction = "execute-nonquery";
+    public const string ListTablesAction = "list-tables";
 
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 

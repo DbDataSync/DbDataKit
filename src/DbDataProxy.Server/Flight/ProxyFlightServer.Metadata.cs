@@ -65,14 +65,14 @@ public sealed partial class ProxyFlightServer
 
     protected override async Task DoGetCatalog(CommandGetCatalogs command, FlightServerRecordBatchStreamWriter writer, ServerCallContext context)
     {
-        var rows = await ReadMetadataAsync(context, SchemataSql).ConfigureAwait(false);
+        var rows = await LoadSchemataAsync(ResolveSource(context), context.CancellationToken).ConfigureAwait(false);
         var catalogs = rows.Select(r => r[0]).Where(c => c is not null).Distinct(StringComparer.Ordinal).OrderBy(c => c, StringComparer.Ordinal).ToList();
         await WriteAsync(writer, CatalogsSchema, [Strings(catalogs)], catalogs.Count).ConfigureAwait(false);
     }
 
     protected override async Task DoGetDbSchema(CommandGetDbSchemas command, FlightServerRecordBatchStreamWriter writer, ServerCallContext context)
     {
-        var rows = await ReadMetadataAsync(context, SchemataSql).ConfigureAwait(false);
+        var rows = await LoadSchemataAsync(ResolveSource(context), context.CancellationToken).ConfigureAwait(false);
         var schemaFilter = Pattern(command.HasDbSchemaFilterPattern ? command.DbSchemaFilterPattern : null);
         var selected = rows
             .Where(r => r[1] is not null && (!command.HasCatalog || r[0] == command.Catalog) && schemaFilter(r[1]!))
@@ -90,7 +90,7 @@ public sealed partial class ProxyFlightServer
         var tableFilter = Pattern(command.HasTableNameFilterPattern ? command.TableNameFilterPattern : null);
         var wantedTypes = command.TableTypes.Count == 0 ? null : command.TableTypes.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var rows = (await QueryRowsAsync(source, TablesSql, context.CancellationToken).ConfigureAwait(false))
+        var rows = (await LoadTablesAsync(source, context.CancellationToken).ConfigureAwait(false))
             .Select(r => new[] { r[0], r[1], r[2], FlightTableType(r[3]) })
             .Where(r => r[2] is not null && r[3] is not null
                         && (!command.HasCatalog || r[0] == command.Catalog)
@@ -121,7 +121,7 @@ public sealed partial class ProxyFlightServer
 
     protected override async Task DoGetPrimaryKeys(CommandGetPrimaryKeys command, FlightServerRecordBatchStreamWriter writer, ServerCallContext context)
     {
-        var rows = (await ReadMetadataAsync(context, PrimaryKeysSql).ConfigureAwait(false))
+        var rows = (await LoadPrimaryKeysAsync(ResolveSource(context), context.CancellationToken).ConfigureAwait(false))
             .Where(r => r[2] == command.Table
                         && (!command.HasCatalog || r[0] == command.Catalog)
                         && (!command.HasDbSchema || r[1] == command.DbSchema))
@@ -245,12 +245,48 @@ public sealed partial class ProxyFlightServer
         var other => other,
     };
 
-    private async Task<List<string?[]>> ReadMetadataAsync(ServerCallContext context, string sql)
+    private ResolvedDataSource ResolveSource(ServerCallContext context) =>
+        catalog.Resolve(context.GetPrincipal(), context.RequestHeaders.GetValue(DataSourceHeader));
+
+    /// <summary>True when metadata should come from the driver's catalog API (ODBC SQLTables) instead of INFORMATION_SCHEMA.</summary>
+    private static bool UseCatalogApi(ResolvedDataSource source) => source.Options.Metadata.ToLowerInvariant() switch
     {
-        var principal = context.GetPrincipal();
-        var source = catalog.Resolve(principal, context.RequestHeaders.GetValue(DataSourceHeader));
-        return await QueryRowsAsync(source, sql, context.CancellationToken).ConfigureAwait(false);
+        "odbc" => true,
+        "informationschema" => false,
+        _ => source.Options.Provider.Equals("odbc", StringComparison.OrdinalIgnoreCase),
+    };
+
+    private static async Task<List<string?[]>> LoadSchemataAsync(ResolvedDataSource source, CancellationToken cancellationToken)
+    {
+        if (!UseCatalogApi(source))
+            return await QueryRowsAsync(source, SchemataSql, cancellationToken).ConfigureAwait(false);
+
+        // The ODBC catalog API has no separate schema listing here; the schemas are those that contain tables.
+        var tables = await LoadTablesAsync(source, cancellationToken).ConfigureAwait(false);
+        return tables.Select(t => new[] { t[0], t[1] }).DistinctBy(r => (r[0], r[1])).ToList();
     }
+
+    private static async Task<List<string?[]>> LoadTablesAsync(ResolvedDataSource source, CancellationToken cancellationToken)
+    {
+        if (!UseCatalogApi(source))
+            return await QueryRowsAsync(source, TablesSql, cancellationToken).ConfigureAwait(false);
+
+        if (source.Executor is not IMetadataProvider provider)
+            throw new RpcException(new Status(StatusCode.Unimplemented, $"Data source '{source.Name}' cannot list tables through the catalog API."));
+        try
+        {
+            var tables = await provider.ListTablesAsync(source.Options.CommandTimeoutSeconds, cancellationToken).ConfigureAwait(false);
+            return tables.Select(t => new string?[] { t.Catalog, t.Schema, t.Name, t.Type }).ToList();
+        }
+        catch (Exception ex) when (ex is not RpcException and not OperationCanceledException)
+        {
+            throw ToRpcException(ex);
+        }
+    }
+
+    // The ODBC catalog functions have no portable primary-key listing in ADO.NET, so those sources report none.
+    private static Task<List<string?[]>> LoadPrimaryKeysAsync(ResolvedDataSource source, CancellationToken cancellationToken) =>
+        UseCatalogApi(source) ? Task.FromResult(new List<string?[]>()) : QueryRowsAsync(source, PrimaryKeysSql, cancellationToken);
 
     private static async Task<List<string?[]>> QueryRowsAsync(ResolvedDataSource source, string sql, CancellationToken cancellationToken)
     {

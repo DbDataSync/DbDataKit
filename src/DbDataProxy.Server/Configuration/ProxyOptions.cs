@@ -125,6 +125,12 @@ public sealed class DataSourceOptions
     /// <summary>Allow statements sent as updates (INSERT/UPDATE/DDL via ExecuteUpdate). Off by default.</summary>
     public bool AllowWrites { get; set; }
 
+    /// <summary>
+    /// How catalog metadata is read: "auto" (the ODBC catalog API for ODBC sources, INFORMATION_SCHEMA otherwise),
+    /// "odbc" (force the ODBC catalog API) or "informationschema" (force SQL against INFORMATION_SCHEMA).
+    /// </summary>
+    public string Metadata { get; set; } = "auto";
+
     public int BatchSize { get; set; } = 32768;
     public int? CommandTimeoutSeconds { get; set; }
 
