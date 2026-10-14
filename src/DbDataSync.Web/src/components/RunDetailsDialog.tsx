@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { RunKindBadge, StatusBadge } from './StatusBadge'
 import { TimingDetail, WatermarkCell } from './RunFigures'
 import { processingTime, queueTime } from './runTimes'
+import { useRunHub } from '../api/useRunHub'
 import type { RunWatermarkTimes, TaskRunRecord } from '../api/types'
 
 /**
@@ -33,6 +34,11 @@ export function RunDetailsDialog({ run, times, onClose }: {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // The run's log, live while it runs and loaded once for a finished one. Every run opens here, so a
+  // scheduled run nobody triggered from this browser is as readable as one that was — the Live run
+  // card only ever follows a run started in the current session.
+  const { logLines } = useRunHub(run.runId)
 
   const failed = run.status === 'Failed'
   const queued = queueTime(run)
@@ -140,6 +146,21 @@ export function RunDetailsDialog({ run, times, onClose }: {
               )}
             </div>
           )}
+
+          <div>
+            <div className="hint" style={{ marginBottom: 4 }}>
+              Log{run.status === 'Running' || run.status === 'Pending' ? ' (live)' : ''}
+            </div>
+            <div className="log" style={{ maxHeight: 320, overflow: 'auto' }} data-testid="run-details-log">
+              {logLines.length === 0 && <span className="log-time">No log output recorded for this run.</span>}
+              {logLines.map((line) => (
+                <span key={line.id} className={`log-line level-${line.level}`}>
+                  <span className="log-time">[{new Date(line.timestampUtc).toLocaleTimeString()}] </span>
+                  {line.message}
+                </span>
+              ))}
+            </div>
+          </div>
 
           <div className="row" style={{ justifyContent: 'flex-end' }}>
             <button type="button" className="btn" onClick={onClose} data-testid="run-details-dialog-close">

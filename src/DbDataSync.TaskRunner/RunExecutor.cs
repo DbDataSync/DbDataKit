@@ -1535,7 +1535,8 @@ public sealed class RunExecutor(
         segments = await CustomSegments.ExpandAsync(
             task, mapping, segments,
             new SegmentingConnections(sourceConnection, targetConnection, SourceColumnsOrNull: null, sourceDialect),
-            cancellationToken);
+            cancellationToken,
+            message => Log(item.RunId, LogSeverity.Info, $"'{mapping.Name}': {message}"));
 
         // Auto segments are resolved against the source's actual value range, so they're expanded
         // here rather than at config-save time — the range moves as the table does. The column's *type*

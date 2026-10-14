@@ -550,7 +550,7 @@ select.select {
   max-height: 260px;
   overflow: auto;
 }
-.log-line { color: #e8e6df; }
+.log-line { color: #e8e6df; white-space: pre-wrap; word-break: break-word; }
 .log-time { color: #8f8d85; }
 .log-line.level-Error { color: #f0836a; }
 .log-line.level-Warning { color: #e2be6b; }

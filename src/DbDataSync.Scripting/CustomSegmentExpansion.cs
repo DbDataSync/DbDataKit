@@ -32,7 +32,8 @@ public sealed class CustomSegmentExpansion(SegmentingStrategyRunner runner)
         TableMappingConfig mapping,
         IReadOnlyList<BatchReloadSegment> segments,
         SegmentingConnections connections,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<string>? log = null)
     {
         if (!segments.OfType<CustomSegment>().Any())
             return segments;
@@ -52,8 +53,20 @@ public sealed class CustomSegmentExpansion(SegmentingStrategyRunner runner)
                     $"Table mapping '{mapping.Name}' segments with strategy '{custom.StrategyName}', which " +
                     $"replication '{task.Name}' does not define.");
 
+            // Said before it runs: a strategy's own query can be the slow part of a pass, and a
+            // log with nothing in it while that query runs looks like a hung run.
+            log?.Invoke(
+                $"Evaluating segmenting strategy '{strategy.Name}' ({strategy.Kind})" +
+                (string.IsNullOrWhiteSpace(strategy.Sql) || strategy.Kind == SegmentingStrategyKind.Script
+                    ? "."
+                    : $":\n{strategy.Sql.Trim()}"));
+
             var candidates = await RunAsync(strategy, custom.Column, task, mapping, connections, cancellationToken);
-            expanded.AddRange(candidates.Where(c => c.Selected).Select(c => c.Segment));
+            var selected = candidates.Where(c => c.Selected).ToList();
+            log?.Invoke(
+                $"Strategy '{strategy.Name}' proposed {candidates.Count} candidate(s) and selected {selected.Count}" +
+                (selected.Count == 0 ? "." : $": {string.Join("; ", selected.Select(c => c.Segment.Describe()))}."));
+            expanded.AddRange(selected.Select(c => c.Segment));
         }
 
         return expanded;
