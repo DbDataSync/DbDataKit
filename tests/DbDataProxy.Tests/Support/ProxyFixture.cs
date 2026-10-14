@@ -208,3 +208,30 @@ public sealed class ByteCountingHandler(HttpMessageHandler inner) : DelegatingHa
         public override void SetLength(long value) => throw new NotSupportedException();
     }
 }
+
+/// <summary>Reads a GetSqlInfo result (a dense union per row) into id -> value.</summary>
+public static class SqlInfoReader
+{
+    public static async Task<Dictionary<uint, object>> ReadAsync(DbDataProxy.Client.QueryResultStream stream)
+    {
+        var values = new Dictionary<uint, object>();
+        await foreach (var batch in stream)
+        {
+            var names = (UInt32Array)batch.Column("info_name");
+            var union = (DenseUnionArray)batch.Column("value");
+            for (int i = 0; i < batch.Length; i++)
+            {
+                var child = union.Fields[union.TypeIds[i]];
+                int offset = union.ValueOffsets[i];
+                values[names.GetValue(i)!.Value] = child switch
+                {
+                    StringArray a => a.GetString(offset),
+                    BooleanArray a => a.GetValue(offset)!.Value,
+                    Int64Array a => a.GetValue(offset)!.Value,
+                    _ => throw new NotSupportedException(child.GetType().Name),
+                };
+            }
+        }
+        return values;
+    }
+}

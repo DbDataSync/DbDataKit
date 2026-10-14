@@ -154,6 +154,16 @@ public sealed class WorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Sql_info_describes_the_odbc_driver_through_the_worker()
+    {
+        using var client = await LoginAsync();
+        var info = await SqlInfoReader.ReadAsync(await client.Raw.GetSqlInfoAsync(new DbDataProxy.Client.QueryOptions { DataSource = "text32" }));
+        Assert.Equal("TEXT", info[0]);                    // the 32-bit driver names itself
+        Assert.Equal("`", info[504]);                     // and says how it quotes identifiers
+        Assert.Equal(true, info[3]);                      // AllowWrites is off for this source
+    }
+
+    [Fact]
     public async Task Worker_reports_sql_errors_to_the_client()
     {
         using var client = await LoginAsync();

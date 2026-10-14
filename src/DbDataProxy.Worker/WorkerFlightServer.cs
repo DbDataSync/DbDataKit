@@ -71,20 +71,20 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
                 System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(columns, WorkerProtocol.Json)))).ConfigureAwait(false);
             return;
         }
-        if (action.Type == WorkerProtocol.IdentifierQuoteAction)
+        if (action.Type == WorkerProtocol.DialectAction)
         {
-            IdentifierQuote? quote;
+            DialectInfo dialect;
             try
             {
-                quote = await CreateExecutor(WorkerProtocol.Deserialize(action.Body.Span)).GetIdentifierQuoteAsync(context.CancellationToken).ConfigureAwait(false);
+                dialect = await CreateExecutor(WorkerProtocol.Deserialize(action.Body.Span)).GetDialectAsync(context.CancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                log.LogWarning(ex, "Worker identifier-quote lookup failed");
+                log.LogWarning(ex, "Worker dialect lookup failed");
                 throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
             }
             await responseStream.WriteAsync(new FlightResult(ByteString.CopyFrom(
-                System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(quote, WorkerProtocol.Json)))).ConfigureAwait(false);
+                System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(dialect, WorkerProtocol.Json)))).ConfigureAwait(false);
             return;
         }
         if (action.Type != WorkerProtocol.NonQueryAction)

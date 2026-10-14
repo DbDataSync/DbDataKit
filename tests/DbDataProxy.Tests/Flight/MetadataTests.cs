@@ -108,9 +108,9 @@ public class MetadataTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
             var union = (DenseUnionArray)batch.Column("value");
             int serverName = Enumerable.Range(0, batch.Length).First(i => names.GetValue(i) == 0);
             var strings = (StringArray)union.Fields[0];
-            Assert.Equal("DbDataProxy", strings.GetString(union.ValueOffsets[serverName]));
+            Assert.Equal("DuckDB", strings.GetString(union.ValueOffsets[serverName]));   // alice's default data source
         }
-        Assert.Equal(6, rows);
+        Assert.True(rows >= 6, $"expected the core server facts plus dialect details, got {rows} rows");
     }
 
     [Fact]
@@ -168,5 +168,58 @@ public class DeclaredColumnTests(ProxyFixture proxy) : IClassFixture<ProxyFixtur
         await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
         var (schema, _) = await client.QueryAsync("SELECT amount FROM prices WHERE 1 = 0");
         Assert.True(Assert.IsType<Decimal128Type>(schema.GetFieldByName("amount").DataType).Scale > 0);
+    }
+}
+
+public class SqlInfoTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
+{
+    // Ids from the Flight SQL spec.
+    private const uint ServerName = 0, ServerVersion = 1, ReadOnly = 3;
+    private static readonly uint Cancel = (uint)Arrow.Flight.Protocol.Sql.SqlInfo.FlightSqlServerCancel;
+    private static readonly uint BulkIngestion = (uint)Arrow.Flight.Protocol.Sql.SqlInfo.FlightSqlServerBulkIngestion;
+    private const uint IdentifierCase = 503, QuoteChar = 504, NullOrdering = 507;
+
+    private async Task<Dictionary<uint, object>> InfoAsync(string? dataSource)
+    {
+        using var client = proxy.Connect();
+        await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+        return await SqlInfoReader.ReadAsync(await client.Raw.GetSqlInfoAsync(new DbDataProxy.Client.QueryOptions { DataSource = dataSource }));
+    }
+
+    [Fact]
+    public async Task Reports_the_selected_data_sources_product_and_dialect()
+    {
+        var info = await InfoAsync("duck");
+
+        Assert.Equal("DuckDB", info[ServerName]);
+        Assert.False(string.IsNullOrEmpty((string)info[ServerVersion]));
+        Assert.Equal("\"", info[QuoteChar]);
+        Assert.Equal(1L, info[IdentifierCase]);   // case insensitive
+        Assert.Equal(3L, info[NullOrdering]);     // nulls sort at the end
+        Assert.Equal(false, info[Cancel]);
+        Assert.Equal(false, info[BulkIngestion]);
+    }
+
+    [Fact]
+    public async Task Read_only_follows_the_data_sources_write_setting()
+    {
+        Assert.Equal(false, (await InfoAsync("duck"))[ReadOnly]);
+        Assert.Equal(true, (await InfoAsync("duck_ro"))[ReadOnly]);
+    }
+
+    [Fact]
+    public async Task Uses_the_users_default_data_source_when_none_is_named()
+    {
+        Assert.Equal("DuckDB", (await InfoAsync(null))[ServerName]);
+    }
+
+    [Fact]
+    public async Task Does_not_describe_data_sources_the_user_cannot_use()
+    {
+        using var client = proxy.Connect();
+        await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+        var ex = await Rpc.ExpectAsync(async () => await SqlInfoReader.ReadAsync(
+            await client.Raw.GetSqlInfoAsync(new DbDataProxy.Client.QueryOptions { DataSource = "other" })));
+        Assert.Equal(Grpc.Core.StatusCode.PermissionDenied, ex.StatusCode);
     }
 }

@@ -39,8 +39,8 @@ public interface IMetadataProvider
     /// <summary>Declared column metadata for one table through the catalog API (ODBC SQLColumns).</summary>
     Task<IReadOnlyList<ColumnEntry>> ListColumnsAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken);
 
-    /// <summary>The driver's identifier quoting (ODBC SQLGetInfo SQL_IDENTIFIER_QUOTE_CHAR), or null if it has none.</summary>
-    Task<IdentifierQuote?> GetIdentifierQuoteAsync(CancellationToken cancellationToken);
+    /// <summary>What the database says about itself: product, version and (for ODBC) how it quotes identifiers.</summary>
+    Task<DialectInfo> GetDialectAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>How a driver quotes identifiers; null from the provider means the driver does not support quoting.</summary>
@@ -52,3 +52,7 @@ public sealed record IdentifierQuote(string Prefix, string Suffix)
 
 /// <summary>A column as declared in the database catalog (nullability and, for decimals, precision and scale).</summary>
 public sealed record ColumnEntry(string Name, bool Nullable, int? Precision, int? Scale);
+
+/// <summary>Self-description of a database. Anything the database cannot say is null.</summary>
+/// <param name="Quote">Null for providers other than ODBC, and for ODBC drivers that report no quoting.</param>
+public sealed record DialectInfo(string? DbmsName, string? DbmsVersion, IdentifierQuote? Quote);

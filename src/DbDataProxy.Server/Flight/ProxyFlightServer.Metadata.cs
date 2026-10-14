@@ -157,57 +157,138 @@ public sealed partial class ProxyFlightServer
             [0, 1, 2, 3, 4, 5], UnionMode.Dense), false),
     ], null);
 
+    // Enum values the Flight SQL spec defines for SQL_IDENTIFIER_CASE / SQL_QUOTED_IDENTIFIER_CASE and SQL_NULL_ORDERING.
+    private const long CaseInsensitive = 1;
+    private const long NullsSortedLow = 1;
+    private const long NullsSortedAtEnd = 3;
+
+    /// <summary>What the server tells clients about itself and the data source they selected.</summary>
+    private sealed class SqlInfoFacts
+    {
+        public Dictionary<uint, string> Strings { get; } = [];
+        public Dictionary<uint, bool> Bools { get; } = [];
+        public Dictionary<uint, long> Longs { get; } = [];
+
+        public IEnumerable<uint> All => Strings.Keys.Concat(Bools.Keys).Concat(Longs.Keys).OrderBy(k => k);
+    }
+
+    // GetSqlInfo is per data source: the x-datasource header picks the backend whose product, version, quoting and
+    // collation-related facts are reported. With no data source selected (several are configured and the client has not
+    // said which) it answers for the proxy alone.
     protected override async Task DoGetSqlInfo(CommandGetSqlInfo command, FlightServerRecordBatchStreamWriter writer, ServerCallContext context)
     {
-        _ = context.GetPrincipal();
-        string version = typeof(ProxyFlightServer).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
-        var strings = new Dictionary<uint, string>
+        var principal = context.GetPrincipal();
+        string? requestedSource = context.RequestHeaders.GetValue(DataSourceHeader);
+        ResolvedDataSource? source = null;
+        try
         {
-            [(uint)SqlInfo.FlightSqlServerName] = "DbDataProxy",
-            [(uint)SqlInfo.FlightSqlServerVersion] = version,
-            [(uint)SqlInfo.FlightSqlServerArrowVersion] = typeof(Apache.Arrow.Schema).Assembly.GetName().Version?.ToString(3) ?? "",
-        };
-        var bools = new Dictionary<uint, bool>
+            source = catalog.Resolve(principal, requestedSource);
+        }
+        catch (RpcException ex) when (string.IsNullOrWhiteSpace(requestedSource) && ex.StatusCode == StatusCode.InvalidArgument)
         {
-            [(uint)SqlInfo.FlightSqlServerReadOnly] = false,
-            [(uint)SqlInfo.FlightSqlServerSql] = true,
-            [(uint)SqlInfo.FlightSqlServerSubstrait] = false,
-        };
+            // Nothing selected and nothing to default to.
+        }
 
+        var facts = await DescribeAsync(source, context.CancellationToken).ConfigureAwait(false);
         var requested = command.Info.Count == 0
-            ? strings.Keys.Concat(bools.Keys).OrderBy(k => k).ToList()
-            : command.Info.Select(i => (uint)i).Where(i => strings.ContainsKey(i) || bools.ContainsKey(i)).ToList();
+            ? facts.All.ToList()
+            : command.Info.Select(i => (uint)i).Where(i => facts.Strings.ContainsKey(i) || facts.Bools.ContainsKey(i) || facts.Longs.ContainsKey(i)).ToList();
 
         var names = new UInt32Array.Builder();
         var typeIds = new ArrowBuffer.Builder<byte>();
         var offsets = new ArrowBuffer.Builder<int>();
         var stringChild = new StringArray.Builder();
         var boolChild = new BooleanArray.Builder();
+        var longChild = new Int64Array.Builder();
         foreach (uint id in requested)
         {
             names.Append(id);
-            if (strings.TryGetValue(id, out var s))
+            if (facts.Strings.TryGetValue(id, out var s))
             {
                 typeIds.Append(0);
                 offsets.Append(stringChild.Length);
                 stringChild.Append(s);
             }
-            else
+            else if (facts.Bools.TryGetValue(id, out bool b))
             {
                 typeIds.Append(1);
                 offsets.Append(boolChild.Length);
-                boolChild.Append(bools[id]);
+                boolChild.Append(b);
+            }
+            else
+            {
+                typeIds.Append(2);
+                offsets.Append(longChild.Length);
+                longChild.Append(facts.Longs[id]);
             }
         }
 
         var unionType = (UnionType)SqlInfoSchema.GetFieldByName("value").DataType;
         IArrowArray[] children =
         [
-            stringChild.Build(), boolChild.Build(), new Int64Array.Builder().Build(), new Int32Array.Builder().Build(),
+            stringChild.Build(), boolChild.Build(), longChild.Build(), new Int32Array.Builder().Build(),
             new ListArray.Builder(StringType.Default).Build(), new MapArray.Builder((MapType)unionType.Fields[5].DataType).Build(),
         ];
         var union = new DenseUnionArray(unionType, requested.Count, children, typeIds.Build(), offsets.Build(), 0, 0);
         await WriteAsync(writer, SqlInfoSchema, [names.Build(), union], requested.Count).ConfigureAwait(false);
+    }
+
+    private async Task<SqlInfoFacts> DescribeAsync(ResolvedDataSource? source, CancellationToken cancellationToken)
+    {
+        var facts = new SqlInfoFacts();
+        string proxyVersion = typeof(ProxyFlightServer).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+
+        facts.Strings[(uint)SqlInfo.FlightSqlServerName] = "DbDataProxy";
+        facts.Strings[(uint)SqlInfo.FlightSqlServerVersion] = proxyVersion;
+        facts.Strings[(uint)SqlInfo.FlightSqlServerArrowVersion] = typeof(Apache.Arrow.Schema).Assembly.GetName().Version?.ToString(3) ?? "";
+        facts.Bools[(uint)SqlInfo.FlightSqlServerReadOnly] = false;
+        facts.Bools[(uint)SqlInfo.FlightSqlServerSql] = true;
+        facts.Bools[(uint)SqlInfo.FlightSqlServerSubstrait] = false;
+        facts.Bools[(uint)SqlInfo.FlightSqlServerCancel] = false;
+        facts.Bools[(uint)SqlInfo.FlightSqlServerBulkIngestion] = false;
+        if (source is null) return facts;
+
+        // Read-only means no statement can change data through this data source's update path; queries are still
+        // limited only by the database account (see the README), so use a read-only login for real protection.
+        facts.Bools[(uint)SqlInfo.FlightSqlServerReadOnly] = !source.Options.AllowWrites;
+
+        string? quote = null;
+        switch (source.Options.Provider.ToLowerInvariant())
+        {
+            case "sqlserver":
+                facts.Strings[(uint)SqlInfo.FlightSqlServerName] = "Microsoft SQL Server";
+                quote = "\"";
+                facts.Longs[(uint)SqlInfo.SqlIdentifierCase] = CaseInsensitive;
+                facts.Longs[(uint)SqlInfo.SqlQuotedIdentifierCase] = CaseInsensitive;
+                facts.Longs[(uint)SqlInfo.SqlNullOrdering] = NullsSortedLow;
+                break;
+            case "duckdb":
+                facts.Strings[(uint)SqlInfo.FlightSqlServerName] = "DuckDB";
+                quote = "\"";
+                facts.Longs[(uint)SqlInfo.SqlIdentifierCase] = CaseInsensitive;
+                facts.Longs[(uint)SqlInfo.SqlQuotedIdentifierCase] = CaseInsensitive;
+                facts.Longs[(uint)SqlInfo.SqlNullOrdering] = NullsSortedAtEnd;
+                break;
+        }
+
+        // Ask the database itself for what a static table cannot know: the version, and for ODBC the product and
+        // the driver's identifier quote. A database that cannot be reached still gets the static answers.
+        if (source.Executor is IMetadataProvider provider)
+        {
+            try
+            {
+                var dialect = await provider.GetDialectAsync(cancellationToken).ConfigureAwait(false);
+                if (dialect.DbmsName is { Length: > 0 } name) facts.Strings[(uint)SqlInfo.FlightSqlServerName] = name;
+                if (dialect.DbmsVersion is { Length: > 0 } version) facts.Strings[(uint)SqlInfo.FlightSqlServerVersion] = version;
+                if (dialect.Quote is { } q) quote = q.Prefix;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _log.LogDebug(ex, "Could not read the dialect of data source {Source}", source.Name);
+            }
+        }
+        if (quote is not null) facts.Strings[(uint)SqlInfo.SqlIdentifierQuoteChar] = quote;
+        return facts;
     }
 
     // ---- Helpers ----
@@ -417,7 +498,7 @@ public sealed partial class ProxyFlightServer
         if (!UseCatalogApi(source) || source.Executor is not IMetadataProvider provider) return StandardQuote;
         try
         {
-            var quote = await provider.GetIdentifierQuoteAsync(cancellationToken).ConfigureAwait(false);
+            var quote = (await provider.GetDialectAsync(cancellationToken).ConfigureAwait(false)).Quote;
             return quote is null ? id => id : quote.Apply;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

@@ -71,16 +71,16 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
         return columns;
     }
 
-    public async Task<IdentifierQuote?> GetIdentifierQuoteAsync(CancellationToken cancellationToken)
+    public async Task<DialectInfo> GetDialectAsync(CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
         var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, "", 1, null));
 
-        using var call = client.DoAction(new FlightAction(WorkerProtocol.IdentifierQuoteAction, payload), Headers(secret), null, cancellationToken);
-        IdentifierQuote? quote = null;
+        using var call = client.DoAction(new FlightAction(WorkerProtocol.DialectAction, payload), Headers(secret), null, cancellationToken);
+        DialectInfo? dialect = null;
         await foreach (var result in call.ResponseStream.ReadAllAsync(cancellationToken).ConfigureAwait(false))
-            quote = System.Text.Json.JsonSerializer.Deserialize<IdentifierQuote?>(result.Body.Span, WorkerProtocol.Json);
-        return quote;
+            dialect = System.Text.Json.JsonSerializer.Deserialize<DialectInfo>(result.Body.Span, WorkerProtocol.Json);
+        return dialect ?? new DialectInfo(null, null, null);
     }
 
     private static Metadata Headers(string secret) => new() { { WorkerProtocol.SecretHeader, secret } };

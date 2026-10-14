@@ -70,12 +70,14 @@ public sealed class DbQueryExecutor(
         return await OdbcMetadata.ListColumnsAsync(odbc, catalog, schema, table, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<IdentifierQuote?> GetIdentifierQuoteAsync(CancellationToken cancellationToken)
+    public async Task<DialectInfo> GetDialectAsync(CancellationToken cancellationToken)
     {
         await using var connection = factory.CreateConnection(connectionString);
-        if (connection is not System.Data.Odbc.OdbcConnection odbc)
-            throw new NotSupportedException("Driver identifier quoting is only available for ODBC data sources.");
-        return await OdbcMetadata.GetIdentifierQuoteAsync(odbc, cancellationToken).ConfigureAwait(false);
+        if (connection is System.Data.Odbc.OdbcConnection odbc)
+            return await OdbcMetadata.GetDialectAsync(odbc, cancellationToken).ConfigureAwait(false);
+
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        return new DialectInfo(null, connection.ServerVersion, null);
     }
 
     private DbCommand CreateCommand(DbConnection connection, QueryRequest request)

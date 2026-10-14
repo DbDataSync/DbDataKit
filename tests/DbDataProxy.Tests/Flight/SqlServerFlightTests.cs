@@ -259,6 +259,27 @@ public sealed class SqlServerFlightTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Sql_info_describes_each_data_sources_backend()
+    {
+        using var client = await LoginAsync();
+
+        var proxyOnly = await SqlInfoReader.ReadAsync(await client.Raw.GetSqlInfoAsync());   // several sources, none selected
+        Assert.Equal("DbDataProxy", proxyOnly[0]);
+
+        var sql = await SqlInfoReader.ReadAsync(await client.Raw.GetSqlInfoAsync(On("sql")));
+        Assert.Equal("Microsoft SQL Server", sql[0]);
+        Assert.StartsWith("1", (string)sql[1]);           // e.g. 16.00.1000
+        Assert.Equal("\"", sql[504]);
+        Assert.Equal(false, sql[3]);                      // AllowWrites is on
+
+        if (!_odbcAvailable) return;
+        var odbc = await SqlInfoReader.ReadAsync(await client.Raw.GetSqlInfoAsync(On("odbc")));
+        Assert.Contains("SQL Server", (string)odbc[0]);   // reported by the ODBC driver itself
+        Assert.Equal("\"", odbc[504]);
+        Assert.Equal(true, odbc[3]);                      // no AllowWrites on this source
+    }
+
+    [Fact]
     public async Task Sql_errors_become_invalid_argument()
     {
         using var client = await LoginAsync();

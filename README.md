@@ -32,6 +32,21 @@ On first start the proxy writes `dbdataproxy-selfsigned.pfx` and `.cer` to its d
 should trust it. The certificate covers localhost, the machine name/FQDN and `Proxy:Tls:Hostnames`, and is
 regenerated automatically when those change or it nears expiry. Use `Tls:Mode = File` for your own PFX.
 
+## Server info (GetSqlInfo)
+
+`GetSqlInfo` is answered per data source, chosen with the `x-datasource` header (or the user's default). With no
+data source selectable it describes the proxy alone.
+
+| Flight SQL id | Value |
+| --- | --- |
+| `FLIGHT_SQL_SERVER_NAME` | The backend product: `Microsoft SQL Server`, `DuckDB`, or for ODBC what the driver reports (`DBMS_NAME`); `DbDataProxy` with no data source |
+| `FLIGHT_SQL_SERVER_VERSION` | The backend version when the database can be reached; otherwise the proxy version |
+| `FLIGHT_SQL_SERVER_ARROW_VERSION` | The Apache Arrow library version |
+| `FLIGHT_SQL_SERVER_READ_ONLY` | `true` when the data source has no `AllowWrites` (see the caveat under Limitations) |
+| `FLIGHT_SQL_SERVER_SQL` / `_SUBSTRAIT` / `_CANCEL` / `_BULK_INGESTION` | `true` / `false` / `false` / `false` |
+| `SQL_IDENTIFIER_QUOTE_CHAR` | `"` for SQL Server and DuckDB; the driver's own character for ODBC (the 32-bit worker's too) |
+| `SQL_IDENTIFIER_CASE`, `SQL_QUOTED_IDENTIFIER_CASE`, `SQL_NULL_ORDERING` | SQL Server and DuckDB only: case-insensitive; nulls sort low (SQL Server) or at the end (DuckDB) |
+
 ## Parameters
 
 Prepared statements accept parameters the standard Flight SQL way: prepare, bind a record batch with `DoPut`, execute.
