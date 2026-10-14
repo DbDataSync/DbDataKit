@@ -16,10 +16,19 @@ internal interface IServiceControl
     int Start(ServiceSituation service);
 }
 
+/// <summary>The outcome of a probe.</summary>
+/// <param name="Reason">What the <em>last</em> attempt hit when it never answered — without it, a name that
+/// resolves somewhere else from this machine, a proxy in the way, and a service that genuinely never started are
+/// one indistinguishable timeout.</param>
+/// <param name="CertificateProblem">Set when the service answered over a certificate that did not validate — which
+/// <see cref="HealthProbeClient"/> deliberately does not treat as a failure, but which the operator still has to
+/// be told about.</param>
+internal sealed record HealthProbeResult(bool Healthy, string? Reason, string? CertificateProblem);
+
 internal interface IHealthProbe
 {
     /// <summary>Polls until the service answers, or the timeout passes.</summary>
-    Task<bool> WaitUntilHealthyAsync(string baseUrl, TimeSpan timeout, CancellationToken cancellationToken);
+    Task<HealthProbeResult> WaitUntilHealthyAsync(string baseUrl, TimeSpan timeout, CancellationToken cancellationToken);
 }
 
 internal sealed class SystemctlServiceControl(ISystemdEnvironment environment) : IServiceControl
@@ -86,35 +95,62 @@ internal sealed class HttpHealthProbe : IHealthProbe
 {
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(2);
 
-    public async Task<bool> WaitUntilHealthyAsync(string baseUrl, TimeSpan timeout, CancellationToken cancellationToken)
+    public async Task<HealthProbeResult> WaitUntilHealthyAsync(string baseUrl, TimeSpan timeout, CancellationToken cancellationToken)
     {
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        using var probe = new HealthProbeClient(TimeSpan.FromSeconds(5));
         var endpoint = $"{baseUrl.TrimEnd('/')}/api/health";
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(timeout);
+        string? reason = null;
 
-        try
+        while (true)
         {
-            while (true)
+            try
             {
-                try
-                {
-                    using var response = await client.GetAsync(endpoint, deadline.Token);
-                    if (response.StatusCode == HttpStatusCode.OK)
-                        return true;
-                }
-                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !deadline.IsCancellationRequested)
-                {
-                    // Not up yet.
-                }
+                using var response = await probe.Client.GetAsync(endpoint, deadline.Token);
+                if (response.StatusCode == HttpStatusCode.OK)
+                    return new HealthProbeResult(true, null, probe.CertificateProblem);
 
+                reason = $"{endpoint} answered {(int)response.StatusCode}";
+            }
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException && !cancellationToken.IsCancellationRequested)
+            {
+                // Every way one attempt can fail — kept, because the last of these is the only account anyone gets
+                // of why. The deadline landing mid-request is one of them, and the one that used to report nothing
+                // at all: a host that took the connection and never replied looks exactly like this.
+                reason = deadline.IsCancellationRequested
+                    ? $"{endpoint}: still waiting on a reply when the {(int)timeout.TotalSeconds}s timeout ran out"
+                    : $"{endpoint}: {Describe(ex)}";
+            }
+
+            if (deadline.IsCancellationRequested)
+                return new HealthProbeResult(false, reason, probe.CertificateProblem);
+
+            try
+            {
                 await Task.Delay(Interval, deadline.Token);
             }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return new HealthProbeResult(false, reason, probe.CertificateProblem);
+            }
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return false;
-        }
+    }
+
+    /// <summary>The sentence that actually names the cause. <see cref="HttpRequestException"/>'s own text is "An
+    /// error occurred while sending the request"; the certificate that did not validate, the host that did not
+    /// resolve, or the port nothing listened on is in the innermost exception under it. A per-request timeout is the
+    /// exception: its own message names the five seconds, and its inner is a bare "The operation has timed
+    /// out."</summary>
+    private static string Describe(Exception ex)
+    {
+        if (ex is TaskCanceledException)
+            return ex.Message;
+
+        var cause = ex;
+        while (cause.InnerException is { } inner)
+            cause = inner;
+        return cause.Message;
     }
 }
 
@@ -191,23 +227,45 @@ internal static class UpdateApplyFlow
 
         store.Record(UpdatePhase.Restarting, $"Switched to slot {change.To}; starting {change.ToVersion}.", change.FromVersion, change.ToVersion, change.RequestedBy);
         output.WriteLine($"Switched to slot {change.To}. Starting the service …");
-        if (control.Start(service) == 0
-            && await health.WaitUntilHealthyAsync(healthUrl, healthTimeout, cancellationToken))
+        var probe = control.Start(service) == 0
+            ? await health.WaitUntilHealthyAsync(healthUrl, healthTimeout, cancellationToken)
+            : new HealthProbeResult(false, "the service did not start", null);
+        if (probe.Healthy)
         {
             var done = change.Install ? $"Updated to {change.ToVersion}." : $"Rolled back to {change.ToVersion}.";
             store.Record(UpdatePhase.Succeeded, done, change.FromVersion, change.ToVersion, change.RequestedBy);
             output.WriteLine($"{done} The service is answering. {from} is still in slot {change.From}: `dbdatasync update --rollback` switches back to it.");
+
+            // Said after the success and not instead of it: the upgrade worked, and this is still worth fixing.
+            if (probe.CertificateProblem is { } certificate)
+            {
+                store.Log($"health probe accepted an invalid certificate: {certificate}");
+                output.WriteLine(
+                    $"  Note: {healthUrl} answered, but {certificate}. Browsers will warn on it — " +
+                    "`dbdatasync config cert use-pem`/`use-pfx` installs one that matches, and `dbdatasync ready` rechecks.");
+            }
+
             return 0;
         }
 
+        var why = "";
+        if (probe.Reason is { } reason)
+        {
+            why = $" — {reason}";
+            // Into the log as well as the terminal: the line below sends people to the log, and a terminal that has
+            // scrolled or been closed is exactly the situation they are in by the time they go looking.
+            store.Log($"health probe gave up: {reason}");
+        }
+
         output.WriteLine(
-            $"The service did not answer at {healthUrl} within {(int)healthTimeout.TotalSeconds} seconds. Switching back to {from} (slot {change.From}) …");
+            $"The service did not answer at {healthUrl} within {(int)healthTimeout.TotalSeconds} seconds{why}. " +
+            $"Switching back to {from} (slot {change.From}) …");
         control.Stop(service);
         change.Layout.Flip(change.From);
         var restarted = control.Start(service) == 0;
         store.Log($"switched back {change.To} -> {change.From}");
 
-        var outcome = $"{change.ToVersion} did not answer after the {noun}, so {from} was switched back in.";
+        var outcome = $"{change.ToVersion} did not answer after the {noun}{why}, so {from} was switched back in.";
         store.Record(UpdatePhase.RolledBack, outcome, change.FromVersion, change.ToVersion, change.RequestedBy);
         error.WriteLine(restarted
             ? $"Switched back: {from} is running again. {change.ToVersion} stays in slot {change.To}. Details are in {store.Workspace.LogPath}."

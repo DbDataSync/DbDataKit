@@ -29,12 +29,18 @@ public static class HealthCommand
             ?? "http://127.0.0.1:8080";
         var endpoint = $"{url.TrimEnd('/')}/api/health";
 
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        using var probe = new HealthProbeClient(TimeSpan.FromSeconds(5));
         try
         {
-            var response = await client.GetAsync(endpoint);
+            var response = await probe.Client.GetAsync(endpoint);
             if (response.IsSuccessStatusCode)
+            {
+                // On stderr, and still exit 0: the question asked was whether it is serving, and it is. A container
+                // orchestrator reading the exit code restarts nothing over this; a person reading the terminal sees it.
+                if (probe.CertificateProblem is { } certificate)
+                    Console.Error.WriteLine($"{endpoint} answered, but {certificate}");
                 return 0;
+            }
 
             Console.Error.WriteLine($"{endpoint} answered {(int)response.StatusCode}.");
             return 1;

@@ -561,15 +561,25 @@ internal sealed class BindingCheck : IReadinessCheck
     public async Task<CheckResult> RunAsync(ReadinessContext context, CancellationToken cancellationToken)
     {
         var url = context.Configuration["DbDataSync:App:Url"] ?? ApiOptions.DefaultUrl;
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        using var probe = new HealthProbeClient(TimeSpan.FromSeconds(5));
         try
         {
-            var response = await client.GetAsync($"{url.TrimEnd('/')}/api/health", cancellationToken);
+            var response = await probe.Client.GetAsync($"{url.TrimEnd('/')}/api/health", cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 return new CheckResult(
                     "Binding", CheckStatus.Fail, $"{url} answered {(int)response.StatusCode}.",
                     "Start DbDataSync (`dbdatasync serve`) and check DbDataSync:App:Url.");
+            }
+
+            // A warning and not a failure: this binding works, which is what this check is about. The certificate's
+            // own validity is the Certificate check's business — what is wrong *here* is the pairing, which only a
+            // probe that actually dialled this URL can see.
+            if (probe.CertificateProblem is { } certificate)
+            {
+                return new CheckResult(
+                    "Binding", CheckStatus.Warn, $"{url} answers, but {certificate}",
+                    "Browsers will warn on it. `dbdatasync config cert use-pem`/`use-pfx` installs one whose name matches DbDataSync:App:Url.");
             }
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)

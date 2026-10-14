@@ -123,10 +123,14 @@ public class UpdateCommandTests : IDisposable
 
     private sealed class FakeHealth(List<string> events, bool healthy) : IHealthProbe
     {
-        public Task<bool> WaitUntilHealthyAsync(string baseUrl, TimeSpan timeout, CancellationToken cancellationToken)
+        /// <summary>What a real probe would have carried back, and the handle the tests below use to follow it all
+        /// the way out to the operator.</summary>
+        public const string Reason = "the remote certificate is invalid";
+
+        public Task<HealthProbeResult> WaitUntilHealthyAsync(string baseUrl, TimeSpan timeout, CancellationToken cancellationToken)
         {
             events.Add($"health {baseUrl} {(int)timeout.TotalSeconds}s");
-            return Task.FromResult(healthy);
+            return Task.FromResult(new HealthProbeResult(healthy, healthy ? null : Reason, null));
         }
     }
 
@@ -583,6 +587,20 @@ public class UpdateCommandTests : IDisposable
         Assert.Equal("a", Layout.Current);
         Assert.Equal("2026.9.18.1918", Layout.Slot("b").Version);
         Assert.Equal(UpdatePhase.RolledBack, Store().ReadState().Current!.Phase);
+    }
+
+    /// <summary>A timeout on its own names nothing that can be acted on — a certificate the prober does not trust and
+    /// a version that genuinely never started read identically. The reason has to reach the terminal, the recorded
+    /// state, and the log the message sends people to, because the terminal is the one of those that scrolls away.
+    /// </summary>
+    [Fact]
+    public async Task Apply_TheServiceNeverAnswers_SaysWhy_InTheTerminal_TheState_AndTheLog()
+    {
+        var (_, output, _) = await RunAsync(Apply("--yes", "--health-timeout", "5"), SlotEnv(service: Systemd, healthy: false), Network());
+
+        Assert.Contains($"within 5 seconds — {FakeHealth.Reason}. Switching back", output);
+        Assert.Contains(FakeHealth.Reason, Store().ReadState().Current!.Message!);
+        Assert.Contains($"health probe gave up: {FakeHealth.Reason}", File.ReadAllText(Store().Workspace.LogPath));
     }
 
     [Fact]
