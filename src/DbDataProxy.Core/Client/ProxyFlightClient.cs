@@ -60,8 +60,17 @@ public sealed class ProxyFlightClient : IDisposable
     {
         string basic = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{password}"));
         using var call = _flight.Handshake(new Metadata { { "authorization", "Basic " + basic } }, null, cancellationToken);
-        await call.RequestStream.WriteAsync(new FlightHandshakeRequest(ByteString.Empty, 0)).ConfigureAwait(false);
-        await call.RequestStream.CompleteAsync().ConfigureAwait(false);
+        try
+        {
+            await call.RequestStream.WriteAsync(new FlightHandshakeRequest(ByteString.Empty, 0)).ConfigureAwait(false);
+            await call.RequestStream.CompleteAsync().ConfigureAwait(false);
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
+        {
+            // The server answers from the Basic header without waiting for this (empty) message, so it can finish the
+            // call before the write returns and .NET reports the write as cancelled. What matters is the response: a
+            // real failure (rejected credentials, a dead connection) is thrown by the response read below.
+        }
 
         var headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
         while (await call.ResponseStream.MoveNext(cancellationToken).ConfigureAwait(false)) { /* payload carries the token too */ }

@@ -108,3 +108,21 @@ public class EndToEndTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
         Assert.Equal(StatusCode.PermissionDenied, ex.StatusCode);
     }
 }
+
+public class HandshakeRaceTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
+{
+    // The server answers from the Basic header and may finish the call before the client's handshake write returns;
+    // .NET then reports that write as Cancelled. The client must treat the server's response as the outcome.
+    [Fact]
+    public async Task Many_handshakes_never_fail_with_cancelled()
+    {
+        for (int round = 0; round < 20; round++)
+        {
+            await Task.WhenAll(Enumerable.Range(0, 32).Select(async _ =>
+            {
+                using var client = proxy.Connect();
+                await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+            }));
+        }
+    }
+}
