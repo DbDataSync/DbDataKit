@@ -24,8 +24,11 @@ public static class CreateTableStatement
         if (columns.Count == 0)
             throw new ArgumentException("A CREATE TABLE needs at least one column.", nameof(columns));
 
+        // A key column is NOT NULL whatever its source said: SQL Server (and most engines) refuse a
+        // PRIMARY KEY over a nullable column, and a source that reports every column nullable — a view,
+        // an ODBC driver, a Flight SQL proxy — would otherwise produce a statement that cannot run.
         var defs = columns.Select(c =>
-            $"{dialect.QuoteIdentifier(c.Name)} {c.Type.Sql} {(c.IsNullable ? "NULL" : "NOT NULL")}");
+            $"{dialect.QuoteIdentifier(c.Name)} {c.Type.Sql} {(c.IsNullable && !c.IsPrimaryKey ? "NULL" : "NOT NULL")}");
 
         var primaryKey = columns.Where(c => c.IsPrimaryKey).Select(c => dialect.QuoteIdentifier(c.Name)).ToList();
         var primaryKeyClause = primaryKey.Count == 0 ? "" : $",\n    PRIMARY KEY ({string.Join(", ", primaryKey)})";

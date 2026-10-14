@@ -32,6 +32,21 @@ public sealed class CreateTableStatementTests
     }
 
     [Fact]
+    public void AKeyColumnTheSourceReportedNullable_IsStillCreatedNotNull()
+    {
+        var columns = new[]
+        {
+            new CreateTableColumn("Id", Rendered("int"), IsNullable: true, IsPrimaryKey: true),
+            new CreateTableColumn("Name", Rendered("varchar(50)"), IsNullable: true, IsPrimaryKey: false),
+        };
+
+        var sql = CreateTableStatement.Build(BracketDialect.Instance, "t", columns);
+
+        Assert.Contains("[Id] int NOT NULL", sql);
+        Assert.Contains("[Name] varchar(50) NULL", sql);
+    }
+
+    [Fact]
     public void NoPrimaryKeyColumn_OmitsThePrimaryKeyClauseEntirely()
     {
         var columns = new[] { new CreateTableColumn("Name", Rendered("text"), IsNullable: true, IsPrimaryKey: false) };
