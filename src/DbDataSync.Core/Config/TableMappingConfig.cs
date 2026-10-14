@@ -360,6 +360,22 @@ public sealed class TableMappingConfig
     public List<BatchReloadSegment> DefaultSegmenting { get; set; } = new();
 
     /// <summary>
+    /// The source columns that form this table's primary key, when the operator says so — phase 201M.
+    /// <para>
+    /// **Empty means "use what the source reports".** A view, an ODBC source or a Flight SQL proxy
+    /// often reports no key (or reports every column nullable), and until now there was nowhere to say
+    /// what the key is. When set it replaces the source's own answer everywhere a key is read: the
+    /// generated <c>CREATE TABLE</c>'s <c>PRIMARY KEY</c>, the SCD2 natural key, and key reconcile.
+    /// </para>
+    /// <para>
+    /// A set, not a sequence: <see cref="CachedColumn"/> carries no key ordinal, so a key's columns
+    /// follow the source's column order exactly as a reported key's do. Names are *source* column
+    /// names. See <c>MappingKey</c>.
+    /// </para>
+    /// </summary>
+    public List<string> PrimaryKey { get; set; } = new();
+
+    /// <summary>
     /// Records how long each stage of a pass took, onto the run itself — see phase 59.
     /// <para>
     /// Opt-in, per mapping, and **off means no measurement at all** rather than measured-and-discarded:

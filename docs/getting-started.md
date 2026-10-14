@@ -37,6 +37,15 @@ cannot describe a different release than the one you have. It is there for every
 
    ![Config history — every save is an auto-commit](../screenshots/golden-path/10-config-history.png)
 
+### Telling DbDataSync a table's primary key
+
+A table mapping uses the source's own primary key where it has one. A view, an ODBC source or a Flight SQL
+proxy often reports none, so the target table would be created without a key. On the mapping's **Column
+mapping** tab, **Primary key** lets you tick the columns that form the key. They replace whatever the
+source reports, and they decide the `PRIMARY KEY` in a generated `CREATE TABLE` (those columns are always
+created `NOT NULL`, even if the source calls them nullable), the key an SCD Type 2 writer versions rows by,
+and the key a key-based delete reconcile matches on. Only columns the mapping carries across can be chosen.
+
 ## Bulk loading a table
 
 Incremental sync only applies changes made at the source. If the target drifts for some other

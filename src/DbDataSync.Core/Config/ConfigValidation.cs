@@ -251,7 +251,9 @@ public static class ConfigValidation
                 $"Table mapping '{mapping.Name}' uses the '{keyReconcileReader}' reader, which needs the " +
                 "source's cached primary key. Use Refresh metadata on this mapping first.");
 
-        var keyColumns = mapping.SourceColumns.Where(c => c.IsPrimaryKey).ToList();
+        var keyColumns = (mapping.PrimaryKey.Count > 0
+            ? mapping.SourceColumns.Where(c => mapping.PrimaryKey.Contains(c.Name, StringComparer.OrdinalIgnoreCase))
+            : mapping.SourceColumns.Where(c => c.IsPrimaryKey)).ToList();
         if (keyColumns.Count == 0)
             throw new ConfigValidationException(
                 $"Table mapping '{mapping.Name}' uses the '{keyReconcileReader}' reader, but its source " +
@@ -330,6 +332,31 @@ public static class ConfigValidation
     /// Phase 190S. Every source names exactly one of a table or a query — never both, never neither —
     /// and every target names a table: there is no query alternative for a write destination.
     /// </summary>
+    /// <summary>
+    /// A stated primary key (phase 201M) names each column once, and only columns the mapping carries
+    /// across: a key column the target never receives can't be matched on or created as a key. Checked
+    /// against the column mappings rather than the cached source columns, which may be empty or stale.
+    /// </summary>
+    public static void ValidatePrimaryKey(TableMappingConfig mapping)
+    {
+        if (mapping.PrimaryKey.Count == 0)
+            return;
+
+        var duplicate = mapping.PrimaryKey
+            .GroupBy(c => c, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(g => g.Count() > 1);
+        if (duplicate is not null)
+            throw new ConfigValidationException(
+                $"Table mapping '{mapping.Name}' lists primary key column '{duplicate.Key}' more than once.");
+
+        var mapped = mapping.ColumnMappings.Select(m => m.SourceColumn).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var unmapped = mapping.PrimaryKey.Where(c => !mapped.Contains(c)).ToList();
+        if (unmapped.Count > 0)
+            throw new ConfigValidationException(
+                $"Table mapping '{mapping.Name}' has primary key column(s) {string.Join(", ", unmapped.Select(c => $"'{c}'"))} " +
+                "that are not in its column mappings. Map them, or take them out of the primary key.");
+    }
+
     public static void ValidateSources(TableMappingConfig mapping)
     {
         for (var i = 0; i < mapping.Sources.Count; i++)

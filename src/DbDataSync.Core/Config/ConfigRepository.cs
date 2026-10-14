@@ -324,6 +324,7 @@ public sealed class ConfigRepository
         // A mapping that resolves to no connection or database cannot run. Catch it here rather than
         // at the first run, where it surfaces as a failed run instead of a rejected edit.
         ConfigValidation.ValidateSources(mapping);
+        ConfigValidation.ValidatePrimaryKey(mapping);
         EndpointResolution.Validate(task, mapping);
         ValidateHooks(mapping.Hooks);
         ConfigValidation.ValidateRelationships(mapping);

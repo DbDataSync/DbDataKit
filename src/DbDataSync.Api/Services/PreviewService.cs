@@ -74,6 +74,7 @@ public sealed class PreviewService(
             var sourceColumns = await ResolveColumnsAsync(
                 source.ConnectionName, sourceConnection, sourceDriver, source.Database, source.Schema, source.Table,
                 "source", problems, cancellationToken);
+            sourceColumns = sourceColumns.WithKey(mapping.PrimaryKey);
 
             // One column list per declared relationship, the same path/failure handling as sourceColumns
             // above — phase 195S, for a reader whose segment or watermark names a relationship's own

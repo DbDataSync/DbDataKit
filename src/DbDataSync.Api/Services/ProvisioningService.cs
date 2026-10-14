@@ -568,6 +568,7 @@ public sealed class ProvisioningService(
             await sourceConnection.DisposeAsync();
         }
 
+        sourceColumns = sourceColumns.WithKey(mapping.PrimaryKey);
         var derived = NaturalKeyDerivation.Derive(sourceColumns, mapping.ColumnMappings);
         if (derived.Count > 0)
             return new InferredNaturalKey(derived, null);
@@ -682,7 +683,7 @@ public sealed class ProvisioningService(
             return Unsupported(ProvisioningActions.CreateTargetTable, targetDriver.DriverType);
 
         var (columns, identityWarnings) = ProvisioningColumnBuilder.Build(
-            ResolveDialect(sourceDriver), sourceColumns, mapping.ColumnMappings);
+            ResolveDialect(sourceDriver), sourceColumns.WithKey(mapping.PrimaryKey), mapping.ColumnMappings);
 
         // Extended with whatever the configured writer needs beyond the mapped columns — a snapshot's
         // marker, an SCD Type 2 target's version key and validity range. The same list the create and

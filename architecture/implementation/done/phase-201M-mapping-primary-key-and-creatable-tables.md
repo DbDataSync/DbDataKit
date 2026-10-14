@@ -1,6 +1,6 @@
 # Phase 201M — A table mapping can state its primary key, and a created table is always creatable
 
-**Status**: Part 1 built (NOT NULL on key columns). Part 2 planned, not started.
+**Status**: Built. See "What was built".
 **Plan reference**: none — raised in conversation after running the Arrow Flight SQL driver against a real
 proxy. The user chose "on the table mapping" for where the key is marked, and said the nullable problem
 must be fixed regardless.
@@ -27,8 +27,8 @@ unattended `CreateTargetTableIfMissing` path agree. Test: `AKeyColumnTheSourceRe
 
 ## Part 2 — planned
 
-**A mapping carries an ordered key.** `TableMappingConfig.PrimaryKey: List<string>`, source column names, in
-key order (empty = use whatever the source reports). It sits beside `ColumnMappings` rather than as a flag on
+**A mapping carries a key.** `TableMappingConfig.PrimaryKey: List<string>`, source column names (empty = use
+whatever the source reports). A set rather than a sequence — see "What was built". It sits beside `ColumnMappings` rather than as a flag on
 each row: a key is one ordered set, and the editor, YAML and validation all want it as such. This follows
 `DefaultSegmenting` as the precedent for a per-mapping list the mapping editor owns.
 
@@ -63,3 +63,24 @@ control (`naturalKey.ts`). Setting it shows in the Setup card's `CREATE TABLE` p
 `MappingKey.Resolve` (stated beats reported; empty falls back; ordering; unmapped column), validation,
 `ProvisioningColumnBuilder` with a stated key, an end-to-end `CREATE TABLE` preview for a source reporting
 all-nullable columns and no key.
+
+## What was built
+
+- `TableMappingConfig.PrimaryKey` (YAML round-trips; test in `CachedColumnsYamlRoundTripTests`).
+- `MappingKey.WithKey` (`Drivers.Abstractions`): with a stated key, exactly those columns are keys and
+  non-nullable; the source's own flags are replaced, not merged. It is applied at each place a key was read
+  from source column metadata: the executor's reader call, preview request, provisioning and natural-key
+  derivation; the API's provisioning plan, natural-key inference and preview; and `ValidateKeyReconcilePairing`.
+  This is read-time, not written into the cached `SourceColumns`, so a metadata refresh can't drop it.
+- `ConfigValidation.ValidatePrimaryKey`, called from `ConfigRepository` beside `ValidateSources`: no duplicates,
+  every column mapped.
+- Editor: a **Primary key** card on the Column mapping tab (checkboxes over the mapped source columns, shows
+  what the source reports, "use the source's own key" to clear). `docs/getting-started.md` documents it.
+
+**Deviation from the plan:** the key is a set, not an ordered list. `CachedColumn`/`ColumnMetadata` carry no key
+ordinal, so a key's columns follow the source column order, exactly as a reported key's do. An operator can't
+reorder a composite key. Adding an ordinal is its own change.
+
+**Not verified:** the editor card was typechecked and the web unit tests pass, but it was not driven in a
+browser. The executor/API call-site changes are covered by the unit tests of the helpers and by building; the
+SQL Server-backed integration tests can't run in this sandbox.

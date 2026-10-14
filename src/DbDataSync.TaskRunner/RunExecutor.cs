@@ -790,7 +790,7 @@ public sealed class RunExecutor(
             // column, not only a key one, so SegmentScope.Build there still needs the whole mapping.
             var stagingColumnMappings = readerKind == GenericDriverKinds.KeyReconcile
                 ? KeyReconcileReader.KeyColumnMappings(
-                    mapping.ColumnMappings, mapping.SourceColumns.RequireAll(mapping.Name, "source"), mapping.Name)
+                    mapping.ColumnMappings, mapping.SourceColumns.WithKey(mapping.PrimaryKey).RequireAll(mapping.Name, "source"), mapping.Name)
                 : mapping.ColumnMappings;
 
             // The hierarchy's "connection" level is always the target's — see HookResolution's doc.
@@ -918,7 +918,7 @@ public sealed class RunExecutor(
                 {
                     read = await reader.ReadChangesAsync(
                         sourceConnection, source, previousWatermark, intent, columnMappings, mapping.Name,
-                        mapping.SourceColumns,
+                        mapping.SourceColumns.WithKey(mapping.PrimaryKey),
                         mapping.Relationships,
                         mapping.RelationshipColumns.ToDictionary(
                             kv => kv.Key, IReadOnlyList<CachedColumn> (kv) => kv.Value, StringComparer.OrdinalIgnoreCase),
@@ -1098,7 +1098,7 @@ public sealed class RunExecutor(
         // operator's own responsibility (Refresh metadata), not something a run should compensate for by
         // calling the catalog itself. mapping.SourceColumns covers a primary-sourced column;
         // mapping.RelationshipColumns[relationship] covers a relationship-sourced one.
-        var sourceColumns = mapping.SourceColumns.Select(c => c.ToColumnMetadata()).ToList();
+        var sourceColumns = mapping.SourceColumns.Select(c => c.ToColumnMetadata()).ToList().WithKey(mapping.PrimaryKey);
         var relationshipColumns = mapping.RelationshipColumns.ToDictionary(
             kv => kv.Key,
             IReadOnlyList<ColumnMetadata> (kv) => kv.Value.Select(c => c.ToColumnMetadata()).ToList(),
@@ -1180,7 +1180,7 @@ public sealed class RunExecutor(
         var sourceColumns = await sourceDriver.ListColumnsAsync(
             sourceConnection, source.Database, source.Schema, source.Table, cancellationToken);
         var (columns, identityWarnings) = ProvisioningColumnBuilder.Build(
-            ResolveDialect(sourceDriver), sourceColumns, mapping.ColumnMappings);
+            ResolveDialect(sourceDriver), sourceColumns.WithKey(mapping.PrimaryKey), mapping.ColumnMappings);
 
         // The same extension the Setup card applies, so what an unattended pass creates and what an
         // operator previewed are one answer rather than two. The mapping's *effective* writer: a
@@ -1588,7 +1588,7 @@ public sealed class RunExecutor(
     {
         try
         {
-            var sourceColumns = mapping.SourceColumns.Select(c => c.ToColumnMetadata()).ToList();
+            var sourceColumns = mapping.SourceColumns.Select(c => c.ToColumnMetadata()).ToList().WithKey(mapping.PrimaryKey);
             var targetColumns = mapping.TargetColumns.Select(c => c.ToColumnMetadata()).ToList();
             var relationshipColumns = mapping.RelationshipColumns.ToDictionary(
                 kv => kv.Key, IReadOnlyList<ColumnMetadata> (kv) => kv.Value.Select(c => c.ToColumnMetadata()).ToList(),
@@ -1665,7 +1665,7 @@ public sealed class RunExecutor(
 
         var sourceColumns = await sourceDriver.ListColumnsAsync(
             sourceConnection, source.Database, source.Schema, source.Table, cancellationToken);
-        var derived = NaturalKeyDerivation.Derive(sourceColumns, mapping.ColumnMappings);
+        var derived = NaturalKeyDerivation.Derive(sourceColumns.WithKey(mapping.PrimaryKey), mapping.ColumnMappings);
         if (derived.Count == 0)
             return options;
 

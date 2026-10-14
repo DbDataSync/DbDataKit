@@ -25,6 +25,7 @@ import { useMappingTabs } from './mappingTabs'
 import { ProvisioningCard } from './ProvisioningCard'
 import { RelationshipsCard } from './RelationshipsCard'
 import { DefaultSegmentingCard } from './DefaultSegmentingCard'
+import { PrimaryKeyCard } from './PrimaryKeyCard'
 import { SourceFilterCard } from './SourceFilterCard'
 import { MappingPipelineCard, type PipelineOverrides } from './MappingPipelineCard'
 import { ReconcileConfigCard } from './ReconcileConfigCard'
@@ -113,6 +114,7 @@ export function TableMappingForm({ replicationName, existing, base, onSaved, onR
   const [defaultSegmenting, setDefaultSegmenting] = useState<BatchReloadSegment[]>(
     structuredClone(existing?.defaultSegmenting ?? []),
   )
+  const [primaryKey, setPrimaryKey] = useState<string[]>(existing?.primaryKey ?? [])
   // Null on each, not an empty stage: a mapping that has never been asked inherits the replication's
   // pipeline entirely, which is not the same as one that overrides it with nothing (phase 68).
   const [pipeline, setPipeline] = useState<PipelineOverrides>({
@@ -248,7 +250,7 @@ export function TableMappingForm({ replicationName, existing, base, onSaved, onR
    * dirty as soon as it is valid.
    */
   const draftShape = canonicalJson({
-    name, source, target, columnMappings, relationships, scripts, provisioning, defaultSegmenting,
+    name, source, target, columnMappings, relationships, scripts, provisioning, defaultSegmenting, primaryKey,
     notes, traceTiming, defaultReadIntent,
     readerOverride: pipeline.readerOverride,
     cacheOverride: pipeline.cacheOverride,
@@ -267,6 +269,7 @@ export function TableMappingForm({ replicationName, existing, base, onSaved, onR
     scripts: existing.scripts ?? {},
     provisioning: existing.provisioning ?? inheritedProvisioning,
     defaultSegmenting: existing.defaultSegmenting ?? [],
+    primaryKey: existing.primaryKey ?? [],
     notes: existing.notes ?? null,
     traceTiming: existing.traceTiming ?? false,
     defaultReadIntent: existing.defaultReadIntent ?? null,
@@ -322,7 +325,7 @@ export function TableMappingForm({ replicationName, existing, base, onSaved, onR
         // being dropped by a save from here.
         ...existing,
         name, sources: [source], targets: [target], columnMappings, relationships, scripts, provisioning,
-        defaultSegmenting, notes, traceTiming, defaultReadIntent, ...pipeline, reconcileOverride,
+        defaultSegmenting, primaryKey, notes, traceTiming, defaultReadIntent, ...pipeline, reconcileOverride,
         sourceColumns: captureFor(sourceColumns, existing?.sourceColumns, sourceTableChanged),
         // `catalogTargetColumns`, not `targetColumns` — the latter falls back to the *source's*
         // columns for a target that does not exist yet, which is right for an editor about to
@@ -457,6 +460,7 @@ export function TableMappingForm({ replicationName, existing, base, onSaved, onR
             sourceColumns, querySource,
             scripts, setScripts,
             defaultSegmenting, setDefaultSegmenting,
+            primaryKey, setPrimaryKey,
             provisioning, setProvisioning,
             pipeline, setPipeline,
             defaultReadIntent, setDefaultReadIntent,
@@ -562,6 +566,8 @@ export interface MappingEditorContext {
   setScripts: (next: ScriptBindings) => void
   defaultSegmenting: BatchReloadSegment[]
   setDefaultSegmenting: (next: BatchReloadSegment[]) => void
+  primaryKey: string[]
+  setPrimaryKey: (next: string[]) => void
   provisioning: ProvisioningConfig
   setProvisioning: (next: ProvisioningConfig) => void
   pipeline: PipelineOverrides
@@ -587,7 +593,7 @@ export function MappingNotesTab() {
 export function ColumnMappingTab() {
   const {
     replicationName, existing, resolvedSource, resolvedTarget, columnMappings, setColumnMappings,
-    targetExists, sourceColumns, querySource, relationships, setRelationships,
+    targetExists, sourceColumns, querySource, relationships, setRelationships, primaryKey, setPrimaryKey,
   } = useOutletContext<MappingEditorContext>()
 
   return (
@@ -605,6 +611,12 @@ export function ColumnMappingTab() {
         onChange={setColumnMappings}
         targetExists={targetExists}
         relationships={relationships}
+      />
+      <PrimaryKeyCard
+        columnMappings={columnMappings}
+        sourceColumns={sourceColumns}
+        value={primaryKey}
+        onChange={setPrimaryKey}
       />
       {/* Between the editor and the cache rather than its own tab (186J/189J): a relationship only
           ever exists to be picked from in the column mapping above it, so managing it anywhere else

@@ -59,6 +59,21 @@ public sealed class CachedColumnsYamlRoundTripTests : IDisposable
     }
 
     [Fact]
+    public void AStatedPrimaryKey_SurvivesARoundTrip()
+    {
+        _config.SaveTableMapping("r", new TableMappingConfig
+        {
+            Name = "keyed",
+            Sources = [new SourceTableSpec { ConnectionName = "s", Database = "d", Schema = "dbo", Table = "T" }],
+            Targets = [new TableSpec { ConnectionName = "t", Database = "d", Schema = "dbo", Table = "T" }],
+            ColumnMappings = [new ColumnMapping { SourceColumn = "Id", TargetColumn = "Id" }],
+            PrimaryKey = ["Id"],
+        }, Author);
+
+        Assert.Equal(["Id"], _config.LoadTableMapping("r", "keyed").PrimaryKey);
+    }
+
+    [Fact]
     public void EveryFactOfACapturedColumn_SurvivesARoundTrip()
     {
         var captured = new DateTime(2026, 9, 1, 14, 30, 0, DateTimeKind.Utc);

@@ -349,6 +349,9 @@ export interface TableMappingConfig {
   verification?: VerificationCheckConfig[]
   /** How this table divides for a reload. Empty means Full — the whole table, unsegmented. */
   defaultSegmenting?: BatchReloadSegment[]
+  /** Source columns the operator states as this table's primary key, in place of what the source reports.
+   * Empty or absent uses the source's own. */
+  primaryKey?: string[]
   /** Records how long each stage of a pass took, onto the run itself. Off means not measured at all. */
   traceTiming?: boolean
   /** Markdown, git-tracked. Not inherited from the replication — a note that applied to every mapping
