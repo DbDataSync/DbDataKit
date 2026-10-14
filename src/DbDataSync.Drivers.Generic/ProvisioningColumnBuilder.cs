@@ -40,7 +40,7 @@ public static class ProvisioningColumnBuilder
             var canonical = sourceDialect.ToCanonicalType(sourceColumn.NativeType);
             columns.Add(new ProvisioningColumn(
                 mapping.TargetColumn, canonical, sourceColumn.IsNullable, sourceColumn.IsPrimaryKey,
-                mapping.TargetType, mapping.Renames));
+                mapping.TargetType, mapping.Renames, sourceColumn.KeyOrdinal));
         }
 
         return (columns, warnings);

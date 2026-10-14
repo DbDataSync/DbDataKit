@@ -44,15 +44,18 @@ public sealed class KeyReconcileReader(SqlDialect dialect, ISegmentValueBinder b
     public static IReadOnlyList<ColumnMapping> KeyColumnMappings(
         IReadOnlyList<ColumnMapping> columnMappings, IReadOnlyList<ColumnMetadata> sourceColumns, string mappingName)
     {
-        var keyColumns = sourceColumns.Where(c => c.IsPrimaryKey).ToList();
+        var keyColumns = sourceColumns.InKeyOrder().ToList();
         if (keyColumns.Count == 0)
             throw new InvalidOperationException(
                 $"Table mapping '{mappingName}' has no primary key on its source — the KeyReconcile " +
                 "reader needs one to know which rows to diff by. A keyless source stays on the " +
                 "BatchReload + DeleteInsert path instead.");
 
-        var keyNames = keyColumns.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var keyMappings = columnMappings.Where(m => keyNames.Contains(m.SourceColumn)).ToList();
+        // In key order, so the projection (and anything ordered by it) follows the key.
+        var keyMappings = keyColumns
+            .Select(k => columnMappings.FirstOrDefault(m => string.Equals(m.SourceColumn, k.Name, StringComparison.OrdinalIgnoreCase)))
+            .OfType<ColumnMapping>()
+            .ToList();
 
         var mappedKeyNames = keyMappings.Select(m => m.SourceColumn).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var unmapped = keyColumns.Where(c => !mappedKeyNames.Contains(c.Name)).Select(c => c.Name).ToList();

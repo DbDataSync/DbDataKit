@@ -45,6 +45,8 @@ mapping** tab, **Primary key** lets you tick the columns that form the key. They
 source reports, and they decide the `PRIMARY KEY` in a generated `CREATE TABLE` (those columns are always
 created `NOT NULL`, even if the source calls them nullable), the key an SCD Type 2 writer versions rows by,
 and the key a key-based delete reconcile matches on. Only columns the mapping carries across can be chosen.
+The order matters — it is the order of the index — so a composite key is listed in order and you can move
+columns up and down. Columns are added at the end in the order you tick them.
 
 ## Bulk loading a table
 

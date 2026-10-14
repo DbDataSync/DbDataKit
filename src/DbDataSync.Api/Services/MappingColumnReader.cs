@@ -31,7 +31,7 @@ public sealed class MappingColumnReader(IColumnCatalog metadata)
                 table.ConnectionName, table.Database, table.Schema, table.Table, cancellationToken);
 
             return new SideRead(
-                columns.Select(c => new CachedColumn(c.Name, c.NativeType, c.IsNullable, c.IsPrimaryKey, c.IsIdentity))
+                columns.Select(c => new CachedColumn(c.Name, c.NativeType, c.IsNullable, c.IsPrimaryKey, c.IsIdentity, c.KeyOrdinal))
                     .ToList(),
                 null);
         }

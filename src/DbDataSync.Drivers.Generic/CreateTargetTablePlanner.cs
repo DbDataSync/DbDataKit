@@ -36,7 +36,7 @@ public static class CreateTargetTablePlanner
                 : targetDialect.RenderColumnType(column.Type);
             if (renderedType.Fidelity is not null)
                 warnings.Add($"Column '{column.Name}': {renderedType.Fidelity}");
-            rendered.Add(new CreateTableColumn(column.Name, renderedType, column.IsNullable, column.IsPrimaryKey));
+            rendered.Add(new CreateTableColumn(column.Name, renderedType, column.IsNullable, column.IsPrimaryKey, column.KeyOrdinal));
         }
 
         var qualifiedTable = targetDialect.QualifyTable(target.Schema, target.Table);

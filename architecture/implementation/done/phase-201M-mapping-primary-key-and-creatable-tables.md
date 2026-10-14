@@ -77,10 +77,14 @@ all-nullable columns and no key.
 - Editor: a **Primary key** card on the Column mapping tab (checkboxes over the mapped source columns, shows
   what the source reports, "use the source's own key" to clear). `docs/getting-started.md` documents it.
 
-**Deviation from the plan:** the key is a set, not an ordered list. `CachedColumn`/`ColumnMetadata` carry no key
-ordinal, so a key's columns follow the source column order, exactly as a reported key's do. An operator can't
-reorder a composite key. Adding an ordinal is its own change.
+**Follow-up (key order):** the first cut treated the key as a set, which was wrong — a key's order is its index
+order. `ColumnMetadata`, `CachedColumn`, `ProvisioningColumn` and `CreateTableColumn` now carry a 1-based
+`KeyOrdinal` (0 = unknown, falls back to column order). `MappingKey.WithKey` sets it from the stated order,
+`MappingKey.InKeyOrder` is the one way to list a key, and `CREATE TABLE`, the SCD2 natural key, key reconcile
+and the target shape use it. SQL Server (`sys.index_columns.key_ordinal`) and the information-schema catalogs
+report the source's own order. Oracle and JDBC still report none (column order). The Primary key card lists a
+composite key in order with up/down buttons.
 
 **Not verified:** the editor card was typechecked and the web unit tests pass, but it was not driven in a
 browser. The executor/API call-site changes are covered by the unit tests of the helpers and by building; the
-SQL Server-backed integration tests can't run in this sandbox.
+SQL Server-backed integration tests can't run in this sandbox, so the `key_ordinal` catalog query is untested.

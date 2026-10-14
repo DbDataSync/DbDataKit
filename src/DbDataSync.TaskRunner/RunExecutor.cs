@@ -1366,7 +1366,7 @@ public sealed class RunExecutor(
             return;
 
         var cached = columns
-            .Select(c => new CachedColumn(c.Name, c.NativeType, c.IsNullable, c.IsPrimaryKey, c.IsIdentity))
+            .Select(c => new CachedColumn(c.Name, c.NativeType, c.IsNullable, c.IsPrimaryKey, c.IsIdentity, c.KeyOrdinal))
             .ToList();
 
         // This pass first, and without waiting on anything: every consumer after this point reads the

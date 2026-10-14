@@ -469,13 +469,14 @@ public sealed class CachedColumn
 {
     public CachedColumn() { }
 
-    public CachedColumn(string name, string nativeType, bool isNullable, bool isPrimaryKey, bool isIdentity)
+    public CachedColumn(string name, string nativeType, bool isNullable, bool isPrimaryKey, bool isIdentity, int keyOrdinal = 0)
     {
         Name = name;
         NativeType = nativeType;
         IsNullable = isNullable;
         IsPrimaryKey = isPrimaryKey;
         IsIdentity = isIdentity;
+        KeyOrdinal = keyOrdinal;
     }
 
     public string Name { get; set; } = "";
@@ -484,13 +485,18 @@ public sealed class CachedColumn
     public bool IsPrimaryKey { get; set; }
     public bool IsIdentity { get; set; }
 
+    /// <summary>1-based position within the primary key; 0 when unknown (column order then stands in).</summary>
+    public int KeyOrdinal { get; set; }
+
     /// <summary>Everything about this column except its name, for reporting what a refresh changed.
     /// Name is excluded because it is the identity a diff pairs two columns *by*.</summary>
     public bool SameShapeAs(CachedColumn other) =>
         string.Equals(NativeType, other.NativeType, StringComparison.Ordinal)
         && IsNullable == other.IsNullable
         && IsPrimaryKey == other.IsPrimaryKey
-        && IsIdentity == other.IsIdentity;
+        && IsIdentity == other.IsIdentity
+        // An unknown position (0, from a cache written before positions were kept) is not a change.
+        && (KeyOrdinal == 0 || other.KeyOrdinal == 0 || KeyOrdinal == other.KeyOrdinal);
 
     /// <summary>
     /// Whether two captures of a side are the same picture — the question every writer of this cache

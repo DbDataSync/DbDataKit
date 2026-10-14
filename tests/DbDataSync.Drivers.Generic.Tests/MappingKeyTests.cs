@@ -36,6 +36,25 @@ public sealed class MappingKeyTests
     }
 
     [Fact]
+    public void A_stated_key_keeps_the_order_it_was_stated_in()
+    {
+        var columns = new[] { Column("A"), Column("B"), Column("C") };
+
+        var keyed = columns.WithKey(["C", "A"]);
+
+        Assert.Equal(["C", "A"], keyed.InKeyOrder().Select(c => c.Name));
+        Assert.Equal([2, 0, 1], keyed.Select(c => c.KeyOrdinal));
+    }
+
+    [Fact]
+    public void Unknown_positions_fall_back_to_column_order_after_known_ones()
+    {
+        var columns = new[] { Column("A", key: true), Column("B", key: true) with { KeyOrdinal = 1 } };
+
+        Assert.Equal(["B", "A"], columns.InKeyOrder().Select(c => c.Name));
+    }
+
+    [Fact]
     public void Cached_columns_take_the_stated_key_too()
     {
         IReadOnlyList<CachedColumn> cached =

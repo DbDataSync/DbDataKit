@@ -87,5 +87,5 @@ public static class CachedMetadataLookup
     }
 
     public static ColumnMetadata ToColumnMetadata(this CachedColumn column) =>
-        new(column.Name, column.NativeType, column.IsNullable, column.IsPrimaryKey, column.IsIdentity);
+        new(column.Name, column.NativeType, column.IsNullable, column.IsPrimaryKey, column.IsIdentity, column.KeyOrdinal);
 }

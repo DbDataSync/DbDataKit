@@ -47,6 +47,21 @@ public sealed class CreateTableStatementTests
     }
 
     [Fact]
+    public void ThePrimaryKeyFollowsKeyOrder_NotColumnOrder()
+    {
+        var columns = new[]
+        {
+            new CreateTableColumn("A", Rendered("int"), false, IsPrimaryKey: true, KeyOrdinal: 2),
+            new CreateTableColumn("B", Rendered("int"), false, IsPrimaryKey: true, KeyOrdinal: 1),
+            new CreateTableColumn("C", Rendered("int"), false, IsPrimaryKey: false),
+        };
+
+        var sql = CreateTableStatement.Build(BracketDialect.Instance, "t", columns);
+
+        Assert.Contains("PRIMARY KEY ([B], [A])", sql);
+    }
+
+    [Fact]
     public void NoPrimaryKeyColumn_OmitsThePrimaryKeyClauseEntirely()
     {
         var columns = new[] { new CreateTableColumn("Name", Rendered("text"), IsNullable: true, IsPrimaryKey: false) };

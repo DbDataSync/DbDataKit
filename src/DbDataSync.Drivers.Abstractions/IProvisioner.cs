@@ -120,7 +120,8 @@ public sealed record ProvisioningColumn(
     bool IsNullable,
     bool IsPrimaryKey,
     string? TypeOverride = null,
-    IReadOnlyList<RenameStep>? Renames = null);
+    IReadOnlyList<RenameStep>? Renames = null,
+    int KeyOrdinal = 0);
 
 /// <param name="Table">The table this call is about: the source table for
 /// <see cref="ProvisioningActions.EnableSourceChangeCapture"/>, the target table for

@@ -20,13 +20,14 @@ internal static class MsSqlSchemaQueries
         using var cmd = connection.CreateTimedCommand();
         cmd.CommandText = """
             SELECT c.name, ty.name AS TypeName, c.max_length, c.precision, c.scale, c.is_nullable,
-                   CASE WHEN pk.column_id IS NOT NULL THEN 1 ELSE 0 END AS IsPrimaryKey, c.is_identity
+                   CASE WHEN pk.column_id IS NOT NULL THEN 1 ELSE 0 END AS IsPrimaryKey, c.is_identity,
+                   ISNULL(pk.key_ordinal, 0) AS KeyOrdinal
             FROM sys.tables t
             JOIN sys.schemas s ON t.schema_id = s.schema_id
             JOIN sys.columns c ON c.object_id = t.object_id
             JOIN sys.types ty ON c.user_type_id = ty.user_type_id
             LEFT JOIN (
-                SELECT ic.object_id, ic.column_id
+                SELECT ic.object_id, ic.column_id, ic.key_ordinal
                 FROM sys.index_columns ic
                 JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id
                 WHERE i.is_primary_key = 1
@@ -48,13 +49,15 @@ internal static class MsSqlSchemaQueries
             var isNullable = reader.GetBoolean(5);
             var isPrimaryKey = reader.GetInt32(6) == 1;
             var isIdentity = reader.GetBoolean(7);
+            var keyOrdinal = Convert.ToInt32(reader.GetValue(8));
 
             results.Add(new ColumnMetadata(
                 reader.GetString(0),
                 FormatSqlType(typeName, maxLength, precision, scale),
                 isNullable,
                 isPrimaryKey,
-                isIdentity));
+                isIdentity,
+                keyOrdinal));
         }
 
         if (results.Count == 0)

@@ -62,15 +62,16 @@ public sealed class InformationSchemaQueries(SqlDialect dialect) : IDescriptorCa
                 name,
                 FormatType(reader.GetString(1), Nullable(reader, 2), Nullable(reader, 3), Nullable(reader, 4)),
                 IsNullable: reader.GetString(5).Equals("YES", StringComparison.OrdinalIgnoreCase),
-                IsPrimaryKey: primaryKey.Contains(name),
+                IsPrimaryKey: primaryKey.Contains(name, StringComparer.OrdinalIgnoreCase),
                 // Standard but unevenly populated; a driver that can detect it does so itself rather
                 // than have a wrong answer default in from here.
-                IsIdentity: false));
+                IsIdentity: false,
+                KeyOrdinal: primaryKey.FindIndex(k => k.Equals(name, StringComparison.OrdinalIgnoreCase)) + 1));
         }
         return results;
     }
 
-    private async Task<HashSet<string>> GetPrimaryKeyAsync(
+    private async Task<List<string>> GetPrimaryKeyAsync(
         DbConnection connection, string schema, string table, CancellationToken cancellationToken)
     {
         using var cmd = connection.CreateTimedCommand();
@@ -84,11 +85,12 @@ public sealed class InformationSchemaQueries(SqlDialect dialect) : IDescriptorCa
             WHERE c.constraint_type = 'PRIMARY KEY'
               AND c.table_schema = {dialect.ParameterReference("schema")}
               AND c.table_name = {dialect.ParameterReference("table")}
+            ORDER BY k.ordinal_position
             """;
         cmd.AddParameter(dialect.ParameterName("schema"), schema);
         cmd.AddParameter(dialect.ParameterName("table"), table);
 
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var names = new List<string>();
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
             names.Add(reader.GetString(0));

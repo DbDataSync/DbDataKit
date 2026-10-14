@@ -410,6 +410,7 @@ export interface ColumnMetadata {
   nativeType: string
   isNullable: boolean
   isPrimaryKey: boolean
+  keyOrdinal?: number
   isIdentity: boolean
 }
 

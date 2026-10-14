@@ -33,7 +33,7 @@ public sealed class TargetShape
         QuotedTarget = dialect.QualifyTable(target.Schema, target.Table);
         Columns = columns;
         MappedTargetColumns = mappedTargetColumns;
-        PrimaryKeyColumns = columns.Where(c => c.IsPrimaryKey).Select(c => c.Name).ToList();
+        PrimaryKeyColumns = columns.InKeyOrder().Select(c => c.Name).ToList();
         RequiresGeneratedColumnOverride = requiresGeneratedColumnOverride;
         InsertColumnList = string.Join(", ", mappedTargetColumns.Select(dialect.QuoteIdentifier));
     }

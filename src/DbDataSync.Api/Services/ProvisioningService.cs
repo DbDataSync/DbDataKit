@@ -573,7 +573,7 @@ public sealed class ProvisioningService(
         if (derived.Count > 0)
             return new InferredNaturalKey(derived, null);
 
-        var keyColumns = sourceColumns.Where(c => c.IsPrimaryKey).Select(c => c.Name).ToList();
+        var keyColumns = sourceColumns.InKeyOrder().Select(c => c.Name).ToList();
         var unmapped = keyColumns
             .Where(k => !mapping.ColumnMappings.Any(m => string.Equals(m.SourceColumn, k, StringComparison.OrdinalIgnoreCase)))
             .ToList();

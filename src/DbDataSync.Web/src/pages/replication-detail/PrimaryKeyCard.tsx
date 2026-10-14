@@ -8,6 +8,9 @@ import type { ColumnMapping, ColumnMetadata } from '../../api/types'
  * here is what the generated `CREATE TABLE` declares as `PRIMARY KEY` (as NOT NULL columns), what an
  * SCD Type 2 writer versions rows by, and what key reconcile matches on. Only columns the mapping
  * carries across are offered — a key column the target never receives can't be matched on.
+ *
+ * The order matters: it is the order of the index, so the chosen columns are listed in key order and
+ * can be moved up and down. Columns are added at the end, in the order they are ticked.
  */
 export function PrimaryKeyCard({ columnMappings, sourceColumns, value, onChange }: {
   columnMappings: ColumnMapping[]
@@ -17,7 +20,14 @@ export function PrimaryKeyCard({ columnMappings, sourceColumns, value, onChange 
 }) {
   const offered = columnMappings.map((m) => m.sourceColumn).filter(Boolean)
   const selected = new Set(value.map((v) => v.toLowerCase()))
-  const reported = (sourceColumns ?? []).filter((c) => c.isPrimaryKey).map((c) => c.name)
+  const reported = (sourceColumns ?? []).filter((c) => c.isPrimaryKey)
+    .sort((a, b) => (a.keyOrdinal || 1e9) - (b.keyOrdinal || 1e9)).map((c) => c.name)
+
+  const move = (index: number, by: -1 | 1) => {
+    const next = [...value]
+    ;[next[index], next[index + by]] = [next[index + by], next[index]]
+    onChange(next)
+  }
 
   const toggle = (name: string) =>
     onChange(selected.has(name.toLowerCase())
@@ -52,6 +62,21 @@ export function PrimaryKeyCard({ columnMappings, sourceColumns, value, onChange 
             </label>
           ))}
         </div>
+        {value.length > 1 && (
+          <ol style={{ margin: 0, paddingLeft: 20 }} data-testid="primary-key-order">
+            {value.map((name, i) => (
+              <li key={name}>
+                <span className="row" style={{ gap: 6 }}>
+                  <span className="mono">{name}</span>
+                  <button type="button" className="btn-link quiet" style={{ padding: 0 }} disabled={i === 0}
+                    onClick={() => move(i, -1)} aria-label={`Move ${name} up`} data-testid={`primary-key-up-${name}`}>↑</button>
+                  <button type="button" className="btn-link quiet" style={{ padding: 0 }} disabled={i === value.length - 1}
+                    onClick={() => move(i, 1)} aria-label={`Move ${name} down`} data-testid={`primary-key-down-${name}`}>↓</button>
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
         {value.length > 0 && (
           <div>
             <button type="button" className="btn-link quiet" style={{ padding: 0 }} onClick={() => onChange([])}

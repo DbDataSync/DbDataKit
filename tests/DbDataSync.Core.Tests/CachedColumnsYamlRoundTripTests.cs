@@ -74,6 +74,17 @@ public sealed class CachedColumnsYamlRoundTripTests : IDisposable
     }
 
     [Fact]
+    public void AKeyColumnsPosition_SurvivesARoundTrip()
+    {
+        var loaded = Save(
+            [new CachedColumn("A", "int", false, true, false, keyOrdinal: 2), new CachedColumn("B", "int", false, true, false, keyOrdinal: 1)],
+            [],
+            new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal([2, 1], loaded.SourceColumns.Select(c => c.KeyOrdinal));
+    }
+
+    [Fact]
     public void EveryFactOfACapturedColumn_SurvivesARoundTrip()
     {
         var captured = new DateTime(2026, 9, 1, 14, 30, 0, DateTimeKind.Utc);

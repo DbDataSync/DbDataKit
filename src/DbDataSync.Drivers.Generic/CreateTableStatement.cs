@@ -8,7 +8,7 @@ namespace DbDataSync.Drivers.Generic;
 /// columns are never represented here at all: <see cref="ProvisioningColumn.IsPrimaryKey"/> aside,
 /// dropping <c>IsIdentity</c> on the way in (with a warning) is the caller's job, not this renderer's —
 /// see phase 25 §4.</summary>
-public sealed record CreateTableColumn(string Name, RenderedColumnType Type, bool IsNullable, bool IsPrimaryKey);
+public sealed record CreateTableColumn(string Name, RenderedColumnType Type, bool IsNullable, bool IsPrimaryKey, int KeyOrdinal = 0);
 
 /// <summary>
 /// Renders a <c>CREATE TABLE</c> for a table that does not exist yet, from already-translated column
@@ -30,7 +30,8 @@ public static class CreateTableStatement
         var defs = columns.Select(c =>
             $"{dialect.QuoteIdentifier(c.Name)} {c.Type.Sql} {(c.IsNullable && !c.IsPrimaryKey ? "NULL" : "NOT NULL")}");
 
-        var primaryKey = columns.Where(c => c.IsPrimaryKey).Select(c => dialect.QuoteIdentifier(c.Name)).ToList();
+        // In key order, not column order: the order of a primary key is the order of its index.
+        var primaryKey = columns.Where(c => c.IsPrimaryKey).OrderBy(c => c.KeyOrdinal == 0 ? int.MaxValue : c.KeyOrdinal).Select(c => dialect.QuoteIdentifier(c.Name)).ToList();
         var primaryKeyClause = primaryKey.Count == 0 ? "" : $",\n    PRIMARY KEY ({string.Join(", ", primaryKey)})";
 
         // One column per line. A forty-column table on one line is unreadable wherever it is shown,

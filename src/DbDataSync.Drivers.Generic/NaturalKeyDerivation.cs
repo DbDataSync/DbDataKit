@@ -48,7 +48,7 @@ public static class NaturalKeyDerivation
             targetOf.TryAdd(mapping.SourceColumn, mapping.TargetColumn);
 
         var keys = new List<string>();
-        foreach (var column in sourceColumns.Where(c => c.IsPrimaryKey))
+        foreach (var column in sourceColumns.InKeyOrder())
         {
             // One unmapped key column and there is no derivation to make: see the summary.
             if (!targetOf.TryGetValue(column.Name, out var target))
