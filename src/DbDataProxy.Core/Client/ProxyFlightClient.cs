@@ -59,7 +59,7 @@ public sealed class ProxyFlightClient : IDisposable
     {
         string basic = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{password}"));
         using var call = _flight.Handshake(new Metadata { { "authorization", "Basic " + basic } }, null, cancellationToken);
-        await call.RequestStream.WriteAsync(new FlightHandshakeRequest(ByteString.Empty, 0), cancellationToken).ConfigureAwait(false);
+        await call.RequestStream.WriteAsync(new FlightHandshakeRequest(ByteString.Empty, 0)).ConfigureAwait(false);
         await call.RequestStream.CompleteAsync().ConfigureAwait(false);
 
         var headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
