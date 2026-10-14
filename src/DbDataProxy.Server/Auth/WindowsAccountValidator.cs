@@ -8,6 +8,9 @@ namespace DbDataProxy.Server.Auth;
 /// <summary>Checks a Windows username/password (local or domain account) with the operating system.</summary>
 public interface IWindowsLogon
 {
+    /// <summary>False when this platform cannot check Windows accounts at all.</summary>
+    bool IsAvailable => true;
+
     bool Validate(string domain, string user, string password);
 }
 
@@ -16,6 +19,8 @@ public sealed partial class NativeWindowsLogon : IWindowsLogon
 {
     private const int LogonNetwork = 3;
     private const int ProviderDefault = 0;
+
+    public bool IsAvailable => OperatingSystem.IsWindows();
 
     public bool Validate(string domain, string user, string password)
     {
@@ -45,9 +50,9 @@ public sealed class WindowsAccountValidator(IOptionsMonitor<ProxyOptions> option
             u.AuthType == UserAuthType.Windows && string.Equals(u.Name, user, StringComparison.OrdinalIgnoreCase));
         if (entry is null) return CredentialResult.NotMine;
 
-        if (!OperatingSystem.IsWindows())
+        if (!logon.IsAvailable)
         {
-            log.LogWarning("User {User} is configured for Windows authentication, which is only available on Windows.", user);
+            log.LogWarning("User {User} is configured for Windows authentication, which this platform cannot check.", user);
             return CredentialResult.Rejected;
         }
 

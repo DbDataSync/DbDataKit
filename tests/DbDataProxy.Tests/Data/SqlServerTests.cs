@@ -98,12 +98,17 @@ public class SqlServerTests
         {
             return await RunAsync(executor, sql);
         }
-        catch (System.Data.Odbc.OdbcException ex) when (ex.Errors.Cast<System.Data.Odbc.OdbcError>().Any(e => e.SQLState == "IM002"))
+        catch (System.Data.Odbc.OdbcException ex) when (IsMissingDriver(ex))
         {
             Assert.Skip("The ODBC driver is not installed: " + ex.Message);
             throw;
         }
     }
+
+    // Windows reports a missing driver as IM002; unixODBC reports "Can't open lib '<driver>' : file not found".
+    internal static bool IsMissingDriver(System.Data.Odbc.OdbcException ex) =>
+        ex.Errors.Cast<System.Data.Odbc.OdbcError>().Any(e => e.SQLState == "IM002")
+        || ex.Message.Contains("Can't open lib", StringComparison.Ordinal);
 
     [Fact]
     public async Task Named_parameters_bind_for_question_mark_and_at_sign_statements()
@@ -189,7 +194,7 @@ public class OdbcUnsupportedTypeTests
                 new QueryRequest("SELECT SYSDATETIMEOFFSET() AS stamp"), CancellationToken.None);
         }
         catch (NotSupportedException e) { ex = e; }
-        catch (System.Data.Odbc.OdbcException) { Assert.Skip("SQL Server or the ODBC driver is not available."); }
+        catch (System.Data.Odbc.OdbcException odbc) when (SqlServerTests.IsMissingDriver(odbc)) { Assert.Skip("The ODBC driver is not installed."); }
 
         Assert.NotNull(ex);
         Assert.Contains("'stamp'", ex.Message);
