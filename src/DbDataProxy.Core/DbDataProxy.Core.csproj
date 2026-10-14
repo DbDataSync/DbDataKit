@@ -6,5 +6,6 @@
     <PackageReference Include="Apache.Arrow.Flight.Sql" />
     <PackageReference Include="System.Data.Odbc" />
     <PackageReference Include="Grpc.Net.Client" />
+    <ProjectReference Include="..\DbData.Odbc.Metadata\DbData.Odbc.Metadata.csproj" />
   </ItemGroup>
 </Project>

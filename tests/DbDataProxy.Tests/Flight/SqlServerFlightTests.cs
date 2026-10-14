@@ -19,7 +19,7 @@ namespace DbDataProxy.Tests.Flight;
 public sealed class SqlServerFlightTests : IAsyncLifetime
 {
     private const string Table = "dbproxy_items";
-    private const string OdbcDriver = "ODBC Driver 18 for SQL Server";
+    private static string OdbcDriver = "ODBC Driver 18 for SQL Server";   // whichever of 18 and 17 is installed
 
     private WebApplication? _app;
     private string _address = "";
@@ -98,13 +98,18 @@ public sealed class SqlServerFlightTests : IAsyncLifetime
 
     private static bool ProbeOdbc()
     {
-        try
+        foreach (string driver in new[] { "ODBC Driver 18 for SQL Server", "ODBC Driver 17 for SQL Server" })
         {
-            using var c = new System.Data.Odbc.OdbcConnection(SqlServerEnv.Odbc(OdbcDriver) + ";Database=tempdb;Connect Timeout=10");
-            c.Open();
-            return true;
+            try
+            {
+                using var c = new System.Data.Odbc.OdbcConnection(SqlServerEnv.Odbc(driver) + ";Database=tempdb;Connect Timeout=10");
+                c.Open();
+                OdbcDriver = driver;
+                return true;
+            }
+            catch (System.Data.Odbc.OdbcException) { }
         }
-        catch (System.Data.Odbc.OdbcException) { return false; }
+        return false;
     }
 
     private async Task<ProxyClient> LoginAsync(string user = "alice", string password = "pw")
@@ -237,6 +242,15 @@ public sealed class SqlServerFlightTests : IAsyncLifetime
         }
 
         AssertDeclaredColumns(await TableSchemaAsync(client, "odbc"));   // SQLColumns through the ODBC catalog API
+
+        // SQLPrimaryKeys through the ODBC catalog API; the INFORMATION_SCHEMA route must agree.
+        foreach (string source in new[] { "odbc", "sql_odbc_infoschema" })
+        {
+            var key = Assert.Single(await RowsAsync(await client.Raw.GetPrimaryKeysAsync(Table, options: On(source))));
+            Assert.Equal(["tempdb", "dbo", Table, "id"], key.Take(4));
+            Assert.Equal("1", key[5]);
+        }
+        Assert.Empty(await RowsAsync(await client.Raw.GetPrimaryKeysAsync(Table + "_view", options: On("odbc"))));
 
         var rows = await RowsAsync(await client.Raw.QueryAsync($"SELECT name FROM dbo.{Table} WHERE id = ?", [2], On("odbc")));
         Assert.Equal("gadget", Assert.Single(rows)[0]);

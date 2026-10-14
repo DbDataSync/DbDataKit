@@ -16,7 +16,8 @@ jobs:
           global-json-file: global.json
       - run: dotnet build -c Release
       # Fails if fewer tests than expected ran (a discovery or filter problem would otherwise look like a pass).
-      - run: dotnet test -c Release --no-build --minimum-expected-tests 100
+      - run: dotnet test --project tests/DbDataProxy.Tests -c Release --no-build --minimum-expected-tests 100
+      - run: dotnet test --project tests/DbData.Odbc.Metadata.Tests -c Release --no-build --minimum-expected-tests 25
       - name: Package (smoke test)
         run: ./build/package.ps1 -Version 0.0.0-ci
         shell: pwsh
@@ -57,4 +58,6 @@ jobs:
           sudo apt-get update
           sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
       - run: dotnet build -c Release
-      - run: dotnet test -c Release --no-build --minimum-expected-tests 100
+      # Fails if fewer tests than expected ran (a discovery or filter problem would otherwise look like a pass).
+      - run: dotnet test --project tests/DbDataProxy.Tests -c Release --no-build --minimum-expected-tests 100
+      - run: dotnet test --project tests/DbData.Odbc.Metadata.Tests -c Release --no-build --minimum-expected-tests 25

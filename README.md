@@ -189,11 +189,13 @@ exe: queries with every compression setting, updates, metadata and wrong-passwor
 
 * `GetExportedKeys`/`GetImportedKeys`/`GetCrossReference` and `GetXdbcTypeInfo`.
 * Catalog metadata: SQL Server and DuckDB sources are read from `INFORMATION_SCHEMA`. ODBC sources use the driver's
-  catalog API (`SQLTables`, via `GetSchema`), so text/Excel/Access and other drivers without `INFORMATION_SCHEMA` work,
-  including through the 32-bit worker. Set a data source's `"Metadata"` to `"odbc"` or `"informationschema"` to
-  override the default (`"auto"`). Per-table schemas (`include_schema`) take decimal precision/scale and nullability
-  (key columns are NOT NULL) from the database catalog, because a zero-row query cannot always report them. Names are quoted with the driver's own identifier character and fall
-  back to shorter names when the driver's catalog is not valid SQL. ODBC sources report no primary keys.
+  catalog functions (`SQLTables`, `SQLColumns`, `SQLPrimaryKeys`, `SQLGetInfo`), so text/Excel/Access and other drivers
+  without `INFORMATION_SCHEMA` work, including through the 32-bit worker. Set a data source's `"Metadata"` to `"odbc"`
+  or `"informationschema"` to override the default (`"auto"`). Per-table schemas (`include_schema`) take decimal
+  precision/scale and nullability (key columns are NOT NULL) from the database catalog, because a zero-row query cannot
+  always report them. Names are quoted with the driver's own identifier character and fall back to shorter names when
+  the driver's catalog is not valid SQL. `GetPrimaryKeys` on an ODBC source asks the driver (`SQLPrimaryKeys`); drivers
+  without keys (text files) or without the function report none.
 * `AllowWrites` only gates statements a client sends as *updates*. A client that runs `INSERT`/`DDL` through the query
   path (ADBC's `cursor.execute` does) is limited only by the database account's permissions, so use read-only database
   accounts for read-only sources.
@@ -211,7 +213,7 @@ The tests publish the 32-bit worker on demand into `artifacts/worker-x86` and us
 driver to prove queries really run in a 32-bit process. Set `DBPROXY_TEST_SQLSERVER` to point the SQL Server tests at
 another instance (Windows authentication).
 
-Layout: `src/DbDataProxy.Core` (Arrow conversion, ADO.NET executor, client, worker protocol),
+Layout: `src/DbData.Odbc.Metadata` (standalone ODBC catalog package, see its README), `src/DbDataProxy.Core` (Arrow conversion, ADO.NET executor, client, worker protocol),
 `src/DbDataProxy.Server` (Kestrel host, Flight SQL server, auth, TLS, service/CLI),
 `src/DbDataProxy.Worker` (32-bit ODBC worker), `tests/DbDataProxy.Tests`.
 

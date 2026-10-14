@@ -54,28 +54,45 @@ public sealed class DbQueryExecutor(
         return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken)
+    // The catalog functions go through the shared ODBC metadata package, which makes its own connection from the
+    // connection string; the factory is only asked what kind of connection this source uses.
+    private bool IsOdbc
     {
-        await using var connection = factory.CreateConnection(connectionString);
-        if (connection is not System.Data.Odbc.OdbcConnection odbc)
-            throw new NotSupportedException("Catalog-API metadata is only available for ODBC data sources.");
-        return await OdbcMetadata.ListTablesAsync(odbc, cancellationToken).ConfigureAwait(false);
+        get
+        {
+            using var connection = factory.CreateConnection(connectionString);
+            return connection is System.Data.Odbc.OdbcConnection;
+        }
     }
 
-    public async Task<IReadOnlyList<ColumnEntry>> ListColumnsAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken)
+    private void RequireOdbc()
     {
-        await using var connection = factory.CreateConnection(connectionString);
-        if (connection is not System.Data.Odbc.OdbcConnection odbc)
-            throw new NotSupportedException("Catalog-API metadata is only available for ODBC data sources.");
-        return await OdbcMetadata.ListColumnsAsync(odbc, catalog, schema, table, cancellationToken).ConfigureAwait(false);
+        if (!IsOdbc) throw new NotSupportedException("Catalog-API metadata is only available for ODBC data sources.");
+    }
+
+    public Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken)
+    {
+        RequireOdbc();
+        return OdbcMetadata.ListTablesAsync(connectionString, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<ColumnEntry>> ListColumnsAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken)
+    {
+        RequireOdbc();
+        return OdbcMetadata.ListColumnsAsync(connectionString, catalog, schema, table, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<PrimaryKeyEntry>> ListPrimaryKeysAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken)
+    {
+        RequireOdbc();
+        return OdbcMetadata.ListPrimaryKeysAsync(connectionString, catalog, schema, table, cancellationToken);
     }
 
     public async Task<DialectInfo> GetDialectAsync(CancellationToken cancellationToken)
     {
-        await using var connection = factory.CreateConnection(connectionString);
-        if (connection is System.Data.Odbc.OdbcConnection odbc)
-            return await OdbcMetadata.GetDialectAsync(odbc, cancellationToken).ConfigureAwait(false);
+        if (IsOdbc) return await OdbcMetadata.GetDialectAsync(connectionString, cancellationToken).ConfigureAwait(false);
 
+        await using var connection = factory.CreateConnection(connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         return new DialectInfo(null, connection.ServerVersion, null);
     }

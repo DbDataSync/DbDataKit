@@ -71,6 +71,25 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
                 System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(columns, WorkerProtocol.Json)))).ConfigureAwait(false);
             return;
         }
+        if (action.Type == WorkerProtocol.ListPrimaryKeysAction)
+        {
+            var keysRequest = System.Text.Json.JsonSerializer.Deserialize<WorkerPrimaryKeysRequest>(action.Body.Span, WorkerProtocol.Json)
+                ?? throw new RpcException(new Status(StatusCode.InvalidArgument, "Empty primary key request."));
+            IReadOnlyList<PrimaryKeyEntry> keys;
+            try
+            {
+                keys = await new DbQueryExecutor(new DelegateConnectionFactory(Odbc.CreateConnection), keysRequest.ConnectionString)
+                    .ListPrimaryKeysAsync(keysRequest.Catalog, keysRequest.Schema, keysRequest.Table, context.CancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                log.LogWarning(ex, "Worker primary key listing failed");
+                throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+            }
+            await responseStream.WriteAsync(new FlightResult(ByteString.CopyFrom(
+                System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(keys, WorkerProtocol.Json)))).ConfigureAwait(false);
+            return;
+        }
         if (action.Type == WorkerProtocol.DialectAction)
         {
             DialectInfo dialect;

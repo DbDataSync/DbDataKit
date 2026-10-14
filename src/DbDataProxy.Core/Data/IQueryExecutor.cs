@@ -39,9 +39,15 @@ public interface IMetadataProvider
     /// <summary>Declared column metadata for one table through the catalog API (ODBC SQLColumns).</summary>
     Task<IReadOnlyList<ColumnEntry>> ListColumnsAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken);
 
+    /// <summary>Primary key columns of one table through the catalog API (ODBC SQLPrimaryKeys), in key order. Empty when there is none or the driver cannot say.</summary>
+    Task<IReadOnlyList<PrimaryKeyEntry>> ListPrimaryKeysAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken);
+
     /// <summary>What the database says about itself: product, version and (for ODBC) how it quotes identifiers.</summary>
     Task<DialectInfo> GetDialectAsync(CancellationToken cancellationToken);
 }
+
+/// <summary>One column of a table's primary key; <paramref name="Sequence"/> is 1-based.</summary>
+public sealed record PrimaryKeyEntry(string? Catalog, string? Schema, string Table, string Column, int Sequence, string? KeyName);
 
 /// <summary>How a driver quotes identifiers; null from the provider means the driver does not support quoting.</summary>
 public sealed record IdentifierQuote(string Prefix, string Suffix)

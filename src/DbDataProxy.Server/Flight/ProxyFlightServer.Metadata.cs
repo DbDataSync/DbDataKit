@@ -123,7 +123,7 @@ public sealed partial class ProxyFlightServer
 
     protected override async Task DoGetPrimaryKeys(CommandGetPrimaryKeys command, FlightServerRecordBatchStreamWriter writer, ServerCallContext context)
     {
-        var rows = (await LoadPrimaryKeysAsync(ResolveSource(context), context.CancellationToken).ConfigureAwait(false))
+        var rows = (await LoadPrimaryKeysAsync(ResolveSource(context), command, context.CancellationToken).ConfigureAwait(false))
             .Where(r => r[2] == command.Table
                         && (!command.HasCatalog || r[0] == command.Catalog)
                         && (!command.HasDbSchema || r[1] == command.DbSchema))
@@ -367,9 +367,24 @@ public sealed partial class ProxyFlightServer
         }
     }
 
-    // The ODBC catalog functions have no portable primary-key listing in ADO.NET, so those sources report none.
-    private static Task<List<string?[]>> LoadPrimaryKeysAsync(ResolvedDataSource source, CancellationToken cancellationToken) =>
-        UseCatalogApi(source) ? Task.FromResult(new List<string?[]>()) : QueryRowsAsync(source, PrimaryKeysSql, cancellationToken);
+    // Sources without INFORMATION_SCHEMA ask the driver (SQLPrimaryKeys) for the one table named in the command; drivers
+    // that cannot say, or tables without a key, report none. Rows are catalog, schema, table, column, key name, sequence.
+    private static async Task<List<string?[]>> LoadPrimaryKeysAsync(
+        ResolvedDataSource source, CommandGetPrimaryKeys command, CancellationToken cancellationToken)
+    {
+        if (!UseCatalogApi(source)) return await QueryRowsAsync(source, PrimaryKeysSql, cancellationToken).ConfigureAwait(false);
+        if (source.Executor is not IMetadataProvider provider) return [];
+        try
+        {
+            var keys = await provider.ListPrimaryKeysAsync(
+                command.HasCatalog ? command.Catalog : null, command.HasDbSchema ? command.DbSchema : null, command.Table, cancellationToken).ConfigureAwait(false);
+            return keys.Select(k => new string?[] { k.Catalog, k.Schema, k.Table, k.Column, k.KeyName, k.Sequence.ToString(System.Globalization.CultureInfo.InvariantCulture) }).ToList();
+        }
+        catch (Exception ex) when (ex is not RpcException and not OperationCanceledException)
+        {
+            throw ToRpcException(ex);
+        }
+    }
 
     private static async Task<List<string?[]>> QueryRowsAsync(ResolvedDataSource source, string sql, CancellationToken cancellationToken)
     {

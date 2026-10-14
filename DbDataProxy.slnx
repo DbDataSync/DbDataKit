@@ -1,10 +1,12 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/DbData.Odbc.Metadata/DbData.Odbc.Metadata.csproj" />
     <Project Path="src/DbDataProxy.Core/DbDataProxy.Core.csproj" />
     <Project Path="src/DbDataProxy.Server/DbDataProxy.Server.csproj" />
     <Project Path="src/DbDataProxy.Worker/DbDataProxy.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/DbData.Odbc.Metadata.Tests/DbData.Odbc.Metadata.Tests.csproj" />
     <Project Path="tests/DbDataProxy.Tests/DbDataProxy.Tests.csproj" />
   </Folder>
 </Solution>

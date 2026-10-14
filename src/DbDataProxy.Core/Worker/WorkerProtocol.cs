@@ -13,6 +13,7 @@ public static class WorkerProtocol
     public const string ListTablesAction = "list-tables";
     public const string DialectAction = "dialect";
     public const string ListColumnsAction = "list-columns";
+    public const string ListPrimaryKeysAction = "list-primary-keys";
 
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -31,3 +32,6 @@ public sealed record WorkerNonQueryResult(long Affected);
 
 /// <summary>Asks the worker for the declared columns of one table.</summary>
 public sealed record WorkerColumnsRequest(string ConnectionString, string? Catalog, string? Schema, string Table);
+
+/// <summary>Asks the worker for the primary key of one table.</summary>
+public sealed record WorkerPrimaryKeysRequest(string ConnectionString, string? Catalog, string? Schema, string Table);

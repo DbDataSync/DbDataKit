@@ -71,6 +71,18 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
         return columns;
     }
 
+    public async Task<IReadOnlyList<PrimaryKeyEntry>> ListPrimaryKeysAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken)
+    {
+        var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
+        var payload = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new WorkerPrimaryKeysRequest(connectionString, catalog, schema, table), WorkerProtocol.Json);
+
+        using var call = client.DoAction(new FlightAction(WorkerProtocol.ListPrimaryKeysAction, payload), Headers(secret), null, cancellationToken);
+        var keys = new List<PrimaryKeyEntry>();
+        await foreach (var result in call.ResponseStream.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            keys.AddRange(System.Text.Json.JsonSerializer.Deserialize<List<PrimaryKeyEntry>>(result.Body.Span, WorkerProtocol.Json) ?? []);
+        return keys;
+    }
+
     public async Task<DialectInfo> GetDialectAsync(CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
