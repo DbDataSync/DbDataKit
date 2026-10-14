@@ -25,7 +25,9 @@ PostgreSQL target, for example. Support varies by engine:
 Every engine above also offers `TriggerAudit`, a portable trigger-based option — see
 [Replication concepts](docs/replication-concepts.md#reader-kinds).
 DuckDB is a source only, for query-based sources like Parquet, CSV, an S3 glob, or an attached
-database. It is not a replication target. See `architecture/planning/done/overview.md` for the
+database. It is not a replication target. **Arrow Flight SQL** is also a source only — a reload of a
+table or query from any server speaking the protocol, usually a SQL proxy, with basic or bearer-token
+authentication; see [Drivers and libraries](docs/drivers-and-libraries.md#arrow-flight-sql). See `architecture/planning/done/overview.md` for the
 broader ambition and `architecture/detailed-design.md` for the full system design.
 
 The table above is the five built-in drivers. Anything else reachable through an ADO.NET

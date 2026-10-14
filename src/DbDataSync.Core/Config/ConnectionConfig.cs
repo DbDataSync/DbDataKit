@@ -26,6 +26,28 @@ public static class DriverIds
     /// <c>DbDataSync.Drivers.DuckDb.DuckDbQueryReader</c>.
     /// </summary>
     public const string DuckDb = "DuckDb";
+
+    /// <summary>
+    /// Arrow Flight SQL, source only — phase 197F. One driver id per *SQL dialect* the server behind the
+    /// protocol speaks, because a Flight SQL endpoint (usually a proxy) accepts whatever SQL the engine
+    /// it fronts does, and the dialect is a property of the driver registration, not of a connection
+    /// (readers are built with their dialect once). <see cref="ArrowFlightSql"/> is plain ANSI SQL; the
+    /// others borrow a named engine's quoting, row limiting and type spellings.
+    /// </summary>
+    public const string ArrowFlightSql = "ArrowFlightSql";
+    public const string ArrowFlightSqlMsSql = "ArrowFlightSqlMsSql";
+    public const string ArrowFlightSqlPostgres = "ArrowFlightSqlPostgres";
+    public const string ArrowFlightSqlMySql = "ArrowFlightSqlMySql";
+    public const string ArrowFlightSqlOracle = "ArrowFlightSqlOracle";
+    public const string ArrowFlightSqlDuckDb = "ArrowFlightSqlDuckDb";
+
+    /// <summary>Every Arrow Flight SQL driver id — for the places that ask "is this one of ours" (the
+    /// drivers list's built-in marker, the readiness check that every connection's driver resolves).</summary>
+    public static readonly IReadOnlyList<string> ArrowFlightSqlVariants =
+    [
+        ArrowFlightSql, ArrowFlightSqlMsSql, ArrowFlightSqlPostgres,
+        ArrowFlightSqlMySql, ArrowFlightSqlOracle, ArrowFlightSqlDuckDb,
+    ];
 }
 
 /// <summary>

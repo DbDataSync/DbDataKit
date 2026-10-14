@@ -244,7 +244,8 @@ internal sealed class StateStoreCheck : IReadinessCheck
 /// parses, and every connection's driver id resolves to a built-in or a driver found on disk.</summary>
 internal sealed class LibrariesAndDriversCheck : IReadinessCheck
 {
-    private static readonly HashSet<string> BuiltInDriverIds = [DriverIds.MsSql, DriverIds.Postgres, DriverIds.DuckDb];
+    private static readonly HashSet<string> BuiltInDriverIds =
+        [DriverIds.MsSql, DriverIds.Postgres, DriverIds.DuckDb, .. DriverIds.ArrowFlightSqlVariants];
 
     public Task<CheckResult> RunAsync(ReadinessContext context, CancellationToken cancellationToken)
     {

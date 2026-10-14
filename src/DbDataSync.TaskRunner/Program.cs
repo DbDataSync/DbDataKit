@@ -3,6 +3,7 @@ using DbDataSync.Core.Config;
 using DbDataSync.Core.Git;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Descriptor;
+using DbDataSync.Drivers.ArrowFlightSql;
 using DbDataSync.Drivers.DuckDb;
 using DbDataSync.Drivers.Generic;
 using DbDataSync.Drivers.MsSql;
@@ -51,6 +52,10 @@ driverRegistry.RegisterWithScripting(postgresDriver, scriptHost);
 driverRegistry.RegisterWithScripting(mySqlDriver, scriptHost);
 driverRegistry.RegisterWithScripting(oracleDriver, scriptHost);
 driverRegistry.RegisterWithScripting(duckDbDriver, scriptHost);
+// One driver per SQL dialect (phase 197F); like DuckDb they name a dialect but supply no catalog, so
+// they get no ScriptedQuery reader out of the same call.
+foreach (var flightSqlDriver in ArrowFlightSqlDriver.CreateAll())
+    driverRegistry.RegisterWithScripting(flightSqlDriver, scriptHost);
 DriverLoader.LoadDescriptorDrivers(options.RepoRoot, libraryRegistry, driverRegistry);
 DriverLoader.LoadCompiledDrivers(options.RepoRoot, driverRegistry);
 

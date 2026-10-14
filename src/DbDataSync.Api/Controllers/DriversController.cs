@@ -29,7 +29,8 @@ public sealed class DriversController(
     DriverRegistry driverRegistry, LibraryRegistry libraryRegistry, ApiOptions apiOptions,
     RestartRequiredState restartRequired, ILogger<DriversController> logger) : ControllerBase
 {
-    private static readonly HashSet<string> BuiltIn = [DriverIds.MsSql, DriverIds.Postgres, DriverIds.DuckDb];
+    private static readonly HashSet<string> BuiltIn =
+        [DriverIds.MsSql, DriverIds.Postgres, DriverIds.DuckDb, .. DriverIds.ArrowFlightSqlVariants];
 
     [Authorize(Policies.Viewer)]
     [HttpGet]

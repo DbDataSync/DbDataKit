@@ -10,7 +10,8 @@ Two separate concepts, easy to conflate because they usually show up together:
   machine that needs it, the first time something asks for it.
 - **A driver** is what actually runs a replication against one engine — the readers, staging providers,
   and writers DbDataSync's pipeline dispatches to for a given `DriverType`. There are three kinds: the
-  five **built-in** drivers compiled into the tool (`MsSql`, `Postgres`, `MySql`, `Oracle`, `DuckDb`), any
+  **built-in** drivers compiled into the tool (`MsSql`, `Postgres`, `MySql`, `Oracle`, `DuckDb`, and the
+  source-only Arrow Flight SQL family), any
   number of **descriptor** drivers (a YAML file, no rebuild needed), and any number of **compiled plugin**
   drivers (your own compiled `IDriver`, a heavier lift covered only briefly below).
 
@@ -97,7 +98,7 @@ either one is visible to the other.
 
 ### Built-in drivers
 
-Compiled into the tool — no install step for the driver itself, ever. Four of the five still need their
+Compiled into the tool — no install step for the driver itself, ever. Four of the first five still need their
 library installed before they can actually connect to anything, exactly like a descriptor driver does:
 
 | `DriverType` | library it needs | notes |
@@ -107,6 +108,7 @@ library installed before they can actually connect to anything, exactly like a d
 | `MySql` | `mysql-connector` | MySQL and MariaDB, one driver — Watermark, TriggerAudit, BatchReload and KeyReconcile readers; the binlog-based native alternative is not supported yet |
 | `Oracle` | `oracle-managed-data-access` | Watermark, TriggerAudit, BatchReload, KeyReconcile, and Flashback Version Query readers; LogMiner is not supported yet |
 | `DuckDb` | `duckdb` (installs itself — see above) | embedded, file path or `:memory:`, nothing to authenticate to |
+| `ArrowFlightSql`, `ArrowFlightSqlMsSql`, `ArrowFlightSqlPostgres`, `ArrowFlightSqlMySql`, `ArrowFlightSqlOracle`, `ArrowFlightSqlDuckDb` | none — ships with the tool | source only, read over Arrow Flight SQL; one driver per SQL dialect — see [Arrow Flight SQL](#arrow-flight-sql) |
 
 Configuring a connection with `DriverType: MsSql`/`Postgres`/`MySql`/`Oracle` before its library is
 installed doesn't fail at save time — the config itself is valid — it fails the first time something
@@ -118,6 +120,48 @@ Library 'microsoft-data-sqlclient' is not installed. Install it with `dbdatasync
 
 Run that once (pin whatever version you want — see above) and every subsequent connection using that
 driver just works, with no further setup.
+
+### Arrow Flight SQL
+
+A source-only driver for any server that speaks [Apache Arrow Flight SQL](https://arrow.apache.org/docs/format/FlightSql.html) —
+typically a SQL proxy in front of another engine. It has one reader, a full reload of a table or query
+(`BatchReload`), and no writer, so it is a place to read *from*.
+
+**Pick the driver for the SQL the server accepts.** Flight SQL carries SQL text to whatever engine sits
+behind it, so quoting identifiers, limiting rows and spelling literals follow that engine, not the
+protocol. Each dialect is its own `DriverType`, listed in the connection editor by name:
+
+| `DriverType` | SQL syntax used |
+| --- | --- |
+| `ArrowFlightSql` | plain ANSI SQL (`"quoted"` identifiers, `FETCH FIRST n ROWS ONLY`) — when the server is not any of the below |
+| `ArrowFlightSqlMsSql` | SQL Server (`[bracketed]` identifiers, `TOP`) |
+| `ArrowFlightSqlPostgres` | PostgreSQL |
+| `ArrowFlightSqlMySql` | MySQL / MariaDB (`` `backtick` `` identifiers) |
+| `ArrowFlightSqlOracle` | Oracle |
+| `ArrowFlightSqlDuckDb` | DuckDB |
+
+**Connection settings**
+
+| Setting | Notes |
+| --- | --- |
+| Host & port, or Connection string | An address: `host:port`, or a URI — `grpc://` and `grpc+tcp://` (plain text), `grpc+tls://`, `http://`, `https://`. There is no default port. |
+| Auth mode | **Basic or bearer token**, or **None** for an open server. Integrated authentication is not offered. |
+| Method | **Basic** — a user id and password, exchanged for a session token by the Flight handshake (a server that issues none gets the Basic header on every call). **Bearer** — a pre-issued token sent as `Authorization: Bearer`. |
+| Password / Bearer token | Kept in the secret store like any password, never in the committed config, and never part of the connection string or an error message. |
+| Catalog | Optional. The catalog that table browsing looks in. |
+| Use TLS | On by default. |
+| Skip certificate validation | Off by default. Accepts **any** certificate — self-signed, expired, wrong host — for a proxy you can't give a trusted one. The traffic is still encrypted but the server's identity is not checked, so use it only on a network you trust. |
+| Parameters | **Prepared** (default): values are bound to a prepared statement and never become part of the SQL text. **Inline**: values are written into the statement as literals — only for a proxy that does not implement prepared statements. |
+
+**What to expect.** Browsing tables and columns uses Flight SQL's metadata calls, and many proxies implement
+none of them: the lists then come back empty and the mapping editor offers the query editor instead. The
+connection test runs `SELECT 1` (`SELECT 1 FROM DUAL` for Oracle) — set the connection's own test query if
+the server needs something else. Column types are reported in ANSI names (`bigint`, `timestamp with time
+zone`, ...) whatever the engine behind the proxy calls them, because an Arrow schema carries no
+engine-specific names. **Compressed results are read automatically** (Arrow's LZ4 and Zstd batch compression,
+which is what a compressing proxy sends), as are dictionary- and run-end-encoded columns — nothing to configure.
+A result's endpoints are read in order from the server the connection is already
+talking to.
 
 ### Descriptor drivers
 

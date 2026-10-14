@@ -12,6 +12,7 @@ using DbDataSync.State.Remote;
 using DbDataSync.Core.Config;
 using DbDataSync.Core.Git;
 using DbDataSync.Drivers.Abstractions;
+using DbDataSync.Drivers.ArrowFlightSql;
 using DbDataSync.Drivers.DuckDb;
 using DbDataSync.Drivers.Generic;
 using DbDataSync.Drivers.MsSql;
@@ -219,6 +220,9 @@ public static class DbDataSyncHost
             // columns by contract. Registered through the same helper anyway, so there is one
             // registration shape rather than a special case to keep in step.
             registry.RegisterWithScripting(duckDbDriver, scriptHost);
+            // Phase 197F: one Arrow Flight SQL driver per SQL dialect the server behind it may speak.
+            foreach (var flightSqlDriver in ArrowFlightSqlDriver.CreateAll())
+                registry.RegisterWithScripting(flightSqlDriver, scriptHost);
 
             // A descriptor-defined driver's library (resolved above) is already loadable; this is
             // what actually stands one up and puts it beside the built-ins.
