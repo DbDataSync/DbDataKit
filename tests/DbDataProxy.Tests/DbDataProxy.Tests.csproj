@@ -2,9 +2,11 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\DbDataProxy.Server\DbDataProxy.Server.csproj" />
     <ProjectReference Include="..\..\src\DbDataProxy.Worker\DbDataProxy.Worker.csproj" />
