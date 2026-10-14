@@ -53,7 +53,8 @@ public sealed class DataSourceCatalog(
 
     private IQueryExecutor CreateExecutor(string name, DataSourceOptions source, IDbProvider provider, string connectionString)
     {
-        if (source.Bitness.Equals("x86", StringComparison.OrdinalIgnoreCase))
+        // A 32-bit proxy process can load 32-bit drivers itself; a 64-bit one hands them to the worker.
+        if (source.Bitness.Equals("x86", StringComparison.OrdinalIgnoreCase) && Environment.Is64BitProcess)
         {
             if (!provider.Name.Equals("odbc", StringComparison.OrdinalIgnoreCase))
                 throw new RpcException(new Status(StatusCode.Internal, $"Data source '{name}': only ODBC sources can use bitness x86."));

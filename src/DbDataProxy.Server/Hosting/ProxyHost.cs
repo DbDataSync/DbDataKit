@@ -60,6 +60,11 @@ public static class ProxyHost
         services.AddSingleton<IDbProvider, OdbcProvider>();
         services.AddSingleton<IDbProvider, SqlServerProvider>();
         services.AddSingleton<IDbProvider, DuckDbProvider>();
+        if (OperatingSystem.IsWindows())
+        {
+            services.AddSingleton<WorkerProcessHost>();
+            services.AddSingleton<IWorkerExecutorFactory>(sp => sp.GetRequiredService<WorkerProcessHost>());
+        }
         services.AddSingleton<DataSourceCatalog>();
 
         services.AddHostedService<MaintenanceService>();
