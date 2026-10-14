@@ -23,6 +23,17 @@ public sealed class PendingQueryStore(TimeProvider time) : IAsyncDisposable
 
     private readonly ConcurrentDictionary<string, PendingQuery> _pending = new();
 
+    public const int MaxPerOwner = 32;
+
+    /// <summary>Refuses new queries from a caller that has too many executed-but-unfetched results open.</summary>
+    public void EnsureCapacity(string owner)
+    {
+        int open = _pending.Values.Count(p => string.Equals(p.Owner, owner, StringComparison.OrdinalIgnoreCase));
+        if (open >= MaxPerOwner)
+            throw new Grpc.Core.RpcException(new Grpc.Core.Status(Grpc.Core.StatusCode.ResourceExhausted,
+                $"Too many queries are waiting to be fetched ({open}); fetch or abandon some first."));
+    }
+
     public byte[] Add(string owner, ResolvedDataSource source, IQueryResult result)
     {
         byte[] handle = RandomNumberGenerator.GetBytes(16);

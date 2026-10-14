@@ -67,6 +67,7 @@ public sealed partial class ProxyFlightServer(
     private async Task<FlightInfo> ExecuteForFlightInfoAsync(
         string sql, ProxyPrincipal principal, ResolvedDataSource source, FlightDescriptor descriptor, ServerCallContext context)
     {
+        pending.EnsureCapacity(principal.Name);
         _log.LogInformation("Query by {User} on {Source}: {Sql}", principal.Name, source.Name, Truncate(sql));
 
         IQueryResult result;
