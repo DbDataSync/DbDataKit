@@ -144,7 +144,8 @@ exe: queries with every compression setting, updates, metadata and wrong-passwor
 * Catalog metadata: SQL Server and DuckDB sources are read from `INFORMATION_SCHEMA`. ODBC sources use the driver's
   catalog API (`SQLTables`, via `GetSchema`), so text/Excel/Access and other drivers without `INFORMATION_SCHEMA` work,
   including through the 32-bit worker. Set a data source's `"Metadata"` to `"odbc"` or `"informationschema"` to
-  override the default (`"auto"`). ODBC sources report no primary keys, and driver quality varies.
+  override the default (`"auto"`). Per-table schemas quote names with the driver's own identifier character and fall
+  back to shorter names when the driver's catalog is not valid SQL. ODBC sources report no primary keys.
 * `AllowWrites` only gates statements a client sends as *updates*. A client that runs `INSERT`/`DDL` through the query
   path (ADBC's `cursor.execute` does) is limited only by the database account's permissions, so use read-only database
   accounts for read-only sources.

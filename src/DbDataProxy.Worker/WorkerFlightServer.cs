@@ -52,6 +52,22 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
             await ListTablesAsync(action, responseStream, context).ConfigureAwait(false);
             return;
         }
+        if (action.Type == WorkerProtocol.IdentifierQuoteAction)
+        {
+            IdentifierQuote? quote;
+            try
+            {
+                quote = await CreateExecutor(WorkerProtocol.Deserialize(action.Body.Span)).GetIdentifierQuoteAsync(context.CancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                log.LogWarning(ex, "Worker identifier-quote lookup failed");
+                throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+            }
+            await responseStream.WriteAsync(new FlightResult(ByteString.CopyFrom(
+                System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(quote, WorkerProtocol.Json)))).ConfigureAwait(false);
+            return;
+        }
         if (action.Type != WorkerProtocol.NonQueryAction)
             throw new RpcException(new Status(StatusCode.Unimplemented, $"Unknown action '{action.Type}'."));
 

@@ -105,9 +105,10 @@ public sealed partial class ProxyFlightServer
         };
         if (command.IncludeSchema)
         {
+            var quote = await LoadIdentifierQuoteAsync(source, context.CancellationToken).ConfigureAwait(false);
             var builder = new BinaryArray.Builder();
             foreach (var r in rows)
-                builder.Append((ReadOnlySpan<byte>)await SerializedTableSchemaAsync(source, r[0], r[1], r[2]!, context.CancellationToken).ConfigureAwait(false));
+                builder.Append((ReadOnlySpan<byte>)await SerializedTableSchemaAsync(source, quote, r[0], r[1], r[2]!, context.CancellationToken).ConfigureAwait(false));
             arrays.Add(builder.Build());
         }
         await WriteAsync(writer, GetTableSchema(command.IncludeSchema), arrays, rows.Count).ConfigureAwait(false);
@@ -313,23 +314,47 @@ public sealed partial class ProxyFlightServer
 
     /// <summary>The Arrow schema of a table (from a zero-row query), serialized the way Flight SQL expects.</summary>
     private static async Task<byte[]> SerializedTableSchemaAsync(
-        ResolvedDataSource source, string? catalogName, string? schemaName, string table, CancellationToken cancellationToken)
+        ResolvedDataSource source, Func<string, string> quote, string? catalogName, string? schemaName, string table, CancellationToken cancellationToken)
     {
-        string name = string.Join('.', new[] { catalogName, schemaName, table }.Where(p => !string.IsNullOrEmpty(p)).Select(Quote));
+        // Some ODBC drivers report a catalog that is not valid in SQL (the text driver reports the directory path), so
+        // fall back from the fully qualified name to schema.table and finally the bare table name.
+        string?[][] candidates = [[catalogName, schemaName, table], [schemaName, table], [table]];
+        foreach (var parts in candidates.DistinctBy(p => string.Join('\0', p)))
+        {
+            string name = string.Join('.', parts.Where(p => !string.IsNullOrEmpty(p)).Select(p => quote(p!)));
+            try
+            {
+                await using var result = await source.Executor
+                    .ExecuteQueryAsync(new QueryRequest($"SELECT * FROM {name} WHERE 1 = 0", 1, source.Options.CommandTimeoutSeconds), cancellationToken)
+                    .ConfigureAwait(false);
+                return SchemaExtensions.SerializeSchema(result.Schema);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Try the next, less qualified name.
+            }
+        }
+        // A table whose schema cannot be read (permissions, exotic types) is reported with an empty schema.
+        return SchemaExtensions.SerializeSchema(new Schema([], null));
+    }
+
+    private static readonly Func<string, string> StandardQuote = id => "\"" + id.Replace("\"", "\"\"") + "\"";
+
+    /// <summary>
+    /// ODBC sources are quoted with the driver's own identifier character (some use backticks or brackets, some none);
+    /// everything else, and any driver that cannot say, gets standard SQL double quotes.
+    /// </summary>
+    private static async Task<Func<string, string>> LoadIdentifierQuoteAsync(ResolvedDataSource source, CancellationToken cancellationToken)
+    {
+        if (!UseCatalogApi(source) || source.Executor is not IMetadataProvider provider) return StandardQuote;
         try
         {
-            await using var result = await source.Executor
-                .ExecuteQueryAsync(new QueryRequest($"SELECT * FROM {name} WHERE 1 = 0", 1, source.Options.CommandTimeoutSeconds), cancellationToken)
-                .ConfigureAwait(false);
-            return SchemaExtensions.SerializeSchema(result.Schema);
+            var quote = await provider.GetIdentifierQuoteAsync(cancellationToken).ConfigureAwait(false);
+            return quote is null ? id => id : quote.Apply;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // A table whose schema cannot be read (permissions, exotic types) is reported with an empty schema.
-            return SchemaExtensions.SerializeSchema(new Schema([], null));
+            return StandardQuote;
         }
     }
-
-    // Standard-SQL identifier quoting; the double quote is doubled so a name cannot escape the identifier.
-    private static string Quote(string? identifier) => "\"" + identifier!.Replace("\"", "\"\"") + "\"";
 }

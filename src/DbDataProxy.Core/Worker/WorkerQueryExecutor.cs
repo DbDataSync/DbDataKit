@@ -59,6 +59,18 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
         return tables;
     }
 
+    public async Task<IdentifierQuote?> GetIdentifierQuoteAsync(CancellationToken cancellationToken)
+    {
+        var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
+        var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, "", 1, null));
+
+        using var call = client.DoAction(new FlightAction(WorkerProtocol.IdentifierQuoteAction, payload), Headers(secret), null, cancellationToken);
+        IdentifierQuote? quote = null;
+        await foreach (var result in call.ResponseStream.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            quote = System.Text.Json.JsonSerializer.Deserialize<IdentifierQuote?>(result.Body.Span, WorkerProtocol.Json);
+        return quote;
+    }
+
     private static Metadata Headers(string secret) => new() { { WorkerProtocol.SecretHeader, secret } };
 
     private sealed class WorkerQueryResult(FlightRecordBatchStreamingCall call, Schema schema) : IQueryResult

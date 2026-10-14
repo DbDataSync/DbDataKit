@@ -34,4 +34,14 @@ public sealed record TableEntry(string? Catalog, string? Schema, string Name, st
 public interface IMetadataProvider
 {
     Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken);
+
+    /// <summary>The driver's identifier quoting (ODBC SQLGetInfo SQL_IDENTIFIER_QUOTE_CHAR), or null if it has none.</summary>
+    Task<IdentifierQuote?> GetIdentifierQuoteAsync(CancellationToken cancellationToken);
+}
+
+/// <summary>How a driver quotes identifiers; null from the provider means the driver does not support quoting.</summary>
+public sealed record IdentifierQuote(string Prefix, string Suffix)
+{
+    /// <summary>Quotes one identifier, doubling any embedded suffix so a name cannot escape the quotes.</summary>
+    public string Apply(string identifier) => Prefix + identifier.Replace(Suffix, Suffix + Suffix) + Suffix;
 }

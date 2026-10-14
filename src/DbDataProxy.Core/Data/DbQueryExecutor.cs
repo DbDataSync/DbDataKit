@@ -60,6 +60,14 @@ public sealed class DbQueryExecutor(IDbConnectionFactory factory, string connect
         return await OdbcMetadata.ListTablesAsync(odbc, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<IdentifierQuote?> GetIdentifierQuoteAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = factory.CreateConnection(connectionString);
+        if (connection is not System.Data.Odbc.OdbcConnection odbc)
+            throw new NotSupportedException("Driver identifier quoting is only available for ODBC data sources.");
+        return await OdbcMetadata.GetIdentifierQuoteAsync(odbc, cancellationToken).ConfigureAwait(false);
+    }
+
     private static DbCommand CreateCommand(DbConnection connection, QueryRequest request)
     {
         var command = connection.CreateCommand();

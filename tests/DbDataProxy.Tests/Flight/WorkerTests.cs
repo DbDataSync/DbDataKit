@@ -104,6 +104,25 @@ public sealed class WorkerTests : IAsyncLifetime
         Assert.Empty(await Flatten(await client.Raw.GetPrimaryKeysAsync("people#csv", options: new DbDataProxy.Client.QueryOptions { DataSource = "text32" })));
     }
 
+
+    [Fact]
+    public async Task Table_schemas_use_the_drivers_identifier_quoting()
+    {
+        using var client = await LoginAsync();
+        var batches = new List<RecordBatch>();
+        await foreach (var batch in await client.Raw.GetTablesAsync(includeSchema: true, options: new DbDataProxy.Client.QueryOptions { DataSource = "text32" }))
+            batches.Add(batch);
+
+        var batch0 = batches.First(b => b.Length > 0);
+        var names = (StringArray)batch0.Column("table_name");
+        int row = Enumerable.Range(0, batch0.Length).First(i => names.GetString(i).StartsWith("people", StringComparison.OrdinalIgnoreCase));
+        var schemaBytes = ((BinaryArray)batch0.Column("table_schema")).GetBytes(row).ToArray();
+
+        // An unreadable table is reported with an empty schema, so a real one must serialize larger than that.
+        int emptyLength = Apache.Arrow.Flight.Sql.SchemaExtensions.SerializeSchema(new Schema([], null)).Length;
+        Assert.True(schemaBytes.Length > emptyLength, "the table's columns were not read");
+    }
+
     private static async Task<List<RecordBatch>> Flatten(DbDataProxy.Client.QueryResultStream stream)
     {
         var batches = new List<RecordBatch>();

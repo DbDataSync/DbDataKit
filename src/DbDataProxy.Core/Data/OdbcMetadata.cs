@@ -31,6 +31,20 @@ public static class OdbcMetadata
         return entries;
     }
 
+
+    /// <summary>
+    /// Asks the driver for its identifier quote character. OdbcCommandBuilder.QuoteIdentifier calls SQLGetInfo
+    /// (SQL_IDENTIFIER_QUOTE_CHAR) and returns the name unchanged when the driver reports no quoting (" ").
+    /// </summary>
+    public static async Task<IdentifierQuote?> GetIdentifierQuoteAsync(OdbcConnection connection, CancellationToken cancellationToken)
+    {
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        const string probe = "x";
+        string quoted = new OdbcCommandBuilder().QuoteIdentifier(probe, connection);
+        int at = quoted.IndexOf(probe, StringComparison.Ordinal);
+        return quoted == probe || at < 0 ? null : new IdentifierQuote(quoted[..at], quoted[(at + probe.Length)..]);
+    }
+
     private static string? Text(DataRow row, string column)
     {
         if (!row.Table.Columns.Contains(column) || row[column] is DBNull) return null;
