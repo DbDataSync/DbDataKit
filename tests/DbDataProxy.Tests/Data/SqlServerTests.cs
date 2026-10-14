@@ -185,7 +185,7 @@ public class OdbcUnsupportedTypeTests
         string server = Environment.GetEnvironmentVariable("DBPROXY_TEST_SQLSERVER") ?? @".\SQLEXPRESS";
         var executor = new DbQueryExecutor(
             new DelegateConnectionFactory(c => new System.Data.Odbc.OdbcConnection(c)),
-            SqlServerEnv.Odbc("ODBC Driver 17 for SQL Server"));
+            SqlServerEnv.Odbc(OperatingSystem.IsWindows() ? "ODBC Driver 17 for SQL Server" : "ODBC Driver 18 for SQL Server"));
 
         NotSupportedException? ex = null;
         try
