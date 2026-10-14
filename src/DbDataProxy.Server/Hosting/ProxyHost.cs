@@ -58,6 +58,7 @@ public static class ProxyHost
         services.AddSingleton<IBasicCredentialValidator, WindowsAccountValidator>();
         services.AddSingleton<IBasicCredentialValidator, PassThroughValidator>();
         services.AddSingleton<ChainedCredentialValidator>();
+        services.AddSingleton<IJwtValidator, JwtBearerValidator>();
         services.AddSingleton<RequestAuthenticator>();
 
         services.AddSingleton<IDbProvider, OdbcProvider>();

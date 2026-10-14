@@ -6,14 +6,22 @@ using Microsoft.AspNetCore.Http;
 namespace DbDataProxy.Server.Auth;
 
 /// <summary>Resolves an <c>authorization</c> header value (Bearer token or Basic credentials) to a principal.</summary>
-public sealed class RequestAuthenticator(SessionStore sessions, ChainedCredentialValidator validators)
+public sealed class RequestAuthenticator(SessionStore sessions, ChainedCredentialValidator validators, IJwtValidator? jwt = null)
 {
     public async ValueTask<ProxyPrincipal?> AuthenticateAsync(string? authorization, CancellationToken cancellationToken, string client = "")
     {
         if (string.IsNullOrWhiteSpace(authorization)) return null;
 
         if (authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-            return sessions.TryGet(authorization["Bearer ".Length..].Trim());
+        {
+            string token = authorization["Bearer ".Length..].Trim();
+            if (sessions.TryGet(token) is { } session) return session;
+
+            // Not one of our session tokens: a JWT from an external identity provider, if that is enabled.
+            return jwt is { Enabled: true } && token.Count(c => c == '.') == 2
+                ? await jwt.ValidateAsync(token, cancellationToken).ConfigureAwait(false)
+                : null;
+        }
 
         if (TryParseBasic(authorization, out string user, out string password))
             return await validators.ValidateAsync(user, password, cancellationToken, client).ConfigureAwait(false);

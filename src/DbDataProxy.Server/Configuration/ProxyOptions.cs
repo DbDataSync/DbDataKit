@@ -95,6 +95,9 @@ public sealed class AuthOptions
     /// which validate them by connecting to the database as that user.
     /// </summary>
     public bool AllowPassThrough { get; set; } = true;
+
+    /// <summary>Accept JWT bearer tokens from an OpenID Connect provider such as Microsoft Entra ID.</summary>
+    public JwtOptions Jwt { get; set; } = new();
 }
 
 public sealed class WorkerOptions
