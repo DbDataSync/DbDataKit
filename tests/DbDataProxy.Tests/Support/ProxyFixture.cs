@@ -105,6 +105,8 @@ public sealed class ProxyClient : IDisposable
 
     public string? Bearer => _proxy.Authorization;
 
+    public ProxyFlightClient Raw => _proxy;
+
     public Task AuthenticateAsync(string user, string password) => _proxy.AuthenticateAsync(user, password);
 
     public void UseHeader(string header) => _proxy.Authorization = header;

@@ -69,10 +69,52 @@ public sealed class ProxyFlightClient : IDisposable
     }
 
     /// <summary>Runs a query and returns its schema and a lazily-read stream of batches.</summary>
-    public async Task<QueryResultStream> QueryAsync(string sql, QueryOptions? options = null, CancellationToken cancellationToken = default)
+    public Task<QueryResultStream> QueryAsync(string sql, QueryOptions? options = null, CancellationToken cancellationToken = default) =>
+        RunCommandAsync(new CommandStatementQuery { Query = sql }, options, cancellationToken);
+
+    /// <summary>Catalog names (Flight SQL GetCatalogs).</summary>
+    public Task<QueryResultStream> GetCatalogsAsync(QueryOptions? options = null, CancellationToken cancellationToken = default) =>
+        RunCommandAsync(new CommandGetCatalogs(), options, cancellationToken);
+
+    /// <summary>Schemas, optionally filtered by catalog and a SQL LIKE pattern (Flight SQL GetDbSchemas).</summary>
+    public Task<QueryResultStream> GetSchemasAsync(string? catalog = null, string? schemaPattern = null, QueryOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        var command = new CommandGetDbSchemas();
+        if (catalog is not null) command.Catalog = catalog;
+        if (schemaPattern is not null) command.DbSchemaFilterPattern = schemaPattern;
+        return RunCommandAsync(command, options, cancellationToken);
+    }
+
+    /// <summary>Tables and views (Flight SQL GetTables); <paramref name="includeSchema"/> adds each table's Arrow schema.</summary>
+    public Task<QueryResultStream> GetTablesAsync(
+        string? catalog = null, string? schemaPattern = null, string? tablePattern = null, IEnumerable<string>? tableTypes = null,
+        bool includeSchema = false, QueryOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        var command = new CommandGetTables { IncludeSchema = includeSchema };
+        if (catalog is not null) command.Catalog = catalog;
+        if (schemaPattern is not null) command.DbSchemaFilterPattern = schemaPattern;
+        if (tablePattern is not null) command.TableNameFilterPattern = tablePattern;
+        if (tableTypes is not null) command.TableTypes.AddRange(tableTypes);
+        return RunCommandAsync(command, options, cancellationToken);
+    }
+
+    public Task<QueryResultStream> GetTableTypesAsync(QueryOptions? options = null, CancellationToken cancellationToken = default) =>
+        RunCommandAsync(new CommandGetTableTypes(), options, cancellationToken);
+
+    public Task<QueryResultStream> GetPrimaryKeysAsync(string table, string? catalog = null, string? schema = null, QueryOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        var command = new CommandGetPrimaryKeys { Table = table };
+        if (catalog is not null) command.Catalog = catalog;
+        if (schema is not null) command.DbSchema = schema;
+        return RunCommandAsync(command, options, cancellationToken);
+    }
+
+    public Task<QueryResultStream> GetSqlInfoAsync(QueryOptions? options = null, CancellationToken cancellationToken = default) =>
+        RunCommandAsync(new CommandGetSqlInfo(), options, cancellationToken);
+
+    private async Task<QueryResultStream> RunCommandAsync(IMessage command, QueryOptions? options, CancellationToken cancellationToken)
     {
         var headers = Headers(options);
-        var command = new CommandStatementQuery { Query = sql };
         var descriptor = FlightDescriptor.CreateCommandDescriptor(Any.Pack(command).ToByteArray());
 
         FlightInfo info;
