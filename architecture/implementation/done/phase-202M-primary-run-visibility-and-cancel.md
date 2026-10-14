@@ -1,6 +1,6 @@
 # Phase 202M — A Primary run says what it is doing, shows the SQL it runs, and can be cancelled
 
-**Status**: Parts 1 and 2 built (run log only). Part 3 planned, not started.
+**Status**: Built. See "What was built" and "Not done".
 **Plan reference**: none — reported from a real run. A mapping with a custom segmenting strategy backfilled
 correctly; a scheduled/"Run now" Primary pass of the same mapping ran longer, with no log of whether it
 segmented, no SQL, no way to cancel, and an idle-looking runner process.
@@ -35,8 +35,9 @@ source/target columns — and writes each as an Info log line (`'<mapping>' (<se
 then the SQL). Best effort: a component that can't describe itself is logged as such; a failure is a warning
 and never stops the pass. Because the run log is what History shows, the SQL is in history too.
 
-Not covered: statements a *segmenting strategy* itself runs (the Source SQL / Target SQL / DuckDB text), and
-the metadata queries around a pass. Add to the strategy runner's log.
+Strategy SQL: built afterwards — `CustomSegmentExpansion.ExpandAsync` takes a log callback and writes the
+strategy's name/kind/SQL before it runs and how many candidates it proposed and selected after. The metadata
+queries around a pass are still not logged.
 
 ## Part 3 — planned: cancel a run that is running
 
@@ -56,3 +57,29 @@ Part 1/2 have no automated test yet (the executor's integration tests need SQL S
 unit test for the segment-description text, and an executor test using the DuckDB source asserting the log
 contains the resolved segment list and the reader SQL. Part 3: store-level cancel marker, worker honouring it
 mid-read, API on a worker it didn't spawn.
+
+## What was built
+
+- **Run log visible for any run** (the user's question: where is a worker's live log?). The only place was the
+  Runs tab's *Live run* card, which follows a run started from that page in the current session. The run
+  details dialog (click any status) now has a **Log** section, live (SignalR plus a 750 ms poll) while the run
+  is queued/running and loaded once for a finished one. Log lines keep their line breaks so SQL is readable.
+- **Cooperative cancel**: `WorkQueue.CancelRequestedUtc` (migration), `WorkQueueStore.RequestCancel` /
+  `IsCancelRequested`, `IRunnerState.IsCancelRequested` (local, remote HTTP, `/internal/state/is-cancel-requested`).
+  `RunExecutor.ProcessWorkItemAsync` runs each item under its own linked token and a 1 s watcher; on a request it
+  logs, cancels that token, and records the run `Cancelled` (the queue item is closed `Failed`: it didn't
+  complete). `ProcessSupervisor.CancelRun` records the request for a claimed/running item and returns; it
+  kills the worker only if the run is still `Running` 60 s later and the worker is one this API spawned.
+- **UI**: Cancel on every queued/pending/running history row and in the details dialog.
+
+## Not done
+
+- Part 1/2 and the watcher have no end-to-end test: the executor tests need SQL Server/Postgres, which this
+  sandbox lacks. Covered: the queue marker (`WorkQueueStoreTests`), TypeScript typecheck, web unit tests.
+  The cancel catch is exercised only by reading; **run a real pass, cancel it, and watch the log** before
+  relying on it.
+- The details-dialog log was not driven in a browser.
+- A segmented Primary pass still shows as one run with its segments in the log. Showing pending/completed
+  segments the way a Backfill does is the next conversation.
+- The work item is closed `Failed` rather than `Cancelled` (no state-interface method for it); a future
+  `MarkCancelled` would be tidier.

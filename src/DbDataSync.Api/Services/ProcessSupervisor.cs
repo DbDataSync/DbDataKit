@@ -188,11 +188,11 @@ public sealed class ProcessSupervisor(
     }
 
     /// <summary>A Pending (not yet claimed) item is cancelled directly — cheap, no process
-    /// interaction. A Claimed/Running item has no per-item cancellation lever yet (see
-    /// architecture/implementation/done/phase-008-work-queue-schema.md); the only available action is
-    /// stopping the whole worker process for that replication, which also affects any other item that
-    /// same process happens to be concurrently processing right now — an accepted v1 limitation,
-    /// same spirit as this method's previous single-run version.</summary>
+    /// interaction. A Claimed/Running item is asked to stop: the request is recorded on its queue row and
+    /// the worker holding it (which polls) cancels that one item — whoever spawned the worker, and
+    /// without disturbing the other runs in it (phase 202M). Killing the whole worker process is now
+    /// only the fallback, for a worker that doesn't act on the request in time or an item the queue no
+    /// longer tracks.</summary>
     public bool CancelRun(Guid runId)
     {
         var run = taskRunStore.GetRun(runId);
@@ -202,6 +202,12 @@ public sealed class ProcessSupervisor(
         if (workQueueStore.TryCancelPending(runId))
         {
             taskRunStore.CompleteRun(runId, RunStatus.Cancelled, 0, 0, "Cancelled by user request.");
+            return true;
+        }
+
+        if (workQueueStore.RequestCancel(runId))
+        {
+            _ = KillWorkerIfStillRunningAsync(runId, run.TaskName);
             return true;
         }
 
@@ -220,6 +226,31 @@ public sealed class ProcessSupervisor(
 
         ReconcileDeadWorker(run.TaskName);
         return true;
+    }
+
+    private static readonly TimeSpan CancelGracePeriod = TimeSpan.FromSeconds(60);
+
+    /// <summary>The fallback for a cooperative cancel that wasn't acted on — a worker stuck inside a
+    /// call that ignores cancellation. Only a worker this instance spawned can be killed.</summary>
+    private async Task KillWorkerIfStillRunningAsync(Guid runId, string taskName)
+    {
+        try
+        {
+            await Task.Delay(CancelGracePeriod);
+            if (taskRunStore.GetRun(runId) is not { Status: RunStatus.Running })
+                return;
+
+            logger.LogWarning(
+                "Run {RunId} did not stop within {Seconds}s of its cancel request; stopping the worker for '{Task}'.",
+                runId, (int)CancelGracePeriod.TotalSeconds, taskName);
+            if (_workers.TryGetValue(taskName, out var process) && !process.HasExited)
+                process.Kill(entireProcessTree: true);
+            ReconcileDeadWorker(taskName);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // Already gone.
+        }
     }
 
     /// <summary>Runs left Running in the store but with no live OS process behind them — left over

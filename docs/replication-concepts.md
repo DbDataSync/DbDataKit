@@ -187,6 +187,16 @@ tab's live card shows rows copied against a one-time catalog-statistics estimate
 a live count — reads that estimate once, at enqueue) and a segment count; **Monitoring → Bulk Load
 History** lists every past batch, filterable by mapping.
 
+### Reading a run's log, and cancelling it
+
+Open any run from **Runs** (click its status) to read its log — live while it runs, as recorded once it has
+finished. This works for scheduled runs as well as ones you started from the page. A pass logs how its
+segmenting resolved (the default list, which segments a custom strategy selected, or that it reads the whole
+table in one query), the SQL its reader, staging and writer run, and the SQL a source/target segmenting
+strategy runs. A run that is queued or running has a **Cancel** button in the history list and in this dialog.
+Cancelling a running pass stops that one run at its next opportunity and leaves the others in the same worker
+alone; the worker is only stopped if the run ignores the request for a minute.
+
 ## Reconciliation (delete detection)
 
 A mapping on `Watermark`, or any reader that can't see deletes, notices inserts and updates through its

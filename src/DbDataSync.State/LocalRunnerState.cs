@@ -47,6 +47,8 @@ public sealed class LocalRunnerState(
 
     public bool HasOutstandingWork(string taskName, RunLane lane) => workQueue.HasOutstandingWork(taskName, lane);
 
+    public bool IsCancelRequested(Guid runId) => workQueue.IsCancelRequested(runId);
+
     public WorkItem? TryClaimNext(string taskName, string workerId, RunLane lane) =>
         workQueue.TryClaimNext(taskName, workerId, lane);
 

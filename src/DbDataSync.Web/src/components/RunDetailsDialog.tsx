@@ -23,11 +23,13 @@ import type { RunWatermarkTimes, TaskRunRecord } from '../api/types'
  * run wants every one of them *plus* its error. Two would mean two places to add the next field to,
  * and they would drift. Splitting them is easy if they ever genuinely diverge.
  */
-export function RunDetailsDialog({ run, times, onClose }: {
+export function RunDetailsDialog({ run, times, onClose, onCancelRun }: {
   run: TaskRunRecord
   /** When the watermark's positions resolved to source-side times. Undefined is a normal answer. */
   times: RunWatermarkTimes | undefined
   onClose: () => void
+  /** Offered while the run is queued or running. Absent where cancelling isn't available. */
+  onCancelRun?: () => void
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -162,7 +164,12 @@ export function RunDetailsDialog({ run, times, onClose }: {
             </div>
           </div>
 
-          <div className="row" style={{ justifyContent: 'flex-end' }}>
+          <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
+            {onCancelRun && (run.status === 'Queued' || run.status === 'Pending' || run.status === 'Running') && (
+              <button type="button" className="btn" onClick={onCancelRun} data-testid="run-details-dialog-cancel">
+                Cancel run
+              </button>
+            )}
             <button type="button" className="btn" onClick={onClose} data-testid="run-details-dialog-close">
               Close
             </button>

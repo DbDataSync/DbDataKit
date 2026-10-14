@@ -250,6 +250,29 @@ public sealed class WorkQueueStoreTests : IDisposable
         Assert.False(_queue.TryCancelPending(runId));
     }
 
+    [Fact]
+    public void RequestCancel_OnAClaimedItem_IsSeenByTheWorkerPollingForIt()
+    {
+        var runId = _queue.Enqueue("crm-sync", RunKind.Primary, "orders");
+        _queue.TryClaimNext("crm-sync", "worker-1");
+        Assert.False(_queue.IsCancelRequested(runId));
+
+        Assert.True(_queue.RequestCancel(runId));
+
+        Assert.True(_queue.IsCancelRequested(runId));
+        Assert.True(_queue.RequestCancel(runId)); // asking twice is still "requested"
+    }
+
+    [Fact]
+    public void RequestCancel_OnAPendingOrUnknownItem_IsNotAnInFlightCancel()
+    {
+        var pending = _queue.Enqueue("crm-sync", RunKind.Primary, "orders");
+
+        Assert.False(_queue.RequestCancel(pending)); // not claimed: TryCancelPending is the lever
+        Assert.False(_queue.IsCancelRequested(pending));
+        Assert.False(_queue.RequestCancel(Guid.NewGuid()));
+    }
+
     /// <summary>
     /// A bulk load has to run a different pipeline from the replication it belongs to — a reload
     /// reader and usually a reconciling writer — so which Kinds to use is carried per work item and

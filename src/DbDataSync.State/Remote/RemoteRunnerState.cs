@@ -58,6 +58,9 @@ public sealed class RemoteRunnerState : IRunnerState, IDisposable
         Required<BoolResponse>(
             $"has-outstanding-work?taskName={Uri.EscapeDataString(taskName)}&lane={lane}").Value;
 
+    public bool IsCancelRequested(Guid runId) =>
+        Required<BoolResponse>($"is-cancel-requested?runId={runId}").Value;
+
     public WorkItem? TryClaimNext(string taskName, string workerId, RunLane lane) =>
         Required<WorkItemResponse>("try-claim-next", new TryClaimNextRequest(taskName, workerId, lane)).Item;
 

@@ -394,6 +394,39 @@ public sealed class WorkQueueStore(StateDatabase database)
             return cmd.ExecuteNonQuery() == 1;
         });
 
+    /// <summary>Asks the worker holding a Claimed/Running item to stop it: marks the row, and the worker
+    /// (which polls <see cref="IsCancelRequested"/>) cancels that one item. False when there is no such
+    /// in-flight item — it finished, was never claimed (use <see cref="TryCancelPending"/>), or doesn't
+    /// exist.</summary>
+    public bool RequestCancel(Guid runId) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(connection, """
+                UPDATE WorkQueue SET CancelRequestedUtc = $now
+                WHERE RunId = $runId AND Status IN ('Claimed','Running') AND CancelRequestedUtc IS NULL;
+                """);
+            cmd.Bind(database, "runId", runId.ToString());
+            cmd.Bind(database, "now", DateTimeOffset.UtcNow.ToString("O"));
+            cmd.ExecuteNonQuery();
+
+            using var check = database.Command(connection,
+                "SELECT COUNT(*) FROM WorkQueue WHERE RunId = $runId AND Status IN ('Claimed','Running') AND CancelRequestedUtc IS NOT NULL;");
+            check.Bind(database, "runId", runId.ToString());
+            return Convert.ToInt64(check.ExecuteScalar()) > 0;
+        });
+
+    /// <summary>True once an operator has asked for this run's item to stop.</summary>
+    public bool IsCancelRequested(Guid runId) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(connection,
+                "SELECT COUNT(*) FROM WorkQueue WHERE RunId = $runId AND CancelRequestedUtc IS NOT NULL;");
+            cmd.Bind(database, "runId", runId.ToString());
+            return Convert.ToInt64(cmd.ExecuteScalar()) > 0;
+        });
+
     /// <summary>True if any Pending/Claimed/Running item remains for this task. With
     /// <paramref name="lane"/> set, only that lane's <see cref="RunKind"/>s count — a worker's
     /// per-lane drain loop exits once its lane is empty, and never waits on the other lane's work.

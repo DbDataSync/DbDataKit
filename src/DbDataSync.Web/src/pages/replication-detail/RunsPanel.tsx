@@ -23,6 +23,8 @@ export interface RunsCommand {
 const COLUMNS = '1.05fr .65fr .85fr .7fr .5fr .55fr .6fr .7fr 1.15fr .85fr 78px'
 
 const KINDS: RunKind[] = ['Primary', 'BulkLoad', 'ReconcileDeletes']
+const isInFlight = (status: RunStatus) => status === 'Queued' || status === 'Pending' || status === 'Running'
+
 const STATUSES: RunStatus[] = ['Queued', 'Pending', 'Running', 'Succeeded', 'Failed', 'Cancelled']
 
 /**
@@ -413,6 +415,20 @@ export function RunsPanel({ replicationName, command }: { replicationName: strin
                     Resync
                   </button>
                 )}
+                {/* Any run still waiting or running, not only the one watched in the Live run card:
+                    a scheduled run is as cancellable as one started from this page. */}
+                {isInFlight(r.status) && (
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    disabled={cancel.isPending}
+                    title="Stop this run. A running pass stops at its next opportunity; the rest of the worker carries on."
+                    onClick={() => cancel.mutate(r.runId)}
+                    data-testid={`cancel-run-${r.runId}`}
+                  >
+                    Cancel
+                  </button>
+                )}
               </span>
             </div>
             {expandedRunId === r.runId && r.timing && <TimingDetail timing={r.timing} runId={r.runId} />}
@@ -426,6 +442,7 @@ export function RunsPanel({ replicationName, command }: { replicationName: strin
         <RunDetailsDialog
           run={detailsRun}
           times={watermarkTimes?.[detailsRun.runId]}
+          onCancelRun={() => { cancel.mutate(detailsRun.runId); setDetailsRun(null) }}
           onClose={() => setDetailsRun(null)}
         />
       )}

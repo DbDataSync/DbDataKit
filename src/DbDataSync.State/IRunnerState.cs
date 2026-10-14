@@ -28,6 +28,10 @@ public interface IRunnerState
 
     bool HasOutstandingWork(string taskName, RunLane lane);
 
+    /// <summary>Whether an operator has asked for this run to stop. Polled by the worker while it runs
+    /// the item; a read, so it is never journalled.</summary>
+    bool IsCancelRequested(Guid runId);
+
     WorkItem? TryClaimNext(string taskName, string workerId, RunLane lane);
 
     bool TryAcquireLock(string taskName, RunKind runKind, string mappingName, Guid runId);

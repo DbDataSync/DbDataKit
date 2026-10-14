@@ -35,6 +35,8 @@ public static class RunnerStateEndpoints
         group.MapGet("/has-outstanding-work", (string taskName, RunLane lane) =>
             new BoolResponse(state.HasOutstandingWork(taskName, lane)));
 
+        group.MapGet("/is-cancel-requested", (Guid runId) => new BoolResponse(state.IsCancelRequested(runId)));
+
         group.MapPost("/try-claim-next", (TryClaimNextRequest r) =>
             new WorkItemResponse(state.TryClaimNext(r.TaskName, r.WorkerId, r.Lane)));
 

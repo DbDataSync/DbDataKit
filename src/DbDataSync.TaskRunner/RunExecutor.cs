@@ -326,8 +326,17 @@ public sealed class RunExecutor(
         }
     }
 
-    private async Task ProcessWorkItemAsync(WorkItem item, CancellationToken cancellationToken)
+    private async Task ProcessWorkItemAsync(WorkItem item, CancellationToken workerToken)
     {
+        // This item's own token: the worker's, plus the operator asking this one run to stop. Shadows the
+        // worker's under the name everything below already uses, so a cancel reaches every reader,
+        // staging provider and writer the pass is in the middle of — and only this item's.
+        using var itemCancellation = CancellationTokenSource.CreateLinkedTokenSource(workerToken);
+        var cancellationToken = itemCancellation.Token;
+        var operatorCancelled = false;
+        using var watcherStop = new CancellationTokenSource();
+        Task? watcher = null;
+
         if (!state.TryAcquireLock(item.TaskName, item.RunKind, item.MappingName, item.RunId))
         {
             // Lost the real RunLocks race despite the queue's own NOT EXISTS pre-filter (rare) — give
@@ -338,6 +347,7 @@ public sealed class RunExecutor(
 
         state.MarkRunning(item.Id);
         state.BeginRun(item.RunId, Environment.ProcessId);
+        watcher = WatchForCancelAsync(item, itemCancellation, () => operatorCancelled = true, watcherStop.Token);
         var scope = item.SegmentLabel == WorkQueueStore.NoSegment ? "" : $", segment {item.SegmentLabel}";
         Log(item.RunId, LogSeverity.Info, $"Run started for mapping '{item.MappingName}' ({item.RunKind}{scope}).");
 
@@ -389,6 +399,17 @@ public sealed class RunExecutor(
             // the coupling this phase removed.
             if (rowsRead > 0 && item.RunKind == RunKind.Primary)
                 MarkProductive();
+        }
+        // After an operator asked this run to stop, whatever the interrupted work throws (a cancelled
+        // command surfaces as a provider-specific exception as often as an OperationCanceledException)
+        // is the cancellation, not a failure. The work item is closed as Failed — it did not complete —
+        // with the run itself recorded Cancelled.
+        catch (Exception ex) when (operatorCancelled && ex is not StateOwnerUnavailableException)
+        {
+            Log(item.RunId, LogSeverity.Warning, "Run cancelled by user request.");
+            state.Flush();
+            state.CompleteRun(item.RunId, RunStatus.Cancelled, 0, 0, "Cancelled by user request.");
+            state.MarkFailed(item.Id);
         }
         catch (Exception ex) when (ex is FileNotFoundException or ConfigValidationException)
         {
@@ -469,7 +490,44 @@ public sealed class RunExecutor(
         }
         finally
         {
+            watcherStop.Cancel();
+            if (watcher is not null)
+                await watcher.ConfigureAwait(false);
             state.ReleaseLock(item.TaskName, item.RunKind, item.MappingName);
+        }
+    }
+
+    private static readonly TimeSpan CancelPollInterval = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Polls the state owner for an operator's cancel request on this item and, when it arrives, cancels
+    /// the item's own token. Best effort and quiet: if the owner can't be asked the watcher stops (the
+    /// run carries on, and the worker's own shutdown still cancels it), and it ends with the item.
+    /// </summary>
+    private async Task WatchForCancelAsync(
+        WorkItem item, CancellationTokenSource itemCancellation, Action markCancelled, CancellationToken stop)
+    {
+        try
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                await Task.Delay(CancelPollInterval, stop).ConfigureAwait(false);
+                if (!state.IsCancelRequested(item.RunId))
+                    continue;
+
+                markCancelled();
+                Log(item.RunId, LogSeverity.Warning, "Cancel requested — stopping this run.");
+                itemCancellation.Cancel();
+                return;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The item finished first.
+        }
+        catch (Exception)
+        {
+            // StateOwnerUnavailableException or a transient read failure: stop watching, never fail the run.
         }
     }
 

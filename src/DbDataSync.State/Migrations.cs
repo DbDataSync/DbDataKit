@@ -823,5 +823,12 @@ internal static class Migrations
         ALTER TABLE ChangeWatermarks {{addcolumn}} PendingBulkLoadBatchId {{key}} NULL;
         CREATE INDEX IX_ChangeWatermarks_PendingBulkLoadBatchId ON ChangeWatermarks(PendingBulkLoadBatchId);
         """,
+
+        """
+        -- When an operator asked for this item to stop, or NULL. A column on the queue row rather than a
+        -- signal to a process: the worker that holds the item polls it, so cancelling works whoever
+        -- spawned that worker, and stops only this item instead of everything the process is doing.
+        ALTER TABLE WorkQueue {{addcolumn}} CancelRequestedUtc {{text}} NULL;
+        """,
     ];
 }
