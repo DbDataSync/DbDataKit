@@ -159,7 +159,7 @@ public sealed partial class ProxyFlightServer(
         if (ex is RpcException rpc) return rpc;
         if (IsLoginFailure(ex))
             return new RpcException(new Status(StatusCode.Unauthenticated, "The database rejected the credentials."));
-        if (ex is DbException)
+        if (ex is DbException or NotSupportedException)
             return new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
         return new RpcException(new Status(StatusCode.Internal, "Query failed: " + ex.Message));
     }

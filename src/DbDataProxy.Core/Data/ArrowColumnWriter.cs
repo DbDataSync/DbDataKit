@@ -44,8 +44,19 @@ internal sealed class ArrowColumnWriter
     public static ArrowColumnWriter Create(DbDataReader reader, int ordinal, ColumnMeta meta)
     {
         string name = reader.GetName(ordinal);
-        Type clr = reader.GetFieldType(ordinal);
         string typeName = SafeTypeName(reader, ordinal);
+        Type clr;
+        try
+        {
+            clr = reader.GetFieldType(ordinal);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or InvalidOperationException)
+        {
+            // Driver-specific types (e.g. ODBC SQL_SS_TIMESTAMPOFFSET) that System.Data.Odbc cannot read at all.
+            throw new NotSupportedException(
+                $"Column '{name}' has a data type the ODBC provider cannot read ({ex.Message.TrimEnd('.')}). " +
+                $"Convert it in the query, for example CAST({name} AS nvarchar(40)).", ex);
+        }
 
         if (clr == typeof(bool))
         {
