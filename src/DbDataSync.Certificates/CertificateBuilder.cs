@@ -22,14 +22,24 @@ namespace DbDataSync.Certificates;
 public static class CertificateBuilder
 {
     /// <summary>
-    /// A self-signed, in-memory certificate. Its private key is ephemeral until
-    /// <see cref="CertificateStore.Install"/> persists it into a real store — see that method's own
-    /// doc comment for why that round trip is necessary before <see cref="PrivateKeyAccess.Grant"/> can
-    /// do anything with it.
+    /// A self-signed certificate over a throwaway in-memory key — for a file target (a managed PFX or
+    /// PEM, where the key has to be exportable because the file is where it lives) and for tests. A
+    /// certificate headed for the Windows store is built over a named key instead — see
+    /// <see cref="CertificateStore.InstallSelfSigned"/>.
     /// </summary>
     public static X509Certificate2 CreateSelfSigned(CertificateSpec spec)
     {
         using var rsa = RSA.Create(CertificateSpec.DefaultKeySizeBits);
+        return CreateSelfSigned(spec, rsa);
+    }
+
+    /// <summary>
+    /// A self-signed certificate over <paramref name="rsa"/>, which the caller keeps ownership of — the
+    /// same "takes the key rather than creating one" shape as <see cref="CreateSigningRequest"/>, for
+    /// the same reason: a named, persisted key has to outlive this call.
+    /// </summary>
+    public static X509Certificate2 CreateSelfSigned(CertificateSpec spec, RSA rsa)
+    {
         var request = BuildRequest(spec, rsa);
 
         // A few minutes in the past, not "now" exactly — clock skew between this machine and whatever
@@ -56,7 +66,7 @@ public static class CertificateBuilder
     /// whenever <c>dbdatasync config cert retrieve</c> eventually collects it, which could be minutes or days and
     /// a different process invocation later. An ephemeral in-memory key (what this method used before)
     /// cannot survive that; <c>CertCommand.Enroll</c> is the real caller and passes a named, persisted
-    /// CNG key (see <c>PendingEnrollmentKeys</c>) for exactly that reason. Tests pass an ordinary
+    /// CNG key (see <c>CertificateKeys</c>) for exactly that reason. Tests pass an ordinary
     /// ephemeral <c>RSA.Create(...)</c> instead, which is what keeps this method itself cross-platform
     /// and testable without Windows.
     /// </para>

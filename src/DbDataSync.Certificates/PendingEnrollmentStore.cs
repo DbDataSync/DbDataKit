@@ -4,14 +4,14 @@ namespace DbDataSync.Certificates;
 
 /// <param name="RequestId">The CA's own request id — what <c>dbdatasync config cert retrieve --request-id</c> is
 /// given.</param>
-/// <param name="KeyName">The <see cref="PendingEnrollmentKeys"/> container holding the private key this
+/// <param name="KeyName">The <see cref="CertificateKeys"/> container holding the private key this
 /// request's CSR was built with.</param>
 public sealed record PendingEnrollment(
     string RequestId, string KeyName, string SubjectCommonName, IReadOnlyList<string> DnsNames,
     string CaConfig, DateTimeOffset SubmittedAtUtc);
 
 /// <summary>
-/// Correlates a CA request id back to the <see cref="PendingEnrollmentKeys"/> container holding its
+/// Correlates a CA request id back to the <see cref="CertificateKeys"/> container holding its
 /// private key — see that class's own doc comment for why this bookkeeping exists at all.
 /// <para>
 /// **Deliberately not <c>dbdatasync.config.yaml</c>, and never git-committed.** This is per-machine,

@@ -48,8 +48,7 @@ public sealed class CertificateExpiryServiceWindowsTests : IDisposable
     private X509Certificate2 InstallSelfSigned(string commonName)
     {
         var spec = new CertificateSpec(commonName, [commonName], 365, "DbDataSync Test");
-        using var ephemeral = CertificateBuilder.CreateSelfSigned(spec);
-        var certificate = CertificateStore.Install(ephemeral, StoreLocation.CurrentUser);
+        var certificate = CertificateStore.InstallSelfSigned(spec, StoreLocation.CurrentUser);
         _installed.Add(certificate);
         return certificate;
     }

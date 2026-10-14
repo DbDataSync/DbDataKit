@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
 namespace DbDataSync.Certificates;
@@ -14,60 +15,70 @@ namespace DbDataSync.Certificates;
 public static class CertificateStore
 {
     /// <summary>
-    /// Installs a certificate into <c>&lt;location&gt;\My</c>, private key non-exportable, friendly name intact.
+    /// Installs a certificate into <c>&lt;location&gt;\My</c>. The certificate must already carry a
+    /// private key that lives in a named CNG container (see <see cref="CertificateKeys"/>); nothing is
+    /// exported, re-imported or created here, so a non-exportable key installs exactly like any other.
     /// <para>
-    /// **Round-trips through a PFX**, not a direct <c>store.Add(certificate)</c>. A certificate fresh
-    /// off <see cref="CertificateBuilder.CreateSelfSigned"/> (or returned from an AD CS submission) has
-    /// an *ephemeral* private key — never written to a real CNG key container — and adding it to a
-    /// store as-is puts the certificate there with no private key <see cref="PrivateKeyAccess.Grant"/>
-    /// or a future <c>X509Certificate2.GetRSAPrivateKey()</c>-then-open could ever find on disk. The
-    /// export/import round trip is what actually persists the key: <see
-    /// cref="X509KeyStorageFlags.PersistKeySet"/> tells CNG to write a real key container, and the
-    /// deliberate *absence* of <see cref="X509KeyStorageFlags.Exportable"/> is the phase 82 doc's
-    /// "non-exportable private keys" decision — nothing in this feature exports one, and this is the
-    /// one place that could.
+    /// The store only has to be pointed at the key: adding a certificate whose key is a named container
+    /// links the two, and <see cref="PrivateKeyAccess.Grant"/> later finds the key file by that name. A
+    /// certificate whose key is ephemeral (an in-memory <c>RSA.Create</c>) would land in the store with
+    /// no key behind it, so it is refused rather than installed half-working.
     /// </para>
     /// <para>
-    /// The PFX password is a fresh random GUID that exists only for the instant between
-    /// <see cref="X509Certificate2.Export"/> and <see cref="X509CertificateLoader.LoadPkcs12(byte[],string?,X509KeyStorageFlags)"/>
-    /// below — never returned, never logged, never the certificate's actual protection (the store ACL
-    /// and, after install, <see cref="PrivateKeyAccess"/> are).
+    /// Returns the certificate as the store now holds it, which is what proves it landed.
     /// </para>
     /// </summary>
     public static X509Certificate2 Install(X509Certificate2 certificate, StoreLocation location)
     {
-        // The store is opened BEFORE any key material is written, not after. LoadPkcs12 with
-        // PersistKeySet writes a real private key container to disk — under
-        // %ProgramData%\Microsoft\Crypto\RSA\MachineKeys for LocalMachine — and that directory is
-        // deliberately writable without elevation, while LocalMachine\My is not. In the original order
-        // a non-elevated `config cert new-self-signed` therefore persisted a private key and *then*
-        // threw "Access is denied" opening the store, orphaning that key with no certificate anywhere
-        // referencing it, once per attempt. Confirmed by running it on a real non-elevated Windows
-        // shell and finding the container left behind.
-        //
-        // Opening first makes any failure to reach the store happen before anything exists to clean
-        // up, whatever the reason for it — not only the missing-elevation case that exposed this.
+        if (certificate.GetRSAPrivateKey() is not RSACng { Key.UniqueName: not null })
+        {
+            throw new ArgumentException(
+                "The certificate's private key is not a named, persisted CNG key, so installing it would leave " +
+                "the store holding a certificate with no key behind it. Create the key with CertificateKeys and " +
+                "build or receive the certificate over it.",
+                nameof(certificate));
+        }
+
+        // The store is opened first, before anything else can have a side effect. The caller's key
+        // already exists on disk — under %ProgramData%\Microsoft\Crypto\RSA\MachineKeys for
+        // LocalMachine, which is deliberately writable without elevation, while LocalMachine\My is not —
+        // so a failure to reach the store has to surface here, where the caller still knows to delete the
+        // key it made (see InstallSelfSigned), not after more has happened.
         using var store = new X509Store(StoreName.My, location);
         store.Open(OpenFlags.ReadWrite);
+        store.Add(certificate);
 
-        var exportPassword = Guid.NewGuid().ToString("N");
-        var pfxBytes = certificate.Export(X509ContentType.Pfx, exportPassword);
+        // The thumbprint is looked up again so the caller gets the store's own copy: it is the one that
+        // is still valid after the input is disposed, and finding it is the check that Add took.
+        return store.Certificates.Find(X509FindType.FindByThumbprint, certificate.Thumbprint, validOnly: false)
+            .Cast<X509Certificate2>()
+            .First();
+    }
 
-        var flags = X509KeyStorageFlags.PersistKeySet
-            | (location == StoreLocation.LocalMachine ? X509KeyStorageFlags.MachineKeySet : X509KeyStorageFlags.UserKeySet);
-
-        var persisted = X509CertificateLoader.LoadPkcs12(pfxBytes, exportPassword, flags);
-
-        // Carried across by hand, because the round trip above does not carry it. FriendlyName is a Windows *store*
-        // property (CERT_FRIENDLY_NAME_PROP_ID), not a field of the encoded certificate, so Export(Pfx) drops it —
-        // and the name CertificateBuilder had just set went into the store empty. Nothing in this codebase looks a
-        // certificate up by it, which is why it went unnoticed: the cost is paid by a person in certlm.msc, or
-        // reading `dbdatasync config cert list`, trying to tell which certificate is the one this tool issued.
-        persisted.FriendlyName = certificate.FriendlyName;
-
-        store.Add(persisted);
-
-        return persisted;
+    /// <summary>
+    /// Issues a self-signed certificate over a fresh named key and installs it — the store-side
+    /// counterpart of <see cref="CertificateBuilder.CreateSelfSigned(CertificateSpec)"/>, which hands back an
+    /// ephemeral key. If anything fails before the store references the certificate, the key is deleted so
+    /// no attempt leaves an orphaned container behind.
+    /// </summary>
+    public static X509Certificate2 InstallSelfSigned(CertificateSpec spec, StoreLocation location)
+    {
+        var keyName = CertificateKeys.NewKeyName();
+        var machineKey = location == StoreLocation.LocalMachine;
+        var key = CertificateKeys.Create(keyName, machineKey);
+        try
+        {
+            using (key)
+            using (var certificate = CertificateBuilder.CreateSelfSigned(spec, key))
+            {
+                return Install(certificate, location);
+            }
+        }
+        catch
+        {
+            CertificateKeys.Delete(keyName, machineKey);
+            throw;
+        }
     }
 
     /// <summary>Every certificate in <c>&lt;location&gt;\My</c> whose Enhanced Key Usage includes

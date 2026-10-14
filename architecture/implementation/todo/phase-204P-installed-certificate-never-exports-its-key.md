@@ -1,6 +1,6 @@
 # Phase 204P — an installed certificate never has its private key exported
 
-**Status:** designed, not yet built. Cause diagnosed from a reported stack trace and the code; the fix is unverified until the first Windows test below passes.
+**Status:** built; verified by Windows tests below (no CA available, so the CA is stood in for by a certificate over a named key reduced to its public half). To be reviewed with the operator.
 
 ## Observed
 
@@ -129,14 +129,6 @@ certificate whose key is ephemeral.
    reads the key file by the CNG unique name, which suggests it works, but it has never been run
    against an installed enrolled certificate because that install never succeeded.
 
-## Unverified assumption
-
-That `store.Add` on a certificate returned by `CopyWithPrivateKey(namedCngKey)` keeps the link to the
-named key container (rather than needing an export to establish it). I expect it does, because
-`PrivateKeyAccess.ResolveKeyFilePath` already relies on a persisted `UniqueName`, but this is from
-reading the code, not from running it. The first Windows test below decides it. If it does not hold,
-the fix needs a different way to associate the named key with the stored certificate, and this plan
-must be revisited before anything else is changed.
 
 ## Tests
 
@@ -150,7 +142,7 @@ must be revisited before anything else is changed.
 - Failure path: `Install` throwing after `Issued` leaves the pending record and the named key in
   place, the caller prints the `retrieve --request-id <id>` command, and no unhandled exception escapes.
   Run it through the shared handler for both the CLI and Admin callers.
-- Success path removes the record and the key.
+- Success path removes the record but **keeps the key**: it is the installed certificate's private key.
 - The existing `Install` tests (`CertificateStoreWindowsTests`, `AdminCertificateServiceWindowsTests`,
   `CertificateExpiryServiceWindowsTests`) currently pass an ephemeral certificate. They must be
   rewritten to use a named key, since `Install` will refuse an ephemeral one.
@@ -160,5 +152,47 @@ must be revisited before anything else is changed.
 
 - Is calling `RetrievePending` again for an already-issued request safe? Step 4 depends on it for the
   recovery path. Needs a check against the COM `ICertRequest` documentation or a real CA.
-- Renaming `PendingEnrollmentKeys` to a general helper touches its callers and tests. Whether to rename
-  or add a thin wrapper is a small call for whoever implements it.
+
+## What was built
+
+- `PendingEnrollmentKeys` is now `CertificateKeys`, used for every store certificate. Key names are
+  `DbDataSync-<guid>` (previously `DbDataSync-PendingEnrollment-<guid>` for enrollment only); the pending
+  record stores whatever name it was given, so old records still resolve.
+- `CertificateBuilder.CreateSelfSigned(spec, RSA key)`; the one-argument overload is unchanged and still
+  serves the `--file` target and the cross-platform tests.
+- `CertificateStore.Install` no longer exports or reloads: it refuses a certificate whose key is not a named
+  CNG key, adds the certificate, and returns the store's copy. `CertificateStore.InstallSelfSigned` creates
+  the key, builds the certificate over it and installs, deleting the key if that fails. The CLI
+  `new-self-signed`, the CLI `renew` fallback and the Admin "issue self-signed" all use it.
+- `EnrollmentCompletionHandler.Complete` (`DbDataSync.Certificates`) is the one handler for `enroll`,
+  `renew`, `retrieve` and the Admin screen. It saves the request record *before* installing and removes it
+  only after install and the key-access grant succeed; on failure it returns the exact
+  `dbdatasync config cert retrieve --request-id <id>` command in its message. Both copies of the old
+  handler are gone.
+- An enrolled certificate now gets the spec's friendly name ("DbDataSync"), which only self-signed ones had.
+
+## Corrections to the design above
+
+- **The key is not deleted on success.** The design said the success path removes the record and the key.
+  That was wrong for the new shape: the named key *is* the installed certificate's key, so deleting it would
+  destroy the certificate's key. The old code could delete it because `Install` had made a second copy by
+  round-tripping. Only a denied or failed request, or an install that threw before the store referenced the
+  certificate (`InstallSelfSigned`), deletes it.
+- The assumption that `store.Add` on a certificate carrying a named key keeps the link to it **held**:
+  tested on Windows, the installed certificate signs, is not exportable, and `PrivateKeyAccess.Grant` works.
+
+## Tests
+
+`InstalledKeyWindowsTests` (all `Category=Windows`, `CurrentUser`, no elevation): the premise (a PFX export of a
+non-exportable key throws the reported message); a named non-exportable key installs; the installed key signs and
+stays non-exportable; the `CopyWithPrivateKey` shape a CA answer has installs and accepts a key-access grant; an
+ephemeral key is refused and leaves nothing; `InstallSelfSigned` keeps the friendly name; the handler's four
+outcomes (installed, install-failed keeps record and key and names the retrieve command, pending, denied deletes
+the key). The three existing `Install` helpers were switched to `InstallSelfSigned`.
+
+## Not verified
+
+Against a real CA: nothing here talks to AD CS, so `AdcsEnrollment.Submit`/`Retrieve` and the real shape of an
+issued certificate are as untested as before this change. Whether `RetrievePending` can be called again for an
+already-issued request is still unconfirmed, and the recovery path for a failed install depends on it. Run on a
+real `enroll` before calling this done.

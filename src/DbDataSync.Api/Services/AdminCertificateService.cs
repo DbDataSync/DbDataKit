@@ -107,8 +107,7 @@ public sealed class AdminCertificateService(ApiOptions apiOptions, CertificateOp
             return CertificateActionResult.Failed(ex.Message);
         }
 
-        var certificate = CertificateBuilder.CreateSelfSigned(spec);
-        var installed = CertificateStore.Install(certificate, StoreLocation.LocalMachine);
+        var installed = CertificateStore.InstallSelfSigned(spec, StoreLocation.LocalMachine);
         GrantIfNeeded(installed);
 
         return CertificateActionResult.Ok(
@@ -162,8 +161,8 @@ public sealed class AdminCertificateService(ApiOptions apiOptions, CertificateOp
     [SupportedOSPlatform("windows")]
     private CertificateActionResult SubmitAndHandle(string caConfig, string template, CertificateSpec spec)
     {
-        var keyName = PendingEnrollmentKeys.NewKeyName();
-        using var privateKey = PendingEnrollmentKeys.Create(keyName);
+        var keyName = CertificateKeys.NewKeyName();
+        using var privateKey = CertificateKeys.Create(keyName);
         var csrPem = CertificateBuilder.CreateSigningRequest(spec, privateKey);
 
         EnrollmentResult result;
@@ -173,7 +172,7 @@ public sealed class AdminCertificateService(ApiOptions apiOptions, CertificateOp
         }
         catch (Exception ex)
         {
-            PendingEnrollmentKeys.Delete(keyName);
+            CertificateKeys.Delete(keyName);
             return CertificateActionResult.Failed($"Enrollment failed: {ex.Message}");
         }
 
@@ -184,40 +183,26 @@ public sealed class AdminCertificateService(ApiOptions apiOptions, CertificateOp
     private CertificateActionResult HandleEnrollmentResult(
         EnrollmentResult result, string keyName, CertificateSpec spec, string caConfig)
     {
-        switch (result.Outcome)
+        // The decisions — save the request id first, install, recover on failure — are
+        // EnrollmentCompletionHandler's, shared with the CLI; this only shapes them for HTTP.
+        var completion = EnrollmentCompletionHandler.Complete(
+            apiOptions.RepoRoot, result, keyName, spec, caConfig, GrantIfNeeded);
+
+        switch (completion.Outcome)
         {
-            case EnrollmentOutcome.Issued:
-            {
-                var reopenedKey = PendingEnrollmentKeys.Open(keyName)
-                    ?? throw new InvalidOperationException(
-                        $"The private key for this enrollment ('{keyName}') could not be reopened.");
-                X509Certificate2 installed;
-                using (reopenedKey)
-                {
-                    var withKey = result.Certificate!.CopyWithPrivateKey(reopenedKey);
-                    installed = CertificateStore.Install(withKey, StoreLocation.LocalMachine);
-                }
-
-                PendingEnrollmentKeys.Delete(keyName);
-                PendingEnrollmentStore.Remove(apiOptions.RepoRoot, result.RequestId ?? "");
-                GrantIfNeeded(installed);
-
+            case CompletionOutcome.Installed:
                 return CertificateActionResult.Ok(
-                    $"Certificate issued and installed (thumbprint {installed.Thumbprint}). Bind it below " +
+                    $"Certificate issued and installed (thumbprint {completion.Installed!.Thumbprint}). Bind it below " +
                     "to put it into service.",
                     requestId: null, GetStatusOnWindows());
-            }
 
-            case EnrollmentOutcome.Pending:
+            case CompletionOutcome.Pending:
                 // Saved so the screen can still offer "Retrieve pending request" after a browser reload
                 // — see PendingEnrollmentStore.List's own doc comment for why that lookup exists at all.
-                PendingEnrollmentStore.Save(apiOptions.RepoRoot, new PendingEnrollment(
-                    result.RequestId!, keyName, spec.SubjectCommonName, spec.DnsNames, caConfig, DateTimeOffset.UtcNow));
-                return CertificateActionResult.Ok(result.Message, result.RequestId, GetStatusOnWindows());
+                return CertificateActionResult.Ok(completion.Message, completion.RequestId, GetStatusOnWindows());
 
             default:
-                PendingEnrollmentKeys.Delete(keyName);
-                return CertificateActionResult.Failed(result.Message);
+                return CertificateActionResult.Failed(completion.Message);
         }
     }
 

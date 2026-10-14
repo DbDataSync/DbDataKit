@@ -4,7 +4,7 @@ namespace DbDataSync.Certificates.Tests;
 
 /// <summary>
 /// The key-persistence primitive behind AD CS enrollment's pending-request handling — see
-/// <see cref="PendingEnrollmentKeys"/>'s own doc comment for why it exists. Needs no CA at all, unlike
+/// <see cref="CertificateKeys"/>'s own doc comment for why it exists. Needs no CA at all, unlike
 /// <see cref="AdcsEnrollment"/> itself, so it gets real coverage even though the enrollment path around
 /// it does not.
 /// <para>
@@ -16,15 +16,15 @@ namespace DbDataSync.Certificates.Tests;
 /// </summary>
 [Trait("Category", "Windows")]
 [SupportedOSPlatform("windows")]
-public sealed class PendingEnrollmentKeysWindowsTests
+public sealed class CertificateKeysWindowsTests
 {
     [WindowsOnlyFact]
     public void Create_ThenOpen_ReturnsAUsableKeyOfTheRightSize()
     {
-        var keyName = PendingEnrollmentKeys.NewKeyName();
-        using (PendingEnrollmentKeys.Create(keyName, machineKey: false)) { }
+        var keyName = CertificateKeys.NewKeyName();
+        using (CertificateKeys.Create(keyName, machineKey: false)) { }
 
-        using var reopened = PendingEnrollmentKeys.Open(keyName, machineKey: false);
+        using var reopened = CertificateKeys.Open(keyName, machineKey: false);
 
         try
         {
@@ -33,14 +33,14 @@ public sealed class PendingEnrollmentKeysWindowsTests
         }
         finally
         {
-            PendingEnrollmentKeys.Delete(keyName, machineKey: false);
+            CertificateKeys.Delete(keyName, machineKey: false);
         }
     }
 
     [WindowsOnlyFact]
     public void Open_UnknownKeyName_ReturnsNull()
     {
-        var result = PendingEnrollmentKeys.Open($"DbDataSync-Nonexistent-{Guid.NewGuid():N}", machineKey: false);
+        var result = CertificateKeys.Open($"DbDataSync-Nonexistent-{Guid.NewGuid():N}", machineKey: false);
 
         Assert.Null(result);
     }
@@ -48,17 +48,17 @@ public sealed class PendingEnrollmentKeysWindowsTests
     [WindowsOnlyFact]
     public void Delete_ThenOpen_ReturnsNull()
     {
-        var keyName = PendingEnrollmentKeys.NewKeyName();
-        using (PendingEnrollmentKeys.Create(keyName, machineKey: false)) { }
+        var keyName = CertificateKeys.NewKeyName();
+        using (CertificateKeys.Create(keyName, machineKey: false)) { }
 
-        PendingEnrollmentKeys.Delete(keyName, machineKey: false);
+        CertificateKeys.Delete(keyName, machineKey: false);
 
-        Assert.Null(PendingEnrollmentKeys.Open(keyName, machineKey: false));
+        Assert.Null(CertificateKeys.Open(keyName, machineKey: false));
     }
 
     [WindowsOnlyFact]
     public void Delete_OnAKeyThatWasNeverCreated_DoesNotThrow()
     {
-        PendingEnrollmentKeys.Delete($"DbDataSync-Nonexistent-{Guid.NewGuid():N}", machineKey: false);
+        CertificateKeys.Delete($"DbDataSync-Nonexistent-{Guid.NewGuid():N}", machineKey: false);
     }
 }

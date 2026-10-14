@@ -310,8 +310,7 @@ public static class CertCommand
             return 1;
         }
 
-        var certificate = CertificateBuilder.CreateSelfSigned(spec);
-        var installed = CertificateStore.Install(certificate, StoreLocation.LocalMachine);
+        var installed = CertificateStore.InstallSelfSigned(spec, StoreLocation.LocalMachine);
         GrantIfNeeded(args, installed);
 
         Console.WriteLine("Issued and installed a self-signed certificate:");
@@ -393,8 +392,7 @@ public static class CertCommand
         // SANs, an extension beyond the doc's literal text rather than leaving renew unusable there.
         var days = int.TryParse(CliOptions.Read(args, "--days"), out var parsedDays) ? parsedDays : 397;
         var selfSignedSpec = new CertificateSpec(subjectCommonName, dnsNames, days, FriendlyName: "DbDataSync");
-        var renewed = CertificateBuilder.CreateSelfSigned(selfSignedSpec);
-        var installed = CertificateStore.Install(renewed, StoreLocation.LocalMachine);
+        var installed = CertificateStore.InstallSelfSigned(selfSignedSpec, StoreLocation.LocalMachine);
         GrantIfNeeded(args, installed);
 
         Console.WriteLine("Renewed (self-signed — no CA is configured):");
@@ -436,6 +434,7 @@ public static class CertCommand
         var spec = new CertificateSpec(pending.SubjectCommonName, pending.DnsNames, ValidityDays: 0, FriendlyName: "DbDataSync");
         return HandleEnrollmentResult(root, result, pending.KeyName, spec, pending.CaConfig, args);
     }
+
 
     private static int Templates(string[] args)
     {
@@ -740,13 +739,13 @@ public static class CertCommand
 
     /// <summary>The shared middle of <see cref="Enroll"/>, <see cref="Renew"/>'s AD CS branch, and
     /// <see cref="Retrieve"/>: build a CSR over a named, persisted key (see
-    /// <see cref="PendingEnrollmentKeys"/>), submit it, and hand the disposition to
+    /// <see cref="CertificateKeys"/>), submit it, and hand the disposition to
     /// <see cref="HandleEnrollmentResult"/>.</summary>
     [SupportedOSPlatform("windows")]
     private static int SubmitAndHandle(string root, string caConfig, string template, CertificateSpec spec, string[] args)
     {
-        var keyName = PendingEnrollmentKeys.NewKeyName();
-        using var privateKey = PendingEnrollmentKeys.Create(keyName);
+        var keyName = CertificateKeys.NewKeyName();
+        using var privateKey = CertificateKeys.Create(keyName);
         var csrPem = CertificateBuilder.CreateSigningRequest(spec, privateKey);
 
         EnrollmentResult result;
@@ -756,50 +755,36 @@ public static class CertCommand
         }
         catch (Exception ex)
         {
-            PendingEnrollmentKeys.Delete(keyName);
+            CertificateKeys.Delete(keyName);
             Console.Error.WriteLine($"Enrollment failed: {ex.Message}");
             return 1;
         }
 
         return HandleEnrollmentResult(root, result, keyName, spec, caConfig, args);
     }
-
     /// <summary>Issued, pending, or denied/failed — shared by a fresh <c>enroll</c>/<c>renew</c> and by
-    /// <c>retrieve</c> collecting one that came back pending earlier.</summary>
+    /// <c>retrieve</c> collecting one that came back pending earlier. The decisions live in
+    /// <see cref="EnrollmentCompletionHandler"/>, which the Admin screen shares; this only prints them.</summary>
     [SupportedOSPlatform("windows")]
     private static int HandleEnrollmentResult(
         string root, EnrollmentResult result, string keyName, CertificateSpec spec, string caConfig, string[] args)
     {
-        switch (result.Outcome)
+        var completion = EnrollmentCompletionHandler.Complete(
+            root, result, keyName, spec, caConfig, installed => GrantIfNeeded(args, installed));
+
+        switch (completion.Outcome)
         {
-            case EnrollmentOutcome.Issued:
-                var reopenedKey = PendingEnrollmentKeys.Open(keyName)
-                    ?? throw new InvalidOperationException(
-                        $"The private key for this enrollment ('{keyName}') could not be reopened.");
-                X509Certificate2 installed;
-                using (reopenedKey)
-                {
-                    var withKey = result.Certificate!.CopyWithPrivateKey(reopenedKey);
-                    installed = CertificateStore.Install(withKey, StoreLocation.LocalMachine);
-                }
-
-                PendingEnrollmentKeys.Delete(keyName);
-                PendingEnrollmentStore.Remove(root, result.RequestId ?? "");
-                GrantIfNeeded(args, installed);
-
+            case CompletionOutcome.Installed:
                 Console.WriteLine("Certificate issued and installed:");
-                PrintIssued(installed);
+                PrintIssued(completion.Installed!);
                 return 0;
 
-            case EnrollmentOutcome.Pending:
-                PendingEnrollmentStore.Save(root, new PendingEnrollment(
-                    result.RequestId!, keyName, spec.SubjectCommonName, spec.DnsNames, caConfig, DateTimeOffset.UtcNow));
-                Console.WriteLine(result.Message);
+            case CompletionOutcome.Pending:
+                Console.WriteLine(completion.Message);
                 return 0;
 
             default:
-                PendingEnrollmentKeys.Delete(keyName);
-                Console.Error.WriteLine(result.Message);
+                Console.Error.WriteLine(completion.Message);
                 return 1;
         }
     }
