@@ -32,6 +32,24 @@ On first start the proxy writes `dbdataproxy-selfsigned.pfx` and `.cer` to its d
 should trust it. The certificate covers localhost, the machine name/FQDN and `Proxy:Tls:Hostnames`, and is
 regenerated automatically when those change or it nears expiry. Use `Tls:Mode = File` for your own PFX.
 
+## Releases and installation
+
+CI (`.github/workflows/ci.yml`) builds, tests and smoke-packages every push and pull request on a Windows runner.
+Pushing a tag such as `v1.2.3` runs `.github/workflows/release.yml`, which tests, runs `build/package.ps1` and creates a
+GitHub release containing `DbDataProxy-<version>-win-x64.zip`, `SHA256SUMS` and `install.ps1` (tags containing `-`,
+such as `v1.2.3-rc1`, are marked as pre-releases).
+
+To install or upgrade from a release, run from an elevated PowerShell prompt:
+
+```powershell
+& ([scriptblock]::Create((irm https://github.com/<owner>/<repo>/releases/latest/download/install.ps1))) -Repo <owner>/<repo> -InstallService
+```
+
+The script verifies the download against `SHA256SUMS`, installs to `%ProgramFiles%\DbDataProxy` (`-InstallDir`),
+keeps an existing `appsettings.json`, stops and restarts a running service around an upgrade, and registers the
+service only with `-InstallService`. `-Version 1.2.3` selects a specific release. Edit the `$Repo` default in
+`scripts/install.ps1` to your repository to make `-Repo` unnecessary.
+
 ## Configuration
 
 `appsettings.json` beside the executable, environment variables (`DBPROXY_Proxy__Listen__Port=9000`) or command

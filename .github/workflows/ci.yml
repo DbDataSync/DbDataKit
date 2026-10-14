@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    # Windows is required: the ODBC and 32-bit worker tests need the Windows drivers and the win-x86 runtime.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet build -c Release
+      - run: dotnet test -c Release --no-build
+      - name: Package (smoke test)
+        run: ./build/package.ps1 -Version 0.0.0-ci
+        shell: pwsh
