@@ -15,7 +15,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 $target = Join-Path $Output $Runtime
-$versionArgs = if ($Version) { @("-p:Version=$Version") } else { @() }
+$versionArgs = @(if ($Version) { "-p:Version=$Version" })
 
 dotnet publish (Join-Path $root 'src\DbDataProxy.Server') -c $Configuration -r $Runtime --self-contained `
   -p:PublishSingleFile=true @versionArgs -o $target
