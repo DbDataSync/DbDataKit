@@ -5,7 +5,6 @@ using Apache.Arrow.Flight.Server;
 using Apache.Arrow.Ipc;
 using DbDataProxy.Server.Configuration;
 using Grpc.Core;
-using Microsoft.AspNetCore.Http;
 
 namespace DbDataProxy.Server.Flight;
 
@@ -64,15 +63,16 @@ public sealed record CompressionPlan(CompressionMode Mode, string Codec, int? Le
         switch (Mode)
         {
             case CompressionMode.Grpc:
-                // Honoured only if the client advertised support in grpc-accept-encoding; otherwise sent uncompressed.
-                context.GetHttpContext().Response.Headers["grpc-internal-encoding-request"] = Codec;
+                // The server compresses all responses with gzip when the client accepts it (see ProxyHost); this plan keeps that.
                 await writer.SetupStream(schema).ConfigureAwait(false);
                 break;
             case CompressionMode.Ipc:
+                context.WriteOptions = new WriteOptions(WriteFlags.NoCompress);
                 await writer.SetupStream(schema).ConfigureAwait(false);
                 FlightIpcCompression.Apply(writer, ToIpcOptions());
                 break;
             default:
+                context.WriteOptions = new WriteOptions(WriteFlags.NoCompress);
                 await writer.SetupStream(schema).ConfigureAwait(false);
                 break;
         }

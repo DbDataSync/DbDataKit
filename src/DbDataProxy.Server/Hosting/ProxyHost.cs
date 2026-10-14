@@ -69,6 +69,7 @@ public static class ProxyHost
             {
                 o.Interceptors.Add<AuthInterceptor>();
                 o.MaxReceiveMessageSize = 64 * 1024 * 1024;
+                o.ResponseCompressionAlgorithm = "gzip";
                 o.ResponseCompressionLevel = System.IO.Compression.CompressionLevel.Fastest;
                 o.CompressionProviders = [new GzipCompressionProvider(System.IO.Compression.CompressionLevel.Fastest)];
             })

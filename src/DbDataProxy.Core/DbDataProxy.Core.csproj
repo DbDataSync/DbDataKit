@@ -3,6 +3,7 @@
     <PackageReference Include="Apache.Arrow" />
     <PackageReference Include="Apache.Arrow.Compression" />
     <PackageReference Include="Apache.Arrow.Flight" />
+    <PackageReference Include="Apache.Arrow.Flight.Sql" />
     <PackageReference Include="System.Data.Odbc" />
     <PackageReference Include="Grpc.Net.Client" />
   </ItemGroup>

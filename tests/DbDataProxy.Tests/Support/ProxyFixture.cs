@@ -2,12 +2,14 @@ using Apache.Arrow;
 using Apache.Arrow.Flight;
 using Apache.Arrow.Flight.Client;
 using Apache.Arrow.Flight.Sql.Client;
+using DbDataProxy.Client;
 using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Hosting;
 using DuckDB.NET.Data;
 using Google.Protobuf;
 using Grpc.Core;
 using Grpc.Net.Client;
+using System.Net;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 
@@ -83,75 +85,56 @@ public sealed class ProxyFixture : IAsyncLifetime
     public ProxyClient Connect() => new(Address);
 }
 
-/// <summary>A minimal Flight SQL client that performs the Basic-auth handshake the way standard Flight clients do.</summary>
+/// <summary>Test client: the proxy client library plus the stock .NET Flight SQL client for compatibility checks.</summary>
 public sealed class ProxyClient : IDisposable
 {
-    private readonly GrpcChannel _channel;
-    private readonly FlightClient _flight;
-    private readonly FlightSqlClient _sql;
-    private string? _bearer;
+    private readonly ProxyFlightClient _proxy;
+    private readonly GrpcChannel _stockChannel;
+    private readonly FlightSqlClient _stock;
 
     public ProxyClient(string address)
     {
-        _channel = GrpcChannel.ForAddress(address);
-        _flight = new FlightClient(_channel);
-        _sql = new FlightSqlClient(_flight);
+        Counter = new ByteCountingHandler(new SocketsHttpHandler());
+        _proxy = new ProxyFlightClient(address, new GrpcChannelOptions { HttpHandler = Counter });
+        _stockChannel = GrpcChannel.ForAddress(address);
+        _stock = new FlightSqlClient(new FlightClient(_stockChannel));
     }
 
-    public string? Bearer => _bearer;
+    /// <summary>Counts response bytes as they cross the wire (after gRPC compression, if any).</summary>
+    public ByteCountingHandler Counter { get; }
 
-    public async Task AuthenticateAsync(string user, string password)
-    {
-        string basic = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user}:{password}"));
-        using var call = _flight.Handshake(new Metadata { { "authorization", "Basic " + basic } });
-        await call.RequestStream.WriteAsync(new FlightHandshakeRequest(ByteString.Empty, 0));
-        await call.RequestStream.CompleteAsync();
-        var headers = await call.ResponseHeadersAsync;
-        _bearer = headers.GetValue("authorization");
-        while (await call.ResponseStream.MoveNext(default)) { }
-    }
+    public string? Bearer => _proxy.Authorization;
 
-    public void UseHeader(string header) => _bearer = header;
+    public Task AuthenticateAsync(string user, string password) => _proxy.AuthenticateAsync(user, password);
 
-    private Apache.Arrow.Flight.Sql.FlightCallOptions Options(string? dataSource, string? compression)
-    {
-        var md = new Metadata();
-        if (_bearer is not null) md.Add("authorization", _bearer);
-        if (dataSource is not null) md.Add("x-datasource", dataSource);
-        if (compression is not null) md.Add("x-compression", compression);
-        return new Apache.Arrow.Flight.Sql.FlightCallOptions { Headers = md };
-    }
+    public void UseHeader(string header) => _proxy.Authorization = header;
 
     public async Task<(Schema Schema, List<RecordBatch> Batches)> QueryAsync(string sql, string? dataSource = null, string? compression = null)
     {
-        var options = Options(dataSource, compression);
-        var info = await _sql.ExecuteAsync(sql, default, options);
+        var result = await _proxy.QueryAsync(sql, new QueryOptions { DataSource = dataSource, Compression = compression });
         var batches = new List<RecordBatch>();
-        foreach (var endpoint in info.Endpoints)
-            await foreach (var b in _sql.DoGetAsync(endpoint.Ticket, options)) batches.Add(b);
-        return (info.Schema, batches);
+        await foreach (var b in result) batches.Add(b);
+        return (result.Schema, batches);
     }
 
-    public Task<long> UpdateAsync(string sql, string? dataSource = null) =>
-        _sql.ExecuteUpdateAsync(sql, default, Options(dataSource, null));
+    /// <summary>Update as non-.NET Flight SQL clients send it (CommandStatementUpdate, no prepared statement).</summary>
+    public Task<long> RawUpdateAsync(string sql, string? dataSource = null) =>
+        _proxy.ExecuteUpdateAsync(sql, new QueryOptions { DataSource = dataSource });
 
-    /// <summary>Sends a CommandStatementUpdate the way non-.NET Flight SQL clients do (no prepared statement).</summary>
-    public async Task<long> RawUpdateAsync(string sql, string? dataSource = null)
+    /// <summary>Update through the stock .NET Flight SQL client, which prepares every statement.</summary>
+    public Task<long> UpdateAsync(string sql, string? dataSource = null)
     {
         var md = new Metadata();
-        if (_bearer is not null) md.Add("authorization", _bearer);
+        if (_proxy.Authorization is not null) md.Add("authorization", _proxy.Authorization);
         if (dataSource is not null) md.Add("x-datasource", dataSource);
-        var command = new Arrow.Flight.Protocol.Sql.CommandStatementUpdate { Query = sql };
-        var descriptor = FlightDescriptor.CreateCommandDescriptor(Google.Protobuf.WellKnownTypes.Any.Pack(command).ToByteArray());
-        using var call = await _flight.StartPut(descriptor, new Schema([], null), md);
-        await call.RequestStream.CompleteAsync();
-        long count = -1;
-        while (await call.ResponseStream.MoveNext(default))
-            count = Arrow.Flight.Protocol.Sql.DoPutUpdateResult.Parser.ParseFrom(call.ResponseStream.Current.ApplicationMetadata).RecordCount;
-        return count;
+        return _stock.ExecuteUpdateAsync(sql, default, new Apache.Arrow.Flight.Sql.FlightCallOptions { Headers = md });
     }
 
-    public void Dispose() => _channel.Dispose();
+    public void Dispose()
+    {
+        _proxy.Dispose();
+        _stockChannel.Dispose();
+    }
 }
 
 public static class Rpc
@@ -170,5 +153,53 @@ public static class Rpc
             throw;
         }
         throw new Xunit.Sdk.XunitException("Expected an RpcException but the call succeeded.");
+    }
+}
+
+public sealed class ByteCountingHandler(HttpMessageHandler inner) : DelegatingHandler(inner)
+{
+    private long _bytes;
+    public long ResponseBytes => Interlocked.Read(ref _bytes);
+    public void Reset() => Interlocked.Exchange(ref _bytes, 0);
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var response = await base.SendAsync(request, cancellationToken);
+        var original = response.Content;
+        var counting = new CountingContent(original, n => Interlocked.Add(ref _bytes, n));
+        foreach (var header in original.Headers) counting.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        response.Content = counting;
+        return response;
+    }
+
+    private sealed class CountingContent(HttpContent inner, Action<long> onBytes) : HttpContent
+    {
+        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+        {
+            await using var source = await inner.ReadAsStreamAsync();
+            await source.CopyToAsync(new CountingStream(stream, onBytes));
+        }
+
+        protected override async Task<Stream> CreateContentReadStreamAsync() =>
+            new CountingStream(await inner.ReadAsStreamAsync(), onBytes);
+
+        protected override bool TryComputeLength(out long length) { length = 0; return false; }
+    }
+
+    private sealed class CountingStream(Stream inner, Action<long> onBytes) : Stream
+    {
+        public override int Read(byte[] buffer, int offset, int count) { int n = inner.Read(buffer, offset, count); onBytes(n); return n; }
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default) { int n = await inner.ReadAsync(buffer, ct); onBytes(n); return n; }
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken ct) => ReadAsync(buffer.AsMemory(offset, count), ct).AsTask();
+        public override void Write(byte[] buffer, int offset, int count) => inner.Write(buffer, offset, count);
+        public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct = default) { onBytes(buffer.Length); await inner.WriteAsync(buffer, ct); }
+        public override bool CanRead => inner.CanRead;
+        public override bool CanSeek => false;
+        public override bool CanWrite => inner.CanWrite;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() => inner.Flush();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
     }
 }
