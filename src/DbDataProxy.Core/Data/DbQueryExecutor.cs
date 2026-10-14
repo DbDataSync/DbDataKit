@@ -17,7 +17,9 @@ public sealed class DelegateConnectionFactory(Func<string, DbConnection> create)
 }
 
 /// <summary>Generic ADO.NET executor: any <see cref="DbConnection"/> becomes an Arrow query source.</summary>
-public sealed class DbQueryExecutor(IDbConnectionFactory factory, string connectionString) : IQueryExecutor, IMetadataProvider
+public sealed class DbQueryExecutor(
+    IDbConnectionFactory factory, string connectionString, ParameterStyle parameterStyle = ParameterStyle.Positional)
+    : IQueryExecutor, IMetadataProvider
 {
     public async Task<IQueryResult> ExecuteQueryAsync(QueryRequest request, CancellationToken cancellationToken)
     {
@@ -68,10 +70,10 @@ public sealed class DbQueryExecutor(IDbConnectionFactory factory, string connect
         return await OdbcMetadata.GetIdentifierQuoteAsync(odbc, cancellationToken).ConfigureAwait(false);
     }
 
-    private static DbCommand CreateCommand(DbConnection connection, QueryRequest request)
+    private DbCommand CreateCommand(DbConnection connection, QueryRequest request)
     {
         var command = connection.CreateCommand();
-        command.CommandText = request.Sql;
+        ParameterBinder.Bind(command, request.Sql, request.Parameters, parameterStyle);
         if (request.CommandTimeoutSeconds is { } timeout) command.CommandTimeout = timeout;
         return command;
     }

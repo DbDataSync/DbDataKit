@@ -27,7 +27,7 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
         try
         {
             result = await executor
-                .ExecuteQueryAsync(new QueryRequest(request.Sql, request.BatchSize, request.TimeoutSeconds), context.CancellationToken)
+                .ExecuteQueryAsync(new QueryRequest(request.Sql, request.BatchSize, request.TimeoutSeconds, request.Parameters), context.CancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -76,7 +76,7 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
         try
         {
             affected = await CreateExecutor(request)
-                .ExecuteNonQueryAsync(new QueryRequest(request.Sql, request.BatchSize, request.TimeoutSeconds), context.CancellationToken)
+                .ExecuteNonQueryAsync(new QueryRequest(request.Sql, request.BatchSize, request.TimeoutSeconds, request.Parameters), context.CancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

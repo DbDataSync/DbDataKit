@@ -62,7 +62,7 @@ public sealed class DataSourceCatalog(
                 throw new RpcException(new Status(StatusCode.Unavailable, "The 32-bit worker is not available on this platform."));
             return worker.Create(connectionString);
         }
-        return new DbQueryExecutor(new DelegateConnectionFactory(provider.CreateConnection), connectionString);
+        return new DbQueryExecutor(new DelegateConnectionFactory(provider.CreateConnection), connectionString, provider.ParameterStyle);
     }
 
     private static string ChooseName(ProxyPrincipal principal, string? requested, Dictionary<string, DataSourceOptions> configured)

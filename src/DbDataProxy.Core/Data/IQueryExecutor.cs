@@ -3,7 +3,8 @@ using Apache.Arrow;
 namespace DbDataProxy.Data;
 
 /// <summary>A request to run one statement against a data source.</summary>
-public sealed record QueryRequest(string Sql, int BatchSize = 32768, int? CommandTimeoutSeconds = null);
+public sealed record QueryRequest(
+    string Sql, int BatchSize = 32768, int? CommandTimeoutSeconds = null, IReadOnlyList<QueryParameter>? Parameters = null);
 
 /// <summary>
 /// An open result set. The schema is known up front; batches are streamed so memory stays bounded.

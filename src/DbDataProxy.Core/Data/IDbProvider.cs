@@ -13,6 +13,9 @@ public interface IDbProvider
 
     /// <summary>Returns the connection string with the caller's credentials injected (pass-through authentication).</summary>
     string ApplyCredentials(string connectionString, string user, string password);
+
+    /// <summary>How this provider marks statement parameters.</summary>
+    ParameterStyle ParameterStyle => ParameterStyle.Positional;
 }
 
 public sealed class OdbcProvider : IDbProvider

@@ -101,7 +101,8 @@ public sealed partial class ProxyFlightServer(
 
     /// <summary>Runs the statement so its schema is known, parks the open result for DoGet and returns the FlightInfo.</summary>
     private async Task<FlightInfo> ExecuteForFlightInfoAsync(
-        string sql, ProxyPrincipal principal, ResolvedDataSource source, FlightDescriptor descriptor, ServerCallContext context)
+        string sql, ProxyPrincipal principal, ResolvedDataSource source, FlightDescriptor descriptor, ServerCallContext context,
+        IReadOnlyList<QueryParameter>? parameters = null)
     {
         pending.EnsureCapacity(principal.Name);
         _log.LogInformation("Query by {User} on {Source}: {Sql}", principal.Name, source.Name, Describe(sql));
@@ -110,7 +111,7 @@ public sealed partial class ProxyFlightServer(
         try
         {
             result = await source.Executor
-                .ExecuteQueryAsync(new QueryRequest(sql, source.Options.BatchSize, source.Options.CommandTimeoutSeconds), context.CancellationToken)
+                .ExecuteQueryAsync(new QueryRequest(sql, source.Options.BatchSize, source.Options.CommandTimeoutSeconds, parameters), context.CancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not RpcException and not OperationCanceledException)
@@ -172,7 +173,8 @@ public sealed partial class ProxyFlightServer(
         await responseStream.WriteAsync(new FlightPutResult(new DoPutUpdateResult { RecordCount = affected }.ToByteString())).ConfigureAwait(false);
     }
 
-    private async Task<long> RunUpdateAsync(string sql, ProxyPrincipal principal, ResolvedDataSource source, ServerCallContext context)
+    private async Task<long> RunUpdateAsync(
+        string sql, ProxyPrincipal principal, ResolvedDataSource source, ServerCallContext context, IReadOnlyList<QueryParameter>? parameters = null)
     {
         if (!source.Options.AllowWrites)
             throw new RpcException(new Status(StatusCode.PermissionDenied, $"Data source '{source.Name}' is read-only."));
@@ -181,7 +183,7 @@ public sealed partial class ProxyFlightServer(
         try
         {
             return await source.Executor
-                .ExecuteNonQueryAsync(new QueryRequest(sql, source.Options.BatchSize, source.Options.CommandTimeoutSeconds), context.CancellationToken)
+                .ExecuteNonQueryAsync(new QueryRequest(sql, source.Options.BatchSize, source.Options.CommandTimeoutSeconds, parameters), context.CancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not RpcException and not OperationCanceledException)
@@ -196,7 +198,7 @@ public sealed partial class ProxyFlightServer(
         if (ex is RpcException rpc) return rpc;
         if (IsLoginFailure(ex))
             return new RpcException(new Status(StatusCode.Unauthenticated, "The database rejected the credentials."));
-        if (ex is DbException or NotSupportedException)
+        if (ex is DbException or NotSupportedException or ArgumentException)
             return new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
         return new RpcException(new Status(StatusCode.Internal, "Query failed: " + ex.Message));
     }

@@ -9,6 +9,8 @@ public sealed class SqlServerProvider : IDbProvider
 {
     public string Name => "sqlserver";
 
+    public ParameterStyle ParameterStyle => ParameterStyle.NamedAtSign;
+
     public DbConnection CreateConnection(string connectionString) => new SqlConnection(connectionString);
 
     public string ApplyCredentials(string connectionString, string user, string password)

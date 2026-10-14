@@ -32,6 +32,19 @@ On first start the proxy writes `dbdataproxy-selfsigned.pfx` and `.cer` to its d
 should trust it. The certificate covers localhost, the machine name/FQDN and `Proxy:Tls:Hostnames`, and is
 regenerated automatically when those change or it nears expiry. Use `Tls:Mode = File` for your own PFX.
 
+## Parameters
+
+Prepared statements accept parameters the standard Flight SQL way: prepare, bind a record batch with `DoPut`, execute.
+ADBC (`cursor.execute(sql, params)` / `executemany`) and the proxy's own `ProxyFlightClient.QueryAsync(sql, [..])` do
+this for you.
+
+* Mark parameters with `?`, bound in column order. SQL Server sources also accept `@name` markers; the Arrow column
+  names are used as the parameter names. Markers inside string literals, quoted identifiers and comments are ignored.
+* A query takes one row of parameters. An update runs once per row (a batch insert) and returns the summed count.
+* Supported Arrow types: booleans, integers, floats, decimals, strings, dates, timestamps, times, binary and nulls.
+* Values are bound through the provider's parameter API, never spliced into the SQL. ODBC drivers that reject 64-bit
+  parameters get values that fit in 32 bits as 32-bit integers.
+
 ## Releases and installation
 
 CI (`.github/workflows/ci.yml`) builds, tests and smoke-packages every push and pull request on a Windows runner.
@@ -156,8 +169,7 @@ exe: queries with every compression setting, updates, metadata and wrong-passwor
 
 ## Not supported yet
 
-* Prepared-statement parameters, `GetExportedKeys`/`GetImportedKeys`/`GetCrossReference` and `GetXdbcTypeInfo`.
-  Plain statements and parameterless prepared statements work (the .NET client prepares everything).
+* `GetExportedKeys`/`GetImportedKeys`/`GetCrossReference` and `GetXdbcTypeInfo`.
 * Catalog metadata: SQL Server and DuckDB sources are read from `INFORMATION_SCHEMA`. ODBC sources use the driver's
   catalog API (`SQLTables`, via `GetSchema`), so text/Excel/Access and other drivers without `INFORMATION_SCHEMA` work,
   including through the 32-bit worker. Set a data source's `"Metadata"` to `"odbc"` or `"informationschema"` to

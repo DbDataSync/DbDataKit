@@ -2,18 +2,18 @@ using Apache.Arrow;
 using Apache.Arrow.Types;
 using DbDataProxy.Data;
 using DbDataProxy.Server.Data;
+using DbDataProxy.Tests.Support;
 using Microsoft.Data.SqlClient;
 
 namespace DbDataProxy.Tests.Data;
 
 /// <summary>
-/// Runs against a local SQL Server / SQL Express instance (Windows authentication) when one is reachable;
-/// otherwise the tests are skipped. Set DBPROXY_TEST_SQLSERVER to use a different server name.
+/// Runs against a local SQL Server / SQL Express instance (Windows authentication) or the server named by the
+/// DBPROXY_TEST_SQLSERVER* variables (see <see cref="SqlServerEnv"/>) when one is reachable;
+/// otherwise the tests are skipped.
 /// </summary>
 public class SqlServerTests
 {
-    private static readonly string Server = Environment.GetEnvironmentVariable("DBPROXY_TEST_SQLSERVER") ?? @".\SQLEXPRESS";
-
     private const string AllTypes = """
         SELECT CAST(1 AS tinyint) AS c_tinyint, CAST(-2 AS smallint) AS c_smallint, CAST(3 AS int) AS c_int,
                CAST(4 AS bigint) AS c_bigint, CAST(1 AS bit) AS c_bit, CAST(12345.6789 AS decimal(18,4)) AS c_decimal,
@@ -26,22 +26,12 @@ public class SqlServerTests
 
     private static async Task<DbQueryExecutor> SqlClientAsync()
     {
-        string cs = $"Server={Server};Integrated Security=True;TrustServerCertificate=True;Encrypt=False;Connect Timeout=3";
-        try
-        {
-            await using var probe = new SqlConnection(cs);
-            await probe.OpenAsync();
-        }
-        catch (Exception ex) when (ex is SqlException or InvalidOperationException)
-        {
-            Assert.Skip($"SQL Server '{Server}' is not reachable: {ex.Message}");
-        }
-        return new DbQueryExecutor(new DelegateConnectionFactory(c => new SqlConnection(c)), cs);
+        await SqlServerEnv.EnsureReachableAsync();
+        return new DbQueryExecutor(new DelegateConnectionFactory(c => new SqlConnection(c)), SqlServerEnv.SqlClient(), ParameterStyle.NamedAtSign);
     }
 
     private static DbQueryExecutor Odbc(string driver) =>
-        new(new DelegateConnectionFactory(c => new System.Data.Odbc.OdbcConnection(c)),
-            $"Driver={{{driver}}};Server={Server};Trusted_Connection=Yes;TrustServerCertificate=Yes");
+        new(new DelegateConnectionFactory(c => new System.Data.Odbc.OdbcConnection(c)), SqlServerEnv.Odbc(driver));
 
     private static async Task<(Schema, RecordBatch)> RunAsync(DbQueryExecutor executor, string sql)
     {
@@ -88,16 +78,55 @@ public class SqlServerTests
     [Theory]
     [InlineData("ODBC Driver 17 for SQL Server")]
     [InlineData("SQL Server")]
+    [InlineData("ODBC Driver 18 for SQL Server")]
     public async Task Odbc_maps_the_same_types_for_the_same_query(string driver)
     {
         await SqlClientAsync(); // skips when no server is available
-        var (_, batch) = await RunAsync(Odbc(driver), AllTypes.Replace("CAST('2024-03-05 06:07:08 +02:00' AS datetimeoffset)", "CAST(NULL AS int)").Replace("CAST('01:02:03' AS time(0))", "CAST(NULL AS int)"));
+        var (_, batch) = await RunOdbcOrSkipAsync(Odbc(driver), AllTypes.Replace("CAST('2024-03-05 06:07:08 +02:00' AS datetimeoffset)", "CAST(NULL AS int)").Replace("CAST('01:02:03' AS time(0))", "CAST(NULL AS int)"));
 
         Assert.Equal(3, Convert.ToInt32(GetValue(batch, "c_int")));
         Assert.Equal(4L, Convert.ToInt64(GetValue(batch, "c_bigint")));
         Assert.Equal("héllo wörld", ((StringArray)batch.Column("c_nvarchar")).GetString(0));
         Assert.Equal(12345.6789m, ((Decimal128Array)batch.Column("c_decimal")).GetValue(0));
         Assert.True(batch.Column("c_null").IsNull(0));
+    }
+
+    /// <summary>Runs through an ODBC driver, skipping the test when this machine does not have that driver installed.</summary>
+    private static async Task<(Schema, RecordBatch)> RunOdbcOrSkipAsync(DbQueryExecutor executor, string sql)
+    {
+        try
+        {
+            return await RunAsync(executor, sql);
+        }
+        catch (System.Data.Odbc.OdbcException ex) when (ex.Errors.Cast<System.Data.Odbc.OdbcError>().Any(e => e.SQLState == "IM002"))
+        {
+            Assert.Skip("The ODBC driver is not installed: " + ex.Message);
+            throw;
+        }
+    }
+
+    [Fact]
+    public async Task Named_parameters_bind_for_question_mark_and_at_sign_statements()
+    {
+        var executor = await SqlClientAsync();
+
+        var (_, positional) = await RunWithAsync(executor, "SELECT CAST(? AS int) + 1 AS n, CAST(? AS nvarchar(20)) AS s, CAST(? AS date) AS d, CAST(? AS int) AS missing",
+            [new("p0", "int64", "41"), new("p1", "string", "it's"), new("p2", "date", new DateTime(2024, 3, 5).ToString("o")), new("p3", "null", null)]);
+        Assert.Equal(42, ((Int32Array)positional.Column("n")).GetValue(0));
+        Assert.Equal("it's", ((StringArray)positional.Column("s")).GetString(0));
+        Assert.Equal(new DateTimeOffset(2024, 3, 5, 0, 0, 0, TimeSpan.Zero), ((Date32Array)positional.Column("d")).GetDateTimeOffset(0));
+        Assert.True(positional.Column("missing").IsNull(0));
+
+        var (_, named) = await RunWithAsync(executor, "SELECT @a + @b AS total", [new("a", "int64", "40"), new("@b", "int64", "2")]);
+        Assert.Equal(42L, Convert.ToInt64(GetValue(named, "total")));
+    }
+
+    private static async Task<(Schema, RecordBatch)> RunWithAsync(DbQueryExecutor executor, string sql, QueryParameter[] parameters)
+    {
+        await using var result = await executor.ExecuteQueryAsync(new QueryRequest(sql, Parameters: parameters), CancellationToken.None);
+        var batches = new List<RecordBatch>();
+        await foreach (var b in result.ReadBatchesAsync(CancellationToken.None)) batches.Add(b);
+        return (result.Schema, Assert.Single(batches));
     }
 
     private static object? GetValue(RecordBatch batch, string column) => batch.Column(column) switch
@@ -151,7 +180,7 @@ public class OdbcUnsupportedTypeTests
         string server = Environment.GetEnvironmentVariable("DBPROXY_TEST_SQLSERVER") ?? @".\SQLEXPRESS";
         var executor = new DbQueryExecutor(
             new DelegateConnectionFactory(c => new System.Data.Odbc.OdbcConnection(c)),
-            $"Driver={{ODBC Driver 17 for SQL Server}};Server={server};Trusted_Connection=Yes;TrustServerCertificate=Yes");
+            SqlServerEnv.Odbc("ODBC Driver 17 for SQL Server"));
 
         NotSupportedException? ex = null;
         try
@@ -160,7 +189,7 @@ public class OdbcUnsupportedTypeTests
                 new QueryRequest("SELECT SYSDATETIMEOFFSET() AS stamp"), CancellationToken.None);
         }
         catch (NotSupportedException e) { ex = e; }
-        catch (System.Data.Odbc.OdbcException) { Assert.Skip("SQL Server is not reachable."); }
+        catch (System.Data.Odbc.OdbcException) { Assert.Skip("SQL Server or the ODBC driver is not available."); }
 
         Assert.NotNull(ex);
         Assert.Contains("'stamp'", ex.Message);

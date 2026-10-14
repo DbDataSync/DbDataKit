@@ -6,6 +6,7 @@ using Apache.Arrow.Flight;
 using Apache.Arrow.Flight.Client;
 using Apache.Arrow.Ipc;
 using Arrow.Flight.Protocol.Sql;
+using DbDataProxy.Data;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
@@ -122,6 +123,112 @@ public sealed class ProxyFlightClient : IDisposable
             info = await infoCall.ResponseAsync.ConfigureAwait(false);
 
         return new QueryResultStream(info.Schema, ReadEndpointsAsync(info, headers));
+    }
+
+    /// <summary>
+    /// Runs a query with parameters. The statement is prepared on the server, the values are bound with a DoPut and the
+    /// statement is closed once the result has been read. Use <c>?</c> markers (or <c>@name</c> for SQL Server).
+    /// </summary>
+    public async Task<QueryResultStream> QueryAsync(
+        string sql, IReadOnlyList<object?> parameters, QueryOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        var headers = Headers(options);
+        var handle = await PrepareAsync(sql, headers, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await BindAsync(new CommandPreparedStatementQuery { PreparedStatementHandle = handle }, parameters, headers, cancellationToken).ConfigureAwait(false);
+            var descriptor = FlightDescriptor.CreateCommandDescriptor(
+                Any.Pack(new CommandPreparedStatementQuery { PreparedStatementHandle = handle }).ToByteArray());
+            FlightInfo info;
+            using (var infoCall = _flight.GetInfo(descriptor, headers, null, cancellationToken))
+                info = await infoCall.ResponseAsync.ConfigureAwait(false);
+            return new QueryResultStream(info.Schema, ReadThenCloseAsync(info, headers, handle));
+        }
+        catch
+        {
+            await CloseAsync(handle, headers).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <summary>Runs an INSERT/UPDATE/DDL statement with parameters; one execution per call, affected rows returned.</summary>
+    public Task<long> ExecuteUpdateAsync(
+        string sql, IReadOnlyList<object?> parameters, QueryOptions? options = null, CancellationToken cancellationToken = default) =>
+        ExecuteUpdateAsync(sql, [parameters], options, cancellationToken);
+
+    /// <summary>Runs one statement once per parameter row (a batch insert); the affected counts are summed.</summary>
+    public async Task<long> ExecuteUpdateAsync(
+        string sql, IReadOnlyList<IReadOnlyList<object?>> parameterRows, QueryOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        var headers = Headers(options);
+        var handle = await PrepareAsync(sql, headers, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var command = new CommandPreparedStatementUpdate { PreparedStatementHandle = handle };
+            var batches = parameterRows.Select(row => ArrowParameters.FromValues(row)).ToList();
+            var descriptor = FlightDescriptor.CreateCommandDescriptor(Any.Pack(command).ToByteArray());
+
+            using var call = await _flight.StartPut(descriptor, batches[0].Schema, headers, null, cancellationToken).ConfigureAwait(false);
+            foreach (var batch in batches) await call.RequestStream.WriteAsync(batch).ConfigureAwait(false);
+            await call.RequestStream.CompleteAsync().ConfigureAwait(false);
+
+            long affected = -1;
+            while (await call.ResponseStream.MoveNext(cancellationToken).ConfigureAwait(false))
+                affected = DoPutUpdateResult.Parser.ParseFrom(call.ResponseStream.Current.ApplicationMetadata).RecordCount;
+            return affected;
+        }
+        finally
+        {
+            await CloseAsync(handle, headers).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<ByteString> PrepareAsync(string sql, Metadata headers, CancellationToken cancellationToken)
+    {
+        var request = Any.Pack(new ActionCreatePreparedStatementRequest { Query = sql }).ToByteArray();
+        using var call = _flight.DoAction(new FlightAction("CreatePreparedStatement", request), headers, null, cancellationToken);
+        ByteString? handle = null;
+        await foreach (var result in call.ResponseStream.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            handle = Any.Parser.ParseFrom(result.Body).Unpack<ActionCreatePreparedStatementResult>().PreparedStatementHandle;
+        return handle ?? throw new InvalidOperationException("The server did not return a prepared statement handle.");
+    }
+
+    private async Task BindAsync(IMessage command, IReadOnlyList<object?> parameters, Metadata headers, CancellationToken cancellationToken)
+    {
+        var batch = ArrowParameters.FromValues(parameters);
+        var descriptor = FlightDescriptor.CreateCommandDescriptor(Any.Pack(command).ToByteArray());
+        using var call = await _flight.StartPut(descriptor, batch.Schema, headers, null, cancellationToken).ConfigureAwait(false);
+        await call.RequestStream.WriteAsync(batch).ConfigureAwait(false);
+        await call.RequestStream.CompleteAsync().ConfigureAwait(false);
+        while (await call.ResponseStream.MoveNext(cancellationToken).ConfigureAwait(false)) { /* the handle comes back unchanged */ }
+    }
+
+    private async Task CloseAsync(ByteString handle, Metadata headers)
+    {
+        try
+        {
+            var request = Any.Pack(new ActionClosePreparedStatementRequest { PreparedStatementHandle = handle }).ToByteArray();
+            using var call = _flight.DoAction(new FlightAction("ClosePreparedStatement", request), headers);
+            await foreach (var _ in call.ResponseStream.ReadAllAsync().ConfigureAwait(false)) { }
+        }
+        catch (RpcException)
+        {
+            // Closing is best effort; the server also expires idle statements.
+        }
+    }
+
+    private async IAsyncEnumerable<RecordBatch> ReadThenCloseAsync(
+        FlightInfo info, Metadata headers, ByteString handle, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await foreach (var batch in ReadEndpointsAsync(info, headers, cancellationToken).ConfigureAwait(false))
+                yield return batch;
+        }
+        finally
+        {
+            await CloseAsync(handle, headers).ConfigureAwait(false);
+        }
     }
 
     /// <summary>Runs an INSERT/UPDATE/DDL statement and returns the affected row count.</summary>

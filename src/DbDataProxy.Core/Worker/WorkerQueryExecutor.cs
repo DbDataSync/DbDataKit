@@ -19,7 +19,7 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
     public async Task<IQueryResult> ExecuteQueryAsync(QueryRequest request, CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
-        var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, request.Sql, request.BatchSize, request.CommandTimeoutSeconds));
+        var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, request.Sql, request.BatchSize, request.CommandTimeoutSeconds, request.Parameters));
 
         var call = client.GetStream(new FlightTicket(payload), Headers(secret), null, cancellationToken);
         try
@@ -38,7 +38,7 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
     public async Task<long> ExecuteNonQueryAsync(QueryRequest request, CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
-        var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, request.Sql, request.BatchSize, request.CommandTimeoutSeconds));
+        var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, request.Sql, request.BatchSize, request.CommandTimeoutSeconds, request.Parameters));
 
         using var call = client.DoAction(new FlightAction(WorkerProtocol.NonQueryAction, payload), Headers(secret), null, cancellationToken);
         long affected = -1;

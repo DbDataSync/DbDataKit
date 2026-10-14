@@ -32,9 +32,9 @@ public sealed partial class ProxyFlightServer
 
     private static readonly Schema CatalogsSchema = new([Str("catalog_name", false)], null);
     private static readonly Schema DbSchemasSchema = new([Str("catalog_name", true), Str("db_schema_name", false)], null);
-    private static readonly Schema TableTypesSchema = new([Str("table_type", false)], null);
+    private static readonly new Schema TableTypesSchema = new([Str("table_type", false)], null);
 
-    private static readonly Schema PrimaryKeysSchema = new(
+    private static readonly new Schema PrimaryKeysSchema = new(
         [Str("catalog_name", true), Str("db_schema_name", true), Str("table_name", false), Str("column_name", false),
          Str("key_name", true), new Field("key_sequence", Int32Type.Default, false)], null);
 
@@ -141,7 +141,7 @@ public sealed partial class ProxyFlightServer
 
     // ---- Server info ----
 
-    private static readonly Schema SqlInfoSchema = new(
+    private static readonly new Schema SqlInfoSchema = new(
     [
         new Field("info_name", UInt32Type.Default, false),
         new Field("value", new UnionType(

@@ -131,6 +131,18 @@ public sealed class WorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Parameters_reach_the_32_bit_worker()
+    {
+        using var client = await LoginAsync();
+        var result = await client.Raw.QueryAsync("SELECT name FROM [people.csv] WHERE age > ? ORDER BY age",
+            [30], new DbDataProxy.Client.QueryOptions { DataSource = "text32" });
+        var names = new List<string?>();
+        await foreach (var batch in result)
+            for (int r = 0; r < batch.Length; r++) names.Add(((StringArray)batch.Column("name")).GetString(r));
+        Assert.Equal(["Ada", "Grace"], names);
+    }
+
+    [Fact]
     public async Task Worker_reports_sql_errors_to_the_client()
     {
         using var client = await LoginAsync();

@@ -22,7 +22,8 @@ public static class WorkerProtocol
 }
 
 /// <summary>An ODBC statement to run inside the worker. Connection strings stay inside the proxy host's machine.</summary>
-public sealed record WorkerRequest(string ConnectionString, string Sql, int BatchSize, int? TimeoutSeconds);
+public sealed record WorkerRequest(
+    string ConnectionString, string Sql, int BatchSize, int? TimeoutSeconds, IReadOnlyList<DbDataProxy.Data.QueryParameter>? Parameters = null);
 
 /// <summary>Result of a non-query executed by the worker.</summary>
 public sealed record WorkerNonQueryResult(long Affected);

@@ -38,7 +38,5 @@ public sealed partial class ProxyFlightServer
     protected override Task<FlightInfo> GetXdbcTypeFlightInfo(CommandGetXdbcTypeInfo command, FlightDescriptor descriptor, ServerCallContext context) =>
         throw Unsupported(nameof(GetXdbcTypeFlightInfo));
 
-    protected override Task PutPreparedStatementQuery(CommandPreparedStatementQuery command, FlightServerRecordBatchStreamReader reader, IAsyncStreamWriter<FlightPutResult> writer, ServerCallContext context) =>
-        throw Unsupported(nameof(PutPreparedStatementQuery));
 
 }

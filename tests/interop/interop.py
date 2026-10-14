@@ -58,6 +58,21 @@ def update():
         return f"rowcount={n} total={total}"
 check("ADBC update + readback", update)
 
+def parameters():
+    with adbc_connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT id, name FROM numbers WHERE id >= ? AND id < ? ORDER BY id", (10, 13))
+        t = cur.fetch_arrow_table()
+        assert t.column("id").to_pylist() == [10, 11, 12], t
+        cur.execute("SELECT count(*) AS n FROM numbers WHERE name = ?", ("x'; DROP TABLE numbers; --",))
+        assert cur.fetch_arrow_table().column("n")[0].as_py() == 0
+        cur.execute("CREATE TABLE IF NOT EXISTS py_params(i INTEGER, s VARCHAR)")
+        cur.executemany("INSERT INTO py_params VALUES (?, ?)", [(1, "a"), (2, "b"), (3, None)])
+        cur.execute("SELECT count(*) AS n FROM py_params")
+        n = cur.fetch_arrow_table().column("n")[0].as_py()
+        assert n >= 3, n
+        return f"select ok, injection harmless, executemany total={n}"
+check("ADBC parameters (query, executemany)", parameters)
+
 def objects():
     with adbc_connect() as conn:
         types = conn.adbc_get_table_types()
