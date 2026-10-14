@@ -36,6 +36,7 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
 
     private readonly string _databaseName = $"DbDataSyncTaskRunnerTest_{Guid.NewGuid():N}";
     private readonly string _repoRoot = Directory.CreateTempSubdirectory("dbdatasync-taskrunner-e2e-").FullName;
+    private BulkLoadBatchStore _batchStore = null!;
     private readonly string _sourceTable = $"Src_{Guid.NewGuid():N}";
     private readonly string _targetTable = $"Tgt_{Guid.NewGuid():N}";
     private readonly string _reloadTargetTable = $"ReloadTgt_{Guid.NewGuid():N}";
@@ -87,7 +88,7 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
         _workQueueStore = new WorkQueueStore(stateDatabase);
         _watermarkStore = new ChangeWatermarkStore(stateDatabase);
         _logWriter = new LogWriter(stateDatabase);
-        var batchStore = new BulkLoadBatchStore(stateDatabase);
+        var batchStore = _batchStore = new BulkLoadBatchStore(stateDatabase);
         _executor = new RunExecutor(
             _configRepository, driverRegistry, secretStore, new LibraryRegistry(_repoRoot).LoadAll(), _repoRoot,
             new LocalRunnerState(_taskRunStore, _workQueueStore, new RunLockStore(stateDatabase),
@@ -658,11 +659,12 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
 
     /// <summary>
     /// A standalone reload replication has no watermark and no change feed — it re-reads its source
-    /// every pass, divided into the segments configured on its reader. Those are iterated within one
-    /// Primary pass, so the mapping still has exactly one run per pass rather than one per segment.
+    /// every pass, divided into the segments configured on the mapping. Phase 203M: a pass that resolves
+    /// to several segments dispatches them as a batch, one run per segment, instead of looping inside
+    /// itself — the same shape a backfill has. The Primary run itself reads nothing.
     /// </summary>
     [Fact]
-    public async Task StandaloneReloadReplication_IteratesEverySegmentConfiguredOnItsReader()
+    public async Task StandaloneReloadReplication_RunsEverySegmentAsItsOwnRunUnderOneBatch()
     {
         await ExecuteAsync(_adminConnection,
             $"INSERT INTO dbo.[{_sourceTable}] (Id, Name) VALUES (1, 'One'), (5, 'Five'), (9, 'Nine'), (40, 'Forty');");
@@ -671,11 +673,22 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
 
         var runId = _workQueueStore.Enqueue("reload-only", RunKind.Primary, "main");
         await _executor.ExecuteWorkerAsync("reload-only", WorkerLanes.Uniform(1), CancellationToken.None);
+        // The pass queued the segments; in production BulkLoadService nudges a worker to take them, and
+        // this stands in for that nudge.
+        for (var i = 0; i < 5 && _workQueueStore.HasOutstandingWork("reload-only"); i++)
+            await _executor.ExecuteWorkerAsync("reload-only", WorkerLanes.Uniform(1), CancellationToken.None);
 
         var run = _taskRunStore.GetRun(runId)!;
         Assert.Equal(RunStatus.Succeeded, run.Status);
-        // Both segments contributed to the one run's totals; Id 40 is outside both and never read.
-        Assert.Equal(3, run.RowsRead);
+        // The coordinating pass reads nothing itself.
+        Assert.Equal(0, run.RowsRead);
+
+        // The segments ran as their own runs, under one batch, and their totals add up: Id 40 is
+        // outside both and never read.
+        var batch = Assert.Single(_batchStore.GetHistory("reload-only").Batches);
+        Assert.Equal(2, batch.SegmentCount);
+        Assert.Equal(2, batch.SegmentsSucceeded);
+        Assert.Equal(3, batch.RowsRead);
 
         var rows = await GetRowsAsync(_reloadTargetTable);
         Assert.Equal(["One", "Five", "Nine"], rows.OrderBy(r => r.Key).Select(r => r.Value));
@@ -696,6 +709,8 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
 
         var runId = _workQueueStore.Enqueue("reload-only", RunKind.Primary, "main");
         await _executor.ExecuteWorkerAsync("reload-only", WorkerLanes.Uniform(1), CancellationToken.None);
+        for (var i = 0; i < 5 && _workQueueStore.HasOutstandingWork("reload-only"); i++) // takes the queued segments
+            await _executor.ExecuteWorkerAsync("reload-only", WorkerLanes.Uniform(1), CancellationToken.None);
 
         Assert.Equal(RunStatus.Succeeded, _taskRunStore.GetRun(runId)!.Status);
         // Every row lands exactly once — the buckets have to tile the range and cover MAX for this

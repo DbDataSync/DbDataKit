@@ -69,6 +69,16 @@ public interface IRunnerState
         string taskName, string mappingName, string sourceTable,
         string capturedPosition, DateTimeOffset? capturedPositionTimeUtc);
 
+    /// <summary>
+    /// A <c>Primary</c> pass of a reader with no position of its own resolved to several segments and
+    /// hands them to the state owner to run as a batch, one work item each (phase 203M) — so they show
+    /// up like a backfill's. <paramref name="segmentsJson"/> is <c>SegmentSerializer.SerializeMany</c>.
+    /// Returns the new batch's id, or null when this mapping already has a bulk load in flight and
+    /// nothing was enqueued. A Prerequisite, for the same reason as <see cref="RequestInitialLoad"/>: it
+    /// creates work, so a blind replay could double it.
+    /// </summary>
+    string? RequestSegmentedLoad(string taskName, string mappingName, string segmentsJson);
+
     // ---- Outcomes: what happened ----
     //
     // These record work that has already been done, so a runner that cannot deliver them has something

@@ -465,6 +465,23 @@ public sealed class WorkQueueStore(StateDatabase database)
             return Convert.ToInt64(cmd.ExecuteScalar()) > 0;
         });
 
+    /// <summary>Whether this mapping already has a <see cref="RunKind.BulkLoad"/> item in flight — what
+    /// a segmented Primary pass checks before dispatching its own batch, so a slow batch is not stacked
+    /// on by the next scheduled tick.</summary>
+    public bool HasInFlightBulkLoad(string taskName, string mappingName) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(connection, $"""
+                SELECT COUNT(*) FROM WorkQueue
+                WHERE TaskName = $task AND RunKind = $kind AND MappingName = $mapping AND {InFlightStatuses};
+                """);
+            cmd.Bind(database, "task", taskName);
+            cmd.Bind(database, "kind", RunKind.BulkLoad.ToString());
+            cmd.Bind(database, "mapping", mappingName);
+            return Convert.ToInt64(cmd.ExecuteScalar()) > 0;
+        });
+
     /// <summary>The <c>RunKind IN (…)</c> fragment for a lane — from <see cref="RunLanes.KindsFor"/>,
     /// which is the single definition of which kinds a lane owns. Enum names, never user input, so
     /// inlining them is safe and keeps the claim query one string.</summary>

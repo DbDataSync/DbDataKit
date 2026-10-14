@@ -14,4 +14,10 @@ internal sealed class NeverCalledInitialLoadEnqueuer : IInitialLoadEnqueuer
         string replicationName, string mappingName, string batchId, CancellationToken cancellationToken) =>
         throw new InvalidOperationException(
             "This test's LocalRunnerState was not expected to start a Bulk Load.");
+
+    public Task<string> EnqueueSegmentsAsync(
+        string replicationName, string mappingName, IReadOnlyList<DbDataSync.Core.Config.BatchReloadSegment> segments,
+        CancellationToken cancellationToken) =>
+        throw new InvalidOperationException(
+            "This test's LocalRunnerState was not expected to start a Bulk Load.");
 }

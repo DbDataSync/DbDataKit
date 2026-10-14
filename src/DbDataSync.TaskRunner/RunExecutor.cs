@@ -879,6 +879,26 @@ public sealed class RunExecutor(
             var segments = await ResolveSegmentsAsync(
                 reader, sourceConnection, targetConnection, source, item, task, mapping, sourceScriptDialect,
                 cancellationToken);
+
+            // Phase 203M: a pass of a reader with no position of its own (it re-reads the table, so every
+            // pass is an InitialLoad) that resolved to several segments does not loop over them here. It
+            // hands them to the state owner to run as a batch — one work item each — so they show up the
+            // way a backfill's do: every segment pending, running or done, cancellable and retryable on
+            // its own. A single segment stays inline; a batch of one adds nothing.
+            if (item.RunKind == RunKind.Primary && intent == ReadIntent.InitialLoad
+                && segments.Count > 1 && segments.All(s => s is not null))
+            {
+                var batchId = state.RequestSegmentedLoad(
+                    task.Name, mapping.Name, SegmentSerializer.SerializeMany([.. segments.Select(s => s!)]));
+
+                Log(item.RunId, LogSeverity.Info, batchId is null
+                    ? $"'{mapping.Name}': a bulk load of this mapping is still in flight, so this pass is skipped " +
+                      $"and its {segments.Count} segments were not queued again."
+                    : $"'{mapping.Name}': queued {segments.Count} segments as batch {batchId}, one run each. " +
+                      "This pass reads and writes nothing itself; the segment runs carry the rows and the batch shows their progress.");
+                return (0, 0, null, null);
+            }
+
             if (segments.Count > 1)
                 Log(item.RunId, LogSeverity.Info, $"Processing {segments.Count} configured segment(s) in this pass.");
 

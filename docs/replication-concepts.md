@@ -179,6 +179,14 @@ by, and what the Backfill form opens pre-filled with — an operator can still e
 segmenting strategies — DuckDB SQL, Source SQL, Target SQL, or a bound C# strategy — are fully documented
 in [Getting started](getting-started.md#custom-segmenting-strategies).
 
+When a scheduled run of a mapping like that resolves to **more than one** segment, it doesn't read them
+itself. The run works out the segments (a custom strategy runs once, and its log says what it selected),
+queues one run per segment as a batch — exactly what a Backfill does — and finishes, reading nothing. The
+segment runs carry the rows, and the batch below shows every segment queued, running or done, each of
+which can be cancelled on its own. If the mapping's previous batch is still running when the next
+scheduled run arrives, that run queues nothing and says so in its log. A mapping that resolves to a
+single segment, or to none (the whole table), still reads inline in the one run.
+
 ### Progress and history
 
 A batch is `Running` while any segment is still queued or in flight, `Completed` once every segment

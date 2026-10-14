@@ -87,6 +87,20 @@ public static class RunnerStateEndpoints
             }
         });
 
+        // Phase 203M: a Primary pass with several resolved segments hands them over to run as a batch.
+        group.MapPost("/request-segmented-load", (RequestSegmentedLoadRequest r) =>
+        {
+            try
+            {
+                return Results.Ok(new RequestSegmentedLoadResponse(
+                    state.RequestSegmentedLoad(r.TaskName, r.MappingName, r.SegmentsJson)));
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new RequestInitialLoadFailedResponse(ex.Message));
+            }
+        });
+
         // ---- Outcomes ----
 
         group.MapPost("/mark-running", (WorkItemRequest r) => { state.MarkRunning(r.WorkItemId); return Results.Ok(); });

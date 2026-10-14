@@ -30,4 +30,13 @@ public interface IInitialLoadEnqueuer
     /// </summary>
     Task EnqueueForInitialLoadAsync(
         string replicationName, string mappingName, string batchId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Enqueues one <c>RunKind.BulkLoad</c> work item per already-resolved segment under a fresh batch
+    /// and returns its id. For a Primary pass that resolved its own segments (phase 203M) and must not
+    /// have them expanded a second time.
+    /// </summary>
+    Task<string> EnqueueSegmentsAsync(
+        string replicationName, string mappingName, IReadOnlyList<DbDataSync.Core.Config.BatchReloadSegment> segments,
+        CancellationToken cancellationToken);
 }

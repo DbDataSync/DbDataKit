@@ -1,6 +1,25 @@
 # Phase 203M — a segmented Primary load runs as a batch
 
-**Status:** design, not started. Written after reading the Bulk Load enqueue path; open questions at the end.
+**Status:** built; to be reviewed with the operator.
+
+## What was built
+
+- `IRunnerState.RequestSegmentedLoad(task, mapping, segmentsJson)` — a Prerequisite (local, remote, `/request-segmented-load`).
+  Returns the new batch id, or null when the mapping already has a `BulkLoad` item in flight
+  (`WorkQueueStore.HasInFlightBulkLoad`). `IInitialLoadEnqueuer.EnqueueSegmentsAsync` (in `BulkLoadService`) enqueues
+  the already-resolved segments, so a strategy is not run twice.
+- `RunExecutor`: a `Primary` pass with intent `InitialLoad` (no reader position of its own) that resolves to more than
+  one segment calls it and returns having read nothing; the log says the batch id, or that the pass was skipped.
+- Answers to the open questions: (1) segment runs stay `BulkLoad`, no new kind; (2) overlap skips the tick;
+  (3) the segment runs are ordinary Bulk Load runs, so they scope exactly as a backfill's; (4) a failed segment no
+  longer fails its siblings — the batch ends `CompletedWithFailures`; (5) the coordinator runs in the worker.
+- Tests: the two standalone-reload integration tests now expect the batch; two `RequestSegmentedLoad` state tests.
+
+**Not verified / to review:** a worker that finishes its pass leaves the segments queued until a worker takes them —
+`BulkLoadService` nudges one, but a non-continuous schedule's behaviour was not exercised. The UI shows these batches
+only where it already shows batches (Monitoring); the Runs tab does not yet group them. Nothing drove this in a browser.
+
+## Original design
 
 ## What the code does today
 

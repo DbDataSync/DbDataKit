@@ -309,6 +309,11 @@ public sealed class JournalRecoveryTests : IDisposable
         public Task EnqueueForInitialLoadAsync(
             string replicationName, string mappingName, string batchId, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Not expected to be called by journal recovery.");
+
+        public Task<string> EnqueueSegmentsAsync(
+            string replicationName, string mappingName, IReadOnlyList<DbDataSync.Core.Config.BatchReloadSegment> segments,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Not expected to be called by journal recovery.");
     }
 
     private sealed class CapturingLogger : ILogger<JournalRecovery>

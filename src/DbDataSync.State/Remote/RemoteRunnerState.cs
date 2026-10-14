@@ -133,6 +133,30 @@ public sealed class RemoteRunnerState : IRunnerState, IDisposable
         response.EnsureSuccessStatusCode();
     }
 
+    public string? RequestSegmentedLoad(string taskName, string mappingName, string segmentsJson) =>
+        WithGrace(() =>
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{StateProtocol.Route}/request-segmented-load")
+            {
+                Content = JsonContent.Create(new RequestSegmentedLoadRequest(taskName, mappingName, segmentsJson), options: Json),
+            };
+
+            using var response = _http.Send(request);
+
+            // A 400 is the request being wrong (a segment failing to enqueue), not the owner being gone —
+            // the same split RequestInitialLoad makes.
+            if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                using var failureStream = response.Content.ReadAsStream();
+                throw new InvalidOperationException(
+                    JsonSerializer.Deserialize<RequestInitialLoadFailedResponse>(failureStream, Json)!.Message);
+            }
+
+            response.EnsureSuccessStatusCode();
+            using var stream = response.Content.ReadAsStream();
+            return JsonSerializer.Deserialize<RequestSegmentedLoadResponse>(stream, Json)!.BatchId;
+        });
+
     // ---- Outcomes: journal rather than lose ----
 
     public void MarkRunning(long id) => Outcome("mark-running", new WorkItemRequest(id), JournalOperation.MarkRunning);

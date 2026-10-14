@@ -48,6 +48,34 @@ public sealed class LocalRunnerStateInitialLoadTests : IDisposable
         Directory.Delete(_tempDir, recursive: true);
     }
 
+    /// <summary>Phase 203M: handing over already-resolved segments creates a batch with one queued run
+    /// per segment, and says which batch.</summary>
+    [Fact]
+    public void RequestSegmentedLoad_QueuesOneRunPerSegmentUnderANewBatch()
+    {
+        var batchId = _state.RequestSegmentedLoad(TaskName, MappingName, SegmentSerializer.SerializeMany(
+            [new RangeSegment("Id", "1", "6"), new RangeSegment("Id", "6", "11")]));
+
+        Assert.NotNull(batchId);
+        var batch = _bulkLoadBatches.GetBatch(batchId!);
+        Assert.Equal(2, batch!.SegmentCount);
+        Assert.True(_workQueue.HasInFlightBulkLoad(TaskName, MappingName));
+    }
+
+    /// <summary>With a bulk load of the mapping already in flight, nothing more is queued and the caller
+    /// is told so — a slow batch is not stacked on by the next tick.</summary>
+    [Fact]
+    public void RequestSegmentedLoad_WhileABulkLoadIsInFlight_QueuesNothing()
+    {
+        _workQueue.Enqueue(TaskName, RunKind.BulkLoad, MappingName, "earlier", segmentJson: null, kinds: null, "earlier-batch");
+
+        var batchId = _state.RequestSegmentedLoad(TaskName, MappingName, SegmentSerializer.SerializeMany(
+            [new RangeSegment("Id", "1", "6"), new RangeSegment("Id", "6", "11")]));
+
+        Assert.Null(batchId);
+        Assert.Empty(_bulkLoadBatches.GetHistory(TaskName).Batches);
+    }
+
     /// <summary>A real (not stubbed) <see cref="IInitialLoadEnqueuer"/> for
     /// <see cref="RequestInitialLoad_WhenNothingElseIsInFlight_SetsThePendingLoad"/> and its neighbours
     /// below — always a single <see cref="FullSegment"/>, since this file has no
@@ -62,6 +90,18 @@ public sealed class LocalRunnerStateInitialLoadTests : IDisposable
             batches.CreateBatch(batchId, replicationName, mappingName, segmentCount: 1, estimatedRows: null, estimateCaveat: null);
             workQueue.EnqueueOrThrow(replicationName, RunKind.BulkLoad, mappingName, "full", segmentJson: null, kinds: null, batchId);
             return Task.CompletedTask;
+        }
+
+        public Task<string> EnqueueSegmentsAsync(
+            string replicationName, string mappingName, IReadOnlyList<BatchReloadSegment> segments,
+            CancellationToken cancellationToken)
+        {
+            var batchId = Guid.NewGuid().ToString("N");
+            batches.CreateBatch(batchId, replicationName, mappingName, segments.Count, estimatedRows: null, estimateCaveat: null);
+            foreach (var segment in segments)
+                workQueue.Enqueue(replicationName, RunKind.BulkLoad, mappingName, segment.Describe(),
+                    SegmentSerializer.Serialize(segment), kinds: null, batchId);
+            return Task.FromResult(batchId);
         }
     }
 

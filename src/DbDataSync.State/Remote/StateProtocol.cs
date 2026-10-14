@@ -53,6 +53,10 @@ public sealed record WorkQueueCollisionResponse(
 /// phase 134's own follow-up left unhardened, not one specific, named cause — see
 /// <c>RemoteRunnerState.RequestInitialLoad</c>.</summary>
 public sealed record RequestInitialLoadFailedResponse(string Message);
+/// <summary>Phase 203M's <c>IRunnerState.RequestSegmentedLoad</c>.</summary>
+public sealed record RequestSegmentedLoadRequest(string TaskName, string MappingName, string SegmentsJson);
+/// <summary>The batch id it created, or null when one was already in flight and nothing was enqueued.</summary>
+public sealed record RequestSegmentedLoadResponse(string? BatchId);
 public sealed record WorkItemRequest(long WorkItemId);
 public sealed record CompleteRunRequest(
     Guid RunId, RunStatus Status, long RowsRead, long RowsWritten, string? ErrorSummary,

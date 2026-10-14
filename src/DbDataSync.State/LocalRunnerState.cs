@@ -98,6 +98,16 @@ public sealed class LocalRunnerState(
         watermarks.SetPendingLoad(taskName, mappingName, sourceTable, capturedPosition, capturedPositionTimeUtc, batchId);
     }
 
+    public string? RequestSegmentedLoad(string taskName, string mappingName, string segmentsJson)
+    {
+        if (workQueue.HasInFlightBulkLoad(taskName, mappingName))
+            return null;
+
+        var segments = SegmentSerializer.DeserializeMany(segmentsJson);
+        return initialLoadEnqueuer.Value.EnqueueSegmentsAsync(taskName, mappingName, segments, CancellationToken.None)
+            .GetAwaiter().GetResult();
+    }
+
     public void MarkRunning(long workItemId) => workQueue.MarkRunning(workItemId);
 
     public void MarkDone(long workItemId) => workQueue.MarkDone(workItemId);

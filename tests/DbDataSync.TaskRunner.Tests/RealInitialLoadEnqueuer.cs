@@ -52,4 +52,17 @@ internal sealed class RealInitialLoadEnqueuer(
 
         return Task.CompletedTask;
     }
+
+    public Task<string> EnqueueSegmentsAsync(
+        string replicationName, string mappingName, IReadOnlyList<BatchReloadSegment> segments,
+        CancellationToken cancellationToken)
+    {
+        var batchId = Guid.NewGuid().ToString("N");
+        batchStore.CreateBatch(batchId, replicationName, mappingName, segments.Count, estimatedRows: null, estimateCaveat: null);
+        foreach (var segment in segments)
+            workQueueStore.Enqueue(
+                replicationName, RunKind.BulkLoad, mappingName, segment.Describe(),
+                SegmentSerializer.Serialize(segment), WorkItemKinds.FromConfig, batchId);
+        return Task.FromResult(batchId);
+    }
 }

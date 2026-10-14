@@ -128,6 +128,29 @@ public sealed class BulkLoadService(
     }
 
     /// <summary>
+    /// Phase 203M: a Primary pass that already resolved its segments (a Custom strategy has run, an Auto
+    /// range has been divided) hands them over to run as a batch. Not expanded again here — that would
+    /// run the strategy a second time and could select differently. The segments are enqueued with
+    /// <c>throwOnCollision: false</c>: the caller has already checked that nothing else of this mapping
+    /// is in flight, so a collision here is a race and collapsing into the other request is right.
+    /// </summary>
+    public async Task<string> EnqueueSegmentsAsync(
+        string replicationName, string mappingName, IReadOnlyList<BatchReloadSegment> segments,
+        CancellationToken cancellationToken)
+    {
+        var task = configRepository.LoadReplicationTask(replicationName);
+        var mapping = configRepository.LoadTableMapping(replicationName, mappingName);
+
+        var batchId = Guid.NewGuid().ToString("N");
+        await CreateBatchAndEnqueueAsync(
+            task, mapping, replicationName, mappingName, batchId, segments, WorkItemKinds.FromConfig,
+            throwOnCollision: false, cancellationToken);
+
+        supervisor.EnsureWorkerRunning(replicationName);
+        return batchId;
+    }
+
+    /// <summary>
     /// The reusable core behind both enqueue paths above: one catalog-statistics row estimate, one
     /// <c>BulkLoadBatches</c> row recording the planned segment count (phase 107 — deliberately not
     /// <c>COUNT(RunId)</c>, which undercounts when an equivalent segment was already in flight), and one
