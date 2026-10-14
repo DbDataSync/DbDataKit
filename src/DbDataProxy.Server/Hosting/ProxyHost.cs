@@ -105,7 +105,7 @@ public static class ProxyHost
 
                 using var loggerFactory = LoggerFactory.Create(l => l.AddSimpleConsole());
                 certificate ??= CertificateProvider.Load(options, dataDirectory, loggerFactory.CreateLogger("Tls"));
-                listen.UseHttps(certificate!);
+                listen.UseHttps(certificate!, https => https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13);
             });
         });
     }
