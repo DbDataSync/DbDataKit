@@ -23,6 +23,9 @@ public static class SqlServerEnv
         $"Server={Server};{(UsesSqlAuthentication ? $"User Id={User};Password={Password}" : "Integrated Security=True")};" +
         $"TrustServerCertificate=True;Encrypt=False;Connect Timeout={timeoutSeconds}";
 
+    /// <summary>Connection string without any login, for data sources that use the caller's own database credentials.</summary>
+    public static string SqlClientWithoutLogin() => $"Server={Server};TrustServerCertificate=True;Encrypt=False";
+
     /// <summary>The same server for an ODBC driver, e.g. "ODBC Driver 17 for SQL Server".</summary>
     public static string Odbc(string driver) =>
         $"Driver={{{driver}}};Server={Server};{(UsesSqlAuthentication ? $"UID={User};PWD={Password}" : "Trusted_Connection=Yes")};TrustServerCertificate=Yes";

@@ -129,8 +129,18 @@ public sealed class ProxyFlightClient : IDisposable
     /// Runs a query with parameters. The statement is prepared on the server, the values are bound with a DoPut and the
     /// statement is closed once the result has been read. Use <c>?</c> markers (or <c>@name</c> for SQL Server).
     /// </summary>
+    public Task<QueryResultStream> QueryAsync(
+        string sql, IReadOnlyList<object?> parameters, QueryOptions? options = null, CancellationToken cancellationToken = default) =>
+        QueryAsync(sql, ArrowParameters.FromValues(parameters), options, cancellationToken);
+
+    /// <summary>Runs a query with named parameters (<c>@name</c> markers on SQL Server); the keys are the parameter names.</summary>
+    public Task<QueryResultStream> QueryAsync(
+        string sql, IReadOnlyDictionary<string, object?> namedParameters, QueryOptions? options = null, CancellationToken cancellationToken = default) =>
+        QueryAsync(sql, ArrowParameters.FromValues([.. namedParameters.Values], [.. namedParameters.Keys]), options, cancellationToken);
+
+    /// <summary>Runs a query with an Arrow batch of parameters (one row).</summary>
     public async Task<QueryResultStream> QueryAsync(
-        string sql, IReadOnlyList<object?> parameters, QueryOptions? options = null, CancellationToken cancellationToken = default)
+        string sql, RecordBatch parameters, QueryOptions? options = null, CancellationToken cancellationToken = default)
     {
         var headers = Headers(options);
         var handle = await PrepareAsync(sql, headers, cancellationToken).ConfigureAwait(false);
@@ -156,16 +166,25 @@ public sealed class ProxyFlightClient : IDisposable
         string sql, IReadOnlyList<object?> parameters, QueryOptions? options = null, CancellationToken cancellationToken = default) =>
         ExecuteUpdateAsync(sql, [parameters], options, cancellationToken);
 
+    /// <summary>Runs an update with named parameters (<c>@name</c> markers on SQL Server).</summary>
+    public Task<long> ExecuteUpdateAsync(
+        string sql, IReadOnlyDictionary<string, object?> namedParameters, QueryOptions? options = null, CancellationToken cancellationToken = default) =>
+        ExecuteUpdateAsync(sql, [ArrowParameters.FromValues([.. namedParameters.Values], [.. namedParameters.Keys])], options, cancellationToken);
+
     /// <summary>Runs one statement once per parameter row (a batch insert); the affected counts are summed.</summary>
+    public Task<long> ExecuteUpdateAsync(
+        string sql, IReadOnlyList<IReadOnlyList<object?>> parameterRows, QueryOptions? options = null, CancellationToken cancellationToken = default) =>
+        ExecuteUpdateAsync(sql, parameterRows.Select(row => ArrowParameters.FromValues(row)).ToList(), options, cancellationToken);
+
+    /// <summary>Runs one statement once per parameter-batch row; all batches must share a schema.</summary>
     public async Task<long> ExecuteUpdateAsync(
-        string sql, IReadOnlyList<IReadOnlyList<object?>> parameterRows, QueryOptions? options = null, CancellationToken cancellationToken = default)
+        string sql, IReadOnlyList<RecordBatch> batches, QueryOptions? options = null, CancellationToken cancellationToken = default)
     {
         var headers = Headers(options);
         var handle = await PrepareAsync(sql, headers, cancellationToken).ConfigureAwait(false);
         try
         {
             var command = new CommandPreparedStatementUpdate { PreparedStatementHandle = handle };
-            var batches = parameterRows.Select(row => ArrowParameters.FromValues(row)).ToList();
             var descriptor = FlightDescriptor.CreateCommandDescriptor(Any.Pack(command).ToByteArray());
 
             using var call = await _flight.StartPut(descriptor, batches[0].Schema, headers, null, cancellationToken).ConfigureAwait(false);
@@ -193,9 +212,8 @@ public sealed class ProxyFlightClient : IDisposable
         return handle ?? throw new InvalidOperationException("The server did not return a prepared statement handle.");
     }
 
-    private async Task BindAsync(IMessage command, IReadOnlyList<object?> parameters, Metadata headers, CancellationToken cancellationToken)
+    private async Task BindAsync(IMessage command, RecordBatch batch, Metadata headers, CancellationToken cancellationToken)
     {
-        var batch = ArrowParameters.FromValues(parameters);
         var descriptor = FlightDescriptor.CreateCommandDescriptor(Any.Pack(command).ToByteArray());
         using var call = await _flight.StartPut(descriptor, batch.Schema, headers, null, cancellationToken).ConfigureAwait(false);
         await call.RequestStream.WriteAsync(batch).ConfigureAwait(false);
