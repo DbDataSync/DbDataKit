@@ -176,12 +176,13 @@ public sealed class RemoteRunnerState : IRunnerState, IDisposable
         RunTiming? timing = null,
         string? previousWatermark = null,
         string? newWatermark = null,
-        string? errorDetail = null) =>
+        string? errorDetail = null,
+        string? segmentLabel = null) =>
         Outcome(
             "complete-run",
             new CompleteRunRequest(
                 runId, status, rowsRead, rowsWritten, errorSummary, failureKind, timing,
-                previousWatermark, newWatermark, errorDetail),
+                previousWatermark, newWatermark, errorDetail, segmentLabel),
             JournalOperation.CompleteRun);
 
     public void SetWatermark(

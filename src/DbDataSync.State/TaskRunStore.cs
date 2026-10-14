@@ -395,7 +395,8 @@ public sealed class TaskRunStore(StateDatabase database)
     public void CompleteRun(
         Guid runId, RunStatus status, long rowsRead, long rowsWritten, string? errorSummary,
         string? failureKind = null, RunTiming? timing = null,
-        string? previousWatermark = null, string? newWatermark = null, string? errorDetail = null) =>
+        string? previousWatermark = null, string? newWatermark = null, string? errorDetail = null,
+        string? segmentLabel = null) =>
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
@@ -416,7 +417,8 @@ public sealed class TaskRunStore(StateDatabase database)
                     StagingKind = $stagingKind, StagingDurationMs = $stagingDuration,
                     WriterKind = $writerKind, WriterDurationMs = $writerDuration,
                     PreviousWatermark = $previousWatermark, NewWatermark = $newWatermark,
-                    ErrorDetail = $errorDetail
+                    ErrorDetail = $errorDetail,
+                    SegmentLabel = COALESCE($segmentLabel, SegmentLabel)
                 WHERE RunId = $runId;
                 """);
             cmd.Bind(database, "status", status.ToString());
@@ -435,6 +437,7 @@ public sealed class TaskRunStore(StateDatabase database)
             cmd.Bind(database, "previousWatermark", (object?)previousWatermark ?? DBNull.Value);
             cmd.Bind(database, "newWatermark", (object?)newWatermark ?? DBNull.Value);
             cmd.Bind(database, "errorDetail", (object?)errorDetail ?? DBNull.Value);
+            cmd.Bind(database, "segmentLabel", (object?)segmentLabel ?? DBNull.Value);
             cmd.Bind(database, "runId", runId.ToString());
             cmd.ExecuteNonQuery();
 

@@ -125,11 +125,12 @@ public sealed class LocalRunnerState(
         RunTiming? timing = null,
         string? previousWatermark = null,
         string? newWatermark = null,
-        string? errorDetail = null)
+        string? errorDetail = null,
+        string? segmentLabel = null)
     {
         taskRuns.CompleteRun(
             runId, status, rowsRead, rowsWritten, errorSummary, failureKind, timing,
-            previousWatermark, newWatermark, errorDetail);
+            previousWatermark, newWatermark, errorDetail, segmentLabel);
 
         // Phase 134: a completed BulkLoad segment may be the last one a batch was waiting on, and that
         // batch may be what a mapping's pending initial load is waiting on. Checked after every BulkLoad

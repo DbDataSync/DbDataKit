@@ -59,6 +59,9 @@ public sealed class RunExecutor(
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
+    /// <summary>The single segment each in-progress pass read inline, until its run completes.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, string> _inlineSegmentLabels = new();
+
     /// <summary>
     /// When this worker last did something that counts as finding changes — a pass that read at
     /// least one row. Written by consumers on any thread, read by the producer, so it is a tick count
@@ -164,9 +167,11 @@ public sealed class RunExecutor(
             SingleReader = degreeOfParallelism == 1,
         });
 
-        var producer = ProduceAsync(taskName, scheduling, lane, workerId, channel.Writer, winddown, hardStop);
+        // What this lane has claimed and not yet finished — see ProduceAsync's wind-down check.
+        var inFlight = new LaneInFlight();
+        var producer = ProduceAsync(taskName, scheduling, lane, workerId, channel.Writer, inFlight, winddown, hardStop);
         var consumers = Enumerable.Range(0, Math.Max(1, degreeOfParallelism))
-            .Select(_ => ConsumeAsync(channel.Reader, hardStop))
+            .Select(_ => ConsumeAsync(channel.Reader, inFlight, hardStop))
             .ToArray();
 
         ExceptionDispatchInfo? producerFailure = null;
@@ -219,10 +224,13 @@ public sealed class RunExecutor(
     /// </para></summary>
     private async Task ProduceAsync(
         string taskName, SchedulingConfig scheduling, RunLane lane, string workerId,
-        ChannelWriter<WorkItem> writer, CancellationToken winddown, CancellationToken hardStop)
+        ChannelWriter<WorkItem> writer, LaneInFlight inFlight, CancellationToken winddown, CancellationToken hardStop)
     {
         var runsContinuously = scheduling.Mode == ScheduleMode.Continuous;
-        var ridesTheProcess = lane == RunLane.BulkLoad && runsContinuously;
+        // The bulk load lane rides the process under either schedule mode. A periodic worker used to let
+        // it exit after a few empty polls, which is before a long Primary pass has queued the segments of
+        // a segmented load (phase 203M) — they would sit until the next scheduled tick.
+        var ridesTheProcess = lane == RunLane.BulkLoad;
         var consecutiveEmptyPolls = 0;
         try
         {
@@ -232,6 +240,7 @@ public sealed class RunExecutor(
                 if (item is not null)
                 {
                     consecutiveEmptyPolls = 0;
+                    inFlight.Started();
                     await writer.WriteAsync(item, hardStop);
                     continue;
                 }
@@ -240,7 +249,12 @@ public sealed class RunExecutor(
                 // sweep, before anything that could wait — so a Running row we do not own (an orphan
                 // the reconciler will release, or the other lane's item) cannot keep this lane alive
                 // past the change lane's own exit.
-                if (ridesTheProcess && winddown.IsCancellationRequested)
+                //
+                // Not while this lane still has work of its own in hand, though: the segments of one
+                // mapping run one after another, so the next is not claimable until the running one
+                // finishes, and leaving now would strand it (phase 203M). Only this lane's own claims
+                // count, so an orphan somebody else left Running still cannot hold the lane open.
+                if (ridesTheProcess && winddown.IsCancellationRequested && inFlight.Count == 0)
                     break;
 
                 if (state.HasOutstandingWork(taskName, lane))
@@ -309,7 +323,7 @@ public sealed class RunExecutor(
         }
     }
 
-    private async Task ConsumeAsync(ChannelReader<WorkItem> reader, CancellationToken cancellationToken)
+    private async Task ConsumeAsync(ChannelReader<WorkItem> reader, LaneInFlight inFlight, CancellationToken cancellationToken)
     {
         await foreach (var item in reader.ReadAllAsync(cancellationToken))
         {
@@ -323,7 +337,20 @@ public sealed class RunExecutor(
                 // buffered stays claimed; the API releases it when it finds this process gone.
                 return;
             }
+            finally
+            {
+                inFlight.Finished();
+            }
         }
+    }
+
+    /// <summary>How many items one lane has claimed and not finished.</summary>
+    private sealed class LaneInFlight
+    {
+        private int _count;
+        public int Count => Volatile.Read(ref _count);
+        public void Started() => Interlocked.Increment(ref _count);
+        public void Finished() => Interlocked.Decrement(ref _count);
     }
 
     private async Task ProcessWorkItemAsync(WorkItem item, CancellationToken workerToken)
@@ -386,7 +413,8 @@ public sealed class RunExecutor(
             state.Flush();
             state.CompleteRun(
                 item.RunId, RunStatus.Succeeded, rowsRead, rowsWritten, errorSummary: null, timing: timing,
-                previousWatermark: watermark?.Previous, newWatermark: watermark?.New);
+                previousWatermark: watermark?.Previous, newWatermark: watermark?.New,
+                segmentLabel: _inlineSegmentLabels.TryRemove(item.RunId, out var inlineSegment) ? inlineSegment : null);
             state.MarkDone(item.Id);
 
             // Idle is "looked for changes and found none", not "the queue is empty" — the queue is
@@ -490,6 +518,7 @@ public sealed class RunExecutor(
         }
         finally
         {
+            _inlineSegmentLabels.TryRemove(item.RunId, out _);
             watcherStop.Cancel();
             if (watcher is not null)
                 await watcher.ConfigureAwait(false);
@@ -898,6 +927,11 @@ public sealed class RunExecutor(
                       "This pass reads and writes nothing itself; the segment runs carry the rows and the batch shows their progress.");
                 return (0, 0, null, null);
             }
+
+            // A pass that reads exactly one segment inline (the mapping's own, not one the request
+            // carried) records which on its run, so the history says what that run covered.
+            if (segments.Count == 1 && segments[0] is { } only && string.IsNullOrWhiteSpace(item.SegmentJson))
+                _inlineSegmentLabels[item.RunId] = only.Describe();
 
             if (segments.Count > 1)
                 Log(item.RunId, LogSeverity.Info, $"Processing {segments.Count} configured segment(s) in this pass.");

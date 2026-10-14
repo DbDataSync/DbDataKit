@@ -673,10 +673,6 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
 
         var runId = _workQueueStore.Enqueue("reload-only", RunKind.Primary, "main");
         await _executor.ExecuteWorkerAsync("reload-only", WorkerLanes.Uniform(1), CancellationToken.None);
-        // The pass queued the segments; in production BulkLoadService nudges a worker to take them, and
-        // this stands in for that nudge.
-        for (var i = 0; i < 5 && _workQueueStore.HasOutstandingWork("reload-only"); i++)
-            await _executor.ExecuteWorkerAsync("reload-only", WorkerLanes.Uniform(1), CancellationToken.None);
 
         var run = _taskRunStore.GetRun(runId)!;
         Assert.Equal(RunStatus.Succeeded, run.Status);
@@ -694,6 +690,50 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
         Assert.Equal(["One", "Five", "Nine"], rows.OrderBy(r => r.Key).Select(r => r.Value));
     }
 
+    /// <summary>A pass that resolves to a single segment reads it inline, as one run. That run is in the
+    /// history with its rows, and says which segment it read.</summary>
+    [Fact]
+    public async Task ASingleSegmentPass_IsInTheRunHistoryAndNamesItsSegment()
+    {
+        await ExecuteAsync(_adminConnection, $"INSERT INTO dbo.[{_sourceTable}] (Id, Name) VALUES (1,'a'),(2,'b'),(9,'z');");
+        await SetUpReloadReplicationAsync([new RangeSegment("Id", "1", "5")]);
+
+        var runId = _workQueueStore.Enqueue("reload-only", RunKind.Primary, "main");
+        await _executor.ExecuteWorkerAsync("reload-only", WorkerLanes.Uniform(1), CancellationToken.None);
+
+        var run = Assert.Single(_taskRunStore.GetMappingRunHistory("reload-only", RunKind.Primary, "main"));
+        Assert.Equal(runId, run.RunId);
+        Assert.Equal(RunStatus.Succeeded, run.Status);
+        Assert.Equal(2, run.RowsRead);
+        Assert.Equal("Id [1, 5)", run.SegmentLabel);
+    }
+
+    /// <summary>
+    /// The segments a pass queues are taken by the same worker run, under either schedule mode — not left
+    /// queued for the next scheduled tick, which for a nightly schedule would be a day. The segments of one
+    /// mapping run one after another, so the worker has to stay for the last one after the lane that
+    /// started the pass has gone idle.
+    /// </summary>
+    [Theory]
+    [InlineData(ScheduleMode.Periodic)]
+    [InlineData(ScheduleMode.Continuous)]
+    public async Task ASegmentedPass_HasEverySegmentRunByTheWorkerThatQueuedThem(ScheduleMode mode)
+    {
+        await ExecuteAsync(_adminConnection, """
+            INSERT INTO dbo.[#T] (Id, Name) VALUES (1,'a'),(2,'b'),(3,'c');
+            """.Replace("#T", _sourceTable));
+        await SetUpReloadReplicationAsync(
+            [new RangeSegment("Id", "1", "2"), new RangeSegment("Id", "2", "3"), new RangeSegment("Id", "3", "4")], mode);
+
+        _workQueueStore.Enqueue("reload-only", RunKind.Primary, "main");
+        await _executor.ExecuteWorkerAsync("reload-only", WorkerLanes.Uniform(1), CancellationToken.None);
+
+        Assert.False(_workQueueStore.HasOutstandingWork("reload-only"));
+        var batch = Assert.Single(_batchStore.GetHistory("reload-only").Batches);
+        Assert.Equal(3, batch.SegmentsSucceeded);
+        Assert.Equal(3, (await GetRowsAsync(_reloadTargetTable)).Count);
+    }
+
     /// <summary>An Auto segment in a standalone reload's configured list is resolved against the
     /// source's live value range at run time, not at config-save time — the range moves as the table
     /// does, so pinning it when the config was written would go stale immediately.</summary>
@@ -709,8 +749,6 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
 
         var runId = _workQueueStore.Enqueue("reload-only", RunKind.Primary, "main");
         await _executor.ExecuteWorkerAsync("reload-only", WorkerLanes.Uniform(1), CancellationToken.None);
-        for (var i = 0; i < 5 && _workQueueStore.HasOutstandingWork("reload-only"); i++) // takes the queued segments
-            await _executor.ExecuteWorkerAsync("reload-only", WorkerLanes.Uniform(1), CancellationToken.None);
 
         Assert.Equal(RunStatus.Succeeded, _taskRunStore.GetRun(runId)!.Status);
         // Every row lands exactly once — the buckets have to tile the range and cover MAX for this
@@ -794,14 +832,15 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
         Assert.Null(run.Timing.ReaderTimeToFirstRowMs);
     }
 
-    private async Task SetUpReloadReplicationAsync(IReadOnlyList<BatchReloadSegment> segments)
+    private async Task SetUpReloadReplicationAsync(
+        IReadOnlyList<BatchReloadSegment> segments, ScheduleMode mode = ScheduleMode.Continuous)
     {
         _configRepository.SaveReplicationTask(new ReplicationTaskConfig
         {
             Name = "reload-only",
             Scheduling = new SchedulingConfig
             {
-                Mode = ScheduleMode.Continuous,
+                Mode = mode,
                 // A continuous worker now stays resident until it has gone a whole idle timeout
                 // without a pass reading anything. These tests drain a queue and want the worker to
                 // leave promptly, so they say so — the production default is 60 seconds.
