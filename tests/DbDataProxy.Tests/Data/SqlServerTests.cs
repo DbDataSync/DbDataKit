@@ -182,7 +182,7 @@ public class OdbcUnsupportedTypeTests
     [Fact]
     public async Task Unreadable_odbc_types_fail_up_front_with_advice_to_cast()
     {
-        string server = Environment.GetEnvironmentVariable("DBPROXY_TEST_SQLSERVER") ?? @".\SQLEXPRESS";
+        await SqlServerEnv.EnsureReachableAsync();
         var executor = new DbQueryExecutor(
             new DelegateConnectionFactory(c => new System.Data.Odbc.OdbcConnection(c)),
             SqlServerEnv.Odbc(OperatingSystem.IsWindows() ? "ODBC Driver 17 for SQL Server" : "ODBC Driver 18 for SQL Server"));
