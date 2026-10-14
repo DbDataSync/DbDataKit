@@ -48,6 +48,21 @@ public sealed class LocalRunnerStateInitialLoadTests : IDisposable
         Directory.Delete(_tempDir, recursive: true);
     }
 
+    /// <summary>A run's segment is on its record as soon as it is set, while the run is still going —
+    /// not only once it completes.</summary>
+    [Fact]
+    public void SetRunSegment_NamesTheSegmentOfARunThatIsStillRunning()
+    {
+        var runId = _workQueue.Enqueue(TaskName, RunKind.Primary, MappingName);
+        _state.BeginRun(runId, pid: 1);
+
+        _state.SetRunSegment(runId, "Id [1, 5)");
+
+        var run = _taskRuns.GetRun(runId)!;
+        Assert.Equal(RunStatus.Running, run.Status);
+        Assert.Equal("Id [1, 5)", run.SegmentLabel);
+    }
+
     /// <summary>Phase 203M: handing over already-resolved segments creates a batch with one queued run
     /// per segment, and says which batch.</summary>
     [Fact]

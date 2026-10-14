@@ -372,6 +372,18 @@ public sealed class TaskRunStore(StateDatabase database)
             cmd.ExecuteNonQuery();
         });
 
+    /// <summary>Records which segment a run covers, as soon as the run knows (phase 203M) — a pass that
+    /// reads exactly one segment inline, whose label was not known when it was enqueued.</summary>
+    public void SetSegmentLabel(Guid runId, string label) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(connection, "UPDATE TaskRuns SET SegmentLabel = $label WHERE RunId = $runId;");
+            cmd.Bind(database, "label", label);
+            cmd.Bind(database, "runId", runId.ToString());
+            cmd.ExecuteNonQuery();
+        });
+
     /// <param name="failureKind">
     /// Why it failed, when that is something the product can act on — see <see cref="RunFailureKinds"/>.
     /// Null for the ordinary case, which is nearly all of them.
@@ -395,8 +407,7 @@ public sealed class TaskRunStore(StateDatabase database)
     public void CompleteRun(
         Guid runId, RunStatus status, long rowsRead, long rowsWritten, string? errorSummary,
         string? failureKind = null, RunTiming? timing = null,
-        string? previousWatermark = null, string? newWatermark = null, string? errorDetail = null,
-        string? segmentLabel = null) =>
+        string? previousWatermark = null, string? newWatermark = null, string? errorDetail = null) =>
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
@@ -417,8 +428,7 @@ public sealed class TaskRunStore(StateDatabase database)
                     StagingKind = $stagingKind, StagingDurationMs = $stagingDuration,
                     WriterKind = $writerKind, WriterDurationMs = $writerDuration,
                     PreviousWatermark = $previousWatermark, NewWatermark = $newWatermark,
-                    ErrorDetail = $errorDetail,
-                    SegmentLabel = COALESCE($segmentLabel, SegmentLabel)
+                    ErrorDetail = $errorDetail
                 WHERE RunId = $runId;
                 """);
             cmd.Bind(database, "status", status.ToString());
@@ -437,7 +447,6 @@ public sealed class TaskRunStore(StateDatabase database)
             cmd.Bind(database, "previousWatermark", (object?)previousWatermark ?? DBNull.Value);
             cmd.Bind(database, "newWatermark", (object?)newWatermark ?? DBNull.Value);
             cmd.Bind(database, "errorDetail", (object?)errorDetail ?? DBNull.Value);
-            cmd.Bind(database, "segmentLabel", (object?)segmentLabel ?? DBNull.Value);
             cmd.Bind(database, "runId", runId.ToString());
             cmd.ExecuteNonQuery();
 

@@ -81,6 +81,8 @@ public sealed class RemoteRunnerState : IRunnerState, IDisposable
 
     public void BeginRun(Guid runId, int? pid) => Required("begin-run", new BeginRunRequest(runId, pid));
 
+    public void SetRunSegment(Guid runId, string label) => Required("set-run-segment", new SetRunSegmentRequest(runId, label));
+
     /// <summary>
     /// Not <see cref="Required"/> — a 409 here means the owner answered "no" to a real, expected
     /// outcome (this call lost its <c>WorkQueue</c> race — see <see cref="WorkQueueCollisionException"/>),
@@ -176,13 +178,12 @@ public sealed class RemoteRunnerState : IRunnerState, IDisposable
         RunTiming? timing = null,
         string? previousWatermark = null,
         string? newWatermark = null,
-        string? errorDetail = null,
-        string? segmentLabel = null) =>
+        string? errorDetail = null) =>
         Outcome(
             "complete-run",
             new CompleteRunRequest(
                 runId, status, rowsRead, rowsWritten, errorSummary, failureKind, timing,
-                previousWatermark, newWatermark, errorDetail, segmentLabel),
+                previousWatermark, newWatermark, errorDetail),
             JournalOperation.CompleteRun);
 
     public void SetWatermark(

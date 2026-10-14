@@ -59,8 +59,6 @@ public sealed class RunExecutor(
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
-    /// <summary>The single segment each in-progress pass read inline, until its run completes.</summary>
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, string> _inlineSegmentLabels = new();
 
     /// <summary>
     /// When this worker last did something that counts as finding changes — a pass that read at
@@ -413,8 +411,7 @@ public sealed class RunExecutor(
             state.Flush();
             state.CompleteRun(
                 item.RunId, RunStatus.Succeeded, rowsRead, rowsWritten, errorSummary: null, timing: timing,
-                previousWatermark: watermark?.Previous, newWatermark: watermark?.New,
-                segmentLabel: _inlineSegmentLabels.TryRemove(item.RunId, out var inlineSegment) ? inlineSegment : null);
+                previousWatermark: watermark?.Previous, newWatermark: watermark?.New);
             state.MarkDone(item.Id);
 
             // Idle is "looked for changes and found none", not "the queue is empty" — the queue is
@@ -518,7 +515,6 @@ public sealed class RunExecutor(
         }
         finally
         {
-            _inlineSegmentLabels.TryRemove(item.RunId, out _);
             watcherStop.Cancel();
             if (watcher is not null)
                 await watcher.ConfigureAwait(false);
@@ -929,9 +925,10 @@ public sealed class RunExecutor(
             }
 
             // A pass that reads exactly one segment inline (the mapping's own, not one the request
-            // carried) records which on its run, so the history says what that run covered.
+            // carried) records which on its run as soon as it is known, so the history says what the
+            // run covers while it is still running.
             if (segments.Count == 1 && segments[0] is { } only && string.IsNullOrWhiteSpace(item.SegmentJson))
-                _inlineSegmentLabels[item.RunId] = only.Describe();
+                state.SetRunSegment(item.RunId, only.Describe());
 
             if (segments.Count > 1)
                 Log(item.RunId, LogSeverity.Info, $"Processing {segments.Count} configured segment(s) in this pass.");

@@ -49,6 +49,12 @@ public static class RunnerStateEndpoints
         group.MapGet("/read-state", (string taskName, string mappingName, string sourceTable) =>
             new ReadStateResponse(state.GetReadState(taskName, mappingName, sourceTable)));
 
+        group.MapPost("/set-run-segment", (SetRunSegmentRequest r) =>
+        {
+            state.SetRunSegment(r.RunId, r.Label);
+            return Results.Ok();
+        });
+
         group.MapPost("/begin-run", (BeginRunRequest r) =>
         {
             state.BeginRun(r.RunId, r.Pid);
@@ -118,7 +124,7 @@ public static class RunnerStateEndpoints
         {
             state.CompleteRun(
                 r.RunId, r.Status, r.RowsRead, r.RowsWritten, r.ErrorSummary, r.FailureKind, r.Timing,
-                r.PreviousWatermark, r.NewWatermark, r.ErrorDetail, r.SegmentLabel);
+                r.PreviousWatermark, r.NewWatermark, r.ErrorDetail);
             return Results.Ok();
         });
 

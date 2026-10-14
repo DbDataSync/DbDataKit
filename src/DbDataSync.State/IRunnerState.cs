@@ -46,6 +46,11 @@ public interface IRunnerState
 
     void BeginRun(Guid runId, int? pid);
 
+    /// <summary>Names the one segment a running pass is reading inline, on its run, the moment it is
+    /// resolved. Cosmetic, but a Prerequisite like <see cref="BeginRun"/> — an owner that cannot be
+    /// reached for it cannot be reached for anything else either.</summary>
+    void SetRunSegment(Guid runId, string label);
+
     /// <summary>
     /// A <c>Primary</c> pass resolved its intent to <see cref="ReadIntent.InitialLoad"/> against a
     /// reader that can capture its own position without reading a row
@@ -105,8 +110,7 @@ public interface IRunnerState
         RunTiming? timing = null,
         string? previousWatermark = null,
         string? newWatermark = null,
-        string? errorDetail = null,
-        string? segmentLabel = null);
+        string? errorDetail = null);
 
     /// <summary>
     /// Only ever called after the target write has committed — the watermark-on-success-only rule the

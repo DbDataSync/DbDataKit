@@ -63,6 +63,8 @@ public sealed class LocalRunnerState(
 
     public void BeginRun(Guid runId, int? pid) => taskRuns.BeginRun(runId, pid);
 
+    public void SetRunSegment(Guid runId, string label) => taskRuns.SetSegmentLabel(runId, label);
+
     /// <summary>
     /// Phase 134, reordered by phase 143. Enqueue first, and only make the pending position/<c>Loading</c>
     /// hold durable once that enqueue is known to have actually created this mapping's own real work —
@@ -125,12 +127,11 @@ public sealed class LocalRunnerState(
         RunTiming? timing = null,
         string? previousWatermark = null,
         string? newWatermark = null,
-        string? errorDetail = null,
-        string? segmentLabel = null)
+        string? errorDetail = null)
     {
         taskRuns.CompleteRun(
             runId, status, rowsRead, rowsWritten, errorSummary, failureKind, timing,
-            previousWatermark, newWatermark, errorDetail, segmentLabel);
+            previousWatermark, newWatermark, errorDetail);
 
         // Phase 134: a completed BulkLoad segment may be the last one a batch was waiting on, and that
         // batch may be what a mapping's pending initial load is waiting on. Checked after every BulkLoad
