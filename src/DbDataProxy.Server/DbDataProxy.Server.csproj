@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <AssemblyName>DbDataProxy</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Apache.Arrow.Flight.AspNetCore" />
+    <PackageReference Include="Apache.Arrow.Flight.Sql" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="DuckDB.NET.Data.Full" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
+    <ProjectReference Include="..\DbDataProxy.Core\DbDataProxy.Core.csproj" />
+  </ItemGroup>
+</Project>
