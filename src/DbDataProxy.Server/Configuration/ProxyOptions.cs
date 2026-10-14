@@ -8,6 +8,9 @@ public sealed class ProxyOptions
     /// <summary>Where generated files (self-signed certificate) live. Defaults to a "DbDataProxy" folder under the OS common application data directory.</summary>
     public string? DataDirectory { get; set; }
 
+    /// <summary>Include (truncated) SQL text in the log. Turn off if queries may contain sensitive literals.</summary>
+    public bool LogSql { get; set; } = true;
+
     public ListenOptions Listen { get; set; } = new();
     public TlsOptions Tls { get; set; } = new();
     public CompressionOptions Compression { get; set; } = new();

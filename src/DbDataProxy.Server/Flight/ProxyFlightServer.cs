@@ -68,7 +68,7 @@ public sealed partial class ProxyFlightServer(
         string sql, ProxyPrincipal principal, ResolvedDataSource source, FlightDescriptor descriptor, ServerCallContext context)
     {
         pending.EnsureCapacity(principal.Name);
-        _log.LogInformation("Query by {User} on {Source}: {Sql}", principal.Name, source.Name, Truncate(sql));
+        _log.LogInformation("Query by {User} on {Source}: {Sql}", principal.Name, source.Name, Describe(sql));
 
         IQueryResult result;
         try
@@ -141,7 +141,7 @@ public sealed partial class ProxyFlightServer(
         if (!source.Options.AllowWrites)
             throw new RpcException(new Status(StatusCode.PermissionDenied, $"Data source '{source.Name}' is read-only."));
 
-        _log.LogInformation("Update by {User} on {Source}: {Sql}", principal.Name, source.Name, Truncate(sql));
+        _log.LogInformation("Update by {User} on {Source}: {Sql}", principal.Name, source.Name, Describe(sql));
         try
         {
             return await source.Executor
@@ -172,6 +172,8 @@ public sealed partial class ProxyFlightServer(
             .Any(e => e.SQLState is { } s && (s.StartsWith("28", StringComparison.Ordinal) || s == "42000" && e.NativeError is 18456)),
         _ => false,
     };
+
+    private string Describe(string sql) => options.CurrentValue.LogSql ? Truncate(sql) : "<sql hidden>";
 
     private static string Truncate(string sql)
     {
