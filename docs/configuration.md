@@ -140,12 +140,13 @@ output is visible rather than scrolling by during `install`. Either way, **a con
 integrated authentication connects/authenticates as this account** — worth deciding `--account`/
 `--user` deliberately rather than accepting the default.
 
-### `dbdatasync config cert use-pem|use-pfx|status|list|new-self-signed|enroll|renew|retrieve|templates|bind`
+### `dbdatasync config cert use-pem|use-pfx|status|list|new-self-signed|enroll|renew|retrieve|templates|discover|bind`
 
 `use-pem`/`use-pfx`/`status` work on any platform; everything else is Windows-only
 — issues, installs, binds, renews and reports on the certificate Kestrel serves TLS with,
 entirely from the CLI so setting up HTTPS never depends on HTTPS already working. Run
-`dbdatasync config cert` with no subcommand for the full flag list.
+`dbdatasync config cert` with no subcommand for the full flag list. A walk-through of each method is in
+[certificates/](certificates/README.md). A walk-through per method is in [certificates/](certificates/README.md).
 
 | command | does |
 | --- | --- |
@@ -158,6 +159,7 @@ entirely from the CLI so setting up HTTPS never depends on HTTPS already working
 | `renew [--ca] [--template] [--account] [--days]` | re-enrolls with the bound certificate's subject and SANs (a fresh request, not a signed AD CS renewal) — works even if the bound certificate has already expired |
 | `retrieve --request-id <id> [--account]` | collects a pending enrollment from `enroll`/`renew` |
 | `templates [--ca]` | best-effort: templates published on the configured CA; empty-plus-a-reason on any failure (not domain-joined, LDAP unreachable, access denied, `CaConfig` unset), never blocking — `--template` stays free text regardless |
+| `discover` | finds the enterprise CA(s) and the templates they publish in Active Directory, unelevated. Exactly one CA (or one template) is saved to `DbDataSync:Certificates:CaConfig` (`Template`) automatically; several are printed with the `config set` command that saves one. A value already set is never overwritten |
 | `bind --thumbprint <thumbprint> [--location] [--allow-invalid\|--no-allow-invalid]` | binds an already-installed certificate by writing the four `Kestrel:Certificates:Default:*` keys (below) into `dbdatasync.config.yaml`, committed the same way every other config write is |
 
 `--account` on the issuing commands, because issuing and granting private-key read access are one
@@ -404,8 +406,8 @@ migrated — update those by hand if you set configuration that way.
 | key | env var | default | meaning |
 | --- | --- | --- | --- |
 | `DbDataSync:Certificates:ExpiryWarningDays` | `DbDataSync__Certificates__ExpiryWarningDays` | `30` | how many days before the bound certificate's `NotAfter` the daily expiry check starts raising a `CertificateExpiring` notification; raised at most once a day, and `CertificateExpired` once past `NotAfter` |
-| `DbDataSync:Certificates:CaConfig` | `DbDataSync__Certificates__CaConfig` | none | the enterprise CA's `CASERVER\CA Name` string — read by `dbdatasync config cert enroll`/`renew`/`templates` (a CLI-process concern; the running API never needs to know which CA a certificate came from, only which one is bound) |
-| `DbDataSync:Certificates:Template` | `DbDataSync__Certificates__Template` | none | the certificate template name for `dbdatasync config cert enroll`/`renew` |
+| `DbDataSync:Certificates:CaConfig` | `DbDataSync__Certificates__CaConfig` | none | the enterprise CA's `CASERVER\CA Name` string — read by `dbdatasync config cert enroll`/`renew`/`templates`, and saved by `dbdatasync config cert discover` (a CLI-process concern; the running API never needs to know which CA a certificate came from, only which one is bound) |
+| `DbDataSync:Certificates:Template` | `DbDataSync__Certificates__Template` | none | the certificate template name for `dbdatasync config cert enroll`/`renew`; `dbdatasync config cert discover` lists the ones the CA publishes |
 
 Windows-only end to end — see `dbdatasync config cert`, above, for issuance/installation/binding.
 The daily expiry check is a hosted service in the API process, registered only when

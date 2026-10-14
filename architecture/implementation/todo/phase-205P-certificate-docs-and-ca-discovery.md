@@ -1,6 +1,6 @@
 # Phase 205P — certificate method docs, and discovering the CA and template
 
-**Status:** designed, not yet built. Follows 204P in the build order only for the docs of `enroll`; `discover` itself is independent.
+**Status:** built; `discover` verified against this machine's real Active Directory forest. To be reviewed with the operator.
 
 `dbdatasync config cert enroll` needs a CA (`--ca`, a `CASERVER\CA Name` string) and a template
 (`--template`). Nothing tells an operator how to find either. Separately, certificate documentation is
@@ -136,8 +136,40 @@ version. Suitability filtering is the follow-up that would make the template ste
 Docs and code as separate commits.
 
 
-## Open questions
+## What was built
 
-- Is template suitability filtering (EKU, requester-supplied subject, enroll permission) worth adding to
-  the first version, given it needs new AD reads of template objects? Without it, the template step only
-  auto-writes when a CA publishes exactly one template.
+- `dbdatasync config cert discover` (Windows only, unelevated). `CaDiscovery` (`DbDataSync.Certificates`) reads
+  the Enrollment Services container once: each CA is one object carrying its `dNSHostName`, `cn` and published
+  templates, so one query answers both. `CertificateTemplateCatalog` now shares its domain-joined check and
+  failure classification with it (`QueryEnrollmentServices`) instead of duplicating them.
+- `CertDiscovery.Decide` is the pure decision, tested without a domain: one CA or one template is written; several
+  are printed with the `config set` command that saves one; a configured value is never overwritten; failure
+  prints the reason and the manual `certutil` route and exits 1.
+- `ResolveCaAndTemplate`'s error and the setup walk-through's `enroll` instruction both point at `discover`.
+- `docs/certificates/`: an index, AD CS enrollment, self-signed, binding an existing store certificate, PEM and
+  PFX, renewal and expiry, and troubleshooting. `docs/configuration.md` links to it and lists `discover`.
+
+## What changed from the design
+
+- **`config set` could not set these keys.** `config set` only accepts keys in the Admin screen's catalog
+  (`AdminConfigService`), and `DbDataSync:Certificates:CaConfig` and `Template` were not in it, so the command
+  the design says to print would have been refused. Both are now in the catalog, which also makes them editable on
+  the Admin Configuration screen.
+- **No `ResolveCaAndTemplate` default.** It does not pick a CA itself; it points at `discover`.
+- **No cross-links from `getting-started.md` or `install.md`**: neither mentions HTTPS or certificates at all, so
+  there was nothing to link from.
+
+## Verified
+
+Run for real against this machine's domain with a throwaway config repo: one CA was found, saved to
+`dbdatasync.config.yaml` and committed; a second run reported it as already configured and listed the templates;
+`config get` and `config cert templates` read the saved value back. The decision logic and the walk-through text are
+covered by `CertDiscoveryTests`. This forest has one CA and over twenty templates, which is the case the design
+predicted: the CA is saved automatically and the template is a pick from a list.
+
+## Not built
+
+Template suitability filtering (server-authentication usage, requester-supplied subject, enroll permission) needs
+new AD reads of each template object and is a separate piece of work. Until then the template is saved
+automatically only when a CA publishes exactly one. Only the single-CA path was exercised against a real forest;
+the several-CA branch is covered by unit tests only.
