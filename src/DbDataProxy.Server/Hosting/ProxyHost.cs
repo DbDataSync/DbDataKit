@@ -45,7 +45,7 @@ public static class ProxyHost
 
     private static void ConfigureServices(IServiceCollection services, ProxyOptions options)
     {
-        if (options.Compression.Mode == CompressionMode.Ipc || options.DataSources.Values.Any(d => d.Compression?.Mode == CompressionMode.Ipc))
+        if (options.Compression.Mode == CompressionMode.Arrow || options.DataSources.Values.Any(d => d.Compression?.Mode == CompressionMode.Arrow))
             FlightIpcCompression.EnsureSupported();
 
         services.AddSingleton(TimeProvider.System);

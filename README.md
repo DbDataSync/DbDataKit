@@ -66,14 +66,14 @@ with a message telling you to `CAST` them in the query.
 | Mode | Codec | Where | Notes |
 |---|---|---|---|
 | `None` | | | |
-| `Grpc` | `gzip` | gRPC message | Any gRPC client that advertises gzip |
-| `Ipc` | `zstd` / `lz4` | inside the Arrow stream | Best ratio on columnar data; client must read compressed Arrow IPC |
+| `Grpc` | `gzip` | **gRPC compression**: the transport compresses each whole message | Any gRPC client that advertises gzip; weaker ratio |
+| `Arrow` | `zstd` / `lz4` | **Arrow data compression**: each column buffer inside the Arrow stream is compressed | Best ratio on columnar data; the client's Arrow reader must support the codec |
 
 Clients can override per call with the `x-compression` header (`none`, `gzip`, `zstd`, `lz4`) unless
-`AllowClientOverride` is false. Standard Arrow clients (C++/Python/Java/Go) read IPC-compressed streams natively.
+`AllowClientOverride` is false. Standard Arrow clients (C++/Python/Java/Go) read Arrow data compression natively (it is part of the Arrow format, so no gRPC negotiation is involved).
 The stock .NET Flight client does not, which is why this repo ships `DbDataProxy.Client.ProxyFlightClient`.
 
-> IPC compression relies on setting writer/reader options that `Apache.Arrow.Flight` 23.0.0 only exposes
+> Arrow data compression relies on setting writer/reader options that `Apache.Arrow.Flight` 23.0.0 only exposes
 > through non-public members. The proxy verifies they exist at startup and fails fast rather than silently sending
 > uncompressed data; tests guard it. If that ever breaks on a package upgrade, use `Grpc` mode until it is fixed.
 

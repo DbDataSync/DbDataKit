@@ -33,7 +33,7 @@ public sealed record CompressionPlan(CompressionMode Mode, string Codec, int? Le
     {
         CompressionMode.None => None,
         CompressionMode.Grpc => Validated(CompressionMode.Grpc, o.Codec, o.Level),
-        CompressionMode.Ipc => Validated(CompressionMode.Ipc, o.Codec, o.Level),
+        CompressionMode.Arrow => Validated(CompressionMode.Arrow, o.Codec, o.Level),
         _ => throw new ArgumentOutOfRangeException(nameof(o)),
     };
 
@@ -41,8 +41,8 @@ public sealed record CompressionPlan(CompressionMode Mode, string Codec, int? Le
     {
         "none" or "off" or "identity" => None,
         "gzip" => new(CompressionMode.Grpc, "gzip", level),
-        "zstd" => new(CompressionMode.Ipc, "zstd", level),
-        "lz4" => new(CompressionMode.Ipc, "lz4", level),
+        "zstd" => new(CompressionMode.Arrow, "zstd", level),
+        "lz4" => new(CompressionMode.Arrow, "lz4", level),
         _ => throw new RpcException(new Status(StatusCode.InvalidArgument,
             $"Unsupported {ClientHeader} value '{name}'. Use none, gzip, zstd or lz4.")),
     };
@@ -66,7 +66,7 @@ public sealed record CompressionPlan(CompressionMode Mode, string Codec, int? Le
                 // The server compresses all responses with gzip when the client accepts it (see ProxyHost); this plan keeps that.
                 await writer.SetupStream(schema).ConfigureAwait(false);
                 break;
-            case CompressionMode.Ipc:
+            case CompressionMode.Arrow:
                 context.WriteOptions = new WriteOptions(WriteFlags.NoCompress);
                 await writer.SetupStream(schema).ConfigureAwait(false);
                 FlightIpcCompression.Apply(writer, ToIpcOptions());

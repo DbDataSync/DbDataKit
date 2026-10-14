@@ -7,9 +7,9 @@ namespace DbDataProxy.Server.Flight;
 
 /// <summary>
 /// Apache.Arrow.Flight 23.0.0 builds its internal <see cref="ArrowStreamWriter"/> with default options and exposes no way
-/// to set IPC body compression, even though the underlying writer supports it. This swaps the writer's options after the
+/// to set Arrow data compression, even though the underlying writer supports it. This swaps the writer's options after the
 /// stream is set up. It relies on private members, so it is verified at startup (<see cref="EnsureSupported"/>) and by
-/// tests; if a package update moves those members the server refuses to enable IPC compression instead of silently
+/// tests; if a package update moves those members the server refuses to enable Arrow data compression instead of silently
 /// sending uncompressed data.
 /// </summary>
 internal static class FlightIpcCompression
@@ -27,7 +27,7 @@ internal static class FlightIpcCompression
     {
         if (!IsSupported)
             throw new NotSupportedException(
-                "This Apache.Arrow.Flight version does not expose the members needed for IPC compression. " +
+                "This Apache.Arrow.Flight version does not expose the members needed for Arrow data compression. " +
                 "Use gRPC compression (Compression:Mode=Grpc) or None.");
     }
 

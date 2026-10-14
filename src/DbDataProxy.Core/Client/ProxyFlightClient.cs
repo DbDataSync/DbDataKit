@@ -33,7 +33,7 @@ public sealed class QueryResultStream(Schema schema, IAsyncEnumerable<RecordBatc
 
 /// <summary>
 /// Flight SQL client for the proxy: performs the Basic-auth handshake, attaches the bearer token to every call and,
-/// unlike the stock .NET Flight client, can read Arrow IPC-compressed (zstd/lz4) result streams.
+/// unlike the stock .NET Flight client, can read result streams that use Arrow data compression (zstd/lz4).
 /// </summary>
 public sealed class ProxyFlightClient : IDisposable
 {
@@ -123,7 +123,7 @@ public sealed class ProxyFlightClient : IDisposable
 }
 
 /// <summary>
-/// Apache.Arrow.Flight 23.0.0 reads result streams without a decompression codec factory, so IPC-compressed batches
+/// Apache.Arrow.Flight 23.0.0 reads result streams without a decompression codec factory, so batches using Arrow data compression
 /// fail to decode. This installs the factory on the reader after the call is created. It relies on private members and
 /// degrades to a clear error (not silent corruption) if a package update moves them.
 /// </summary>
@@ -143,7 +143,7 @@ internal static class FlightIpcDecompression
     public static void Enable(FlightRecordBatchStreamReader reader)
     {
         if (!IsSupported)
-            throw new NotSupportedException("This Apache.Arrow.Flight version does not allow enabling IPC decompression.");
+            throw new NotSupportedException("This Apache.Arrow.Flight version does not allow enabling Arrow data decompression.");
         object implementation = ImplementationField!.GetValue(reader)
             ?? throw new InvalidOperationException("The Flight reader has no implementation to configure.");
         FactoryField!.SetValue(implementation, Factory);

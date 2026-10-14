@@ -59,15 +59,15 @@ public enum CompressionMode
     None,
     /// <summary>gRPC message compression (gzip/deflate). Works with any gRPC client that advertises support.</summary>
     Grpc,
-    /// <summary>Arrow IPC buffer compression (zstd/lz4). Best ratio for columnar data; clients must read compressed IPC.</summary>
-    Ipc,
+    /// <summary>Arrow data compression (zstd/lz4): each column buffer inside the Arrow stream is compressed. Best ratio for columnar data; clients must read compressed Arrow data.</summary>
+    Arrow,
 }
 
 public sealed class CompressionOptions
 {
-    public CompressionMode Mode { get; set; } = CompressionMode.Ipc;
+    public CompressionMode Mode { get; set; } = CompressionMode.Arrow;
 
-    /// <summary>For <see cref="CompressionMode.Ipc"/>: "zstd" or "lz4". For <see cref="CompressionMode.Grpc"/>: "gzip" or "deflate".</summary>
+    /// <summary>For <see cref="CompressionMode.Arrow"/>: "zstd" or "lz4". For <see cref="CompressionMode.Grpc"/>: "gzip" or "deflate".</summary>
     public string Codec { get; set; } = "zstd";
 
     /// <summary>Codec-specific level; null uses the codec default.</summary>
