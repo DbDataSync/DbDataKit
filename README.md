@@ -184,3 +184,7 @@ another instance (Windows authentication).
 Layout: `src/DbDataProxy.Core` (Arrow conversion, ADO.NET executor, client, worker protocol),
 `src/DbDataProxy.Server` (Kestrel host, Flight SQL server, auth, TLS, service/CLI),
 `src/DbDataProxy.Worker` (32-bit ODBC worker), `tests/DbDataProxy.Tests`.
+
+## License
+
+MIT; see [LICENSE](LICENSE).

@@ -19,7 +19,7 @@ $stage = Join-Path $root "artifacts\stage\DbDataProxy-$Version"
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Path $stage | Out-Null
 Copy-Item (Join-Path $published '*') $stage -Recurse -Exclude '*.pdb', 'web.config'
-Copy-Item (Join-Path $root 'README.md') $stage
+Copy-Item (Join-Path $root 'README.md'), (Join-Path $root 'LICENSE') $stage
 
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
 $zip = Join-Path $Output "DbDataProxy-$Version-win-x64.zip"
