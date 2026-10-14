@@ -58,19 +58,27 @@ public sealed class PassThroughValidator(IOptionsMonitor<ProxyOptions> options) 
 }
 
 /// <summary>Tries each validator in order; the first definitive answer wins.</summary>
-public sealed class ChainedCredentialValidator(IEnumerable<IBasicCredentialValidator> validators)
+public sealed class ChainedCredentialValidator(IEnumerable<IBasicCredentialValidator> validators, LoginThrottle? throttle = null)
 {
     private readonly IBasicCredentialValidator[] _validators = validators.ToArray();
 
-    public async ValueTask<ProxyPrincipal?> ValidateAsync(string user, string password, CancellationToken cancellationToken)
+    /// <param name="client">Identifies the caller (its network address) for brute-force throttling.</param>
+    public async ValueTask<ProxyPrincipal?> ValidateAsync(string user, string password, CancellationToken cancellationToken, string client = "")
     {
+        if (throttle?.IsLockedOut(client, user) == true) return null;
+
         foreach (var v in _validators)
         {
             var result = await v.ValidateAsync(user, password, cancellationToken).ConfigureAwait(false);
-            if (result.Definitive) return result.Principal;
+            if (!result.Definitive) continue;
+
+            if (result.Principal is null) throttle?.RecordFailure(client, user);
+            else throttle?.RecordSuccess(client, user);
+            return result.Principal;
         }
         // Burn comparable time so a rejected unknown user is not distinguishable from a wrong password.
         PasswordHasher.BurnVerifyTime(password);
+        throttle?.RecordFailure(client, user);
         return null;
     }
 }

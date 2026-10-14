@@ -85,6 +85,11 @@ public sealed class AuthOptions
     /// <summary>Absolute lifetime of a bearer token.</summary>
     public int SessionMaxHours { get; set; } = 12;
 
+    /// <summary>Failed logins (per user and client) within <see cref="LockoutMinutes"/> before further attempts are refused. 0 disables.</summary>
+    public int MaxFailedLogins { get; set; } = 5;
+
+    public int LockoutMinutes { get; set; } = 1;
+
     /// <summary>
     /// Accept credentials that are not in <see cref="ProxyOptions.Users"/> and hand them to pass-through data sources,
     /// which validate them by connecting to the database as that user.

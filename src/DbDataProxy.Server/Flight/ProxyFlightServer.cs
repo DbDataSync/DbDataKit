@@ -40,7 +40,7 @@ public sealed partial class ProxyFlightServer(
         if (!RequestAuthenticator.TryParseBasic(header, out string user, out string password))
             throw new RpcException(new Status(StatusCode.Unauthenticated, "Basic credentials are required."));
 
-        var principal = await credentialValidator.ValidateAsync(user, password, context.CancellationToken).ConfigureAwait(false);
+        var principal = await credentialValidator.ValidateAsync(user, password, context.CancellationToken, context.ClientAddress()).ConfigureAwait(false);
         if (principal is null)
         {
             _log.LogWarning("Handshake rejected for user {User} from {Peer}", user, context.Peer);

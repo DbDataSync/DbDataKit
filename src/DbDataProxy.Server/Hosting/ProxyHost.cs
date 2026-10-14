@@ -50,6 +50,7 @@ public static class ProxyHost
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<SessionStore>();
+        services.AddSingleton<LoginThrottle>();
         services.AddSingleton<PendingQueryStore>();
         services.AddSingleton<PreparedStatementStore>();
         services.AddSingleton<IBasicCredentialValidator, LocalUserValidator>();
@@ -115,7 +116,7 @@ public static class ProxyHost
 }
 
 /// <summary>Housekeeping: drops expired sessions and disposes query results nobody fetched.</summary>
-public sealed class MaintenanceService(SessionStore sessions, PendingQueryStore pending, PreparedStatementStore prepared, ILogger<MaintenanceService> log) : BackgroundService
+public sealed class MaintenanceService(SessionStore sessions, LoginThrottle throttle, PendingQueryStore pending, PreparedStatementStore prepared, ILogger<MaintenanceService> log) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -127,6 +128,7 @@ public sealed class MaintenanceService(SessionStore sessions, PendingQueryStore 
                 try
                 {
                     sessions.Sweep();
+                    throttle.Sweep();
                     prepared.Sweep();
                     await pending.SweepAsync();
                 }

@@ -1,13 +1,14 @@
 using System.Text;
 using Grpc.Core;
 using Grpc.Core.Interceptors;
+using Microsoft.AspNetCore.Http;
 
 namespace DbDataProxy.Server.Auth;
 
 /// <summary>Resolves an <c>authorization</c> header value (Bearer token or Basic credentials) to a principal.</summary>
 public sealed class RequestAuthenticator(SessionStore sessions, ChainedCredentialValidator validators)
 {
-    public async ValueTask<ProxyPrincipal?> AuthenticateAsync(string? authorization, CancellationToken cancellationToken)
+    public async ValueTask<ProxyPrincipal?> AuthenticateAsync(string? authorization, CancellationToken cancellationToken, string client = "")
     {
         if (string.IsNullOrWhiteSpace(authorization)) return null;
 
@@ -15,7 +16,7 @@ public sealed class RequestAuthenticator(SessionStore sessions, ChainedCredentia
             return sessions.TryGet(authorization["Bearer ".Length..].Trim());
 
         if (TryParseBasic(authorization, out string user, out string password))
-            return await validators.ValidateAsync(user, password, cancellationToken).ConfigureAwait(false);
+            return await validators.ValidateAsync(user, password, cancellationToken, client).ConfigureAwait(false);
 
         return null;
     }
@@ -82,7 +83,7 @@ public sealed class AuthInterceptor(RequestAuthenticator authenticator) : Interc
         if (context.Method == HandshakeMethod) return;
 
         string? header = context.RequestHeaders.GetValue("authorization");
-        var principal = await authenticator.AuthenticateAsync(header, context.CancellationToken);
+        var principal = await authenticator.AuthenticateAsync(header, context.CancellationToken, context.ClientAddress());
         if (principal is null)
             throw new RpcException(new Status(StatusCode.Unauthenticated, "Invalid or missing credentials."));
         context.UserState[PrincipalKey] = principal;
@@ -91,6 +92,10 @@ public sealed class AuthInterceptor(RequestAuthenticator authenticator) : Interc
 
 public static class ServerCallContextExtensions
 {
+    /// <summary>The caller's network address without the port, used to scope brute-force throttling.</summary>
+    public static string ClientAddress(this ServerCallContext context) =>
+        context.GetHttpContext().Connection.RemoteIpAddress?.ToString() ?? "";
+
     public static ProxyPrincipal GetPrincipal(this ServerCallContext context) =>
         context.UserState.TryGetValue(AuthInterceptor.PrincipalKey, out var p) && p is ProxyPrincipal principal
             ? principal
