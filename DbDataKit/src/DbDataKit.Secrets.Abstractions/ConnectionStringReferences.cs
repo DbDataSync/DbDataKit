@@ -30,6 +30,21 @@ public static class ConnectionStringReferences
         return connectionString is not null && SecretRef.TryParse(connectionString, out reference);
     }
 
+    /// <summary>
+    /// The literal values of credential keys (<c>Password</c>, <c>Pwd</c>, <c>AccountKey</c>, ...) in a connection string, for
+    /// registering with a redactor after a whole-string secret was resolved. Reference values are skipped.
+    /// </summary>
+    public static IReadOnlyList<string> CredentialValues(string? connectionString)
+    {
+        var list = new List<string>();
+        if (string.IsNullOrWhiteSpace(connectionString)) return list;
+        foreach (var (key, value) in ConnectionStringParser.Parse(connectionString))
+        {
+            if (CredentialKeyDetector.IsCredentialKey(key) && value.Length > 0 && !SecretRef.LooksLikeRef(value)) list.Add(value);
+        }
+        return list;
+    }
+
     /// <summary>The credential keys of <paramref name="connectionString"/> whose value is a reference.</summary>
     public static IReadOnlyList<ConnectionStringReference> Find(string? connectionString)
     {

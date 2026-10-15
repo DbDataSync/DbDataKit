@@ -77,4 +77,8 @@ public class ConnectionStringReferencesTests
         Assert.Equal("Password", one.Key);
         Assert.Equal(SecretRefKind.Env, one.Reference.Kind);
     }
+
+    [Fact]
+    public void CredentialValuesListsLiteralsOnly() =>
+        Assert.Equal(["lit", "q;x"], ConnectionStringReferences.CredentialValues("Server=a;Password=lit;Pwd=env:X;AccountKey=\"q;x\";Database=d"));
 }
