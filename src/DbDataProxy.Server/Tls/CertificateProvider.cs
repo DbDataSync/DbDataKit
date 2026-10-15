@@ -104,7 +104,7 @@ public static class CertificateProvider
         X509Certificate2 legacy;
         try
         {
-            legacy = X509CertificateLoader.LoadPkcs12FromFile(setup.PfxPath, null, X509KeyStorageFlags.Exportable);
+            legacy = X509CertificateLoader.LoadPkcs12FromFile(setup.PfxPath, null, X509KeyStorageFlags.Exportable | X509KeyStorageFlags.EphemeralKeySet);
         }
         catch (CryptographicException)
         {
