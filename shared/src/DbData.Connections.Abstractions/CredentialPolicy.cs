@@ -36,7 +36,8 @@ public static class CredentialPolicy
         "integratedsecurity", "trustedconnection", "authentication", "authenticationtype", "authtype", "authmethod",
         "gsslib", "krbsrvname", "kerberosservicename", "kerberos", "sspi", "sspiprotocol", "useraccesstoken", "accesstoken",
         "integratedsecurityprovider", "trustedauthentication", "winauth", "windowsauthentication", "usewindowsauth", "gssencmode",
-        "krbservicename", "servicename", "clientcertificate", "clientcertificatefile", "clientcertificatekey",
+        "krbservicename", "servicename", "clientcertificate", "clientcertificatefile", "clientcertificatekey", "includerealm",
+        "passfile", "sslcertificate", "sslpassword", "sslkeypassword", "usesslstream", "authenticationmode",
     };
 
     /// <summary>The comparison form of a key.</summary>

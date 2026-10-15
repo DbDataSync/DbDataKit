@@ -17,17 +17,38 @@ public interface IKeyBag
 }
 
 /// <summary>A bag over a (provider typed) <see cref="DbConnectionStringBuilder"/>: quoting and keyword synonyms are the builder's.</summary>
-public sealed class BuilderBag(DbConnectionStringBuilder builder) : IKeyBag
+public sealed class BuilderBag(DbConnectionStringBuilder builder, Func<DbConnectionStringBuilder>? factory = null) : IKeyBag
 {
-    public DbConnectionStringBuilder Builder { get; } = builder;
+    public DbConnectionStringBuilder Builder { get; private set; } = builder;
     public void Set(string key, string value) => Builder[key] = value;
-    public bool Remove(string key) => Builder.Remove(key);
+    /// <summary>
+    /// Removes a key and proves it is gone. Npgsql's <c>Remove</c> reports success but keeps some keywords in the string, so when the key
+    /// is still there the builder is rebuilt without it; if it still cannot be removed this throws (fail closed).
+    /// </summary>
+    public bool Remove(string key)
+    {
+        bool removed = Builder.Remove(key);
+        string norm = CredentialPolicy.NormalizeKey(key);
+        bool Present() => new DbConnectionStringBuilder { ConnectionString = Builder.ConnectionString }.Keys.Cast<string>().Any(k => CredentialPolicy.NormalizeKey(k) == norm);
+        if (!Present()) return removed;
+
+        var keep = new List<KeyValuePair<string, string>>();
+        var parsed = new DbConnectionStringBuilder { ConnectionString = Builder.ConnectionString };
+        foreach (string k in parsed.Keys)
+            if (CredentialPolicy.NormalizeKey(k) != norm) keep.Add(new(k, Convert.ToString(parsed[k], CultureInfo.InvariantCulture) ?? ""));
+        var fresh = factory is null ? new DbConnectionStringBuilder() : factory();
+        foreach (var (k, v) in keep) fresh[k] = v;
+        Builder = fresh;
+        if (Present()) throw new InvalidOperationException($"The key '{key}' could not be removed from the connection string.");
+        return true;
+    }
     public bool TryGet(string key, out string value)
     {
-        if (Builder.TryGetValue(key, out var o) && o is not null) { value = Convert.ToString(o, CultureInfo.InvariantCulture) ?? ""; return true; }
+        if (Builder.ShouldSerialize(key) && Builder.TryGetValue(key, out var o) && o is not null) { value = Convert.ToString(o, CultureInfo.InvariantCulture) ?? ""; return true; }
         value = ""; return false;
     }
-    public IReadOnlyList<string> Keys => Builder.Keys.Cast<string>().ToList();
+    /// <summary>Only keys that are set: typed builders report every valid keyword from <c>Keys</c>, so the rendered string is read back.</summary>
+    public IReadOnlyList<string> Keys => new DbConnectionStringBuilder { ConnectionString = Builder.ConnectionString }.Keys.Cast<string>().ToList();
     public string Render() => Builder.ConnectionString;
 }
 
@@ -236,7 +257,7 @@ public abstract class ComposerBase(EngineId engine) : IConnectionStringComposer
 public abstract class BuilderComposer(EngineId engine) : ComposerBase(engine)
 {
     protected abstract DbConnectionStringBuilder NewBuilder();
-    protected override IKeyBag NewBag() => new BuilderBag(NewBuilder());
+    protected override IKeyBag NewBag() => new BuilderBag(NewBuilder(), NewBuilder);
 
     protected override IKeyBag ParseText(string text)
     {
@@ -247,6 +268,6 @@ public abstract class BuilderComposer(EngineId engine) : ComposerBase(engine)
             // the message of a builder exception can quote the offending text, so it is dropped
             throw new ConnectionPolicyException("the connection string is malformed or uses a keyword this engine does not know");
         }
-        return new BuilderBag(b);
+        return new BuilderBag(b, NewBuilder);
     }
 }
