@@ -1,3 +1,4 @@
+using DbData.Config.Testing;
 using DbData.Config.Yaml;
 
 namespace DbData.Config.Tests;
@@ -169,19 +170,46 @@ public class MigrationTests
     }
 
     [Fact]
-    public void Golden_pairs_are_stable_and_idempotent()
-    {
-        var e = Engine();
-        var once = e.Plan("proxy", V1, "p.yml", new() { TargetVersion = 2 }).NewText;
-        var twice = e.Plan("proxy", once, "p.yml", new() { TargetVersion = 2 });
-        Assert.Equal(MigrationStatus.UpToDate, twice.Status);
-        Assert.Equal(once, twice.NewText);
-    }
+    public void Golden_pairs_are_stable_and_idempotent() =>
+        GoldenMigration.AssertPair(Engine(), "proxy", V1, "# header comment\n\nschemaVersion: 2\nname: x  # keep\ntimeout: 5   # seconds\ntags: [a]\n",
+            new() { TargetVersion = 2 }, "p.yml");
 
     [Fact]
     public void CRLF_files_keep_their_line_endings()
     {
         var r = Engine().Plan("proxy", "name: x\r\noldTimeout: 5\r\n", "p.yml", new() { TargetVersion = 2 });
         Assert.Equal("schemaVersion: 2\r\nname: x\r\ntimeout: 5\r\n", r.NewText);
+    }
+
+    [Fact]
+    public void Schema_header_form_is_read_and_updated_in_place()
+    {
+        var r = Engine().Plan("proxy", "schema: proxy/1   # v\noldTimeout: 1\n", "p.yml", new() { TargetVersion = 2 });
+        Assert.Equal(MigrationStatus.Migrated, r.Status);
+        Assert.Equal("schema: proxy/2   # v\ntimeout: 1\n", r.NewText);
+    }
+
+    [Fact]
+    public void Schema_header_is_refused_when_newer_wrong_kind_or_combined()
+    {
+        var e = Engine();
+        var newer = e.Plan("proxy", "schema: proxy/9\n", "p.yml");
+        Assert.Equal(MigrationStatus.Refused, newer.Status);
+        Assert.Contains(newer.Diagnostics, d => d.Code == "DBD-110" && d.Message.Contains("`schema`"));
+        Assert.Equal(MigrationStatus.Failed, e.Plan("proxy", "schema: other/1\n", "p.yml").Status);
+        Assert.Equal(MigrationStatus.Failed, e.Plan("proxy", "schema: proxy\n", "p.yml").Status);
+        Assert.Equal(MigrationStatus.Failed, e.Plan("proxy", "schema: proxy/1\nschemaVersion: 1\n", "p.yml").Status);
+    }
+
+    [Fact]
+    public void Binder_and_schema_accept_the_header_form()
+    {
+        var ok = new ConfigBuilder<ProxyConfig>().AddText("p.yml", "schema: proxy/2\ntimeout: 5\n").Build();
+        Assert.True(ok.Ok, string.Join("; ", ok.Diagnostics));
+        var newer = new ConfigBuilder<ProxyConfig>().AddText("p.yml", "schema: proxy/3\n").Build();
+        Assert.Contains(newer.Diagnostics, d => d.Code == "DBD-110");
+        var bad = new ConfigBuilder<ProxyConfig>().AddText("p.yml", "schema: other/1\n").Build();
+        Assert.Contains(bad.Diagnostics, d => d.Code == "DBD-111");
+        Assert.Equal("^proxy/[1-9][0-9]*$", JsonSchemaGenerator.Generate<ProxyConfig>()["properties"]!["schema"]!["pattern"]!.GetValue<string>());
     }
 }

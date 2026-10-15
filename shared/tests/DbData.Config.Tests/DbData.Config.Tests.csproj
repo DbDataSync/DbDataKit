@@ -13,5 +13,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\DbData.Config\DbData.Config.csproj" />
+    <ProjectReference Include="..\..\src\DbData.Config.Testing\DbData.Config.Testing.csproj" />
   </ItemGroup>
 </Project>

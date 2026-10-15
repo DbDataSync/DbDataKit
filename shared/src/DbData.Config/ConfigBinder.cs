@@ -103,7 +103,7 @@ public sealed class ConfigBinder(IDiagnosticCatalog? catalog = null, IReadOnlyDi
             {
                 var key = e.Key.Value;
                 if (discriminator != null && key == discriminator) continue;
-                if (topLevel && o.HasVersion && key == o.VersionKey) continue;
+                if (topLevel && o.HasVersion && (key == o.VersionKey || (key == SchemaHeader.Key && o.AcceptsHeader))) continue;
                 var p = o.Find(key);
                 if (p == null)
                 {

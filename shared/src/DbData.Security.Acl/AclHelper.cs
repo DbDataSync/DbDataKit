@@ -1,7 +1,7 @@
 using System.Security.AccessControl;
 using System.Security.Principal;
 
-namespace DbData.Secrets.Windows;
+namespace DbData.Security.Acl;
 
 /// <summary>One deviation from the expected permissions.</summary>
 public sealed record AclDrift(string Path, string Description);
@@ -14,7 +14,7 @@ public sealed record AclReport(bool InSync, IReadOnlyList<AclDrift> Drift);
 /// on Windows it replaces the DACL with explicit FullControl ACEs for the given identities and turns
 /// inheritance off; on Unix it sets mode 0600 (file) / 0700 (directory) and ignores the identities
 /// (the owning user is the only identity). Intended for PFX files, key files and secret blobs, and
-/// reused by service hosting (Plan 03).
+/// the single ACL implementation used by Secrets.Windows and Hosting.WindowsService.
 /// <para>Identities may be SIDs ("S-1-5-18"), "DOMAIN\user", "NT SERVICE\name", or the aliases
 /// <c>SYSTEM</c>, <c>Administrators</c> and <c>CurrentUser</c>. Restricting to identities that exclude the
 /// caller is allowed (the owner can always re-grant), but the caller then loses access.</para>

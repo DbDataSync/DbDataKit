@@ -1,3 +1,4 @@
+using DbData.Security.Acl;
 using System.Security.Principal;
 using System.Security;
 
@@ -39,9 +40,9 @@ public class WindowsTests
             var layout = DirectoryLayout.ForProduct("P", Path.Combine(root, "pf"), Path.Combine(root, "pd"));
             var resolver = new WellKnownPrincipalResolver(me);
             var secrets = layout[LayoutRole.Secrets];
-            new WindowsAclPolicy().Apply(secrets, resolver);
+            new FileSystemAclService().Apply(secrets, resolver);
 
-            var acl = new WindowsFileSystemAclReader().ReadAcl(secrets.Path);
+            var acl = new FileSystemAclService().Read(secrets.Path);
             Assert.NotNull(acl);
             Assert.True(acl!.InheritanceProtected);
             Assert.DoesNotContain(acl.Aces, a => WellKnownPrincipalResolver.IsBroadGroup(a.Sid));

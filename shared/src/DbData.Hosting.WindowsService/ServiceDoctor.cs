@@ -1,3 +1,5 @@
+using DbData.Security.Acl;
+
 namespace DbData.Hosting.WindowsService;
 
 public enum DoctorSeverity
@@ -22,7 +24,7 @@ public sealed record DoctorReport(IReadOnlyList<DoctorCheck> Checks)
 /// <c>service doctor</c>: verifies the installed service and directory ACLs against the spec and layout.
 /// Everything goes through injected interfaces, so it runs on any OS against fakes.
 /// </summary>
-public sealed class ServiceDoctor(IServiceControlManager scm, IFileSystemAclReader fs, IPrincipalResolver principals)
+public sealed class ServiceDoctor(IServiceControlManager scm, IAclService fs, IPrincipalResolver principals)
 {
     public DoctorReport Run(ServiceInstallSpec spec, DirectoryLayout layout, IEnumerable<DoctorCheck>? extraChecks = null)
     {
@@ -88,7 +90,7 @@ public sealed class ServiceDoctor(IServiceControlManager scm, IFileSystemAclRead
     private void CheckDirectory(LayoutEntry entry, List<DoctorCheck> checks)
     {
         var id = $"dir.{entry.Role}";
-        var acl = fs.DirectoryExists(entry.Path) ? fs.ReadAcl(entry.Path) : null;
+        var acl = fs.DirectoryExists(entry.Path) ? fs.Read(entry.Path) : null;
         if (acl is null)
         {
             checks.Add(new(id, DoctorSeverity.Fail, $"{entry.Path} is missing."));
@@ -155,7 +157,7 @@ public sealed class ServiceDoctor(IServiceControlManager scm, IFileSystemAclRead
         {
             foreach (var file in fs.EnumerateFiles(entry.Path))
             {
-                var fileAcl = fs.ReadAcl(file);
+                var fileAcl = fs.Read(file);
                 if (fileAcl?.Aces.Any(a => a.Allow && WellKnownPrincipalResolver.IsBroadGroup(a.Sid) && (a.Rights & AccessRights.Read) != 0) == true)
                 {
                     problems.Add((DoctorSeverity.Fail, $"{Path.GetFileName(file)} is readable by Users/Everyone"));

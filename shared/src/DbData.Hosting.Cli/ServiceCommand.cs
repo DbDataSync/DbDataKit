@@ -1,3 +1,4 @@
+using DbData.Security.Acl;
 using System.Security;
 using DbData.Hosting.Systemd;
 using DbData.Hosting.WindowsService;
@@ -51,10 +52,10 @@ public sealed class ServiceCommandContext
 public sealed class ServiceCommand(
     ServiceCommandContext context,
     IServiceControlManager scm,
-    IFileSystemAclReader aclReader,
+    IAclService acl,
     IElevationChecker elevation,
     IEventLogSourceRegistrar? eventLog = null,
-    IAclPolicy? aclPolicy = null,
+    bool applyAcls = true,
     Func<TimeSpan, Task>? delay = null)
 {
     private static readonly HashSet<string> Flags = new(StringComparer.OrdinalIgnoreCase)
@@ -193,12 +194,12 @@ public sealed class ServiceCommand(
             var result = provisioner.Install(spec, password, options);
             console.Out.Write(result.Plan.Render());
 
-            if (!dryRun && aclPolicy is not null)
+            if (!dryRun && applyAcls)
             {
                 var resolver = context.PrincipalResolver(spec.EffectiveAccount);
                 foreach (var entry in context.Layout.Entries.Where(e => !e.IsLink && e.Acl is not null))
                 {
-                    aclPolicy.Apply(entry, resolver);
+                    acl.Apply(entry, resolver);
                 }
 
                 console.Out.WriteLine("Directory permissions applied.");
@@ -264,7 +265,7 @@ public sealed class ServiceCommand(
         var spec = BuildSpec(parsed);
         var existing = scm.GetConfig(context.ServiceName);
         var account = existing?.AccountName is { } n ? ServiceAccount.Parse(n, context.ServiceName) : spec.EffectiveAccount;
-        var doctor = new ServiceDoctor(scm, aclReader, context.PrincipalResolver(account));
+        var doctor = new ServiceDoctor(scm, acl, context.PrincipalResolver(account));
         var report = doctor.Run(spec, context.Layout, context.ExtraDoctorChecks?.Invoke());
         foreach (var c in report.Checks)
         {

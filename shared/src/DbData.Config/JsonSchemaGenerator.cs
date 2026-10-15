@@ -50,6 +50,8 @@ public static class JsonSchemaGenerator
         if (discriminator != null) { props[discriminator] = new JsonObject { ["const"] = caseName }; required.Add(discriminator); }
         if (topLevel && o.HasVersion)
             props[o.VersionKey] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = o.Version, ["default"] = 1, ["description"] = "Schema version of this file (1 when absent)." };
+        if (topLevel && o.AcceptsHeader)
+            props[SchemaHeader.Key] = new JsonObject { ["type"] = "string", ["pattern"] = o.Kind is null ? "^[^/]+/[1-9][0-9]*$" : $"^{System.Text.RegularExpressions.Regex.Escape(o.Kind)}/[1-9][0-9]*$", ["description"] = "Alternative to the version key: `<kind>/<version>`." };
         foreach (var p in o.Properties)
         {
             var n = Node(p.Type);

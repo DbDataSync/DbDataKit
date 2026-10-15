@@ -1,6 +1,6 @@
 # DbData.Secrets.Windows
 
-DPAPI store and `AclHelper`. `AclHelper` is cross-platform and is the piece Plan 03 (service hosting) reuses.
+DPAPI store. `AclHelper` now lives in `DbData.Security.Acl` (namespace `DbData.Security.Acl`, referenced by this package) and is shared with `DbData.Hosting.WindowsService`.
 
 ## Public contract
 - `DpapiProtector.Protect/Unprotect/ToInlineRef` (Windows only, `[SupportedOSPlatform("windows")]`).

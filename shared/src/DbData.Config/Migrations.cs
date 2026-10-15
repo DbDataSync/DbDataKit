@@ -65,9 +65,10 @@ public sealed class YamlDocument
         Apply(new EditResult(Text[..entry.Key.Start] + YamlText.Scalar(newName) + Text[entry.Key.End..], null));
     }
 
-    internal void SetVersion(string key, int version)
+    internal void SetVersion(string key, int version, string? headerKind = null)
     {
-        if (Has(key)) { Set(key, YamlValue.Raw(version.ToString(CultureInfo.InvariantCulture))); return; }
+        var value = headerKind is null ? version.ToString(CultureInfo.InvariantCulture) : SchemaHeader.Format(headerKind, version);
+        if (Has(key)) { Set(key, YamlValue.Raw(value)); return; }
         // new key goes first, below any leading comment block, so the file's header stays on top
         var nl = Text.Contains("\r\n") ? "\r\n" : "\n";
         var at = 0;
@@ -77,7 +78,7 @@ public sealed class YamlDocument
             if (t.Length == 0 || t[0] == '#') at += line.Length + 1; else break;
         }
         at = Math.Min(at, Text.Length);
-        var insert = $"{key}: {version}{nl}";
+        var insert = $"{key}: {value}{nl}";
         if (at > 0 && at == Text.Length && !Text.EndsWith('\n')) insert = nl + insert;
         Apply(new EditResult(Text[..at] + insert + Text[at..], null));
     }
@@ -175,7 +176,22 @@ public sealed class MigrationEngine
         { diags.Add(catalog.Create(SharedCodes.InvalidValue, file, root.Line, root.Column, "The document must be a mapping of keys to values.")); return Result(MigrationStatus.Failed, 0, 0, text); }
 
         var from = 1;
-        if ((root as YamlMapping)?.Get(options.VersionKey) is { } vn)
+        var usesHeader = false;
+        if ((root as YamlMapping)?.Get(SchemaHeader.Key) is { } hn && options.VersionKey != SchemaHeader.Key)
+        {
+            if (((YamlMapping)root!).Get(options.VersionKey) != null)
+            {
+                diags.Add(catalog.Create(SharedCodes.SchemaVersionInvalid, file, hn.Line, hn.Column, $"Both `{SchemaHeader.Key}` and `{options.VersionKey}` are present; use one."));
+                return Result(MigrationStatus.Failed, 0, 0, text);
+            }
+            if (hn is not YamlScalar hs || !SchemaHeader.TryParse(hs.Value, out var hk, out from) || hk != kind)
+            {
+                diags.Add(catalog.Create(SharedCodes.SchemaVersionInvalid, file, hn.Line, hn.Column, $"`{SchemaHeader.Key}` must be `{kind}/<positive whole number>`."));
+                return Result(MigrationStatus.Failed, 0, 0, text);
+            }
+            usesHeader = true;
+        }
+        else if ((root as YamlMapping)?.Get(options.VersionKey) is { } vn)
         {
             if (vn is not YamlScalar vs || !int.TryParse(vs.Value, NumberStyles.None, CultureInfo.InvariantCulture, out from) || from < 1)
             {
@@ -188,9 +204,10 @@ public sealed class MigrationEngine
         var target = options.TargetVersion ?? latest;
         if (from > latest)
         {
-            var at = (root as YamlMapping)?.Get(options.VersionKey);
+            var keyName = usesHeader ? SchemaHeader.Key : options.VersionKey;
+            var at = (root as YamlMapping)?.Get(keyName);
             diags.Add(catalog.Create(SharedCodes.SchemaVersionNewer, file, at?.Line ?? 0, at?.Column ?? 0,
-                $"`{options.VersionKey}` is {from}, but this tool understands `{kind}` files up to version {latest}.", "Upgrade the tool; this file was written by a newer version."));
+                $"`{keyName}` is {from}, but this tool understands `{kind}` files up to version {latest}.", "Upgrade the tool; this file was written by a newer version."));
             return Result(MigrationStatus.Refused, from, from, text);
         }
         if (target > latest || target < from)
@@ -221,7 +238,7 @@ public sealed class MigrationEngine
                         diags.Add(catalog.Create(SharedCodes.MigrationQuestion, file, 0, 0, $"Migration {kind} {step.From} -> {step.To} needs an answer: {q.Question}" + (q.Options != null ? $" ({string.Join(" / ", q.Options)})" : ""), $"Supply an answer for `{q.Id}`."));
                     return Result(MigrationStatus.Failed, from, version, text);
                 }
-                doc.SetVersion(options.VersionKey, step.To);
+                if (usesHeader) doc.SetVersion(SchemaHeader.Key, step.To, kind); else doc.SetVersion(options.VersionKey, step.To);
                 version = step.To;
             }
         }

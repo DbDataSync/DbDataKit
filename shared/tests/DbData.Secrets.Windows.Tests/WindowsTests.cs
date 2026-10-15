@@ -2,6 +2,7 @@ using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
+using DbData.Security.Acl;
 using Xunit;
 
 namespace DbData.Secrets.Windows.Tests;
