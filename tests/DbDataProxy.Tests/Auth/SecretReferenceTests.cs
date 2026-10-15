@@ -190,11 +190,15 @@ public sealed class SecretReferenceTests : IDisposable
         var (runtime, _) = Runtime();
         string name = Env("pfx-reference-pw");
         string pfx = Path.Combine(_dir, "t.pfx");
-        using (var cert = CertificateProvider.CreateSelfSigned(["localhost"], 30))
+        using (var key = System.Security.Cryptography.RSA.Create(2048))
+        {
+            var request = new CertificateRequest("CN=localhost", key, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+            using var cert = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(30));
             File.WriteAllBytes(pfx, cert.Export(X509ContentType.Pfx, "pfx-reference-pw"));
+        }
 
         var options = new ProxyOptions { DataDirectory = _dir, Tls = { Mode = TlsMode.File, CertificatePath = pfx, CertificatePassword = "env:" + name } };
-        using var loaded = CertificateProvider.Load(options, _dir, NullLogger.Instance, runtime)!;
+        using var loaded = CertificateProvider.Load(options, _dir, NullLogger.Instance, secrets: runtime)!;
         Assert.True(loaded.HasPrivateKey);
     }
 }

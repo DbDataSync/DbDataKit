@@ -15,6 +15,15 @@
     <DbDataKitReference Include="Secrets.Abstractions" />
     <DbDataKitReference Include="Secrets" />
     <DbDataKitReference Include="Secrets.Windows" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+    <DbDataKitReference Include="Hosting.Abstractions" />
+    <DbDataKitReference Include="Hosting" />
+    <DbDataKitReference Include="Hosting.WindowsService" />
+    <DbDataKitReference Include="Hosting.Systemd" />
+    <DbDataKitReference Include="Hosting.Certificates" />
+    <DbDataKitReference Include="Hosting.Children" />
+    <DbDataKitReference Include="Hosting.Cli" />
+    <DbDataKitReference Include="Security.Acl" />
     <ProjectReference Include="..\DbDataProxy.Core\DbDataProxy.Core.csproj" />
   </ItemGroup>
 </Project>

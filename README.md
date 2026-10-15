@@ -23,14 +23,45 @@ cd artifacts/publish/win-x64
 ./DbDataProxy.exe hash-password     # prompts; paste the hash into appsettings.json
 # edit appsettings.json (see appsettings.example.json), then:
 ./DbDataProxy.exe                   # run in a console
-./DbDataProxy.exe install           # or register the Windows service (elevated prompt), then: sc start DbDataProxy
+./DbDataProxy.exe service install   # or register the Windows service (elevated prompt), then: DbDataProxy service start
 ./DbDataProxy.exe query --insecure --user me --password ... --datasource erp --sql "SELECT 1"
 ```
 
 On first start the proxy writes `dbdataproxy-selfsigned.pfx` and `.cer` to its data directory
 (`%ProgramData%\DbDataProxy` by default, `Proxy:DataDirectory` to change). Import the `.cer` into clients that
 should trust it. The certificate covers localhost, the machine name/FQDN and `Proxy:Tls:Hostnames`, and is
-regenerated automatically when those change or it nears expiry. Use `Tls:Mode = File` for your own PFX.
+regenerated automatically when those change or it nears expiry (a running proxy rotates it in the background, 30 days
+before it ends, and serves the new one without a restart; `/health` reports its state). Use `Tls:Mode = File` for your own PFX.
+
+The generated PFX is encrypted with a random password. The password is kept in `dbdataproxy-selfsigned.pfx.pwd`, protected
+with DPAPI (machine scope) on Windows and readable only by the owner (mode 0600) elsewhere; the PFX, that file and a
+data directory the proxy creates are restricted to the service identity, Administrators and SYSTEM. A PFX written by an
+earlier version (empty password) is re-encrypted in place on the first start, keeping the same certificate. A
+`Tls:CertificatePassword` set in the configuration is still honoured for the self-signed file; remove it to use the
+protected password. Manage the certificate with `DbDataProxy cert show|ensure|renew|check`.
+
+## Service, containers and health
+
+```
+DbDataProxy service install [--name N] [--account A] [--password-secret env:NAME|file:PATH] [--data-dir PATH] [--dry-run]
+DbDataProxy service uninstall|start|stop|restart|status|doctor [--name N]
+DbDataProxy service unit [--name N] [--exec /opt/dbdataproxy/DbDataProxy]     # hardened systemd unit (also: service --systemd)
+DbDataProxy install|uninstall                                                  # same as service install|uninstall
+```
+
+The service is registered through the Service Control Manager API (no `sc.exe`). By default it runs as the virtual account
+`NT SERVICE\DbDataProxy`, which has no password and no rights beyond what it is granted: read/execute on the install
+directory and modify on the data directory (the only places it needs). Use `--account DOMAIN\name$` for a group managed
+service account, or `--account DOMAIN\user` with a password. `--account LocalSystem` needs `--allow-localsystem`.
+A password is never put on the service command line; give it with `--password-secret env:NAME` or `file:PATH`, or type it at the
+prompt. `--password` is still accepted but prints a warning, because command lines are visible to other users.
+`service doctor` checks the service settings and directory permissions. The service restarts after a crash (5 s, 5 s, 60 s;
+the counter resets after a day) and starts at boot.
+
+The proxy answers `GET /health`, `/health/live`, `/health/ready` and `/version` on its HTTP/2 listener, and on stop waits for
+running queries (`Proxy:Hosting:DrainSeconds`, default 30) before shutting down. `Proxy:Hosting:MaxConcurrentRequests`
+(default 1000) caps in-flight requests; further ones get 503. `DbDataProxy --healthcheck` probes the local proxy (HTTP/2, TLS
+certificate accepted for loopback only) and exits 0 or 1, for a container HEALTHCHECK.
 
 ## Server info (GetSqlInfo)
 
