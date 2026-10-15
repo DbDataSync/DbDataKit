@@ -30,6 +30,7 @@ public static class SharedCodes
     public const string NotEditable = "DBD-130";
     public const string ValidationFailed = "DBD-140";
     public const string UnknownUnionKind = "DBD-107";
+    public const string FileNotFound = "DBD-108";
 
     public static IReadOnlyDictionary<string, (ConfigSeverity Severity, string Fix)> Defaults { get; } = new Dictionary<string, (ConfigSeverity, string)>
     {
@@ -39,6 +40,7 @@ public static class SharedCodes
         [UnknownKey] = (ConfigSeverity.Error, "Remove the key, or correct its spelling."),
         [MissingKey] = (ConfigSeverity.Error, "Add the missing key."),
         [InvalidValue] = (ConfigSeverity.Error, "Use a value of the documented shape."),
+        [FileNotFound] = (ConfigSeverity.Error, "Check the path, or create the file."),
         [UnknownUnionKind] = (ConfigSeverity.Error, "Use one of the documented kinds."),
         [SchemaVersionNewer] = (ConfigSeverity.Error, "Upgrade the tool; this file was written by a newer version."),
         [SchemaVersionInvalid] = (ConfigSeverity.Error, "schemaVersion must be a positive integer."),
