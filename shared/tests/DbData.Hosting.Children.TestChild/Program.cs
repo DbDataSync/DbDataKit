@@ -1,0 +1,47 @@
+using System.Diagnostics;
+using DbData.Hosting.Children;
+
+// Tiny helper child used by the Children tests. Commands: echo | printenv NAME | exit N | sleep FILE | spawn FILE | watch FILE
+var cmd = args.Length > 0 ? args[0] : "";
+switch (cmd)
+{
+    case "echo":
+    {
+        var info = ChildEnvironment.TryRead() ?? throw new InvalidOperationException("no launch info");
+        await using var stream = await ChildTransports.ConnectAsync(info);
+        var buf = new byte[256];
+        var n = await stream.ReadAsync(buf);
+        var reply = System.Text.Encoding.UTF8.GetBytes("echo:" + System.Text.Encoding.UTF8.GetString(buf, 0, n));
+        await stream.WriteAsync(reply);
+        await stream.FlushAsync();
+        return 0;
+    }
+    case "printenv":
+        Console.Out.Write(Environment.GetEnvironmentVariable(args[1]) ?? "<null>");
+        return 0;
+    case "exit":
+        return int.Parse(args[1]);
+    case "sleep":
+        File.WriteAllText(args[1], Environment.ProcessId.ToString());
+        await Task.Delay(Timeout.Infinite);
+        return 0;
+    case "spawn":
+    {
+        var grand = Process.Start(new ProcessStartInfo(Environment.ProcessPath!, [typeof(Program).Assembly.Location, "sleep", args[1] + ".grand"]) { UseShellExecute = false })!;
+        File.WriteAllText(args[1], Environment.ProcessId.ToString());
+        await Task.Delay(Timeout.Infinite);
+        return 0;
+    }
+    case "watch":
+    {
+        var info = ChildEnvironment.TryRead();
+        var pid = int.Parse(Environment.GetEnvironmentVariable("WATCH_PID")!);
+        var start = long.Parse(Environment.GetEnvironmentVariable("WATCH_START") ?? "0");
+        _ = ParentDeathMonitor.Start(pid, start, () => Environment.Exit(42));
+        File.WriteAllText(args[1], "ready");
+        await Task.Delay(Timeout.Infinite);
+        return 0;
+    }
+    default:
+        return 99;
+}
