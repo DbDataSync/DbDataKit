@@ -3,7 +3,7 @@ using DbDataKit.Hosting.Certificates;
 
 namespace DbDataKit.Hosting.Cli;
 
-/// <summary><c>cert status|ensure|check</c> over a <see cref="CertificateOptions"/>.</summary>
+/// <summary><c>cert status|show|ensure|renew|check</c> over a <see cref="CertificateOptions"/> (<c>show</c> is an alias of <c>status</c>).</summary>
 public sealed class CertCommand(
     CertificateOptions options,
     ICertificateSecretSource secrets,
@@ -12,7 +12,7 @@ public sealed class CertCommand(
 {
     private readonly TimeProvider _time = time ?? TimeProvider.System;
 
-    public const string Usage = "Usage: cert <status|ensure|check>\n  status  show the certificate in use (never creates or changes anything)\n  ensure  create or rotate the managed certificate if needed\n  check   exit 1 when rotation is due or the certificate is missing";
+    public const string Usage = "Usage: cert <status|show|ensure|renew|check>\n  status  show the certificate in use (never creates or changes anything); 'show' is the same\n  ensure  create or rotate the managed certificate if needed\n  renew   replace the managed self-signed certificate now (clients must trust the new .cer)\n  check   exit 1 when rotation is due or the certificate is missing";
 
     public int Execute(string[] args, IConsole console) => ExecuteAsync(args, console).GetAwaiter().GetResult();
 
@@ -21,8 +21,19 @@ public sealed class CertCommand(
         switch (args.FirstOrDefault()?.ToLowerInvariant())
         {
             case "status":
+            case "show":
             case "check":
-                var cert = TryLoadExisting();
+                X509Certificate2? cert;
+                try
+                {
+                    cert = TryLoadExisting();
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or System.Security.Cryptography.CryptographicException)
+                {
+                    console.Out.WriteLine($"A certificate exists for mode {options.Mode} but cannot be opened with the stored password ({ex.GetType().Name}). 'ensure' replaces it.");
+                    return ExitCodes.Failure;
+                }
+
                 if (cert is null)
                 {
                     console.Out.WriteLine($"No certificate present for mode {options.Mode}.");
@@ -36,6 +47,20 @@ public sealed class CertCommand(
                     console.Out.WriteLine($"Thumbprint: {s.Thumbprint}");
                     console.Out.WriteLine($"Expires:    {s.NotAfter:u} ({s.DaysRemaining} day(s)) - {s.State}");
                     return args[0].Equals("check", StringComparison.OrdinalIgnoreCase) && s.NeedsRotation ? ExitCodes.Failure : ExitCodes.Ok;
+                }
+
+            case "renew":
+                if (options.Mode != CertificateMode.SelfSigned)
+                {
+                    console.Error.WriteLine("renew applies to managed self-signed certificates only; replace the certificate at its source for other modes.");
+                    return ExitCodes.Usage;
+                }
+
+                using (var renewed = provider.RenewSelfSigned(options))
+                {
+                    console.Out.WriteLine($"Certificate renewed: {renewed.Thumbprint}");
+                    console.Out.WriteLine($"Public certificate for client trust: {options.PublicCertificatePath ?? Path.ChangeExtension(options.Path!, ".cer")}");
+                    return ExitCodes.Ok;
                 }
 
             case "ensure":

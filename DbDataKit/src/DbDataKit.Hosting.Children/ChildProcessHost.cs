@@ -13,7 +13,18 @@ public sealed class ChildProcessSpec
 
     public IReadOnlyDictionary<string, string> Environment { get; init; } = new Dictionary<string, string>();
 
+    /// <summary>
+    /// Handshake transport. Null picks the platform default. <see cref="ChildEndpointKind.None"/> launches without a
+    /// listener, for children that host their own server (for example Kestrel on a port the host chooses); the job
+    /// object, kill-on-dispose, parent identity and output capture still apply.
+    /// </summary>
     public ChildEndpointKind? Transport { get; init; }
+
+    /// <summary>Called for each line the child writes to standard output. Output is always drained, even when null.</summary>
+    public Action<string>? OnOutputLine { get; init; }
+
+    /// <summary>Called for each line the child writes to standard error. Output is always drained, even when null.</summary>
+    public Action<string>? OnErrorLine { get; init; }
 
     /// <summary>Windows job limits.</summary>
     public long? MemoryLimitBytes { get; init; }
@@ -51,6 +62,7 @@ public sealed class ChildProcess : IAsyncDisposable
 
     public int ProcessId => _process.Id;
 
+    /// <summary>Where the child connects; throws when launched with <see cref="ChildEndpointKind.None"/>.</summary>
     public ChildEndpoint Endpoint => _listener.Endpoint;
 
     public Task<ChildExitReport> Exited => _exited.Task;
@@ -102,7 +114,8 @@ public static class ChildProcessHost
         try
         {
             var self = Process.GetCurrentProcess();
-            var info = new ChildLaunchInfo(token, listener.Endpoint, self.Id, ChildEnvironment.StartTicksOf(self));
+            var hasTransport = spec.Transport != ChildEndpointKind.None;
+            var info = new ChildLaunchInfo(token, hasTransport ? listener.Endpoint : new ChildEndpoint(ChildEndpointKind.None, ""), self.Id, ChildEnvironment.StartTicksOf(self));
 
             var psi = new ProcessStartInfo(spec.FileName)
             {
@@ -118,6 +131,13 @@ public static class ChildProcessHost
 
             job = new JobObjectHolder(OperatingSystem.IsWindows() ? new JobObject(spec.MemoryLimitBytes, spec.CpuPercent) : null);
             process = Process.Start(psi) ?? throw new InvalidOperationException("The child process did not start.");
+            // The redirected pipes must be drained or a chatty child blocks on a full buffer.
+            var onOut = spec.OnOutputLine;
+            var onErr = spec.OnErrorLine;
+            process.OutputDataReceived += (_, e) => { if (e.Data is { Length: > 0 }) onOut?.Invoke(e.Data); };
+            process.ErrorDataReceived += (_, e) => { if (e.Data is { Length: > 0 }) onErr?.Invoke(e.Data); };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
             // Tiny window between start and assignment; documented in the README. Nested jobs are fine on Win8+.
             if (OperatingSystem.IsWindows())
             {

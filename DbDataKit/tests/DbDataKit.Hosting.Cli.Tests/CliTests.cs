@@ -216,6 +216,60 @@ public class CertCommandTests
     }
 
     [Fact]
+    public void Show_is_status_and_renew_replaces_the_certificate_now()
+    {
+        var (cmd, dir, options) = Make();
+        try
+        {
+            Assert.Equal(0, cmd.Execute(["ensure"], new BufferConsole()));
+            var shown = new BufferConsole();
+            Assert.Equal(0, cmd.Execute(["show"], shown));
+            var before = shown.OutWriter.ToString();
+
+            var renewed = new BufferConsole();
+            Assert.Equal(0, cmd.Execute(["renew"], renewed));
+            Assert.Contains("renewed", renewed.OutWriter.ToString());
+
+            var after = new BufferConsole();
+            Assert.Equal(0, cmd.Execute(["show"], after));
+            Assert.NotEqual(before, after.OutWriter.ToString()); // new thumbprint and expiry
+            Assert.Contains("Thumbprint", after.OutWriter.ToString());
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void Renew_is_refused_for_non_self_signed_modes()
+    {
+        var secrets = new InMemorySecretSource();
+        var cmd = new CertCommand(new CertificateOptions { Mode = CertificateMode.Store, Thumbprint = "AB" }, secrets, new CertificateProvider(secrets));
+        Assert.Equal(ExitCodes.Usage, cmd.Execute(["renew"], new BufferConsole()));
+    }
+
+    [Fact]
+    public void Status_reports_a_certificate_that_cannot_be_opened_instead_of_crashing()
+    {
+        var (_, dir, options) = Make();
+        try
+        {
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(options.Path!, "not a pfx");
+            var secrets = new InMemorySecretSource();
+            var cmd = new CertCommand(options, secrets, new CertificateProvider(secrets, fqdnLookup: _ => null));
+            var console = new BufferConsole();
+            Assert.Equal(ExitCodes.Failure, cmd.Execute(["show"], console));
+            Assert.Contains("cannot be opened", console.OutWriter.ToString());
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
     public void Unknown_verb_shows_usage()
     {
         var (cmd, _, _) = Make();

@@ -12,6 +12,9 @@ public enum ChildEndpointKind
     NamedPipe,
     UnixSocket,
     LoopbackTcp,
+
+    /// <summary>No transport: the child hosts its own server. Only valid in <see cref="ChildProcessSpec.Transport"/>.</summary>
+    None,
 }
 
 /// <summary>Where the child connects. Serialised as <c>pipe:NAME</c>, <c>unix:/path</c> or <c>tcp:127.0.0.1:PORT</c>.</summary>
@@ -21,6 +24,7 @@ public sealed record ChildEndpoint(ChildEndpointKind Kind, string Address)
     {
         ChildEndpointKind.NamedPipe => $"pipe:{Address}",
         ChildEndpointKind.UnixSocket => $"unix:{Address}",
+        ChildEndpointKind.None => "none:",
         _ => $"tcp:{Address}",
     };
 
@@ -56,6 +60,7 @@ public static class ChildTransports
         var kind = preferred ?? (OperatingSystem.IsWindows() ? ChildEndpointKind.NamedPipe : ChildEndpointKind.UnixSocket);
         return kind switch
         {
+            ChildEndpointKind.None => new NoTransportListener(),
             ChildEndpointKind.NamedPipe => new NamedPipeListener(),
             ChildEndpointKind.UnixSocket => new UnixSocketListener(),
             _ => new LoopbackTcpListener(),
@@ -266,4 +271,15 @@ internal sealed class LoopbackTcpListener : IChildTransportListener
         _listener.Stop();
         return ValueTask.CompletedTask;
     }
+}
+
+/// <summary>Placeholder for children that host their own server (<see cref="ChildEndpointKind.None"/>).</summary>
+internal sealed class NoTransportListener : IChildTransportListener
+{
+    public ChildEndpoint Endpoint => throw new InvalidOperationException("This child was launched without a transport.");
+
+    public Task<Stream> AcceptAsync(string token, CancellationToken cancellationToken) =>
+        throw new InvalidOperationException("This child was launched without a transport.");
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
