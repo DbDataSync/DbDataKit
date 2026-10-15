@@ -41,3 +41,13 @@ Branch `worktree-agent-a12e81128462776ae`. Packages under `shared/src`: `DbData.
 - Done: engine ids/caps, parameterised `CanonicalType`, `TypeMapping`/`Fidelity`, `ISqlDialect`; shared `SqlLexer` (+ fuzz/property tests), parameter rewriter, statement classifier, `ReadOnlyPolicy` with per-dialect deny lists and `ISqlParser` seam; strict `dialect.yaml` loader; built-in ansi/sqlserver/postgres/mysql/oracle/duckdb/fabric + generic ODBC from facts; type tables with `types.golden.yml`; Canonical<->Arrow table; offline conformance suite green for all dialects.
 - Stubbed: live conformance (skipped unless `DBDATA_CONFORMANCE_<ENGINE>` is set; no driver in `shared/`), live type round trip, DDL fragments (`CreateTable` etc. not in `ISqlDialect` yet), array/list native types, product adoption (migration phases 1 and 6).
 - Run tests from `shared/` (a `shared/global.json` opts into the Microsoft.Testing.Platform runner required by .NET 10 `dotnet test`).
+
+## Wave 1 merge summary (main)
+Merged: Secrets, Odbc.Metadata, Update, Config, Hosting, Dialect. `shared/DbData.Shared.slnx` builds everything;
+run `cd shared && dotnet test --solution DbData.Shared.slnx` (962 pass, 17 skipped by design: live DB, admin, Unix).
+Merge conventions: union-resolve `Directory.Packages.props`/`STATUS.md`; `shared/tests/Directory.Build.props` supplies xunit.v3
+(do not add it per test project); `shared/**` is pinned to LF in `.gitattributes`.
+Open decisions: Sync env-var sanitisation rule (Secrets), camelCase default keys (Config), migrations per product,
+BouncyCastle for ed25519 (Update), signing-key custody (Update), Oracle/tinyint type policy (Dialect).
+Reconcile pending: Hosting `IAclPolicy` vs Secrets `AclHelper`.
+Wave 2 (in progress): Connections (06), Transfer (07), Metadata Part B (04), Config.Testing + ACL reconcile.
