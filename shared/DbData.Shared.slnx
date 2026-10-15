@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/DbData.Transfer.Benchmarks/DbData.Transfer.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/DbData.Config.Hosting/DbData.Config.Hosting.csproj" />
     <Project Path="src/DbData.Config.Testing/DbData.Config.Testing.csproj" />
@@ -22,8 +25,13 @@
     <Project Path="src/DbData.Secrets.Cli/DbData.Secrets.Cli.csproj" />
     <Project Path="src/DbData.Secrets.Keyring/DbData.Secrets.Keyring.csproj" />
     <Project Path="src/DbData.Secrets.Windows/DbData.Secrets.Windows.csproj" />
-    <Project Path="src/DbData.Security.Acl/DbData.Security.Acl.csproj" />
     <Project Path="src/DbData.Secrets/DbData.Secrets.csproj" />
+    <Project Path="src/DbData.Security.Acl/DbData.Security.Acl.csproj" />
+    <Project Path="src/DbData.Transfer.Abstractions/DbData.Transfer.Abstractions.csproj" />
+    <Project Path="src/DbData.Transfer.Conformance/DbData.Transfer.Conformance.csproj" />
+    <Project Path="src/DbData.Transfer.Postgres/DbData.Transfer.Postgres.csproj" />
+    <Project Path="src/DbData.Transfer.SqlServer/DbData.Transfer.SqlServer.csproj" />
+    <Project Path="src/DbData.Transfer/DbData.Transfer.csproj" />
     <Project Path="src/DbData.Update.Abstractions/DbData.Update.Abstractions.csproj" />
     <Project Path="src/DbData.Update.Detect/DbData.Update.Detect.csproj" />
     <Project Path="src/DbData.Update.Service/DbData.Update.Service.csproj" />
@@ -57,6 +65,10 @@
     <Project Path="tests/DbData.Secrets.Tests/DbData.Secrets.Tests.csproj" />
     <Project Path="tests/DbData.Secrets.Windows.Tests/DbData.Secrets.Windows.Tests.csproj" />
     <Project Path="tests/DbData.Security.Acl.Tests/DbData.Security.Acl.Tests.csproj" />
+    <Project Path="tests/DbData.Transfer.Conformance.Tests/DbData.Transfer.Conformance.Tests.csproj" />
+    <Project Path="tests/DbData.Transfer.Postgres.Tests/DbData.Transfer.Postgres.Tests.csproj" />
+    <Project Path="tests/DbData.Transfer.SqlServer.Tests/DbData.Transfer.SqlServer.Tests.csproj" />
+    <Project Path="tests/DbData.Transfer.Tests/DbData.Transfer.Tests.csproj" />
     <Project Path="tests/DbData.Update.Detect.Tests/DbData.Update.Detect.Tests.csproj" />
     <Project Path="tests/DbData.Update.Service.Tests/DbData.Update.Service.Tests.csproj" />
     <Project Path="tests/DbData.Update.Tests/DbData.Update.Tests.csproj" />

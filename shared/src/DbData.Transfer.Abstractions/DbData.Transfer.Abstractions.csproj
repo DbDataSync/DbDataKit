@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbData.Transfer</RootNamespace>
+    <Description>Contracts for moving rows between engines: schema, batches, sources, bulk writers, staging, apply strategies, state, write intent.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Apache.Arrow" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbData.Dialect.Abstractions\DbData.Dialect.Abstractions.csproj" />
+    <ProjectReference Include="..\DbData.Dialect.Arrow\DbData.Dialect.Arrow.csproj" />
+  </ItemGroup>
+</Project>
