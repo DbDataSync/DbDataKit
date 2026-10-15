@@ -51,3 +51,9 @@ Open decisions: Sync env-var sanitisation rule (Secrets), camelCase default keys
 BouncyCastle for ed25519 (Update), signing-key custody (Update), Oracle/tinyint type policy (Dialect).
 Reconcile pending: Hosting `IAclPolicy` vs Secrets `AclHelper`.
 Wave 2 (in progress): Connections (06), Transfer (07), Metadata Part B (04), Config.Testing + ACL reconcile.
+
+## Metadata (Plan 04 Part B)
+Branch worktree-agent-a1cd09b6bde6b9eb0. `shared/src/DbData.Metadata.Abstractions` (TableRef, ColumnInfo/KeyInfo/ForeignKeyInfo/IndexInfo, TableShape + ShapeSupport, QueryShape, ServerFacts, CatalogCapabilities, ICatalogReader, TableFilter/LikePattern, CatalogNames, ICatalogCache/ConnectionFingerprint) and `shared/src/DbData.Metadata` (InformationSchema, SqlServer, Postgres, DuckDB, ODBC readers; ServerFactsProbe; DialectProfiles; dialects.lock-style YAML; CachingCatalogReader). Added `SQLPrepare`/`SQLDescribeCol` (`OdbcCatalog.DescribeQueryAsync`) and raw `GetInfoTextAsync/GetInfoNumberAsync` to `DbData.Odbc.Metadata` (PublicAPI updated, fake-backed tests).
+- Done: tests green (`dotnet test --project tests/DbData.Metadata.Tests`; DuckDB in-process, SQL Server/Postgres via recording fake DbConnection, ODBC via fakes). New package version: DuckDB.NET.Data.Full 1.5.6.
+- Stubbed/not done: live SQL Server/Postgres runs (need a provider package, skipped; env `DBDATA_METADATA_*`), `FlightSqlCatalogReader`, MySQL/Oracle-specific readers, procedures on `ICatalogReader`, product adoption (Proxy `Metadata.cs`, Sync, Build).
+- Open: where the DuckDB/Npgsql/SqlClient live tests should get providers; SQL_TINYINT signedness policy; whether `ServerFacts` should replace Build's `ServerFacts` record directly.

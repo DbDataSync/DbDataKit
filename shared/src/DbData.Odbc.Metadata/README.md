@@ -46,3 +46,8 @@ on Unix, bitness from the library path when it says). Registry and file access g
   `DBDATA_REQUIRE_SQLSERVER=true` to fail instead of skip (the `DBPROXY_` names also work).
 
 Public API is tracked with `Microsoft.CodeAnalysis.PublicApiAnalyzers` (`PublicAPI.Shipped.txt`).
+
+## Query description
+`OdbcCatalog.DescribeQueryAsync(sql)` prepares a statement (SQLPrepare) and describes its result columns (SQLNumResultCols + SQLDescribeCol) without
+executing it, returning `OdbcResultColumn` records. Not every driver can describe an unexecuted statement; those fail with their SQLSTATE. The text
+is not checked here: callers apply a read-only policy first (`DbData.Metadata` does). `GetInfoTextAsync`/`GetInfoNumberAsync` read any other SQLGetInfo value (null when unanswered).
