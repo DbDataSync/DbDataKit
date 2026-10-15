@@ -5,9 +5,11 @@ using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Configuration;
 using DbDataProxy.Server.Data;
 using DbDataProxy.Server.Flight;
+using DbDataProxy.Server.Secrets;
 using DbDataProxy.Server.Tls;
 using Grpc.Net.Compression;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using DbDataKit.Secrets;
 using Microsoft.Extensions.Options;
 
 namespace DbDataProxy.Server.Hosting;
@@ -33,14 +35,35 @@ public static class ProxyHost
         builder.Services.Configure<ProxyOptions>(builder.Configuration.GetSection(ProxyOptions.SectionName));
         configure?.Invoke(builder);
 
+        // One redactor for the process: every resolved secret is registered with it, every logger and every client-facing
+        // error text passes through it.
+        var redactor = new Redactor();
+        builder.Services.AddSingleton(redactor);
+        builder.Services.AddSingleton<IRedactor>(redactor);
+        builder.Services.AddSingleton<SecretsRuntime>();
+        RedactLogging(builder.Services, redactor);
+
         var options = builder.Configuration.GetSection(ProxyOptions.SectionName).Get<ProxyOptions>() ?? new ProxyOptions();
         ConfigureServices(builder.Services, options);
         ConfigureKestrel(builder, options);
 
         var app = builder.Build();
+        // Resolves every referenced secret (registering it for redaction), warns about literals, and fails when
+        // Proxy:RequireReferencedSecrets is on and one is found.
+        app.Services.GetRequiredService<SecretsRuntime>().ValidateStartup(app.Services.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue);
         app.MapFlightEndpoint();
         app.MapGet("/", () => "DbDataProxy Arrow Flight SQL endpoint. Connect with a Flight SQL client.");
         return app;
+    }
+
+    /// <summary>Replaces the logger factory with one whose loggers scrub secrets from message and exception text.</summary>
+    private static void RedactLogging(IServiceCollection services, IRedactor redactor)
+    {
+        var original = services.LastOrDefault(d => d.ServiceType == typeof(ILoggerFactory) && d.ImplementationType is not null)
+            ?? throw new InvalidOperationException("Logging is not configured.");
+        services.Remove(original);
+        services.AddSingleton<ILoggerFactory>(sp =>
+            new RedactingLoggerFactory((ILoggerFactory)ActivatorUtilities.CreateInstance(sp, original.ImplementationType!), redactor));
     }
 
     private static void ConfigureServices(IServiceCollection services, ProxyOptions options)
@@ -76,6 +99,7 @@ public static class ProxyHost
         services
             .AddGrpc(o =>
             {
+                o.Interceptors.Add<RedactingInterceptor>(); // outermost: scrubs the detail of every RpcException
                 o.Interceptors.Add<AuthInterceptor>();
                 o.MaxReceiveMessageSize = 64 * 1024 * 1024;
                 o.ResponseCompressionAlgorithm = "gzip";
@@ -103,8 +127,9 @@ public static class ProxyHost
                 listen.Protocols = HttpProtocols.Http2;
                 if (options.Tls.Mode == TlsMode.None) return;
 
-                using var loggerFactory = LoggerFactory.Create(l => l.AddSimpleConsole());
-                certificate ??= CertificateProvider.Load(options, dataDirectory, loggerFactory.CreateLogger("Tls"));
+                var services = kestrel.ApplicationServices;
+                certificate ??= CertificateProvider.Load(options, dataDirectory,
+                    services.GetRequiredService<ILoggerFactory>().CreateLogger("Tls"), services.GetRequiredService<SecretsRuntime>());
                 listen.UseHttps(certificate!, https => https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13);
             });
         });

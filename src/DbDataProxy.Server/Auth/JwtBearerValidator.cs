@@ -1,4 +1,5 @@
 using DbDataProxy.Server.Configuration;
+using DbDataProxy.Server.Secrets;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Protocols;
@@ -14,8 +15,11 @@ public interface IJwtValidator
     ValueTask<ProxyPrincipal?> ValidateAsync(string token, CancellationToken cancellationToken);
 }
 
-public sealed class JwtBearerValidator(IOptionsMonitor<ProxyOptions> options, ILogger<JwtBearerValidator> log) : IJwtValidator
+public sealed class JwtBearerValidator(IOptionsMonitor<ProxyOptions> options, ILogger<JwtBearerValidator> log, SecretsRuntime? secrets = null) : IJwtValidator
 {
+    // The resolved signing key lives exactly as long as the options snapshot (JwtOptions instance) it was resolved from.
+    private (JwtOptions Snapshot, byte[] Key)? _signingKey;
+
     private readonly JsonWebTokenHandler _handler = new();
     private ConfigurationManager<OpenIdConnectConfiguration>? _discovery;
     private string? _discoveryAuthority;
@@ -86,7 +90,7 @@ public sealed class JwtBearerValidator(IOptionsMonitor<ProxyOptions> options, IL
 
         if (!string.IsNullOrWhiteSpace(jwt.SigningKey))
         {
-            parameters.IssuerSigningKey = new SymmetricSecurityKey(Convert.FromBase64String(jwt.SigningKey));
+            parameters.IssuerSigningKey = new SymmetricSecurityKey(SigningKeyFor(jwt));
             parameters.ValidateIssuer = !string.IsNullOrWhiteSpace(jwt.Issuer);
             parameters.ValidIssuer = jwt.Issuer;
             return parameters;
@@ -97,6 +101,15 @@ public sealed class JwtBearerValidator(IOptionsMonitor<ProxyOptions> options, IL
         parameters.ValidateIssuer = true;
         parameters.ValidIssuer = string.IsNullOrWhiteSpace(jwt.Issuer) ? configuration.Issuer : jwt.Issuer;
         return parameters;
+    }
+
+    private byte[] SigningKeyFor(JwtOptions jwt)
+    {
+        if (_signingKey is { } cached && ReferenceEquals(cached.Snapshot, jwt)) return cached.Key;
+        string configured = secrets?.ResolveSecret("Proxy:Auth:Jwt:SigningKey", jwt.SigningKey) ?? jwt.SigningKey!;
+        var key = Convert.FromBase64String(configured);
+        _signingKey = (jwt, key);
+        return key;
     }
 
     private ConfigurationManager<OpenIdConnectConfiguration> Discovery(string authority)

@@ -125,6 +125,33 @@ The stock .NET Flight client does not, which is why this repo ships `DbDataProxy
 > through non-public members. The proxy verifies they exist at startup and fails fast rather than silently sending
 > uncompressed data; tests guard it. If that ever breaks on a package upgrade, use `Grpc` mode until it is fixed.
 
+### Secrets
+
+Configuration values that are secrets can be references instead of literals (shared `DbDataKit.Secrets` library):
+
+| Reference | Resolves to |
+|---|---|
+| `env:NAME` | the environment variable `NAME` |
+| `file:C:\secrets\erp.txt` | the file's contents, trimmed (Docker/Kubernetes secrets, systemd `LoadCredential`) |
+| `secret:dbdata:proxy:datasource:erp` | environment variable `DBDATA_SECRET_DBDATA_PROXY_DATASOURCE_ERP`; or, when `$CREDENTIALS_DIRECTORY` is set, the file `dbdata_proxy_datasource_erp` in it; or, on Windows, `<DataDirectory>\secrets\dbdata~proxy~datasource~erp.secret` (DPAPI) |
+| `dpapi:<base64>` | an inline DPAPI blob (Windows, machine scope). Create one with `DbDataProxy protect-secret` |
+
+Where they work: a data source `ConnectionString` (the whole string, or just the value of a password key:
+`Server=SQL01;User Id=proxy_reader;Password=env:ERP_DB_PASSWORD`), `Proxy:Tls:CertificatePassword` and
+`Proxy:Auth:Jwt:SigningKey`. References are resolved each time the setting is used, from the current settings, so a rotated
+secret (and a reloaded `appsettings.json`) takes effect without keeping old values around. A reference that cannot be
+resolved fails that data source with a message naming the reference (never a value) and is logged.
+
+Literals still work, but the proxy logs a one-time warning naming the config key (never the value), e.g.
+`Config key Proxy:DataSources:erp:ConnectionString (Password) holds a literal secret`. Set
+`"RequireReferencedSecrets": true` to turn the warning into a startup failure (and to refuse a literal that appears after a reload).
+
+Every resolved secret is registered with a redactor that scrubs all log output (messages and exception text) and the
+text of errors returned to clients; `Password=...`-style fragments are scrubbed even when the value is unknown.
+
+Password hashes (`Proxy:Users:*:PasswordHash`) use the shared PBKDF2 hasher in the format `PBKDF2-SHA256$iterations$salt$hash`,
+the same format `hash-password` has always written, so existing hashes verify unchanged.
+
 ### Authentication
 
 Everything arrives as a Flight call; the proxy denies any call without valid credentials (except the handshake).
