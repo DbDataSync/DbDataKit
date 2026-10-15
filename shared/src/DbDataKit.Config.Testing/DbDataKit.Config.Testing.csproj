@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbDataKit.Config.Testing</PackageId>
+    <Description>Test helpers for DbDataKit.Config users: golden migration pairs, fuzz helper, schema/binder agreement, diagnostics catalog completeness. Framework agnostic (failures throw ConfigTestException).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Config\DbDataKit.Config.csproj" />
+  </ItemGroup>
+</Project>

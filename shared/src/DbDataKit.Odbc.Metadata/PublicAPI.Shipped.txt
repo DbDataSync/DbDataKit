@@ -1,0 +1,474 @@
+#nullable enable
+DbDataKit.Odbc.Metadata.IOdbcCatalogFunctions
+DbDataKit.Odbc.Metadata.IOdbcCatalogFunctions.ColumnsAsync(string? catalog, string? schema, string? table, string? column, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<string?[]!>!>!
+DbDataKit.Odbc.Metadata.IOdbcCatalogFunctions.ForeignKeysAsync(string? catalog, string? schema, string! table, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<string?[]!>!>!
+DbDataKit.Odbc.Metadata.IOdbcCatalogFunctions.GetInfoNumberAsync(ushort infoType, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<uint>!
+DbDataKit.Odbc.Metadata.IOdbcCatalogFunctions.GetInfoStringAsync(ushort infoType, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<string?>!
+DbDataKit.Odbc.Metadata.IOdbcCatalogFunctions.PrimaryKeysAsync(string? catalog, string? schema, string! table, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<string?[]!>!>!
+DbDataKit.Odbc.Metadata.IOdbcCatalogFunctions.ProcedureColumnsAsync(string? catalog, string? schema, string? procedure, string? column, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<string?[]!>!>!
+DbDataKit.Odbc.Metadata.IOdbcCatalogFunctions.ProceduresAsync(string? catalog, string? schema, string? procedure, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<string?[]!>!>!
+DbDataKit.Odbc.Metadata.IOdbcCatalogFunctions.StatisticsAsync(string? catalog, string? schema, string! table, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<string?[]!>!>!
+DbDataKit.Odbc.Metadata.IOdbcCatalogFunctions.StreamColumnsAsync(string? catalog, string? schema, string? table, string? column, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<string?[]!>!
+DbDataKit.Odbc.Metadata.IOdbcCatalogFunctions.StreamTablesAsync(string? catalog, string? schema, string? table, string? types, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<string?[]!>!
+DbDataKit.Odbc.Metadata.IOdbcCatalogFunctions.TablesAsync(string? catalog, string? schema, string? table, string? types, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<string?[]!>!>!
+DbDataKit.Odbc.Metadata.IOdbcCatalogFunctions.TypeInfoAsync(int sqlType, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<string?[]!>!>!
+DbDataKit.Odbc.Metadata.IOdbcFileReader
+DbDataKit.Odbc.Metadata.IOdbcFileReader.GetEnvironmentVariable(string! name) -> string?
+DbDataKit.Odbc.Metadata.IOdbcFileReader.ReadAllText(string! path) -> string?
+DbDataKit.Odbc.Metadata.IOdbcRegistryReader
+DbDataKit.Odbc.Metadata.IOdbcRegistryReader.GetValue(DbDataKit.Odbc.Metadata.OdbcRegistryHive hive, DbDataKit.Odbc.Metadata.OdbcBitness view, string! subKey, string! name) -> string?
+DbDataKit.Odbc.Metadata.IOdbcRegistryReader.GetValueNames(DbDataKit.Odbc.Metadata.OdbcRegistryHive hive, DbDataKit.Odbc.Metadata.OdbcBitness view, string! subKey) -> System.Collections.Generic.IReadOnlyList<string!>!
+DbDataKit.Odbc.Metadata.OdbcBitness
+DbDataKit.Odbc.Metadata.OdbcBitness.Unknown = 0 -> DbDataKit.Odbc.Metadata.OdbcBitness
+DbDataKit.Odbc.Metadata.OdbcBitness.X64 = 64 -> DbDataKit.Odbc.Metadata.OdbcBitness
+DbDataKit.Odbc.Metadata.OdbcBitness.X86 = 32 -> DbDataKit.Odbc.Metadata.OdbcBitness
+DbDataKit.Odbc.Metadata.OdbcCatalog
+DbDataKit.Odbc.Metadata.OdbcCatalog.CatalogsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<string!>!>!
+DbDataKit.Odbc.Metadata.OdbcCatalog.ColumnsAsync(string? catalog = null, string? schema = null, string? table = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcColumn!>!>!
+DbDataKit.Odbc.Metadata.OdbcCatalog.DisposeAsync() -> System.Threading.Tasks.ValueTask
+DbDataKit.Odbc.Metadata.OdbcCatalog.ForeignKeysAsync(string? catalog, string? schema, string! table, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcForeignKey!>!>!
+DbDataKit.Odbc.Metadata.OdbcCatalog.GetInfoAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DbDataKit.Odbc.Metadata.OdbcDriverInfo!>!
+DbDataKit.Odbc.Metadata.OdbcCatalog.IndexesAsync(string? catalog, string? schema, string! table, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcIndex!>!>!
+DbDataKit.Odbc.Metadata.OdbcCatalog.OdbcCatalog(DbDataKit.Odbc.Metadata.IOdbcCatalogFunctions! functions, DbDataKit.Odbc.Metadata.OdbcCatalogOptions? options = null) -> void
+DbDataKit.Odbc.Metadata.OdbcCatalog.PrimaryKeyAsync(string? catalog, string? schema, string! table, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DbDataKit.Odbc.Metadata.OdbcPrimaryKey?>!
+DbDataKit.Odbc.Metadata.OdbcCatalog.PrimaryKeysAsync(System.Collections.Generic.IEnumerable<DbDataKit.Odbc.Metadata.OdbcTable!>! tables, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<(System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcPrimaryKey!>! Keys, bool Supported)>!
+DbDataKit.Odbc.Metadata.OdbcCatalog.ProcedureColumnsAsync(string? catalog = null, string? schema = null, string? procedure = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcProcedureColumn!>!>!
+DbDataKit.Odbc.Metadata.OdbcCatalog.ProceduresAsync(string? catalog = null, string? schema = null, string? procedure = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcProcedure!>!>!
+DbDataKit.Odbc.Metadata.OdbcCatalog.SchemasAsync(string? catalog = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<string!>!>!
+DbDataKit.Odbc.Metadata.OdbcCatalog.StreamColumnsAsync(string? catalog = null, string? schema = null, string? table = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<DbDataKit.Odbc.Metadata.OdbcColumn!>!
+DbDataKit.Odbc.Metadata.OdbcCatalog.StreamTablesAsync(string? catalog = null, string? schema = null, string? table = null, string! types = "TABLE,VIEW", System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<DbDataKit.Odbc.Metadata.OdbcTable!>!
+DbDataKit.Odbc.Metadata.OdbcCatalog.TablesAsync(string? catalog = null, string? schema = null, string? table = null, string! types = "TABLE,VIEW", System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcTable!>!>!
+DbDataKit.Odbc.Metadata.OdbcCatalog.TypeInfoAsync(int sqlType = 0, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcTypeInfo!>!>!
+DbDataKit.Odbc.Metadata.OdbcCatalogException
+DbDataKit.Odbc.Metadata.OdbcCatalogException.Function.get -> string!
+DbDataKit.Odbc.Metadata.OdbcCatalogException.NotSupported.get -> bool
+DbDataKit.Odbc.Metadata.OdbcCatalogException.OdbcCatalogException(string! function, string! sqlState) -> void
+DbDataKit.Odbc.Metadata.OdbcCatalogException.SqlState.get -> string!
+DbDataKit.Odbc.Metadata.OdbcCatalogOptions
+DbDataKit.Odbc.Metadata.OdbcCatalogOptions.LoginTimeout.get -> System.TimeSpan?
+DbDataKit.Odbc.Metadata.OdbcCatalogOptions.LoginTimeout.init -> void
+DbDataKit.Odbc.Metadata.OdbcCatalogOptions.MaxRows.get -> int?
+DbDataKit.Odbc.Metadata.OdbcCatalogOptions.MaxRows.init -> void
+DbDataKit.Odbc.Metadata.OdbcCatalogOptions.Policy.get -> DbDataKit.Odbc.Metadata.OdbcConnectionPolicy!
+DbDataKit.Odbc.Metadata.OdbcCatalogOptions.Policy.init -> void
+DbDataKit.Odbc.Metadata.OdbcCatalogOptions.RowLimitBehavior.get -> DbDataKit.Odbc.Metadata.OdbcRowLimitBehavior
+DbDataKit.Odbc.Metadata.OdbcCatalogOptions.RowLimitBehavior.init -> void
+DbDataKit.Odbc.Metadata.OdbcCatalogOptions.StatementTimeout.get -> System.TimeSpan?
+DbDataKit.Odbc.Metadata.OdbcCatalogOptions.StatementTimeout.init -> void
+DbDataKit.Odbc.Metadata.OdbcCatalogSession
+DbDataKit.Odbc.Metadata.OdbcCatalogSession.Catalog.get -> DbDataKit.Odbc.Metadata.OdbcCatalog!
+DbDataKit.Odbc.Metadata.OdbcCatalogSession.CrawlAsync(string? catalog = null, string? schema = null, DbDataKit.Odbc.Metadata.OdbcCrawlOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DbDataKit.Odbc.Metadata.OdbcSchemaCrawl!>!
+DbDataKit.Odbc.Metadata.OdbcCatalogSession.DisposeAsync() -> System.Threading.Tasks.ValueTask
+DbDataKit.Odbc.Metadata.OdbcCatalogSession.Info.get -> DbDataKit.Odbc.Metadata.OdbcDriverInfo!
+DbDataKit.Odbc.Metadata.OdbcColumn
+DbDataKit.Odbc.Metadata.OdbcColumn.Catalog.get -> string?
+DbDataKit.Odbc.Metadata.OdbcColumn.Catalog.init -> void
+DbDataKit.Odbc.Metadata.OdbcColumn.Default.get -> string?
+DbDataKit.Odbc.Metadata.OdbcColumn.Default.init -> void
+DbDataKit.Odbc.Metadata.OdbcColumn.Name.get -> string!
+DbDataKit.Odbc.Metadata.OdbcColumn.Name.init -> void
+DbDataKit.Odbc.Metadata.OdbcColumn.Nullable.get -> bool
+DbDataKit.Odbc.Metadata.OdbcColumn.Nullable.init -> void
+DbDataKit.Odbc.Metadata.OdbcColumn.OdbcColumn(string? Catalog, string? Schema, string! Table, string! Name, int? SqlType, string? TypeName, int? Size, int? Scale, bool Nullable, int Ordinal, string? Default = null, string? Remarks = null) -> void
+DbDataKit.Odbc.Metadata.OdbcColumn.Ordinal.get -> int
+DbDataKit.Odbc.Metadata.OdbcColumn.Ordinal.init -> void
+DbDataKit.Odbc.Metadata.OdbcColumn.Remarks.get -> string?
+DbDataKit.Odbc.Metadata.OdbcColumn.Remarks.init -> void
+DbDataKit.Odbc.Metadata.OdbcColumn.Scale.get -> int?
+DbDataKit.Odbc.Metadata.OdbcColumn.Scale.init -> void
+DbDataKit.Odbc.Metadata.OdbcColumn.Schema.get -> string?
+DbDataKit.Odbc.Metadata.OdbcColumn.Schema.init -> void
+DbDataKit.Odbc.Metadata.OdbcColumn.Size.get -> int?
+DbDataKit.Odbc.Metadata.OdbcColumn.Size.init -> void
+DbDataKit.Odbc.Metadata.OdbcColumn.SqlType.get -> int?
+DbDataKit.Odbc.Metadata.OdbcColumn.SqlType.init -> void
+DbDataKit.Odbc.Metadata.OdbcColumn.Table.get -> string!
+DbDataKit.Odbc.Metadata.OdbcColumn.Table.init -> void
+DbDataKit.Odbc.Metadata.OdbcColumn.TypeName.get -> string?
+DbDataKit.Odbc.Metadata.OdbcColumn.TypeName.init -> void
+DbDataKit.Odbc.Metadata.OdbcConfigurationException
+DbDataKit.Odbc.Metadata.OdbcConfigurationException.OdbcConfigurationException(string! message) -> void
+DbDataKit.Odbc.Metadata.OdbcConnectionPolicy
+DbDataKit.Odbc.Metadata.OdbcConnectionPolicy.AllowedDrivers.get -> System.Collections.Generic.IReadOnlySet<string!>?
+DbDataKit.Odbc.Metadata.OdbcConnectionPolicy.AllowedDrivers.init -> void
+DbDataKit.Odbc.Metadata.OdbcConnectionPolicy.AllowedDsns.get -> System.Collections.Generic.IReadOnlySet<string!>?
+DbDataKit.Odbc.Metadata.OdbcConnectionPolicy.AllowedDsns.init -> void
+DbDataKit.Odbc.Metadata.OdbcConnectionPolicy.ForbidFileDsn.get -> bool
+DbDataKit.Odbc.Metadata.OdbcConnectionPolicy.ForbidFileDsn.init -> void
+DbDataKit.Odbc.Metadata.OdbcConnectionPolicy.ForbidKeys.get -> System.Collections.Generic.IReadOnlySet<string!>!
+DbDataKit.Odbc.Metadata.OdbcConnectionPolicy.ForbidKeys.init -> void
+DbDataKit.Odbc.Metadata.OdbcConnectionPolicy.ForbidSaveFile.get -> bool
+DbDataKit.Odbc.Metadata.OdbcConnectionPolicy.ForbidSaveFile.init -> void
+DbDataKit.Odbc.Metadata.OdbcConnectionPolicy.TryValidate(string! connectionString, out string? reason) -> bool
+DbDataKit.Odbc.Metadata.OdbcConnectionPolicy.Validate(string! connectionString) -> void
+DbDataKit.Odbc.Metadata.OdbcConnectionString
+DbDataKit.Odbc.Metadata.OdbcCrawlOptions
+DbDataKit.Odbc.Metadata.OdbcCrawlOptions.IncludeColumns.get -> bool
+DbDataKit.Odbc.Metadata.OdbcCrawlOptions.IncludeColumns.init -> void
+DbDataKit.Odbc.Metadata.OdbcCrawlOptions.IncludeForeignKeys.get -> bool
+DbDataKit.Odbc.Metadata.OdbcCrawlOptions.IncludeForeignKeys.init -> void
+DbDataKit.Odbc.Metadata.OdbcCrawlOptions.IncludeIndexes.get -> bool
+DbDataKit.Odbc.Metadata.OdbcCrawlOptions.IncludeIndexes.init -> void
+DbDataKit.Odbc.Metadata.OdbcCrawlOptions.IncludePrimaryKeys.get -> bool
+DbDataKit.Odbc.Metadata.OdbcCrawlOptions.IncludePrimaryKeys.init -> void
+DbDataKit.Odbc.Metadata.OdbcCrawlOptions.TableTypes.get -> string!
+DbDataKit.Odbc.Metadata.OdbcCrawlOptions.TableTypes.init -> void
+DbDataKit.Odbc.Metadata.OdbcDiagnosis
+DbDataKit.Odbc.Metadata.OdbcDiagnosis.Advice.get -> string?
+DbDataKit.Odbc.Metadata.OdbcDiagnosis.Advice.init -> void
+DbDataKit.Odbc.Metadata.OdbcDiagnosis.OdbcDiagnosis(string! SqlState, string! Summary, string? Advice) -> void
+DbDataKit.Odbc.Metadata.OdbcDiagnosis.SqlState.get -> string!
+DbDataKit.Odbc.Metadata.OdbcDiagnosis.SqlState.init -> void
+DbDataKit.Odbc.Metadata.OdbcDiagnosis.Summary.get -> string!
+DbDataKit.Odbc.Metadata.OdbcDiagnosis.Summary.init -> void
+DbDataKit.Odbc.Metadata.OdbcDiagnostics
+DbDataKit.Odbc.Metadata.OdbcDriverEntry
+DbDataKit.Odbc.Metadata.OdbcDriverEntry.Bitness.get -> DbDataKit.Odbc.Metadata.OdbcBitness
+DbDataKit.Odbc.Metadata.OdbcDriverEntry.Bitness.init -> void
+DbDataKit.Odbc.Metadata.OdbcDriverEntry.Library.get -> string?
+DbDataKit.Odbc.Metadata.OdbcDriverEntry.Library.init -> void
+DbDataKit.Odbc.Metadata.OdbcDriverEntry.Name.get -> string!
+DbDataKit.Odbc.Metadata.OdbcDriverEntry.Name.init -> void
+DbDataKit.Odbc.Metadata.OdbcDriverEntry.OdbcDriverEntry(string! Name, string? Library, DbDataKit.Odbc.Metadata.OdbcBitness Bitness) -> void
+DbDataKit.Odbc.Metadata.OdbcDriverInfo
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.CatalogSeparator.get -> string?
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.CatalogSeparator.init -> void
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.CatalogTerm.get -> string?
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.CatalogTerm.init -> void
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.DbmsName.get -> string?
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.DbmsName.init -> void
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.DbmsVersion.get -> string?
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.DbmsVersion.init -> void
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.DriverName.get -> string?
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.DriverName.init -> void
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.IdentifierCase.get -> DbDataKit.Odbc.Metadata.OdbcIdentifierCase
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.IdentifierCase.init -> void
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.IdentifierQuote.get -> DbDataKit.Odbc.Metadata.OdbcIdentifierQuote?
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.IdentifierQuote.init -> void
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.OdbcDriverInfo(string? DbmsName, string? DbmsVersion, string? DriverName, DbDataKit.Odbc.Metadata.OdbcIdentifierQuote? IdentifierQuote, DbDataKit.Odbc.Metadata.OdbcIdentifierCase IdentifierCase, DbDataKit.Odbc.Metadata.OdbcIdentifierCase QuotedIdentifierCase, string? SearchPatternEscape, string? CatalogSeparator, string? CatalogTerm, string? SchemaTerm) -> void
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.QuotedIdentifierCase.get -> DbDataKit.Odbc.Metadata.OdbcIdentifierCase
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.QuotedIdentifierCase.init -> void
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.SchemaTerm.get -> string?
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.SchemaTerm.init -> void
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.SearchPatternEscape.get -> string?
+DbDataKit.Odbc.Metadata.OdbcDriverInfo.SearchPatternEscape.init -> void
+DbDataKit.Odbc.Metadata.OdbcDriverInventory
+DbDataKit.Odbc.Metadata.OdbcDsnEntry
+DbDataKit.Odbc.Metadata.OdbcDsnEntry.Bitness.get -> DbDataKit.Odbc.Metadata.OdbcBitness
+DbDataKit.Odbc.Metadata.OdbcDsnEntry.Bitness.init -> void
+DbDataKit.Odbc.Metadata.OdbcDsnEntry.Driver.get -> string?
+DbDataKit.Odbc.Metadata.OdbcDsnEntry.Driver.init -> void
+DbDataKit.Odbc.Metadata.OdbcDsnEntry.Name.get -> string!
+DbDataKit.Odbc.Metadata.OdbcDsnEntry.Name.init -> void
+DbDataKit.Odbc.Metadata.OdbcDsnEntry.OdbcDsnEntry(string! Name, string? Driver, DbDataKit.Odbc.Metadata.OdbcDsnScope Scope, DbDataKit.Odbc.Metadata.OdbcBitness Bitness) -> void
+DbDataKit.Odbc.Metadata.OdbcDsnEntry.Scope.get -> DbDataKit.Odbc.Metadata.OdbcDsnScope
+DbDataKit.Odbc.Metadata.OdbcDsnEntry.Scope.init -> void
+DbDataKit.Odbc.Metadata.OdbcDsnScope
+DbDataKit.Odbc.Metadata.OdbcDsnScope.System = 1 -> DbDataKit.Odbc.Metadata.OdbcDsnScope
+DbDataKit.Odbc.Metadata.OdbcDsnScope.User = 0 -> DbDataKit.Odbc.Metadata.OdbcDsnScope
+DbDataKit.Odbc.Metadata.OdbcForeignKey
+DbDataKit.Odbc.Metadata.OdbcForeignKey.Catalog.get -> string?
+DbDataKit.Odbc.Metadata.OdbcForeignKey.Catalog.init -> void
+DbDataKit.Odbc.Metadata.OdbcForeignKey.Columns.get -> System.Collections.Generic.IReadOnlyList<string!>!
+DbDataKit.Odbc.Metadata.OdbcForeignKey.Columns.init -> void
+DbDataKit.Odbc.Metadata.OdbcForeignKey.DeleteRule.get -> int?
+DbDataKit.Odbc.Metadata.OdbcForeignKey.DeleteRule.init -> void
+DbDataKit.Odbc.Metadata.OdbcForeignKey.Name.get -> string?
+DbDataKit.Odbc.Metadata.OdbcForeignKey.Name.init -> void
+DbDataKit.Odbc.Metadata.OdbcForeignKey.OdbcForeignKey(string? Name, string? Catalog, string? Schema, string! Table, System.Collections.Generic.IReadOnlyList<string!>! Columns, string? ReferencedCatalog, string? ReferencedSchema, string! ReferencedTable, System.Collections.Generic.IReadOnlyList<string!>! ReferencedColumns, int? UpdateRule = null, int? DeleteRule = null) -> void
+DbDataKit.Odbc.Metadata.OdbcForeignKey.ReferencedCatalog.get -> string?
+DbDataKit.Odbc.Metadata.OdbcForeignKey.ReferencedCatalog.init -> void
+DbDataKit.Odbc.Metadata.OdbcForeignKey.ReferencedColumns.get -> System.Collections.Generic.IReadOnlyList<string!>!
+DbDataKit.Odbc.Metadata.OdbcForeignKey.ReferencedColumns.init -> void
+DbDataKit.Odbc.Metadata.OdbcForeignKey.ReferencedSchema.get -> string?
+DbDataKit.Odbc.Metadata.OdbcForeignKey.ReferencedSchema.init -> void
+DbDataKit.Odbc.Metadata.OdbcForeignKey.ReferencedTable.get -> string!
+DbDataKit.Odbc.Metadata.OdbcForeignKey.ReferencedTable.init -> void
+DbDataKit.Odbc.Metadata.OdbcForeignKey.Schema.get -> string?
+DbDataKit.Odbc.Metadata.OdbcForeignKey.Schema.init -> void
+DbDataKit.Odbc.Metadata.OdbcForeignKey.Table.get -> string!
+DbDataKit.Odbc.Metadata.OdbcForeignKey.Table.init -> void
+DbDataKit.Odbc.Metadata.OdbcForeignKey.UpdateRule.get -> int?
+DbDataKit.Odbc.Metadata.OdbcForeignKey.UpdateRule.init -> void
+DbDataKit.Odbc.Metadata.OdbcIdentifierCase
+DbDataKit.Odbc.Metadata.OdbcIdentifierCase.Lower = 2 -> DbDataKit.Odbc.Metadata.OdbcIdentifierCase
+DbDataKit.Odbc.Metadata.OdbcIdentifierCase.Mixed = 4 -> DbDataKit.Odbc.Metadata.OdbcIdentifierCase
+DbDataKit.Odbc.Metadata.OdbcIdentifierCase.Sensitive = 3 -> DbDataKit.Odbc.Metadata.OdbcIdentifierCase
+DbDataKit.Odbc.Metadata.OdbcIdentifierCase.Unknown = 0 -> DbDataKit.Odbc.Metadata.OdbcIdentifierCase
+DbDataKit.Odbc.Metadata.OdbcIdentifierCase.Upper = 1 -> DbDataKit.Odbc.Metadata.OdbcIdentifierCase
+DbDataKit.Odbc.Metadata.OdbcIdentifierQuote
+DbDataKit.Odbc.Metadata.OdbcIdentifierQuote.Apply(string! identifier) -> string!
+DbDataKit.Odbc.Metadata.OdbcIdentifierQuote.OdbcIdentifierQuote(string! Prefix, string! Suffix) -> void
+DbDataKit.Odbc.Metadata.OdbcIdentifierQuote.Prefix.get -> string!
+DbDataKit.Odbc.Metadata.OdbcIdentifierQuote.Prefix.init -> void
+DbDataKit.Odbc.Metadata.OdbcIdentifierQuote.Suffix.get -> string!
+DbDataKit.Odbc.Metadata.OdbcIdentifierQuote.Suffix.init -> void
+DbDataKit.Odbc.Metadata.OdbcIndex
+DbDataKit.Odbc.Metadata.OdbcIndex.Catalog.get -> string?
+DbDataKit.Odbc.Metadata.OdbcIndex.Catalog.init -> void
+DbDataKit.Odbc.Metadata.OdbcIndex.Columns.get -> System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcIndexColumn!>!
+DbDataKit.Odbc.Metadata.OdbcIndex.Columns.init -> void
+DbDataKit.Odbc.Metadata.OdbcIndex.Name.get -> string!
+DbDataKit.Odbc.Metadata.OdbcIndex.Name.init -> void
+DbDataKit.Odbc.Metadata.OdbcIndex.OdbcIndex(string? Catalog, string? Schema, string! Table, string! Name, bool Unique, System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcIndexColumn!>! Columns) -> void
+DbDataKit.Odbc.Metadata.OdbcIndex.Schema.get -> string?
+DbDataKit.Odbc.Metadata.OdbcIndex.Schema.init -> void
+DbDataKit.Odbc.Metadata.OdbcIndex.Table.get -> string!
+DbDataKit.Odbc.Metadata.OdbcIndex.Table.init -> void
+DbDataKit.Odbc.Metadata.OdbcIndex.Unique.get -> bool
+DbDataKit.Odbc.Metadata.OdbcIndex.Unique.init -> void
+DbDataKit.Odbc.Metadata.OdbcIndexColumn
+DbDataKit.Odbc.Metadata.OdbcIndexColumn.Descending.get -> bool
+DbDataKit.Odbc.Metadata.OdbcIndexColumn.Descending.init -> void
+DbDataKit.Odbc.Metadata.OdbcIndexColumn.Name.get -> string!
+DbDataKit.Odbc.Metadata.OdbcIndexColumn.Name.init -> void
+DbDataKit.Odbc.Metadata.OdbcIndexColumn.OdbcIndexColumn(string! Name, bool Descending) -> void
+DbDataKit.Odbc.Metadata.OdbcInventory
+DbDataKit.Odbc.Metadata.OdbcInventory.CanLoadDriver(string! name, DbDataKit.Odbc.Metadata.OdbcBitness processBitness) -> bool
+DbDataKit.Odbc.Metadata.OdbcInventory.DriverBitnesses(string! name) -> System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcBitness>!
+DbDataKit.Odbc.Metadata.OdbcInventory.Drivers.get -> System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcDriverEntry!>!
+DbDataKit.Odbc.Metadata.OdbcInventory.Drivers.init -> void
+DbDataKit.Odbc.Metadata.OdbcInventory.DsnBitnesses(string! name) -> System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcBitness>!
+DbDataKit.Odbc.Metadata.OdbcInventory.Dsns.get -> System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcDsnEntry!>!
+DbDataKit.Odbc.Metadata.OdbcInventory.Dsns.init -> void
+DbDataKit.Odbc.Metadata.OdbcInventory.OdbcInventory(System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcDriverEntry!>! Drivers, System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcDsnEntry!>! Dsns) -> void
+DbDataKit.Odbc.Metadata.OdbcParameterKind
+DbDataKit.Odbc.Metadata.OdbcParameterKind.Input = 1 -> DbDataKit.Odbc.Metadata.OdbcParameterKind
+DbDataKit.Odbc.Metadata.OdbcParameterKind.InputOutput = 2 -> DbDataKit.Odbc.Metadata.OdbcParameterKind
+DbDataKit.Odbc.Metadata.OdbcParameterKind.Output = 4 -> DbDataKit.Odbc.Metadata.OdbcParameterKind
+DbDataKit.Odbc.Metadata.OdbcParameterKind.ResultColumn = 3 -> DbDataKit.Odbc.Metadata.OdbcParameterKind
+DbDataKit.Odbc.Metadata.OdbcParameterKind.ReturnValue = 5 -> DbDataKit.Odbc.Metadata.OdbcParameterKind
+DbDataKit.Odbc.Metadata.OdbcParameterKind.Unknown = 0 -> DbDataKit.Odbc.Metadata.OdbcParameterKind
+DbDataKit.Odbc.Metadata.OdbcPolicyViolationException
+DbDataKit.Odbc.Metadata.OdbcPolicyViolationException.OdbcPolicyViolationException(string! reason) -> void
+DbDataKit.Odbc.Metadata.OdbcPolicyViolationException.Reason.get -> string!
+DbDataKit.Odbc.Metadata.OdbcPrimaryKey
+DbDataKit.Odbc.Metadata.OdbcPrimaryKey.Catalog.get -> string?
+DbDataKit.Odbc.Metadata.OdbcPrimaryKey.Catalog.init -> void
+DbDataKit.Odbc.Metadata.OdbcPrimaryKey.Columns.get -> System.Collections.Generic.IReadOnlyList<string!>!
+DbDataKit.Odbc.Metadata.OdbcPrimaryKey.Columns.init -> void
+DbDataKit.Odbc.Metadata.OdbcPrimaryKey.Name.get -> string?
+DbDataKit.Odbc.Metadata.OdbcPrimaryKey.Name.init -> void
+DbDataKit.Odbc.Metadata.OdbcPrimaryKey.OdbcPrimaryKey(string? Catalog, string? Schema, string! Table, string? Name, System.Collections.Generic.IReadOnlyList<string!>! Columns) -> void
+DbDataKit.Odbc.Metadata.OdbcPrimaryKey.Schema.get -> string?
+DbDataKit.Odbc.Metadata.OdbcPrimaryKey.Schema.init -> void
+DbDataKit.Odbc.Metadata.OdbcPrimaryKey.Table.get -> string!
+DbDataKit.Odbc.Metadata.OdbcPrimaryKey.Table.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedure
+DbDataKit.Odbc.Metadata.OdbcProcedure.Catalog.get -> string?
+DbDataKit.Odbc.Metadata.OdbcProcedure.Catalog.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedure.InputParameters.get -> int?
+DbDataKit.Odbc.Metadata.OdbcProcedure.InputParameters.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedure.Kind.get -> DbDataKit.Odbc.Metadata.OdbcProcedureKind
+DbDataKit.Odbc.Metadata.OdbcProcedure.Kind.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedure.Name.get -> string!
+DbDataKit.Odbc.Metadata.OdbcProcedure.Name.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedure.OdbcProcedure(string? Catalog, string? Schema, string! Name, int? InputParameters, int? OutputParameters, int? ResultSets, string? Remarks, DbDataKit.Odbc.Metadata.OdbcProcedureKind Kind) -> void
+DbDataKit.Odbc.Metadata.OdbcProcedure.OutputParameters.get -> int?
+DbDataKit.Odbc.Metadata.OdbcProcedure.OutputParameters.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedure.Remarks.get -> string?
+DbDataKit.Odbc.Metadata.OdbcProcedure.Remarks.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedure.ResultSets.get -> int?
+DbDataKit.Odbc.Metadata.OdbcProcedure.ResultSets.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedure.Schema.get -> string?
+DbDataKit.Odbc.Metadata.OdbcProcedure.Schema.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Catalog.get -> string?
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Catalog.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Default.get -> string?
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Default.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Kind.get -> DbDataKit.Odbc.Metadata.OdbcParameterKind
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Kind.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Name.get -> string!
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Name.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Nullable.get -> bool
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Nullable.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.OdbcProcedureColumn(string? Catalog, string? Schema, string! Procedure, string! Name, DbDataKit.Odbc.Metadata.OdbcParameterKind Kind, int? SqlType, string? TypeName, int? Size, int? Scale, bool Nullable, int Ordinal, string? Default = null, string? Remarks = null) -> void
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Ordinal.get -> int
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Ordinal.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Procedure.get -> string!
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Procedure.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Remarks.get -> string?
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Remarks.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Scale.get -> int?
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Scale.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Schema.get -> string?
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Schema.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Size.get -> int?
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.Size.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.SqlType.get -> int?
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.SqlType.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.TypeName.get -> string?
+DbDataKit.Odbc.Metadata.OdbcProcedureColumn.TypeName.init -> void
+DbDataKit.Odbc.Metadata.OdbcProcedureKind
+DbDataKit.Odbc.Metadata.OdbcProcedureKind.NoResult = 1 -> DbDataKit.Odbc.Metadata.OdbcProcedureKind
+DbDataKit.Odbc.Metadata.OdbcProcedureKind.ReturnsValue = 2 -> DbDataKit.Odbc.Metadata.OdbcProcedureKind
+DbDataKit.Odbc.Metadata.OdbcProcedureKind.Unknown = 0 -> DbDataKit.Odbc.Metadata.OdbcProcedureKind
+DbDataKit.Odbc.Metadata.OdbcRegistryHive
+DbDataKit.Odbc.Metadata.OdbcRegistryHive.CurrentUser = 1 -> DbDataKit.Odbc.Metadata.OdbcRegistryHive
+DbDataKit.Odbc.Metadata.OdbcRegistryHive.LocalMachine = 0 -> DbDataKit.Odbc.Metadata.OdbcRegistryHive
+DbDataKit.Odbc.Metadata.OdbcResultExtensions
+DbDataKit.Odbc.Metadata.OdbcResultList<T>
+DbDataKit.Odbc.Metadata.OdbcResultList<T>.Count.get -> int
+DbDataKit.Odbc.Metadata.OdbcResultList<T>.GetEnumerator() -> System.Collections.Generic.IEnumerator<T>!
+DbDataKit.Odbc.Metadata.OdbcResultList<T>.OdbcResultList(System.Collections.Generic.IReadOnlyList<T>! items, DbDataKit.Odbc.Metadata.OdbcResultTruncated? truncation) -> void
+DbDataKit.Odbc.Metadata.OdbcResultList<T>.Truncation.get -> DbDataKit.Odbc.Metadata.OdbcResultTruncated?
+DbDataKit.Odbc.Metadata.OdbcResultList<T>.this[int index].get -> T
+DbDataKit.Odbc.Metadata.OdbcResultTruncated
+DbDataKit.Odbc.Metadata.OdbcResultTruncated.Function.get -> string!
+DbDataKit.Odbc.Metadata.OdbcResultTruncated.Function.init -> void
+DbDataKit.Odbc.Metadata.OdbcResultTruncated.MaxRows.get -> int
+DbDataKit.Odbc.Metadata.OdbcResultTruncated.MaxRows.init -> void
+DbDataKit.Odbc.Metadata.OdbcResultTruncated.OdbcResultTruncated(string! Function, int MaxRows) -> void
+DbDataKit.Odbc.Metadata.OdbcResultTruncatedException
+DbDataKit.Odbc.Metadata.OdbcResultTruncatedException.OdbcResultTruncatedException(DbDataKit.Odbc.Metadata.OdbcResultTruncated! signal) -> void
+DbDataKit.Odbc.Metadata.OdbcResultTruncatedException.Signal.get -> DbDataKit.Odbc.Metadata.OdbcResultTruncated!
+DbDataKit.Odbc.Metadata.OdbcRowLimitBehavior
+DbDataKit.Odbc.Metadata.OdbcRowLimitBehavior.Throw = 0 -> DbDataKit.Odbc.Metadata.OdbcRowLimitBehavior
+DbDataKit.Odbc.Metadata.OdbcRowLimitBehavior.Truncate = 1 -> DbDataKit.Odbc.Metadata.OdbcRowLimitBehavior
+DbDataKit.Odbc.Metadata.OdbcRows
+DbDataKit.Odbc.Metadata.OdbcRows.Count.get -> int
+DbDataKit.Odbc.Metadata.OdbcRows.GetEnumerator() -> System.Collections.Generic.IEnumerator<string?[]!>!
+DbDataKit.Odbc.Metadata.OdbcRows.OdbcRows(System.Collections.Generic.IReadOnlyList<string?[]!>! rows, bool truncated) -> void
+DbDataKit.Odbc.Metadata.OdbcRows.Truncated.get -> bool
+DbDataKit.Odbc.Metadata.OdbcRows.this[int index].get -> string?[]!
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.Columns.get -> System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcColumn!>!
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.Columns.init -> void
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.ForeignKeys.get -> System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcForeignKey!>!
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.ForeignKeys.init -> void
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.ForeignKeysSupported.get -> bool
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.ForeignKeysSupported.init -> void
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.Indexes.get -> System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcIndex!>!
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.Indexes.init -> void
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.IndexesSupported.get -> bool
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.IndexesSupported.init -> void
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.Info.get -> DbDataKit.Odbc.Metadata.OdbcDriverInfo!
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.Info.init -> void
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.OdbcSchemaCrawl(DbDataKit.Odbc.Metadata.OdbcDriverInfo! Info, System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcTable!>! Tables, System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcColumn!>! Columns, System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcPrimaryKey!>! PrimaryKeys, bool PrimaryKeysSupported, System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcForeignKey!>! ForeignKeys, bool ForeignKeysSupported, System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcIndex!>! Indexes, bool IndexesSupported) -> void
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.PrimaryKeys.get -> System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcPrimaryKey!>!
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.PrimaryKeys.init -> void
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.PrimaryKeysSupported.get -> bool
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.PrimaryKeysSupported.init -> void
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.Tables.get -> System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcTable!>!
+DbDataKit.Odbc.Metadata.OdbcSchemaCrawl.Tables.init -> void
+DbDataKit.Odbc.Metadata.OdbcSearchable
+DbDataKit.Odbc.Metadata.OdbcSearchable.AllExceptLike = 2 -> DbDataKit.Odbc.Metadata.OdbcSearchable
+DbDataKit.Odbc.Metadata.OdbcSearchable.LikeOnly = 1 -> DbDataKit.Odbc.Metadata.OdbcSearchable
+DbDataKit.Odbc.Metadata.OdbcSearchable.Searchable = 3 -> DbDataKit.Odbc.Metadata.OdbcSearchable
+DbDataKit.Odbc.Metadata.OdbcSearchable.Unknown = -1 -> DbDataKit.Odbc.Metadata.OdbcSearchable
+DbDataKit.Odbc.Metadata.OdbcSearchable.Unsearchable = 0 -> DbDataKit.Odbc.Metadata.OdbcSearchable
+DbDataKit.Odbc.Metadata.OdbcSqlType
+DbDataKit.Odbc.Metadata.OdbcTable
+DbDataKit.Odbc.Metadata.OdbcTable.Catalog.get -> string?
+DbDataKit.Odbc.Metadata.OdbcTable.Catalog.init -> void
+DbDataKit.Odbc.Metadata.OdbcTable.IsView.get -> bool
+DbDataKit.Odbc.Metadata.OdbcTable.Name.get -> string!
+DbDataKit.Odbc.Metadata.OdbcTable.Name.init -> void
+DbDataKit.Odbc.Metadata.OdbcTable.OdbcTable(string? Catalog, string? Schema, string! Name, string! Type, string? Remarks = null) -> void
+DbDataKit.Odbc.Metadata.OdbcTable.Remarks.get -> string?
+DbDataKit.Odbc.Metadata.OdbcTable.Remarks.init -> void
+DbDataKit.Odbc.Metadata.OdbcTable.Schema.get -> string?
+DbDataKit.Odbc.Metadata.OdbcTable.Schema.init -> void
+DbDataKit.Odbc.Metadata.OdbcTable.Type.get -> string!
+DbDataKit.Odbc.Metadata.OdbcTable.Type.init -> void
+DbDataKit.Odbc.Metadata.OdbcTypeInfo
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.AutoUnique.get -> bool?
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.AutoUnique.init -> void
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.CaseSensitive.get -> bool
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.CaseSensitive.init -> void
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.ColumnSize.get -> int?
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.ColumnSize.init -> void
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.CreateParams.get -> string?
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.CreateParams.init -> void
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.FixedPrecisionScale.get -> bool
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.FixedPrecisionScale.init -> void
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.LiteralPrefix.get -> string?
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.LiteralPrefix.init -> void
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.LiteralSuffix.get -> string?
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.LiteralSuffix.init -> void
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.LocalTypeName.get -> string?
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.LocalTypeName.init -> void
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.MaximumScale.get -> int?
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.MaximumScale.init -> void
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.MinimumScale.get -> int?
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.MinimumScale.init -> void
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.Nullable.get -> bool
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.Nullable.init -> void
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.OdbcTypeInfo(string! TypeName, int SqlType, int? ColumnSize, string? LiteralPrefix, string? LiteralSuffix, string? CreateParams, bool Nullable, bool CaseSensitive, DbDataKit.Odbc.Metadata.OdbcSearchable Searchable, bool? Unsigned, bool FixedPrecisionScale, bool? AutoUnique, string? LocalTypeName, int? MinimumScale, int? MaximumScale) -> void
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.Searchable.get -> DbDataKit.Odbc.Metadata.OdbcSearchable
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.Searchable.init -> void
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.SqlType.get -> int
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.SqlType.init -> void
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.TypeName.get -> string!
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.TypeName.init -> void
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.Unsigned.get -> bool?
+DbDataKit.Odbc.Metadata.OdbcTypeInfo.Unsigned.init -> void
+const DbDataKit.Odbc.Metadata.OdbcSqlType.BigInt = -5 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.Binary = -2 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.Bit = -7 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.Char = 1 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.DateTime = 9 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.Decimal = 3 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.Double = 8 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.Float = 6 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.Guid = -11 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.Integer = 4 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.IntervalDay = 103 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.IntervalDayToHour = 108 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.IntervalDayToMinute = 109 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.IntervalDayToSecond = 110 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.IntervalHour = 104 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.IntervalHourToMinute = 111 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.IntervalHourToSecond = 112 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.IntervalMinute = 105 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.IntervalMinuteToSecond = 113 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.IntervalMonth = 102 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.IntervalSecond = 106 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.IntervalYear = 101 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.IntervalYearToMonth = 107 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.LongVarBinary = -4 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.LongVarchar = -1 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.Numeric = 2 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.Real = 7 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.SmallInt = 5 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.SqlServerTable = -153 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.SqlServerTime2 = -154 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.SqlServerTimestampOffset = -155 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.SqlServerUdt = -151 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.SqlServerVariant = -150 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.SqlServerXml = -152 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.TinyInt = -6 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.TypeDate = 91 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.TypeTime = 92 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.TypeTimestamp = 93 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.Unknown = 0 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.VarBinary = -3 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.Varchar = 12 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.WChar = -8 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.WLongVarchar = -10 -> int
+const DbDataKit.Odbc.Metadata.OdbcSqlType.WVarchar = -9 -> int
+override DbDataKit.Odbc.Metadata.OdbcDiagnosis.ToString() -> string!
+static DbDataKit.Odbc.Metadata.OdbcCatalog.Connect(string! connectionString, DbDataKit.Odbc.Metadata.OdbcCatalogOptions? options = null) -> DbDataKit.Odbc.Metadata.OdbcCatalog!
+static DbDataKit.Odbc.Metadata.OdbcCatalogOptions.Default.get -> DbDataKit.Odbc.Metadata.OdbcCatalogOptions!
+static DbDataKit.Odbc.Metadata.OdbcCatalogSession.OpenAsync(string! connectionString, DbDataKit.Odbc.Metadata.OdbcCatalogOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DbDataKit.Odbc.Metadata.OdbcCatalogSession!>!
+static DbDataKit.Odbc.Metadata.OdbcCatalogSession.OpenOverAsync(DbDataKit.Odbc.Metadata.IOdbcCatalogFunctions! functions, DbDataKit.Odbc.Metadata.OdbcCatalogOptions? options, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<DbDataKit.Odbc.Metadata.OdbcCatalogSession!>!
+static DbDataKit.Odbc.Metadata.OdbcConnectionPolicy.Default.get -> DbDataKit.Odbc.Metadata.OdbcConnectionPolicy!
+static DbDataKit.Odbc.Metadata.OdbcConnectionPolicy.Unrestricted.get -> DbDataKit.Odbc.Metadata.OdbcConnectionPolicy!
+static DbDataKit.Odbc.Metadata.OdbcConnectionString.Build(System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, string!>>! pairs) -> string!
+static DbDataKit.Odbc.Metadata.OdbcConnectionString.Build(params (string! Key, string! Value)[]! pairs) -> string!
+static DbDataKit.Odbc.Metadata.OdbcConnectionString.Get(string! connectionString, params string![]! keys) -> string?
+static DbDataKit.Odbc.Metadata.OdbcConnectionString.Normalize(string! value) -> string!
+static DbDataKit.Odbc.Metadata.OdbcConnectionString.Parse(string! text) -> System.Collections.Generic.IReadOnlyList<(string! Key, string! Value)>!
+static DbDataKit.Odbc.Metadata.OdbcConnectionString.Quote(string! value) -> string!
+static DbDataKit.Odbc.Metadata.OdbcConnectionString.TryParseStrict(string! text, out System.Collections.Generic.IReadOnlyList<(string! Key, string! Value)>! pairs, out string? error) -> bool
+static DbDataKit.Odbc.Metadata.OdbcDiagnostics.Explain(DbDataKit.Odbc.Metadata.OdbcCatalogException! exception) -> DbDataKit.Odbc.Metadata.OdbcDiagnosis!
+static DbDataKit.Odbc.Metadata.OdbcDiagnostics.Explain(DbDataKit.Odbc.Metadata.OdbcCatalogException! exception, string? connectionString, DbDataKit.Odbc.Metadata.OdbcInventory? inventory, DbDataKit.Odbc.Metadata.OdbcBitness? processBitness) -> DbDataKit.Odbc.Metadata.OdbcDiagnosis!
+static DbDataKit.Odbc.Metadata.OdbcDiagnostics.Explain(string! sqlState) -> DbDataKit.Odbc.Metadata.OdbcDiagnosis!
+static DbDataKit.Odbc.Metadata.OdbcDiagnostics.Explain(string! sqlState, string? connectionString, DbDataKit.Odbc.Metadata.OdbcInventory? inventory, DbDataKit.Odbc.Metadata.OdbcBitness? processBitness) -> DbDataKit.Odbc.Metadata.OdbcDiagnosis!
+static DbDataKit.Odbc.Metadata.OdbcDiagnostics.ProcessBitness.get -> DbDataKit.Odbc.Metadata.OdbcBitness
+static DbDataKit.Odbc.Metadata.OdbcDriverInventory.FromUnixFiles(DbDataKit.Odbc.Metadata.IOdbcFileReader! files) -> DbDataKit.Odbc.Metadata.OdbcInventory!
+static DbDataKit.Odbc.Metadata.OdbcDriverInventory.FromWindowsRegistry(DbDataKit.Odbc.Metadata.IOdbcRegistryReader! registry, bool is64BitOperatingSystem = true) -> DbDataKit.Odbc.Metadata.OdbcInventory!
+static DbDataKit.Odbc.Metadata.OdbcDriverInventory.Read() -> DbDataKit.Odbc.Metadata.OdbcInventory!
+static DbDataKit.Odbc.Metadata.OdbcResultExtensions.GetTruncation<T>(this System.Collections.Generic.IReadOnlyList<T>! result) -> DbDataKit.Odbc.Metadata.OdbcResultTruncated?
+static DbDataKit.Odbc.Metadata.OdbcSqlType.Name(int code) -> string!

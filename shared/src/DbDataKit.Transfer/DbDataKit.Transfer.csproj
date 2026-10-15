@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Transfer</RootNamespace>
+    <Description>Value conversion, staging policy, strategy SQL builders, capability matrix and the write gate.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Transfer.Abstractions\DbDataKit.Transfer.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Dialect\DbDataKit.Dialect.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Matrix\strategy-matrix.json" LogicalName="DbDataKit.Transfer.strategy-matrix.json" />
+    <InternalsVisibleTo Include="DbDataKit.Transfer.Tests" />
+  </ItemGroup>
+</Project>

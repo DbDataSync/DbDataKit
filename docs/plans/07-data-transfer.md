@@ -1,4 +1,4 @@
-# Plan 07: Data Transfer, Staging and Loading (`DbData.Transfer`)
+# Plan 07: Data Transfer, Staging and Loading (`DbDataKit.Transfer`)
 
 Status: proposed. Depends on: Plans 05 (dialect/types), 06 (connections). This is the largest design task; start with
 Phase 0 (written comparison) before writing code.
@@ -30,7 +30,7 @@ Non-goals: a scheduler, a change-data-capture framework for every engine (stays 
 
 ## 3. Design
 
-### 3.1 Core abstractions (`DbData.Transfer.Abstractions`)
+### 3.1 Core abstractions (`DbDataKit.Transfer.Abstractions`)
 ```csharp
 record TransferSchema(IReadOnlyList<TransferColumn> Columns);                 // canonical types (Plan 05), names, nullability, key flags
 interface IDataSource { TransferSchema Schema {get;}  IAsyncEnumerable<DataBatch> ReadAsync(ReadRequest r, CancellationToken ct); }
@@ -54,7 +54,7 @@ Build `TransferValues`/`ClrType`/`PgType`/`ArrowConversions`, and Proxy `ArrowCo
   NaN/Infinity, text with NUL bytes, unpaired surrogates).
 - Golden tests from the Plan 05 `types.golden.yml` plus value edge-case tables.
 
-### 3.3 Bulk writers (`DbData.Transfer.SqlServer`, `.Postgres`, `.MySql`, `.Oracle`, generic)
+### 3.3 Bulk writers (`DbDataKit.Transfer.SqlServer`, `.Postgres`, `.MySql`, `.Oracle`, generic)
 Extract from Build `MutationGate.BulkCopySqlServerAsync/BulkCopyPostgresAsync` and Sync `MsSqlStagingTableProvider`/`PgCopyStagingProvider`/`BatchInsertStagingProvider`:
 - SQL Server: `SqlBulkCopy` fed directly from `AsDataReader()` (avoid Build's `DataTable` buffering, the review's noted perf concern), batch size and timeout options.
 - Postgres: binary `COPY ... FROM STDIN` with explicit type writers (Sync `PostgresValues.cs`).

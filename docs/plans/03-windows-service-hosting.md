@@ -1,4 +1,4 @@
-# Plan 03: Windows Services and Hosting (`DbData.Hosting`)
+# Plan 03: Windows Services and Hosting (`DbDataKit.Hosting`)
 
 Status: proposed. Depends on: Plan 02 (ACL helper, secret handling for service accounts). Feeds Plan 08 (updater needs service control).
 
@@ -26,7 +26,7 @@ Sync 9.6 (network-trust auth behind proxy), 9.9 (bootstrap invite file), 9.10 (r
 
 ## 3. Design
 
-### 3.1 Service control (`DbData.Hosting.WindowsService`)
+### 3.1 Service control (`DbDataKit.Hosting.WindowsService`)
 - Use the Service Control Manager API directly (P/Invoke `CreateServiceW`, `ChangeServiceConfig2W`,
   `StartService`, `ControlService`, `QueryServiceStatusEx`) instead of `sc.exe`, so passwords never appear on
   a command line and error codes are typed. Fall back to `ServiceController` for status.
@@ -36,7 +36,7 @@ Sync 9.6 (network-trust auth behind proxy), 9.9 (bootstrap invite file), 9.10 (r
 - Settings: auto-start (delayed), description, dependencies, failure actions (restart 3x, reset period),
   service SID type `unrestricted`/`restricted`, required privileges trimmed (`sc privs` equivalent),
   Event Log source registration, binary path quoting and `current` junction (see Plan 08).
-- Commands (shared via `DbData.Hosting.Cli`): `service install|uninstall|start|stop|restart|status|run` with
+- Commands (shared via `DbDataKit.Hosting.Cli`): `service install|uninstall|start|stop|restart|status|run` with
   `--account`, `--password-stdin`, `--data-dir`, `--console` for foreground. Elevation detection with a clear
   message (optionally UAC relaunch).
 - Idempotent install: reconfigure if present; refuse to downgrade silently.
@@ -63,7 +63,7 @@ files, writable binaries). Linux equivalents: `/opt/<product>`, `/var/lib/<produ
   read-only root filesystem where possible, no SDK in runtime images (Sync's default image includes the SDK
   for in-app library installs; treat that as an explicit "dev image" and make `runtime` the default).
 
-### 3.4 Certificates (`DbData.Hosting.Certificates`)
+### 3.4 Certificates (`DbDataKit.Hosting.Certificates`)
 Merge Sync's `DbDataSync.Certificates` (Windows store lookup, ADCS enrollment, managed self-signed) and
 Proxy's `CertificateProvider` (self-signed with SAN machine/FQDN/loopback, 2048-bit RSA):
 - Modes: `File` (PFX/PEM, password via secret ref), `Store` (thumbprint/subject in LocalMachine\My, ACL on
@@ -73,7 +73,7 @@ Proxy's `CertificateProvider` (self-signed with SAN machine/FQDN/loopback, 2048-
 - Refuse plain HTTP/`TlsMode.None` on non-loopback binds unless explicitly overridden (Proxy S-5, Sync 9.6).
 - Expiry/rotation surfaced on the health endpoint and `service doctor`.
 
-### 3.5 Child process supervision (`DbData.Hosting.Children`)
+### 3.5 Child process supervision (`DbDataKit.Hosting.Children`)
 Common `ChildProcessHost` for Sync's TaskRunner and Proxy's x86 worker:
 - Windows Job Object with `KILL_ON_JOB_CLOSE` and parent-death detection so children never outlive the host.
 - Handoff of tokens through environment or an inherited handle, never argv.
@@ -92,12 +92,12 @@ handling documented once.
 
 ## 4. Package layout
 ```
-DbData.Hosting               host builder, drain, health/version, limits
-DbData.Hosting.WindowsService SCM wrapper, install/uninstall, event log, ACL checks
-DbData.Hosting.Systemd       unit generation
-DbData.Hosting.Certificates  cert modes, self-signed, store, ADCS
-DbData.Hosting.Children      child process host + pipe/UDS transport
-DbData.Hosting.Cli           shared `service` and `cert` command set
+DbDataKit.Hosting               host builder, drain, health/version, limits
+DbDataKit.Hosting.WindowsService SCM wrapper, install/uninstall, event log, ACL checks
+DbDataKit.Hosting.Systemd       unit generation
+DbDataKit.Hosting.Certificates  cert modes, self-signed, store, ADCS
+DbDataKit.Hosting.Children      child process host + pipe/UDS transport
+DbDataKit.Hosting.Cli           shared `service` and `cert` command set
 ```
 
 ## 5. Phases

@@ -1,4 +1,4 @@
-# Plan 05: SQL Dialect and Type System (`DbData.Dialect`)
+# Plan 05: SQL Dialect and Type System (`DbDataKit.Dialect`)
 
 Status: proposed. Depends on: none (Plan 01 for YAML descriptors). Foundation for Plans 04, 06, 07.
 This is the highest-overlap area in the review; do it early.
@@ -105,17 +105,17 @@ allow/deny with a reason. An optional `ISqlParser` seam lets a product plug an A
 Documented honestly as defence in depth: real enforcement is a read-only login/session (Plan 06 recipes). Used by Proxy (S-1),
 Build (replaces `ReadGuard`), Sync (`query-preview`).
 
-### 3.7 Conformance harness (`DbData.Dialect.Conformance`)
+### 3.7 Conformance harness (`DbDataKit.Dialect.Conformance`)
 xunit base classes parameterised by engine: quoting round-trips (hostile names), literal rendering, row limits incl. tie-safe,
 type round-trip table, parameter marker rewriting, DDL smoke. Docker fixtures for SQL Server, Postgres, MySQL, Oracle (as available) and
 in-process DuckDB. Adding an engine = adding a `dialect.yaml` + fixture + passing the suite.
 
 ## 4. Package layout
 ```
-DbData.Dialect.Abstractions   EngineId/Caps, ISqlDialect, CanonicalType, TypeMapping
-DbData.Dialect                data-driven dialect, built-in dialect.yaml set, lexer, classifier
-DbData.Dialect.Arrow          Canonical <-> Arrow mapping (depends on Apache.Arrow)
-DbData.Dialect.Conformance    test harness
+DbDataKit.Dialect.Abstractions   EngineId/Caps, ISqlDialect, CanonicalType, TypeMapping
+DbDataKit.Dialect                data-driven dialect, built-in dialect.yaml set, lexer, classifier
+DbDataKit.Dialect.Arrow          Canonical <-> Arrow mapping (depends on Apache.Arrow)
+DbDataKit.Dialect.Conformance    test harness
 ```
 
 ## 5. Migration (strangler pattern, no big bang)

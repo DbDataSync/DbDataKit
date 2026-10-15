@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <PackageId>DbData.Config.Yaml</PackageId>
-    <Description>Strict YAML subset reader, node tree with positions, layered merge and surgical editor for DbData tools.</Description>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="YamlDotNet" />
-  </ItemGroup>
-</Project>

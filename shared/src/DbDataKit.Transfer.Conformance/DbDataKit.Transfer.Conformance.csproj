@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Transfer.Conformance</RootNamespace>
+    <Description>Strategy conformance suite: runs the strategy SQL on an engine and compares with expected result sets; DuckDB reference runner.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DuckDB.NET.Data.Full" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Transfer\DbDataKit.Transfer.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets\DbDataKit.Secrets.csproj" />
+  </ItemGroup>
+</Project>

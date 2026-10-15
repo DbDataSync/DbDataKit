@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Dialect.Arrow</RootNamespace>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <Description>Canonical type to Apache Arrow type mapping, as a data table.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Apache.Arrow" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Dialect.Abstractions\DbDataKit.Dialect.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

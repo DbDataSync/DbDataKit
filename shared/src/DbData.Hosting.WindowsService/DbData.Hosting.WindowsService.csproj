@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <PackageId>DbData.Hosting.WindowsService</PackageId>
-    <Description>Service Control Manager wrapper (P/Invoke), install planning, directory layout and service doctor.</Description>
-  </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\DbData.Security.Acl\DbData.Security.Acl.csproj" />
-  </ItemGroup>
-</Project>

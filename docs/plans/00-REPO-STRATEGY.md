@@ -33,7 +33,7 @@ DbDataKit/
   DbDataSync/          submodule (product)
   DbDataProxy/         submodule (product)
   DbDataBuild/         submodule (product)
-  shared/              shared packages (DbData.*), one solution, independently versioned
+  shared/              shared packages (DbDataKit.*), one solution, independently versioned
     src/ tests/ Directory.Build.props Directory.Packages.props
   docs/
     index.md           landing page: what each project is, how they relate, why they differ
@@ -72,9 +72,9 @@ any dirty tree or non-fast-forward. Pointer bumps in the hub are a separate, exp
 
 Each product's `Directory.Build.props` imports an optional `Directory.Build.local.props` (git-ignored) that
 `local-on` generates. When present it sets `UseLocalDbDataShared=true`, and a shared `.targets` file swaps
-`PackageReference Include="DbData.*"` for `ProjectReference` to `../DbDataKit/shared/src/<pkg>`.
+`PackageReference Include="DbDataKit.*"` for `ProjectReference` to `../DbDataKit/shared/src/<pkg>`.
 CI never creates the file, so published builds always use released packages. The swap logic lives in the
-`DbData.Build` props package so each product imports it once.
+`DbDataKit.Build` props package so each product imports it once.
 
 ## Cross-repo validation
 
@@ -88,7 +88,7 @@ Dependabot or Renovate in each product opens PRs when a new shared package versi
 - **Reusable workflows** in the hub (`reusable-ci.yml`, `reusable-release.yml`) called by products with inputs:
   solution path, project name, tag prefix, publish target. Actions are SHA-pinned; `permissions:` is
   least-privilege. NuGet Trusted Publishing stays per repo; each repo registers its own caller workflow.
-- **`DbData.Build` props package**: central package versions, analyzers, SourceLink, nullable/warnings policy,
+- **`DbDataKit.Build` props package**: central package versions, analyzers, SourceLink, nullable/warnings policy,
   the source-override targets.
 - **`CLAUDE.md` skeleton** in every repo: build, test, release commands; where shared code comes from;
   "shared behaviour changes go to the hub".
@@ -131,6 +131,6 @@ handed to another team.
 2. Create `shared/` with the CI baseline (central package versions, pinned Actions, vulnerability scan).
 3. Add `tools/dev.ps1` and `dev.config.json`; verify on a clean clone.
 4. Add reusable workflows and `contract.yml`; point one product (Proxy, smallest) at them first.
-5. Extract `DbData.Odbc.Metadata` as the first shared package (see plan 04).
+5. Extract `DbDataKit.Odbc.Metadata` as the first shared package (see plan 04).
 6. Add `docs/index.md` landing page and CLAUDE.md files.
 7. Roll the reusable workflows to Build and Sync.

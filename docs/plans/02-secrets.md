@@ -1,4 +1,4 @@
-# Plan 02: Secrets (`DbData.Secrets`)
+# Plan 02: Secrets (`DbDataKit.Secrets`)
 
 Status: proposed. Depends on: none. Consumed by Plans 01 (secret-typed keys), 03 (service contexts), 06 (connections).
 
@@ -83,7 +83,7 @@ PFX gets a random password stored via the store, not null (closes Proxy S-3). JW
 as `secret:` rather than plaintext.
 
 ### 3.6 CLI
-Shared command set mounted by each product (`dbdata secret ...` via `DbData.Secrets.Cli`, or
+Shared command set mounted by each product (`dbdata secret ...` via `DbDataKit.Secrets.Cli`, or
 `<product> secret ...`): `set <name>` (prompt or stdin, never argv), `get <name> --reveal`, `list`, `rm`,
 `test <ref>` (resolves and reports ok/not found without printing), `import-env`. Service passwords are
 never passed on a command line (Plan 03 reads from stdin/secret).
@@ -95,11 +95,11 @@ never passed on a command line (Plan 03 reads from stdin/secret).
 
 ## 4. Package layout
 ```
-DbData.Secrets.Abstractions   SecretRef, SecretValue, ISecretResolver/Store, IRedactor, detector
-DbData.Secrets                chain, env/file/legacy-env providers, redactor
-DbData.Secrets.Keyring        OS keyring provider (wraps ClrKernel.Core.Secrets or replaces it)
-DbData.Secrets.Windows        DPAPI machine/user providers, ACL helper
-DbData.Secrets.Cli            shared command set
+DbDataKit.Secrets.Abstractions   SecretRef, SecretValue, ISecretResolver/Store, IRedactor, detector
+DbDataKit.Secrets                chain, env/file/legacy-env providers, redactor
+DbDataKit.Secrets.Keyring        OS keyring provider (wraps ClrKernel.Core.Secrets or replaces it)
+DbDataKit.Secrets.Windows        DPAPI machine/user providers, ACL helper
+DbDataKit.Secrets.Cli            shared command set
 ```
 
 ## 5. Phases

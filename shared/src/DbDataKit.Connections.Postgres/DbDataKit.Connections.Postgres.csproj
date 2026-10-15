@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Connections.Postgres</RootNamespace>
+    <PackageId>DbDataKit.Connections.Postgres</PackageId>
+    <Description>PostgreSQL provider: NpgsqlConnectionStringBuilder composer with verify-full TLS default, read-only session recipe and SQLSTATE failure mapping.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <PackageReference Include="Npgsql" />
+    <ProjectReference Include="..\DbDataKit.Connections\DbDataKit.Connections.csproj" />
+  </ItemGroup>
+</Project>

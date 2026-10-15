@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>dbdata-updater</AssemblyName>
+    <Description>Privileged one-shot updater: wires the DbDataKit.Update.Service state machine to concrete interfaces. Service control is a stub until Plan 03.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Update.Service\DbDataKit.Update.Service.csproj" />
+  </ItemGroup>
+</Project>

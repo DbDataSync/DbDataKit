@@ -1,8 +1,0 @@
-# DbData.Config.Testing
-
-Test helpers for products that use `DbData.Config` (Plan 01 section 4). Framework agnostic: every failed expectation throws `ConfigTestException`.
-
-- `GoldenMigration.AssertPair(engine, kind, before, after, options?)`: the engine must turn `before` into exactly `after` (comments and ordering included), the result must be valid strict YAML, and planning again on `after` must be `UpToDate`. `AssertDirectory(engine, kind, dir)` does this for every `name.before.yml` / `name.after.yml` pair (copy the folder to the output directory); `DBDATA_UPDATE_GOLDEN=1` rewrites the `.after` files.
-- `FuzzHelper`: seeded mutations of a valid sample. `DamagedInputYieldsDiagnostics(sample, target)` fails when the target throws or refuses without a diagnostic; ready-made targets `ForBuilder<T>`, `ForMigrations(engine, kind, sample)` (also checks migrated output is valid YAML) and `ForReader` (YAML or `.json`). Each returns the number of accepted mutations so a test can assert the fuzz is not vacuous.
-- `SchemaAgreement.Assert<T>()`: every key the binder accepts is in the generated JSON Schema and vice versa (recursively through lists, maps and unions; `additionalProperties` follows the unknown-key policy; the version keys are included).
-- `CatalogCompleteness.Assert(codes, fixtures, prefix?)`: each code needs a `CodeFixture` that produces it and carries fix text; reports missing, non-producing, throwing, fix-less, stale and wrongly prefixed entries all at once. `CodeFixture.FromText(code, yaml)` covers reader-level codes. Example: see `CatalogTests` in `DbData.Config.Tests` (all `SharedCodes`).

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Connections.Descriptor</RootNamespace>
+    <PackageId>DbDataKit.Connections.Descriptor</PackageId>
+    <Description>YAML-described ADO.NET engines (engine/1) over a DbProviderFactory, using dialect.yaml for SQL facts. Fixed properties are overridable only where marked.</Description>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Connections\DbDataKit.Connections.csproj" />
+  </ItemGroup>
+</Project>

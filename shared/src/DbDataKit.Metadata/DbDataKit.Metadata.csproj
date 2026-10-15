@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Metadata</RootNamespace>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <Description>Catalog readers (INFORMATION_SCHEMA, SQL Server, PostgreSQL, DuckDB, ODBC), query description, server facts and dialect lock files.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <PackageReference Include="YamlDotNet" />
+    <ProjectReference Include="..\DbDataKit.Metadata.Abstractions\DbDataKit.Metadata.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Dialect\DbDataKit.Dialect.csproj" />
+    <ProjectReference Include="..\DbDataKit.Odbc.Metadata\DbDataKit.Odbc.Metadata.csproj" />
+    <InternalsVisibleTo Include="DbDataKit.Metadata.Tests" />
+  </ItemGroup>
+</Project>

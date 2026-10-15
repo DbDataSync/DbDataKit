@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Update checker, release sources, downloader, ed25519 verifier and safe extraction for DbData products.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" />
+    <ProjectReference Include="..\DbDataKit.Update.Abstractions\DbDataKit.Update.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

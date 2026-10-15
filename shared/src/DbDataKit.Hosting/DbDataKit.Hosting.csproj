@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbDataKit.Hosting</PackageId>
+    <Description>UseDbDataHost: console/service/systemd integration, drain, health/version endpoints, request limits.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <ProjectReference Include="..\DbDataKit.Hosting.Abstractions\DbDataKit.Hosting.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

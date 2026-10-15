@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Connections.DuckDb</RootNamespace>
+    <PackageId>DbDataKit.Connections.DuckDb</PackageId>
+    <Description>DuckDB provider with the read-only sandbox recipe (READ_ONLY, no external access, no extension install or autoload, locked configuration).</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <PackageReference Include="DuckDB.NET.Data.Full" />
+    <ProjectReference Include="..\DbDataKit.Connections\DbDataKit.Connections.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,4 +1,4 @@
-# Plan 06: Connections, Drivers and Providers (`DbData.Connections`)
+# Plan 06: Connections, Drivers and Providers (`DbDataKit.Connections`)
 
 Status: proposed. Depends on: Plans 01 (definitions), 02 (secrets), 05 (dialect). Plan 04 supplies the ODBC pieces.
 
@@ -62,13 +62,13 @@ combining a provider with transfer components, so Sync's driver contract version
 
 ### 3.3 Provider packages
 ```
-DbData.Connections.Abstractions   definition, IDbProvider, ConnectionContext, policy, failure model
-DbData.Connections                registry, composers, pool/limits, env/secret login resolution, built-in generic ADO provider
-DbData.Connections.SqlServer / .Postgres / .MySql / .Oracle / .DuckDb / .Odbc / .FlightSql
-DbData.Connections.Descriptor     YAML-described engines over a DbProviderFactory (Sync Drivers.Descriptor)
-DbData.Connections.Libraries      on-demand NuGet provider install (Sync Libraries), hardened
-DbData.Connections.Jdbc           IKVM JDBC bridge (Sync Drivers.Jdbc); optional, heavy
-DbData.Connections.Plugins        compiled plugin loading with AssemblyLoadContext
+DbDataKit.Connections.Abstractions   definition, IDbProvider, ConnectionContext, policy, failure model
+DbDataKit.Connections                registry, composers, pool/limits, env/secret login resolution, built-in generic ADO provider
+DbDataKit.Connections.SqlServer / .Postgres / .MySql / .Oracle / .DuckDb / .Odbc / .FlightSql
+DbDataKit.Connections.Descriptor     YAML-described engines over a DbProviderFactory (Sync Drivers.Descriptor)
+DbDataKit.Connections.Libraries      on-demand NuGet provider install (Sync Libraries), hardened
+DbDataKit.Connections.Jdbc           IKVM JDBC bridge (Sync Drivers.Jdbc); optional, heavy
+DbDataKit.Connections.Plugins        compiled plugin loading with AssemblyLoadContext
 ```
 Engine packages carry their client libraries; products reference only what they ship. Proxy references SqlServer/DuckDb/Odbc; Build SqlServer/Postgres/DuckDb/Odbc/FlightSql; Sync references all, plus descriptor/libraries/JDBC.
 
@@ -106,7 +106,7 @@ wraps provider pooling rather than replacing it, and gives Proxy a global/per-us
 catalog sessions (Plan 04). Optional for Sync/Build; default pass-through to the provider pool.
 
 ### 3.8 Flight SQL and the Proxy relationship
-`DbData.Connections.FlightSql` unifies Build's `FlightSqlRowSource`/`FlightSqlLogin` grammar with Proxy's `ProxyFlightClient`
+`DbDataKit.Connections.FlightSql` unifies Build's `FlightSqlRowSource`/`FlightSqlLogin` grammar with Proxy's `ProxyFlightClient`
 (which reads Arrow-IPC-compressed streams stock clients cannot). Login grammar keeps `token`, `token_env`, `user/password`,
 headers; `token_command` is gated by policy `allowExternalCommands` (off for web/MCP) and requires an absolute path (Build F-1).
 Strategic option, to be decided: route all exotic engines (32-bit ODBC, vendor-only drivers) through the Proxy and let Sync/Build

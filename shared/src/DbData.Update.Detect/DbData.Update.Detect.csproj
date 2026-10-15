@@ -1,8 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <Description>Install-method detection for CLIs and the update appliers that match each method.</Description>
-  </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\DbData.Update.Abstractions\DbData.Update.Abstractions.csproj" />
-  </ItemGroup>
-</Project>

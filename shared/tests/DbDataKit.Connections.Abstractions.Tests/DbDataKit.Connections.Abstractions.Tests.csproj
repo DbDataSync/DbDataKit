@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Secrets\DbDataKit.Secrets.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Dialect\DbDataKit.Dialect.csproj" />
+  </ItemGroup>
+</Project>

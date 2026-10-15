@@ -1,7 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
-    <RootNamespace>DbData.Dialect</RootNamespace>
-    <Description>Engine identity, capabilities, canonical type model and the ISqlDialect contract.</Description>
-  </PropertyGroup>
-</Project>

@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbDataKit.Hosting.Children</PackageId>
+    <Description>Supervised child processes: job object, parent-death detection, token handoff, pipe/UDS transport, restart policy.</Description>
+  </PropertyGroup>
+</Project>

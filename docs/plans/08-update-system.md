@@ -1,4 +1,4 @@
-# Plan 08: Install and Update System (`DbData.Update`)
+# Plan 08: Install and Update System (`DbDataKit.Update`)
 
 Status: proposed. Depends on: Plan 03 (service control, directories, `/version`, drain), Plan 01 (config migration), Plan 02 (signing keys are not secrets but must be handled carefully).
 
@@ -41,7 +41,7 @@ Every release publishes `release.json` (and a detached signature `release.json.s
 - Also publish SBOM and GitHub build provenance attestation; verification of attestations is optional on the client.
 - `revoked` and a monotonic `minimumSafeVersion` support emergency withdrawal.
 
-### 3.2 Updater library (`DbData.Update`)
+### 3.2 Updater library (`DbDataKit.Update`)
 ```
 IReleaseSource    GitHubReleases | NuGetFlatContainer | Folder/UNC share (air-gapped) | Url
 UpdateChecker     latest per channel (stable/beta/snapshot), min-version and revocation checks
@@ -77,7 +77,7 @@ Linux: same layout with a `current` symlink, helper via a systemd path/oneshot u
 - Native assets (Build): the product embeds expected SHA-256 per RID (or reads them from the signed manifest) instead of trusting the same release's `SHA256SUMS`.
 
 ### 3.5 Installer (`install.ps1` and friends)
-Single bootstrap template `DbData.Install` parameterised per product: `-Product -Version -Channel -InstallService -Account -DataDir -ConfigFrom`:
+Single bootstrap template `DbDataKit.Install` parameterised per product: `-Product -Version -Channel -InstallService -Account -DataDir -ConfigFrom`:
 downloads `release.json` + signature, verifies with the embedded public key, verifies artifacts, creates directories/ACLs and the service via Plan 03's
 CLI (`<tool> service install`), migrates/preserves config, supports `-WhatIf`, writes a log, and is idempotent (re-run = repair/upgrade). The documented
 one-liner remains but pins a version/hash of the bootstrap script itself in docs. Rollback behaviour shared with the updater (failure leaves the previous service running, not stopped).
@@ -102,7 +102,7 @@ Snapshot/beta channels get distinct channel names and are never offered to `stab
 | Phase | Work | Exit |
 |---|---|---|
 | 1 | Manifest schema, signing tooling, `reusable-release.yml` producing signed manifests; key management decision | Proxy release produces and verifies a signed manifest |
-| 2 | `DbData.Update` core: sources, downloader, verifier (zip-slip tests, tamper tests, revocation, downgrade protection); port Sync `Updates` onto it | Sync stable/snapshot flow unchanged for users |
+| 2 | `DbDataKit.Update` core: sources, downloader, verifier (zip-slip tests, tamper tests, revocation, downgrade protection); port Sync `Updates` onto it | Sync stable/snapshot flow unchanged for users |
 | 3 | Install-method detection and CLI update command; Build uses it (Scoop/archive); native asset hashes from manifest | Build `update --check` works; fetch-native verifies embedded hashes |
 | 4 | Service swap helper (Windows) + side-by-side layout + health/rollback journaling; Proxy first | VM test: v1 to v2 success, v3 failing health rolls back, interrupted update recovers |
 | 5 | Sync service adoption incl. DB schema upgrade steps and pre-update backup hook | Update with migration succeeds; no-rollback flag works |

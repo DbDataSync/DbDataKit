@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Connections</RootNamespace>
+    <PackageId>DbDataKit.Connections</PackageId>
+    <Description>Provider registry, secure connection-string composers, login resolution, parameter style adapter and connection pool.</Description>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Dialect\DbDataKit.Dialect.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets\DbDataKit.Secrets.csproj" />
+    <ProjectReference Include="..\DbDataKit.Odbc.Metadata\DbDataKit.Odbc.Metadata.csproj" />
+    <InternalsVisibleTo Include="DbDataKit.Connections.Tests" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Dialect</RootNamespace>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <Description>Data-driven SQL dialects, shared SQL lexer, statement classifier and read-only policy.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="YamlDotNet" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Dialect.Abstractions\DbDataKit.Dialect.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="dialects\*.yaml" LogicalName="DbDataKit.Dialect.dialects.%(Filename)%(Extension)" />
+    <InternalsVisibleTo Include="DbDataKit.Dialect.Tests" />
+  </ItemGroup>
+</Project>

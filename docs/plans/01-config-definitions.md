@@ -1,4 +1,4 @@
-# Plan 01: Definition / Config (`DbData.Config`)
+# Plan 01: Definition / Config (`DbDataKit.Config`)
 
 Status: proposed. Depends on: none (Plan 02 supplies secret references; Plan 08 calls the migrator).
 Inputs: review detail docs, sections "Configuration and definition schemas" in each.
@@ -95,10 +95,10 @@ become validators on the shared schema.
 ## 4. Package layout
 
 ```
-DbData.Config.Yaml        strict reader, nodes, merge, editor, diagnostics (no other deps beyond YamlDotNet)
-DbData.Config             schema attributes, binder, layering, migrations, env/CLI sources, JSON Schema
-DbData.Config.Hosting     Microsoft.Extensions.Configuration/Options integration, validators, show --origin
-DbData.Config.Testing     fixture/fuzz helpers, golden migration helper, schema-binder agreement test
+DbDataKit.Config.Yaml        strict reader, nodes, merge, editor, diagnostics (no other deps beyond YamlDotNet)
+DbDataKit.Config             schema attributes, binder, layering, migrations, env/CLI sources, JSON Schema
+DbDataKit.Config.Hosting     Microsoft.Extensions.Configuration/Options integration, validators, show --origin
+DbDataKit.Config.Testing     fixture/fuzz helpers, golden migration helper, schema-binder agreement test
 ```
 
 ## 5. Phases
@@ -106,7 +106,7 @@ DbData.Config.Testing     fixture/fuzz helpers, golden migration helper, schema-
 | Phase | Work | Exit criteria |
 |---|---|---|
 | 0 | Decide key conventions (`snake_case` vs `camelCase`: Build uses snake_case, Sync camelCase), version key name, env prefix scheme. Write the spec. | Spec merged in `docs/` |
-| 1 | Extract `DbData.Config.Yaml` from Build with its fuzz tests; Build consumes the package (behaviour-identical: its test suite is the safety net) | Build tests green, no golden diffs |
+| 1 | Extract `DbDataKit.Config.Yaml` from Build with its fuzz tests; Build consumes the package (behaviour-identical: its test suite is the safety net) | Build tests green, no golden diffs |
 | 2 | Diagnostics + typed binder + schema generation; port one small Build config (`dialects:`) onto it | Binder/schema agreement test |
 | 3 | Layering, env/CLI, `show --origin` | Precedence tests incl. legacy aliases |
 | 4 | Migration engine + `schemaVersion` introduced as version 1 in all three; first real migration used as the proving ground | Dry-run/apply/backup tests; refusal of newer |

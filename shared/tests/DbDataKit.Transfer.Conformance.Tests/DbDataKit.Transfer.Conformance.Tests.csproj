@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DbDataKit.Transfer.Conformance\DbDataKit.Transfer.Conformance.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Secrets\DbDataKit.Secrets.csproj" />
+  </ItemGroup>
+</Project>

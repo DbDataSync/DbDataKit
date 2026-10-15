@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>dbdata-update</ToolCommandName>
+    <Description>CI tool: create, sign and verify DbData release manifests (release/1) with ed25519.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Update\DbDataKit.Update.csproj" />
+  </ItemGroup>
+</Project>

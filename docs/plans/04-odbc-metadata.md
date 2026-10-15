@@ -1,12 +1,12 @@
-# Plan 04: ODBC and Database/Query Metadata (`DbData.Odbc.Metadata` and `DbData.Metadata`)
+# Plan 04: ODBC and Database/Query Metadata (`DbDataKit.Odbc.Metadata` and `DbDataKit.Metadata`)
 
-Status: proposed. The ODBC package is already in progress in DbDataProxy (`src/DbData.Odbc.Metadata`, commit `c08355f`).
+Status: proposed. The ODBC package is already in progress in DbDataProxy (`src/DbDataKit.Odbc.Metadata`, commit `c08355f`).
 This plan covers (a) finishing and extracting it into the shared repo and (b) a broader neutral metadata layer built on top.
 Depends on: Plan 05 (canonical types, lexer), Plan 06 (connection policy, parameter markers).
 
 ## 1. Current state
 
-`DbData.Odbc.Metadata` (7 files, about 700 lines with README, 27 tests): `OdbcCatalog` (connect, `GetInfoAsync`, catalogs,
+`DbDataKit.Odbc.Metadata` (7 files, about 700 lines with README, 27 tests): `OdbcCatalog` (connect, `GetInfoAsync`, catalogs,
 schemas, tables, columns, primary keys, foreign keys, indexes), `IOdbcCatalogFunctions` seam, internal P/Invoke
 `OdbcNativeFunctions`, records (`OdbcTable`, `OdbcColumn`, `OdbcPrimaryKey`, `OdbcForeignKey`, `OdbcIndex`,
 `OdbcDriverInfo`, `OdbcIdentifierQuote`), `OdbcConnectionString` (parse/normalize), `OdbcCatalogException` (SQLSTATE only).
@@ -19,10 +19,10 @@ Other metadata code to bring into view:
   `DialectDiscovery`, `dialects.lock.yml`.
 - Proxy: INFORMATION_SCHEMA SQL in `Metadata.cs`, `GetSqlInfo` facts, `SELECT * ... WHERE 1 = 0` schema probe.
 
-## 2. Part A: extract and finish `DbData.Odbc.Metadata`
+## 2. Part A: extract and finish `DbDataKit.Odbc.Metadata`
 
 ### 2.1 Extraction steps
-1. `git subtree split` (or `filter-repo`) the `src/DbData.Odbc.Metadata` and `tests/DbData.Odbc.Metadata.Tests` paths to preserve history,
+1. `git subtree split` (or `filter-repo`) the `src/DbDataKit.Odbc.Metadata` and `tests/DbDataKit.Odbc.Metadata.Tests` paths to preserve history,
    then add under `shared/src` and `shared/tests` of the hub. Proxy then switches to the NuGet package.
 2. Add package metadata: `PackageId`, SemVer starting 0.x, SourceLink, README, `IsPackable`, symbols, deterministic build,
    own `Directory.Build.props` and `Directory.Packages.props` (the project currently inherits `net10.0`, nullable, implicit usings from the Proxy root).
@@ -44,7 +44,7 @@ Other metadata code to bring into view:
 
 ### 2.3 API additions
 - `SQLGetTypeInfo` returning `OdbcTypeInfo` and `SqlType` to canonical type mapping (via Plan 05; this package stays dependency-free
-  by exposing the raw SQL_xxx codes plus an optional `DbData.Odbc.Metadata.Canonical` mapping package).
+  by exposing the raw SQL_xxx codes plus an optional `DbDataKit.Odbc.Metadata.Canonical` mapping package).
 - `SQLProcedures`/`SQLProcedureColumns` (Sync hook discovery, Build native SQL).
 - `OdbcDriverInventory`: list installed drivers and DSNs (Windows registry both bitness hives, `odbcinst` on Unix) with bitness, so
   consumers can detect "this driver is 32-bit only" and route to the Proxy worker (replaces trial and error).
@@ -52,7 +52,7 @@ Other metadata code to bring into view:
 - Tests: add the existing fake-driver unit tests to a shared matrix: SQL Server (msodbcsql18 container), SQLite/DuckDB ODBC on Linux,
   Microsoft Text driver 32-bit on Windows (already used by Proxy worker tests).
 
-## 3. Part B: neutral metadata model (`DbData.Metadata`)
+## 3. Part B: neutral metadata model (`DbDataKit.Metadata`)
 
 Goal: one set of records and one reader interface that products consume regardless of how the catalog is reached.
 

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Connections</RootNamespace>
+    <PackageId>DbDataKit.Connections.Abstractions</PackageId>
+    <Description>Connection definition (connection/1), provider contracts, credential policy and the connection failure model.</Description>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Config\DbDataKit.Config.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Dialect.Abstractions\DbDataKit.Dialect.Abstractions.csproj" />
+    <InternalsVisibleTo Include="DbDataKit.Connections.Abstractions.Tests" />
+  </ItemGroup>
+</Project>

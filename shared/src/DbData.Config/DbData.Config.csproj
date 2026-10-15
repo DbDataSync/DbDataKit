@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <PackageId>DbData.Config</PackageId>
-    <Description>Schema attributes, typed binder (no object deserializer), layering, env/CLI overrides, versioned migrations and JSON Schema generation.</Description>
-  </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\DbData.Config.Yaml\DbData.Config.Yaml.csproj" />
-  </ItemGroup>
-</Project>

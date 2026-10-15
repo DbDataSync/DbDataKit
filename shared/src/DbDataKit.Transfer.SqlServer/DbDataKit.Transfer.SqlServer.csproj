@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Transfer.SqlServer</RootNamespace>
+    <Description>SQL Server bulk writer: SqlBulkCopy fed straight from batch readers (no DataTable buffering).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Transfer\DbDataKit.Transfer.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="DbDataKit.Transfer.SqlServer.Tests" />
+  </ItemGroup>
+</Project>

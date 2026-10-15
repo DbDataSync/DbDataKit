@@ -10,7 +10,7 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 01 | [Config / definitions](01-config-definitions.md) | Build strict YAML, Sync typed YAML, Proxy json | Strict parsing everywhere, `schemaVersion` + migrations, Proxy startup validation |
 | 02 | [Secrets](02-secrets.md) | Sync keyring, Build env logins, Proxy plaintext | One reference syntax, no plaintext, one redactor |
 | 03 | [Windows service / hosting](03-windows-service-hosting.md) | Proxy `ServiceInstaller`, Sync service + certificates | Least-privilege install, ACLs, certs, child hosting |
-| 04 | [ODBC and metadata](04-odbc-metadata.md) | Proxy `DbData.Odbc.Metadata` | Extract and harden; neutral catalog reader |
+| 04 | [ODBC and metadata](04-odbc-metadata.md) | Proxy `DbDataKit.Odbc.Metadata` | Extract and harden; neutral catalog reader |
 | 05 | [SQL dialect and types](05-sql-dialect.md) | Sync dialects, Build `DialectProfile`, Proxy Arrow map | One quoting, lexer, canonical types, conformance suite |
 | 06 | [Connections / providers](06-connections.md) | Sync `IDriver`, Proxy `IDbProvider`, Build logins | One definition, composer, read-only recipes, failure model |
 | 07 | [Data transfer, staging, loading](07-data-transfer.md) | Sync pipeline, Build copy models | Shared converters, bulk writers, strategies, write gate |

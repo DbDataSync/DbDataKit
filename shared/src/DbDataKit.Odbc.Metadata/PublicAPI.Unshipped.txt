@@ -1,0 +1,19 @@
+#nullable enable
+DbDataKit.Odbc.Metadata.IOdbcCatalogFunctions.DescribeQueryAsync(string! sql, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcResultColumn!>!>!
+DbDataKit.Odbc.Metadata.OdbcCatalog.DescribeQueryAsync(string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<DbDataKit.Odbc.Metadata.OdbcResultColumn!>!>!
+DbDataKit.Odbc.Metadata.OdbcCatalog.GetInfoNumberAsync(ushort infoType, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<uint?>!
+DbDataKit.Odbc.Metadata.OdbcCatalog.GetInfoTextAsync(ushort infoType, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string?>!
+DbDataKit.Odbc.Metadata.OdbcResultColumn
+DbDataKit.Odbc.Metadata.OdbcResultColumn.Name.get -> string!
+DbDataKit.Odbc.Metadata.OdbcResultColumn.Name.init -> void
+DbDataKit.Odbc.Metadata.OdbcResultColumn.Nullable.get -> bool?
+DbDataKit.Odbc.Metadata.OdbcResultColumn.Nullable.init -> void
+DbDataKit.Odbc.Metadata.OdbcResultColumn.OdbcResultColumn(int Ordinal, string! Name, int SqlType, int? Size, int? Scale, bool? Nullable) -> void
+DbDataKit.Odbc.Metadata.OdbcResultColumn.Ordinal.get -> int
+DbDataKit.Odbc.Metadata.OdbcResultColumn.Ordinal.init -> void
+DbDataKit.Odbc.Metadata.OdbcResultColumn.Scale.get -> int?
+DbDataKit.Odbc.Metadata.OdbcResultColumn.Scale.init -> void
+DbDataKit.Odbc.Metadata.OdbcResultColumn.Size.get -> int?
+DbDataKit.Odbc.Metadata.OdbcResultColumn.Size.init -> void
+DbDataKit.Odbc.Metadata.OdbcResultColumn.SqlType.get -> int
+DbDataKit.Odbc.Metadata.OdbcResultColumn.SqlType.init -> void

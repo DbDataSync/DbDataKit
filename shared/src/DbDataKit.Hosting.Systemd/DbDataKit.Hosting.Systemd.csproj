@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbDataKit.Hosting.Systemd</PackageId>
+    <Description>Hardened systemd unit file and Dockerfile generators.</Description>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Connections.SqlServer</RootNamespace>
+    <PackageId>DbDataKit.Connections.SqlServer</PackageId>
+    <Description>SQL Server provider: SqlConnectionStringBuilder composer with secure TLS defaults, read login recipe and SqlException failure mapping.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <ProjectReference Include="..\DbDataKit.Connections\DbDataKit.Connections.csproj" />
+  </ItemGroup>
+</Project>

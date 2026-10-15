@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Data.Odbc" />
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\DbDataKit.Odbc.Metadata\DbDataKit.Odbc.Metadata.csproj" />
+  </ItemGroup>
+</Project>
