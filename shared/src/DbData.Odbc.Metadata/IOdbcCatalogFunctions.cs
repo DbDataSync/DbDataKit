@@ -58,6 +58,13 @@ public interface IOdbcCatalogFunctions : IAsyncDisposable
     Task<IReadOnlyList<string?[]>> ProcedureColumnsAsync(string? catalog, string? schema, string? procedure, string? column, CancellationToken cancellationToken) =>
         throw new OdbcCatalogException("SQLProcedureColumns", "IM001");
 
+    /// <summary>
+    /// SQLPrepare followed by SQLNumResultCols and SQLDescribeCol for each column: the result columns of a statement without executing it.
+    /// Drivers that cannot describe an unexecuted statement fail with their own SQLSTATE (IM001 here when not implemented).
+    /// </summary>
+    Task<IReadOnlyList<OdbcResultColumn>> DescribeQueryAsync(string sql, CancellationToken cancellationToken) =>
+        throw new OdbcCatalogException("SQLPrepare", "IM001");
+
     /// <summary>SQLTables as a stream, rows in driver order, not capped by <see cref="OdbcCatalogOptions.MaxRows"/>. Disposing the enumerator early frees the statement.</summary>
     IAsyncEnumerable<string?[]> StreamTablesAsync(string? catalog, string? schema, string? table, string? types, CancellationToken cancellationToken) =>
         OdbcStreams.From(TablesAsync(catalog, schema, table, types, cancellationToken));
