@@ -43,6 +43,27 @@ public sealed class ServiceCommandContext
     public Func<IEnumerable<DoctorCheck>>? ExtraDoctorChecks { get; init; }
 
     public TimeSpan StopTimeout { get; init; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Start mode; null keeps the library default (automatic, delayed).</summary>
+    public ServiceStartMode? StartMode { get; init; }
+
+    /// <summary>Failure actions; null keeps <see cref="FailurePolicy.Default"/>.</summary>
+    public FailurePolicy? Failure { get; init; }
+
+    public IReadOnlyList<string> Dependencies { get; init; } = [];
+
+    /// <summary>Service SID type; null keeps unrestricted.</summary>
+    public ServiceSidType? SidType { get; init; }
+
+    /// <summary>Trim the service token to these privileges; null leaves the default set.</summary>
+    public IReadOnlyList<string>? RequiredPrivileges { get; init; }
+
+    /// <summary>
+    /// Option name that supplies a data directory (default <c>data-dir</c>) and the argument the service is started
+    /// with for it; null makes <c>--data-dir</c> add <c>--data-dir PATH</c> to the service command line. Products
+    /// whose host takes it as configuration (<c>--Section:Key=PATH</c>) set <see cref="DataDirectoryArgument"/>.
+    /// </summary>
+    public Func<string, IReadOnlyList<string>>? DataDirectoryArgument { get; init; }
 }
 
 /// <summary>
@@ -142,8 +163,7 @@ public sealed class ServiceCommand(
         var args = context.Arguments.ToList();
         if (parsed.Get("data-dir") is { } dataDir)
         {
-            args.Add("--data-dir");
-            args.Add(dataDir);
+            args.AddRange(context.DataDirectoryArgument?.Invoke(dataDir) ?? ["--data-dir", dataDir]);
         }
 
         return new ServiceInstallSpec
@@ -155,6 +175,11 @@ public sealed class ServiceCommand(
             Arguments = args,
             Account = ServiceAccount.Parse(parsed.Get("account"), context.ServiceName),
             AllowLocalSystem = parsed.Has("allow-localsystem"),
+            StartMode = context.StartMode ?? ServiceStartMode.AutomaticDelayed,
+            Failure = context.Failure ?? FailurePolicy.Default,
+            Dependencies = context.Dependencies,
+            SidType = context.SidType ?? ServiceSidType.Unrestricted,
+            RequiredPrivileges = context.RequiredPrivileges,
             EventLogSource = context.EventLogSource,
             Version = context.Version,
         };

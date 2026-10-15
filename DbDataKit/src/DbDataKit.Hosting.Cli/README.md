@@ -7,3 +7,5 @@ Plain command classes, no CLI framework: `Execute(string[] args, IConsole consol
 - Products provide a `ServiceCommandContext` (name, binary, layout, principal resolver, optional systemd unit) and inject the real `WindowsServiceControlManager`, `FileSystemAclService` and a `WindowsPrincipalResolver`.
 
 UAC relaunch is not implemented (message only).
+
+`ServiceCommandContext` also takes `StartMode`, `Failure` (restart delays and reset period), `Dependencies`, `SidType`, `RequiredPrivileges`, and `DataDirectoryArgument` (how `--data-dir` reaches the service command line when the host reads its data directory from configuration rather than a `--data-dir` option).

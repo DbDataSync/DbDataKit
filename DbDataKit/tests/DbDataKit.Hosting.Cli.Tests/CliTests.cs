@@ -56,6 +56,29 @@ public class ServiceCommandTests
     }
 
     [Fact]
+    public void Context_start_mode_failure_policy_and_data_dir_mapping_are_applied()
+    {
+        var scm = new InMemoryServiceControlManager();
+        var ctx = new ServiceCommandContext
+        {
+            ServiceName = "Prod",
+            BinaryPath = @"C:\Program Files\Prod\Prod.exe",
+            Layout = DirectoryLayout.ForProduct("Prod", @"C:\PF", @"C:\PD"),
+            PrincipalResolver = _ => new WellKnownPrincipalResolver("S-1-5-80-1"),
+            StartMode = ServiceStartMode.Automatic,
+            Failure = new FailurePolicy([TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5)], TimeSpan.FromDays(1)),
+            DataDirectoryArgument = path => [$"--Prod:DataDirectory={path}"],
+        };
+        var cmd = new ServiceCommand(ctx, scm, new RecordingAcl(), new Elevated(true), null, false, _ => Task.CompletedTask);
+        Assert.Equal(0, cmd.Execute(["install", "--data-dir", @"D:\data"], new BufferConsole()));
+        var cfg = scm.GetConfig("Prod")!;
+        Assert.Equal(ServiceStartMode.Automatic, cfg.StartMode);
+        Assert.Equal(2, cfg.FailureRestartActions);
+        Assert.Contains(@"--Prod:DataDirectory=D:\data", cfg.BinaryPathName);
+        Assert.DoesNotContain("--data-dir", cfg.BinaryPathName);
+    }
+
+    [Fact]
     public void Install_without_elevation_is_refused_but_dry_run_is_fine()
     {
         var (cmd, scm, _) = Make(elevated: false);
