@@ -68,7 +68,7 @@ public class CatalogTests
             Assert.Equal(6000, r.Value!.Listen.Port);
             Assert.Equal(7, r.Value.Timeout);
 
-            File.WriteAllText(path, "{ \"timeout\": 7, }");
+            File.WriteAllText(path, "{ \"timeout\": 7 ");
             var bad = new ConfigBuilder<ProxyConfig>().AddFile(path).Build();
             Assert.Contains(bad.Diagnostics, d => d.Code == SharedCodes.YamlSyntax && d.Line == 1);
         }

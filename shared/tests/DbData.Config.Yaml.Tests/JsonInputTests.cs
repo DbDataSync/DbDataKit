@@ -21,8 +21,8 @@ public class JsonInputTests
     }
 
     [Theory]
-    [InlineData("{\"a\": 1,}")]
-    [InlineData("{\"a\": 1 // c\n}")]
+    [InlineData("{\"a\": 1,, }")]
+    [InlineData("{\"a\": 1 /* open }")]
     [InlineData("{\"a\": ")]
     [InlineData("{'a': 1}")]
     [InlineData("not json")]
@@ -33,6 +33,28 @@ public class JsonInputTests
         var diag = Assert.Single(d);
         Assert.Equal(SharedCodes.YamlSyntax, diag.Code);
         Assert.True(diag.Line >= 1);
+    }
+
+    [Fact]
+    public void Comments_and_trailing_commas_are_allowed_and_positions_kept()
+    {
+        var text = "{\n  // line\n  \"a\": \"x // not a comment, \", /* block\n c */\n  \"b\": [1, 2,],\n}\n";
+        var d = new List<ConfigDiagnostic>();
+        var root = Assert.IsType<YamlMapping>(JsonInput.Read(text, "a.json", d));
+        Assert.Empty(d);
+        Assert.Equal("x // not a comment, ", ((YamlScalar)root.Get("a")!).Value);
+        Assert.Equal(2, ((YamlSequence)root.Get("b")!).Items.Count);
+        Assert.Equal(5, root.Get("b")!.Line);
+        Assert.Null(JsonInput.Read("// only a comment\n", "a.json", d));
+        Assert.Empty(d);
+    }
+
+    [Fact]
+    public void Duplicate_keys_stay_errors_even_with_comments()
+    {
+        var d = new List<ConfigDiagnostic>();
+        JsonInput.Read("{\"a\": 1, // c\n \"a\": 2,}", "a.json", d);
+        Assert.Contains(d, x => x.Code == SharedCodes.DuplicateKey);
     }
 
     [Fact]

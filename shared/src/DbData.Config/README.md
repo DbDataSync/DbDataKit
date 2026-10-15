@@ -29,5 +29,5 @@ Typed, strict, layered configuration on top of `DbData.Config.Yaml`. No YamlDotN
 - Env prefix: `DBDATA_<APP>__...`. Legacy aliases are caller supplied.
 - Migrations live in the product that owns the file kind; the engine is shared (plan recommendation).
 - Git-commit-instead-of-.bak is not implemented (only `.bak`).
-- JSON input: files named `*.json` (via `AddFile`/`AddText`, and the MEC provider) go through `JsonInput` in `DbData.Config.Yaml`: strict JSON check (no comments or trailing commas), then the same strict node tree with line/column. Test helpers live in `DbData.Config.Testing`.
+- JSON input: files named `*.json` (via `AddFile`/`AddText`, and the MEC provider) go through `JsonInput` in `DbData.Config.Yaml`: JSON check (comments and trailing commas allowed, like appsettings.json), then the same strict node tree with line/column. Test helpers live in `DbData.Config.Testing`.
 - Merge: top-level keys of every layer are layered; per-key opt-out of list appending is via `key=`.
