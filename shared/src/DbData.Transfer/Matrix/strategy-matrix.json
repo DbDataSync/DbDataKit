@@ -1,0 +1,79 @@
+{
+  "_comment": "Which strategy is valid on which engine. status: reference = verified by this repository's conformance suite on that engine; product-verified = verified by a product's own conformance (Build matrix/strategies.yml, Sync writers) but not by this repository; unverified = builder exists, nobody has run it; unsupported = rejected. min_version is the lowest engine version the SQL form needs.",
+  "strategies": {
+    "full_replace": {
+      "needs": ["transaction"],
+      "engines": {
+        "duckdb":    { "status": "reference" },
+        "sqlserver": { "status": "product-verified", "note": "Build conformance; DELETE by default, TRUNCATE optional" },
+        "postgres":  { "status": "product-verified", "note": "Build conformance" },
+        "mysql":     { "status": "unverified", "note": "TRUNCATE commits implicitly; DELETE is transactional" },
+        "oracle":    { "status": "unverified", "note": "TRUNCATE is DDL and commits implicitly" },
+        "fabric":    { "status": "unverified", "note": "not tested on Fabric" }
+      }
+    },
+    "delete_insert_by_key": {
+      "needs": ["transaction", "key_columns"],
+      "engines": {
+        "duckdb":    { "status": "reference" },
+        "sqlserver": { "status": "product-verified" },
+        "postgres":  { "status": "product-verified" },
+        "mysql":     { "status": "unverified" },
+        "oracle":    { "status": "unverified" },
+        "fabric":    { "status": "unverified" }
+      }
+    },
+    "merge_by_key": {
+      "needs": ["transaction", "key_columns", "merge_or_upsert"],
+      "engines": {
+        "duckdb":    { "status": "reference", "note": "INSERT ... ON CONFLICT; needs a PRIMARY KEY or UNIQUE constraint on the key", "requires": ["unique_key_on_target"] },
+        "sqlserver": { "status": "product-verified", "note": "MERGE" },
+        "postgres":  { "status": "product-verified", "min_version": "9.5", "note": "MERGE from 15 (Build parity); ON CONFLICT below, which needs a unique index on the key", "requires": [] },
+        "mysql":     { "status": "unverified", "note": "ON DUPLICATE KEY UPDATE; needs a PRIMARY KEY or UNIQUE index on the key", "requires": ["unique_key_on_target"] },
+        "oracle":    { "status": "unverified", "note": "MERGE" },
+        "fabric":    { "status": "unverified", "note": "MERGE is documented for Fabric Warehouse but untested" }
+      }
+    },
+    "delete_insert_by_range": {
+      "needs": ["transaction", "range_column"],
+      "engines": {
+        "duckdb":    { "status": "reference" },
+        "sqlserver": { "status": "product-verified" },
+        "postgres":  { "status": "product-verified" },
+        "mysql":     { "status": "unverified" },
+        "oracle":    { "status": "unverified" },
+        "fabric":    { "status": "unverified" }
+      }
+    },
+    "watermark_append": {
+      "needs": ["transaction", "watermark_column"],
+      "engines": {
+        "duckdb":    { "status": "reference" },
+        "sqlserver": { "status": "product-verified" },
+        "postgres":  { "status": "product-verified" },
+        "mysql":     { "status": "unverified" },
+        "oracle":    { "status": "unverified" },
+        "fabric":    { "status": "unverified" }
+      }
+    },
+    "key_reconcile_delete": {
+      "needs": ["transaction", "key_columns"],
+      "engines": {
+        "duckdb":    { "status": "reference" },
+        "sqlserver": { "status": "product-verified", "note": "Sync KeyReconcileDelete" },
+        "postgres":  { "status": "product-verified", "note": "Sync KeyReconcileDelete" },
+        "mysql":     { "status": "unverified" },
+        "oracle":    { "status": "unverified" },
+        "fabric":    { "status": "unverified" }
+      }
+    }
+  },
+  "aliases": {
+    "DeleteInsert": "full_replace",
+    "Snapshot": null,
+    "MsSqlMerge": "merge_by_key",
+    "Merge": "merge_by_key",
+    "KeyReconcileDelete": "key_reconcile_delete",
+    "Watermark": "watermark_append"
+  }
+}

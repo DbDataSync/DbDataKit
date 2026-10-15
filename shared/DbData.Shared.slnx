@@ -20,6 +20,9 @@
     <Project Path="src/DbData.Secrets.Keyring/DbData.Secrets.Keyring.csproj" />
     <Project Path="src/DbData.Secrets.Windows/DbData.Secrets.Windows.csproj" />
     <Project Path="src/DbData.Secrets/DbData.Secrets.csproj" />
+    <Project Path="src/DbData.Transfer.Abstractions/DbData.Transfer.Abstractions.csproj" />
+    <Project Path="src/DbData.Transfer.Conformance/DbData.Transfer.Conformance.csproj" />
+    <Project Path="src/DbData.Transfer/DbData.Transfer.csproj" />
     <Project Path="src/DbData.Update.Abstractions/DbData.Update.Abstractions.csproj" />
     <Project Path="src/DbData.Update.Detect/DbData.Update.Detect.csproj" />
     <Project Path="src/DbData.Update.Service/DbData.Update.Service.csproj" />
@@ -49,6 +52,8 @@
     <Project Path="tests/DbData.Secrets.Keyring.Tests/DbData.Secrets.Keyring.Tests.csproj" />
     <Project Path="tests/DbData.Secrets.Tests/DbData.Secrets.Tests.csproj" />
     <Project Path="tests/DbData.Secrets.Windows.Tests/DbData.Secrets.Windows.Tests.csproj" />
+    <Project Path="tests/DbData.Transfer.Conformance.Tests/DbData.Transfer.Conformance.Tests.csproj" />
+    <Project Path="tests/DbData.Transfer.Tests/DbData.Transfer.Tests.csproj" />
     <Project Path="tests/DbData.Update.Detect.Tests/DbData.Update.Detect.Tests.csproj" />
     <Project Path="tests/DbData.Update.Service.Tests/DbData.Update.Service.Tests.csproj" />
     <Project Path="tests/DbData.Update.Tests/DbData.Update.Tests.csproj" />

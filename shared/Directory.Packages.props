@@ -24,5 +24,8 @@
     <PackageVersion Include="xunit.v3.assert" Version="4.0.2" />
     <PackageVersion Include="xunit.v3.extensibility.core" Version="4.0.2" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
+    <PackageVersion Include="DuckDB.NET.Data.Full" Version="1.5.6" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
   </ItemGroup>
 </Project>
