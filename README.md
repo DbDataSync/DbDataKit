@@ -213,7 +213,7 @@ The tests publish the 32-bit worker on demand into `artifacts/worker-x86` and us
 driver to prove queries really run in a 32-bit process. Set `DBPROXY_TEST_SQLSERVER` to point the SQL Server tests at
 another instance (Windows authentication).
 
-Layout: `src/DbData.Odbc.Metadata` (standalone ODBC catalog package, see its README), `src/DbDataProxy.Core` (Arrow conversion, ADO.NET executor, client, worker protocol),
+Layout: the shared `DbDataKit.Odbc.Metadata` package (ODBC catalog; project reference into the hub while the adoption pass is offline), `src/DbDataProxy.Core` (Arrow conversion, ADO.NET executor, client, worker protocol),
 `src/DbDataProxy.Server` (Kestrel host, Flight SQL server, auth, TLS, service/CLI),
 `src/DbDataProxy.Worker` (32-bit ODBC worker), `tests/DbDataProxy.Tests`.
 

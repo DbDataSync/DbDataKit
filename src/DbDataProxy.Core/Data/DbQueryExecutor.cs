@@ -73,7 +73,7 @@ public sealed class DbQueryExecutor(
     public Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken)
     {
         RequireOdbc();
-        return OdbcMetadata.ListTablesAsync(connectionString, cancellationToken);
+        return OdbcMetadata.ListTablesAsync(connectionString, commandTimeoutSeconds, cancellationToken);
     }
 
     public Task<IReadOnlyList<ColumnEntry>> ListColumnsAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken)

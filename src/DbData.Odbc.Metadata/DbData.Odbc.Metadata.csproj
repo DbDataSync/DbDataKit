@@ -1,6 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <RootNamespace>DbData.Odbc.Metadata</RootNamespace>
-    <Description>ODBC catalog metadata (tables, columns, primary and foreign keys, indexes, driver facts) through the driver manager's own catalog functions.</Description>
-  </PropertyGroup>
-</Project>

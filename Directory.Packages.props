@@ -1,6 +1,7 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <DbDataKitVersion>0.1.0</DbDataKitVersion>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
@@ -19,6 +20,7 @@
     <PackageVersion Include="Grpc.Net.Client" Version="2.84.0" />
     <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
     <PackageVersion Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.23.0" />
+    <PackageVersion Include="DbDataKit.Odbc.Metadata" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.0.0" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />

@@ -198,7 +198,9 @@ public sealed partial class ProxyFlightServer(
         if (ex is RpcException rpc) return rpc;
         if (IsLoginFailure(ex))
             return new RpcException(new Status(StatusCode.Unauthenticated, "The database rejected the credentials."));
-        if (ex is DbException or NotSupportedException or ArgumentException or DbData.Odbc.Metadata.OdbcCatalogException)
+        if (ex is DbDataKit.Odbc.Metadata.OdbcResultTruncatedException)
+            return new RpcException(new Status(StatusCode.ResourceExhausted, "The data source's catalog is larger than the configured limit."));
+        if (ex is DbException or NotSupportedException or DbDataKit.Odbc.Metadata.OdbcPolicyViolationException or ArgumentException or DbDataKit.Odbc.Metadata.OdbcCatalogException)
             return new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
         return new RpcException(new Status(StatusCode.Internal, "Query failed: " + ex.Message));
     }
@@ -208,7 +210,7 @@ public sealed partial class ProxyFlightServer(
         Microsoft.Data.SqlClient.SqlException sql => sql.Number is 18456 or 18452 or 4060,
         System.Data.Odbc.OdbcException odbc => odbc.Errors.Cast<System.Data.Odbc.OdbcError>()
             .Any(e => e.SQLState is { } s && (s.StartsWith("28", StringComparison.Ordinal) || s == "42000" && e.NativeError is 18456)),
-        DbData.Odbc.Metadata.OdbcCatalogException catalogError => catalogError.SqlState.StartsWith("28", StringComparison.Ordinal),
+        DbDataKit.Odbc.Metadata.OdbcCatalogException catalogError => catalogError.SqlState.StartsWith("28", StringComparison.Ordinal),
         _ => false,
     };
 
