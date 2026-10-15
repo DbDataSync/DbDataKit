@@ -1,7 +1,7 @@
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
-using System.Text;
+using DbDataKit.Dialect;
 using Apache.Arrow;
 using Apache.Arrow.Types;
 
@@ -160,17 +160,18 @@ public enum ParameterStyle
 /// <summary>Applies <see cref="QueryParameter"/> values to a command.</summary>
 internal static class ParameterBinder
 {
-    public static void Bind(DbCommand command, string sql, IReadOnlyList<QueryParameter>? parameters, ParameterStyle style)
+    public static void Bind(DbCommand command, string sql, IReadOnlyList<QueryParameter>? parameters, ParameterStyle style, ISqlDialect? dialect = null)
     {
+        dialect ??= style == ParameterStyle.NamedAtSign ? ProviderDialects.SqlServer : ProviderDialects.Odbc;
         command.CommandText = sql;
         if (parameters is null || parameters.Count == 0) return;
 
-        int markers = SqlMarkers.CountPositional(sql, bracketIdentifiers: style == ParameterStyle.NamedAtSign);
+        int markers = ParameterMarkers.Count(sql, dialect);
         if (markers > 0)
         {
             if (markers != parameters.Count)
                 throw new ArgumentException($"The statement has {markers} '?' markers but {parameters.Count} parameters were supplied.");
-            if (style == ParameterStyle.NamedAtSign) command.CommandText = SqlMarkers.RewriteToNamed(sql);
+            if (style == ParameterStyle.NamedAtSign) command.CommandText = ParameterMarkers.RewriteToNamed(sql, dialect);
         }
 
         for (int i = 0; i < parameters.Count; i++)
@@ -193,67 +194,4 @@ internal static class ParameterBinder
 
     private static string Prefixed(string? name, int index) =>
         string.IsNullOrEmpty(name) ? "@p" + (index + 1) : name.StartsWith('@') ? name : "@" + name;
-}
-
-/// <summary>Finds <c>?</c> markers while skipping string literals, quoted identifiers and comments.</summary>
-public static class SqlMarkers
-{
-    public static int CountPositional(string sql, bool bracketIdentifiers = false)
-    {
-        int count = 0;
-        Scan(sql, bracketIdentifiers, _ => count++);
-        return count;
-    }
-
-    public static string RewriteToNamed(string sql, bool bracketIdentifiers = true)
-    {
-        var output = new StringBuilder(sql.Length + 16);
-        int next = 1, copied = 0;
-        Scan(sql, bracketIdentifiers, position =>
-        {
-            output.Append(sql, copied, position - copied).Append("@p").Append(next++);
-            copied = position + 1;
-        });
-        output.Append(sql, copied, sql.Length - copied);
-        return output.ToString();
-    }
-
-    private static void Scan(string sql, bool bracketIdentifiers, Action<int> onMarker)
-    {
-        for (int i = 0; i < sql.Length; i++)
-        {
-            char c = sql[i];
-            switch (c)
-            {
-                case '\'' or '"':
-                    i = SkipQuoted(sql, i, c);
-                    break;
-                case '[' when bracketIdentifiers:
-                    i = SkipQuoted(sql, i, ']');
-                    break;
-                case '-' when i + 1 < sql.Length && sql[i + 1] == '-':
-                    while (i < sql.Length && sql[i] != '\n') i++;
-                    break;
-                case '/' when i + 1 < sql.Length && sql[i + 1] == '*':
-                    int end = sql.IndexOf("*/", i + 2, StringComparison.Ordinal);
-                    i = end < 0 ? sql.Length : end + 1;
-                    break;
-                case '?':
-                    onMarker(i);
-                    break;
-            }
-        }
-    }
-
-    // Returns the index of the closing character; a doubled closing character is an escape, not the end.
-    private static int SkipQuoted(string sql, int start, char close)
-    {
-        for (int i = start + 1; i < sql.Length; i++)
-        {
-            if (sql[i] != close) continue;
-            if (i + 1 < sql.Length && sql[i + 1] == close) { i++; continue; }
-            return i;
-        }
-        return sql.Length;
-    }
 }

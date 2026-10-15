@@ -5,6 +5,7 @@ using Apache.Arrow.Flight.Server;
 using Apache.Arrow.Flight.Sql;
 using Apache.Arrow.Types;
 using Arrow.Flight.Protocol.Sql;
+using DbDataKit.Dialect;
 using DbDataProxy.Data;
 using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Data;
@@ -105,11 +106,11 @@ public sealed partial class ProxyFlightServer
         };
         if (command.IncludeSchema)
         {
-            var quote = await LoadIdentifierQuoteAsync(source, context.CancellationToken).ConfigureAwait(false);
+            var dialect = await LoadQuotingDialectAsync(source, context.CancellationToken).ConfigureAwait(false);
             var declared = await LoadDeclaredColumnsAsync(source, context.CancellationToken).ConfigureAwait(false);
             var builder = new BinaryArray.Builder();
             foreach (var r in rows)
-                builder.Append((ReadOnlySpan<byte>)await SerializedTableSchemaAsync(source, quote, declared, r[0], r[1], r[2]!, context.CancellationToken).ConfigureAwait(false));
+                builder.Append((ReadOnlySpan<byte>)await SerializedTableSchemaAsync(source, dialect, declared, r[0], r[1], r[2]!, context.CancellationToken).ConfigureAwait(false));
             arrays.Add(builder.Build());
         }
         await WriteAsync(writer, GetTableSchema(command.IncludeSchema), arrays, rows.Count).ConfigureAwait(false);
@@ -476,7 +477,7 @@ public sealed partial class ProxyFlightServer
 
     /// <summary>The Arrow schema of a table (from a zero-row query), serialized the way Flight SQL expects.</summary>
     private static async Task<byte[]> SerializedTableSchemaAsync(
-        ResolvedDataSource source, Func<string, string> quote, DeclaredColumns declared, string? catalogName, string? schemaName, string table,
+        ResolvedDataSource source, ISqlDialect dialect, DeclaredColumns declared, string? catalogName, string? schemaName, string table,
         CancellationToken cancellationToken)
     {
         // Some ODBC drivers report a catalog that is not valid in SQL (the text driver reports the directory path), so
@@ -484,9 +485,10 @@ public sealed partial class ProxyFlightServer
         string?[][] candidates = [[catalogName, schemaName, table], [schemaName, table], [table]];
         foreach (var parts in candidates.DistinctBy(p => string.Join('\0', p)))
         {
-            string name = string.Join('.', parts.Where(p => !string.IsNullOrEmpty(p)).Select(p => quote(p!)));
             try
             {
+                // Quote inside the try: a name the dialect refuses (control characters, S-9) just moves on to the next candidate.
+                string name = dialect.QuoteQualified(parts.Where(p => !string.IsNullOrEmpty(p)).Select(p => p!));
                 await using var result = await source.Executor
                     .ExecuteQueryAsync(new QueryRequest($"SELECT * FROM {name} WHERE 1 = 0", 1, source.Options.CommandTimeoutSeconds), cancellationToken)
                     .ConfigureAwait(false);
@@ -502,23 +504,23 @@ public sealed partial class ProxyFlightServer
         return SchemaExtensions.SerializeSchema(new Schema([], null));
     }
 
-    private static readonly Func<string, string> StandardQuote = id => "\"" + id.Replace("\"", "\"\"") + "\"";
-
     /// <summary>
-    /// ODBC sources are quoted with the driver's own identifier character (some use backticks or brackets, some none);
-    /// everything else, and any driver that cannot say, gets standard SQL double quotes.
+    /// The dialect used to quote table names in schema probes. ODBC sources use the driver's own identifier quote (some use
+    /// backticks or brackets, some none, in which case only plain names are emitted); other providers use their built-in dialect,
+    /// and an ODBC driver that cannot say gets the generic double-quote dialect.
     /// </summary>
-    private static async Task<Func<string, string>> LoadIdentifierQuoteAsync(ResolvedDataSource source, CancellationToken cancellationToken)
+    private static async Task<ISqlDialect> LoadQuotingDialectAsync(ResolvedDataSource source, CancellationToken cancellationToken)
     {
-        if (!UseCatalogApi(source) || source.Executor is not IMetadataProvider provider) return StandardQuote;
+        var fallback = ProviderDialects.For(source.Options.Provider);
+        if (!UseCatalogApi(source) || source.Executor is not IMetadataProvider provider) return fallback;
         try
         {
-            var quote = (await provider.GetDialectAsync(cancellationToken).ConfigureAwait(false)).Quote;
-            return quote is null ? id => id : quote.Apply;
+            var info = await provider.GetDialectAsync(cancellationToken).ConfigureAwait(false);
+            return ProviderDialects.ForOdbc(info.DbmsName, info.Quote?.Prefix, info.Quote?.Suffix);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return StandardQuote;
+            return fallback;
         }
     }
 }

@@ -50,11 +50,7 @@ public interface IMetadataProvider
 public sealed record PrimaryKeyEntry(string? Catalog, string? Schema, string Table, string Column, int Sequence, string? KeyName);
 
 /// <summary>How a driver quotes identifiers; null from the provider means the driver does not support quoting.</summary>
-public sealed record IdentifierQuote(string Prefix, string Suffix)
-{
-    /// <summary>Quotes one identifier, doubling any embedded suffix so a name cannot escape the quotes.</summary>
-    public string Apply(string identifier) => Prefix + identifier.Replace(Suffix, Suffix + Suffix) + Suffix;
-}
+public sealed record IdentifierQuote(string Prefix, string Suffix);
 
 /// <summary>A column as declared in the database catalog (nullability and, for decimals, precision and scale).</summary>
 public sealed record ColumnEntry(string Name, bool Nullable, int? Precision, int? Scale);

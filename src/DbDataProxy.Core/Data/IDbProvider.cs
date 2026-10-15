@@ -16,6 +16,9 @@ public interface IDbProvider
 
     /// <summary>How this provider marks statement parameters.</summary>
     ParameterStyle ParameterStyle => ParameterStyle.Positional;
+
+    /// <summary>The shared dialect for this provider (marker scanning, quoting, read-only classification).</summary>
+    DbDataKit.Dialect.ISqlDialect Dialect => ProviderDialects.Odbc;
 }
 
 public sealed class OdbcProvider : IDbProvider

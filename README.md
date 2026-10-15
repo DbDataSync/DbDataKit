@@ -101,6 +101,24 @@ Other ADO.NET providers: implement `IDbProvider` and register it. Statements are
 source sets `"AllowWrites": true` (this only gates statements sent as *updates*; the database account's own
 permissions are the real boundary for what a query can do).
 
+#### Read-only statement check (`Classifier`)
+
+On a source without `AllowWrites`, the text of every query and every prepared statement is checked with the shared
+`DbDataKit.Dialect` classifier (dialect chosen from the provider: SQL Server, DuckDB, or generic ODBC): it must be
+exactly one `SELECT` (or `WITH ... SELECT`; DuckDB also `FROM`-first, `DESCRIBE`, `SUMMARIZE`, `SHOW`) and must not use
+a deny-listed word outside strings, comments and quoted identifiers (`OPENROWSET`, `xp_*`, `sp_*`, `BULK`, `COPY`,
+`ATTACH`, `INSTALL`, `LOAD`, `PRAGMA`, `read_csv` and the other `read_*` functions, ...). Set it per data source:
+
+| `Classifier` | Effect |
+|---|---|
+| `warn` (default, so existing configuration behaves as before) | A statement that would be refused is logged as a warning and still runs |
+| `strict` | The statement is refused with gRPC `PermissionDenied` |
+| `off` | No check |
+
+The check is lexical and refuses some harmless SQL (an unquoted column named like a deny-listed word: quote it). It is
+defence in depth, not a security boundary; the database login is. Sources with `AllowWrites` are not checked on the
+query path. Plan to move to `strict` after a release in `warn` shows no unexpected log lines.
+
 Types map to Arrow as: integers/floats/bool directly (`tinyint` → UInt8), `decimal` → Decimal128 (precision/scale
 from the provider, default 38/9 when unknown), `date` → Date32, `datetime/datetime2` → Timestamp(µs),
 `datetimeoffset` → Timestamp(µs, UTC), `time` → Time64(µs), strings/GUIDs/anything else → Utf8, `varbinary` → Binary.
@@ -196,8 +214,9 @@ exe: queries with every compression setting, updates, metadata and wrong-passwor
   always report them. Names are quoted with the driver's own identifier character and fall back to shorter names when
   the driver's catalog is not valid SQL. `GetPrimaryKeys` on an ODBC source asks the driver (`SQLPrimaryKeys`); drivers
   without keys (text files) or without the function report none.
-* `AllowWrites` only gates statements a client sends as *updates*. A client that runs `INSERT`/`DDL` through the query
-  path (ADBC's `cursor.execute` does) is limited only by the database account's permissions, so use read-only database
+* `AllowWrites` gates statements a client sends as *updates*. A client that runs `INSERT`/`DDL` through the query
+  path (ADBC's `cursor.execute` does) is refused only when the source's `Classifier` is `strict` (and then by a lexical
+  check, not a parser); otherwise it is limited by the database account's permissions, so use read-only database
   accounts for read-only sources.
 * Transactions, `DoPut` bulk ingestion.
 * Pass-through and Windows-account logon have not been exercised against real accounts.

@@ -71,6 +71,8 @@ public sealed partial class ProxyFlightServer
     {
         var principal = context.GetPrincipal();
         var source = catalog.Resolve(principal, context.RequestHeaders.GetValue(DataSourceHeader));
+        // Prepare is also how some clients send updates, so only read-only sources are checked here (updates are refused later anyway).
+        EnforceReadOnlyText(request.Query, principal, source);
         byte[] handle = prepared.Add(principal.Name, source.Name, request.Query);
 
         byte[] emptySchema = SchemaExtensions.SerializeSchema(new Schema([], null));
@@ -90,7 +92,7 @@ public sealed partial class ProxyFlightServer
     /// </summary>
     internal static Schema ParameterSchemaFor(string sql, string provider)
     {
-        int count = SqlMarkers.CountPositional(sql, bracketIdentifiers: provider.Equals("sqlserver", StringComparison.OrdinalIgnoreCase));
+        int count = ParameterMarkers.Count(sql, ProviderDialects.For(provider));
         return new Schema(Enumerable.Range(0, count).Select(i => new Apache.Arrow.Field("parameter_" + i, Apache.Arrow.Types.NullType.Default, true)).ToList(), null);
     }
 

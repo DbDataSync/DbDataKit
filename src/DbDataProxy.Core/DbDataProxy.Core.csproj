@@ -7,5 +7,7 @@
     <PackageReference Include="System.Data.Odbc" />
     <PackageReference Include="Grpc.Net.Client" />
     <DbDataKitReference Include="Odbc.Metadata" />
+    <DbDataKitReference Include="Dialect.Abstractions" />
+    <DbDataKitReference Include="Dialect" />
   </ItemGroup>
 </Project>

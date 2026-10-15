@@ -11,6 +11,8 @@ public sealed class SqlServerProvider : IDbProvider
 
     public ParameterStyle ParameterStyle => ParameterStyle.NamedAtSign;
 
+    public DbDataKit.Dialect.ISqlDialect Dialect => ProviderDialects.SqlServer;
+
     public DbConnection CreateConnection(string connectionString) => new SqlConnection(connectionString);
 
     public string ApplyCredentials(string connectionString, string user, string password)
@@ -28,6 +30,8 @@ public sealed class SqlServerProvider : IDbProvider
 public sealed class DuckDbProvider : IDbProvider
 {
     public string Name => "duckdb";
+
+    public DbDataKit.Dialect.ISqlDialect Dialect => ProviderDialects.DuckDb;
 
     public DbConnection CreateConnection(string connectionString) => new DuckDBConnection(connectionString);
 

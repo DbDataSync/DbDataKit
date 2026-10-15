@@ -109,15 +109,66 @@ public class ParameterUnitTests
     [InlineData("SELECT ? -- is this ? a marker\n, ?", 2)]
     [InlineData("SELECT /* ? */ ?", 1)]
     [InlineData("SELECT 1", 0)]
-    public void Counts_only_real_markers(string sql, int expected) =>
-        Assert.Equal(expected, SqlMarkers.CountPositional(sql));
+    public void Counts_only_real_markers(string sql, int expected)
+    {
+        Assert.Equal(expected, ParameterMarkers.Count(sql, ProviderDialects.Odbc));
+        Assert.Equal(expected, ParameterMarkers.Count(sql, ProviderDialects.DuckDb));
+        Assert.Equal(expected, ParameterMarkers.Count(sql, ProviderDialects.SqlServer));
+    }
 
     [Fact]
     public void Rewrites_markers_for_named_providers_and_leaves_literals_alone()
     {
-        Assert.Equal("SELECT '?', @p1, [a?b], @p2", SqlMarkers.RewriteToNamed("SELECT '?', ?, [a?b], ?"));
-        Assert.Equal(1, SqlMarkers.CountPositional("SELECT [a?b], ?", bracketIdentifiers: true));
-        Assert.Equal(2, SqlMarkers.CountPositional("SELECT [?, ?]")); // DuckDB list literal: brackets are not quoting
+        Assert.Equal("SELECT '?', @p1, [a?b], @p2", ParameterMarkers.RewriteToNamed("SELECT '?', ?, [a?b], ?", ProviderDialects.SqlServer));
+        Assert.Equal(1, ParameterMarkers.Count("SELECT [a?b], ?", ProviderDialects.SqlServer));
+        Assert.Equal(2, ParameterMarkers.Count("SELECT [?, ?]", ProviderDialects.DuckDb)); // DuckDB list literal: brackets are not quoting
+        Assert.Equal(2, ParameterMarkers.Count("SELECT [?, ?]", ProviderDialects.Odbc));
+    }
+
+    [Theory]
+    [InlineData("SELECT $$ ? $$, ?", 1)]                // dollar-quoted string (DuckDB)
+    [InlineData("SELECT $tag$ it's ? $tag$, ?, ?", 2)]
+    [InlineData("SELECT E'it\\'s ?', ?", 1)]             // E'..' string: a backslash escapes the quote
+    [InlineData("SELECT $1, $name, ?", 1)]               // other marker styles are not '?' markers
+    public void DuckDb_markers_respect_dollar_quotes_and_E_strings(string sql, int expected) =>
+        Assert.Equal(expected, ParameterMarkers.Count(sql, ProviderDialects.DuckDb));
+
+    [Fact]
+    public void Odbc_dialect_from_driver_quote_scans_backticks_and_brackets()
+    {
+        var mysql = ProviderDialects.ForOdbc("MySQL", "`", "`");
+        Assert.Equal(1, ParameterMarkers.Count("SELECT `a?b`, ?", mysql));
+        var access = ProviderDialects.ForOdbc("ACCESS", "[", "]");
+        Assert.Equal(1, ParameterMarkers.Count("SELECT [a?b], ?", access));
+        Assert.Equal("`a``b`", mysql.Quote("a`b"));
+        Assert.Equal("[a]]b]", access.Quote("a]b"));
+    }
+
+    [Fact]
+    public void Hash_is_not_a_comment_for_the_proxy_dialects()
+    {
+        // '#' starts a comment only in MySQL-style dialects; for SQL Server it starts a temp-table name, so the marker after it counts.
+        Assert.Equal(1, ParameterMarkers.Count("SELECT * FROM #t WHERE a = ?", ProviderDialects.SqlServer));
+        Assert.Equal(2, ParameterMarkers.Count("SELECT 1 # c ?\n, ?", ProviderDialects.Odbc));
+        Assert.Equal(1, ParameterMarkers.Count("SELECT 1 # c ?\n, ?", DbDataKit.Dialect.DialectCatalog.Builtin.Get("mysql")));
+    }
+
+    [Fact]
+    public void Identifier_quoting_rejects_hostile_names_and_doubles_closers()
+    {
+        foreach (var dialect in new[] { ProviderDialects.SqlServer, ProviderDialects.DuckDb, ProviderDialects.Odbc })
+        {
+            Assert.Throws<ArgumentException>(() => dialect.Quote("a\nb"));
+            Assert.Throws<ArgumentException>(() => dialect.Quote("a\0b"));
+            Assert.Throws<ArgumentException>(() => dialect.Quote(""));
+        }
+        Assert.Equal("\"a\"\"b\"", ProviderDialects.DuckDb.Quote("a\"b"));
+        Assert.Equal("[a]]b]", ProviderDialects.SqlServer.Quote("a]b"));
+        Assert.Equal("\"main\".\"t\"", ProviderDialects.DuckDb.QuoteQualified(["main", "t"]));
+        // A driver that reports no quote character: plain names pass unquoted, anything else is refused rather than passed through raw.
+        var none = ProviderDialects.ForOdbc("Text", null, null);
+        Assert.Equal("people", none.Quote("people"));
+        Assert.Throws<NotSupportedException>(() => none.Quote("x; DROP TABLE y"));
     }
 
     [Fact]

@@ -3,6 +3,7 @@ using Apache.Arrow.Flight;
 using Apache.Arrow.Flight.Server;
 using Apache.Arrow.Flight.Sql;
 using Arrow.Flight.Protocol.Sql;
+using DbDataKit.Dialect;
 using DbDataProxy.Data;
 using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Configuration;
@@ -99,11 +100,30 @@ public sealed partial class ProxyFlightServer(
         return ExecuteForFlightInfoAsync(command.Query, principal, source, descriptor, context);
     }
 
+    /// <summary>
+    /// On a read-only data source, checks the statement text with the shared classifier: one SELECT, no deny-listed words for the
+    /// provider's dialect. Per the source's <see cref="DataSourceOptions.Classifier"/> mode a failure is refused or only logged.
+    /// Defence in depth: the database login is what really enforces read-only.
+    /// </summary>
+    internal void EnforceReadOnlyText(string sql, ProxyPrincipal principal, ResolvedDataSource source)
+    {
+        if (source.Options.AllowWrites || source.Options.Classifier == ClassifierMode.Off) return;
+        var decision = ReadOnlyPolicy.Check(sql, ProviderDialects.For(source.Options.Provider));
+        if (decision.Allowed) return;
+        if (source.Options.Classifier == ClassifierMode.Strict)
+        {
+            _log.LogWarning("Refused statement by {User} on read-only source {Source}: {Reason}", principal.Name, source.Name, decision.Reason);
+            throw new RpcException(new Status(StatusCode.PermissionDenied, $"Data source '{source.Name}' is read-only and the statement was refused: {decision.Reason}."));
+        }
+        _log.LogWarning("Statement by {User} on read-only source {Source} would be refused with Classifier=Strict: {Reason}", principal.Name, source.Name, decision.Reason);
+    }
+
     /// <summary>Runs the statement so its schema is known, parks the open result for DoGet and returns the FlightInfo.</summary>
     private async Task<FlightInfo> ExecuteForFlightInfoAsync(
         string sql, ProxyPrincipal principal, ResolvedDataSource source, FlightDescriptor descriptor, ServerCallContext context,
         IReadOnlyList<QueryParameter>? parameters = null)
     {
+        EnforceReadOnlyText(sql, principal, source);
         pending.EnsureCapacity(principal.Name);
         _log.LogInformation("Query by {User} on {Source}: {Sql}", principal.Name, source.Name, Describe(sql));
 

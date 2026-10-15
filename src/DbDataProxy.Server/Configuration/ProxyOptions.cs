@@ -126,6 +126,13 @@ public sealed class DataSourceOptions
     public bool AllowWrites { get; set; }
 
     /// <summary>
+    /// What to do with statement text on a read-only source (AllowWrites=false) that is not a single plain SELECT or that uses a
+    /// deny-listed function or statement (OPENROWSET, xp_*, read_csv, COPY, ATTACH, ...): "warn" (default) logs the would-be refusal,
+    /// "strict" refuses it with PermissionDenied, "off" skips the check. Defence in depth only; use a read-only database login.
+    /// </summary>
+    public ClassifierMode Classifier { get; set; } = ClassifierMode.Warn;
+
+    /// <summary>
     /// How catalog metadata is read: "auto" (the ODBC catalog API for ODBC sources, INFORMATION_SCHEMA otherwise),
     /// "odbc" (force the ODBC catalog API) or "informationschema" (force SQL against INFORMATION_SCHEMA).
     /// </summary>
@@ -136,6 +143,19 @@ public sealed class DataSourceOptions
 
     /// <summary>Overrides the global compression settings for this data source.</summary>
     public CompressionOptions? Compression { get; set; }
+}
+
+/// <summary>How <see cref="DataSourceOptions.Classifier"/> treats statement text on read-only sources.</summary>
+public enum ClassifierMode
+{
+    /// <summary>Log a warning for statements that would be refused, and run them.</summary>
+    Warn,
+
+    /// <summary>Refuse statements that are not a single SELECT or that use deny-listed words.</summary>
+    Strict,
+
+    /// <summary>No statement text checks.</summary>
+    Off,
 }
 
 public sealed class UserOptions
