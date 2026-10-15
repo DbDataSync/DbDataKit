@@ -1,6 +1,7 @@
 using DbDataProxy.Data;
 using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Configuration;
+using DbDataProxy.Server.Secrets;
 using Grpc.Core;
 using Microsoft.Extensions.Options;
 
@@ -21,7 +22,8 @@ public interface IWorkerExecutorFactory
 public sealed class DataSourceCatalog(
     IOptionsMonitor<ProxyOptions> options,
     IEnumerable<IDbProvider> providers,
-    IWorkerExecutorFactory? worker = null)
+    IWorkerExecutorFactory? worker = null,
+    SecretsRuntime? secrets = null)
 {
     private readonly Dictionary<string, IDbProvider> _providers =
         providers.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
@@ -36,9 +38,19 @@ public sealed class DataSourceCatalog(
         if (!principal.CanUse(name))
             throw new RpcException(new Status(StatusCode.PermissionDenied, $"Not authorized for data source '{name}'."));
 
-        string connectionString = source.ConnectionString;
         if (!_providers.TryGetValue(source.Provider, out var provider))
             throw new RpcException(new Status(StatusCode.Internal, $"Data source '{name}' uses unknown provider '{source.Provider}'."));
+
+        // Resolved per call from the current options snapshot: nothing secret outlives the snapshot, and a rotated secret is picked up.
+        string connectionString;
+        try
+        {
+            connectionString = secrets?.ResolveConnectionString($"Proxy:DataSources:{name}:ConnectionString", source.ConnectionString, source.Provider) ?? source.ConnectionString;
+        }
+        catch (SecretConfigurationException ex)
+        {
+            throw new RpcException(new Status(StatusCode.Internal, $"Data source '{name}' has an unusable secret reference ({ex.ConfigKey}); see the server log."));
+        }
 
         if (source.PassThrough)
         {

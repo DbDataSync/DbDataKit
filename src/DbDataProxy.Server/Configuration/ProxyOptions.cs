@@ -11,6 +11,13 @@ public sealed class ProxyOptions
     /// <summary>Include (truncated) SQL text in the log. Turn off if queries may contain sensitive literals.</summary>
     public bool LogSql { get; set; } = true;
 
+    /// <summary>
+    /// Refuse to start (and refuse the data source or token key at run time) when a connection-string password,
+    /// <c>Tls:CertificatePassword</c> or <c>Auth:Jwt:SigningKey</c> is a literal instead of a secret reference
+    /// (<c>secret:</c>, <c>env:</c>, <c>file:</c>, <c>dpapi:</c>). Off by default: literals still work and log a one-time warning naming the key.
+    /// </summary>
+    public bool RequireReferencedSecrets { get; set; }
+
     public ListenOptions Listen { get; set; } = new();
     public TlsOptions Tls { get; set; } = new();
     public CompressionOptions Compression { get; set; } = new();

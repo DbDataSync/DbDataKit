@@ -12,6 +12,9 @@
     <PackageReference Include="DuckDB.NET.Data.Full" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
+    <DbDataKitReference Include="Secrets.Abstractions" />
+    <DbDataKitReference Include="Secrets" />
+    <DbDataKitReference Include="Secrets.Windows" />
     <ProjectReference Include="..\DbDataProxy.Core\DbDataProxy.Core.csproj" />
   </ItemGroup>
 </Project>

@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using DbDataProxy.Server.Configuration;
+using DbDataProxy.Server.Secrets;
 
 namespace DbDataProxy.Server.Tls;
 
@@ -15,9 +16,11 @@ public static class CertificateProvider
     public const string SelfSignedFileName = "dbdataproxy-selfsigned.pfx";
     private static readonly TimeSpan RenewBefore = TimeSpan.FromDays(30);
 
-    public static X509Certificate2? Load(ProxyOptions options, string dataDirectory, ILogger logger)
+    public static X509Certificate2? Load(ProxyOptions options, string dataDirectory, ILogger logger, SecretsRuntime? secrets = null)
     {
         var tls = options.Tls;
+        // The password may be a secret reference; resolve it for this load only.
+        string? password = secrets?.ResolveSecret("Proxy:Tls:CertificatePassword", tls.CertificatePassword) ?? tls.CertificatePassword;
         switch (tls.Mode)
         {
             case TlsMode.None:
@@ -27,14 +30,14 @@ public static class CertificateProvider
             case TlsMode.File:
                 if (string.IsNullOrWhiteSpace(tls.CertificatePath))
                     throw new InvalidOperationException("Proxy:Tls:CertificatePath is required when Proxy:Tls:Mode is File.");
-                return LoadPfx(tls.CertificatePath, tls.CertificatePassword);
+                return LoadPfx(tls.CertificatePath, password);
 
             default:
-                return LoadOrCreateSelfSigned(tls, dataDirectory, logger);
+                return LoadOrCreateSelfSigned(tls, password, dataDirectory, logger);
         }
     }
 
-    private static X509Certificate2 LoadOrCreateSelfSigned(TlsOptions tls, string dataDirectory, ILogger logger)
+    private static X509Certificate2 LoadOrCreateSelfSigned(TlsOptions tls, string? password, string dataDirectory, ILogger logger)
     {
         string path = tls.CertificatePath ?? Path.Combine(dataDirectory, SelfSignedFileName);
         var names = HostNames(tls);
@@ -43,7 +46,7 @@ public static class CertificateProvider
         {
             try
             {
-                var existing = LoadPfx(path, tls.CertificatePassword);
+                var existing = LoadPfx(path, password);
                 if (IsUsable(existing, names)) return existing;
                 logger.LogInformation("Self-signed certificate at {Path} is expiring or its host names changed; regenerating.", path);
                 existing.Dispose();
@@ -56,13 +59,13 @@ public static class CertificateProvider
 
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         using var created = CreateSelfSigned(names, tls.SelfSignedValidityDays);
-        File.WriteAllBytes(path, created.Export(X509ContentType.Pfx, tls.CertificatePassword));
+        File.WriteAllBytes(path, created.Export(X509ContentType.Pfx, password));
         string cerPath = Path.ChangeExtension(path, ".cer");
         File.WriteAllBytes(cerPath, created.Export(X509ContentType.Cert));
         logger.LogInformation(
             "Generated self-signed certificate {Thumbprint} for {Names}. Clients can trust it by importing {CerPath}.",
             created.Thumbprint, string.Join(", ", names), cerPath);
-        return LoadPfx(path, tls.CertificatePassword);
+        return LoadPfx(path, password);
     }
 
     public static X509Certificate2 CreateSelfSigned(IReadOnlyCollection<string> names, int validityDays)

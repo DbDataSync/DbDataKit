@@ -23,6 +23,9 @@
     <PackageVersion Include="DbDataKit.Odbc.Metadata" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Dialect.Abstractions" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Dialect" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Secrets.Abstractions" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Secrets" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Secrets.Windows" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.0.0" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />

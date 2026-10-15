@@ -14,6 +14,8 @@ public static class Cli
         {
             case "hash-password":
                 return HashPassword(rest);
+            case "protect-secret":
+                return ProtectSecret(rest);
             case "query":
                 return await QueryCommand.RunAsync(rest);
             case "install":
@@ -46,6 +48,25 @@ public static class Cli
         return 0;
     }
 
+    /// <summary>Prints a <c>dpapi:</c> reference (machine scope) for a secret, to paste into a config value. Windows only.</summary>
+    private static int ProtectSecret(string[] args)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Console.Error.WriteLine("protect-secret needs Windows DPAPI; use env: or file: references on this platform.");
+            return 2;
+        }
+        string? secret = args.Length > 0 ? args[0] : ReadPasswordFromConsole();
+        if (string.IsNullOrEmpty(secret))
+        {
+            Console.Error.WriteLine("A secret is required.");
+            return 2;
+        }
+        using var value = DbDataKit.Secrets.SecretValue.From(secret);
+        Console.WriteLine(DbDataKit.Secrets.Windows.DpapiProtector.ToInlineRef(value, Secrets.SecretsRuntime.DpapiEntropy, System.Security.Cryptography.DataProtectionScope.LocalMachine));
+        return 0;
+    }
+
     private static string? ReadPasswordFromConsole()
     {
         if (Console.IsInputRedirected) return Console.In.ReadLine();
@@ -66,6 +87,7 @@ public static class Cli
         Usage:
           DbDataProxy [run]                Run the proxy (as a Windows service/systemd unit when started by one)
           DbDataProxy hash-password [pw]   Print a password hash for the Proxy:Users configuration
+          DbDataProxy protect-secret [s]   Print a dpapi: reference (Windows, machine scope) for a config value
           DbDataProxy query --user U --password P --sql "..." [--address URL] [--datasource N]
                                            [--compression none|gzip|zstd|lz4] [--insecure]
                                            Run a query against a proxy (smoke test)
