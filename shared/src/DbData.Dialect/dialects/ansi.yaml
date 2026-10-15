@@ -1,0 +1,135 @@
+schema: dialect/1
+id: ansi
+display: ANSI SQL (baseline)
+quote: { open: "\"", close: "\"" }
+parameters: { style: positional }
+row_limit: { default: offset_fetch, styles: [offset_fetch], ties: [offset_fetch] }
+identifier: { case: upper, max_length: 128, safe_unquoted: "^[A-Za-z_][A-Za-z0-9_]*$" }
+capabilities: [schemas, positional_parameters, truncate_table, merge]
+syntax: [double_quote_identifier, n_strings, prefixed_strings, question_parameter]
+reserved_words:
+  - ADD
+  - ALL
+  - ALTER
+  - AND
+  - ANY
+  - AS
+  - ASC
+  - BETWEEN
+  - BY
+  - CASE
+  - CHECK
+  - COLUMN
+  - CONSTRAINT
+  - CREATE
+  - CROSS
+  - CURRENT
+  - DEFAULT
+  - DELETE
+  - DESC
+  - DISTINCT
+  - DROP
+  - ELSE
+  - END
+  - EXISTS
+  - FETCH
+  - FOR
+  - FOREIGN
+  - FROM
+  - FULL
+  - GRANT
+  - GROUP
+  - HAVING
+  - IN
+  - INDEX
+  - INNER
+  - INSERT
+  - INTO
+  - IS
+  - JOIN
+  - KEY
+  - LEFT
+  - LIKE
+  - LIMIT
+  - NOT
+  - NULL
+  - OFFSET
+  - ON
+  - OR
+  - ORDER
+  - OUTER
+  - PRIMARY
+  - REFERENCES
+  - RIGHT
+  - SELECT
+  - SET
+  - TABLE
+  - THEN
+  - TO
+  - TRUNCATE
+  - UNION
+  - UNIQUE
+  - UPDATE
+  - USER
+  - USING
+  - VALUES
+  - VIEW
+  - WHEN
+  - WHERE
+  - WITH
+read_only:
+  # Words refused anywhere in a read-only statement (outside strings, comments and quoted identifiers).
+  # A column that is literally named like one of these must be quoted. Real enforcement is a read-only login.
+  deny_words:
+    - insert
+    - update
+    - delete
+    - merge
+    - drop
+    - alter
+    - create
+    - truncate
+    - grant
+    - revoke
+    - into
+    - exec
+    - execute
+    - call
+    - copy
+    - vacuum
+    - set
+    - lock
+    - rename
+  select_starters: [select, values]
+literals:
+  "true": "TRUE"
+  "false": "FALSE"
+  binary: "X'{hex}'"
+  date: "DATE '{v}'"
+  time: "TIME '{v}'"
+  timestamp: "TIMESTAMP '{v}'"
+  timestamptz: "TIMESTAMP WITH TIME ZONE '{v}'"
+  guid: "'{v}'"
+  json: "'{v}'"
+  xml: "'{v}'"
+  fraction_digits: "6"
+types:
+  - { native: "boolean", canonical: "boolean" }
+  - { native: "smallint", canonical: "int16" }
+  - { native: "integer", canonical: "int32" }
+  - { native: "int", canonical: "int32", direction: to_canonical }
+  - { native: "bigint", canonical: "int64" }
+  - { native: "numeric({p},{s})", canonical: "decimal({p},{s})", defaults: { p: 18, s: 0 } }
+  - { native: "decimal({p},{s})", canonical: "decimal({p},{s})", direction: to_canonical, defaults: { p: 18, s: 0 } }
+  - { native: "real", canonical: "float" }
+  - { native: "double precision", canonical: "double" }
+  - { native: "character varying({n})", canonical: "string(~unicode,{n})" }
+  - { native: "varchar({n})", canonical: "string(~unicode,{n})", direction: to_canonical }
+  - { native: "character({n})", canonical: "string(~unicode,{n})", direction: to_canonical, fidelity: lossy, note: "fixed-width padding is not preserved" }
+  - { native: "clob", canonical: "string(~unicode)" }
+  - { native: "binary varying({n})", canonical: "binary({n})" }
+  - { native: "blob", canonical: "binary" }
+  - { native: "date", canonical: "date" }
+  - { native: "time({s})", canonical: "time({s})", defaults: { s: 0 } }
+  - { native: "timestamp({s})", canonical: "timestamp({s})", defaults: { s: 6 } }
+  - { native: "timestamp({s}) with time zone", canonical: "timestamp(tz,{s})", defaults: { s: 6 } }

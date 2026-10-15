@@ -1,0 +1,18 @@
+schema: dialect/1
+id: fabric
+extends: sqlserver
+display: Microsoft Fabric Warehouse
+capabilities_remove: [identity_insert, bulk_copy, sequences, returning]
+# Fabric Warehouse has no nchar/nvarchar (varchar is UTF-8), no money, datetime/smalldatetime, datetimeoffset, xml or json.
+# These rows are tried before the inherited SQL Server rows when writing; reading keeps the SQL Server rows.
+types_prepend:
+  - { native: "varchar({n})", canonical: "string(unicode,{n})", n_max: 8000, fidelity: widened, note: "Fabric varchar is UTF-8, so Unicode text is preserved without nvarchar" }
+  - { native: "varchar(max)", canonical: "string(unicode)", fidelity: widened, note: "Fabric varchar is UTF-8, so Unicode text is preserved without nvarchar" }
+  - { native: "varchar(max)", canonical: "string(unicode,{n})", direction: from_canonical, fidelity: widened, note: "length above 8000 becomes varchar(max); Fabric varchar is UTF-8", n_min: 8001 }
+  - { native: "datetime2(6)", canonical: "timestamp(tz,{s})", direction: from_canonical, defaults: { s: 6 }, fidelity: lossy, note: "Fabric has no datetimeoffset; the offset is dropped and the value must be normalised to UTC" }
+  - { native: "datetime2({s})", canonical: "timestamp({s})", direction: from_canonical, defaults: { s: 6 }, s_max: 6 }
+  - { native: "datetime2(6)", canonical: "timestamp({s})", direction: from_canonical, fidelity: lossy, note: "Fabric supports at most 6 fractional-second digits", s_min: 7 }
+  - { native: "time({s})", canonical: "time({s})", direction: from_canonical, defaults: { s: 6 }, s_max: 6 }
+  - { native: "time(6)", canonical: "time({s})", direction: from_canonical, fidelity: lossy, note: "Fabric supports at most 6 fractional-second digits", s_min: 7 }
+  - { native: "varchar(max)", canonical: "xml", direction: from_canonical, fidelity: widened, note: "Fabric has no xml type; stored as text" }
+  - { native: "varchar(max)", canonical: "json", direction: from_canonical, fidelity: widened, note: "stored as text" }

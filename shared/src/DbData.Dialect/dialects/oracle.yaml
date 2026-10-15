@@ -1,0 +1,76 @@
+schema: dialect/1
+id: oracle
+extends: ansi
+display: Oracle Database
+quote: { open: "\"", close: "\"" }
+parameters: { style: named_colon }
+row_limit: { default: offset_fetch, styles: [offset_fetch], ties: [offset_fetch] }
+identifier: { case: upper, max_length: 128 }
+capabilities: [merge, returning, temp_tables, schemas, sequences, truncate_table, named_parameters]
+capabilities_remove: [positional_parameters]
+syntax: [double_quote_identifier, n_strings, oracle_q_quote, colon_parameter, hash_identifiers]
+syntax_remove: [prefixed_strings, question_parameter]
+reserved_words_add: [ACCESS, AUDIT, CLUSTER, COMMENT, CONNECT, LEVEL, MINUS, NOWAIT, NUMBER, RAW, ROW, ROWID, ROWNUM, SESSION, SHARE, SIZE, START, SYNONYM, SYSDATE, UID, VARCHAR2]
+read_only:
+  deny_words_add: [noaudit, audit, flashback, purge, analyze, explain]
+  deny_prefixes: [dbms_, utl_, owa_, apex_]
+literals:
+  "true": "1"
+  "false": "0"
+  binary: "HEXTORAW('{hex}')"
+  date: "DATE '{v}'"
+  time: "INTERVAL '{v}' HOUR TO SECOND"
+  timestamp: "TIMESTAMP '{v}'"
+  timestamptz: "TIMESTAMP '{v}'"
+  guid: "HEXTORAW('{hexn}')"
+  json: "'{v}'"
+  xml: "XMLTYPE('{v}')"
+  fraction_digits: "6"
+types:
+  - { native: "number(1)", canonical: "boolean", direction: from_canonical, fidelity: widened, note: "no BOOLEAN column type before 23ai; stored as number(1)" }
+  - { native: "boolean", canonical: "boolean", direction: to_canonical }
+  - { native: "number(3)", canonical: "int8", direction: from_canonical }
+  - { native: "number(3)", canonical: "int8(unsigned)", direction: from_canonical }
+  - { native: "number(5)", canonical: "int16", direction: from_canonical }
+  - { native: "number(5)", canonical: "int16(unsigned)", direction: from_canonical }
+  - { native: "number(10)", canonical: "int32", direction: from_canonical }
+  - { native: "number(10)", canonical: "int32(unsigned)", direction: from_canonical }
+  - { native: "number(19)", canonical: "int64", direction: from_canonical }
+  - { native: "number(20)", canonical: "int64(unsigned)", direction: from_canonical }
+  - { native: "number", canonical: "decimal", direction: to_canonical, fidelity: lossy, note: "NUMBER without precision is a floating decimal of up to 38 digits; mapped to an unconstrained decimal" }
+  - { native: "number({p},{s})", canonical: "decimal({p},{s})", defaults: { s: 0 }, p_max: 38 }
+  - { native: "numeric({p},{s})", canonical: "decimal({p},{s})", direction: to_canonical, defaults: { s: 0 } }
+  - { native: "decimal({p},{s})", canonical: "decimal({p},{s})", direction: to_canonical, defaults: { s: 0 } }
+  - { native: "number(38,{s})", canonical: "decimal({p},{s})", direction: from_canonical, fidelity: lossy, note: "precision above 38 is reduced to 38", p_min: 39 }
+  - { native: "binary_float", canonical: "float" }
+  - { native: "binary_double", canonical: "double" }
+  - { native: "float({n})", canonical: "double", direction: to_canonical, fidelity: lossy, note: "FLOAT is a binary-precision decimal type; mapped to double" }
+  - { native: "float", canonical: "double", direction: to_canonical, fidelity: lossy, note: "FLOAT is a binary-precision decimal type; mapped to double" }
+  - { native: "varchar2({n})", canonical: "string({n})", n_max: 4000 }
+  - { native: "varchar2({n} char)", canonical: "string({n})", direction: to_canonical }
+  - { native: "varchar2({n} byte)", canonical: "string({n})", direction: to_canonical }
+  - { native: "nvarchar2({n})", canonical: "string(unicode,{n})", n_max: 2000 }
+  - { native: "clob", canonical: "string" }
+  - { native: "clob", canonical: "string({n})", direction: from_canonical, fidelity: widened, note: "length above 4000 becomes clob", n_min: 4001 }
+  - { native: "nclob", canonical: "string(unicode)" }
+  - { native: "nclob", canonical: "string(unicode,{n})", direction: from_canonical, fidelity: widened, note: "length above 2000 becomes nclob", n_min: 2001 }
+  - { native: "char({n})", canonical: "string({n})", direction: to_canonical, defaults: { n: 1 }, fidelity: lossy, note: "fixed-width padding is not preserved" }
+  - { native: "nchar({n})", canonical: "string(unicode,{n})", direction: to_canonical, defaults: { n: 1 }, fidelity: lossy, note: "fixed-width padding is not preserved" }
+  - { native: "long", canonical: "string", direction: to_canonical }
+  - { native: "raw({n})", canonical: "binary({n})", n_max: 2000 }
+  - { native: "blob", canonical: "binary" }
+  - { native: "blob", canonical: "binary({n})", direction: from_canonical, fidelity: widened, note: "length above 2000 becomes blob", n_min: 2001 }
+  - { native: "long raw", canonical: "binary", direction: to_canonical }
+  - { native: "date", canonical: "timestamp(0)", direction: to_canonical, fidelity: widened, note: "Oracle DATE carries a time of day; read as timestamp(0)" }
+  - { native: "date", canonical: "date", direction: from_canonical, fidelity: widened, note: "Oracle DATE always carries a time of day (00:00:00)" }
+  - { native: "interval day(0) to second({s})", canonical: "time({s})", direction: from_canonical, defaults: { s: 6 }, s_max: 9, fidelity: widened, note: "no TIME type; stored as an interval of the day" }
+  - { native: "timestamp({s}) with time zone", canonical: "timestamp(tz,{s})", defaults: { s: 6 }, s_max: 9 }
+  - { native: "timestamp({s}) with local time zone", canonical: "timestamp(tz,{s})", direction: to_canonical, defaults: { s: 6 } }
+  - { native: "timestamp({s})", canonical: "timestamp({s})", defaults: { s: 6 }, s_max: 9 }
+  - { native: "interval day({n}) to second({s})", canonical: "interval", direction: to_canonical, fidelity: lossy, note: "interval precision is not carried" }
+  - { native: "interval day to second", canonical: "interval", direction: to_canonical, fidelity: lossy, note: "interval precision is not carried" }
+  - { native: "interval day(9) to second(9)", canonical: "interval", direction: from_canonical }
+  - { native: "raw(16)", canonical: "guid", direction: from_canonical, fidelity: widened, note: "stored as raw(16); byte order follows the CLR Guid layout" }
+  - { native: "clob", canonical: "json", direction: from_canonical, fidelity: widened, note: "stored as text; use a native JSON column on 21c+ by overriding the table" }
+  - { native: "json", canonical: "json", direction: to_canonical }
+  - { native: "xmltype", canonical: "xml" }

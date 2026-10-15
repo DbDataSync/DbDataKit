@@ -1,0 +1,75 @@
+schema: dialect/1
+id: sqlserver
+extends: ansi
+display: Microsoft SQL Server
+quote: { open: "[", close: "]" }
+parameters: { style: named_at }
+row_limit: { default: top_n, styles: [top_n, offset_fetch], ties: [top_n] }
+identifier: { case: preserve, max_length: 128 }
+capabilities: [merge, bulk_copy, temp_tables, transactional_ddl, schemas, multi_statement, named_parameters, truncate_table, identity_insert, sequences, returning]
+syntax: [bracket_identifier, double_quote_identifier, n_strings, nested_block_comments, at_parameter, hash_identifiers, prefixed_strings]
+reserved_words_add: [CLUSTERED, DECLARE, EXEC, EXECUTE, IDENTITY, OPEN, PROC, PROCEDURE, TOP, TRAN, TRANSACTION]
+read_only:
+  deny_words_add: [openrowset, opendatasource, openquery, bulk, waitfor, dbcc, shutdown, readtext, writetext, updatetext, backup, restore, reconfigure, kill]
+  deny_prefixes: [xp_, sp_]
+literals:
+  "true": "1"
+  "false": "0"
+  binary: "0x{hex}"
+  date: "CAST('{v}' AS date)"
+  time: "CAST('{v}' AS time(7))"
+  timestamp: "CAST('{v}' AS datetime2(7))"
+  timestamptz: "CAST('{v}' AS datetimeoffset(7))"
+  guid: "CAST('{v}' AS uniqueidentifier)"
+  json: "'{v}'"
+  xml: "CAST('{v}' AS xml)"
+  string_prefix: "N"
+  string_prefix_when: non_ascii
+  fraction_digits: "7"
+types:
+  - { native: "bit", canonical: "boolean" }
+  - { native: "tinyint", canonical: "int8(unsigned)" }
+  - { native: "smallint", canonical: "int8", direction: from_canonical, fidelity: widened, note: "SQL Server has no signed 8-bit integer; widened to smallint" }
+  - { native: "smallint", canonical: "int16" }
+  - { native: "int", canonical: "int32" }
+  - { native: "bigint", canonical: "int64" }
+  - { native: "int", canonical: "int16(unsigned)", direction: from_canonical, fidelity: widened, note: "unsigned 16-bit widened to int" }
+  - { native: "bigint", canonical: "int32(unsigned)", direction: from_canonical, fidelity: widened, note: "unsigned 32-bit widened to bigint" }
+  - { native: "decimal(20,0)", canonical: "int64(unsigned)", direction: from_canonical, fidelity: widened, note: "unsigned 64-bit widened to decimal(20,0)" }
+  - { native: "decimal({p},{s})", canonical: "decimal({p},{s})", defaults: { p: 18, s: 0 }, p_max: 38 }
+  - { native: "numeric({p},{s})", canonical: "decimal({p},{s})", direction: to_canonical, defaults: { p: 18, s: 0 } }
+  - { native: "decimal(38,{s})", canonical: "decimal({p},{s})", direction: from_canonical, fidelity: lossy, note: "precision above 38 is reduced to 38", p_min: 39, s_max: 38 }
+  - { native: "money", canonical: "decimal(19,4)", direction: to_canonical, fidelity: lossy, note: "money currency semantics are lost; only the scale survives" }
+  - { native: "smallmoney", canonical: "decimal(10,4)", direction: to_canonical, fidelity: lossy, note: "smallmoney currency semantics are lost; only the scale survives" }
+  - { native: "real", canonical: "float" }
+  - { native: "float(24)", canonical: "float", direction: to_canonical }
+  - { native: "float", canonical: "double" }
+  - { native: "float(53)", canonical: "double", direction: to_canonical }
+  - { native: "varchar({n})", canonical: "string({n})", defaults: { n: 1 }, n_max: 8000 }
+  - { native: "varchar(max)", canonical: "string" }
+  - { native: "varchar(max)", canonical: "string({n})", direction: from_canonical, fidelity: widened, note: "length above 8000 becomes varchar(max)", n_min: 8001 }
+  - { native: "nvarchar({n})", canonical: "string(unicode,{n})", defaults: { n: 1 }, n_max: 4000 }
+  - { native: "nvarchar(max)", canonical: "string(unicode)" }
+  - { native: "nvarchar(max)", canonical: "string(unicode,{n})", direction: from_canonical, fidelity: widened, note: "length above 4000 becomes nvarchar(max)", n_min: 4001 }
+  - { native: "char({n})", canonical: "string({n})", direction: to_canonical, defaults: { n: 1 }, fidelity: lossy, note: "fixed-width padding is not preserved" }
+  - { native: "nchar({n})", canonical: "string(unicode,{n})", direction: to_canonical, defaults: { n: 1 }, fidelity: lossy, note: "fixed-width padding is not preserved" }
+  - { native: "text", canonical: "string", direction: to_canonical }
+  - { native: "ntext", canonical: "string(unicode)", direction: to_canonical }
+  - { native: "sysname", canonical: "string(unicode,128)", direction: to_canonical }
+  - { native: "varbinary({n})", canonical: "binary({n})", defaults: { n: 1 }, n_max: 8000 }
+  - { native: "varbinary(max)", canonical: "binary" }
+  - { native: "varbinary(max)", canonical: "binary({n})", direction: from_canonical, fidelity: widened, note: "length above 8000 becomes varbinary(max)", n_min: 8001 }
+  - { native: "binary({n})", canonical: "binary({n})", direction: to_canonical, defaults: { n: 1 }, fidelity: lossy, note: "fixed-length binary becomes variable-length" }
+  - { native: "image", canonical: "binary", direction: to_canonical }
+  - { native: "timestamp", canonical: "binary(8)", direction: to_canonical, fidelity: lossy, note: "rowversion becomes plain binary(8); the engine-managed behaviour is not recreated" }
+  - { native: "rowversion", canonical: "binary(8)", direction: to_canonical, fidelity: lossy, note: "rowversion becomes plain binary(8); the engine-managed behaviour is not recreated" }
+  - { native: "date", canonical: "date" }
+  - { native: "time({s})", canonical: "time({s})", defaults: { s: 7 }, s_max: 7 }
+  - { native: "smalldatetime", canonical: "timestamp(0)", direction: to_canonical }
+  - { native: "datetime", canonical: "timestamp(3)", direction: to_canonical }
+  - { native: "datetime2({s})", canonical: "timestamp({s})", defaults: { s: 7 }, s_max: 7 }
+  - { native: "datetimeoffset({s})", canonical: "timestamp(tz,{s})", defaults: { s: 7 }, s_max: 7 }
+  - { native: "uniqueidentifier", canonical: "guid" }
+  - { native: "xml", canonical: "xml" }
+  - { native: "json", canonical: "json", direction: to_canonical }
+  - { native: "nvarchar(max)", canonical: "json", direction: from_canonical, fidelity: widened, note: "stored as text; no native json type is assumed" }
