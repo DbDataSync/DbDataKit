@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Release manifest model, version semantics and contracts for the DbData update system.</Description>
+  </PropertyGroup>
+</Project>
