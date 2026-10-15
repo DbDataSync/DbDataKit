@@ -60,6 +60,7 @@ public sealed class ArrowDataBatch : DataBatch
     {
         var v = x.GetTimestamp(i);
         if (v is null) return null;
-        return string.IsNullOrEmpty(((TimestampType)x.Data.DataType).Timezone) ? DateTime.SpecifyKind(v.Value.UtcDateTime, DateTimeKind.Unspecified) : v.Value;
+        // object: a bare ternary would convert the DateTime to DateTimeOffset
+        return string.IsNullOrEmpty(((TimestampType)x.Data.DataType).Timezone) ? (object)DateTime.SpecifyKind(v.Value.UtcDateTime, DateTimeKind.Unspecified) : v.Value;
     }
 }

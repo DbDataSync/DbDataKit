@@ -461,7 +461,7 @@ public static class ValueConverter
                 var r = c.Fix(ConversionFailure.PrecisionLoss, $"fractional seconds beyond {scale} digits", () => reduced);
                 return r;
             }
-            return tz ? new DateTimeOffset(DateTime.SpecifyKind(instant, DateTimeKind.Utc)) : instant;
+            return tz ? (object)new DateTimeOffset(DateTime.SpecifyKind(instant, DateTimeKind.Utc)) : instant;      // object: a bare ternary would convert the DateTime to DateTimeOffset
         }
 
         // ---- guid, interval
