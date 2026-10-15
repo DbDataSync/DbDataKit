@@ -56,6 +56,12 @@ public static class ConformanceRunner
         }
         finally
         {
+            // live engines keep tables: leave nothing behind (errors here must not hide the real result)
+            foreach (var t in new[] { target, stage })
+            {
+                try { await gate.ExecuteAsync(new SqlStatement("cleanup:drop", $"DROP TABLE IF EXISTS {d.QuoteQualified(t.Parts)}", [], new WriteIntent("cleanup:drop", WriteKind.Ddl, t.ToString())), CancellationToken.None); }
+                catch (Exception ex) when (ex is DbException or GateRefusedException) { }
+            }
             await gate.DisposeAsync();
         }
         return new ConformanceResult(c.Name, c.Strategy, diffs.Count == 0, diffs, c.Idempotent && diffs.Count == 0);

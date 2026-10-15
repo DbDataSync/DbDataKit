@@ -83,8 +83,8 @@ public sealed class AdoWriteExecutor(DbConnection connection, ISqlDialect dialec
         {
             var dp = cmd.CreateParameter();
             if (dialect.ParameterStyle is ParameterStyle.NamedAt or ParameterStyle.NamedColon) dp.ParameterName = p.Marker[1..];
-            if (DbTypeOf(p.Type) is { } dbType) dp.DbType = dbType;
-            dp.Value = p.Value ?? DBNull.Value;
+            if (ParameterValues.DbTypeFor(dialect.Id, p.Type) is { } dbType) dp.DbType = dbType;
+            dp.Value = ParameterValues.Adapt(dialect.Id, p.Value) ?? DBNull.Value;
             cmd.Parameters.Add(dp);
         }
     }

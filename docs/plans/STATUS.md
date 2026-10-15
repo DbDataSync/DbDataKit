@@ -51,3 +51,12 @@ Open decisions: Sync env-var sanitisation rule (Secrets), camelCase default keys
 BouncyCastle for ed25519 (Update), signing-key custody (Update), Oracle/tinyint type policy (Dialect).
 Reconcile pending: Hosting `IAclPolicy` vs Secrets `AclHelper`.
 Wave 2 (in progress): Connections (06), Transfer (07), Metadata Part B (04), Config.Testing + ACL reconcile.
+
+## Transfer (Plan 07, phases 0-4 and part of 5)
+
+Branch `worktree-agent-ae65f8928374b45cd`. Plan 07a (`docs/plans/07a-strategy-comparison.md`) written from the Sync and Build code. Packages in `shared/src`: `DbData.Transfer.Abstractions`, `DbData.Transfer`, `DbData.Transfer.Conformance`, `DbData.Transfer.SqlServer`, `DbData.Transfer.Postgres`; tests in `shared/tests/DbData.Transfer*.Tests`; benchmark stub in `shared/benchmarks`.
+
+- Done: abstractions (schema, `DataBatch` with reader and Arrow views, source/writer/staging/strategy/state/verifier contracts); `ValueConverter` (plan per column, fidelity, Fail/Null/Truncate/Clamp, edge-case tests); staging policy (Build-compatible names, run suffix, temp variants, lifecycle, generic provider); six strategy SQL builders (full_replace, delete_insert_by_key, merge_by_key, delete_insert_by_range, watermark_append, key_reconcile_delete with DeleteGuard); capability matrix as data; `WriteGate` (intent, readonly, permitted kinds, locks, transactions, statement log with hashes/types by default, redaction, dry-run) and the reusable source-scan invariant helper; DuckDB conformance (all six strategies, idempotent re-run); SQL Server `SqlBulkCopy` and Postgres binary COPY writers (offline tests green; live tests gated by `DBDATA_TEST_SQLSERVER` / `DBDATA_TEST_POSTGRES`).
+- Not run: any live SQL Server/Postgres test; MySQL/Oracle/Fabric SQL is text-tested only. Matrix marks SQL Server/Postgres `product-verified` (Build conformance), not verified here.
+- Not done: Arrow-first and Parquet staging, MySQL/Oracle writers, `ITransferVerifier` implementation, segmenter, SCD2/Snapshot, Windows ACL on the statement log, Sync/Build adoption (phases 3-5 product work), benchmark gate in CI (baseline of current paths not measured; stub compares only in-memory feeding).
+- Open: Windows ACL for the statement log; whether Sync Merge (commit per chunk) should map to a non-transactional `merge_by_key` option; `DateOnly`/`TimeOnly` bulk behaviour on SqlClient is adapted to `DateTime`/`TimeSpan` defensively and unverified live.
