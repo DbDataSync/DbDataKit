@@ -6,6 +6,7 @@
     <Project Path="src/DbData.Connections.Abstractions/DbData.Connections.Abstractions.csproj" />
     <Project Path="src/DbData.Connections.Descriptor/DbData.Connections.Descriptor.csproj" />
     <Project Path="src/DbData.Connections.DuckDb/DbData.Connections.DuckDb.csproj" />
+    <Project Path="src/DbData.Connections.Libraries/DbData.Connections.Libraries.csproj" />
     <Project Path="src/DbData.Connections.Odbc/DbData.Connections.Odbc.csproj" />
     <Project Path="src/DbData.Connections.Postgres/DbData.Connections.Postgres.csproj" />
     <Project Path="src/DbData.Connections.SqlServer/DbData.Connections.SqlServer.csproj" />
@@ -41,6 +42,7 @@
     <Project Path="tests/DbData.Connections.Abstractions.Tests/DbData.Connections.Abstractions.Tests.csproj" />
     <Project Path="tests/DbData.Connections.Descriptor.Tests/DbData.Connections.Descriptor.Tests.csproj" />
     <Project Path="tests/DbData.Connections.DuckDb.Tests/DbData.Connections.DuckDb.Tests.csproj" />
+    <Project Path="tests/DbData.Connections.Libraries.Tests/DbData.Connections.Libraries.Tests.csproj" />
     <Project Path="tests/DbData.Connections.Odbc.Tests/DbData.Connections.Odbc.Tests.csproj" />
     <Project Path="tests/DbData.Connections.Postgres.Tests/DbData.Connections.Postgres.Tests.csproj" />
     <Project Path="tests/DbData.Connections.SqlServer.Tests/DbData.Connections.SqlServer.Tests.csproj" />

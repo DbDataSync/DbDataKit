@@ -51,3 +51,11 @@ Open decisions: Sync env-var sanitisation rule (Secrets), camelCase default keys
 BouncyCastle for ed25519 (Update), signing-key custody (Update), Oracle/tinyint type policy (Dialect).
 Reconcile pending: Hosting `IAclPolicy` vs Secrets `AclHelper`.
 Wave 2 (in progress): Connections (06), Transfer (07), Metadata Part B (04), Config.Testing + ACL reconcile.
+
+## Connections (Plan 06)
+
+Packages in `shared/src`: `DbData.Connections.Abstractions`, `DbData.Connections`, `.SqlServer`, `.Postgres`, `.DuckDb`, `.Odbc`, `.Descriptor`, `.Libraries` (tests in `shared/tests`, all offline; live variants gated by `DBDATA_TEST_SQLSERVER`, `DBDATA_TEST_POSTGRES`, `DBDATA_TEST_ODBC`).
+
+- Done: `connection/1` strict loader and JSON Schema; failure model and classifier with engine mappers; composers (SqlClient, Npgsql, generic ADO, ODBC with brace quoting and Plan 04 policy) with credentials last, properties deny-list, TLS verify-by-default and hostile-credential tests; pass-through injection that strips integrated-security keys and asserts none remain; login resolution (`DBDATA_<APP>_<CONN>_<READ|WRITE>` plus legacy `DBDATABUILD_*`, no read-to-write fallback); `ParameterStyleAdapter`; pool with limits, timeouts, idle reaping and metrics; DuckDB sandbox proven in-process; YAML engine descriptors (`engine/1`) with locked fixed properties; library-install validation and planning (H1 corpus).
+- Stubbed or not done: JDBC/IKVM, Flight SQL, MySql/Oracle providers, plugins package, `IDbProvider.Catalog` (waits for Plan 04 part B), `SQL_ATTR_ACCESS_MODE` is reflection based and unrun against a real driver, `DotnetPublishExecutor` unrun, no product adoption, `KnownLibraries`/compat checkers not ported.
+- Conventions: `Microsoft.Data.SqlClient` 7.1.1, `Npgsql` 10.0.3, `DuckDB.NET.Data.Full` 1.5.6 added to `Directory.Packages.props`; `System.Security.Cryptography.Pkcs` pinned to 10.0.13 for a transitive advisory.
