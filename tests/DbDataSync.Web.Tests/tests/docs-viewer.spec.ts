@@ -1,8 +1,14 @@
+import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { test, expect } from '@playwright/test'
 import { screenshotDir } from '../screenshots'
 
 const screenshotsDir = screenshotDir('docs-viewer')
+
+// Every page in the repo's docs/, counted rather than written down, so adding a page does not break this.
+const docsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'docs')
+const docPageCount = fs.readdirSync(docsDir).filter((name) => name.endsWith('.md')).length
 
 /**
  * Phase 160's Docs viewer against the real pages of `docs/` — in dev the Vite server serves the repo's own folder at
@@ -19,7 +25,7 @@ test('the rail leads to an index of every page, for the version that is running'
 
   await expect(page).toHaveURL(/\/docs$/)
   await expect(page.getByTestId('docs-index')).toBeVisible()
-  await expect(page.getByTestId('docs-index').getByRole('link')).toHaveCount(7)
+  await expect(page.getByTestId('docs-index').getByRole('link')).toHaveCount(docPageCount)
   // The version comes from /api/about — present and not the placeholder text alone.
   await expect(page.getByTestId('docs-version')).toContainText(/\d/)
   await page.screenshot({ path: path.join(screenshotsDir, '01-docs-index.png') })
