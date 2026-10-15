@@ -5,7 +5,7 @@
 `bind` do not need one.
 
 **"Both a CA and a template are needed."** Pass `--ca` and `--template`, or save them. `dbdatasync config cert discover`
-finds them; see [enrollment](ad-cs-enroll.md).
+finds them; see [enrollment](certificates-ad-cs-enroll.md).
 
 **`discover` or `templates` says NotDomainJoined, DirectoryUnreachable or AccessDenied.** The machine must be joined to
 the domain and able to read the AD configuration partition. The message includes the underlying error. You can still
@@ -25,6 +25,6 @@ account>`, or grant that account read on the key in the certificate store.
 
 **A certificate is bound but HTTPS does not use it, and `Server` is `httpsys`.** HTTP.sys ignores the Kestrel
 certificate keys; bind the certificate to the port with `netsh http add sslcert`. See [Sharing a port with
-HTTP.sys](../configuration.md#sharing-a-port-with-httpsys).
+HTTP.sys](configuration.md#sharing-a-port-with-httpsys).
 
-**An encrypted PEM key is refused.** Decrypt it first; see [PEM and PFX files](pem-and-pfx.md).
+**An encrypted PEM key is refused.** Decrypt it first; see [PEM and PFX files](certificates-pem-and-pfx.md).

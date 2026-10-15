@@ -7,6 +7,13 @@
 export const DOC_PAGES = [
   { slug: 'install', title: 'Install' },
   { slug: 'configuration', title: 'Configuration' },
+  { slug: 'certificates', title: 'Certificates' },
+  { slug: 'certificates-ad-cs-enroll', title: 'Certificates: AD CS enrollment' },
+  { slug: 'certificates-self-signed', title: 'Certificates: self-signed' },
+  { slug: 'certificates-existing-windows-store', title: 'Certificates: existing Windows store certificate' },
+  { slug: 'certificates-pem-and-pfx', title: 'Certificates: PEM and PFX files' },
+  { slug: 'certificates-renewal-and-expiry', title: 'Certificates: renewal and expiry' },
+  { slug: 'certificates-troubleshooting', title: 'Certificates: troubleshooting' },
   { slug: 'getting-started', title: 'Getting started' },
   { slug: 'replication-concepts', title: 'Replication concepts' },
   { slug: 'drivers-and-libraries', title: 'Drivers and libraries' },

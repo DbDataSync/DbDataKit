@@ -22,7 +22,7 @@ one table in `docs/configuration.md` with no task-oriented pages.
 
 ## Part 1 — Docs
 
-Add `docs/certificates/`, one page per method plus an index. Keep the `docs/configuration.md` reference
+Add `docs/certificates*.md`, one page per method plus an index. Keep the `docs/configuration.md` reference
 table and link to the new pages from it and from `docs/getting-started.md`.
 
 | File | Contents |
@@ -146,7 +146,7 @@ Docs and code as separate commits.
   are printed with the `config set` command that saves one; a configured value is never overwritten; failure
   prints the reason and the manual `certutil` route and exits 1.
 - `ResolveCaAndTemplate`'s error and the setup walk-through's `enroll` instruction both point at `discover`.
-- `docs/certificates/`: an index, AD CS enrollment, self-signed, binding an existing store certificate, PEM and
+- `docs/certificates*.md`: an index, AD CS enrollment, self-signed, binding an existing store certificate, PEM and
   PFX, renewal and expiry, and troubleshooting. `docs/configuration.md` links to it and lists `discover`.
 
 ## What changed from the design

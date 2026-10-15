@@ -146,7 +146,7 @@ integrated authentication connects/authenticates as this account** — worth dec
 — issues, installs, binds, renews and reports on the certificate Kestrel serves TLS with,
 entirely from the CLI so setting up HTTPS never depends on HTTPS already working. Run
 `dbdatasync config cert` with no subcommand for the full flag list. A walk-through of each method is in
-[certificates/](certificates/README.md). A walk-through per method is in [certificates/](certificates/README.md).
+[certificates](certificates.md).
 
 | command | does |
 | --- | --- |

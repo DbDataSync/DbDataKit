@@ -9,7 +9,7 @@
 | A store certificate you bound that someone else manages | them | restart after they replace it |
 
 `renew` reads the currently bound certificate and re-enrolls with the same subject and names. With a CA and template
-configured (see [enrollment](ad-cs-enroll.md)) it asks the CA; with none it makes a fresh self-signed one. Either way it
+configured (see [enrollment](certificates-ad-cs-enroll.md)) it asks the CA; with none it makes a fresh self-signed one. Either way it
 installs the new certificate, but the service keeps serving the old one until restarted, because Kestrel resolves its
 certificate once at startup. A restart interrupts any replication run in progress, so it is your call when.
 

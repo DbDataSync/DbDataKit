@@ -28,7 +28,7 @@ dbdatasync config cert new-self-signed --dns dbdatasync.example.com
 ```
 
 From an **elevated** prompt, on Windows (`--store` states it explicitly). `--dns` is required and takes one or more
-names, comma-separated; the first is the subject. `--days` and `--account` are as for [enrollment](ad-cs-enroll.md).
+names, comma-separated; the first is the subject. `--days` and `--account` are as for [enrollment](certificates-ad-cs-enroll.md).
 
 The certificate is installed in `LocalMachine\My` with a non-exportable private key. The key is never exported, not even
 briefly. Then:
@@ -41,4 +41,4 @@ dbdatasync config cert bind --thumbprint <thumbprint>
 certificate whose chain it cannot build. It says so when it does.
 
 Nothing renews a store certificate for you. `dbdatasync config cert renew`, with no CA configured, issues a fresh
-self-signed one with the same subject and names. See [renewal and expiry](renewal-and-expiry.md).
+self-signed one with the same subject and names. See [renewal and expiry](certificates-renewal-and-expiry.md).

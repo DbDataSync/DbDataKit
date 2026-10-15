@@ -87,4 +87,4 @@ Do not run `enroll` again: it asks the CA for a second certificate.
 ## Renewing
 
 `dbdatasync config cert renew` re-enrolls using the bound certificate's subject and names. It is a fresh request, not a
-signed renewal, so it works even after the certificate has expired. See [renewal and expiry](renewal-and-expiry.md).
+signed renewal, so it works even after the certificate has expired. See [renewal and expiry](certificates-renewal-and-expiry.md).
