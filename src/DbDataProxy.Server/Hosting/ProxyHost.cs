@@ -18,22 +18,55 @@ public static class ProxyHost
 {
     public const string ServiceName = "DbDataProxy";
 
-    /// <summary>Builds the proxy host. <paramref name="configure"/> lets tests and embedders adjust it before it is built.</summary>
+    /// <summary>
+    /// The web application builder with the proxy's configuration sources (appsettings.json, DBPROXY_ environment variables, command line).
+    /// A configuration file that cannot be parsed surfaces as <see cref="ProxyConfigException"/>.
+    /// </summary>
+    public static WebApplicationBuilder CreateBuilder(string[] args)
+    {
+        WebApplicationBuilder builder;
+        try
+        {
+            builder = WebApplication.CreateBuilder(new WebApplicationOptions
+            {
+                Args = args,
+                // A Windows service starts in System32; settings and the worker are found relative to the executable.
+                ContentRootPath = AppContext.BaseDirectory,
+            });
+        }
+        catch (Exception ex) when (ex is InvalidDataException or FormatException)
+        {
+            throw new ProxyConfigException(DescribeLoadFailure(ex), []);
+        }
+        builder.Configuration.AddEnvironmentVariables("DBPROXY_");
+        return builder;
+    }
+
+    private static string DescribeLoadFailure(Exception ex)
+    {
+        var parts = new List<string>();
+        for (var e = ex; e is not null; e = e.InnerException) parts.Add(e.Message);
+        return "The configuration could not be read: " + string.Join(" ", parts.Distinct());
+    }
+
+    /// <summary>
+    /// Builds the proxy host. <paramref name="configure"/> lets tests and embedders adjust it before it is built.
+    /// Throws <see cref="ProxyConfigException"/> when the effective configuration is not valid (the command line exits with code 2).
+    /// </summary>
     public static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null)
     {
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
-        {
-            Args = args,
-            // A Windows service starts in System32; settings and the worker are found relative to the executable.
-            ContentRootPath = AppContext.BaseDirectory,
-        });
-
-        builder.Configuration.AddEnvironmentVariables("DBPROXY_");
+        var builder = CreateBuilder(args);
         builder.Services.AddWindowsService(o => o.ServiceName = ServiceName);
         builder.Services.AddSystemd();
-
-        builder.Services.Configure<ProxyOptions>(builder.Configuration.GetSection(ProxyOptions.SectionName));
+        var loadGuard = ProxyConfigLoadGuard.Install(builder.Configuration);
         configure?.Invoke(builder);
+
+        // Strict startup validation: unknown keys, types, ranges and cross-references are errors. Later edits of a running service are
+        // validated the same way, and a rejected edit keeps the last good configuration (ProxyOptionsMonitor).
+        var configRoot = (IConfigurationRoot)builder.Configuration;
+        var loaded = ProxyConfig.LoadOrThrow(configRoot);
+        builder.Services.AddSingleton<IOptionsMonitor<ProxyOptions>>(sp =>
+            new ProxyOptionsMonitor(configRoot, loaded.Value!, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Config"), loadGuard));
 
         // One redactor for the process: every resolved secret is registered with it, every logger and every client-facing
         // error text passes through it.
@@ -43,11 +76,13 @@ public static class ProxyHost
         builder.Services.AddSingleton<SecretsRuntime>();
         RedactLogging(builder.Services, redactor);
 
-        var options = builder.Configuration.GetSection(ProxyOptions.SectionName).Get<ProxyOptions>() ?? new ProxyOptions();
+        var options = loaded.Value!;
         ConfigureServices(builder.Services, options);
         ConfigureKestrel(builder, options);
 
         var app = builder.Build();
+        if (loaded.Diagnostics.Count > 0)
+            app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Config").LogWarning("{Details}", ProxyConfig.Format(loaded.Diagnostics));
         // Resolves every referenced secret (registering it for redaction), warns about literals, and fails when
         // Proxy:RequireReferencedSecrets is on and one is found.
         app.Services.GetRequiredService<SecretsRuntime>().ValidateStartup(app.Services.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue);

@@ -40,6 +40,8 @@ public sealed class ProxyFixture : IAsyncLifetime
             ["Proxy:Tls:Mode"] = "None",
             ["Proxy:DataDirectory"] = _dir,
             ["Proxy:Compression:Mode"] = "None",
+            // The shipped appsettings.json (copied beside the tests) says SchemaVersion 2; these tests exercise the schema 1 defaults (Classifier warn).
+            ["Proxy:SchemaVersion"] = "1",
             ["Proxy:DataSources:duck:Provider"] = "duckdb",
             ["Proxy:DataSources:duck:ConnectionString"] = $"Data Source={DuckDbPath}",
             ["Proxy:DataSources:duck:AllowWrites"] = "true",

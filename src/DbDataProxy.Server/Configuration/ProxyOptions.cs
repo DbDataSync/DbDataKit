@@ -1,6 +1,12 @@
+using DbDataKit.Config;
+
 namespace DbDataProxy.Server.Configuration;
 
-/// <summary>Root of the "Proxy" configuration section.</summary>
+/// <summary>
+/// Root of the "Proxy" configuration section. Keys are PascalCase and matched case-insensitively (like the stock configuration binder);
+/// unknown keys are startup errors (see <see cref="ProxyConfig"/>).
+/// </summary>
+[ConfigSchema(ProxyConfig.Kind, Version = ProxyConfig.LatestSchemaVersion, Naming = KeyNaming.Verbatim)]
 public sealed class ProxyOptions
 {
     public const string SectionName = "Proxy";
@@ -18,6 +24,19 @@ public sealed class ProxyOptions
     /// </summary>
     public bool RequireReferencedSecrets { get; set; }
 
+    /// <summary>
+    /// Forward-compatibility switch: unknown keys become warnings instead of startup errors (for example while rolling a config file back
+    /// to an older release). Off by default: a misspelt key is an error with a "did you mean" suggestion.
+    /// </summary>
+    public bool AllowUnknownKeys { get; set; }
+
+    /// <summary>
+    /// Version of the configuration schema this file was written for ("SchemaVersion", optional; absent means 1). Version 2 changes defaults only
+    /// (the statement <c>Classifier</c> defaults to <c>strict</c> instead of <c>warn</c>); see the README. Set by the loader, not bound as a property.
+    /// </summary>
+    [ConfigIgnore]
+    public int SchemaVersion { get; set; } = 1;
+
     public ListenOptions Listen { get; set; } = new();
     public TlsOptions Tls { get; set; } = new();
     public CompressionOptions Compression { get; set; } = new();
@@ -31,9 +50,12 @@ public sealed class ProxyOptions
     public List<UserOptions> Users { get; set; } = [];
 }
 
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class ListenOptions
 {
     public string Address { get; set; } = "0.0.0.0";
+    [ConfigKey(Min = 0, Max = 65535)]
+    /// <summary>TCP port, 1-65535; 0 lets the operating system pick one (tests).</summary>
     public int Port { get; set; } = 8815;
 }
 
@@ -47,17 +69,20 @@ public enum TlsMode
     None,
 }
 
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class TlsOptions
 {
     public TlsMode Mode { get; set; } = TlsMode.SelfSigned;
 
     /// <summary>PFX path for <see cref="TlsMode.File"/>; for self-signed mode, where the generated PFX is stored.</summary>
     public string? CertificatePath { get; set; }
+    [Secret]
     public string? CertificatePassword { get; set; }
 
     /// <summary>Extra DNS names / IPs for the self-signed certificate. localhost and the machine name are always included.</summary>
     public List<string> Hostnames { get; set; } = [];
 
+    [ConfigKey(Min = 1)]
     public int SelfSignedValidityDays { get; set; } = 825;
 }
 
@@ -70,6 +95,7 @@ public enum CompressionMode
     Arrow,
 }
 
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class CompressionOptions
 {
     public CompressionMode Mode { get; set; } = CompressionMode.Arrow;
@@ -87,17 +113,22 @@ public sealed class CompressionOptions
     public bool AllowClientOverride { get; set; } = true;
 }
 
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class AuthOptions
 {
     /// <summary>How long an issued bearer token stays valid after its last use.</summary>
+    [ConfigKey(Min = 1, Max = 525600)]
     public int SessionIdleMinutes { get; set; } = 30;
 
     /// <summary>Absolute lifetime of a bearer token.</summary>
+    [ConfigKey(Min = 1, Max = 8760)]
     public int SessionMaxHours { get; set; } = 12;
 
     /// <summary>Failed logins (per user and client) within <see cref="LockoutMinutes"/> before further attempts are refused. 0 disables.</summary>
+    [ConfigKey(Min = 0, Max = 1000)]
     public int MaxFailedLogins { get; set; } = 5;
 
+    [ConfigKey(Min = 0, Max = 10080)]
     public int LockoutMinutes { get; set; } = 1;
 
     /// <summary>
@@ -110,17 +141,21 @@ public sealed class AuthOptions
     public JwtOptions Jwt { get; set; } = new();
 }
 
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class WorkerOptions
 {
     /// <summary>Path to the 32-bit worker executable. Defaults to "worker/DbDataProxy.Worker.exe" beside the service.</summary>
     public string? Path { get; set; }
+    [ConfigKey(Min = 1, Max = 3600)]
     public int StartupTimeoutSeconds { get; set; } = 30;
 }
 
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class DataSourceOptions
 {
     /// <summary>"odbc", "sqlserver" or "duckdb".</summary>
     public string Provider { get; set; } = "odbc";
+    // Not [Secret]: `config show` masks only the credential parts of a connection string (references stay visible).
     public string ConnectionString { get; set; } = "";
 
     /// <summary>"x64" (in-process, the default) or "x86" (routes through the 32-bit worker; ODBC only).</summary>
@@ -145,7 +180,9 @@ public sealed class DataSourceOptions
     /// </summary>
     public string Metadata { get; set; } = "auto";
 
+    [ConfigKey(Min = 1, Max = 1000000)]
     public int BatchSize { get; set; } = 32768;
+    [ConfigKey(Min = 0, Max = 86400)]
     public int? CommandTimeoutSeconds { get; set; }
 
     /// <summary>Overrides the global compression settings for this data source.</summary>
@@ -165,6 +202,7 @@ public enum ClassifierMode
     Off,
 }
 
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class UserOptions
 {
     public string Name { get; set; } = "";
@@ -173,6 +211,7 @@ public sealed class UserOptions
     public UserAuthType AuthType { get; set; } = UserAuthType.Password;
 
     /// <summary>PBKDF2 hash as produced by "DbDataProxy hash-password" (AuthType Password).</summary>
+    [Secret]
     public string? PasswordHash { get; set; }
 
     /// <summary>Data sources this user may query ("*" for all).</summary>

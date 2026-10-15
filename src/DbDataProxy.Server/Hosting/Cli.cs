@@ -1,4 +1,5 @@
 using DbDataProxy.Server.Auth;
+using DbDataProxy.Server.Configuration;
 
 namespace DbDataProxy.Server.Hosting;
 
@@ -18,6 +19,8 @@ public static class Cli
                 return ProtectSecret(rest);
             case "query":
                 return await QueryCommand.RunAsync(rest);
+            case "config":
+                return ConfigCommand.Run(rest);
             case "install":
                 return ServiceInstaller.Install(rest);
             case "uninstall":
@@ -26,9 +29,18 @@ public static class Cli
                 PrintHelp();
                 return 0;
             case "run":
-                var app = ProxyHost.Build(rest);
-                await app.RunAsync();
-                return 0;
+                try
+                {
+                    var app = ProxyHost.Build(rest);
+                    await app.RunAsync();
+                    return 0;
+                }
+                catch (Exception ex) when (ex is ProxyConfigException or Secrets.PlainSecretNotAllowedException)
+                {
+                    // Invalid configuration: one precise message (key paths and sources, no secret values) and the documented exit code.
+                    Console.Error.WriteLine(ex.Message);
+                    return ProxyConfigException.ExitCode;
+                }
             default:
                 Console.Error.WriteLine($"Unknown command '{command}'.");
                 PrintHelp();
@@ -94,6 +106,9 @@ public static class Cli
           DbDataProxy install [--name N] [--account A --password P]
                                            Register the Windows service (run elevated)
           DbDataProxy uninstall [--name N] Remove the Windows service
+          DbDataProxy config check [--file F]  Validate the configuration (exit code 0 valid, 2 invalid)
+          DbDataProxy config show [--origin] [--file F]
+                                           Print the effective configuration, secrets masked; --origin adds where each value came from
           DbDataProxy help                 Show this help
 
         Configuration is read from appsettings.json beside the executable, environment variables
