@@ -66,6 +66,8 @@ public enum DescribeStrategy
     PreparedStatement,
     /// <summary>ODBC <c>SQLPrepare</c> + <c>SQLDescribeCol</c>.</summary>
     OdbcPrepare,
+    /// <summary>An engine statement that describes a query (DuckDB <c>DESCRIBE</c>), nothing executed.</summary>
+    EngineDescribeStatement,
     /// <summary><c>SELECT * FROM (query) t WHERE 1 = 0</c> run through the read-only policy.</summary>
     WrappedZeroRowProbe,
 }
