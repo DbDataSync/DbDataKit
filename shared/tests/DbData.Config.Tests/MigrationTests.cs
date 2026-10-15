@@ -1,3 +1,4 @@
+using DbData.Config.Testing;
 using DbData.Config.Yaml;
 
 namespace DbData.Config.Tests;
@@ -169,14 +170,9 @@ public class MigrationTests
     }
 
     [Fact]
-    public void Golden_pairs_are_stable_and_idempotent()
-    {
-        var e = Engine();
-        var once = e.Plan("proxy", V1, "p.yml", new() { TargetVersion = 2 }).NewText;
-        var twice = e.Plan("proxy", once, "p.yml", new() { TargetVersion = 2 });
-        Assert.Equal(MigrationStatus.UpToDate, twice.Status);
-        Assert.Equal(once, twice.NewText);
-    }
+    public void Golden_pairs_are_stable_and_idempotent() =>
+        GoldenMigration.AssertPair(Engine(), "proxy", V1, "# header comment\n\nschemaVersion: 2\nname: x  # keep\ntimeout: 5   # seconds\ntags: [a]\n",
+            new() { TargetVersion = 2 }, "p.yml");
 
     [Fact]
     public void CRLF_files_keep_their_line_endings()

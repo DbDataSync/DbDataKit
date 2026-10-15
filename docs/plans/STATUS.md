@@ -51,3 +51,8 @@ Open decisions: Sync env-var sanitisation rule (Secrets), camelCase default keys
 BouncyCastle for ed25519 (Update), signing-key custody (Update), Oracle/tinyint type policy (Dialect).
 Reconcile pending: Hosting `IAclPolicy` vs Secrets `AclHelper`.
 Wave 2 (in progress): Connections (06), Transfer (07), Metadata Part B (04), Config.Testing + ACL reconcile.
+
+## Cleanup (ACL reconcile, Config.Testing)
+- ACL: new `shared/src/DbData.Security.Acl` is the single implementation (`AclHelper`, `IAclService`/`FileSystemAclService`, `AclSpecification`). `DbData.Secrets.Windows` and `DbData.Hosting.WindowsService` reference it; Hosting's `IAclPolicy`, `WindowsAclPolicy` and `IFileSystemAclReader` are gone (doctor and `ServiceCommand` take one `IAclService`; `LayoutAcl.Apply` maps layout to spec). `AclHelper` namespace moved to `DbData.Security.Acl` (breaking for any product code that used `DbData.Secrets.Windows.AclHelper`).
+- Config: `DbData.Config.Testing` added (golden migration pairs, fuzz helper, schema/binder agreement, catalog completeness) with tests, and used by `DbData.Config.Tests`. `schema: <kind>/<int>` header and JSON input (`*.json`, `JsonInput`) implemented with tests. Still not done: git-commit backup mode, CLI commands.
+- `cd shared && dotnet test --solution DbData.Shared.slnx` green; new projects added to the slnx.

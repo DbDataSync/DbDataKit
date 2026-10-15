@@ -25,8 +25,9 @@ Typed, strict, layered configuration on top of `DbData.Config.Yaml`. No YamlDotN
 ## Decisions
 
 - Key naming: per-schema policy (default camelCase, Sync's convention; Build uses `SnakeCase`). Existing keys are never renamed; use `[ConfigKey("name")]`.
-- Version key name: `schemaVersion` (integer). The `schema: kind/int` form from the plan is not implemented.
+- Version key name: `schemaVersion` (integer). The `schema: <kind>/<int>` header is accepted as an alternative on versioned schemas (binder, builder, migration engine, JSON Schema `schema` property with a `^kind/N$` pattern); the migration engine keeps whichever form the file uses, and refuses a file that has both, a wrong kind, or a newer version. `SchemaHeader.TryParse/Format`.
 - Env prefix: `DBDATA_<APP>__...`. Legacy aliases are caller supplied.
 - Migrations live in the product that owns the file kind; the engine is shared (plan recommendation).
 - Git-commit-instead-of-.bak is not implemented (only `.bak`).
+- JSON input: files named `*.json` (via `AddFile`/`AddText`, and the MEC provider) go through `JsonInput` in `DbData.Config.Yaml`: strict JSON check (no comments or trailing commas), then the same strict node tree with line/column. Test helpers live in `DbData.Config.Testing`.
 - Merge: top-level keys of every layer are layered; per-key opt-out of list appending is via `key=`.
