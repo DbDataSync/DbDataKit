@@ -1,41 +1,48 @@
 # DbData.Odbc.Metadata
 
 Catalog metadata for ODBC data sources, read through the driver manager's own catalog functions instead of
-`INFORMATION_SCHEMA` or `System.Data.Odbc.GetSchema` (which has no primary or foreign keys). It is meant to be shared by
-DbDataProxy, DbDataSync and DbDataBuild, and has no dependencies beyond .NET.
+`INFORMATION_SCHEMA` or `System.Data.Odbc.GetSchema` (which has no primary or foreign keys). Shared by DbDataProxy,
+DbDataSync and DbDataBuild. No dependencies beyond .NET (net10.0).
+
+Origin: copied from `DbDataProxy/src/DbData.Odbc.Metadata` at commit `c08355f` (a history-preserving subtree split was not
+possible from a worktree of the hub), then hardened per Plan 04 section 2.2/2.3.
 
 ```csharp
-await using var catalog = OdbcCatalog.Connect("Driver={ODBC Driver 18 for SQL Server};Server=...;Database=...");
-
-var tables  = await catalog.TablesAsync(schema: "dbo");                 // tables and views
-var columns = await catalog.ColumnsAsync(schema: "dbo", table: "orders");
-var key     = await catalog.PrimaryKeyAsync(null, "dbo", "orders");     // null when there is none
-var fks     = await catalog.ForeignKeysAsync(null, "dbo", "orders");
-var indexes = await catalog.IndexesAsync(null, "dbo", "orders");
-var info    = await catalog.GetInfoAsync();                             // product, version, identifier quote and case
+await using var session = await OdbcCatalogSession.OpenAsync("Driver={ODBC Driver 18 for SQL Server};Server=...;Database=...");
+var crawl = await session.CrawlAsync(schema: "dbo");        // tables, columns, keys, indexes on ONE connection
+var types = await session.Catalog.TypeInfoAsync();          // SQLGetTypeInfo, raw SQL type codes (OdbcSqlType)
+var procs = await session.Catalog.ProceduresAsync(schema: "dbo");
+await foreach (var c in session.Catalog.StreamColumnsAsync()) { }   // huge catalogs, not capped
 ```
 
-## What it does for you
+## Hardening
 
-* **One connection, serialized calls.** `Connect` takes a connection string or a bare DSN name and connects on first use
-  with `SQL_DRIVER_NOPROMPT`. The package makes its own connection because `System.Data.Odbc` keeps its handle private.
-  Calls run one at a time on a thread-pool thread.
-* **Catalog arguments are patterns; names are not.** `SQLTables` and `SQLColumns` treat `_` and `%` as wildcards. Names
-  are escaped with the driver's `SQL_SEARCH_PATTERN_ESCAPE`, repeated unescaped if a driver finds nothing, and the rows
-  are matched exactly (then case-insensitively) so `my_table` never returns `myXtable`.
-* **Failures say what failed, not what you sent.** `OdbcCatalogException` carries the function name and SQLSTATE only
-  (driver messages can quote names or paths). `NotSupported` is true for the SQLSTATEs drivers use for "I do not
-  implement this" (IM001, HYC00, HY106, ...).
-* **Bitness follows the process.** A 32-bit process loads 32-bit drivers; DbDataProxy hosts this package inside its
-  `win-x86` worker for them.
+* **Limits** (`OdbcCatalogOptions`): login timeout, `StatementTimeout` (`SQL_ATTR_QUERY_TIMEOUT`, default 60 s), `MaxRows`
+  (default 500,000) with `RowLimitBehavior` Throw (`OdbcResultTruncatedException`) or Truncate (`result.GetTruncation()`
+  returns an `OdbcResultTruncated`). Cancellation calls `SQLCancel` and surfaces as `OperationCanceledException`.
+* **Connection strings**: `OdbcConnectionString.Build/Quote` (brace quoting; control characters refused), strict parser
+  `TryParseStrict`, and `OdbcConnectionPolicy` (`AllowedDrivers`, `AllowedDsns`, `ForbidFileDsn`, `ForbidSaveFile`,
+  `ForbidKeys`) enforced in `OdbcCatalog.Connect` and again before `SQLDriverConnect`. The default policy forbids
+  `FILEDSN`/`SAVEFILE`; use `Unrestricted` only for administrator-written strings. Hostile-string tests cover brace
+  breakouts, `FILEDSN=`, `SAVEFILE=`, DSN/driver smuggling and duplicates.
+* `SQLGetInfo` strings grow and retry (no silent 1 KB cut); a value too long for SQLSMALLINT is an error.
+* `SQLWCHAR` width is probed after connecting; a 4-byte (UTF-32) unixODBC build fails with `OdbcConfigurationException`.
+* P/Invoke uses `LibraryImport` behind an internal `IOdbcApi` seam.
 
-## Layers
+## Machine facts
 
-`OdbcCatalog` (typed records) sits over `IOdbcCatalogFunctions` (raw result sets as `string?[]` rows). Fake the interface
-in tests; the real implementation is internal and P/Invokes `odbc32.dll` / `libodbc.so.2` / `libodbc.2.dylib`.
+`OdbcDriverInventory.Read()` lists drivers and DSNs with bitness (Windows registry, both views; `odbcinst.ini`/`odbc.ini`
+on Unix, bitness from the library path when it says). Registry and file access go through `IOdbcRegistryReader` /
+`IOdbcFileReader`. `OdbcDiagnostics.Explain(...)` turns IM002/IM014 and other common SQLSTATEs into plain advice.
 
-## Tests
+## Verification status
 
-`tests/DbData.Odbc.Metadata.Tests`: unit tests against a fake driver, and integration tests against SQL Server through
-`ODBC Driver 18/17 for SQL Server` using `DBPROXY_TEST_SQLSERVER`, `_USER` and `_PASSWORD` (default `.\SQLEXPRESS` with
-Windows authentication); they skip when no server is reachable unless `DBPROXY_REQUIRE_SQLSERVER=true`.
+* Fake-driver tests (`IOdbcCatalogFunctions` fake and a scripted `IOdbcApi`) cover everything, including timeouts, cap,
+  cancellation, buffer growth, session reuse and policy.
+* Verified against real odbc32.dll on Windows, and against SQL Server (`ODBC Driver 17/18`) including SQLGetTypeInfo,
+  SQLProcedures, SQLProcedureColumns, the cap and sessions. Not verified on Linux/macOS (unixODBC naming, UTF-32 detection) or
+  with drivers that reject `SQL_ATTR_QUERY_TIMEOUT`; those paths are covered by fakes only.
+* Integration tests skip when no server is reachable: `DBDATA_TEST_SQLSERVER` (default `.\SQLEXPRESS`), `_USER`, `_PASSWORD`,
+  `DBDATA_REQUIRE_SQLSERVER=true` to fail instead of skip (the `DBPROXY_` names also work).
+
+Public API is tracked with `Microsoft.CodeAnalysis.PublicApiAnalyzers` (`PublicAPI.Shipped.txt`).

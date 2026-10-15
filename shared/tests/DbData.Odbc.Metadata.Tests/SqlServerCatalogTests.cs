@@ -4,16 +4,19 @@ using DbData.Odbc.Metadata;
 namespace DbData.Odbc.Metadata.Tests;
 
 /// <summary>
-/// The native layer against a real driver. Uses the same variables as the proxy's tests: DBPROXY_TEST_SQLSERVER (default
+/// The native layer against a real driver. Variables (DBDATA_ prefix, or the DBPROXY_ prefix the proxy's tests use): TEST_SQLSERVER (default
 /// .\SQLEXPRESS with Windows authentication), _USER and _PASSWORD for SQL authentication, and DBPROXY_REQUIRE_SQLSERVER=true
 /// to fail instead of skip when the server or driver is missing.
 /// </summary>
 public sealed class SqlServerCatalogTests : IAsyncLifetime
 {
-    private static readonly string Server = Environment.GetEnvironmentVariable("DBPROXY_TEST_SQLSERVER") ?? @".\SQLEXPRESS";
-    private static readonly string? User = Environment.GetEnvironmentVariable("DBPROXY_TEST_SQLSERVER_USER");
-    private static readonly string? Password = Environment.GetEnvironmentVariable("DBPROXY_TEST_SQLSERVER_PASSWORD");
-    private static readonly bool Required = string.Equals(Environment.GetEnvironmentVariable("DBPROXY_REQUIRE_SQLSERVER"), "true", StringComparison.OrdinalIgnoreCase);
+    // DBDATA_* first, then the DBPROXY_* names the Proxy tests use.
+    private static string? Env(string name) => Environment.GetEnvironmentVariable("DBDATA_" + name) ?? Environment.GetEnvironmentVariable("DBPROXY_" + name);
+
+    private static readonly string Server = Env("TEST_SQLSERVER") ?? @".\SQLEXPRESS";
+    private static readonly string? User = Env("TEST_SQLSERVER_USER");
+    private static readonly string? Password = Env("TEST_SQLSERVER_PASSWORD");
+    private static readonly bool Required = string.Equals(Env("REQUIRE_SQLSERVER"), "true", StringComparison.OrdinalIgnoreCase);
 
     private const string Schema = "dbdata_meta";
     private string? connectionString;
@@ -54,6 +57,7 @@ public sealed class SqlServerCatalogTests : IAsyncLifetime
     {
         string[] statements =
         [
+            $"IF OBJECT_ID('{Schema}.usp_add') IS NOT NULL DROP PROCEDURE {Schema}.usp_add",
             $"IF OBJECT_ID('{Schema}.child') IS NOT NULL DROP TABLE {Schema}.child",
             $"IF OBJECT_ID('{Schema}.v_parent') IS NOT NULL DROP VIEW {Schema}.v_parent",
             $"IF OBJECT_ID('{Schema}.parent') IS NOT NULL DROP TABLE {Schema}.parent",
@@ -74,6 +78,8 @@ public sealed class SqlServerCatalogTests : IAsyncLifetime
             await using var command = new OdbcCommand(sql, connection);
             await command.ExecuteNonQueryAsync();
         }
+        await using var procedure = new OdbcCommand($"CREATE PROCEDURE {Schema}.usp_add @a int, @b int OUTPUT AS SET @b = @a + 1", connection);
+        await procedure.ExecuteNonQueryAsync();
         await using var view = new OdbcCommand($"CREATE VIEW {Schema}.v_parent AS SELECT a, b FROM {Schema}.parent", connection);
         await view.ExecuteNonQueryAsync();
     }
@@ -182,5 +188,63 @@ public sealed class SqlServerCatalogTests : IAsyncLifetime
         var ex = await Assert.ThrowsAsync<OdbcCatalogException>(() => catalog.TablesAsync());
         Assert.Equal("SQLDriverConnect", ex.Function);
         Assert.DoesNotContain("No Such Driver", ex.Message);
+    }
+
+    [Fact]
+    public async Task Lists_the_data_types_the_server_supports()
+    {
+        await using var catalog = Open();
+        var types = await catalog.TypeInfoAsync();
+
+        Assert.Contains(types, t => t.TypeName == "int" && t.SqlType == OdbcSqlType.Integer);
+        Assert.Contains(types, t => t.TypeName == "varchar" && t.SqlType == OdbcSqlType.Varchar && t.ColumnSize == 8000);
+        Assert.Single(await catalog.TypeInfoAsync(OdbcSqlType.Integer), t => t.TypeName == "int");
+    }
+
+    [Fact]
+    public async Task Lists_procedures_and_their_parameters()
+    {
+        await using var catalog = Open();
+        var procedure = Assert.Single(await catalog.ProceduresAsync(schema: Schema, procedure: "usp_add"));
+        Assert.Equal("usp_add", procedure.Name);          // the ;1 version suffix is removed
+
+        var columns = await catalog.ProcedureColumnsAsync(schema: Schema, procedure: "usp_add");
+        Assert.Contains(columns, c => c.Name == "@a" && c.Kind == OdbcParameterKind.Input);
+        Assert.Contains(columns, c => c.Name == "@b" && c.Kind == OdbcParameterKind.InputOutput);
+    }
+
+    [Fact]
+    public async Task A_session_crawls_the_schema_on_one_connection_and_streams_match_the_buffered_calls()
+    {
+        await using var session = await OdbcCatalogSession.OpenAsync(connectionString!, new OdbcCatalogOptions { StatementTimeout = TimeSpan.FromSeconds(30) });
+        var crawl = await session.CrawlAsync(schema: Schema);
+
+        Assert.Contains(crawl.Tables, t => t.Name == "parent");
+        Assert.Contains(crawl.ForeignKeys, k => k.Name == "fk_child_parent");
+        Assert.Contains(crawl.PrimaryKeys, k => k.Name == "pk_parent");
+
+        var streamed = new List<string>();
+        await foreach (var c in session.Catalog.StreamColumnsAsync(schema: Schema, table: "parent")) streamed.Add(c.Name);
+        Assert.Equal(4, streamed.Count);
+        Assert.Contains("label", streamed);
+    }
+
+    [Fact]
+    public async Task The_row_cap_applies_to_a_real_driver()
+    {
+        var options = new OdbcCatalogOptions { MaxRows = 2, RowLimitBehavior = OdbcRowLimitBehavior.Truncate };
+        await using var catalog = OdbcCatalog.Connect(connectionString!, options);
+
+        var tables = await catalog.TablesAsync(schema: Schema);
+        Assert.Equal(2, tables.Count);
+        Assert.Equal(2, tables.GetTruncation()!.MaxRows);
+    }
+
+    [Fact]
+    public async Task The_driver_manager_is_not_32_bit_wide_in_SQLWCHAR()
+    {
+        // Connecting runs the SQLWCHAR width probe; a UTF-32 driver manager would throw OdbcConfigurationException here.
+        await using var catalog = Open();
+        Assert.NotNull((await catalog.GetInfoAsync()).DbmsName);
     }
 }
