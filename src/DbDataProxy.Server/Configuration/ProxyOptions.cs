@@ -16,12 +16,22 @@ public sealed class ProxyOptions
     public CompressionOptions Compression { get; set; } = new();
     public AuthOptions Auth { get; set; } = new();
     public WorkerOptions Worker { get; set; } = new();
+    public HostingOptions Hosting { get; set; } = new();
 
     /// <summary>Named back-end connections clients can target. Clients never send connection strings.</summary>
     public Dictionary<string, DataSourceOptions> DataSources { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Local user accounts (hashed passwords) and the data sources they may use.</summary>
     public List<UserOptions> Users { get; set; } = [];
+}
+
+public sealed class HostingOptions
+{
+    /// <summary>In-flight requests (a Flight stream counts for its whole duration) before new ones are refused with 503.</summary>
+    public int MaxConcurrentRequests { get; set; } = 1000;
+
+    /// <summary>On stop, how long to let in-flight queries finish before the host shuts down.</summary>
+    public int DrainSeconds { get; set; } = 30;
 }
 
 public sealed class ListenOptions

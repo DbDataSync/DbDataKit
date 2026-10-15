@@ -1,5 +1,8 @@
 using System.Net;
+using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
+using DbDataKit.Hosting;
+using CertificateReadinessProbe = DbDataKit.Hosting.Certificates.CertificateReadinessProbe;
 using DbDataProxy.Data;
 using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Configuration;
@@ -27,21 +30,43 @@ public static class ProxyHost
         });
 
         builder.Configuration.AddEnvironmentVariables("DBPROXY_");
-        builder.Services.AddWindowsService(o => o.ServiceName = ServiceName);
-        builder.Services.AddSystemd();
-
         builder.Services.Configure<ProxyOptions>(builder.Configuration.GetSection(ProxyOptions.SectionName));
         configure?.Invoke(builder);
 
         var options = builder.Configuration.GetSection(ProxyOptions.SectionName).Get<ProxyOptions>() ?? new ProxyOptions();
+        UseSharedHost(builder, options, args);
         ConfigureServices(builder.Services, options);
         ConfigureKestrel(builder, options);
 
         var app = builder.Build();
+        app.UseDbDataPipeline();
+        app.MapDbDataEndpoints();
         app.MapFlightEndpoint();
         app.MapGet("/", () => "DbDataProxy Arrow Flight SQL endpoint. Connect with a Flight SQL client.");
         return app;
     }
+
+    /// <summary>
+    /// Service/systemd integration, drain on stop, /health and /version, and request limits come from the shared host.
+    /// The limits are set so that nothing a client could do before is refused: a Flight stream may run for hours and
+    /// bodies keep Kestrel's 30 MB default; only the in-flight request cap (default 1000) is new.
+    /// </summary>
+    private static void UseSharedHost(WebApplicationBuilder builder, ProxyOptions options, string[] args) =>
+        builder.UseDbDataHost(host =>
+        {
+            host.Product = ServiceName;
+            host.Version = Version;
+            host.DrainTimeout = TimeSpan.FromSeconds(Math.Max(0, options.Hosting.DrainSeconds));
+            host.Limits.MaxConcurrentRequests = Math.Max(1, options.Hosting.MaxConcurrentRequests);
+            host.Limits.RequestTimeout = TimeSpan.FromDays(7);
+            host.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(30);
+            host.Limits.KeepAliveTimeout = TimeSpan.FromSeconds(130);
+            host.Limits.MaxRequestBodyBytes = 30_000_000;
+            host.Limits.MaxMessageBytes = 64 * 1024 * 1024;
+        }, args);
+
+    public static string Version { get; } =
+        (typeof(ProxyHost).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0").Split('+')[0];
 
     private static void ConfigureServices(IServiceCollection services, ProxyOptions options)
     {
@@ -88,7 +113,11 @@ public static class ProxyHost
     private static void ConfigureKestrel(WebApplicationBuilder builder, ProxyOptions options)
     {
         string dataDirectory = ResolveDataDirectory(options);
-        X509Certificate2? certificate = null;
+        var holder = new TlsCertificateHolder();
+        builder.Services.AddSingleton(holder);
+        builder.Services.AddSingleton<IReadinessProbe>(new CertificateReadinessProbe(() => holder.Current, CertificateProvider.RenewBeforeDays));
+        builder.Services.AddHostedService(sp => new CertificateRotationService(
+            holder, options, dataDirectory, sp.GetRequiredService<ILogger<CertificateRotationService>>()));
 
         builder.WebHost.ConfigureKestrel(kestrel =>
         {
@@ -104,8 +133,13 @@ public static class ProxyHost
                 if (options.Tls.Mode == TlsMode.None) return;
 
                 using var loggerFactory = LoggerFactory.Create(l => l.AddSimpleConsole());
-                certificate ??= CertificateProvider.Load(options, dataDirectory, loggerFactory.CreateLogger("Tls"));
-                listen.UseHttps(certificate!, https => https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13);
+                if (holder.Current is null) holder.Set(CertificateProvider.Load(options, dataDirectory, loggerFactory.CreateLogger("Tls")));
+                listen.UseHttps(https =>
+                {
+                    // Looked up per handshake so a rotated certificate is served without a restart.
+                    https.ServerCertificateSelector = (_, _) => holder.Current;
+                    https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
+                });
             });
         });
     }
