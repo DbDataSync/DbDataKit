@@ -94,6 +94,17 @@ public sealed class ConfigBuilder<T>(IDiagnosticCatalog? catalog = null) where T
             }
         }
 
+        if (schema.AcceptsHeader && merged.Root.Get(SchemaHeader.Key) is YamlScalar h)
+        {
+            if (!SchemaHeader.TryParse(h.Value, out var hk, out var hv) || (schema.Kind != null && hk != schema.Kind))
+                diags.Add(_catalog.Create(SharedCodes.SchemaVersionInvalid, FileOf(merged, h), h.Line, h.Column, $"`schema` is `{h.Value}`; expected `{schema.Kind ?? "<kind>"}/<positive whole number>`."));
+            else if (hv > schema.Version)
+            {
+                diags.Add(_catalog.Create(SharedCodes.SchemaVersionNewer, FileOf(merged, h), h.Line, h.Column, $"`schema` is {h.Value}, but this tool understands up to {schema.Version}.", "Upgrade the tool; this file was written by a newer version."));
+                return new ConfigResult<T>(null, diags, merged, new Dictionary<string, SourceInfo>(), schema);
+            }
+        }
+
         var bound = new ConfigBinder(_catalog, merged.FileOf).Bind<T>(merged.Root, layers.Count > 0 ? layers[^1].File : "");
         diags.AddRange(bound.Diagnostics);
         if (bound.Value != null && !diags.HasErrors())

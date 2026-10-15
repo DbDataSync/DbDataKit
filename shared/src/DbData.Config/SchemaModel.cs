@@ -64,7 +64,10 @@ public sealed class ObjectSchema : TypeSchema
 
     /// <summary>Keys the binder accepts at this level (excluding a union discriminator).</summary>
     public IEnumerable<string> AllowedKeys(bool includeVersionKey) =>
-        includeVersionKey && HasVersion ? Properties.Select(p => p.Key).Append(VersionKey) : Properties.Select(p => p.Key);
+        includeVersionKey && HasVersion ? Properties.Select(p => p.Key).Append(VersionKey).Concat(AcceptsHeader ? [SchemaHeader.Key] : []) : Properties.Select(p => p.Key);
+
+    /// <summary>True when the <c>schema: kind/int</c> header form is accepted at the top level (no clashing property or version key).</summary>
+    public bool AcceptsHeader => HasVersion && VersionKey != SchemaHeader.Key && Find(SchemaHeader.Key) == null;
 }
 
 public static class SchemaModel
