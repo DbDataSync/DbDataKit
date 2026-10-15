@@ -1,3 +1,5 @@
+using DbData.Security.Acl;
+
 namespace DbData.Hosting.WindowsService;
 
 /// <summary>Who an ACL rule is about. Resolved to a SID by an <see cref="IPrincipalResolver"/>.</summary>
@@ -7,19 +9,6 @@ public enum LayoutPrincipal
     Administrators,
     System,
     Users,
-}
-
-[Flags]
-public enum AccessRights
-{
-    None = 0,
-    Read = 1,
-    Execute = 2,
-    Write = 4,
-    Delete = 8,
-    ReadExecute = Read | Execute,
-    Modify = Read | Execute | Write | Delete,
-    Full = Modify | 16,
 }
 
 public enum LayoutRole
@@ -138,26 +127,18 @@ public sealed class WellKnownPrincipalResolver(string serviceAccountSid) : IPrin
         sid is UsersSid or EveryoneSid or AuthenticatedUsersSid;
 }
 
-/// <summary>An ACE as read back from disk.</summary>
-public sealed record ObservedAce(string Sid, AccessRights Rights, bool Allow, bool Inherited);
-
-public sealed record ObservedAcl(bool InheritanceProtected, IReadOnlyList<ObservedAce> Aces);
-
-/// <summary>Read-only view of the file system used by the doctor; fakeable.</summary>
-public interface IFileSystemAclReader
+/// <summary>Converts layout entries to shared ACL specs and applies them through the one <see cref="IAclService"/>.</summary>
+public static class LayoutAcl
 {
-    bool DirectoryExists(string path);
+    public static AclSpecification? ToSpecification(LayoutEntry entry, IPrincipalResolver principals) =>
+        entry.Acl is null
+            ? null
+            : new AclSpecification(entry.Acl.CutInheritance,
+                entry.Acl.Rules.Select(r => new AclEntry(principals.ResolveSid(r.Principal), r.Rights)).ToList());
 
-    IEnumerable<string> EnumerateFiles(string directory);
-
-    ObservedAcl? ReadAcl(string path);
-}
-
-/// <summary>
-/// Applies a <see cref="LayoutEntry"/>'s ACL. NOTE: a parallel ACL helper exists in DbData.Secrets.Windows
-/// (Plan 02); reconcile the two at merge. This one is deliberately small and dependency free.
-/// </summary>
-public interface IAclPolicy
-{
-    void Apply(LayoutEntry entry, IPrincipalResolver principals);
+    public static void Apply(this IAclService acl, LayoutEntry entry, IPrincipalResolver principals)
+    {
+        var spec = ToSpecification(entry, principals);
+        if (spec is not null) acl.Apply(entry.Path, spec);
+    }
 }

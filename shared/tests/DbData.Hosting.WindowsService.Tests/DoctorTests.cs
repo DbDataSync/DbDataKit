@@ -1,10 +1,12 @@
+using DbData.Security.Acl;
+
 namespace DbData.Hosting.WindowsService.Tests;
 
 public class DoctorTests
 {
     private const string ServiceSid = "S-1-5-80-111-222-333-444-555";
 
-    private sealed class FakeFs : IFileSystemAclReader
+    private sealed class FakeFs : IAclService
     {
         public Dictionary<string, ObservedAcl> Dirs { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, ObservedAcl> Files { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -14,7 +16,9 @@ public class DoctorTests
         public IEnumerable<string> EnumerateFiles(string directory) =>
             Files.Keys.Where(f => f.StartsWith(directory, StringComparison.OrdinalIgnoreCase));
 
-        public ObservedAcl? ReadAcl(string path) =>
+        public void Apply(string directory, AclSpecification spec) => throw new NotSupportedException();
+
+        public ObservedAcl? Read(string path) =>
             Dirs.TryGetValue(path, out var d) ? d : Files.GetValueOrDefault(path);
     }
 

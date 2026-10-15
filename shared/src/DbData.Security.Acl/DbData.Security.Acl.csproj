@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbData.Security.Acl</PackageId>
+    <Description>Single source of truth for file and directory ACLs: AclHelper (restrict, verify, drift) and IAclService (apply a spec, read back).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="DbData.Security.Acl.Tests" />
+  </ItemGroup>
+</Project>

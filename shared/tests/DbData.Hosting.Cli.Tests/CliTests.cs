@@ -1,3 +1,4 @@
+using DbData.Security.Acl;
 using DbData.Hosting.Certificates;
 using DbData.Hosting.Systemd;
 using DbData.Hosting.WindowsService;
@@ -11,20 +12,17 @@ public class ServiceCommandTests
         public bool IsElevated => value;
     }
 
-    private sealed class EmptyFs : IFileSystemAclReader
+    private sealed class RecordingAcl : IAclService
     {
+        public List<string> AppliedPaths { get; } = [];
+
         public bool DirectoryExists(string path) => false;
 
         public IEnumerable<string> EnumerateFiles(string directory) => [];
 
-        public ObservedAcl? ReadAcl(string path) => null;
-    }
+        public ObservedAcl? Read(string path) => null;
 
-    private sealed class RecordingAcl : IAclPolicy
-    {
-        public List<LayoutRole> Applied { get; } = [];
-
-        public void Apply(LayoutEntry entry, IPrincipalResolver principals) => Applied.Add(entry.Role);
+        public void Apply(string directory, AclSpecification spec) => AppliedPaths.Add(directory);
     }
 
     private static (ServiceCommand Cmd, InMemoryServiceControlManager Scm, RecordingAcl Acl) Make(bool elevated = true)
@@ -41,7 +39,7 @@ public class ServiceCommandTests
             EventLogSource = "Prod",
             Version = "2.0.0",
         };
-        return (new ServiceCommand(ctx, scm, new EmptyFs(), new Elevated(elevated), new InMemoryEventLogSourceRegistrar(), acl, _ => Task.CompletedTask), scm, acl);
+        return (new ServiceCommand(ctx, scm, acl, new Elevated(elevated), new InMemoryEventLogSourceRegistrar(), true, _ => Task.CompletedTask), scm, acl);
     }
 
     [Fact]
@@ -51,8 +49,9 @@ public class ServiceCommandTests
         var console = new BufferConsole();
         Assert.Equal(0, cmd.Execute(["install"], console));
         Assert.Equal(@"NT SERVICE\Prod", scm.GetConfig("Prod")!.AccountName);
-        Assert.Contains(LayoutRole.Secrets, acl.Applied);
-        Assert.DoesNotContain(LayoutRole.Current, acl.Applied);
+        var layout = DirectoryLayout.ForProduct("Prod", @"C:\PF", @"C:\PD");
+        Assert.Contains(layout[LayoutRole.Secrets].Path, acl.AppliedPaths);
+        Assert.DoesNotContain(layout[LayoutRole.Current].Path, acl.AppliedPaths);
         Assert.Contains("installed", console.OutWriter.ToString());
     }
 
@@ -74,7 +73,7 @@ public class ServiceCommandTests
         var console = new BufferConsole();
         Assert.Equal(0, cmd.Execute(["install", "--dry-run"], console));
         Assert.Empty(scm.Operations);
-        Assert.Empty(acl.Applied);
+        Assert.Empty(acl.AppliedPaths);
         Assert.Contains("create", console.OutWriter.ToString());
     }
 
