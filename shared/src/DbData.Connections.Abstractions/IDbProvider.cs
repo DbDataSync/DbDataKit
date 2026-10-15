@@ -32,7 +32,7 @@ public enum ReadOnlyEnforcement
 }
 
 /// <summary>A read-only recipe: connection-string keys applied at compose time and statements executed right after open.</summary>
-public sealed class ReadOnlySession(
+public class ReadOnlySession(
     string engine, ReadOnlyEnforcement enforcement, IReadOnlyList<string> statements,
     IReadOnlyDictionary<string, string>? connectionStringKeys = null, string? notes = null)
 {
@@ -46,7 +46,7 @@ public sealed class ReadOnlySession(
 
     public static ReadOnlySession NoneAvailable(string engine, string notes) => new(engine, ReadOnlyEnforcement.None, [], null, notes);
 
-    public async Task ApplyAsync(DbConnection connection, CancellationToken ct = default)
+    public virtual async Task ApplyAsync(DbConnection connection, CancellationToken ct = default)
     {
         foreach (var sql in Statements)
         {

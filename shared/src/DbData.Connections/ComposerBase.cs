@@ -116,6 +116,8 @@ public abstract class ComposerBase(EngineId engine) : IConnectionStringComposer
     protected abstract string PasswordKey { get; }
     /// <summary>Marks the connection as integrated authentication (Windows or Kerberos).</summary>
     protected abstract void SetIntegrated(IKeyBag bag);
+    /// <summary>False for engines with no login (DuckDB): a login that carries credentials is then refused, never silently ignored.</summary>
+    protected virtual bool UsesCredentials => true;
 
     /// <summary>Fixed (descriptor) properties, applied before everything else.</summary>
     protected virtual void ApplyFixed(IKeyBag bag, ConnectionContext ctx) { }
@@ -177,6 +179,7 @@ public abstract class ComposerBase(EngineId engine) : IConnectionStringComposer
     {
         if (login is null || login.Mode == AuthMode.None) return;
         if (login.Mode == AuthMode.Sql && login.UserName is null && login.Password is null) return; // a whole-string login brings its own
+        if (!UsesCredentials) throw new ConnectionPolicyException("this engine takes no credentials");
         StripCredentialKeys(bag);
         switch (login.Mode)
         {
@@ -216,6 +219,7 @@ public abstract class ComposerBase(EngineId engine) : IConnectionStringComposer
         ArgumentNullException.ThrowIfNull(baseConnectionString);
         ArgumentNullException.ThrowIfNull(user);
         ArgumentNullException.ThrowIfNull(password);
+        if (!UsesCredentials) throw new ConnectionPolicyException("this engine takes no credentials");
         policy ??= ConnectionPolicy.Default;
         string pw = password.RevealString();
         if (user.Length == 0) throw new ConnectionPolicyException("pass-through user name is empty");
