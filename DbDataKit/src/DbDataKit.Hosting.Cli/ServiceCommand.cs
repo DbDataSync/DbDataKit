@@ -221,10 +221,20 @@ public sealed class ServiceCommand(
 
             if (!dryRun && applyAcls)
             {
-                var resolver = context.PrincipalResolver(spec.EffectiveAccount);
-                foreach (var entry in context.Layout.Entries.Where(e => !e.IsLink && e.Acl is not null))
+                try
                 {
-                    acl.Apply(entry, resolver);
+                    var resolver = context.PrincipalResolver(spec.EffectiveAccount);
+                    foreach (var entry in context.Layout.Entries.Where(e => !e.IsLink && e.Acl is not null))
+                    {
+                        acl.Apply(entry, resolver);
+                    }
+                }
+                catch (Exception ex) when (ex is System.Security.Principal.IdentityNotMappedException or UnauthorizedAccessException or IOException or ArgumentException or PlatformNotSupportedException)
+                {
+                    // The service exists by now: say so, and that running install again finishes the job.
+                    console.Error.WriteLine($"Service '{spec.Name}' was registered, but its directory permissions could not be applied: {ex.Message}");
+                    console.Error.WriteLine("Fix the cause (for example the account name) and run 'service install' again; it is safe to repeat.");
+                    return ExitCodes.Failure;
                 }
 
                 console.Out.WriteLine("Directory permissions applied.");

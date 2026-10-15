@@ -79,6 +79,24 @@ public class ServiceCommandTests
     }
 
     [Fact]
+    public void Failing_to_apply_directory_permissions_is_reported_not_thrown()
+    {
+        var scm = new InMemoryServiceControlManager();
+        var ctx = new ServiceCommandContext
+        {
+            ServiceName = "Prod",
+            BinaryPath = @"C:\Prod\Prod.exe",
+            Layout = DirectoryLayout.ForProduct("Prod", @"C:\PF", @"C:\PD"),
+            PrincipalResolver = _ => throw new ArgumentException("no such account"),
+        };
+        var cmd = new ServiceCommand(ctx, scm, new RecordingAcl(), new Elevated(true), null, true, _ => Task.CompletedTask);
+        var console = new BufferConsole();
+        Assert.Equal(ExitCodes.Failure, cmd.Execute(["install"], console));
+        Assert.NotNull(scm.GetConfig("Prod")); // registered
+        Assert.Contains("run 'service install' again", console.ErrorWriter.ToString());
+    }
+
+    [Fact]
     public void Install_without_elevation_is_refused_but_dry_run_is_fine()
     {
         var (cmd, scm, _) = Make(elevated: false);
