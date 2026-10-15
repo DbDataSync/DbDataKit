@@ -1,0 +1,2 @@
+# Shared libraries: source contains line-ending-sensitive test literals
+shared/** text eol=lf
