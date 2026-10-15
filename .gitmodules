@@ -6,4 +6,4 @@
 	url = https://github.com/DbDataSync/DbDataProxy.git
 [submodule "DbDataBuild"]
 	path = DbDataBuild
-	url = https://github.com/danshryock/DbDataBuild.git
+	url = https://github.com/DbDataSync/DbDataBuild.git
