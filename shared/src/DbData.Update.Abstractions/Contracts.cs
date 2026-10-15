@@ -34,7 +34,7 @@ public interface IReleaseSource
     Task<IReadOnlyList<ReleaseRef>> ListAsync(CancellationToken ct);
 }
 
-public enum InstallMethod { Unknown, Scoop, DotnetTool, Archive, Container, ServiceSwap }
+public enum InstallMethod { Unknown, Scoop, Winget, DotnetTool, Archive, Container, ServiceSwap }
 
 public sealed record UpdateApplyRequest(
     string Product, string ToolId, ReleaseVersion Current, ReleaseVersion Target,
