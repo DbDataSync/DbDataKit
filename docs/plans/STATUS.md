@@ -69,3 +69,20 @@ Branch `worktree-agent-ae65f8928374b45cd`. Plan 07a (`docs/plans/07a-strategy-co
 - Not run: any live SQL Server/Postgres test; MySQL/Oracle/Fabric SQL is text-tested only. Matrix marks SQL Server/Postgres `product-verified` (Build conformance), not verified here.
 - Not done: Arrow-first and Parquet staging, MySQL/Oracle writers, `ITransferVerifier` implementation, segmenter, SCD2/Snapshot, Windows ACL on the statement log, Sync/Build adoption (phases 3-5 product work), benchmark gate in CI (baseline of current paths not measured; stub compares only in-memory feeding).
 - Open: Windows ACL for the statement log; whether Sync Merge (commit per chunk) should map to a non-transactional `merge_by_key` option; `DateOnly`/`TimeOnly` bulk behaviour on SqlClient is adapted to `DateTime`/`TimeSpan` defensively and unverified live.
+## Connections (Plan 06)
+
+Packages in `shared/src`: `DbData.Connections.Abstractions`, `DbData.Connections`, `.SqlServer`, `.Postgres`, `.DuckDb`, `.Odbc`, `.Descriptor`, `.Libraries` (tests in `shared/tests`, all offline; live variants gated by `DBDATA_TEST_SQLSERVER`, `DBDATA_TEST_POSTGRES`, `DBDATA_TEST_ODBC`).
+
+- Done: `connection/1` strict loader and JSON Schema; failure model and classifier with engine mappers; composers (SqlClient, Npgsql, generic ADO, ODBC with brace quoting and Plan 04 policy) with credentials last, properties deny-list, TLS verify-by-default and hostile-credential tests; pass-through injection that strips integrated-security keys and asserts none remain; login resolution (`DBDATA_<APP>_<CONN>_<READ|WRITE>` plus legacy `DBDATABUILD_*`, no read-to-write fallback); `ParameterStyleAdapter`; pool with limits, timeouts, idle reaping and metrics; DuckDB sandbox proven in-process; YAML engine descriptors (`engine/1`) with locked fixed properties; library-install validation and planning (H1 corpus).
+- Stubbed or not done: JDBC/IKVM, Flight SQL, MySql/Oracle providers, plugins package, `IDbProvider.Catalog` (waits for Plan 04 part B), `SQL_ATTR_ACCESS_MODE` is reflection based and unrun against a real driver, `DotnetPublishExecutor` unrun, no product adoption, `KnownLibraries`/compat checkers not ported.
+- Conventions: `Microsoft.Data.SqlClient` 7.1.1, `Npgsql` 10.0.3, `DuckDB.NET.Data.Full` 1.5.6 added to `Directory.Packages.props`; `System.Security.Cryptography.Pkcs` pinned to 10.0.13 for a transitive advisory.
+
+## Overall status (all planned waves merged)
+Packages on main (shared/): Config (Yaml, Config, Hosting, Testing), Secrets (Abstractions, core, Windows, Keyring stub, Cli), Security.Acl,
+Dialect (Abstractions, core, Arrow, Conformance), Odbc.Metadata, Metadata (Abstractions, core), Connections (Abstractions, core, SqlServer,
+Postgres, DuckDb, Odbc, Descriptor, Libraries), Transfer (Abstractions, core, Conformance, SqlServer, Postgres), Update (Abstractions, core,
+Service, Detect, Tools), Hosting (Abstractions, core, WindowsService, Systemd, Certificates, Children, Cli).
+`cd shared && dotnet test --solution DbData.Shared.slnx`: 1833 total, 0 failed, 50 skipped (live DB/admin/Unix gated).
+Not built: Flight SQL and JDBC providers, MySQL/Oracle providers and writers, plugins package, Arrow-first/Parquet staging, verifier implementation,
+keyring backend, config CLI commands, reusable-release workflow, product adoption (no product repo was changed).
+Open decisions are listed per package section above.
