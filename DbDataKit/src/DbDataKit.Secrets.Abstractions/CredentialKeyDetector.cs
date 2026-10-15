@@ -112,6 +112,12 @@ internal static class ConnectionStringParser
 {
     public static IEnumerable<(string Key, string Value)> Parse(string text)
     {
+        foreach (var t in ParseSpans(text)) yield return (t.Key, t.Value);
+    }
+
+    /// <summary>Like <see cref="Parse"/> but also yields the span of the raw value token (quotes included).</summary>
+    public static IEnumerable<(string Key, string Value, int Start, int End)> ParseSpans(string text)
+    {
         var i = 0;
         while (i < text.Length)
         {
@@ -131,6 +137,7 @@ internal static class ConnectionStringParser
             var k = eq + 1;
             while (k < text.Length && text[k] == ' ') k++;
             string value;
+            int tokenEnd;
             if (k < text.Length && (text[k] == '"' || text[k] == '\'' || text[k] == '{'))
             {
                 var close = text[k] == '{' ? '}' : text[k];
@@ -146,16 +153,18 @@ internal static class ConnectionStringParser
                 }
                 e = Math.Min(e, text.Length);
                 value = text[(k + 1)..e];
+                tokenEnd = Math.Min(e + 1, text.Length);
                 var next = text.IndexOf(';', e);
                 i = next < 0 ? text.Length : next + 1;
             }
             else
             {
                 var semi = text.IndexOf(';', k);
-                value = (semi < 0 ? text[k..] : text[k..semi]).Trim();
+                tokenEnd = semi < 0 ? text.Length : semi;
+                value = text[k..tokenEnd].Trim();
                 i = semi < 0 ? text.Length : semi + 1;
             }
-            if (key.Length > 0) yield return (key, value);
+            if (key.Length > 0) yield return (key, value, k, tokenEnd);
         }
     }
 }
