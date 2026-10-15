@@ -1,0 +1,114 @@
+schema: dialect/1
+id: duckdb
+extends: ansi
+display: DuckDB
+quote: { open: "\"", close: "\"" }
+parameters: { style: numbered }
+row_limit: { default: limit_offset, styles: [limit_offset], ties: [] }
+identifier: { case: preserve, max_length: 0 }
+capabilities: [upsert_on_conflict, returning, transactional_ddl, temp_tables, schemas, bulk_copy, multi_statement, truncate_table, sequences, positional_parameters, named_parameters]
+capabilities_remove: [merge]
+syntax: [double_quote_identifier, e_strings, n_strings, dollar_quoting, nested_block_comments, question_parameter, dollar_numbered_parameter, dollar_named_parameter]
+syntax_remove: [prefixed_strings]
+reserved_words_add: [ANALYSE, ANALYZE, ARRAY, LATERAL, QUALIFY, RETURNING, SOME, WINDOW]
+read_only:
+  deny_words_add:
+    - attach
+    - detach
+    - install
+    - load
+    - export
+    - import
+    - pragma
+    - checkpoint
+    - read_csv
+    - read_csv_auto
+    - read_parquet
+    - read_json
+    - read_json_auto
+    - read_ndjson
+    - read_ndjson_auto
+    - read_text
+    - read_blob
+    - parquet_scan
+    - parquet_metadata
+    - parquet_schema
+    - csv_scan
+    - sniff_csv
+    - glob
+    - iceberg_scan
+    - delta_scan
+    - getenv
+    - duckdb_secrets
+    - which_secret
+    - httpfs
+    - nextval
+    - setseed
+  deny_prefixes: [read_, write_]
+  select_starters: [select, values, from, describe, summarize, show, table]
+literals:
+  "true": "TRUE"
+  "false": "FALSE"
+  binary: "'\\x{hex}'::BLOB"
+  date: "DATE '{v}'"
+  time: "TIME '{v}'"
+  timestamp: "TIMESTAMP '{v}'"
+  timestamptz: "TIMESTAMPTZ '{v}'"
+  guid: "'{v}'::UUID"
+  json: "'{v}'::JSON"
+  xml: "'{v}'"
+  fraction_digits: "6"
+types:
+  - { native: "boolean", canonical: "boolean" }
+  - { native: "bool", canonical: "boolean", direction: to_canonical }
+  - { native: "tinyint", canonical: "int8" }
+  - { native: "int1", canonical: "int8", direction: to_canonical }
+  - { native: "utinyint", canonical: "int8(unsigned)" }
+  - { native: "smallint", canonical: "int16" }
+  - { native: "int2", canonical: "int16", direction: to_canonical }
+  - { native: "short", canonical: "int16", direction: to_canonical }
+  - { native: "usmallint", canonical: "int16(unsigned)" }
+  - { native: "integer", canonical: "int32" }
+  - { native: "int", canonical: "int32", direction: to_canonical }
+  - { native: "int4", canonical: "int32", direction: to_canonical }
+  - { native: "uinteger", canonical: "int32(unsigned)" }
+  - { native: "bigint", canonical: "int64" }
+  - { native: "int8", canonical: "int64", direction: to_canonical }
+  - { native: "long", canonical: "int64", direction: to_canonical }
+  - { native: "ubigint", canonical: "int64(unsigned)" }
+  - { native: "hugeint", canonical: "decimal(38,0)", direction: to_canonical, fidelity: lossy, note: "128-bit integer does not fit 38 decimal digits in every case" }
+  - { native: "decimal", canonical: "decimal(18,3)", direction: to_canonical }
+  - { native: "numeric", canonical: "decimal(18,3)", direction: to_canonical }
+  - { native: "decimal({p},{s})", canonical: "decimal({p},{s})", defaults: { s: 0 }, p_max: 38 }
+  - { native: "numeric({p},{s})", canonical: "decimal({p},{s})", direction: to_canonical, defaults: { s: 0 } }
+  - { native: "decimal(38,{s})", canonical: "decimal({p},{s})", direction: from_canonical, fidelity: lossy, note: "precision above 38 is reduced to 38", p_min: 39, s_max: 38 }
+  - { native: "float", canonical: "float" }
+  - { native: "float4", canonical: "float", direction: to_canonical }
+  - { native: "real", canonical: "float", direction: to_canonical }
+  - { native: "double", canonical: "double" }
+  - { native: "float8", canonical: "double", direction: to_canonical }
+  - { native: "double precision", canonical: "double", direction: to_canonical }
+  - { native: "varchar({n})", canonical: "string(~unicode,{n})", direction: to_canonical }
+  - { native: "varchar", canonical: "string(~unicode)" }
+  - { native: "varchar", canonical: "string(~unicode,{n})", direction: from_canonical, fidelity: widened, note: "DuckDB does not enforce VARCHAR lengths" }
+  - { native: "text", canonical: "string(~unicode)", direction: to_canonical }
+  - { native: "string", canonical: "string(~unicode)", direction: to_canonical }
+  - { native: "blob", canonical: "binary" }
+  - { native: "blob", canonical: "binary({n})", direction: from_canonical, fidelity: widened, note: "DuckDB does not enforce BLOB lengths" }
+  - { native: "bytea", canonical: "binary", direction: to_canonical }
+  - { native: "date", canonical: "date" }
+  - { native: "time", canonical: "time({s})", defaults: { s: 6 }, s_max: 6 }
+  - { native: "time", canonical: "time({s})", direction: from_canonical, fidelity: lossy, note: "fractional-second precision above 6 is reduced to microseconds", s_min: 7 }
+  - { native: "timestamptz", canonical: "timestamp(tz,{s})", defaults: { s: 6 }, s_max: 6 }
+  - { native: "timestamp with time zone", canonical: "timestamp(tz,{s})", direction: to_canonical, defaults: { s: 6 } }
+  - { native: "timestamptz", canonical: "timestamp(tz,{s})", direction: from_canonical, fidelity: lossy, note: "fractional-second precision above 6 is reduced to microseconds", s_min: 7 }
+  - { native: "timestamp_s", canonical: "timestamp(0)", direction: to_canonical }
+  - { native: "timestamp_ms", canonical: "timestamp(3)", direction: to_canonical }
+  - { native: "timestamp_ns", canonical: "timestamp({s})", direction: from_canonical, s_min: 7 }
+  - { native: "timestamp_ns", canonical: "timestamp(9)", direction: to_canonical }
+  - { native: "timestamp", canonical: "timestamp({s})", defaults: { s: 6 }, s_max: 6 }
+  - { native: "datetime", canonical: "timestamp(6)", direction: to_canonical }
+  - { native: "interval", canonical: "interval" }
+  - { native: "uuid", canonical: "guid" }
+  - { native: "json", canonical: "json" }
+  - { native: "varchar", canonical: "xml", direction: from_canonical, fidelity: widened, note: "stored as text" }

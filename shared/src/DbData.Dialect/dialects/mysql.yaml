@@ -1,0 +1,87 @@
+schema: dialect/1
+id: mysql
+extends: ansi
+display: MySQL / MariaDB
+quote: { open: "`", close: "`" }
+parameters: { style: positional }
+row_limit: { default: limit_offset, styles: [limit_offset], ties: [] }
+identifier: { case: preserve, max_length: 64 }
+capabilities: [upsert_on_conflict, temp_tables, schemas, bulk_copy, truncate_table, positional_parameters, identity_insert]
+capabilities_remove: [merge]
+syntax: [backtick_identifier, double_quote_string, backslash_escapes, n_strings, prefixed_strings, hash_comments, dash_dash_needs_space, executable_comments, question_parameter]
+syntax_remove: [double_quote_identifier]
+reserved_words_add: [DATABASE, DATABASES, DESCRIBE, EXPLAIN, KEYS, RANK, SCHEMA, SHOW, UNLOCK, USE]
+read_only:
+  deny_words_add: [load_file, sleep, benchmark, outfile, dumpfile, get_lock, release_lock, load, handler, sys_exec, sys_eval, shutdown]
+  select_starters: [select, values, table]
+literals:
+  "true": "1"
+  "false": "0"
+  binary: "X'{hex}'"
+  date: "DATE '{v}'"
+  time: "TIME '{v}'"
+  timestamp: "TIMESTAMP '{v}'"
+  timestamptz: "TIMESTAMP '{v}'"
+  guid: "'{v}'"
+  json: "CAST('{v}' AS JSON)"
+  xml: "'{v}'"
+  fraction_digits: "6"
+types:
+  - { native: "tinyint(1)", canonical: "boolean", direction: to_canonical, fidelity: lossy, note: "tinyint(1) is the MySQL convention for boolean; other values 2..127 are not preserved as such" }
+  - { native: "boolean", canonical: "boolean", direction: to_canonical }
+  - { native: "bool", canonical: "boolean", direction: to_canonical }
+  - { native: "bit(1)", canonical: "boolean", direction: to_canonical }
+  - { native: "tinyint(1)", canonical: "boolean", direction: from_canonical, fidelity: lossy, note: "no native boolean; stored as tinyint(1)" }
+  - { native: "tinyint({n}) unsigned", canonical: "int8(unsigned)", direction: to_canonical }
+  - { native: "tinyint unsigned", canonical: "int8(unsigned)" }
+  - { native: "tinyint({n})", canonical: "int8", direction: to_canonical }
+  - { native: "tinyint", canonical: "int8" }
+  - { native: "smallint({n}) unsigned", canonical: "int16(unsigned)", direction: to_canonical }
+  - { native: "smallint unsigned", canonical: "int16(unsigned)" }
+  - { native: "smallint({n})", canonical: "int16", direction: to_canonical }
+  - { native: "smallint", canonical: "int16" }
+  - { native: "int({n}) unsigned", canonical: "int32(unsigned)", direction: to_canonical }
+  - { native: "integer unsigned", canonical: "int32(unsigned)", direction: to_canonical }
+  - { native: "int unsigned", canonical: "int32(unsigned)" }
+  - { native: "int({n})", canonical: "int32", direction: to_canonical }
+  - { native: "integer", canonical: "int32", direction: to_canonical }
+  - { native: "mediumint", canonical: "int32", direction: to_canonical }
+  - { native: "int", canonical: "int32" }
+  - { native: "bigint({n}) unsigned", canonical: "int64(unsigned)", direction: to_canonical }
+  - { native: "bigint unsigned", canonical: "int64(unsigned)" }
+  - { native: "bigint({n})", canonical: "int64", direction: to_canonical }
+  - { native: "bigint", canonical: "int64" }
+  - { native: "year", canonical: "int16", direction: to_canonical }
+  - { native: "decimal({p},{s})", canonical: "decimal({p},{s})", defaults: { p: 10, s: 0 }, p_max: 65, s_max: 30 }
+  - { native: "numeric({p},{s})", canonical: "decimal({p},{s})", direction: to_canonical, defaults: { p: 10, s: 0 } }
+  - { native: "decimal(65,{s})", canonical: "decimal({p},{s})", direction: from_canonical, fidelity: lossy, note: "precision above 65 is reduced to 65", p_min: 66, s_max: 30 }
+  - { native: "float", canonical: "float" }
+  - { native: "double", canonical: "double" }
+  - { native: "double precision", canonical: "double", direction: to_canonical }
+  - { native: "real", canonical: "double", direction: to_canonical }
+  - { native: "varchar({n})", canonical: "string(~unicode,{n})", n_max: 16383 }
+  - { native: "longtext", canonical: "string(~unicode,{n})", direction: from_canonical, fidelity: widened, note: "length above 16383 becomes longtext", n_min: 16384 }
+  - { native: "char({n})", canonical: "string(~unicode,{n})", direction: to_canonical, defaults: { n: 1 }, fidelity: lossy, note: "fixed-width padding is not preserved" }
+  - { native: "longtext", canonical: "string(~unicode)" }
+  - { native: "mediumtext", canonical: "string(~unicode)", direction: to_canonical }
+  - { native: "text", canonical: "string(~unicode)", direction: to_canonical }
+  - { native: "tinytext", canonical: "string(~unicode)", direction: to_canonical }
+  - { native: "varbinary({n})", canonical: "binary({n})", n_max: 65535 }
+  - { native: "binary({n})", canonical: "binary({n})", direction: to_canonical, defaults: { n: 1 }, fidelity: lossy, note: "fixed-length binary becomes variable-length" }
+  - { native: "longblob", canonical: "binary" }
+  - { native: "longblob", canonical: "binary({n})", direction: from_canonical, fidelity: widened, note: "length above 65535 becomes longblob", n_min: 65536 }
+  - { native: "mediumblob", canonical: "binary", direction: to_canonical }
+  - { native: "blob", canonical: "binary", direction: to_canonical }
+  - { native: "tinyblob", canonical: "binary", direction: to_canonical }
+  - { native: "date", canonical: "date" }
+  - { native: "time({s})", canonical: "time({s})", defaults: { s: 0 }, s_max: 6 }
+  - { native: "time(6)", canonical: "time({s})", direction: from_canonical, fidelity: lossy, note: "fractional-second precision above 6 is reduced to microseconds", s_min: 7 }
+  - { native: "datetime({s})", canonical: "timestamp({s})", defaults: { s: 0 }, s_max: 6 }
+  - { native: "datetime(6)", canonical: "timestamp({s})", direction: from_canonical, fidelity: lossy, note: "fractional-second precision above 6 is reduced to microseconds", s_min: 7 }
+  - { native: "timestamp({s})", canonical: "timestamp(tz,{s})", direction: to_canonical, defaults: { s: 0 } }
+  - { native: "datetime({s})", canonical: "timestamp(tz,{s})", direction: from_canonical, defaults: { s: 0 }, s_max: 6, fidelity: lossy, note: "no zone-aware type that keeps the offset; the value is stored as datetime and must be normalised to UTC" }
+  - { native: "datetime(6)", canonical: "timestamp(tz,{s})", direction: from_canonical, fidelity: lossy, note: "no zone-aware type that keeps the offset; precision above 6 is reduced to microseconds", s_min: 7 }
+  - { native: "char(36)", canonical: "guid", direction: from_canonical, fidelity: widened, note: "stored as 36-character text" }
+  - { native: "uuid", canonical: "guid", direction: to_canonical }
+  - { native: "json", canonical: "json" }
+  - { native: "longtext", canonical: "xml", direction: from_canonical, fidelity: widened, note: "stored as text" }

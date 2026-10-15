@@ -1,0 +1,107 @@
+schema: dialect/1
+id: postgres
+extends: ansi
+display: PostgreSQL
+quote: { open: "\"", close: "\"" }
+parameters: { style: numbered }
+row_limit: { default: limit_offset, styles: [limit_offset, offset_fetch], ties: [offset_fetch] }
+identifier: { case: lower, max_length: 63 }
+capabilities: [upsert_on_conflict, returning, transactional_ddl, temp_tables, schemas, bulk_copy, multi_statement, truncate_table, sequences, positional_parameters]
+capabilities_remove: [merge]
+syntax: [double_quote_identifier, e_strings, n_strings, prefixed_strings, dollar_quoting, nested_block_comments, dollar_numbered_parameter]
+reserved_words_add: [ANALYSE, ANALYZE, ARRAY, ASYMMETRIC, BOTH, CONCURRENTLY, LATERAL, LEADING, PLACING, RETURNING, SOME, SYMMETRIC, TRAILING, VARIADIC, WINDOW]
+read_only:
+  deny_words_add:
+    - pg_read_file
+    - pg_read_binary_file
+    - pg_stat_file
+    - lo_import
+    - lo_export
+    - lo_get
+    - lo_put
+    - lo_from_bytea
+    - lo_unlink
+    - lo_create
+    - lo_creat
+    - pg_sleep
+    - pg_sleep_for
+    - pg_sleep_until
+    - nextval
+    - setval
+    - set_config
+    - pg_terminate_backend
+    - pg_cancel_backend
+    - pg_reload_conf
+    - pg_rotate_logfile
+    - pg_notify
+    - pg_switch_wal
+    - pg_logical_emit_message
+    - query_to_xml
+    - query_to_xml_and_xmlschema
+    - query_to_xmlschema
+    - cursor_to_xml
+  deny_prefixes: [dblink, pg_ls_, pg_advisory_, pg_read_]
+  select_starters_add: [table]
+literals:
+  "true": "TRUE"
+  "false": "FALSE"
+  binary: "'\\x{hex}'::bytea"
+  date: "DATE '{v}'"
+  time: "TIME '{v}'"
+  timestamp: "TIMESTAMP '{v}'"
+  timestamptz: "TIMESTAMPTZ '{v}'"
+  guid: "'{v}'::uuid"
+  json: "'{v}'::jsonb"
+  xml: "XMLPARSE(DOCUMENT '{v}')"
+  fraction_digits: "6"
+types:
+  - { native: "boolean", canonical: "boolean" }
+  - { native: "bool", canonical: "boolean", direction: to_canonical }
+  - { native: "smallint", canonical: "int16" }
+  - { native: "int2", canonical: "int16", direction: to_canonical }
+  - { native: "smallint", canonical: "int8", direction: from_canonical, fidelity: widened, note: "PostgreSQL has no 8-bit integer; widened to smallint" }
+  - { native: "smallint", canonical: "int8(unsigned)", direction: from_canonical, fidelity: widened, note: "PostgreSQL has no 8-bit integer; widened to smallint" }
+  - { native: "integer", canonical: "int32" }
+  - { native: "int", canonical: "int32", direction: to_canonical }
+  - { native: "int4", canonical: "int32", direction: to_canonical }
+  - { native: "integer", canonical: "int16(unsigned)", direction: from_canonical, fidelity: widened, note: "unsigned 16-bit widened to integer" }
+  - { native: "bigint", canonical: "int64" }
+  - { native: "int8", canonical: "int64", direction: to_canonical }
+  - { native: "bigint", canonical: "int32(unsigned)", direction: from_canonical, fidelity: widened, note: "unsigned 32-bit widened to bigint" }
+  - { native: "numeric(20,0)", canonical: "int64(unsigned)", direction: from_canonical, fidelity: widened, note: "unsigned 64-bit widened to numeric(20,0)" }
+  - { native: "numeric", canonical: "decimal", direction: to_canonical, fidelity: widened, note: "unconstrained numeric has no fixed precision or scale" }
+  - { native: "numeric({p},{s})", canonical: "decimal({p},{s})", defaults: { s: 0 }, p_max: 1000 }
+  - { native: "decimal({p},{s})", canonical: "decimal({p},{s})", direction: to_canonical, defaults: { s: 0 } }
+  - { native: "numeric", canonical: "decimal({p},{s})", direction: from_canonical, fidelity: widened, note: "precision above 1000 becomes unconstrained numeric", p_min: 1001 }
+  - { native: "money", canonical: "decimal(19,2)", direction: to_canonical, fidelity: lossy, note: "money currency semantics and locale formatting are lost; only the scale survives" }
+  - { native: "real", canonical: "float" }
+  - { native: "float4", canonical: "float", direction: to_canonical }
+  - { native: "double precision", canonical: "double" }
+  - { native: "float8", canonical: "double", direction: to_canonical }
+  - { native: "float", canonical: "double", direction: to_canonical }
+  - { native: "varchar({n})", canonical: "string(~unicode,{n})", n_max: 10485760 }
+  - { native: "character varying({n})", canonical: "string(~unicode,{n})", direction: to_canonical }
+  - { native: "character varying", canonical: "string(~unicode)", direction: to_canonical }
+  - { native: "text", canonical: "string(~unicode)" }
+  - { native: "text", canonical: "string(~unicode,{n})", direction: from_canonical, fidelity: widened, note: "length above 10485760 becomes text", n_min: 10485761 }
+  - { native: "bpchar", canonical: "string(~unicode)", direction: to_canonical, fidelity: lossy, note: "fixed-width padding is not preserved" }
+  - { native: "character({n})", canonical: "string(~unicode,{n})", direction: to_canonical, defaults: { n: 1 }, fidelity: lossy, note: "fixed-width padding is not preserved" }
+  - { native: "char({n})", canonical: "string(~unicode,{n})", direction: to_canonical, defaults: { n: 1 }, fidelity: lossy, note: "fixed-width padding is not preserved" }
+  - { native: "name", canonical: "string(~unicode,63)", direction: to_canonical }
+  - { native: "bytea", canonical: "binary" }
+  - { native: "bytea", canonical: "binary({n})", direction: from_canonical, fidelity: widened, note: "bytea does not enforce a length" }
+  - { native: "date", canonical: "date" }
+  - { native: "time({s})", canonical: "time({s})", defaults: { s: 6 }, s_max: 6 }
+  - { native: "time({s}) without time zone", canonical: "time({s})", direction: to_canonical, defaults: { s: 6 } }
+  - { native: "time(6)", canonical: "time({s})", direction: from_canonical, fidelity: lossy, note: "fractional-second precision above 6 is reduced to microseconds", s_min: 7 }
+  - { native: "timestamp({s}) with time zone", canonical: "timestamp(tz,{s})", defaults: { s: 6 }, s_max: 6 }
+  - { native: "timestamptz", canonical: "timestamp(tz,{s})", direction: to_canonical, defaults: { s: 6 } }
+  - { native: "timestamp(6) with time zone", canonical: "timestamp(tz,{s})", direction: from_canonical, fidelity: lossy, note: "fractional-second precision above 6 is reduced to microseconds", s_min: 7 }
+  - { native: "timestamp({s})", canonical: "timestamp({s})", defaults: { s: 6 }, s_max: 6 }
+  - { native: "timestamp({s}) without time zone", canonical: "timestamp({s})", direction: to_canonical, defaults: { s: 6 } }
+  - { native: "timestamp(6)", canonical: "timestamp({s})", direction: from_canonical, fidelity: lossy, note: "fractional-second precision above 6 is reduced to microseconds", s_min: 7 }
+  - { native: "interval", canonical: "interval" }
+  - { native: "uuid", canonical: "guid" }
+  - { native: "jsonb", canonical: "json" }
+  - { native: "json", canonical: "json", direction: to_canonical }
+  - { native: "xml", canonical: "xml" }
