@@ -111,6 +111,14 @@ public class ModelTests
         Assert.Equal(1, await HealthProbeClient.RunAsync(new Uri("http://x/health"), TimeSpan.FromSeconds(1), bad));
     }
 
+    [Fact]
+    public async Task Healthcheck_flag_is_recognised_only_when_present()
+    {
+        Assert.Null(await HealthProbeClient.TryHandleAsync(["--urls", "x"]));
+        Assert.Equal(2, await HealthProbeClient.TryHandleAsync(["--healthcheck", "not a url"]));
+        Assert.Equal(1, await HealthProbeClient.TryHandleAsync(["--healthcheck", "http://127.0.0.1:1/health"]));
+    }
+
     private sealed class StubHandler(HttpStatusCode code) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
