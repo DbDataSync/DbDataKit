@@ -223,6 +223,31 @@ public sealed class OdbcCatalog(IOdbcCatalogFunctions functions, OdbcCatalogOpti
             .ToList(), truncation);
     }
 
+    // ---- Query description ------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The result columns of a statement, found by preparing it (SQLPrepare) and describing the columns (SQLDescribeCol); the statement
+    /// is never executed. Not every driver can describe an unexecuted statement: those throw with NotSupported or their own SQLSTATE.
+    /// Check the text with a read-only policy first when it comes from outside; this method does not look at it.
+    /// </summary>
+    public async Task<IReadOnlyList<OdbcResultColumn>> DescribeQueryAsync(string sql, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sql);
+        return await functions.DescribeQueryAsync(sql, cancellationToken).ConfigureAwait(false);
+    }
+
+    // ---- Raw driver facts -------------------------------------------------------------------------------------------
+
+    /// <summary>One SQLGetInfo string value, or null when the driver does not answer it. For facts <see cref="GetInfoAsync"/> does not cover.</summary>
+    public Task<string?> GetInfoTextAsync(ushort infoType, CancellationToken cancellationToken = default) => TryInfoStringAsync(infoType, cancellationToken);
+
+    /// <summary>One SQLGetInfo numeric value (SQLUSMALLINT or SQLUINTEGER), or null when the driver does not answer it.</summary>
+    public async Task<uint?> GetInfoNumberAsync(ushort infoType, CancellationToken cancellationToken = default)
+    {
+        try { return await functions.GetInfoNumberAsync(infoType, cancellationToken).ConfigureAwait(false); }
+        catch (OdbcCatalogException ex) when (ex.Function == "SQLGetInfo") { return null; }
+    }
+
     // ---- Types and procedures ---------------------------------------------------------------------------------------
 
     /// <summary>The data types the data source supports (SQLGetTypeInfo); <paramref name="sqlType"/> 0 is every type. Drivers that cannot answer throw with NotSupported.</summary>

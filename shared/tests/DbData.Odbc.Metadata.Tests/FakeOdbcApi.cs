@@ -89,7 +89,25 @@ internal sealed class FakeOdbcApi : IOdbcApi
 
     public short NumResultCols(nint stmt, out short columns)
     {
-        columns = (short)(ColumnCount >= 0 ? ColumnCount : Rows.Length > 0 ? Rows[0].Length : 0);
+        columns = (short)(DescribedColumns.Length > 0 ? DescribedColumns.Length : ColumnCount >= 0 ? ColumnCount : Rows.Length > 0 ? Rows[0].Length : 0);
+        return 0;
+    }
+
+    public List<string> Prepared = [];
+    public (string Name, short SqlType, long Size, short Scale, short Nullable)[] DescribedColumns = [];
+    public short PrepareResult;
+
+    public short Prepare(nint stmt, string sql)
+    {
+        Prepared.Add(sql);
+        LastFunction = "SQLPrepare";
+        return PrepareResult;
+    }
+
+    public short DescribeCol(nint stmt, ushort column, out string name, out short sqlType, out long size, out short scale, out short nullable)
+    {
+        var c = DescribedColumns[column - 1];
+        (name, sqlType, size, scale, nullable) = c;
         return 0;
     }
 

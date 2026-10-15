@@ -233,6 +233,27 @@ internal sealed class OdbcNativeFunctions(string connectionString, OdbcCatalogOp
     public Task<IReadOnlyList<string?[]>> ProcedureColumnsAsync(string? catalog, string? schema, string? procedure, string? column, CancellationToken cancellationToken) =>
         RunAsync("SQLProcedureColumns", s => api.ProcedureColumns(s, catalog, schema, procedure, column), cancellationToken);
 
+    public Task<IReadOnlyList<OdbcResultColumn>> DescribeQueryAsync(string sql, CancellationToken cancellationToken) =>
+        SerializedAsync<IReadOnlyList<OdbcResultColumn>>(() =>
+        {
+            nint stmt = OpenStatement("SQLPrepare", s => api.Prepare(s, sql), cancellationToken);
+            try
+            {
+                if (!Ok(api.NumResultCols(stmt, out short width))) throw new OdbcCatalogException("SQLNumResultCols", api.DiagState(HandleStmt, stmt));
+                var columns = new List<OdbcResultColumn>(width);
+                for (ushort c = 1; c <= width; c++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!Ok(api.DescribeCol(stmt, c, out string name, out short sqlType, out long size, out short scale, out short nullable)))
+                        throw new OdbcCatalogException("SQLDescribeCol", api.DiagState(HandleStmt, stmt));
+                    // SQL_NO_NULLS 0, SQL_NULLABLE 1, SQL_NULLABLE_UNKNOWN 2. Size 0 means the driver does not say.
+                    columns.Add(new OdbcResultColumn(c, name, sqlType, size > 0 ? (int)Math.Min(size, int.MaxValue) : null, scale, nullable switch { 0 => false, 1 => true, _ => null }));
+                }
+                return columns;
+            }
+            finally { api.FreeHandle(HandleStmt, stmt); }
+        }, cancellationToken);
+
     public IAsyncEnumerable<string?[]> StreamTablesAsync(string? catalog, string? schema, string? table, string? types, CancellationToken cancellationToken) =>
         StreamAsync("SQLTables", s => api.Tables(s, catalog, schema, table, types), cancellationToken);
 

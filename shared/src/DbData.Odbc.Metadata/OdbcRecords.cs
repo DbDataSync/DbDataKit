@@ -23,6 +23,9 @@ public sealed record OdbcForeignKey(
     string? ReferencedCatalog, string? ReferencedSchema, string ReferencedTable, IReadOnlyList<string> ReferencedColumns,
     int? UpdateRule = null, int? DeleteRule = null);
 
+/// <summary>A column of a statement's result (SQLDescribeCol). <paramref name="Nullable"/> is null when the driver says "unknown"; <paramref name="Size"/> is null when it reports 0.</summary>
+public sealed record OdbcResultColumn(int Ordinal, string Name, int SqlType, int? Size, int? Scale, bool? Nullable);
+
 /// <summary>One column of an index; Descending is false when the driver does not say.</summary>
 public sealed record OdbcIndexColumn(string Name, bool Descending);
 

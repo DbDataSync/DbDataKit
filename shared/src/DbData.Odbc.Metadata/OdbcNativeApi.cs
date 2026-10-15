@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace DbData.Odbc.Metadata;
 
@@ -25,6 +26,8 @@ internal interface IOdbcApi
     short Procedures(nint stmt, string? catalog, string? schema, string? procedure);
     short ProcedureColumns(nint stmt, string? catalog, string? schema, string? procedure, string? column);
     short NumResultCols(nint stmt, out short columns);
+    short Prepare(nint stmt, string sql);
+    short DescribeCol(nint stmt, ushort column, out string name, out short sqlType, out long size, out short scale, out short nullable);
     short Fetch(nint stmt);
     short GetData(nint stmt, ushort column, Span<byte> buffer, out nint indicator);
     short Cancel(nint stmt);
@@ -99,6 +102,10 @@ internal sealed partial class OdbcNativeApi : IOdbcApi
     private static partial short SQLProcedureColumnsW(nint stmt, string? catalog, short catalogLength, string? schema, short schemaLength,
         string? procedure, short procedureLength, string? column, short columnLength);
     [LibraryImport(Library)] private static partial short SQLNumResultCols(nint stmt, out short columns);
+    [LibraryImport(Library, StringMarshalling = StringMarshalling.Utf16)] private static partial short SQLPrepareW(nint stmt, string sql, int length);
+    [LibraryImport(Library)]
+    private static partial short SQLDescribeColW(nint stmt, ushort column, Span<byte> name, short nameMax, out short nameLength, out short dataType,
+        out nuint columnSize, out short decimalDigits, out short nullable);
     [LibraryImport(Library)] private static partial short SQLFetch(nint stmt);
     [LibraryImport(Library)] private static partial short SQLGetData(nint stmt, ushort column, short targetType, Span<byte> buffer, nint bufferLength, out nint indicator);
     [LibraryImport(Library)] private static partial short SQLCancel(nint stmt);
@@ -132,6 +139,23 @@ internal sealed partial class OdbcNativeApi : IOdbcApi
     public short ProcedureColumns(nint stmt, string? catalog, string? schema, string? procedure, string? column) =>
         SQLProcedureColumnsW(stmt, catalog, Len(catalog), schema, Len(schema), procedure, Len(procedure), column, Len(column));
     public short NumResultCols(nint stmt, out short columns) => SQLNumResultCols(stmt, out columns);
+    public short Prepare(nint stmt, string sql) => SQLPrepareW(stmt, sql, NullTerminated);
+
+    public short DescribeCol(nint stmt, ushort column, out string name, out short sqlType, out long size, out short scale, out short nullable)
+    {
+        // The name length comes back in characters; ask again with room for it when the first buffer was too small.
+        int characters = 256;
+        while (true)
+        {
+            var buffer = new byte[characters * 2];
+            short ret = SQLDescribeColW(stmt, column, buffer, (short)characters, out short length, out sqlType, out nuint columnSize, out scale, out nullable);
+            size = (long)columnSize;
+            if (ret is not (0 or 1)) { name = ""; return ret; }
+            if (length < characters || characters >= short.MaxValue / 2) { name = Encoding.Unicode.GetString(buffer, 0, Math.Min(length, characters - 1) * 2); return ret; }
+            characters = Math.Min(length + 1, short.MaxValue / 2);
+        }
+    }
+
     public short Fetch(nint stmt) => SQLFetch(stmt);
     public short GetData(nint stmt, ushort column, Span<byte> buffer, out nint indicator) => SQLGetData(stmt, column, -8, buffer, buffer.Length, out indicator);   // SQL_C_WCHAR
     public short Cancel(nint stmt) => SQLCancel(stmt);

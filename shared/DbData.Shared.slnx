@@ -15,6 +15,8 @@
     <Project Path="src/DbData.Hosting.Systemd/DbData.Hosting.Systemd.csproj" />
     <Project Path="src/DbData.Hosting.WindowsService/DbData.Hosting.WindowsService.csproj" />
     <Project Path="src/DbData.Hosting/DbData.Hosting.csproj" />
+    <Project Path="src/DbData.Metadata.Abstractions/DbData.Metadata.Abstractions.csproj" />
+    <Project Path="src/DbData.Metadata/DbData.Metadata.csproj" />
     <Project Path="src/DbData.Odbc.Metadata/DbData.Odbc.Metadata.csproj" />
     <Project Path="src/DbData.Secrets.Abstractions/DbData.Secrets.Abstractions.csproj" />
     <Project Path="src/DbData.Secrets.Cli/DbData.Secrets.Cli.csproj" />
@@ -46,6 +48,8 @@
     <Project Path="tests/DbData.Hosting.Systemd.Tests/DbData.Hosting.Systemd.Tests.csproj" />
     <Project Path="tests/DbData.Hosting.Tests/DbData.Hosting.Tests.csproj" />
     <Project Path="tests/DbData.Hosting.WindowsService.Tests/DbData.Hosting.WindowsService.Tests.csproj" />
+    <Project Path="tests/DbData.Metadata.Abstractions.Tests/DbData.Metadata.Abstractions.Tests.csproj" />
+    <Project Path="tests/DbData.Metadata.Tests/DbData.Metadata.Tests.csproj" />
     <Project Path="tests/DbData.Odbc.Metadata.Tests/DbData.Odbc.Metadata.Tests.csproj" />
     <Project Path="tests/DbData.Secrets.Abstractions.Tests/DbData.Secrets.Abstractions.Tests.csproj" />
     <Project Path="tests/DbData.Secrets.Cli.Tests/DbData.Secrets.Cli.Tests.csproj" />
