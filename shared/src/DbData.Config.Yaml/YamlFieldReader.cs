@@ -18,17 +18,17 @@ public static class DidYouMean
 
     public static int Distance(string a, string b)
     {
-        var prev = new int[b.Length + 1];
-        var cur = new int[b.Length + 1];
-        for (var j = 0; j <= b.Length; j++) prev[j] = j;
+        // optimal string alignment: insert, delete, substitute, and swap of two adjacent characters each cost 1
+        var d = new int[a.Length + 1, b.Length + 1];
+        for (var i = 0; i <= a.Length; i++) d[i, 0] = i;
+        for (var j = 0; j <= b.Length; j++) d[0, j] = j;
         for (var i = 1; i <= a.Length; i++)
-        {
-            cur[0] = i;
             for (var j = 1; j <= b.Length; j++)
-                cur[j] = Math.Min(Math.Min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
-            (prev, cur) = (cur, prev);
-        }
-        return prev[b.Length];
+            {
+                d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
+                if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1]) d[i, j] = Math.Min(d[i, j], d[i - 2, j - 2] + 1);
+            }
+        return d[a.Length, b.Length];
     }
 }
 
