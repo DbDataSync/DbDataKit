@@ -29,4 +29,4 @@ and decoupled from Build's diagnostic catalog.
 - Removing the only entry of a block mapping leaves `key:` (null) behind; Set/Insert then treat it as an empty value.
 - Build's `ReadInfo`/`ReadColumns`/`ReadRewrites` helpers are product-specific and were not lifted.
 - The "every code has a fixture and fix text" test helper is the `DBD-` defaults table plus tests here; the Testing package ships the reusable helper (later).
-- `JsonInput.Read/ReadByExtension(text, file, diagnostics, catalog?)`: JSON behind the same node tree (strict JSON syntax check with JSON positions, then the strict reader; `.json` file names select it). Comments and trailing commas are syntax errors.
+- `JsonInput.Read/ReadByExtension(text, file, diagnostics, catalog?)`: JSON behind the same node tree (strict JSON syntax check with JSON positions, then the strict reader; `.json` file names select it). Comments (`//`, `/* */`) and trailing commas are allowed; duplicate keys stay errors.
