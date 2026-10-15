@@ -4,6 +4,7 @@
     <Project Path="src/DbData.Config.Yaml/DbData.Config.Yaml.csproj" />
     <Project Path="src/DbData.Config/DbData.Config.csproj" />
     <Project Path="src/DbData.Connections.Abstractions/DbData.Connections.Abstractions.csproj" />
+    <Project Path="src/DbData.Connections.Descriptor/DbData.Connections.Descriptor.csproj" />
     <Project Path="src/DbData.Connections.DuckDb/DbData.Connections.DuckDb.csproj" />
     <Project Path="src/DbData.Connections.Odbc/DbData.Connections.Odbc.csproj" />
     <Project Path="src/DbData.Connections.Postgres/DbData.Connections.Postgres.csproj" />
@@ -38,6 +39,7 @@
     <Project Path="tests/DbData.Config.Tests/DbData.Config.Tests.csproj" />
     <Project Path="tests/DbData.Config.Yaml.Tests/DbData.Config.Yaml.Tests.csproj" />
     <Project Path="tests/DbData.Connections.Abstractions.Tests/DbData.Connections.Abstractions.Tests.csproj" />
+    <Project Path="tests/DbData.Connections.Descriptor.Tests/DbData.Connections.Descriptor.Tests.csproj" />
     <Project Path="tests/DbData.Connections.DuckDb.Tests/DbData.Connections.DuckDb.Tests.csproj" />
     <Project Path="tests/DbData.Connections.Odbc.Tests/DbData.Connections.Odbc.Tests.csproj" />
     <Project Path="tests/DbData.Connections.Postgres.Tests/DbData.Connections.Postgres.Tests.csproj" />

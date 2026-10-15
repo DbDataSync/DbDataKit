@@ -21,7 +21,7 @@ public abstract class DbProviderBase(
     public ReadOnlySession ReadOnly { get; } = readOnly;
     public IFailureMapper FailureMapper { get; } = failureMapper ?? new NoMapper();
 
-    public EngineCaps Caps => _dialects.TryGet(Engine, out var d) ? d!.Caps : EngineCaps.None;
+    public virtual EngineCaps Caps => _dialects.TryGet(Engine, out var d) ? d!.Caps : EngineCaps.None;
 
     /// <summary>The statement <see cref="TestAsync"/> runs. Oracle-style engines override it.</summary>
     protected virtual string TestSql => "SELECT 1";
