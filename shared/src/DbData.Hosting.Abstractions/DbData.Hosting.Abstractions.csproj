@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbData.Hosting.Abstractions</PackageId>
+    <Description>Host conventions shared by DbData products: modes, health/version models, drain, request limits.</Description>
+  </PropertyGroup>
+</Project>

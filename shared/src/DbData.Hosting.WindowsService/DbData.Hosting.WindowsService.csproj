@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbData.Hosting.WindowsService</PackageId>
+    <Description>Service Control Manager wrapper (P/Invoke), install planning, directory layout and service doctor.</Description>
+  </PropertyGroup>
+</Project>

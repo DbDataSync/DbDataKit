@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbData.Hosting.Certificates</PackageId>
+    <Description>Server certificate modes (file, store, enroll, self-signed), expiry/rotation, plain-HTTP guard.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbData.Hosting.Abstractions\DbData.Hosting.Abstractions.csproj" />
+  </ItemGroup>
+</Project>
