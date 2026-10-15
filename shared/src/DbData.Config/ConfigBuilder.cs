@@ -60,7 +60,7 @@ public sealed class ConfigBuilder<T>(IDiagnosticCatalog? catalog = null) where T
         var layers = new List<YamlLayer>();
         void Load(string name, string text)
         {
-            if (StrictYamlReader.Read(text, name, diags, _catalog) is not { } node) return;
+            if (JsonInput.ReadByExtension(text, name, diags, _catalog) is not { } node) return;
             if (node is YamlMapping m) layers.Add(new YamlLayer(name, m));
             else diags.Add(_catalog.Create(SharedCodes.InvalidValue, name, node.Line, node.Column, "The document must be a mapping of keys to values."));
         }

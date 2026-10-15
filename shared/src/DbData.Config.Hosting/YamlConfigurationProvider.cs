@@ -51,7 +51,7 @@ public sealed class DbDataYamlConfigurationProvider : ConfigurationProvider, IDi
         using (var sr = new StreamReader(fs)) text = sr.ReadToEnd();
 
         var diags = new List<ConfigDiagnostic>();
-        var root = StrictYamlReader.Read(text, _path, diags, _catalog);
+        var root = JsonInput.ReadByExtension(text, _path, diags, _catalog);
         if (_schema != null && !diags.HasErrors())
         {
             var bind = typeof(ConfigBinder).GetMethod(nameof(ConfigBinder.Bind))!.MakeGenericMethod(_schema);
