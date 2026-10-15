@@ -4,6 +4,7 @@
     <Project Path="src/DbData.Config.Yaml/DbData.Config.Yaml.csproj" />
     <Project Path="src/DbData.Config/DbData.Config.csproj" />
     <Project Path="src/DbData.Connections.Abstractions/DbData.Connections.Abstractions.csproj" />
+    <Project Path="src/DbData.Connections/DbData.Connections.csproj" />
     <Project Path="src/DbData.Dialect.Abstractions/DbData.Dialect.Abstractions.csproj" />
     <Project Path="src/DbData.Dialect.Arrow/DbData.Dialect.Arrow.csproj" />
     <Project Path="src/DbData.Dialect.Conformance/DbData.Dialect.Conformance.csproj" />
@@ -33,6 +34,7 @@
     <Project Path="tests/DbData.Config.Tests/DbData.Config.Tests.csproj" />
     <Project Path="tests/DbData.Config.Yaml.Tests/DbData.Config.Yaml.Tests.csproj" />
     <Project Path="tests/DbData.Connections.Abstractions.Tests/DbData.Connections.Abstractions.Tests.csproj" />
+    <Project Path="tests/DbData.Connections.Tests/DbData.Connections.Tests.csproj" />
     <Project Path="tests/DbData.Dialect.Abstractions.Tests/DbData.Dialect.Abstractions.Tests.csproj" />
     <Project Path="tests/DbData.Dialect.Arrow.Tests/DbData.Dialect.Arrow.Tests.csproj" />
     <Project Path="tests/DbData.Dialect.Conformance.Tests/DbData.Dialect.Conformance.Tests.csproj" />
