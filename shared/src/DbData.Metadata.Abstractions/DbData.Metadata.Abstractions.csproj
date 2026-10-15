@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbData.Metadata</RootNamespace>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <Description>Neutral catalog model (tables, columns, keys, indexes, query shapes, server facts) and the ICatalogReader contract.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbData.Dialect.Abstractions\DbData.Dialect.Abstractions.csproj" />
+    <InternalsVisibleTo Include="DbData.Metadata.Abstractions.Tests" />
+  </ItemGroup>
+</Project>
