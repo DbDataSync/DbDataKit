@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Side-by-side install layout, update-plan journal and the privileged updater state machine.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbData.Update\DbData.Update.csproj" />
+  </ItemGroup>
+</Project>

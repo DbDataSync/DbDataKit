@@ -6,6 +6,7 @@
   <ItemGroup>
     <!-- Add versions here only; keep alphabetical. Agents: append your lines, do not reformat. -->
     <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="3.3.4" />
+    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageVersion Include="System.Data.Odbc" Version="10.0.13" />
