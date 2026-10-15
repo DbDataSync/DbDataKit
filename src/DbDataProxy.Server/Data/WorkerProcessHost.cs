@@ -1,8 +1,8 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using Apache.Arrow.Flight.Client;
+using DbDataKit.Hosting.Children;
 using DbDataProxy.Data;
 using DbDataProxy.Server.Configuration;
 using DbDataProxy.Worker;
@@ -15,15 +15,21 @@ namespace DbDataProxy.Server.Data;
 /// <summary>
 /// Owns the 32-bit worker process: starts it on first use, keeps it for later queries, restarts it if it dies and
 /// stops it with the service. The worker listens on a loopback port and only answers calls carrying a per-launch secret.
+/// The process is launched through <see cref="ChildProcessHost"/>: it lives in a Windows job object (it dies with the
+/// service even if the service is killed), its output is drained into the log, and disposing the host kills its tree.
+/// The worker keeps its own Flight server (hence no handshake transport); the wire protocol is unchanged.
 /// </summary>
 public sealed class WorkerProcessHost(IOptionsMonitor<ProxyOptions> options, ILogger<WorkerProcessHost> log)
     : IWorkerLink, IWorkerExecutorFactory, IAsyncDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private Process? _process;
+    private ChildProcess? _child;
     private GrpcChannel? _channel;
     private FlightClient? _client;
     private string _secret = "";
+
+    /// <summary>Process id of the running worker, or null when none is running.</summary>
+    public int? WorkerProcessId => _child is { Exited.IsCompleted: false } c ? c.ProcessId : null;
 
     public IQueryExecutor Create(string connectionString) => new WorkerQueryExecutor(this, connectionString);
 
@@ -32,7 +38,7 @@ public sealed class WorkerProcessHost(IOptionsMonitor<ProxyOptions> options, ILo
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_process is null || _process.HasExited || _client is null)
+            if (_child is null || _child.Exited.IsCompleted || _client is null)
                 await StartAsync(cancellationToken).ConfigureAwait(false);
             return (_client!, _secret);
         }
@@ -46,7 +52,7 @@ public sealed class WorkerProcessHost(IOptionsMonitor<ProxyOptions> options, ILo
 
     private async Task StartAsync(CancellationToken cancellationToken)
     {
-        StopProcess();
+        await StopProcessAsync().ConfigureAwait(false);
 
         var settings = options.CurrentValue.Worker;
         string path = settings.Path ?? DefaultWorkerPath;
@@ -57,50 +63,49 @@ public sealed class WorkerProcessHost(IOptionsMonitor<ProxyOptions> options, ILo
         int port = FreeLoopbackPort();
         _secret = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
 
-        var startInfo = new ProcessStartInfo(path)
+        ChildProcess child;
+        try
         {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            WorkingDirectory = Path.GetDirectoryName(path)!,
-        };
-        startInfo.ArgumentList.Add("--port");
-        startInfo.ArgumentList.Add(port.ToString());
-        startInfo.ArgumentList.Add("--parent");
-        startInfo.ArgumentList.Add(Environment.ProcessId.ToString());
-        startInfo.Environment["DBPROXY_WORKER_SECRET"] = _secret;
-
-        var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the 32-bit worker.");
-        process.OutputDataReceived += (_, e) => { if (e.Data is { Length: > 0 }) log.LogDebug("worker: {Line}", e.Data); };
-        process.ErrorDataReceived += (_, e) => { if (e.Data is { Length: > 0 }) log.LogWarning("worker: {Line}", e.Data); };
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
+            child = ChildProcessHost.Launch(new ChildProcessSpec
+            {
+                FileName = path,
+                WorkingDirectory = Path.GetDirectoryName(path)!,
+                Arguments = ["--port", port.ToString(), "--parent", Environment.ProcessId.ToString()],
+                Environment = new Dictionary<string, string> { ["DBPROXY_WORKER_SECRET"] = _secret },
+                Transport = ChildEndpointKind.None,
+                OnOutputLine = line => log.LogDebug("worker: {Line}", line),
+                OnErrorLine = line => log.LogWarning("worker: {Line}", line),
+            });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            throw new RpcException(new Status(StatusCode.Unavailable, "Could not start the 32-bit worker: " + ex.Message));
+        }
 
         try
         {
-            await WaitUntilListeningAsync(process, port, TimeSpan.FromSeconds(settings.StartupTimeoutSeconds), cancellationToken).ConfigureAwait(false);
+            await WaitUntilListeningAsync(child, port, TimeSpan.FromSeconds(settings.StartupTimeoutSeconds), cancellationToken).ConfigureAwait(false);
         }
         catch
         {
-            TryKill(process);
+            await child.DisposeAsync().ConfigureAwait(false);
             throw;
         }
 
-        _process = process;
+        _child = child;
         _channel = GrpcChannel.ForAddress($"http://127.0.0.1:{port}", new GrpcChannelOptions { MaxReceiveMessageSize = 64 * 1024 * 1024 });
         _client = new FlightClient(_channel);
-        log.LogInformation("Started 32-bit worker (pid {Pid}) on port {Port}", process.Id, port);
+        log.LogInformation("Started 32-bit worker (pid {Pid}) on port {Port}", child.ProcessId, port);
     }
 
-    private static async Task WaitUntilListeningAsync(Process process, int port, TimeSpan timeout, CancellationToken cancellationToken)
+    private static async Task WaitUntilListeningAsync(ChildProcess process, int port, TimeSpan timeout, CancellationToken cancellationToken)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(timeout);
         while (true)
         {
-            if (process.HasExited)
-                throw new RpcException(new Status(StatusCode.Unavailable, $"The 32-bit worker exited during startup (code {process.ExitCode})."));
+            if (process.Exited.IsCompleted)
+                throw new RpcException(new Status(StatusCode.Unavailable, $"The 32-bit worker exited during startup (code {process.Exited.Result.ExitCode})."));
             try
             {
                 using var probe = new TcpClient();
@@ -126,29 +131,22 @@ public sealed class WorkerProcessHost(IOptionsMonitor<ProxyOptions> options, ILo
         finally { listener.Stop(); }
     }
 
-    private void StopProcess()
+    private async ValueTask StopProcessAsync()
     {
         _channel?.Dispose();
         _channel = null;
         _client = null;
-        if (_process is not null)
+        if (_child is not null)
         {
-            TryKill(_process);
-            _process.Dispose();
-            _process = null;
+            var child = _child;
+            _child = null;
+            await child.DisposeAsync().ConfigureAwait(false); // kills the worker and anything it started
         }
     }
 
-    private static void TryKill(Process process)
+    public async ValueTask DisposeAsync()
     {
-        try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
-        catch (InvalidOperationException) { /* already exited */ }
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        StopProcess();
+        await StopProcessAsync().ConfigureAwait(false);
         _gate.Dispose();
-        return ValueTask.CompletedTask;
     }
 }
