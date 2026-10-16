@@ -51,6 +51,9 @@ public sealed class OdbcComposer(string? fixedDriver = null) : ComposerBase(new 
 
     public static OdbcDriverProfile ProfileOfDriverName(string driver)
     {
+        // The legacy driver that ships with Windows is literally named "SQL Server": it knows neither Encrypt/TrustServerCertificate (TLS 1.0 at best)
+        // nor ApplicationIntent, so writing them would only break connections. Every later driver ("ODBC Driver 17 for SQL Server", "SQL Server Native Client 11.0") has the keys.
+        if (driver.Trim().Equals("SQL Server", StringComparison.OrdinalIgnoreCase)) return OdbcDriverProfile.Unknown;
         if (driver.Contains("SQL Server", StringComparison.OrdinalIgnoreCase)) return OdbcDriverProfile.SqlServer;
         if (driver.Contains("PostgreSQL", StringComparison.OrdinalIgnoreCase)) return OdbcDriverProfile.Postgres;
         if (driver.Contains("DuckDB", StringComparison.OrdinalIgnoreCase)) return OdbcDriverProfile.DuckDb;
