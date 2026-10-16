@@ -259,7 +259,8 @@ public sealed class MigrationTests
         Assert.Equal(MigrationStatus.Migrated, plan.Status);
         Assert.Equal(1, plan.FromVersion);
         Assert.Equal(2, plan.ToVersion);
-        Assert.Equal(V1.Replace("# proxy settings\n", "# proxy settings\nschemaVersion: 2\n").Replace("\r\n", "\n"), plan.NewText.Replace("\r\n", "\n"));
+        var v1 = V1.Replace("\r\n", "\n"); // the checkout may have CRLF line endings
+        Assert.Equal(v1.Replace("# proxy settings\n", "# proxy settings\nschemaVersion: 2\n"), plan.NewText.Replace("\r\n", "\n"));
         Assert.Contains(plan.Log, l => l.Contains("No keys change"));
         Assert.Equal(MigrationStatus.UpToDate, ProxyConfig.Migrations.Plan(ProxyConfig.Kind, plan.NewText, "proxy.yaml").Status);
     }
@@ -319,14 +320,14 @@ public sealed class ProviderTableTests
     [Fact]
     public void Known_and_pass_through_provider_lists_match_the_registered_providers()
     {
-        IDbProvider[] providers = [new OdbcProvider(), new SqlServerProvider(), new DuckDbProvider()];
-        Assert.Equal(ProxyConfigValidator.KnownProviders.Order(), providers.Select(p => p.Name).Order());
+        var registry = Support.TestSources.Registry();
+        Assert.Equal(ProxyConfigValidator.KnownProviders.Order(), registry.Engines.Order());
 
-        var passThrough = providers.Where(p =>
+        var passThrough = ProxyConfigValidator.KnownProviders.Where(name =>
         {
-            try { p.ApplyCredentials(p.Name == "odbc" ? "Driver={X};Server=a" : "Server=a;Database=b", "u", "p"); return true; }
-            catch (NotSupportedException) { return false; }
-        }).Select(p => p.Name);
+            try { registry.Get(name).Composer.ApplyPassThroughCredentials(name == "odbc" ? "Driver={X};Server=a" : "Server=a;Database=b", "u", DbDataKit.Secrets.SecretValue.From("p")); return true; }
+            catch (DbDataKit.Connections.ConnectionPolicyException) { return false; }
+        });
         Assert.Equal(ProxyConfigValidator.PassThroughProviders.Order(), passThrough.Order());
     }
 }

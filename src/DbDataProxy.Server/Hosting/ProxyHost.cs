@@ -144,9 +144,13 @@ public static class ProxyHost
         services.AddSingleton<IJwtValidator, JwtBearerValidator>();
         services.AddSingleton<RequestAuthenticator>();
 
-        services.AddSingleton<IDbProvider, OdbcProvider>();
-        services.AddSingleton<IDbProvider, SqlServerProvider>();
-        services.AddSingleton<IDbProvider, DuckDbProvider>();
+        // The shared providers: one registry, one composer, one failure model per engine.
+        services.AddSingleton(_ => new DbDataKit.Connections.ProviderRegistry(
+        [
+            new DbDataKit.Connections.Odbc.OdbcProvider(),
+            new DbDataKit.Connections.SqlServer.SqlServerProvider(),
+            new DbDataKit.Connections.DuckDb.DuckDbProvider(),
+        ]));
         if (OperatingSystem.IsWindows())
         {
             services.AddSingleton<WorkerProcessHost>();

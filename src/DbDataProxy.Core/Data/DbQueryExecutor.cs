@@ -5,29 +5,14 @@ using Apache.Arrow;
 
 namespace DbDataProxy.Data;
 
-/// <summary>Opens connections to one data source; one implementation per ADO.NET provider.</summary>
-public interface IDbConnectionFactory
-{
-    DbConnection CreateConnection(string connectionString);
-}
-
-public sealed class DelegateConnectionFactory(Func<string, DbConnection> create) : IDbConnectionFactory
-{
-    public DbConnection CreateConnection(string connectionString) => create(connectionString);
-}
-
-/// <summary>Generic ADO.NET executor: any <see cref="DbConnection"/> becomes an Arrow query source.</summary>
-public sealed class DbQueryExecutor(
-    IDbConnectionFactory factory, string connectionString, ParameterStyle parameterStyle = ParameterStyle.Positional,
-    DbDataKit.Dialect.ISqlDialect? dialect = null)
-    : IQueryExecutor, IMetadataProvider
+/// <summary>Generic ADO.NET executor: any <see cref="DbConnection"/> opened through the shared provider becomes an Arrow query source.</summary>
+public sealed class DbQueryExecutor(SourceConnection source) : IQueryExecutor, IMetadataProvider
 {
     public async Task<IQueryResult> ExecuteQueryAsync(QueryRequest request, CancellationToken cancellationToken)
     {
-        var connection = factory.CreateConnection(connectionString);
+        var connection = await source.OpenAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
             var command = CreateCommand(connection, request);
             try
             {
@@ -49,22 +34,13 @@ public sealed class DbQueryExecutor(
 
     public async Task<long> ExecuteNonQueryAsync(QueryRequest request, CancellationToken cancellationToken)
     {
-        await using var connection = factory.CreateConnection(connectionString);
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await source.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = CreateCommand(connection, request);
         return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    // The catalog functions go through the shared ODBC metadata package, which makes its own connection from the
-    // connection string; the factory is only asked what kind of connection this source uses.
-    private bool IsOdbc
-    {
-        get
-        {
-            using var connection = factory.CreateConnection(connectionString);
-            return connection is System.Data.Odbc.OdbcConnection;
-        }
-    }
+    // The catalog functions go through the shared ODBC metadata package, which makes its own connection from the composed connection string.
+    private bool IsOdbc => source.Engine == "odbc";
 
     private void RequireOdbc()
     {
@@ -74,35 +50,35 @@ public sealed class DbQueryExecutor(
     public Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken)
     {
         RequireOdbc();
-        return OdbcMetadata.ListTablesAsync(connectionString, commandTimeoutSeconds, cancellationToken);
+        return OdbcMetadata.ListTablesAsync(source.Compose(), commandTimeoutSeconds, cancellationToken);
     }
 
     public Task<IReadOnlyList<ColumnEntry>> ListColumnsAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken)
     {
         RequireOdbc();
-        return OdbcMetadata.ListColumnsAsync(connectionString, catalog, schema, table, cancellationToken);
+        return OdbcMetadata.ListColumnsAsync(source.Compose(), catalog, schema, table, cancellationToken);
     }
 
     public Task<IReadOnlyList<PrimaryKeyEntry>> ListPrimaryKeysAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken)
     {
         RequireOdbc();
-        return OdbcMetadata.ListPrimaryKeysAsync(connectionString, catalog, schema, table, cancellationToken);
+        return OdbcMetadata.ListPrimaryKeysAsync(source.Compose(), catalog, schema, table, cancellationToken);
     }
 
     public async Task<DialectInfo> GetDialectAsync(CancellationToken cancellationToken)
     {
-        if (IsOdbc) return await OdbcMetadata.GetDialectAsync(connectionString, cancellationToken).ConfigureAwait(false);
+        if (IsOdbc) return await OdbcMetadata.GetDialectAsync(source.Compose(), cancellationToken).ConfigureAwait(false);
 
-        await using var connection = factory.CreateConnection(connectionString);
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await source.OpenAsync(cancellationToken).ConfigureAwait(false);
         return new DialectInfo(null, connection.ServerVersion, null);
     }
 
     private DbCommand CreateCommand(DbConnection connection, QueryRequest request)
     {
         var command = connection.CreateCommand();
-        ParameterBinder.Bind(command, request.Sql, request.Parameters, parameterStyle, dialect);
-        if (request.CommandTimeoutSeconds is { } timeout) command.CommandTimeout = timeout;
+        ParameterBinder.Bind(command, request.Sql, request.Parameters, source.ParameterStyle, source.Dialect);
+        // Never "forever": a request without its own timeout gets the definition's (the data source's CommandTimeoutSeconds, else the shared default).
+        command.CommandTimeout = request.CommandTimeoutSeconds ?? source.Definition.Timeouts.CommandS;
         return command;
     }
 }

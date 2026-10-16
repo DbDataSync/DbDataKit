@@ -27,11 +27,11 @@ public class SqlServerTests
     private static async Task<DbQueryExecutor> SqlClientAsync()
     {
         await SqlServerEnv.EnsureReachableAsync();
-        return new DbQueryExecutor(new DelegateConnectionFactory(c => new SqlConnection(c)), SqlServerEnv.SqlClient(), ParameterStyle.NamedAtSign);
+        return new DbQueryExecutor(TestSources.SqlClient(SqlServerEnv.SqlClient()));
     }
 
     private static DbQueryExecutor Odbc(string driver) =>
-        new(new DelegateConnectionFactory(c => new System.Data.Odbc.OdbcConnection(c)), SqlServerEnv.Odbc(driver));
+        new(TestSources.Odbc(SqlServerEnv.Odbc(driver)));
 
     private static async Task<(Schema, RecordBatch)> RunAsync(DbQueryExecutor executor, string sql)
     {
@@ -98,7 +98,7 @@ public class SqlServerTests
         {
             return await RunAsync(executor, sql);
         }
-        catch (System.Data.Odbc.OdbcException ex) when (IsMissingDriver(ex))
+        catch (DbDataKit.Connections.ConnectionFailureException ex) when (IsMissingDriver(ex))
         {
             Assert.Skip("The ODBC driver is not installed: " + ex.Message);
             throw;
@@ -106,9 +106,9 @@ public class SqlServerTests
     }
 
     // Windows reports a missing driver as IM002; unixODBC reports "Can't open lib '<driver>' : file not found".
-    internal static bool IsMissingDriver(System.Data.Odbc.OdbcException ex) =>
-        ex.Errors.Cast<System.Data.Odbc.OdbcError>().Any(e => e.SQLState == "IM002")
-        || ex.Message.Contains("Can't open lib", StringComparison.Ordinal);
+    // The shared ODBC mapper reports the first diagnostic record as "SQLSTATE/native error" (01000 is what unixODBC says for a library it cannot open).
+    internal static bool IsMissingDriver(DbDataKit.Connections.ConnectionFailureException ex) =>
+        ex.Failure.Code?.StartsWith("IM002", StringComparison.Ordinal) == true || ex.Failure.Code?.StartsWith("01000", StringComparison.Ordinal) == true;
 
     [Fact]
     public async Task Named_parameters_bind_for_question_mark_and_at_sign_statements()
@@ -163,13 +163,14 @@ public class SqlServerTests
     [Fact]
     public void Credentials_are_injected_into_provider_connection_strings_with_proper_quoting()
     {
-        var sql = new SqlServerProvider().ApplyCredentials("Server=x;Integrated Security=True", "bob", "p;ass=word'\"");
+        var registry = TestSources.Registry();
+        var sql = registry.Get("sqlserver").Composer.ApplyPassThroughCredentials("Server=x;Integrated Security=True", "bob", DbDataKit.Secrets.SecretValue.From("p;ass=word'\""));
         var builder = new SqlConnectionStringBuilder(sql);
         Assert.False(builder.IntegratedSecurity);
         Assert.Equal("bob", builder.UserID);
         Assert.Equal("p;ass=word'\"", builder.Password);
 
-        var odbc = new OdbcProvider().ApplyCredentials("Driver={SQL Server};Server=x;Trusted_Connection=Yes;UID=old", "bob", "p};ass");
+        var odbc = registry.Get("odbc").Composer.ApplyPassThroughCredentials("Driver={SQL Server};Server=x;Trusted_Connection=Yes;UID=old", "bob", DbDataKit.Secrets.SecretValue.From("p};ass"));
         var parsed = new System.Data.Odbc.OdbcConnectionStringBuilder(odbc);
         Assert.Equal("bob", parsed["UID"]);
         Assert.Contains("PWD={p}};ass}", odbc); // braces are escaped so the value cannot break out of the connection string
@@ -183,9 +184,8 @@ public class OdbcUnsupportedTypeTests
     public async Task Unreadable_odbc_types_fail_up_front_with_advice_to_cast()
     {
         await SqlServerEnv.EnsureReachableAsync();
-        var executor = new DbQueryExecutor(
-            new DelegateConnectionFactory(c => new System.Data.Odbc.OdbcConnection(c)),
-            SqlServerEnv.Odbc(OperatingSystem.IsWindows() ? "ODBC Driver 17 for SQL Server" : "ODBC Driver 18 for SQL Server"));
+        var executor = new DbQueryExecutor(TestSources.Odbc(
+            SqlServerEnv.Odbc(OperatingSystem.IsWindows() ? "ODBC Driver 17 for SQL Server" : "ODBC Driver 18 for SQL Server")));
 
         NotSupportedException? ex = null;
         try
@@ -194,7 +194,7 @@ public class OdbcUnsupportedTypeTests
                 new QueryRequest("SELECT SYSDATETIMEOFFSET() AS stamp"), CancellationToken.None);
         }
         catch (NotSupportedException e) { ex = e; }
-        catch (System.Data.Odbc.OdbcException odbc) when (SqlServerTests.IsMissingDriver(odbc)) { Assert.Skip("The ODBC driver is not installed."); }
+        catch (DbDataKit.Connections.ConnectionFailureException odbc) when (SqlServerTests.IsMissingDriver(odbc)) { Assert.Skip("The ODBC driver is not installed."); }
 
         Assert.NotNull(ex);
         Assert.Contains("'stamp'", ex.Message);

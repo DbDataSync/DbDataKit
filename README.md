@@ -168,9 +168,29 @@ Clients never send connection strings. They name a configured data source with t
 | `duckdb` | DuckDB.NET (handy for local testing) |
 | `odbc` | System.Data.Odbc. `"Bitness": "x86"` runs the query in the 32-bit worker process |
 
-Other ADO.NET providers: implement `IDbProvider` and register it. Statements are read-only unless the data
+Connections are made by the shared `DbDataKit.Connections` providers (SQL Server, DuckDB, ODBC): the data source's
+settings become a shared `ConnectionDefinition` (the Proxy-only ones, such as bitness, pass-through, metadata mode and
+batch size, travel in its `extensions.proxy`), the composer builds the connection string, and failures are classified by
+the shared failure model. The configuration keys are unchanged. Statements are read-only unless the data
 source sets `"AllowWrites": true` (this only gates statements sent as *updates*; the database account's own
 permissions are the real boundary for what a query can do).
+
+What the shared composer does to a configured connection string (behaviour changes with the Connections adoption):
+
+* **TLS for SQL Server** (the `sqlserver` provider and ODBC "ODBC Driver N for SQL Server" / Native Client drivers): a string
+  with no `Encrypt` gets `Encrypt=Mandatory` and no `TrustServerCertificate` means certificate validation is on. An explicit
+  setting in the string is kept as written (`TrustServerCertificate=True`, `Encrypt=False`, `Encrypt=Strict`). The legacy
+  Windows ODBC driver named just `SQL Server` knows none of these keys and is left alone. ODBC PostgreSQL drivers get
+  `sslmode=verify-full` unless the string sets `sslmode`.
+* **Timeouts**: a connect timeout in the string is kept (default 15 s); every command now runs with the data source's
+  `CommandTimeoutSeconds`, else a `Command Timeout` in the string, else 300 s (before: the driver's default, 30 s for
+  SqlClient and ODBC, none for DuckDB).
+* **Read-only sources** (no `AllowWrites`) add `ApplicationIntent=ReadOnly` for SQL Server (a routing hint toward a readable secondary,
+  not enforcement: use a read-only login) and, for known ODBC drivers, their read-only keyword.
+* **ODBC strings** are parsed strictly and checked by the shared policy: `FILEDSN` and `SAVEFILE` are refused, malformed strings fail
+  with a configuration error instead of reaching the driver.
+* **Pass-through credentials** go through the composer, which removes every integrated-security style key, writes the caller's login
+  with the engine's own quoting and refuses control characters and values over 512 characters (answered as `Unauthenticated`).
 
 #### Read-only statement check (`Classifier`)
 
@@ -330,7 +350,7 @@ The tests publish the 32-bit worker on demand into `artifacts/worker-x86` and us
 driver to prove queries really run in a 32-bit process. Set `DBPROXY_TEST_SQLSERVER` to point the SQL Server tests at
 another instance (Windows authentication).
 
-Layout: the shared `DbDataKit.Odbc.Metadata` package (ODBC catalog; project reference into the hub while the adoption pass is offline), `src/DbDataProxy.Core` (Arrow conversion, ADO.NET executor, client, worker protocol),
+Layout: the shared `DbDataKit.*` packages (ODBC catalog, Connections providers, ...; project references into the hub while the adoption pass is offline), `src/DbDataProxy.Core` (Arrow conversion, ADO.NET executor, client, worker protocol),
 `src/DbDataProxy.Server` (Kestrel host, Flight SQL server, auth, TLS, service/CLI),
 `src/DbDataProxy.Worker` (32-bit ODBC worker), `tests/DbDataProxy.Tests`.
 

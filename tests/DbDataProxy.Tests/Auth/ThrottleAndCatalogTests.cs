@@ -85,10 +85,12 @@ public class DataSourceCatalogTests
     private sealed class FakeWorker : IWorkerExecutorFactory
     {
         public string? LastConnectionString;
-        public IQueryExecutor Create(string connectionString)
+        public bool? LastReadOnly;
+        public IQueryExecutor Create(string connectionString, bool readOnly = false)
         {
             LastConnectionString = connectionString;
-            return new DbQueryExecutor(new DelegateConnectionFactory(_ => throw new NotSupportedException()), connectionString);
+            LastReadOnly = readOnly;
+            return new DbQueryExecutor(Support.TestSources.Odbc(connectionString));
         }
     }
 
@@ -105,7 +107,7 @@ public class DataSourceCatalogTests
     };
 
     private static DataSourceCatalog Catalog(ProxyOptions options, IWorkerExecutorFactory? worker = null) =>
-        new(new StaticMonitor(options), [new OdbcProvider(), new SqlServerProvider(), new DuckDbProvider()], worker);
+        new(new StaticMonitor(options), Support.TestSources.Registry(), worker);
 
     private static StatusCode CodeOf(Action action) => Assert.Throws<RpcException>(action).StatusCode;
 

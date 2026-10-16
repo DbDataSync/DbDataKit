@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Apache.Arrow.Flight;
 using Apache.Arrow.Flight.Server;
+using DbDataKit.Connections;
 using DbDataProxy.Data;
 using DbDataProxy.Worker;
 using Google.Protobuf;
@@ -15,7 +16,7 @@ namespace DbDataProxy.WorkerHost;
 /// </summary>
 public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlightServer> log) : FlightServer
 {
-    private static readonly OdbcProvider Odbc = new();
+    private static readonly IDbProvider Odbc = new DbDataKit.Connections.Odbc.OdbcProvider();
 
     public override async Task DoGet(FlightTicket ticket, FlightServerRecordBatchStreamWriter responseStream, ServerCallContext context)
     {
@@ -59,7 +60,7 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
             IReadOnlyList<ColumnEntry> columns;
             try
             {
-                columns = await new DbQueryExecutor(new DelegateConnectionFactory(Odbc.CreateConnection), columnsRequest.ConnectionString)
+                columns = await new DbQueryExecutor(Source(columnsRequest.ConnectionString, columnsRequest.ReadOnly))
                     .ListColumnsAsync(columnsRequest.Catalog, columnsRequest.Schema, columnsRequest.Table, context.CancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -78,7 +79,7 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
             IReadOnlyList<PrimaryKeyEntry> keys;
             try
             {
-                keys = await new DbQueryExecutor(new DelegateConnectionFactory(Odbc.CreateConnection), keysRequest.ConnectionString)
+                keys = await new DbQueryExecutor(Source(keysRequest.ConnectionString, keysRequest.ReadOnly))
                     .ListPrimaryKeysAsync(keysRequest.Catalog, keysRequest.Schema, keysRequest.Table, context.CancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -144,8 +145,12 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
         await responseStream.WriteAsync(new FlightResult(ByteString.CopyFrom(body))).ConfigureAwait(false);
     }
 
-    private static DbQueryExecutor CreateExecutor(WorkerRequest request) =>
-        new(new DelegateConnectionFactory(Odbc.CreateConnection), request.ConnectionString);
+    // The proxy sends the administrator's string (secrets resolved, pass-through credentials injected); the shared provider composes it here
+    // (TLS and timeout defaults, ODBC policy) and opens it, so the 32-bit worker runs the same code path as the in-process ODBC provider.
+    private static SourceConnection Source(string connectionString, bool readOnly) =>
+        SourceConnection.Create(Odbc, "worker", connectionString, readOnly);
+
+    private static DbQueryExecutor CreateExecutor(WorkerRequest request) => new(Source(request.ConnectionString, request.ReadOnly));
 
     private void Authorize(ServerCallContext context)
     {

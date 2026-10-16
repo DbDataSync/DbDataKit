@@ -23,7 +23,7 @@ public class PendingQueryStoreTests
     }
 
     private static ResolvedDataSource Source() =>
-        new("s", new DataSourceOptions(), new DbQueryExecutor(new DelegateConnectionFactory(_ => throw new NotSupportedException()), ""));
+        new("s", new DataSourceOptions(), new DbQueryExecutor(Support.TestSources.Duck("Data Source=:memory:")));
 
     [Fact]
     public void A_handle_can_be_taken_once_and_only_by_its_owner()

@@ -1,3 +1,5 @@
+using DbDataKit.Connections;
+using DbDataKit.Secrets;
 using DbDataProxy.Data;
 using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Configuration;
@@ -12,7 +14,7 @@ public sealed record ResolvedDataSource(string Name, DataSourceOptions Options, 
 /// <summary>Builds executors for the 32-bit ODBC worker; absent when the platform cannot host one.</summary>
 public interface IWorkerExecutorFactory
 {
-    IQueryExecutor Create(string connectionString);
+    IQueryExecutor Create(string connectionString, bool readOnly = false);
 }
 
 /// <summary>
@@ -21,13 +23,10 @@ public interface IWorkerExecutorFactory
 /// </summary>
 public sealed class DataSourceCatalog(
     IOptionsMonitor<ProxyOptions> options,
-    IEnumerable<IDbProvider> providers,
+    ProviderRegistry providers,
     IWorkerExecutorFactory? worker = null,
     SecretsRuntime? secrets = null)
 {
-    private readonly Dictionary<string, IDbProvider> _providers =
-        providers.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
-
     public ResolvedDataSource Resolve(ProxyPrincipal principal, string? requested)
     {
         var configured = options.CurrentValue.DataSources;
@@ -38,7 +37,7 @@ public sealed class DataSourceCatalog(
         if (!principal.CanUse(name))
             throw new RpcException(new Status(StatusCode.PermissionDenied, $"Not authorized for data source '{name}'."));
 
-        if (!_providers.TryGetValue(source.Provider, out var provider))
+        if (!providers.TryGet(source.Provider, out var provider))
             throw new RpcException(new Status(StatusCode.Internal, $"Data source '{name}' uses unknown provider '{source.Provider}'."));
 
         // Resolved per call from the current options snapshot: nothing secret outlives the snapshot, and a rotated secret is picked up.
@@ -57,24 +56,45 @@ public sealed class DataSourceCatalog(
             if (principal.Credentials is null)
                 throw new RpcException(new Status(StatusCode.PermissionDenied,
                     $"Data source '{name}' requires database credentials; authenticate with your database username and password."));
-            connectionString = provider.ApplyCredentials(connectionString, principal.Credentials.User, principal.Credentials.Password);
+            try
+            {
+                // The shared composer strips every integrated-security style key, writes the caller's login through the engine's own quoting,
+                // refuses control characters and over-long values, and asserts nothing integrated remains.
+                connectionString = provider.Composer.ApplyPassThroughCredentials(
+                    connectionString, principal.Credentials.User, SecretValue.From(principal.Credentials.Password));
+            }
+            catch (ConnectionPolicyException)
+            {
+                throw new RpcException(new Status(StatusCode.Unauthenticated, "The database credentials were not accepted."));
+            }
         }
 
-        return new ResolvedDataSource(name, source, CreateExecutor(name, source, provider, connectionString));
+        var connection = SourceConnection.Create(provider, DataSourceDefinitions.Build(name, source, connectionString), connectionString);
+        try
+        {
+            // Validates the configuration (malformed string, ODBC policy) once, before a worker or a driver sees it.
+            _ = connection.Compose();
+        }
+        catch (ConnectionPolicyException ex)
+        {
+            throw new RpcException(new Status(StatusCode.Internal, $"Data source '{name}' has an invalid connection configuration ({ex.Rule}); see the server log."));
+        }
+
+        return new ResolvedDataSource(name, source, CreateExecutor(name, source, connection, connectionString));
     }
 
-    private IQueryExecutor CreateExecutor(string name, DataSourceOptions source, IDbProvider provider, string connectionString)
+    private IQueryExecutor CreateExecutor(string name, DataSourceOptions source, SourceConnection connection, string connectionString)
     {
         // A 32-bit proxy process can load 32-bit drivers itself; a 64-bit one hands them to the worker.
         if (source.Bitness.Equals("x86", StringComparison.OrdinalIgnoreCase) && Environment.Is64BitProcess)
         {
-            if (!provider.Name.Equals("odbc", StringComparison.OrdinalIgnoreCase))
+            if (connection.Engine != "odbc")
                 throw new RpcException(new Status(StatusCode.Internal, $"Data source '{name}': only ODBC sources can use bitness x86."));
             if (worker is null)
                 throw new RpcException(new Status(StatusCode.Unavailable, "The 32-bit worker is not available on this platform."));
-            return worker.Create(connectionString);
+            return worker.Create(connectionString, connection.ReadOnly);
         }
-        return new DbQueryExecutor(new DelegateConnectionFactory(provider.CreateConnection), connectionString, provider.ParameterStyle, provider.Dialect);
+        return new DbQueryExecutor(connection);
     }
 
     private static string ChooseName(ProxyPrincipal principal, string? requested, Dictionary<string, DataSourceOptions> configured)

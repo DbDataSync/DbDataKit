@@ -216,6 +216,10 @@ public sealed partial class ProxyFlightServer(
     internal static RpcException ToRpcException(Exception ex)
     {
         if (ex is RpcException rpc) return rpc;
+        if (ex is DbDataKit.Connections.ConnectionFailureException failure)
+            return failure.Failure.Kind == DbDataKit.Connections.ConnectionFailureKind.Login
+                ? new RpcException(new Status(StatusCode.Unauthenticated, "The database rejected the credentials."))
+                : new RpcException(new Status(StatusCode.InvalidArgument, failure.Message));
         if (IsLoginFailure(ex))
             return new RpcException(new Status(StatusCode.Unauthenticated, "The database rejected the credentials."));
         if (ex is DbDataKit.Odbc.Metadata.OdbcResultTruncatedException)

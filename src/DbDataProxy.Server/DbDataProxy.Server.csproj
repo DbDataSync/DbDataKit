@@ -12,6 +12,8 @@
     <PackageReference Include="DuckDB.NET.Data.Full" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
+    <DbDataKitReference Include="Connections.SqlServer" />
+    <DbDataKitReference Include="Connections.DuckDb" />
     <DbDataKitReference Include="Config.Yaml" />
     <DbDataKitReference Include="Config" />
     <DbDataKitReference Include="Config.Hosting" />

@@ -9,5 +9,8 @@
     <DbDataKitReference Include="Odbc.Metadata" />
     <DbDataKitReference Include="Dialect.Abstractions" />
     <DbDataKitReference Include="Dialect" />
+    <DbDataKitReference Include="Connections.Abstractions" />
+    <DbDataKitReference Include="Connections" />
+    <DbDataKitReference Include="Connections.Odbc" />
   </ItemGroup>
 </Project>
