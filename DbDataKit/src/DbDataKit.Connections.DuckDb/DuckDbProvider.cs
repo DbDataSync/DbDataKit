@@ -85,6 +85,68 @@ public sealed class DuckDbFailureMapper : IFailureMapper
     }
 }
 
+/// <summary>
+/// The sandbox as a session that can be applied to any number of connections of the same file. DuckDB.NET shares one database instance per file within a
+/// process, and <c>lock_configuration</c> is a setting of that instance: the first connection locks it, and every later connection (a second query while the
+/// first is still streaming) would fail on its first <c>SET</c>. So a connection that finds the configuration already locked checks that it is the sandbox
+/// this recipe would have applied (external access off, the same allowed directories) instead of setting it again, and fails closed when it is not.
+/// </summary>
+internal sealed class DuckDbSandboxSession(
+    IReadOnlyList<string> statements, IReadOnlyDictionary<string, string> keys, string? notes, IReadOnlyList<string> allowedDirectories)
+    : ReadOnlySession("duckdb", ReadOnlyEnforcement.Engine, statements, keys, notes)
+{
+    public override async Task ApplyAsync(DbConnection connection, CancellationToken ct = default)
+    {
+        if (!await IsLockedAsync(connection, ct).ConfigureAwait(false))
+        {
+            try
+            {
+                await base.ApplyAsync(connection, ct).ConfigureAwait(false);
+                return;
+            }
+            catch (DuckDBException)
+            {
+                // Another connection to the same file may have locked the configuration between our check and our SET (it ran the same statements before the lock).
+                // Anything else is a real failure.
+                if (!await IsLockedAsync(connection, ct).ConfigureAwait(false)) throw;
+            }
+        }
+        await VerifyAsync(connection, ct).ConfigureAwait(false);
+    }
+
+    private static async Task<object?> ScalarAsync(DbConnection connection, string sql, CancellationToken ct)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        return await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
+    }
+
+    private static bool IsTrue(object? value) => value is bool b ? b : string.Equals(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture), "true", StringComparison.OrdinalIgnoreCase);
+
+    private static async Task<bool> IsLockedAsync(DbConnection connection, CancellationToken ct) =>
+        IsTrue(await ScalarAsync(connection, "SELECT current_setting('lock_configuration')", ct).ConfigureAwait(false));
+
+    private static string Normal(string path) => path.Replace('\\', '/').TrimEnd('/');
+
+    private async Task VerifyAsync(DbConnection connection, CancellationToken ct)
+    {
+        bool external = IsTrue(await ScalarAsync(connection, "SELECT current_setting('enable_external_access')", ct).ConfigureAwait(false));
+        bool install = IsTrue(await ScalarAsync(connection, "SELECT current_setting('autoinstall_known_extensions')", ct).ConfigureAwait(false));
+        bool load = IsTrue(await ScalarAsync(connection, "SELECT current_setting('autoload_known_extensions')", ct).ConfigureAwait(false));
+        var actual = (await ScalarAsync(connection, "SELECT current_setting('allowed_directories')", ct).ConfigureAwait(false) is System.Collections.IEnumerable list and not string
+            ? list.Cast<object?>().Select(o => Normal(Convert.ToString(o, System.Globalization.CultureInfo.InvariantCulture) ?? "")) : []).ToList();
+
+        var compare = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var expected = allowedDirectories.Select(Normal).ToList();
+        // DuckDB adds the database's own temporary directory (<file>.tmp) to the list; nothing else may be in it besides what the recipe sets.
+        bool same = !external && !install && !load
+            && expected.All(e => actual.Contains(e, compare))
+            && actual.All(a => expected.Contains(a, compare) || a.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase));
+        if (!same)
+            throw new ConnectionPolicyException("the DuckDB database is already open in this process with a different sandbox (another data source uses the same file with other allowed directories, or without the sandbox)");
+    }
+}
+
 /// <summary>DuckDB provider over DuckDB.NET.</summary>
 public sealed class DuckDbProvider : DbProviderBase
 {
@@ -93,8 +155,7 @@ public sealed class DuckDbProvider : DbProviderBase
     /// external access is off (no <c>read_csv</c>, <c>COPY</c>, <c>ATTACH</c>, httpfs), extension install and autoload are off, and the
     /// configuration is locked last so none of it can be set back. Nothing may follow the lock.
     /// </summary>
-    public static ReadOnlySession ReadOnlyRecipe { get; } = new(
-        "duckdb", ReadOnlyEnforcement.Engine,
+    public static ReadOnlySession ReadOnlyRecipe { get; } = new DuckDbSandboxSession(
         [
             "SET enable_external_access = false",
             "SET autoinstall_known_extensions = false",
@@ -102,7 +163,8 @@ public sealed class DuckDbProvider : DbProviderBase
             "SET lock_configuration = true",
         ],
         new Dictionary<string, string> { ["access_mode"] = "READ_ONLY" },
-        "Engine enforced. An in-memory database cannot be opened read-only; use a file.");
+        "Engine enforced. An in-memory database cannot be opened read-only; use a file. The configuration lives on the database instance DuckDB shares per file within a process, so a later connection verifies it instead of setting it again.",
+        []);
 
     public DuckDbProvider(DialectCatalog? dialects = null, DbDataKit.Secrets.IRedactor? redactor = null, bool includeRawFailures = false)
         : base(EngineId.DuckDb, new DuckDbComposer(), ReadOnlyRecipe, new DuckDbFailureMapper(), dialects, redactor, includeRawFailures) { }
@@ -127,8 +189,7 @@ public sealed class DuckDbProvider : DbProviderBase
         if (sandbox is null || sandbox.AllowedDirectories.Count == 0) return ReadOnlyRecipe;
         var statements = new List<string> { AllowedDirectoriesStatement(sandbox.AllowedDirectories) };
         statements.AddRange(ReadOnlyRecipe.Statements);
-        return new ReadOnlySession("duckdb", ReadOnlyEnforcement.Engine, statements, ReadOnlyRecipe.ConnectionStringKeys,
-            ReadOnlyRecipe.Notes + " Reads below the allowed directories are permitted.");
+        return new DuckDbSandboxSession(statements, ReadOnlyRecipe.ConnectionStringKeys, ReadOnlyRecipe.Notes + " Reads below the allowed directories are permitted.", sandbox.AllowedDirectories);
     }
 
     /// <summary>The <c>SET allowed_directories</c> statement for a validated list. Quotes are doubled; names with control characters or relative paths are refused.</summary>

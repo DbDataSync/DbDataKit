@@ -229,6 +229,46 @@ public class DuckDbTests
     }
 
     [Fact]
+    public async Task Connections_to_the_same_file_can_be_open_together_and_all_stay_sandboxed()
+    {
+        // DuckDB.NET shares one database instance per file, and the lock is a setting of that instance: a second query while the first is still streaming
+        // used to fail on its first SET.
+        using var dir = new TempDir();
+        string db = MakeDatabase(dir);
+        string secret = dir.File("secret.csv");
+        await File.WriteAllTextAsync(secret, "a\n1\n");
+        var provider = new DuckDbProvider();
+
+        await using var first = await provider.OpenAsync(Ctx(db));
+        await using var second = await provider.OpenAsync(Ctx(db));
+        await using var third = await provider.OpenAsync(Ctx(db));
+        foreach (var c in new[] { first, second, third })
+        {
+            Assert.Null(await TryRun(c, "SELECT sum(x) FROM t"));
+            Assert.NotNull(await TryRun(c, $"SELECT * FROM read_csv('{secret.Replace('\\', '/')}')"));
+            Assert.NotNull(await TryRun(c, "INSERT INTO t VALUES (4)"));
+            Assert.NotNull(await TryRun(c, "SET enable_external_access = true"));
+        }
+    }
+
+    [Fact]
+    public async Task A_second_connection_with_other_allowed_directories_fails_closed_instead_of_inheriting_the_first()
+    {
+        using var dir = new TempDir();
+        string db = MakeDatabase(dir);
+        string a = System.IO.Path.Combine(dir.Path, "a");
+        string b = System.IO.Path.Combine(dir.Path, "b");
+        Directory.CreateDirectory(a);
+        Directory.CreateDirectory(b);
+
+        await using var first = await new DuckDbProvider(new DuckDbSandboxOptions { AllowedDirectories = [a] }).OpenAsync(Ctx(db));
+        await using var same = await new DuckDbProvider(new DuckDbSandboxOptions { AllowedDirectories = [a] }).OpenAsync(Ctx(db));
+        var other = await Assert.ThrowsAsync<ConnectionPolicyException>(async () => await new DuckDbProvider(new DuckDbSandboxOptions { AllowedDirectories = [b] }).OpenAsync(Ctx(db)));
+        Assert.Contains("different sandbox", other.Message);
+        await Assert.ThrowsAsync<ConnectionPolicyException>(async () => await new DuckDbProvider().OpenAsync(Ctx(db)));
+    }
+
+    [Fact]
     public async Task Raw_failure_text_is_kept_only_when_asked_for_and_never_in_the_public_message()
     {
         using var dir = new TempDir();
