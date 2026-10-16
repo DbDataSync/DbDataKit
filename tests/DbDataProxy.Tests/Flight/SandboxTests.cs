@@ -1,4 +1,5 @@
 using Apache.Arrow;
+using DbDataProxy.Client;
 using DbDataProxy.Tests.Support;
 using Grpc.Core;
 
@@ -79,6 +80,20 @@ public class SandboxTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
         var (_, batches) = await client.QueryAsync("SELECT count(*) AS n FROM prices", "duck_off");
         Assert.Equal(1L, ((Int64Array)Assert.Single(batches).Column("n")).GetValue(0));
         Assert.Contains("prices", Assert.Single(await RowsAsync(client, "SELECT table_name FROM information_schema.tables WHERE table_name = 'prices'", "duck_off")));
+    }
+
+    [Fact]
+    public async Task A_query_can_run_while_another_result_of_the_same_sandboxed_file_is_still_open()
+    {
+        // DuckDB shares one database instance per file and the sandbox locks its configuration: the second connection must verify it, not set it again.
+        using var client = await LoginAsync();
+        var open = await client.Raw.QueryAsync("SELECT id FROM numbers", new QueryOptions { DataSource = "duck_off" });
+        var (_, batches) = await client.QueryAsync("SELECT count(*) AS n FROM prices", "duck_off");
+        Assert.Equal(1L, ((Int64Array)Assert.Single(batches).Column("n")).GetValue(0));
+
+        long rows = 0;
+        await foreach (var batch in open) rows += batch.Length;
+        Assert.Equal(10000, rows);
     }
 
     [Fact]
