@@ -1,0 +1,9 @@
+{
+  // keys are case-insensitive; comments and trailing commas are allowed
+  "proxy": {
+    "listen": { "address": "127.0.0.1", "port": 9000, },
+    "tls": { "mode": "none" },
+    "datasources": { "erp": { "provider": "SqlServer", "connectionstring": "Server=x;Database=y;Password=env:ERP_PW" }, },
+    "users": [ { "name": "bob", "passwordhash": "PBKDF2-SHA256$1$a$b", "datasources": [ "ERP" ], "defaultdatasource": "erp" } ],
+  },
+}

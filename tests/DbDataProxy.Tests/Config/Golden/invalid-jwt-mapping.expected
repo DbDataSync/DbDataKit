@@ -1,0 +1,3 @@
+Proxy:Auth:Jwt:Authority
+Proxy:Auth:Jwt:Mappings:0:Claim
+Proxy:Auth:Jwt:Mappings:0:DataSources:0

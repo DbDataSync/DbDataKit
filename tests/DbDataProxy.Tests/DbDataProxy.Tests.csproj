@@ -12,6 +12,9 @@
     <Using Include="Microsoft.AspNetCore.Builder" />
     <Using Include="Microsoft.Extensions.DependencyInjection" />
     <Using Include="Microsoft.Extensions.Configuration" />
+    <DbDataKitReference Include="Config.Testing" />
+    <None Include="Config\Golden\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\DbDataProxy.Server\appsettings.example.json" Link="appsettings.example.json" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="..\..\src\DbDataProxy.Server\DbDataProxy.Server.csproj" />
     <ProjectReference Include="..\..\src\DbDataProxy.Worker\DbDataProxy.Worker.csproj" />
   </ItemGroup>

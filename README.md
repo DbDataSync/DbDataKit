@@ -86,6 +86,46 @@ service only with `-InstallService`. `-Version 1.2.3` selects a specific release
 line (`--Proxy:Listen:Port=9000`). `appsettings.example.json` documents every option. Users, data sources,
 compression and auth settings reload without a restart; the listener and certificate need one.
 
+### Validation, schema version and the config commands
+
+The configuration stays JSON (`appsettings.json`, section `Proxy`, PascalCase keys, the same environment and command
+line overrides). It is read through the shared `DbDataKit.Config` strict binder, so a typo is no longer ignored:
+
+* **Strict at startup.** An unknown key (`Proxy:Listen:Prot`), a value of the wrong type, a number out of range, a
+  user that names an undefined data source, `Tls.Mode` `File` without `CertificatePath`, `Bitness` `x86` with a
+  provider other than `odbc`, `PassThrough` on DuckDB, an unknown provider, a duplicate or empty user name, a codec the
+  compression mode does not support, JWT without `Audience`, ... all stop the service before it listens. Every problem is
+  listed once with its key path in environment-variable form, where it came from (file with line and column, `env:NAME`,
+  `cli:args`) and, for unknown keys, a "did you mean" suggestion. Secret values are never printed.
+  The process exits with **code 2** (the same code as a command line usage error); scripts and service managers can rely on it.
+* **Case-insensitive, unchanged keys.** Keys are matched ignoring case, exactly as before, so every existing file and
+  override (`DBPROXY_Proxy__Listen__Port`, `Proxy__Tls__Mode`, `--Proxy:Listen:Port=9000`) keeps working, booleans may
+  still be written `True`. `appsettings.json` and `appsettings.example.json` are checked by the test suite.
+* **Reloads keep the last good configuration.** An edit of `appsettings.json` that is invalid (syntax error, unknown key,
+  failed validation) is rejected with an error in the log naming the problems, and the running service keeps using the last
+  good configuration; it never crashes on a bad edit. A later valid edit is picked up.
+* **Forward compatibility, explicitly.** `"AllowUnknownKeys": true` (or `--allow-unknown-keys` for `config check`) turns
+  unknown keys into warnings, for example while rolling a file back to an older release. The default is strict.
+* **`SchemaVersion`** (optional, inside `Proxy`; absent means 1). Version 2 changes defaults only: a data source without
+  its own `Classifier` is `strict` instead of `warn`. Files without `SchemaVersion` keep every old default, so upgrading
+  changes nothing; a startup warning lists the read-only sources that still rely on the old default. The shipped
+  `appsettings.json` and the example use `"SchemaVersion": 2` (new installs get the strict default). Moving v1 to v2 is a
+  documented no-op (`ProxyConfigMigrations`: no key changes) other than that default: set `Classifier` on each source, then
+  add `"SchemaVersion": 2`. A file with a newer version than the release understands is refused with an upgrade message.
+  Future renames ship as additional migrations in the shared migration framework (see `MigrationTests`); `config migrate`
+  is not provided because the shared migration engine edits YAML documents and cannot rewrite `appsettings.json` in place yet.
+
+```
+DbDataProxy config check [--file path]        validate (exit 0 valid, 2 invalid); warnings are printed to stderr
+DbDataProxy config show [--origin] [--file p] effective values; --origin adds file:line, env:NAME, cli:args or "default"
+```
+
+Without `--file` both commands read the same sources as the service (appsettings.json beside the executable,
+`DBPROXY_` environment variables, command line options); with `--file` only that file (plus `--Proxy:...` options) is read.
+`config show` masks secrets: a secret reference (`env:`, `file:`, `secret:`, `dpapi:`) is shown as the reference,
+a literal secret (`SigningKey`, `PasswordHash`, a literal `Password=` in a connection string, a literal certificate password)
+as `********` or `***`.
+
 ### Data sources
 
 Clients never send connection strings. They name a configured data source with the `x-datasource` call header
@@ -111,13 +151,13 @@ a deny-listed word outside strings, comments and quoted identifiers (`OPENROWSET
 
 | `Classifier` | Effect |
 |---|---|
-| `warn` (default, so existing configuration behaves as before) | A statement that would be refused is logged as a warning and still runs |
-| `strict` | The statement is refused with gRPC `PermissionDenied` |
+| `warn` (default without `SchemaVersion`, so existing configuration behaves as before) | A statement that would be refused is logged as a warning and still runs |
+| `strict` (default from `"SchemaVersion": 2`, i.e. new installs) | The statement is refused with gRPC `PermissionDenied` |
 | `off` | No check |
 
 The check is lexical and refuses some harmless SQL (an unquoted column named like a deny-listed word: quote it). It is
 defence in depth, not a security boundary; the database login is. Sources with `AllowWrites` are not checked on the
-query path. Plan to move to `strict` after a release in `warn` shows no unexpected log lines.
+query path. Upgrade path: stay on `warn` (no `SchemaVersion`) for a release, check the log for would-be refusals, then set `"SchemaVersion": 2` (or `"Classifier": "strict"` per source).
 
 Types map to Arrow as: integers/floats/bool directly (`tinyint` → UInt8), `decimal` → Decimal128 (precision/scale
 from the provider, default 38/9 when unknown), `date` → Date32, `datetime/datetime2` → Timestamp(µs),

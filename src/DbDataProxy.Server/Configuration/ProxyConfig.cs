@@ -184,9 +184,12 @@ public static class ProxyConfig
     public static string MaskConnectionString(string connectionString)
     {
         if (ConnectionStringReferences.IsWholeReference(connectionString, out var whole)) return whole!.ToAuditString();
-        var redactor = new Redactor();
-        foreach (var credential in ConnectionStringReferences.CredentialValues(connectionString)) redactor.Register(credential);
-        return redactor.Redact(connectionString);
+        // The shared Redactor would also mask `Password=env:NAME` (it masks every credential key); a reference is not a secret, so mask only literal values.
+        string masked = connectionString;
+        foreach (var credential in ConnectionStringReferences.CredentialValues(connectionString))
+            foreach (var opening in new[] { "=", "={", "=\"", "='" })
+                masked = masked.Replace(opening + credential, opening + Redactor.Replacement, StringComparison.Ordinal);
+        return masked;
     }
 
     /// <summary>

@@ -1,0 +1,1 @@
+{ "Proxy": { "DataSources": { "x": { "Provider": "odbc", "CommandTimeoutSeconds": -5, "ConnectionString": "a" } } } }
