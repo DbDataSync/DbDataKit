@@ -71,7 +71,7 @@ data source selectable it describes the proxy alone.
 | Flight SQL id | Value |
 | --- | --- |
 | `FLIGHT_SQL_SERVER_NAME` | The backend product: `Microsoft SQL Server`, `DuckDB`, or for ODBC what the driver reports (`DBMS_NAME`); `DbDataProxy` with no data source |
-| `FLIGHT_SQL_SERVER_VERSION` | The backend version when the database can be reached; otherwise the proxy version |
+| `FLIGHT_SQL_SERVER_VERSION` | The backend version when the database can be reached (what the shared catalog reader reports: `SELECT version()` without the leading `v` for DuckDB, the connection's server version for SQL Server, `DBMS_VER` for ODBC); otherwise the proxy version |
 | `FLIGHT_SQL_SERVER_ARROW_VERSION` | The Apache Arrow library version |
 | `FLIGHT_SQL_SERVER_READ_ONLY` | `true` when the data source has no `AllowWrites` (see the caveat under Limitations) |
 | `FLIGHT_SQL_SERVER_SQL` / `_SUBSTRAIT` / `_CANCEL` / `_BULK_INGESTION` | `true` / `false` / `false` / `false` |
@@ -368,14 +368,19 @@ exe: queries with every compression setting, updates, metadata and wrong-passwor
 ## Not supported yet
 
 * `GetExportedKeys`/`GetImportedKeys`/`GetCrossReference` and `GetXdbcTypeInfo`.
-* Catalog metadata: SQL Server and DuckDB sources are read from `INFORMATION_SCHEMA`. ODBC sources use the driver's
-  catalog functions (`SQLTables`, `SQLColumns`, `SQLPrimaryKeys`, `SQLGetInfo`), so text/Excel/Access and other drivers
-  without `INFORMATION_SCHEMA` work, including through the 32-bit worker. Set a data source's `"Metadata"` to `"odbc"`
-  or `"informationschema"` to override the default (`"auto"`). Per-table schemas (`include_schema`) take decimal
-  precision/scale and nullability (key columns are NOT NULL) from the database catalog, because a zero-row query cannot
-  always report them. Names are quoted with the driver's own identifier character and fall back to shorter names when
-  the driver's catalog is not valid SQL. `GetPrimaryKeys` on an ODBC source asks the driver (`SQLPrimaryKeys`); drivers
-  without keys (text files) or without the function report none.
+* Catalog metadata comes from the shared `DbDataKit.Metadata` readers, one implementation for every Flight SQL metadata call (catalogs, schemas,
+  tables, primary keys, per-table schemas and `GetSqlInfo`). ODBC sources use the driver's catalog functions (`SQLTables`, `SQLColumns`,
+  `SQLPrimaryKeys`, `SQLGetInfo`), so text/Excel/Access and other drivers without `INFORMATION_SCHEMA` work, including through the 32-bit
+  worker; SQL Server sources use the `sys` catalog views and DuckDB its `duckdb_*()` functions, both of which answer exactly what `INFORMATION_SCHEMA`
+  did (tests compare recorded responses of a DuckDB file and the text driver byte for byte, and SQL Server against `INFORMATION_SCHEMA` live). Set a
+  data source's `"Metadata"` to `"odbc"` (ODBC sources only) or `"informationschema"` (generic `INFORMATION_SCHEMA` reader) to override the default
+  (`"auto"`). Per-table schemas (`include_schema`) take decimal precision/scale and nullability (key columns are NOT NULL) from the catalog, because a zero-row
+  query cannot always report them (one catalog read per table). Names are quoted with the driver's own identifier character and fall back to shorter names when
+  the driver's catalog is not valid SQL. `GetPrimaryKeys` on an ODBC source asks the driver (`SQLPrimaryKeys`); drivers without keys (text files)
+  or without the function report none. Table-name filter patterns are SQL `LIKE` patterns matched by a linear matcher (no regular expressions, so a hostile
+  pattern cannot make the server backtrack) with `\` as the escape character for `%` and `_`, as in the ODBC and JDBC catalog functions. Differences from
+  the previous implementation: `\` in a pattern is now an escape (it was a literal character); table types are normalised to `TABLE`, `VIEW`, `MATERIALIZED VIEW`,
+  `SYSTEM TABLE`, `LOCAL TEMPORARY` and `OTHER` (an ODBC driver's `ALIAS`/`SYNONYM`/`GLOBAL TEMPORARY` used to pass through as written); the DuckDB server version is reported without the leading `v`.
 * `AllowWrites` gates statements a client sends as *updates*. A client that runs `INSERT`/`DDL` through the query
   path (ADBC's `cursor.execute` does) is refused by the engine on DuckDB sources (read-only file, see Security); on SQL Server and ODBC
   sources only when the source's `Classifier` is `strict` (and then by a lexical check, not a parser) or the database account cannot write,

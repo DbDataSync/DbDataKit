@@ -136,7 +136,7 @@ public class PassThroughSafetyTests
     {
         public string? LastConnectionString;
 
-        public IQueryExecutor Create(string connectionString, bool readOnly = false)
+        public IQueryExecutor Create(string connectionString, bool readOnly = false, string? metadataMode = null)
         {
             LastConnectionString = connectionString;
             return new DbQueryExecutor(TestSources.Odbc(connectionString));

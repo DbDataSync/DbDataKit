@@ -12,5 +12,7 @@
     <DbDataKitReference Include="Connections.Abstractions" />
     <DbDataKitReference Include="Connections" />
     <DbDataKitReference Include="Connections.Odbc" />
+    <DbDataKitReference Include="Metadata.Abstractions" />
+    <DbDataKitReference Include="Metadata" />
   </ItemGroup>
 </Project>

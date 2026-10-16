@@ -14,22 +14,12 @@ using Grpc.Core;
 namespace DbDataProxy.Server.Flight;
 
 // Flight SQL catalog metadata (catalogs, schemas, tables, table types, primary keys, server info).
-// Table metadata is read from INFORMATION_SCHEMA through the data source's own executor, so it works for SQL Server,
-// DuckDB and ODBC sources (including the 32-bit worker) whose database exposes those standard views. Filtering is done
-// here in C#, never by pasting client text into SQL.
+// What the catalog contains comes from the shared catalog readers behind the data source's IMetadataProvider (DbDataKit.Metadata: the ODBC catalog
+// functions for ODBC sources, including the 32-bit worker, INFORMATION_SCHEMA or the engine's own views for the others). This file only shapes the
+// Flight SQL responses. Filtering is done here in C# with the shared LIKE matcher, never by pasting client text into SQL.
 public sealed partial class ProxyFlightServer
 {
     private static readonly string[] TableTypes = ["TABLE", "VIEW"];
-
-    private const string SchemataSql = "SELECT catalog_name, schema_name FROM information_schema.schemata";
-    private const string TablesSql = "SELECT table_catalog, table_schema, table_name, table_type FROM information_schema.tables";
-
-    private const string PrimaryKeysSql =
-        "SELECT kcu.table_catalog, kcu.table_schema, kcu.table_name, kcu.column_name, kcu.constraint_name, kcu.ordinal_position " +
-        "FROM information_schema.table_constraints tc " +
-        "JOIN information_schema.key_column_usage kcu " +
-        "ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema AND tc.table_name = kcu.table_name " +
-        "WHERE tc.constraint_type = 'PRIMARY KEY'";
 
     private static readonly Schema CatalogsSchema = new([Str("catalog_name", false)], null);
     private static readonly Schema DbSchemasSchema = new([Str("catalog_name", true), Str("db_schema_name", false)], null);
@@ -66,7 +56,10 @@ public sealed partial class ProxyFlightServer
 
     protected override async Task DoGetCatalog(CommandGetCatalogs command, FlightServerRecordBatchStreamWriter writer, ServerCallContext context)
     {
-        var rows = await LoadSchemataAsync(ResolveSource(context), context.CancellationToken).ConfigureAwait(false);
+        var source = ResolveSource(context);
+        // A catalog is any the source reports a schema or a table in (ODBC drivers such as the text driver have tables in a catalog and no schema at all).
+        var rows = (await LoadSchemataAsync(source, context.CancellationToken).ConfigureAwait(false))
+            .Concat(await LoadTablesAsync(source, context.CancellationToken).ConfigureAwait(false));
         var catalogs = rows.Select(r => r[0]).Where(c => c is not null).Distinct(StringComparer.Ordinal).OrderBy(c => c, StringComparer.Ordinal).ToList();
         await WriteAsync(writer, CatalogsSchema, [Strings(catalogs)], catalogs.Count).ConfigureAwait(false);
     }
@@ -92,7 +85,7 @@ public sealed partial class ProxyFlightServer
         var wantedTypes = command.TableTypes.Count == 0 ? null : command.TableTypes.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var rows = (await LoadTablesAsync(source, context.CancellationToken).ConfigureAwait(false))
-            .Select(r => new[] { r[0], r[1], r[2], FlightTableType(r[3]) })
+            .Select(r => new[] { r[0], r[1], r[2], r[3] })
             .Where(r => r[2] is not null && r[3] is not null
                         && (!command.HasCatalog || r[0] == command.Catalog)
                         && schemaFilter(r[1] ?? "") && tableFilter(r[2]!)
@@ -107,7 +100,7 @@ public sealed partial class ProxyFlightServer
         if (command.IncludeSchema)
         {
             var dialect = await LoadQuotingDialectAsync(source, context.CancellationToken).ConfigureAwait(false);
-            var declared = await LoadDeclaredColumnsAsync(source, context.CancellationToken).ConfigureAwait(false);
+            var declared = LoadDeclaredColumns(source);
             var builder = new BinaryArray.Builder();
             foreach (var r in rows)
                 builder.Append((ReadOnlySpan<byte>)await SerializedTableSchemaAsync(source, dialect, declared, r[0], r[1], r[2]!, context.CancellationToken).ConfigureAwait(false));
@@ -313,21 +306,11 @@ public sealed partial class ProxyFlightServer
         await writer.WriteAsync(new RecordBatch(schema, columns, length)).ConfigureAwait(false);
     }
 
-    /// <summary>SQL LIKE patterns (% and _) as a case-insensitive matcher; null matches everything.</summary>
-    private static Func<string, bool> Pattern(string? like)
-    {
-        if (string.IsNullOrEmpty(like)) return _ => true;
-        var regex = new Regex("^" + Regex.Escape(like).Replace("%", ".*").Replace("_", ".") + "$",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Singleline);
-        return regex.IsMatch;
-    }
-
-    private static string? FlightTableType(string? databaseType) => databaseType?.ToUpperInvariant() switch
-    {
-        "BASE TABLE" => "TABLE",
-        null => null,
-        var other => other,
-    };
+    /// <summary>
+    /// SQL LIKE patterns as a case-insensitive matcher; null matches everything. The shared matcher is linear (a hostile pattern cannot make it backtrack, which
+    /// the regular expression this replaces could) and honours the backslash escape of the ODBC and JDBC catalog functions (<c>\_</c> is a literal underscore).
+    /// </summary>
+    private static Func<string, bool> Pattern(string? like) => DbDataKit.Metadata.LikePattern.Compile(like);
 
     private ResolvedDataSource ResolveSource(ServerCallContext context) =>
         catalog.Resolve(context.GetPrincipal(), context.RequestHeaders.GetValue(DataSourceHeader));
@@ -340,26 +323,28 @@ public sealed partial class ProxyFlightServer
         _ => source.Options.Provider.Equals("odbc", StringComparison.OrdinalIgnoreCase),
     };
 
+    private IMetadataProvider MetadataOf(ResolvedDataSource source) =>
+        source.Executor as IMetadataProvider
+        ?? throw new RpcException(new Status(StatusCode.Unimplemented, $"Data source '{source.Name}' cannot list its catalog."));
+
     private async Task<List<string?[]>> LoadSchemataAsync(ResolvedDataSource source, CancellationToken cancellationToken)
     {
-        if (!UseCatalogApi(source))
-            return await QueryRowsAsync(source, SchemataSql, cancellationToken).ConfigureAwait(false);
-
-        // The ODBC catalog API has no separate schema listing here; the schemas are those that contain tables.
-        var tables = await LoadTablesAsync(source, cancellationToken).ConfigureAwait(false);
-        return tables.Select(t => new[] { t[0], t[1] }).DistinctBy(r => (r[0], r[1])).ToList();
+        try
+        {
+            var schemas = await MetadataOf(source).ListSchemasAsync(source.Options.CommandTimeoutSeconds, cancellationToken).ConfigureAwait(false);
+            return schemas.Select(s => new string?[] { s.Catalog, s.Name }).ToList();
+        }
+        catch (Exception ex) when (ex is not RpcException and not OperationCanceledException)
+        {
+            throw Fail(ex);
+        }
     }
 
     private async Task<List<string?[]>> LoadTablesAsync(ResolvedDataSource source, CancellationToken cancellationToken)
     {
-        if (!UseCatalogApi(source))
-            return await QueryRowsAsync(source, TablesSql, cancellationToken).ConfigureAwait(false);
-
-        if (source.Executor is not IMetadataProvider provider)
-            throw new RpcException(new Status(StatusCode.Unimplemented, $"Data source '{source.Name}' cannot list tables through the catalog API."));
         try
         {
-            var tables = await provider.ListTablesAsync(source.Options.CommandTimeoutSeconds, cancellationToken).ConfigureAwait(false);
+            var tables = await MetadataOf(source).ListTablesAsync(source.Options.CommandTimeoutSeconds, cancellationToken).ConfigureAwait(false);
             return tables.Select(t => new string?[] { t.Catalog, t.Schema, t.Name, t.Type }).ToList();
         }
         catch (Exception ex) when (ex is not RpcException and not OperationCanceledException)
@@ -368,41 +353,15 @@ public sealed partial class ProxyFlightServer
         }
     }
 
-    // Sources without INFORMATION_SCHEMA ask the driver (SQLPrimaryKeys) for the one table named in the command; drivers
-    // that cannot say, or tables without a key, report none. Rows are catalog, schema, table, column, key name, sequence.
-    private async Task<List<string?[]>> LoadPrimaryKeysAsync(
-        ResolvedDataSource source, CommandGetPrimaryKeys command, CancellationToken cancellationToken)
+    // The key of the one table named in the command, from the shared reader (the driver's SQLPrimaryKeys for ODBC); drivers that cannot say, or tables
+    // without a key, report none. Rows are catalog, schema, table, column, key name, sequence.
+    private async Task<List<string?[]>> LoadPrimaryKeysAsync(ResolvedDataSource source, CommandGetPrimaryKeys command, CancellationToken cancellationToken)
     {
-        if (!UseCatalogApi(source)) return await QueryRowsAsync(source, PrimaryKeysSql, cancellationToken).ConfigureAwait(false);
-        if (source.Executor is not IMetadataProvider provider) return [];
         try
         {
-            var keys = await provider.ListPrimaryKeysAsync(
+            var keys = await MetadataOf(source).ListPrimaryKeysAsync(
                 command.HasCatalog ? command.Catalog : null, command.HasDbSchema ? command.DbSchema : null, command.Table, cancellationToken).ConfigureAwait(false);
             return keys.Select(k => new string?[] { k.Catalog, k.Schema, k.Table, k.Column, k.KeyName, k.Sequence.ToString(System.Globalization.CultureInfo.InvariantCulture) }).ToList();
-        }
-        catch (Exception ex) when (ex is not RpcException and not OperationCanceledException)
-        {
-            throw Fail(ex);
-        }
-    }
-
-    private async Task<List<string?[]>> QueryRowsAsync(ResolvedDataSource source, string sql, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await using var result = await source.Executor
-                .ExecuteQueryAsync(new QueryRequest(sql, 4096, source.Options.CommandTimeoutSeconds), cancellationToken)
-                .ConfigureAwait(false);
-            var rows = new List<string?[]>();
-            await foreach (var batch in result.ReadBatchesAsync(cancellationToken).ConfigureAwait(false))
-                for (int r = 0; r < batch.Length; r++)
-                {
-                    var row = new string?[batch.ColumnCount];
-                    for (int c = 0; c < row.Length; c++) row[c] = ArrowText.Get(batch.Column(c), r);
-                    rows.Add(row);
-                }
-            return rows;
         }
         catch (Exception ex) when (ex is not RpcException and not OperationCanceledException)
         {
@@ -414,43 +373,18 @@ public sealed partial class ProxyFlightServer
     private delegate Task<IReadOnlyDictionary<string, ColumnEntry>?> DeclaredColumns(
         string? catalogName, string? schemaName, string table, CancellationToken cancellationToken);
 
-    private const string ColumnsSql =
-        "SELECT table_catalog, table_schema, table_name, column_name, is_nullable, numeric_precision, numeric_scale FROM information_schema.columns";
-
     /// <summary>
-    /// A zero-row query cannot always say how a column was declared (DuckDB reports every decimal as 0/0, nothing says
-    /// NOT NULL), so precision, scale and nullability come from the catalog: INFORMATION_SCHEMA, or SQLColumns for ODBC.
+    /// A zero-row query cannot always say how a column was declared (DuckDB reports every decimal as 0/0, nothing says NOT NULL), so precision, scale and
+    /// nullability come from the catalog reader, one table at a time. A source whose catalog cannot be read keeps what the zero-row query reported.
     /// </summary>
-    private async Task<DeclaredColumns> LoadDeclaredColumnsAsync(ResolvedDataSource source, CancellationToken cancellationToken)
+    private static DeclaredColumns LoadDeclaredColumns(ResolvedDataSource source)
     {
-        if (UseCatalogApi(source))
+        if (source.Executor is not IMetadataProvider provider) return (_, _, _, _) => Task.FromResult<IReadOnlyDictionary<string, ColumnEntry>?>(null);
+        return async (catalogName, schemaName, table, ct) =>
         {
-            if (source.Executor is not IMetadataProvider provider) return (_, _, _, _) => Task.FromResult<IReadOnlyDictionary<string, ColumnEntry>?>(null);
-            return async (catalogName, schemaName, table, ct) =>
-            {
-                try { return ByName(await provider.ListColumnsAsync(catalogName, schemaName, table, ct).ConfigureAwait(false)); }
-                catch (Exception ex) when (ex is not OperationCanceledException) { return null; }
-            };
-        }
-
-        Dictionary<(string?, string?, string), List<ColumnEntry>> byTable = [];
-        try
-        {
-            foreach (var r in await QueryRowsAsync(source, ColumnsSql, cancellationToken).ConfigureAwait(false))
-            {
-                if (r[2] is not { } tableName || r[3] is not { } columnName) continue;
-                var key = (r[0], r[1], tableName);
-                if (!byTable.TryGetValue(key, out var list)) byTable[key] = list = [];
-                list.Add(new ColumnEntry(columnName,!string.Equals(r[4], "NO", StringComparison.OrdinalIgnoreCase),
-                    int.TryParse(r[5], out int p) ? p : null, int.TryParse(r[6], out int s) ? s : null));
-            }
-        }
-        catch (RpcException)
-        {
-            // No INFORMATION_SCHEMA.COLUMNS: keep what the zero-row query reported.
-        }
-        return (catalogName, schemaName, table, _) => Task.FromResult<IReadOnlyDictionary<string, ColumnEntry>?>(
-            byTable.TryGetValue((catalogName, schemaName, table), out var columns) ? ByName(columns) : null);
+            try { return ByName(await provider.ListColumnsAsync(catalogName, schemaName, table, ct).ConfigureAwait(false)); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { return null; }
+        };
     }
 
     private static Dictionary<string, ColumnEntry> ByName(IEnumerable<ColumnEntry> columns)

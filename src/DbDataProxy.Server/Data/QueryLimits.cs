@@ -76,6 +76,9 @@ public sealed class LimitedExecutor(IQueryExecutor inner, ConcurrencyGate gate, 
     public Task<long> ExecuteNonQueryAsync(QueryRequest request, CancellationToken cancellationToken) =>
         RunAsync(() => inner.ExecuteNonQueryAsync(request, cancellationToken), cancellationToken);
 
+    public Task<IReadOnlyList<SchemaEntry>> ListSchemasAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken) =>
+        RunAsync(() => Metadata.ListSchemasAsync(commandTimeoutSeconds, cancellationToken), cancellationToken);
+
     public Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken) =>
         RunAsync(() => Metadata.ListTablesAsync(commandTimeoutSeconds, cancellationToken), cancellationToken);
 

@@ -86,7 +86,7 @@ public class DataSourceCatalogTests
     {
         public string? LastConnectionString;
         public bool? LastReadOnly;
-        public IQueryExecutor Create(string connectionString, bool readOnly = false)
+        public IQueryExecutor Create(string connectionString, bool readOnly = false, string? metadataMode = null)
         {
             LastConnectionString = connectionString;
             LastReadOnly = readOnly;

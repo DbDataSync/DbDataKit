@@ -26,6 +26,12 @@ public sealed class SourceConnection
 
     public bool ReadOnly => Context.ReadOnly;
 
+    /// <summary>How catalog metadata is read: "auto" (the ODBC catalog functions for ODBC, INFORMATION_SCHEMA or the engine's views otherwise), "odbc" or "informationschema". Kept in <c>extensions.proxy.metadata</c>.</summary>
+    public string MetadataMode =>
+        Definition.Extensions.Items.TryGetValue("proxy", out var node) && node is YamlMapping map && map.Get("metadata") is YamlScalar scalar && scalar.Value.Length > 0
+            ? scalar.Value.ToLowerInvariant()
+            : "auto";
+
     public ParameterStyle ParameterStyle => Engine == "sqlserver" ? ParameterStyle.NamedAtSign : ParameterStyle.Positional;
 
     /// <summary>Marker scanning, quoting and statement classification for this engine.</summary>
@@ -36,7 +42,7 @@ public sealed class SourceConnection
     /// for pass-through, after credential injection); its explicit TLS and timeout keys are carried into the definition so the composer keeps them.
     /// </summary>
     public static ConnectionDefinition BuildDefinition(
-        string name, string engine, string connectionString, bool readOnly, int? commandTimeoutSeconds = null, YamlNode? proxyExtension = null)
+        string name, string engine, string connectionString, bool readOnly, int? commandTimeoutSeconds = null, YamlNode? proxyExtension = null, string? metadataMode = null)
     {
         var definition = new ConnectionDefinition
         {
@@ -46,6 +52,8 @@ public sealed class SourceConnection
             Tls = ConnectionHints.TlsFrom(engine, connectionString),
             Timeouts = ConnectionHints.TimeoutsFrom(engine, connectionString, commandTimeoutSeconds),
         };
+        if (proxyExtension is null && metadataMode is not null)
+            proxyExtension = new YamlMapping([new YamlEntry(new YamlScalar("metadata", 0, 0), new YamlScalar(metadataMode, 0, 0))], 0, 0);
         if (proxyExtension is not null) definition.Extensions.Items["proxy"] = proxyExtension;
         return definition;
     }
@@ -58,8 +66,8 @@ public sealed class SourceConnection
     }
 
     /// <summary>A source from just a name and string (tests, the worker): definition built with <see cref="BuildDefinition"/>.</summary>
-    public static SourceConnection Create(IDbProvider provider, string name, string connectionString, bool readOnly = false, int? commandTimeoutSeconds = null) =>
-        Create(provider, BuildDefinition(name, provider.Engine.Value, connectionString, readOnly, commandTimeoutSeconds), connectionString);
+    public static SourceConnection Create(IDbProvider provider, string name, string connectionString, bool readOnly = false, int? commandTimeoutSeconds = null, string? metadataMode = null) =>
+        Create(provider, BuildDefinition(name, provider.Engine.Value, connectionString, readOnly, commandTimeoutSeconds, null, metadataMode), connectionString);
 
     /// <summary>Creates, opens and (for read-only sources) sandboxes a connection. Failures arrive as <see cref="ConnectionFailureException"/>.</summary>
     public Task<DbConnection> OpenAsync(CancellationToken cancellationToken) => Provider.OpenAsync(Context, cancellationToken);

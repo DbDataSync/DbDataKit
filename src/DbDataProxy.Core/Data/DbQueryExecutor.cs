@@ -68,13 +68,8 @@ public sealed class DbQueryExecutor(SourceConnection source, FailureTranslator? 
         }
     }
 
-    // The catalog functions go through the shared ODBC metadata package, which makes its own connection from the composed connection string.
-    private bool IsOdbc => source.Engine == "odbc";
-
-    private void RequireOdbc()
-    {
-        if (!IsOdbc) throw new UnsupportedValueException("Catalog-API metadata is only available for ODBC data sources.");
-    }
+    // Catalog metadata comes from the shared catalog readers (see CatalogAccess); failures are translated like any other.
+    private readonly CatalogAccess _catalog = new(source);
 
     private async Task<T> GuardAsync<T>(Func<Task<T>> call)
     {
@@ -86,31 +81,19 @@ public sealed class DbQueryExecutor(SourceConnection source, FailureTranslator? 
         }
     }
 
-    public Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken)
-    {
-        RequireOdbc();
-        return GuardAsync(() => OdbcMetadata.ListTablesAsync(source.Compose(), commandTimeoutSeconds, cancellationToken));
-    }
+    public Task<IReadOnlyList<SchemaEntry>> ListSchemasAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken) =>
+        GuardAsync(() => _catalog.ListSchemasAsync(commandTimeoutSeconds, cancellationToken));
 
-    public Task<IReadOnlyList<ColumnEntry>> ListColumnsAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken)
-    {
-        RequireOdbc();
-        return GuardAsync(() => OdbcMetadata.ListColumnsAsync(source.Compose(), catalog, schema, table, cancellationToken));
-    }
+    public Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken) =>
+        GuardAsync(() => _catalog.ListTablesAsync(commandTimeoutSeconds, cancellationToken));
 
-    public Task<IReadOnlyList<PrimaryKeyEntry>> ListPrimaryKeysAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken)
-    {
-        RequireOdbc();
-        return GuardAsync(() => OdbcMetadata.ListPrimaryKeysAsync(source.Compose(), catalog, schema, table, cancellationToken));
-    }
+    public Task<IReadOnlyList<ColumnEntry>> ListColumnsAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken) =>
+        GuardAsync(() => _catalog.ListColumnsAsync(catalog, schema, table, cancellationToken));
 
-    public Task<DialectInfo> GetDialectAsync(CancellationToken cancellationToken) => GuardAsync(async () =>
-    {
-        if (IsOdbc) return await OdbcMetadata.GetDialectAsync(source.Compose(), cancellationToken).ConfigureAwait(false);
+    public Task<IReadOnlyList<PrimaryKeyEntry>> ListPrimaryKeysAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken) =>
+        GuardAsync(() => _catalog.ListPrimaryKeysAsync(catalog, schema, table, cancellationToken));
 
-        await using var connection = await source.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return new DialectInfo(null, connection.ServerVersion, null);
-    });
+    public Task<DialectInfo> GetDialectAsync(CancellationToken cancellationToken) => GuardAsync(() => _catalog.GetDialectAsync(cancellationToken));
 
     private DbCommand CreateCommand(DbConnection connection, QueryRequest request)
     {

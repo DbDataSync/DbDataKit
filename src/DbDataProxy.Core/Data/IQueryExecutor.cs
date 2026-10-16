@@ -28,21 +28,27 @@ public interface IQueryExecutor
 /// <summary>A table or view as reported by a data source's catalog.</summary>
 public sealed record TableEntry(string? Catalog, string? Schema, string Name, string Type);
 
+/// <summary>A schema as reported by a data source's catalog.</summary>
+public sealed record SchemaEntry(string? Catalog, string Name);
+
 /// <summary>
-/// Lists tables through the driver's catalog API rather than SQL. For ODBC this is SQLTables, so it works for sources
-/// that have no INFORMATION_SCHEMA (text files, Excel, Access, older drivers).
+/// Catalog metadata of one data source, answered by the shared catalog readers (see <see cref="CatalogAccess"/>): through the driver's catalog functions for ODBC
+/// (SQLTables and friends, so text files, Excel, Access and older drivers work) and through INFORMATION_SCHEMA or the engine's catalog views for the others.
 /// </summary>
 public interface IMetadataProvider
 {
+    /// <summary>Every schema the source reports (empty ones and system catalogs included); for ODBC, the schemas that contain tables.</summary>
+    Task<IReadOnlyList<SchemaEntry>> ListSchemasAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken);
 
-    /// <summary>Declared column metadata for one table through the catalog API (ODBC SQLColumns).</summary>
+    /// <summary>Declared column metadata for one table: nullability and decimal precision and scale.</summary>
     Task<IReadOnlyList<ColumnEntry>> ListColumnsAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken);
 
-    /// <summary>Primary key columns of one table through the catalog API (ODBC SQLPrimaryKeys), in key order. Empty when there is none or the driver cannot say.</summary>
+    /// <summary>Primary key columns of one table, in key order. Empty when there is none or the driver cannot say.</summary>
     Task<IReadOnlyList<PrimaryKeyEntry>> ListPrimaryKeysAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken);
 
-    /// <summary>What the database says about itself: product, version and (for ODBC) how it quotes identifiers.</summary>
+    /// <summary>What the database says about itself (the shared <c>ServerFacts</c>): product, version and (for ODBC) how it quotes identifiers.</summary>
     Task<DialectInfo> GetDialectAsync(CancellationToken cancellationToken);
 }
 

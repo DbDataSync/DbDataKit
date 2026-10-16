@@ -16,7 +16,7 @@ public sealed record ResolvedDataSource(string Name, DataSourceOptions Options, 
 /// <summary>Builds executors for the 32-bit ODBC worker; absent when the platform cannot host one.</summary>
 public interface IWorkerExecutorFactory
 {
-    IQueryExecutor Create(string connectionString, bool readOnly = false);
+    IQueryExecutor Create(string connectionString, bool readOnly = false, string? metadataMode = null);
 }
 
 /// <summary>
@@ -115,7 +115,7 @@ public sealed class DataSourceCatalog(
                 throw new RpcException(new Status(StatusCode.Internal, $"Data source '{name}': only ODBC sources can use bitness x86."));
             if (worker is null)
                 throw new RpcException(new Status(StatusCode.Unavailable, "The 32-bit worker is not available on this platform."));
-            return worker.Create(connectionString, connection.ReadOnly);
+            return worker.Create(connectionString, connection.ReadOnly, connection.MetadataMode);
         }
         // Failures leave as kind + code; the redacted driver text goes only to the local log (Proxy:LogDriverErrors).
         return new DbQueryExecutor(connection, new FailureTranslator(

@@ -60,6 +60,19 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
             await ListTablesAsync(action, responseStream, context).ConfigureAwait(false);
             return;
         }
+        if (action.Type == WorkerProtocol.ListSchemasAction)
+        {
+            var schemasRequest = WorkerProtocol.Deserialize(action.Body.Span);
+            IReadOnlyList<SchemaEntry> schemas;
+            try { schemas = await CreateExecutor(schemasRequest).ListSchemasAsync(schemasRequest.TimeoutSeconds, context.CancellationToken).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                throw Fail(ex, "schema listing");
+            }
+            await responseStream.WriteAsync(new FlightResult(ByteString.CopyFrom(
+                System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(schemas, WorkerProtocol.Json)))).ConfigureAwait(false);
+            return;
+        }
         if (action.Type == WorkerProtocol.ListColumnsAction)
         {
             var columnsRequest = System.Text.Json.JsonSerializer.Deserialize<WorkerColumnsRequest>(action.Body.Span, WorkerProtocol.Json)
@@ -67,7 +80,7 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
             IReadOnlyList<ColumnEntry> columns;
             try
             {
-                columns = await CreateExecutor(columnsRequest.ConnectionString, columnsRequest.ReadOnly)
+                columns = await CreateExecutor(columnsRequest.ConnectionString, columnsRequest.ReadOnly, columnsRequest.MetadataMode)
                     .ListColumnsAsync(columnsRequest.Catalog, columnsRequest.Schema, columnsRequest.Table, context.CancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -85,7 +98,7 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
             IReadOnlyList<PrimaryKeyEntry> keys;
             try
             {
-                keys = await CreateExecutor(keysRequest.ConnectionString, keysRequest.ReadOnly)
+                keys = await CreateExecutor(keysRequest.ConnectionString, keysRequest.ReadOnly, keysRequest.MetadataMode)
                     .ListPrimaryKeysAsync(keysRequest.Catalog, keysRequest.Schema, keysRequest.Table, context.CancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -149,12 +162,12 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
 
     // The proxy sends the administrator's string (secrets resolved, pass-through credentials injected); the shared provider composes it here
     // (TLS and timeout defaults, ODBC policy) and opens it, so the 32-bit worker runs the same code path as the in-process ODBC provider.
-    private static SourceConnection Source(string connectionString, bool readOnly) =>
-        SourceConnection.Create(Odbc, "worker", connectionString, readOnly);
+    private static SourceConnection Source(string connectionString, bool readOnly, string? metadataMode) =>
+        SourceConnection.Create(Odbc, "worker", connectionString, readOnly, metadataMode: metadataMode);
 
-    private DbQueryExecutor CreateExecutor(WorkerRequest request) => new(Source(request.ConnectionString, request.ReadOnly), Translator());
+    private DbQueryExecutor CreateExecutor(WorkerRequest request) => new(Source(request.ConnectionString, request.ReadOnly, request.MetadataMode), Translator());
 
-    private DbQueryExecutor CreateExecutor(string connectionString, bool readOnly) => new(Source(connectionString, readOnly), Translator());
+    private DbQueryExecutor CreateExecutor(string connectionString, bool readOnly, string? metadataMode) => new(Source(connectionString, readOnly, metadataMode), Translator());
 
     // Driver errors never leave the worker as text: the executor classifies them (kind and code, from the shared ODBC mapper) and they
     // travel to the proxy as status trailers. The raw text goes to the worker's log, which the proxy folds into its own (redacted) log.

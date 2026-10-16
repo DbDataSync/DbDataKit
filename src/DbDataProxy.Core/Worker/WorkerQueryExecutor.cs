@@ -14,7 +14,7 @@ public interface IWorkerLink
 }
 
 /// <summary>Runs ODBC queries in the 32-bit worker process and streams the Arrow results back.</summary>
-public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionString, bool readOnly = false) : IQueryExecutor, IMetadataProvider
+public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionString, bool readOnly = false, string? metadataMode = null) : IQueryExecutor, IMetadataProvider
 {
     private static readonly DbDataKit.Dialect.EngineId Odbc = new("odbc");
 
@@ -33,7 +33,7 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
     private async Task<IQueryResult> ExecuteQueryAsyncCore(QueryRequest request, CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
-        var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, request.Sql, request.BatchSize, request.CommandTimeoutSeconds, request.Parameters, readOnly));
+        var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, request.Sql, request.BatchSize, request.CommandTimeoutSeconds, request.Parameters, readOnly, metadataMode));
 
         var call = client.GetStream(new FlightTicket(payload), Headers(secret), null, cancellationToken);
         try
@@ -54,7 +54,7 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
     private async Task<long> ExecuteNonQueryAsyncCore(QueryRequest request, CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
-        var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, request.Sql, request.BatchSize, request.CommandTimeoutSeconds, request.Parameters, readOnly));
+        var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, request.Sql, request.BatchSize, request.CommandTimeoutSeconds, request.Parameters, readOnly, metadataMode));
 
         using var call = client.DoAction(new FlightAction(WorkerProtocol.NonQueryAction, payload), Headers(secret), null, cancellationToken);
         long affected = -1;
@@ -63,12 +63,26 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
         return affected;
     }
 
+    public Task<IReadOnlyList<SchemaEntry>> ListSchemasAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken) => GuardAsync(() => ListSchemasAsyncCore(commandTimeoutSeconds, cancellationToken));
+
+    private async Task<IReadOnlyList<SchemaEntry>> ListSchemasAsyncCore(int? commandTimeoutSeconds, CancellationToken cancellationToken)
+    {
+        var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
+        var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, "", 1, commandTimeoutSeconds, null, readOnly, metadataMode));
+
+        using var call = client.DoAction(new FlightAction(WorkerProtocol.ListSchemasAction, payload), Headers(secret), null, cancellationToken);
+        var schemas = new List<SchemaEntry>();
+        await foreach (var result in call.ResponseStream.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            schemas.AddRange(System.Text.Json.JsonSerializer.Deserialize<List<SchemaEntry>>(result.Body.Span, WorkerProtocol.Json) ?? []);
+        return schemas;
+    }
+
     public Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken) => GuardAsync(() => ListTablesAsyncCore(commandTimeoutSeconds, cancellationToken));
 
     private async Task<IReadOnlyList<TableEntry>> ListTablesAsyncCore(int? commandTimeoutSeconds, CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
-        var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, "", 1, commandTimeoutSeconds, null, readOnly));
+        var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, "", 1, commandTimeoutSeconds, null, readOnly, metadataMode));
 
         using var call = client.DoAction(new FlightAction(WorkerProtocol.ListTablesAction, payload), Headers(secret), null, cancellationToken);
         var tables = new List<TableEntry>();
@@ -82,7 +96,7 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
     private async Task<IReadOnlyList<ColumnEntry>> ListColumnsAsyncCore(string? catalog, string? schema, string table, CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
-        var payload = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new WorkerColumnsRequest(connectionString, catalog, schema, table, readOnly), WorkerProtocol.Json);
+        var payload = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new WorkerColumnsRequest(connectionString, catalog, schema, table, readOnly, metadataMode), WorkerProtocol.Json);
 
         using var call = client.DoAction(new FlightAction(WorkerProtocol.ListColumnsAction, payload), Headers(secret), null, cancellationToken);
         var columns = new List<ColumnEntry>();
@@ -96,7 +110,7 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
     private async Task<IReadOnlyList<PrimaryKeyEntry>> ListPrimaryKeysAsyncCore(string? catalog, string? schema, string table, CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
-        var payload = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new WorkerPrimaryKeysRequest(connectionString, catalog, schema, table, readOnly), WorkerProtocol.Json);
+        var payload = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new WorkerPrimaryKeysRequest(connectionString, catalog, schema, table, readOnly, metadataMode), WorkerProtocol.Json);
 
         using var call = client.DoAction(new FlightAction(WorkerProtocol.ListPrimaryKeysAction, payload), Headers(secret), null, cancellationToken);
         var keys = new List<PrimaryKeyEntry>();
@@ -110,7 +124,7 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
     private async Task<DialectInfo> GetDialectAsyncCore(CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
-        var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, "", 1, null, null, readOnly));
+        var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, "", 1, null, null, readOnly, metadataMode));
 
         using var call = client.DoAction(new FlightAction(WorkerProtocol.DialectAction, payload), Headers(secret), null, cancellationToken);
         DialectInfo? dialect = null;

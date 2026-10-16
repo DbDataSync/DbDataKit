@@ -31,7 +31,7 @@ public sealed class WorkerProcessHost(IOptionsMonitor<ProxyOptions> options, ILo
     /// <summary>Process id of the running worker, or null when none is running.</summary>
     public int? WorkerProcessId => _child is { Exited.IsCompleted: false } c ? c.ProcessId : null;
 
-    public IQueryExecutor Create(string connectionString, bool readOnly = false) => new WorkerQueryExecutor(this, connectionString, readOnly);
+    public IQueryExecutor Create(string connectionString, bool readOnly = false, string? metadataMode = null) => new WorkerQueryExecutor(this, connectionString, readOnly, metadataMode);
 
     public async ValueTask<(FlightClient Client, string Secret)> GetAsync(CancellationToken cancellationToken)
     {
