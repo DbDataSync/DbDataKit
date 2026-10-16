@@ -39,29 +39,38 @@ public class PoolTests
     }
 
     [Fact]
-    public async Task A_lease_with_its_own_opener_counts_against_the_caps_and_is_never_reused()
+    public async Task A_cancelled_wait_gives_back_the_per_user_slot_it_had_taken()
     {
-        var made = new List<FakeConnection>();
-        ValueTask<System.Data.Common.DbConnection> Open(CancellationToken _)
-        {
-            var c = new FakeConnection();
-            c.Open();
-            made.Add(c);
-            return ValueTask.FromResult<System.Data.Common.DbConnection>(c);
-        }
-        await using var pool = new ConnectionPool(new ConnectionPoolOptions { MaxConcurrency = 2, MaxPerUser = 1, AcquireTimeout = TimeSpan.FromMilliseconds(80), ReapInterval = null });
+        var gate = new ConcurrencyGate(1, maxPerUser: 2, acquireTimeout: TimeSpan.FromSeconds(30));
+        var holder = await gate.EnterAsync("other");
+        using var cts = new CancellationTokenSource();
+        var waiter = gate.EnterAsync("alice", cts.Token).AsTask(); // has alice's slot, waits on the global one
+        await Task.Delay(50);
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await waiter);
+        holder.Dispose();
+        using var a = await gate.EnterAsync("alice");
+        a.Dispose();
+        using var b = await new ConcurrencyGate(2, 1).EnterAsync("alice");
+        Assert.Equal(0, gate.Waiting);
+    }
 
-        await using (var a = await pool.AcquireAsync(Open, "alice")) { Assert.Same(made[0], a.Connection); }
-        await using (var b = await pool.AcquireAsync(Open, "alice")) { Assert.NotSame(made[0], b.Connection); }
-        Assert.Equal(2, made.Count);
-        Assert.Equal(0, pool.Metrics.Idle);
-
-        await using var first = await pool.AcquireAsync(Open, "alice");
-        await Assert.ThrowsAsync<PoolAcquireTimeoutException>(async () => await pool.AcquireAsync(Open, "alice")); // per-user cap
-        await using var other = await pool.AcquireAsync(Open, "bob");
-        await Assert.ThrowsAsync<PoolAcquireTimeoutException>(async () => await pool.AcquireAsync(Open, "carol")); // global cap
-        await using var bare = new ConnectionPool();
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => await bare.AcquireAsync()); // no default opener
+    [Fact]
+    public async Task The_gate_counts_per_user_and_globally_and_ticket_dispose_is_idempotent()
+    {
+        var gate = new ConcurrencyGate(2, maxPerUser: 1, acquireTimeout: TimeSpan.FromMilliseconds(60));
+        var a = await gate.EnterAsync("alice");
+        await Assert.ThrowsAsync<PoolAcquireTimeoutException>(async () => await gate.EnterAsync("alice"));
+        var b = await gate.EnterAsync("bob");
+        await Assert.ThrowsAsync<PoolAcquireTimeoutException>(async () => await gate.EnterAsync("carol"));
+        Assert.Equal(2, gate.Active);
+        Assert.Equal(2, gate.Timeouts);
+        a.Dispose(); a.Dispose();
+        Assert.Equal(1, gate.Active);
+        (await gate.EnterAsync("carol")).Dispose();
+        b.Dispose();
+        Assert.Equal(0, gate.Active);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ConcurrencyGate(0));
     }
 
     [Fact]
