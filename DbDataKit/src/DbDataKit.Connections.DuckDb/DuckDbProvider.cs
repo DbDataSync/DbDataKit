@@ -8,8 +8,10 @@ namespace DbDataKit.Connections.DuckDb;
 /// DuckDB composer: <c>address.database</c> is the file path (or <c>:memory:</c>); there is no host, port, TLS or login. A login that
 /// carries credentials is refused rather than ignored. A read-only context adds <c>access_mode=READ_ONLY</c>.
 /// </summary>
-public sealed class DuckDbComposer() : BuilderComposer(EngineId.DuckDb)
+public sealed class DuckDbComposer(ReadOnlySession? recipe = null) : BuilderComposer(EngineId.DuckDb)
 {
+    private readonly ReadOnlySession _recipe = recipe ?? DuckDbProvider.ReadOnlyRecipe;
+
     protected override DbConnectionStringBuilder NewBuilder() => new DuckDBConnectionStringBuilder();
     protected override string UserKey => "user";
     protected override string PasswordKey => "password";
@@ -22,8 +24,26 @@ public sealed class DuckDbComposer() : BuilderComposer(EngineId.DuckDb)
         if (a.Database is not null) bag.Set("Data Source", a.Database);
     }
 
-    protected override IEnumerable<KeyValuePair<string, string>> ReadOnlyKeys(IKeyBag bag, ConnectionContext ctx) =>
-        DuckDbProvider.ReadOnlyRecipe.ConnectionStringKeys;
+    /// <summary>
+    /// <c>access_mode=READ_ONLY</c> needs a file: DuckDB refuses it for an in-memory database, which has nothing to protect anyway
+    /// (it is empty and private to the connection), so the key is left out there and the SET statements still run.
+    /// </summary>
+    protected override IEnumerable<KeyValuePair<string, string>> ReadOnlyKeys(IKeyBag bag, ConnectionContext ctx)
+    {
+        if (!bag.TryGet("Data Source", out var path) || DuckDbProvider.IsInMemory(path)) return [];
+        return _recipe.ConnectionStringKeys;
+    }
+}
+
+/// <summary>
+/// Per source exceptions to the sandbox. <see cref="AllowedDirectories"/> keeps external access off but lets queries read (and, for a
+/// read-write source, write) files below the listed directories, for example a source that deliberately reads a Parquet folder.
+/// Everything else (other paths, <c>ATTACH</c> of an arbitrary file, extension install and load, changing a setting) stays blocked.
+/// </summary>
+public sealed record DuckDbSandboxOptions
+{
+    /// <summary>Absolute directories. Each is set through <c>allowed_directories</c>; relative paths, control characters and empty entries are refused.</summary>
+    public IReadOnlyList<string> AllowedDirectories { get; init; } = [];
 }
 
 /// <summary>Maps DuckDB error classes (the text before the first colon of the message, from a fixed vocabulary) to kinds. The message itself is never kept.</summary>
@@ -79,6 +99,44 @@ public sealed class DuckDbProvider : DbProviderBase
 
     public DuckDbProvider(DialectCatalog? dialects = null)
         : base(EngineId.DuckDb, new DuckDbComposer(), ReadOnlyRecipe, new DuckDbFailureMapper(), dialects) { }
+
+    /// <summary>A provider whose sandbox allows reading below <see cref="DuckDbSandboxOptions.AllowedDirectories"/> (see <see cref="Recipe"/>).</summary>
+    public DuckDbProvider(DuckDbSandboxOptions sandbox, DialectCatalog? dialects = null)
+        : this(Recipe(sandbox), dialects) { }
+
+    private DuckDbProvider(ReadOnlySession recipe, DialectCatalog? dialects)
+        : base(EngineId.DuckDb, new DuckDbComposer(recipe), recipe, new DuckDbFailureMapper(), dialects) { }
+
+    /// <summary>True for <c>:memory:</c>, an empty path and the other spellings of a private in-memory database.</summary>
+    public static bool IsInMemory(string? dataSource) =>
+        string.IsNullOrWhiteSpace(dataSource) || dataSource.Trim().StartsWith(":memory:", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The recipe for <paramref name="sandbox"/>: the standard one with <c>SET allowed_directories</c> placed before external access is turned
+    /// off (DuckDB takes the list while the configuration is still open) and the lock still last.
+    /// </summary>
+    public static ReadOnlySession Recipe(DuckDbSandboxOptions? sandbox)
+    {
+        if (sandbox is null || sandbox.AllowedDirectories.Count == 0) return ReadOnlyRecipe;
+        var statements = new List<string> { AllowedDirectoriesStatement(sandbox.AllowedDirectories) };
+        statements.AddRange(ReadOnlyRecipe.Statements);
+        return new ReadOnlySession("duckdb", ReadOnlyEnforcement.Engine, statements, ReadOnlyRecipe.ConnectionStringKeys,
+            ReadOnlyRecipe.Notes + " Reads below the allowed directories are permitted.");
+    }
+
+    /// <summary>The <c>SET allowed_directories</c> statement for a validated list. Quotes are doubled; names with control characters or relative paths are refused.</summary>
+    public static string AllowedDirectoriesStatement(IReadOnlyList<string> directories)
+    {
+        var items = new List<string>();
+        foreach (var d in directories)
+        {
+            if (string.IsNullOrWhiteSpace(d)) throw new ConnectionPolicyException("allowed directory is empty");
+            if (d.Any(char.IsControl)) throw new ConnectionPolicyException("allowed directory has a control character");
+            if (!Path.IsPathFullyQualified(d)) throw new ConnectionPolicyException("allowed directory must be an absolute path", d);
+            items.Add("'" + d.Replace('\\', '/').Replace("'", "''", StringComparison.Ordinal) + "'");
+        }
+        return "SET allowed_directories = [" + string.Join(", ", items) + "]";
+    }
 
     protected override DbConnection NewConnection(string connectionString, ConnectionContext context) => new DuckDBConnection(connectionString);
 }

@@ -10,7 +10,7 @@ Registry, composers, login resolution, parameter adapter and pool for Plan 06.
 - `ApplyPassThroughCredentials`: strips every integrated-security key (Trusted_Connection, Integrated Security, Authentication, Kerberos and GSS keywords, client certificates, passfile), sets the client's user and password, asserts none remain, caps lengths, refuses control characters. Hostile input such as `x};Driver={evil};UID={` stays one value.
 - `LoginResolver`: read order is `read_login`, `DBDATA_<APP>_<CONN>_READ`, legacy `DBDATABUILD_<CONN>_READ` (Build only, through the Secrets `LegacyEnvProvider`), then `auth`. Write mirrors it; write on a read-only connection is refused; read never looks at anything write.
 - `ParameterStyleAdapter`: `@name`, `:name` or `$n` to `?` with the Plan 05 lexer (markers in strings, comments and quoted identifiers are left alone), returns the binding order; `PositionalCommand.Bind` adds one parameter per marker.
-- `ConnectionPool` / `ConnectionLease`: global and per-user concurrency caps, acquire timeout (`PoolAcquireTimeoutException`), default command timeout, reuse of opened connections with idle reaping, metrics. It sits on top of the provider's own pool.
+- `ConnectionPool` / `ConnectionLease`: global and per-user concurrency caps, acquire timeout (`PoolAcquireTimeoutException`), default command timeout, reuse of opened connections with idle reaping, metrics. It sits on top of the provider's own pool. `AcquireAsync(open, userKey)` takes a lease whose connection comes from the caller's own opener (pass-through: credentials differ per caller): caps and timeout apply, the connection is never reused; `new ConnectionPool(options)` is a pool with no default opener, used only this way (added for Proxy).
 
 ## Decisions
 

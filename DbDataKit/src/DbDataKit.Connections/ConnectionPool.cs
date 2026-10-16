@@ -33,6 +33,11 @@ public interface IConnectionPool : IAsyncDisposable
     PoolMetrics Metrics { get; }
     /// <param name="userKey">Counts against <see cref="ConnectionPoolOptions.MaxPerUser"/>. Never used as part of reuse: idle connections are not shared across pass-through users when reuse is off.</param>
     ValueTask<ConnectionLease> AcquireAsync(string? userKey = null, CancellationToken ct = default);
+    /// <summary>
+    /// Takes a lease whose connection comes from <paramref name="open"/> instead of the pool's own opener (pass-through: the credentials differ per
+    /// caller). The caps and the acquire timeout apply as usual; the connection is never taken from or returned to the idle list, so it cannot cross users.
+    /// </summary>
+    ValueTask<ConnectionLease> AcquireAsync(Func<CancellationToken, ValueTask<DbConnection>> open, string? userKey = null, CancellationToken ct = default);
     /// <summary>Closes idle connections past the idle timeout; returns how many.</summary>
     int ReapIdle();
 }
@@ -44,14 +49,15 @@ public sealed class ConnectionLease : IAsyncDisposable
     private readonly string? _user;
     private int _released;
 
-    internal ConnectionLease(ConnectionPool pool, DbConnection connection, string? user, int commandTimeoutSeconds)
+    internal ConnectionLease(ConnectionPool pool, DbConnection connection, string? user, int commandTimeoutSeconds, bool reusable = true)
     {
-        _pool = pool; Connection = connection; _user = user; DefaultCommandTimeoutSeconds = commandTimeoutSeconds;
+        _pool = pool; Connection = connection; _user = user; DefaultCommandTimeoutSeconds = commandTimeoutSeconds; Reusable = reusable;
     }
 
     public DbConnection Connection { get; }
     public int DefaultCommandTimeoutSeconds { get; }
     internal bool Broken { get; private set; }
+    internal bool Reusable { get; }
 
     /// <summary>Marks the connection as unusable (after a failure or cancellation); it will be closed, not reused.</summary>
     public void Invalidate() => Broken = true;
@@ -86,6 +92,10 @@ public sealed class ConnectionPool : IConnectionPool
     private long _acquired, _created, _reaped, _timeouts, _discarded;
     private bool _disposed;
 
+    /// <summary>A pool with no opener of its own: every lease comes through <see cref="AcquireAsync(Func{CancellationToken, ValueTask{DbConnection}}, string?, CancellationToken)"/>.</summary>
+    public ConnectionPool(ConnectionPoolOptions? options = null)
+        : this(static _ => throw new InvalidOperationException("This pool has no default opener; acquire with an opener."), (options ?? new()) with { MaxIdle = 0, ReapInterval = null }) { }
+
     public ConnectionPool(Func<CancellationToken, ValueTask<DbConnection>> open, ConnectionPoolOptions? options = null)
     {
         _open = open ?? throw new ArgumentNullException(nameof(open));
@@ -105,7 +115,12 @@ public sealed class ConnectionPool : IConnectionPool
         }
     }
 
-    public async ValueTask<ConnectionLease> AcquireAsync(string? userKey = null, CancellationToken ct = default)
+    public ValueTask<ConnectionLease> AcquireAsync(string? userKey = null, CancellationToken ct = default) => AcquireCoreAsync(null, userKey, ct);
+
+    public ValueTask<ConnectionLease> AcquireAsync(Func<CancellationToken, ValueTask<DbConnection>> open, string? userKey = null, CancellationToken ct = default) =>
+        AcquireCoreAsync(open ?? throw new ArgumentNullException(nameof(open)), userKey, ct);
+
+    private async ValueTask<ConnectionLease> AcquireCoreAsync(Func<CancellationToken, ValueTask<DbConnection>>? custom, string? userKey, CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         var started = _o.TimeProvider.GetTimestamp();
@@ -132,10 +147,12 @@ public sealed class ConnectionPool : IConnectionPool
 
         try
         {
-            var connection = TakeIdle() ?? await OpenNewAsync(ct).ConfigureAwait(false);
+            var connection = custom is null
+                ? TakeIdle() ?? await OpenNewAsync(_open, ct).ConfigureAwait(false)
+                : await OpenNewAsync(custom, ct).ConfigureAwait(false);
             Interlocked.Increment(ref _active);
             Interlocked.Increment(ref _acquired);
-            return new ConnectionLease(this, connection, userKey, _o.DefaultCommandTimeoutSeconds);
+            return new ConnectionLease(this, connection, userKey, _o.DefaultCommandTimeoutSeconds, reusable: custom is null);
         }
         catch
         {
@@ -145,9 +162,9 @@ public sealed class ConnectionPool : IConnectionPool
         }
     }
 
-    private async ValueTask<DbConnection> OpenNewAsync(CancellationToken ct)
+    private async ValueTask<DbConnection> OpenNewAsync(Func<CancellationToken, ValueTask<DbConnection>> open, CancellationToken ct)
     {
-        var c = await _open(ct).ConfigureAwait(false);
+        var c = await open(ct).ConfigureAwait(false);
         Interlocked.Increment(ref _created);
         return c;
     }
@@ -171,7 +188,7 @@ public sealed class ConnectionPool : IConnectionPool
     internal async ValueTask ReleaseAsync(ConnectionLease lease, string? user)
     {
         Interlocked.Decrement(ref _active);
-        bool keep = !lease.Broken && !_disposed && _o.MaxIdle > 0 && lease.Connection.State == System.Data.ConnectionState.Open;
+        bool keep = lease.Reusable && !lease.Broken && !_disposed && _o.MaxIdle > 0 && lease.Connection.State == System.Data.ConnectionState.Open;
         if (keep)
         {
             lock (_gate)

@@ -39,6 +39,32 @@ public class PoolTests
     }
 
     [Fact]
+    public async Task A_lease_with_its_own_opener_counts_against_the_caps_and_is_never_reused()
+    {
+        var made = new List<FakeConnection>();
+        ValueTask<System.Data.Common.DbConnection> Open(CancellationToken _)
+        {
+            var c = new FakeConnection();
+            c.Open();
+            made.Add(c);
+            return ValueTask.FromResult<System.Data.Common.DbConnection>(c);
+        }
+        await using var pool = new ConnectionPool(new ConnectionPoolOptions { MaxConcurrency = 2, MaxPerUser = 1, AcquireTimeout = TimeSpan.FromMilliseconds(80), ReapInterval = null });
+
+        await using (var a = await pool.AcquireAsync(Open, "alice")) { Assert.Same(made[0], a.Connection); }
+        await using (var b = await pool.AcquireAsync(Open, "alice")) { Assert.NotSame(made[0], b.Connection); }
+        Assert.Equal(2, made.Count);
+        Assert.Equal(0, pool.Metrics.Idle);
+
+        await using var first = await pool.AcquireAsync(Open, "alice");
+        await Assert.ThrowsAsync<PoolAcquireTimeoutException>(async () => await pool.AcquireAsync(Open, "alice")); // per-user cap
+        await using var other = await pool.AcquireAsync(Open, "bob");
+        await Assert.ThrowsAsync<PoolAcquireTimeoutException>(async () => await pool.AcquireAsync(Open, "carol")); // global cap
+        await using var bare = new ConnectionPool();
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await bare.AcquireAsync()); // no default opener
+    }
+
+    [Fact]
     public async Task Concurrency_is_capped_and_waiting_times_out()
     {
         var (pool, _) = Make(new() { MaxConcurrency = 2, AcquireTimeout = TimeSpan.FromMilliseconds(80) });

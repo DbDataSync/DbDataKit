@@ -222,4 +222,56 @@ public class DuckDbTests
         var r = await new DuckDbProvider().TestAsync(Ctx(MakeDatabase(dir)));
         Assert.True(r.Success, r.Failure?.ToString());
     }
+
+    // ---- AllowedDirectories: a deliberate exception, not a blanket off -------------------------------
+
+    [Fact]
+    public async Task Allowed_directories_permit_reads_below_them_and_nothing_else()
+    {
+        using var dir = new TempDir();
+        string db = MakeDatabase(dir);
+        string data = System.IO.Path.Combine(dir.Path, "lake");
+        string elsewhere = System.IO.Path.Combine(dir.Path, "private");
+        Directory.CreateDirectory(data);
+        Directory.CreateDirectory(elsewhere);
+        await File.WriteAllTextAsync(System.IO.Path.Combine(data, "ok.csv"), "a,b\n1,2\n");
+        await File.WriteAllTextAsync(System.IO.Path.Combine(elsewhere, "no.csv"), "a,b\n1,2\n");
+        string F(string p) => p.Replace('\\', '/');
+
+        var provider = new DuckDbProvider(new DuckDbSandboxOptions { AllowedDirectories = [data] });
+        await using var c = await provider.OpenAsync(Ctx(db));
+
+        Assert.Null(await TryRun(c, $"SELECT * FROM read_csv('{F(System.IO.Path.Combine(data, "ok.csv"))}')"));
+        Assert.NotNull(await TryRun(c, $"SELECT * FROM read_csv('{F(System.IO.Path.Combine(elsewhere, "no.csv"))}')"));
+        Assert.NotNull(await TryRun(c, $"ATTACH '{F(System.IO.Path.Combine(elsewhere, "x.duckdb"))}' AS o"));
+        Assert.NotNull(await TryRun(c, "INSTALL httpfs"));
+        Assert.NotNull(await TryRun(c, "SET allowed_directories = []"));
+        Assert.NotNull(await TryRun(c, "SET enable_external_access = true"));
+        Assert.NotNull(await TryRun(c, "INSERT INTO t VALUES (4)"));
+    }
+
+    [Theory]
+    [InlineData("relative/dir")]
+    [InlineData("")]
+    public void Allowed_directories_must_be_absolute_and_clean(string directory) =>
+        Assert.Throws<ConnectionPolicyException>(() => DuckDbProvider.AllowedDirectoriesStatement([directory]));
+
+    [Fact]
+    public void Allowed_directory_quotes_are_doubled()
+    {
+        string root = OperatingSystem.IsWindows() ? "C:/" : "/";
+        Assert.Equal($"SET allowed_directories = ['{root}it''s']", DuckDbProvider.AllowedDirectoriesStatement([root + "it's"]));
+    }
+
+    [Fact]
+    public async Task An_in_memory_database_works_read_only_with_the_rest_of_the_recipe()
+    {
+        var p = new DuckDbProvider();
+        var ctx = Ctx(":memory:");
+        Assert.DoesNotContain("access_mode", p.Composer.Compose(ctx), StringComparison.OrdinalIgnoreCase);
+        await using var c = await p.OpenAsync(ctx);
+        Assert.Null(await TryRun(c, "SELECT 1"));
+        Assert.NotNull(await TryRun(c, "INSTALL httpfs"));
+        Assert.NotNull(await TryRun(c, "SET enable_external_access = true"));
+    }
 }

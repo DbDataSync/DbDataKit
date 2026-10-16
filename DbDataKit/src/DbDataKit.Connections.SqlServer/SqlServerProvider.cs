@@ -26,7 +26,9 @@ public sealed class SqlServerComposer() : BuilderComposer(EngineId.SqlServer)
 
     protected override void ApplyTls(IKeyBag bag, TlsSpec tls, ConnectionContext ctx)
     {
-        bag.Set("Encrypt", tls.Encrypt ? "Mandatory" : "Optional");
+        // An administrator string that asks for TDS 8.0 (Encrypt=Strict) keeps it: Strict is stronger than Mandatory, never weaker.
+        bool strict = tls.Encrypt && bag.TryGet("Encrypt", out var current) && string.Equals(current, "Strict", StringComparison.OrdinalIgnoreCase);
+        bag.Set("Encrypt", strict ? "Strict" : tls.Encrypt ? "Mandatory" : "Optional");
         bag.Set("Trust Server Certificate", tls.EffectiveVerify ? "False" : "True");
         if (tls.CaFile is not null && tls.EffectiveVerify) bag.Set("Server Certificate", tls.CaFile);
     }
