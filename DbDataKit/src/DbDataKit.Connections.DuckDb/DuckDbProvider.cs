@@ -97,15 +97,15 @@ public sealed class DuckDbProvider : DbProviderBase
         new Dictionary<string, string> { ["access_mode"] = "READ_ONLY" },
         "Engine enforced. An in-memory database cannot be opened read-only; use a file.");
 
-    public DuckDbProvider(DialectCatalog? dialects = null)
-        : base(EngineId.DuckDb, new DuckDbComposer(), ReadOnlyRecipe, new DuckDbFailureMapper(), dialects) { }
+    public DuckDbProvider(DialectCatalog? dialects = null, DbDataKit.Secrets.IRedactor? redactor = null, bool includeRawFailures = false)
+        : base(EngineId.DuckDb, new DuckDbComposer(), ReadOnlyRecipe, new DuckDbFailureMapper(), dialects, redactor, includeRawFailures) { }
 
     /// <summary>A provider whose sandbox allows reading below <see cref="DuckDbSandboxOptions.AllowedDirectories"/> (see <see cref="Recipe"/>).</summary>
-    public DuckDbProvider(DuckDbSandboxOptions sandbox, DialectCatalog? dialects = null)
-        : this(Recipe(sandbox), dialects) { }
+    public DuckDbProvider(DuckDbSandboxOptions sandbox, DialectCatalog? dialects = null, DbDataKit.Secrets.IRedactor? redactor = null, bool includeRawFailures = false)
+        : this(Recipe(sandbox), dialects, redactor, includeRawFailures) { }
 
-    private DuckDbProvider(ReadOnlySession recipe, DialectCatalog? dialects)
-        : base(EngineId.DuckDb, new DuckDbComposer(recipe), recipe, new DuckDbFailureMapper(), dialects) { }
+    private DuckDbProvider(ReadOnlySession recipe, DialectCatalog? dialects, DbDataKit.Secrets.IRedactor? redactor, bool includeRawFailures)
+        : base(EngineId.DuckDb, new DuckDbComposer(recipe), recipe, new DuckDbFailureMapper(), dialects, redactor, includeRawFailures) { }
 
     /// <summary>True for <c>:memory:</c>, an empty path and the other spellings of a private in-memory database.</summary>
     public static bool IsInMemory(string? dataSource) =>

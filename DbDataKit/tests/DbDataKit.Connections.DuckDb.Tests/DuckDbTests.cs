@@ -216,6 +216,22 @@ public class DuckDbTests
     }
 
     [Fact]
+    public async Task Raw_failure_text_is_kept_only_when_asked_for_and_never_in_the_public_message()
+    {
+        using var dir = new TempDir();
+        var missing = Ctx(dir.File("missing.duckdb"));
+        var plain = await Assert.ThrowsAsync<ConnectionFailureException>(async () => await new DuckDbProvider().OpenAsync(missing));
+        Assert.Null(plain.Failure.Raw);
+
+        var redactor = new DbDataKit.Secrets.Redactor();
+        redactor.Register("missing.duckdb");
+        var raw = await Assert.ThrowsAsync<ConnectionFailureException>(async () => await new DuckDbProvider(redactor: redactor, includeRawFailures: true).OpenAsync(missing));
+        Assert.NotNull(raw.Failure.Raw);
+        Assert.DoesNotContain("missing.duckdb", raw.Failure.Raw, StringComparison.Ordinal);
+        Assert.DoesNotContain(dir.Path, raw.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Test_connection_works()
     {
         using var dir = new TempDir();

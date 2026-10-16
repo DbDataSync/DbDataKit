@@ -87,8 +87,8 @@ public sealed class OdbcReadOnlySession() : ReadOnlySession(
 /// <summary>ODBC provider over System.Data.Odbc.</summary>
 public sealed class OdbcProvider : DbProviderBase
 {
-    public OdbcProvider(string? fixedDriver = null, DialectCatalog? dialects = null)
-        : base(new EngineId("odbc"), new OdbcComposer(fixedDriver), new OdbcReadOnlySession(), new OdbcFailureMapper(), dialects) { }
+    public OdbcProvider(string? fixedDriver = null, DialectCatalog? dialects = null, DbDataKit.Secrets.IRedactor? redactor = null, bool includeRawFailures = false)
+        : base(new EngineId("odbc"), new OdbcComposer(fixedDriver), new OdbcReadOnlySession(), new OdbcFailureMapper(), dialects, redactor, includeRawFailures) { }
 
     protected override DbConnection NewConnection(string connectionString, ConnectionContext context) => new OdbcConnection(connectionString);
 
