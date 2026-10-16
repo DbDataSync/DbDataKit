@@ -1,3 +1,5 @@
+using DbDataKit.Config;
+
 namespace DbDataProxy.Server.Configuration;
 
 /// <summary>
@@ -5,6 +7,7 @@ namespace DbDataProxy.Server.Configuration;
 /// Set <see cref="Authority"/> for an OIDC provider (Entra ID: https://login.microsoftonline.com/{tenant}/v2.0), or
 /// <see cref="SigningKey"/> for tokens signed with a shared HMAC key.
 /// </summary>
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class JwtOptions
 {
     public bool Enabled => !string.IsNullOrWhiteSpace(Authority) || !string.IsNullOrWhiteSpace(SigningKey);
@@ -12,6 +15,7 @@ public sealed class JwtOptions
     public string? Authority { get; set; }
 
     /// <summary>Base64 HMAC-SHA256 key, for providers or tooling that issue symmetric tokens.</summary>
+    [Secret]
     public string? SigningKey { get; set; }
 
     /// <summary>Expected issuer; defaults to the authority's. With a symmetric key the issuer is only checked when set.</summary>
@@ -23,12 +27,14 @@ public sealed class JwtOptions
     /// <summary>Claim holding the display/user name.</summary>
     public string NameClaim { get; set; } = "preferred_username";
 
+    [ConfigKey(Min = 0, Max = 3600)]
     public int ClockSkewSeconds { get; set; } = 60;
 
     /// <summary>Which token claims grant which data sources. A token that matches no mapping is refused.</summary>
     public List<JwtMapping> Mappings { get; set; } = [];
 }
 
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class JwtMapping
 {
     /// <summary>Claim type to inspect, e.g. "groups", "roles", "scp" or "sub".</summary>

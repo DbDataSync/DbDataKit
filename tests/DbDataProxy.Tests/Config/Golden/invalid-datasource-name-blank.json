@@ -1,0 +1,1 @@
+{ "Proxy": { "DataSources": { " ": { "Provider": "odbc", "ConnectionString": "a" } } } }

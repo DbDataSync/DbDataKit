@@ -1,0 +1,19 @@
+{
+  "Proxy": {
+    "SchemaVersion": 2,
+    "DataDirectory": "C:\\data\\proxy",
+    "LogSql": false,
+    "RequireReferencedSecrets": true,
+    "Listen": { "Address": "::1", "Port": 8815 },
+    "Tls": { "Mode": "File", "CertificatePath": "C:\\certs\\proxy.pfx", "CertificatePassword": "env:PFX_PW", "Hostnames": [ "proxy.example.com" ] },
+    "Compression": { "Mode": "Grpc", "Codec": "gzip", "AllowClientOverride": false },
+    "Auth": { "SessionIdleMinutes": 10, "AllowPassThrough": false, "Jwt": { "Authority": "https://login.microsoftonline.com/t/v2.0", "Audience": "api://x", "Mappings": [ { "Claim": "groups", "Value": "g1", "DataSources": [ "*" ] } ] } },
+    "Worker": { "StartupTimeoutSeconds": 60 },
+    "DataSources": {
+      "legacy": { "Provider": "odbc", "Bitness": "x86", "ConnectionString": "secret:dbdata:proxy:legacy", "BatchSize": 1000, "CommandTimeoutSeconds": 30, "Metadata": "odbc", "Compression": { "Mode": "Arrow", "Codec": "lz4", "Level": 3 } },
+      "pt": { "Provider": "sqlserver", "PassThrough": true, "ConnectionString": "Server=a", "Classifier": "off" },
+      "scratch": { "Provider": "duckdb", "AllowWrites": true, "ConnectionString": "Data Source=:memory:" }
+    },
+    "Users": [ { "Name": "win", "AuthType": "Windows", "DataSources": [ "legacy" ] } ]
+  }
+}

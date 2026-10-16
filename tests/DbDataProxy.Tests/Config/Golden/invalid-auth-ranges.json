@@ -1,0 +1,1 @@
+{ "Proxy": { "Auth": { "SessionIdleMinutes": 0, "SessionMaxHours": 0 }, "Worker": { "StartupTimeoutSeconds": 0 } } }
