@@ -74,7 +74,9 @@ public sealed class ChainedCredentialValidator(IEnumerable<IBasicCredentialValid
             if (!result.Definitive) continue;
 
             if (result.Principal is null) throttle?.RecordFailure(client, user);
-            else throttle?.RecordSuccess(client, user);
+            // A pass-through principal was not verified by anyone yet (the database checks it at query time), so accepting it proves nothing:
+            // it must not clear the failures a rejected database login has recorded for this user and client (S-2).
+            else if (result.Principal.Credentials is null) throttle?.RecordSuccess(client, user);
             return result.Principal;
         }
         // Burn comparable time so a rejected unknown user is not distinguishable from a wrong password.

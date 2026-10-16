@@ -16,7 +16,21 @@ public interface IWorkerLink
 /// <summary>Runs ODBC queries in the 32-bit worker process and streams the Arrow results back.</summary>
 public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionString, bool readOnly = false) : IQueryExecutor, IMetadataProvider
 {
-    public async Task<IQueryResult> ExecuteQueryAsync(QueryRequest request, CancellationToken cancellationToken)
+    private static readonly DbDataKit.Dialect.EngineId Odbc = new("odbc");
+
+    /// <summary>A worker status that carries a classified failure becomes that failure again (kind and code); anything else passes through.</summary>
+    internal static Exception Map(Exception ex) =>
+        ex is RpcException rpc && FailureTranslator.FromTrailers(rpc.Trailers, Odbc) is { } failure ? new DbDataKit.Connections.ConnectionFailureException(failure) : ex;
+
+    private static async Task<T> GuardAsync<T>(Func<Task<T>> call)
+    {
+        try { return await call().ConfigureAwait(false); }
+        catch (RpcException ex) when (Map(ex) is var mapped && !ReferenceEquals(mapped, ex)) { throw mapped; }
+    }
+
+    public Task<IQueryResult> ExecuteQueryAsync(QueryRequest request, CancellationToken cancellationToken) => GuardAsync(() => ExecuteQueryAsyncCore(request, cancellationToken));
+
+    private async Task<IQueryResult> ExecuteQueryAsyncCore(QueryRequest request, CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
         var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, request.Sql, request.BatchSize, request.CommandTimeoutSeconds, request.Parameters, readOnly));
@@ -35,7 +49,9 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
         }
     }
 
-    public async Task<long> ExecuteNonQueryAsync(QueryRequest request, CancellationToken cancellationToken)
+    public Task<long> ExecuteNonQueryAsync(QueryRequest request, CancellationToken cancellationToken) => GuardAsync(() => ExecuteNonQueryAsyncCore(request, cancellationToken));
+
+    private async Task<long> ExecuteNonQueryAsyncCore(QueryRequest request, CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
         var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, request.Sql, request.BatchSize, request.CommandTimeoutSeconds, request.Parameters, readOnly));
@@ -47,7 +63,9 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
         return affected;
     }
 
-    public async Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken) => GuardAsync(() => ListTablesAsyncCore(commandTimeoutSeconds, cancellationToken));
+
+    private async Task<IReadOnlyList<TableEntry>> ListTablesAsyncCore(int? commandTimeoutSeconds, CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
         var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, "", 1, commandTimeoutSeconds, null, readOnly));
@@ -59,7 +77,9 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
         return tables;
     }
 
-    public async Task<IReadOnlyList<ColumnEntry>> ListColumnsAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<ColumnEntry>> ListColumnsAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken) => GuardAsync(() => ListColumnsAsyncCore(catalog, schema, table, cancellationToken));
+
+    private async Task<IReadOnlyList<ColumnEntry>> ListColumnsAsyncCore(string? catalog, string? schema, string table, CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
         var payload = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new WorkerColumnsRequest(connectionString, catalog, schema, table, readOnly), WorkerProtocol.Json);
@@ -71,7 +91,9 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
         return columns;
     }
 
-    public async Task<IReadOnlyList<PrimaryKeyEntry>> ListPrimaryKeysAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<PrimaryKeyEntry>> ListPrimaryKeysAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken) => GuardAsync(() => ListPrimaryKeysAsyncCore(catalog, schema, table, cancellationToken));
+
+    private async Task<IReadOnlyList<PrimaryKeyEntry>> ListPrimaryKeysAsyncCore(string? catalog, string? schema, string table, CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
         var payload = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new WorkerPrimaryKeysRequest(connectionString, catalog, schema, table, readOnly), WorkerProtocol.Json);
@@ -83,7 +105,9 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
         return keys;
     }
 
-    public async Task<DialectInfo> GetDialectAsync(CancellationToken cancellationToken)
+    public Task<DialectInfo> GetDialectAsync(CancellationToken cancellationToken) => GuardAsync(() => GetDialectAsyncCore(cancellationToken));
+
+    private async Task<DialectInfo> GetDialectAsyncCore(CancellationToken cancellationToken)
     {
         var (client, secret) = await link.GetAsync(cancellationToken).ConfigureAwait(false);
         var payload = WorkerProtocol.Serialize(new WorkerRequest(connectionString, "", 1, null, null, readOnly));
@@ -103,8 +127,14 @@ public sealed class WorkerQueryExecutor(IWorkerLink link, string connectionStrin
 
         public async IAsyncEnumerable<RecordBatch> ReadBatchesAsync([EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            while (await call.ResponseStream.MoveNext(cancellationToken).ConfigureAwait(false))
+            while (true)
+            {
+                bool more;
+                try { more = await call.ResponseStream.MoveNext(cancellationToken).ConfigureAwait(false); }
+                catch (RpcException ex) when (Map(ex) is var mapped && !ReferenceEquals(mapped, ex)) { throw mapped; }
+                if (!more) yield break;
                 yield return call.ResponseStream.Current;
+            }
         }
 
         public ValueTask DisposeAsync()

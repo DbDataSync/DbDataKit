@@ -52,8 +52,11 @@ public sealed class RequestAuthenticator(SessionStore sessions, ChainedCredentia
 /// <summary>
 /// Denies every Flight call that does not carry valid credentials. The handshake call is exempt because it is
 /// where credentials are exchanged for a bearer token (the handler validates them itself).
+/// Pass-through credentials are only checked by the database, at query time, so this is also where a rejected database login
+/// feeds the login throttle (a classified Login failure from the handler counts as one failed attempt for that user and client) and
+/// where a locked-out user is refused before any connection is made (S-2).
 /// </summary>
-public sealed class AuthInterceptor(RequestAuthenticator authenticator) : Interceptor
+public sealed class AuthInterceptor(RequestAuthenticator authenticator, LoginThrottle? throttle = null) : Interceptor
 {
     public const string PrincipalKey = "principal";
     private const string HandshakeMethod = "/arrow.flight.protocol.FlightService/Handshake";
@@ -62,7 +65,8 @@ public sealed class AuthInterceptor(RequestAuthenticator authenticator) : Interc
         TRequest request, ServerCallContext context, UnaryServerMethod<TRequest, TResponse> continuation)
     {
         await AuthorizeAsync(context);
-        return await continuation(request, context);
+        try { return await continuation(request, context); }
+        catch (RpcException ex) { NoteFailure(ex, context); throw; }
     }
 
     public override async Task ServerStreamingServerHandler<TRequest, TResponse>(
@@ -70,7 +74,8 @@ public sealed class AuthInterceptor(RequestAuthenticator authenticator) : Interc
         ServerStreamingServerMethod<TRequest, TResponse> continuation)
     {
         await AuthorizeAsync(context);
-        await continuation(request, responseStream, context);
+        try { await continuation(request, responseStream, context); }
+        catch (RpcException ex) { NoteFailure(ex, context); throw; }
     }
 
     public override async Task<TResponse> ClientStreamingServerHandler<TRequest, TResponse>(
@@ -78,7 +83,8 @@ public sealed class AuthInterceptor(RequestAuthenticator authenticator) : Interc
         ClientStreamingServerMethod<TRequest, TResponse> continuation)
     {
         await AuthorizeAsync(context);
-        return await continuation(requestStream, context);
+        try { return await continuation(requestStream, context); }
+        catch (RpcException ex) { NoteFailure(ex, context); throw; }
     }
 
     public override async Task DuplexStreamingServerHandler<TRequest, TResponse>(
@@ -86,7 +92,8 @@ public sealed class AuthInterceptor(RequestAuthenticator authenticator) : Interc
         DuplexStreamingServerMethod<TRequest, TResponse> continuation)
     {
         await AuthorizeAsync(context);
-        await continuation(requestStream, responseStream, context);
+        try { await continuation(requestStream, responseStream, context); }
+        catch (RpcException ex) { NoteFailure(ex, context); throw; }
     }
 
     private async Task AuthorizeAsync(ServerCallContext context)
@@ -97,7 +104,18 @@ public sealed class AuthInterceptor(RequestAuthenticator authenticator) : Interc
         var principal = await authenticator.AuthenticateAsync(header, context.CancellationToken, context.ClientAddress());
         if (principal is null)
             throw new RpcException(new Status(StatusCode.Unauthenticated, "Invalid or missing credentials."));
+        // A pass-through principal carries the caller's own database credentials: after too many rejected logins refuse it here, without
+        // touching the database, exactly like the handshake does for passwords it can check itself.
+        if (principal.Credentials is not null && throttle?.IsLockedOut(context.ClientAddress(), principal.Name) == true)
+            throw new RpcException(new Status(StatusCode.Unauthenticated, "Too many failed logins; try again later."));
         context.UserState[PrincipalKey] = principal;
+    }
+
+    private void NoteFailure(RpcException ex, ServerCallContext context)
+    {
+        if (throttle is null || ex is not DbDataProxy.Server.Flight.FailureRpcException { Failure.Kind: DbDataKit.Connections.ConnectionFailureKind.Login }) return;
+        if (context.UserState.TryGetValue(PrincipalKey, out var p) && p is ProxyPrincipal { Credentials: not null } principal)
+            throttle.RecordFailure(context.ClientAddress(), principal.Name);
     }
 }
 

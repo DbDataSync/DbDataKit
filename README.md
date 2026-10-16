@@ -274,7 +274,10 @@ Everything arrives as a Flight call; the proxy denies any call without valid cre
    data sources like any other.
 3. **Pass-through database credentials** (`"PassThrough": true` on a data source): the username/password the
    client authenticates with are injected into that connection and the database is the authority, so a wrong
-   password fails at query time. Local users always win over pass-through for the same name.
+   password fails at query time. Local users always win over pass-through for the same name. A rejected database
+   login (failure kind `Login`) is answered `Unauthenticated` and counts in the login throttle for that user and client
+   address like a wrong password at the handshake does; once locked out (`Auth:MaxFailedLogins` within `Auth:LockoutMinutes`)
+   the user is refused before any database connection is made, and a pass-through handshake does not reset the count.
 4. **JWT bearer / OIDC** (`Proxy:Auth:Jwt`, e.g. Microsoft Entra ID): clients send `authorization: Bearer <jwt>` on
    every call. Validated against the authority's keys (or a shared HMAC key); `Mappings` turn claims (`groups`,
    `roles`, `scp`, ...) into data-source access. Tokens matching no mapping are refused.
@@ -288,6 +291,47 @@ A 64-bit process cannot load 32-bit drivers, so `Bitness: "x86"` ODBC sources ar
 loopback Flight connection guarded by a random per-launch secret, restarts it if it dies and stops it with the
 service; the worker also exits if the proxy disappears. If you publish the whole proxy as `win-x86`
 (`./build/publish.ps1 -Runtime win-x86`) the sources run in-process and no worker is needed.
+
+## Security
+
+What the proxy enforces and where the responsibility stays with the database (details per feature are in the sections above).
+
+* **Read-only is enforced at the connection where the engine can.** A data source without `AllowWrites` is opened read-only:
+  * *DuckDB*: the file is opened `access_mode=READ_ONLY` and the session is sandboxed before the first statement runs:
+    `enable_external_access=false` (no `read_csv`/`read_parquet`/`read_text` of any file, no `COPY ... TO`, no `ATTACH`),
+    extension install and autoload off (`INSTALL`/`LOAD` fail), then `lock_configuration=true` so no `SET` can undo it.
+    This holds with `Classifier: off`; the lexical classifier is a second line, not the control. A source that deliberately serves a folder of
+    files lists it in `"AllowedDirectories": ["C:/data/parquet"]` (absolute paths): reads below those directories work, everything else stays blocked.
+    An in-memory database (`:memory:`) cannot be opened read-only, so it only gets the session settings. A source with `AllowWrites` is **not** sandboxed
+    (it is trusted with the host's files, as before).
+  * *SQL Server*: `ApplicationIntent=ReadOnly` is added. It only routes to a readable secondary of an availability group and does nothing on a plain
+    instance: **it does not stop writes**. Use a dedicated read login with only `db_datareader` for real enforcement.
+  * *ODBC*: known drivers get their read-only keyword and `SQL_ATTR_ACCESS_MODE=SQL_MODE_READ_ONLY` is set after connecting (best effort; many drivers ignore
+    it). The database login is the control.
+* **TLS to SQL Server**: encrypt and verify the certificate unless the connection string says otherwise explicitly (see Data sources). Each source that
+  opts out (`TrustServerCertificate=True`, `Encrypt=False`) is named in one startup warning; the setting keeps working.
+* **Pass-through credentials** go through the shared composer: every integrated-security style key of the administrator's string (`Trusted_Connection`,
+  `Integrated Security`, `Authentication=...`, Kerberos and GSS keywords, client-certificate keys) is removed before the caller's user and password are written with the
+  engine's own quoting, control characters and over-long values (512) are refused, and the result is asserted free of integrated keys.
+  `x};Driver={evil};UID={` stays one value (tests cover hostile logins for SQL Server and ODBC).
+* **Clients never see database error text.** A failed connection or statement is answered with its kind, the engine's error number or SQLSTATE and a fixed
+  sentence, for example `The login was rejected. [sqlserver 18456]` or `The statement was not accepted by the server. [duckdb Parser-Error]`:
+
+  | Failure kind | gRPC status |
+  |---|---|
+  | Login (also counted in the throttle) | `Unauthenticated` |
+  | Network, Tls | `Unavailable` |
+  | Timeout | `DeadlineExceeded` |
+  | Permission | `PermissionDenied` |
+  | Syntax, Unsupported | `InvalidArgument` |
+  | anything else | `Internal` (with the exception type name) |
+
+  Messages the proxy writes itself (a `?`-marker count mismatch, an ODBC column type to `CAST`, the classifier's refusal) are passed on. The driver's own text
+  (scrubbed by the redactor) goes to the server log; `Proxy:LogDriverErrors: false` logs only kind and code. 32-bit worker failures travel the same way.
+* **Limits (off by default)**: `MaxConcurrentQueries` per data source and `MaxConcurrentQueriesPerUser` cap the queries running at once (a streaming result counts until it
+  is read to the end or discarded); a request waits up to `AcquireTimeoutSeconds` (30) and is then refused with `ResourceExhausted`.
+  Every command now has a timeout (`CommandTimeoutSeconds`, else 300 s).
+* Not covered: row and byte limits, an audit log of failures per client beyond the log lines, and anything the database login allows.
 
 ## Clients
 
@@ -333,9 +377,9 @@ exe: queries with every compression setting, updates, metadata and wrong-passwor
   the driver's catalog is not valid SQL. `GetPrimaryKeys` on an ODBC source asks the driver (`SQLPrimaryKeys`); drivers
   without keys (text files) or without the function report none.
 * `AllowWrites` gates statements a client sends as *updates*. A client that runs `INSERT`/`DDL` through the query
-  path (ADBC's `cursor.execute` does) is refused only when the source's `Classifier` is `strict` (and then by a lexical
-  check, not a parser); otherwise it is limited by the database account's permissions, so use read-only database
-  accounts for read-only sources.
+  path (ADBC's `cursor.execute` does) is refused by the engine on DuckDB sources (read-only file, see Security); on SQL Server and ODBC
+  sources only when the source's `Classifier` is `strict` (and then by a lexical check, not a parser) or the database account cannot write,
+  so use read-only database accounts for read-only sources.
 * Transactions, `DoPut` bulk ingestion.
 * Pass-through and Windows-account logon have not been exercised against real accounts.
 * The Linux/Docker path (`Dockerfile`) has not been built or run in this repository's environment.

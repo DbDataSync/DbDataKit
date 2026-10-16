@@ -26,12 +26,21 @@ public sealed class ProxyFixture : IAsyncLifetime
     public string Address { get; private set; } = "";
     public string DuckDbPath { get; private set; } = "";
 
+    /// <summary>A directory the <c>duck_lake</c> source is allowed to read files from (it holds lake.csv), and a file next to it that is not allowed.</summary>
+    public string LakeDirectory { get; private set; } = "";
+    public string PrivateCsv { get; private set; } = "";
+
     public async ValueTask InitializeAsync()
     {
         _dir = Path.Combine(Path.GetTempPath(), "dbproxy-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_dir);
         DuckDbPath = Path.Combine(_dir, "test.duckdb");
         SeedDuckDb(DuckDbPath);
+        LakeDirectory = Path.Combine(_dir, "lake");
+        Directory.CreateDirectory(LakeDirectory);
+        File.WriteAllText(Path.Combine(LakeDirectory, "lake.csv"), "a,b\n1,2\n3,4\n");
+        PrivateCsv = Path.Combine(_dir, "private.csv");
+        File.WriteAllText(PrivateCsv, "secret\nhunter2\n");
 
         var settings = new Dictionary<string, string?>
         {
@@ -53,6 +62,10 @@ public sealed class ProxyFixture : IAsyncLifetime
             ["Proxy:DataSources:duck_off:Provider"] = "duckdb",
             ["Proxy:DataSources:duck_off:ConnectionString"] = $"Data Source={DuckDbPath}",
             ["Proxy:DataSources:duck_off:Classifier"] = "off",
+            ["Proxy:DataSources:duck_lake:Provider"] = "duckdb",
+            ["Proxy:DataSources:duck_lake:ConnectionString"] = $"Data Source={DuckDbPath}",
+            ["Proxy:DataSources:duck_lake:Classifier"] = "off",
+            ["Proxy:DataSources:duck_lake:AllowedDirectories:0"] = LakeDirectory,
             ["Proxy:DataSources:other:Provider"] = "duckdb",
             ["Proxy:DataSources:other:ConnectionString"] = "Data Source=:memory:",
             ["Proxy:Users:0:Name"] = "alice",
@@ -61,6 +74,7 @@ public sealed class ProxyFixture : IAsyncLifetime
             ["Proxy:Users:0:DataSources:1"] = "duck_ro",
             ["Proxy:Users:0:DataSources:2"] = "duck_strict",
             ["Proxy:Users:0:DataSources:3"] = "duck_off",
+            ["Proxy:Users:0:DataSources:4"] = "duck_lake",
             ["Proxy:Users:0:DefaultDataSource"] = "duck",
         };
 

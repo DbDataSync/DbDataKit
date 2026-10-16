@@ -100,9 +100,11 @@ public sealed class ShippedFilesTests
         Assert.True(load.Ok, ConfigTestSupport.Format(load));
         var o = load.Value!;
         Assert.Equal(2, o.SchemaVersion);
-        Assert.Equal(["erp", "legacy", "scratch", "warehouse"], o.DataSources.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(["erp", "lake", "legacy", "scratch", "warehouse"], o.DataSources.Keys.Order(StringComparer.Ordinal));
         Assert.Equal("x86", o.DataSources["legacy"].Bitness);
         Assert.Equal(ClassifierMode.Strict, o.DataSources["erp"].Classifier);
+        Assert.Equal(20, o.DataSources["erp"].MaxConcurrentQueries);
+        Assert.Equal([@"C:\data\parquet"], o.DataSources["lake"].AllowedDirectories);
         Assert.Equal(@"Data Source=C:\data\scratch.duckdb", o.DataSources["scratch"].ConnectionString);
         Assert.Equal("reporting", Assert.Single(o.Users).Name);
     }

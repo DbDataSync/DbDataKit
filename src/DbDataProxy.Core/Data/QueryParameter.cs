@@ -34,7 +34,7 @@ public sealed record QueryParameter(string? Name, string Type, string? Text)
             "timestamp" => (DateTime.ParseExact(Text, "o", inv, DateTimeStyles.RoundtripKind), DbType.DateTime2),
             "time" => (TimeSpan.ParseExact(Text, "c", inv), DbType.Time),
             "binary" => (Convert.FromBase64String(Text), DbType.Binary),
-            _ => throw new NotSupportedException($"Unsupported parameter type '{Type}'."),
+            _ => throw new UnsupportedValueException($"Unsupported parameter type '{Type}'."),
         };
     }
 }
@@ -77,7 +77,7 @@ public static class ArrowParameters
             Time32Array a => new(name, "time", TimeSpan.FromTicks(a.GetTime(row)!.Value.Ticks).ToString("c", inv)),
             Time64Array a => new(name, "time", TimeSpan.FromTicks(a.GetTime(row)!.Value.Ticks).ToString("c", inv)),
             BinaryArray a => new(name, "binary", Convert.ToBase64String(a.GetBytes(row))),
-            _ => throw new NotSupportedException($"Parameter '{name}' has Arrow type {array.Data.DataType.Name}, which is not supported."),
+            _ => throw new UnsupportedValueException($"Parameter '{name}' has Arrow type {array.Data.DataType.Name}, which is not supported."),
         };
     }
 
@@ -142,7 +142,7 @@ public static class ArrowParameters
             case Guid g:
                 return (StringType.Default, new StringArray.Builder().Append(g.ToString()).Build());
             default:
-                throw new NotSupportedException($"Cannot send a {value.GetType().Name} as a statement parameter.");
+                throw new UnsupportedValueException($"Cannot send a {value.GetType().Name} as a statement parameter.");
         }
     }
 }
@@ -170,7 +170,7 @@ internal static class ParameterBinder
         if (markers > 0)
         {
             if (markers != parameters.Count)
-                throw new ArgumentException($"The statement has {markers} '?' markers but {parameters.Count} parameters were supplied.");
+                throw new ParameterMismatchException($"The statement has {markers} '?' markers but {parameters.Count} parameters were supplied.");
             if (style == ParameterStyle.NamedAtSign) command.CommandText = ParameterMarkers.RewriteToNamed(sql, dialect);
         }
 

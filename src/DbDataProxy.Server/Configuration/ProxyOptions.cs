@@ -31,6 +31,12 @@ public sealed class ProxyOptions
     public bool AllowUnknownKeys { get; set; }
 
     /// <summary>
+    /// Write the (redacted) driver text of failed statements and connections to the server log. Clients never see it: they get the failure kind,
+    /// the engine's error number or SQLSTATE and a fixed sentence. Turn off to log only kind and code.
+    /// </summary>
+    public bool LogDriverErrors { get; set; } = true;
+
+    /// <summary>
     /// Version of the configuration schema this file was written for ("SchemaVersion", optional; absent means 1). Version 2 changes defaults only
     /// (the statement <c>Classifier</c> defaults to <c>strict</c> instead of <c>warn</c>); see the README. Set by the loader, not bound as a property.
     /// </summary>
@@ -190,6 +196,28 @@ public sealed class DataSourceOptions
     /// "odbc" (force the ODBC catalog API) or "informationschema" (force SQL against INFORMATION_SCHEMA).
     /// </summary>
     public string Metadata { get; set; } = "auto";
+
+    /// <summary>
+    /// DuckDB sources without <see cref="AllowWrites"/> run in a sandbox (read-only file, no external file access, no extensions, locked settings).
+    /// Directories listed here are the one exception: queries may read files below them (for example a folder of Parquet files the source
+    /// deliberately serves). Absolute paths only; everything else stays blocked. No effect on a source with <see cref="AllowWrites"/>, which is not sandboxed.
+    /// </summary>
+    public List<string> AllowedDirectories { get; set; } = [];
+
+    /// <summary>
+    /// Most queries running at once on this data source (a streaming result counts until it has been read or discarded); further requests wait up to
+    /// <see cref="AcquireTimeoutSeconds"/> and are then refused with ResourceExhausted. 0 (default) means no limit.
+    /// </summary>
+    [ConfigKey(Min = 0, Max = 100000)]
+    public int MaxConcurrentQueries { get; set; }
+
+    /// <summary>Most queries one user may have running at once on this data source. 0 (default) means no limit.</summary>
+    [ConfigKey(Min = 0, Max = 100000)]
+    public int MaxConcurrentQueriesPerUser { get; set; }
+
+    /// <summary>How long a request waits for a free slot when a limit is set.</summary>
+    [ConfigKey(Min = 1, Max = 3600)]
+    public int AcquireTimeoutSeconds { get; set; } = 30;
 
     [ConfigKey(Min = 1, Max = 1000000)]
     public int BatchSize { get; set; } = 32768;

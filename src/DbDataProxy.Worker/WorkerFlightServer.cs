@@ -3,6 +3,7 @@ using System.Text;
 using Apache.Arrow.Flight;
 using Apache.Arrow.Flight.Server;
 using DbDataKit.Connections;
+using DbDataKit.Odbc.Metadata;
 using DbDataProxy.Data;
 using DbDataProxy.Worker;
 using Google.Protobuf;
@@ -33,15 +34,21 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            log.LogWarning(ex, "Worker query failed");
-            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+            throw Fail(ex, "Worker query failed");
         }
 
         await using (result)
         {
-            await responseStream.SetupStream(result.Schema).ConfigureAwait(false);
-            await foreach (var batch in result.ReadBatchesAsync(context.CancellationToken).ConfigureAwait(false))
-                await responseStream.WriteAsync(batch).ConfigureAwait(false);
+            try
+            {
+                await responseStream.SetupStream(result.Schema).ConfigureAwait(false);
+                await foreach (var batch in result.ReadBatchesAsync(context.CancellationToken).ConfigureAwait(false))
+                    await responseStream.WriteAsync(batch).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException and not RpcException)
+            {
+                throw Fail(ex, "streaming");
+            }
         }
     }
 
@@ -60,13 +67,12 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
             IReadOnlyList<ColumnEntry> columns;
             try
             {
-                columns = await new DbQueryExecutor(Source(columnsRequest.ConnectionString, columnsRequest.ReadOnly))
+                columns = await CreateExecutor(columnsRequest.ConnectionString, columnsRequest.ReadOnly)
                     .ListColumnsAsync(columnsRequest.Catalog, columnsRequest.Schema, columnsRequest.Table, context.CancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                log.LogWarning(ex, "Worker column listing failed");
-                throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+                throw Fail(ex, "Worker column listing failed");
             }
             await responseStream.WriteAsync(new FlightResult(ByteString.CopyFrom(
                 System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(columns, WorkerProtocol.Json)))).ConfigureAwait(false);
@@ -79,13 +85,12 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
             IReadOnlyList<PrimaryKeyEntry> keys;
             try
             {
-                keys = await new DbQueryExecutor(Source(keysRequest.ConnectionString, keysRequest.ReadOnly))
+                keys = await CreateExecutor(keysRequest.ConnectionString, keysRequest.ReadOnly)
                     .ListPrimaryKeysAsync(keysRequest.Catalog, keysRequest.Schema, keysRequest.Table, context.CancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                log.LogWarning(ex, "Worker primary key listing failed");
-                throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+                throw Fail(ex, "Worker primary key listing failed");
             }
             await responseStream.WriteAsync(new FlightResult(ByteString.CopyFrom(
                 System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(keys, WorkerProtocol.Json)))).ConfigureAwait(false);
@@ -100,8 +105,7 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                log.LogWarning(ex, "Worker dialect lookup failed");
-                throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+                throw Fail(ex, "Worker dialect lookup failed");
             }
             await responseStream.WriteAsync(new FlightResult(ByteString.CopyFrom(
                 System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(dialect, WorkerProtocol.Json)))).ConfigureAwait(false);
@@ -120,8 +124,7 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            log.LogWarning(ex, "Worker statement failed");
-            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+            throw Fail(ex, "Worker statement failed");
         }
 
         byte[] body = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new WorkerNonQueryResult(affected), WorkerProtocol.Json);
@@ -138,8 +141,7 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            log.LogWarning(ex, "Worker table listing failed");
-            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+            throw Fail(ex, "Worker table listing failed");
         }
         byte[] body = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(tables, WorkerProtocol.Json);
         await responseStream.WriteAsync(new FlightResult(ByteString.CopyFrom(body))).ConfigureAwait(false);
@@ -150,7 +152,30 @@ public sealed class WorkerFlightServer(WorkerSecret secret, ILogger<WorkerFlight
     private static SourceConnection Source(string connectionString, bool readOnly) =>
         SourceConnection.Create(Odbc, "worker", connectionString, readOnly);
 
-    private static DbQueryExecutor CreateExecutor(WorkerRequest request) => new(Source(request.ConnectionString, request.ReadOnly));
+    private DbQueryExecutor CreateExecutor(WorkerRequest request) => new(Source(request.ConnectionString, request.ReadOnly), Translator());
+
+    private DbQueryExecutor CreateExecutor(string connectionString, bool readOnly) => new(Source(connectionString, readOnly), Translator());
+
+    // Driver errors never leave the worker as text: the executor classifies them (kind and code, from the shared ODBC mapper) and they
+    // travel to the proxy as status trailers. The raw text goes to the worker's log, which the proxy folds into its own (redacted) log.
+    private FailureTranslator Translator() => new(Odbc.FailureMapper, Odbc.Engine, "worker", redactor: null, includeRaw: true, sink: new LogSink(log));
+
+    private sealed class LogSink(ILogger log) : IFailureSink
+    {
+        public void Failed(string source, ConnectionFailure failure) =>
+            log.LogWarning("Worker {Source} failure {Failure}: {Raw}", source, FailureTranslator.Describe(failure), failure.Raw ?? "(raw text not kept)");
+    }
+
+    private RpcException Fail(Exception ex, string what)
+    {
+        log.LogWarning("Worker {What} failed: {Type}", what, ex.GetType().Name);
+        return ex switch
+        {
+            ConnectionFailureException f => new RpcException(new Status(StatusCode.Unknown, f.Message), FailureTranslator.ToTrailers(f.Failure)),
+            IClientVisible or OdbcPolicyViolationException or OdbcResultTruncatedException => new RpcException(new Status(StatusCode.InvalidArgument, ex.Message)),
+            _ => new RpcException(new Status(StatusCode.Internal, "The 32-bit worker failed.")),
+        };
+    }
 
     private void Authorize(ServerCallContext context)
     {

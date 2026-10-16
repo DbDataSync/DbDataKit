@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using DbDataKit.Connections;
+using DbDataKit.Connections.DuckDb;
 using DbDataKit.Secrets;
 using DbDataProxy.Data;
 using DbDataProxy.Server.Auth;
@@ -25,8 +27,26 @@ public sealed class DataSourceCatalog(
     IOptionsMonitor<ProxyOptions> options,
     ProviderRegistry providers,
     IWorkerExecutorFactory? worker = null,
-    SecretsRuntime? secrets = null)
+    SecretsRuntime? secrets = null,
+    QueryLimits? limits = null,
+    ILoggerFactory? loggerFactory = null,
+    IRedactor? redactor = null)
 {
+    private readonly ConcurrentDictionary<string, IDbProvider> _sandboxProviders = new(StringComparer.Ordinal);
+    private readonly IFailureSink? _sink = loggerFactory is null ? null : new LoggingFailureSink(loggerFactory.CreateLogger("DbDataProxy.Data"));
+
+    /// <summary>
+    /// The provider for a data source. A DuckDB source with <c>AllowedDirectories</c> gets its own provider whose sandbox lets queries read those
+    /// directories; every other source uses the registry's provider (the full sandbox for a source without <c>AllowWrites</c>).
+    /// </summary>
+    private IDbProvider ProviderFor(DataSourceOptions source, IDbProvider provider)
+    {
+        if (provider.Engine.Value != "duckdb" || source.AllowedDirectories.Count == 0) return provider;
+        bool raw = options.CurrentValue.LogDriverErrors;
+        return _sandboxProviders.GetOrAdd(raw + "\n" + string.Join('\n', source.AllowedDirectories), _ =>
+            new DuckDbProvider(new DuckDbSandboxOptions { AllowedDirectories = [.. source.AllowedDirectories] }, redactor: redactor, includeRawFailures: raw));
+    }
+
     public ResolvedDataSource Resolve(ProxyPrincipal principal, string? requested)
     {
         var configured = options.CurrentValue.DataSources;
@@ -37,8 +57,9 @@ public sealed class DataSourceCatalog(
         if (!principal.CanUse(name))
             throw new RpcException(new Status(StatusCode.PermissionDenied, $"Not authorized for data source '{name}'."));
 
-        if (!providers.TryGet(source.Provider, out var provider))
+        if (!providers.TryGet(source.Provider, out var registered))
             throw new RpcException(new Status(StatusCode.Internal, $"Data source '{name}' uses unknown provider '{source.Provider}'."));
+        var provider = ProviderFor(source, registered);
 
         // Resolved per call from the current options snapshot: nothing secret outlives the snapshot, and a rotated secret is picked up.
         string connectionString;
@@ -80,7 +101,9 @@ public sealed class DataSourceCatalog(
             throw new RpcException(new Status(StatusCode.Internal, $"Data source '{name}' has an invalid connection configuration ({ex.Rule}); see the server log."));
         }
 
-        return new ResolvedDataSource(name, source, CreateExecutor(name, source, connection, connectionString));
+        var executor = CreateExecutor(name, source, connection, connectionString);
+        if (limits?.For(name, source) is { } gate) executor = new LimitedExecutor(executor, gate, principal.Name, name);
+        return new ResolvedDataSource(name, source, executor);
     }
 
     private IQueryExecutor CreateExecutor(string name, DataSourceOptions source, SourceConnection connection, string connectionString)
@@ -94,7 +117,9 @@ public sealed class DataSourceCatalog(
                 throw new RpcException(new Status(StatusCode.Unavailable, "The 32-bit worker is not available on this platform."));
             return worker.Create(connectionString, connection.ReadOnly);
         }
-        return new DbQueryExecutor(connection);
+        // Failures leave as kind + code; the redacted driver text goes only to the local log (Proxy:LogDriverErrors).
+        return new DbQueryExecutor(connection, new FailureTranslator(
+            connection.Provider.FailureMapper, connection.Provider.Engine, name, redactor, options.CurrentValue.LogDriverErrors, _sink));
     }
 
     private static string ChooseName(ProxyPrincipal principal, string? requested, Dictionary<string, DataSourceOptions> configured)

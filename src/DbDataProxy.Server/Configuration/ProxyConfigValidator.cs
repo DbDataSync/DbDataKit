@@ -110,6 +110,19 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
             if (!MetadataModes.Contains((source.Metadata ?? "").ToLowerInvariant()))
                 cx.Error($"{at}.Metadata", $"`Metadata` is `{source.Metadata}`.", $"One of: {string.Join(", ", MetadataModes)}.");
 
+            for (int i = 0; i < source.AllowedDirectories.Count; i++)
+            {
+                string dir = source.AllowedDirectories[i];
+                if (provider != "duckdb")
+                    cx.Error($"{at}.AllowedDirectories", "`AllowedDirectories` works only with the duckdb provider (it lists directories the DuckDB sandbox lets queries read).", "Remove it or use Provider duckdb.");
+                else if (string.IsNullOrWhiteSpace(dir) || dir.Any(char.IsControl) || !Path.IsPathFullyQualified(dir))
+                    cx.Error($"{at}.AllowedDirectories[{i}]", "A directory must be an absolute path without control characters.", "Example: C:/data/parquet or /srv/data/parquet.");
+            }
+            if (source.AllowedDirectories.Count > 0 && provider == "duckdb" && source.AllowWrites)
+                cx.Warning($"{at}.AllowedDirectories", "The source has `AllowWrites`, so it is not sandboxed and `AllowedDirectories` has no effect.", "Remove it, or drop `AllowWrites` to sandbox the source.");
+            if (source.MaxConcurrentQueries > 0 && source.MaxConcurrentQueriesPerUser > source.MaxConcurrentQueries)
+                cx.Warning($"{at}.MaxConcurrentQueriesPerUser", "The per-user cap is above the data source cap, so it can never be reached.", "Lower it or raise `MaxConcurrentQueries`.");
+
             if (source.Compression is { } own) ValidateCompression(own, $"{at}.Compression", cx);
         }
     }

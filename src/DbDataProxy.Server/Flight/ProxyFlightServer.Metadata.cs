@@ -340,7 +340,7 @@ public sealed partial class ProxyFlightServer
         _ => source.Options.Provider.Equals("odbc", StringComparison.OrdinalIgnoreCase),
     };
 
-    private static async Task<List<string?[]>> LoadSchemataAsync(ResolvedDataSource source, CancellationToken cancellationToken)
+    private async Task<List<string?[]>> LoadSchemataAsync(ResolvedDataSource source, CancellationToken cancellationToken)
     {
         if (!UseCatalogApi(source))
             return await QueryRowsAsync(source, SchemataSql, cancellationToken).ConfigureAwait(false);
@@ -350,7 +350,7 @@ public sealed partial class ProxyFlightServer
         return tables.Select(t => new[] { t[0], t[1] }).DistinctBy(r => (r[0], r[1])).ToList();
     }
 
-    private static async Task<List<string?[]>> LoadTablesAsync(ResolvedDataSource source, CancellationToken cancellationToken)
+    private async Task<List<string?[]>> LoadTablesAsync(ResolvedDataSource source, CancellationToken cancellationToken)
     {
         if (!UseCatalogApi(source))
             return await QueryRowsAsync(source, TablesSql, cancellationToken).ConfigureAwait(false);
@@ -364,13 +364,13 @@ public sealed partial class ProxyFlightServer
         }
         catch (Exception ex) when (ex is not RpcException and not OperationCanceledException)
         {
-            throw ToRpcException(ex);
+            throw Fail(ex);
         }
     }
 
     // Sources without INFORMATION_SCHEMA ask the driver (SQLPrimaryKeys) for the one table named in the command; drivers
     // that cannot say, or tables without a key, report none. Rows are catalog, schema, table, column, key name, sequence.
-    private static async Task<List<string?[]>> LoadPrimaryKeysAsync(
+    private async Task<List<string?[]>> LoadPrimaryKeysAsync(
         ResolvedDataSource source, CommandGetPrimaryKeys command, CancellationToken cancellationToken)
     {
         if (!UseCatalogApi(source)) return await QueryRowsAsync(source, PrimaryKeysSql, cancellationToken).ConfigureAwait(false);
@@ -383,11 +383,11 @@ public sealed partial class ProxyFlightServer
         }
         catch (Exception ex) when (ex is not RpcException and not OperationCanceledException)
         {
-            throw ToRpcException(ex);
+            throw Fail(ex);
         }
     }
 
-    private static async Task<List<string?[]>> QueryRowsAsync(ResolvedDataSource source, string sql, CancellationToken cancellationToken)
+    private async Task<List<string?[]>> QueryRowsAsync(ResolvedDataSource source, string sql, CancellationToken cancellationToken)
     {
         try
         {
@@ -406,7 +406,7 @@ public sealed partial class ProxyFlightServer
         }
         catch (Exception ex) when (ex is not RpcException and not OperationCanceledException)
         {
-            throw ToRpcException(ex);
+            throw Fail(ex);
         }
     }
 
@@ -421,7 +421,7 @@ public sealed partial class ProxyFlightServer
     /// A zero-row query cannot always say how a column was declared (DuckDB reports every decimal as 0/0, nothing says
     /// NOT NULL), so precision, scale and nullability come from the catalog: INFORMATION_SCHEMA, or SQLColumns for ODBC.
     /// </summary>
-    private static async Task<DeclaredColumns> LoadDeclaredColumnsAsync(ResolvedDataSource source, CancellationToken cancellationToken)
+    private async Task<DeclaredColumns> LoadDeclaredColumnsAsync(ResolvedDataSource source, CancellationToken cancellationToken)
     {
         if (UseCatalogApi(source))
         {

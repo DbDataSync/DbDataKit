@@ -5,38 +5,67 @@ using Apache.Arrow;
 
 namespace DbDataProxy.Data;
 
-/// <summary>Generic ADO.NET executor: any <see cref="DbConnection"/> opened through the shared provider becomes an Arrow query source.</summary>
-public sealed class DbQueryExecutor(SourceConnection source) : IQueryExecutor, IMetadataProvider
+/// <summary>
+/// Generic ADO.NET executor: any <see cref="DbConnection"/> opened through the shared provider becomes an Arrow query source. Whatever the
+/// driver throws leaves as a <see cref="DbDataKit.Connections.ConnectionFailureException"/> (kind and code, never the driver's text); see <see cref="FailureTranslator"/>.
+/// </summary>
+public sealed class DbQueryExecutor(SourceConnection source, FailureTranslator? failures = null) : IQueryExecutor, IMetadataProvider
 {
+    private readonly FailureTranslator _failures = failures ?? new FailureTranslator(source.Provider.FailureMapper, source.Provider.Engine, source.Definition.Name);
+
+    [System.Diagnostics.CodeAnalysis.DoesNotReturn]
+    private void Rethrow(Exception ex)
+    {
+        var translated = _failures.Translate(ex);
+        if (ReferenceEquals(translated, ex)) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex).Throw();
+        throw translated;
+    }
+
     public async Task<IQueryResult> ExecuteQueryAsync(QueryRequest request, CancellationToken cancellationToken)
     {
-        var connection = await source.OpenAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var command = CreateCommand(connection, request);
+            var connection = await source.OpenAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                var reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess, cancellationToken).ConfigureAwait(false);
-                return new DbQueryResult(connection, command, reader, request.BatchSize);
+                var command = CreateCommand(connection, request);
+                try
+                {
+                    var reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess, cancellationToken).ConfigureAwait(false);
+                    return new DbQueryResult(connection, command, reader, request.BatchSize, _failures);
+                }
+                catch
+                {
+                    await command.DisposeAsync().ConfigureAwait(false);
+                    throw;
+                }
             }
             catch
             {
-                await command.DisposeAsync().ConfigureAwait(false);
+                await connection.DisposeAsync().ConfigureAwait(false);
                 throw;
             }
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            await connection.DisposeAsync().ConfigureAwait(false);
+            Rethrow(ex);
             throw;
         }
     }
 
     public async Task<long> ExecuteNonQueryAsync(QueryRequest request, CancellationToken cancellationToken)
     {
-        await using var connection = await source.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await using var command = CreateCommand(connection, request);
-        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var connection = await source.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await using var command = CreateCommand(connection, request);
+            return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Rethrow(ex);
+            throw;
+        }
     }
 
     // The catalog functions go through the shared ODBC metadata package, which makes its own connection from the composed connection string.
@@ -44,34 +73,44 @@ public sealed class DbQueryExecutor(SourceConnection source) : IQueryExecutor, I
 
     private void RequireOdbc()
     {
-        if (!IsOdbc) throw new NotSupportedException("Catalog-API metadata is only available for ODBC data sources.");
+        if (!IsOdbc) throw new UnsupportedValueException("Catalog-API metadata is only available for ODBC data sources.");
+    }
+
+    private async Task<T> GuardAsync<T>(Func<Task<T>> call)
+    {
+        try { return await call().ConfigureAwait(false); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Rethrow(ex);
+            throw;
+        }
     }
 
     public Task<IReadOnlyList<TableEntry>> ListTablesAsync(int? commandTimeoutSeconds, CancellationToken cancellationToken)
     {
         RequireOdbc();
-        return OdbcMetadata.ListTablesAsync(source.Compose(), commandTimeoutSeconds, cancellationToken);
+        return GuardAsync(() => OdbcMetadata.ListTablesAsync(source.Compose(), commandTimeoutSeconds, cancellationToken));
     }
 
     public Task<IReadOnlyList<ColumnEntry>> ListColumnsAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken)
     {
         RequireOdbc();
-        return OdbcMetadata.ListColumnsAsync(source.Compose(), catalog, schema, table, cancellationToken);
+        return GuardAsync(() => OdbcMetadata.ListColumnsAsync(source.Compose(), catalog, schema, table, cancellationToken));
     }
 
     public Task<IReadOnlyList<PrimaryKeyEntry>> ListPrimaryKeysAsync(string? catalog, string? schema, string table, CancellationToken cancellationToken)
     {
         RequireOdbc();
-        return OdbcMetadata.ListPrimaryKeysAsync(source.Compose(), catalog, schema, table, cancellationToken);
+        return GuardAsync(() => OdbcMetadata.ListPrimaryKeysAsync(source.Compose(), catalog, schema, table, cancellationToken));
     }
 
-    public async Task<DialectInfo> GetDialectAsync(CancellationToken cancellationToken)
+    public Task<DialectInfo> GetDialectAsync(CancellationToken cancellationToken) => GuardAsync(async () =>
     {
         if (IsOdbc) return await OdbcMetadata.GetDialectAsync(source.Compose(), cancellationToken).ConfigureAwait(false);
 
         await using var connection = await source.OpenAsync(cancellationToken).ConfigureAwait(false);
         return new DialectInfo(null, connection.ServerVersion, null);
-    }
+    });
 
     private DbCommand CreateCommand(DbConnection connection, QueryRequest request)
     {
@@ -90,9 +129,11 @@ internal sealed class DbQueryResult : IQueryResult
     private readonly DbDataReader _reader;
     private readonly ArrowColumnWriter[] _columns;
     private readonly int _batchSize;
+    private readonly FailureTranslator _failures;
 
-    public DbQueryResult(DbConnection connection, DbCommand command, DbDataReader reader, int batchSize)
+    public DbQueryResult(DbConnection connection, DbCommand command, DbDataReader reader, int batchSize, FailureTranslator failures)
     {
+        _failures = failures;
         _connection = connection;
         _command = command;
         _reader = reader;
@@ -115,12 +156,7 @@ internal sealed class DbQueryResult : IQueryResult
     {
         while (true)
         {
-            int rows = 0;
-            while (rows < _batchSize && await _reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                for (int c = 0; c < _columns.Length; c++) _columns[c].Append(_reader, c);
-                rows++;
-            }
+            int rows = await ReadRowsAsync(cancellationToken).ConfigureAwait(false);
             if (rows == 0) yield break;
 
             var arrays = new IArrowArray[_columns.Length];
@@ -128,6 +164,27 @@ internal sealed class DbQueryResult : IQueryResult
             yield return new RecordBatch(Schema, arrays, rows);
 
             if (rows < _batchSize) yield break;
+        }
+    }
+
+    // A driver error in the middle of a stream is translated like one at the start: kind and code, never the driver's text.
+    private async Task<int> ReadRowsAsync(CancellationToken cancellationToken)
+    {
+        int rows = 0;
+        try
+        {
+            while (rows < _batchSize && await _reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                for (int c = 0; c < _columns.Length; c++) _columns[c].Append(_reader, c);
+                rows++;
+            }
+            return rows;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            var translated = _failures.Translate(ex);
+            if (ReferenceEquals(translated, ex)) throw;
+            throw translated;
         }
     }
 

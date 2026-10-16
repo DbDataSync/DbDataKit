@@ -136,7 +136,7 @@ public sealed partial class ProxyFlightServer(
         }
         catch (Exception ex) when (ex is not RpcException and not OperationCanceledException)
         {
-            throw ToRpcException(ex);
+            throw Fail(ex);
         }
 
         byte[] handle = pending.Add(principal.Name, source, result);
@@ -175,7 +175,7 @@ public sealed partial class ProxyFlightServer(
         }
         catch (Exception ex) when (ex is not RpcException and not OperationCanceledException)
         {
-            throw ToRpcException(ex);
+            throw Fail(ex);
         }
         _log.LogInformation("Streamed {Rows} rows to {User} from {Source} (compression: {Compression})",
             rows, principal.Name, query.Source.Name, plan);
@@ -208,34 +208,52 @@ public sealed partial class ProxyFlightServer(
         }
         catch (Exception ex) when (ex is not RpcException and not OperationCanceledException)
         {
-            throw ToRpcException(ex);
+            throw Fail(ex);
         }
     }
 
-    /// <summary>Maps database failures to gRPC statuses clients can act on, without leaking connection strings.</summary>
-    internal static RpcException ToRpcException(Exception ex)
+    /// <summary>
+    /// Maps failures to gRPC statuses clients can act on. A database failure arrives as a classified <see cref="DbDataKit.Connections.ConnectionFailure"/> and the client
+    /// gets its kind, the engine's error number or SQLSTATE and a fixed sentence (for example "The login was rejected. [sqlserver 18456]"), never the driver's own
+    /// text, which can name tables, columns, servers and file paths; that text goes to the local log. Messages the Proxy wrote itself are passed on.
+    /// </summary>
+    public static RpcException ToRpcException(Exception ex)
     {
-        if (ex is RpcException rpc) return rpc;
-        if (ex is DbDataKit.Connections.ConnectionFailureException failure)
-            return failure.Failure.Kind == DbDataKit.Connections.ConnectionFailureKind.Login
-                ? new RpcException(new Status(StatusCode.Unauthenticated, "The database rejected the credentials."))
-                : new RpcException(new Status(StatusCode.InvalidArgument, failure.Message));
-        if (IsLoginFailure(ex))
-            return new RpcException(new Status(StatusCode.Unauthenticated, "The database rejected the credentials."));
-        if (ex is DbDataKit.Odbc.Metadata.OdbcResultTruncatedException)
-            return new RpcException(new Status(StatusCode.ResourceExhausted, "The data source's catalog is larger than the configured limit."));
-        if (ex is DbException or NotSupportedException or DbDataKit.Odbc.Metadata.OdbcPolicyViolationException or ArgumentException or DbDataKit.Odbc.Metadata.OdbcCatalogException)
-            return new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
-        return new RpcException(new Status(StatusCode.Internal, "Query failed: " + ex.Message));
+        switch (ex)
+        {
+            case RpcException rpc:
+                return rpc;
+            case DbDataKit.Connections.ConnectionFailureException failure:
+                return new FailureRpcException(failure.Failure);
+            case IClientVisible or DbDataKit.Odbc.Metadata.OdbcPolicyViolationException:
+                return new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+            case DbDataKit.Odbc.Metadata.OdbcResultTruncatedException:
+                return new RpcException(new Status(StatusCode.ResourceExhausted, "The data source's catalog is larger than the configured limit."));
+            default:
+                return new FailureRpcException(new DbDataKit.Connections.ConnectionFailure(DbDataKit.Connections.ConnectionFailureKind.Other, ex.GetType().Name, null));
+        }
     }
 
-    private static bool IsLoginFailure(Exception ex) => ex switch
+    /// <summary>The client-facing status for <paramref name="ex"/>; a failure nobody classified (a bug, not a database error) is also logged in full.</summary>
+    private RpcException Fail(Exception ex)
     {
-        Microsoft.Data.SqlClient.SqlException sql => sql.Number is 18456 or 18452 or 4060,
-        System.Data.Odbc.OdbcException odbc => odbc.Errors.Cast<System.Data.Odbc.OdbcError>()
-            .Any(e => e.SQLState is { } s && (s.StartsWith("28", StringComparison.Ordinal) || s == "42000" && e.NativeError is 18456)),
-        DbDataKit.Odbc.Metadata.OdbcCatalogException catalogError => catalogError.SqlState.StartsWith("28", StringComparison.Ordinal),
-        _ => false,
+        var rpc = ToRpcException(ex);
+        if (rpc is FailureRpcException { Failure.Kind: DbDataKit.Connections.ConnectionFailureKind.Other } && ex is not DbDataKit.Connections.ConnectionFailureException)
+            _log.LogError(ex, "Unexpected failure while serving a request");
+        return rpc;
+    }
+
+    /// <summary>The gRPC status for a failure kind.</summary>
+    public static StatusCode StatusFor(DbDataKit.Connections.ConnectionFailureKind kind) => kind switch
+    {
+        DbDataKit.Connections.ConnectionFailureKind.Login => StatusCode.Unauthenticated,
+        DbDataKit.Connections.ConnectionFailureKind.Network => StatusCode.Unavailable,
+        DbDataKit.Connections.ConnectionFailureKind.Tls => StatusCode.Unavailable,
+        DbDataKit.Connections.ConnectionFailureKind.Timeout => StatusCode.DeadlineExceeded,
+        DbDataKit.Connections.ConnectionFailureKind.Permission => StatusCode.PermissionDenied,
+        DbDataKit.Connections.ConnectionFailureKind.Syntax => StatusCode.InvalidArgument,
+        DbDataKit.Connections.ConnectionFailureKind.Unsupported => StatusCode.InvalidArgument, // as before: a driver or server that cannot do what was asked (a missing ODBC driver is IM002)
+        _ => StatusCode.Internal,
     };
 
     private string Describe(string sql) => options.CurrentValue.LogSql ? Truncate(sql) : "<sql hidden>";

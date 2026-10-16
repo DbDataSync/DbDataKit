@@ -53,7 +53,7 @@ internal sealed class ArrowColumnWriter
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or InvalidOperationException)
         {
             // Driver-specific types (e.g. ODBC SQL_SS_TIMESTAMPOFFSET) that System.Data.Odbc cannot read at all.
-            throw new NotSupportedException(
+            throw new UnsupportedValueException(
                 $"Column '{name}' has a data type the ODBC provider cannot read ({ex.Message.TrimEnd('.')}). " +
                 $"Convert it in the query, for example CAST({name} AS nvarchar(40)).", ex);
         }

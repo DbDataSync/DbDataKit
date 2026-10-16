@@ -54,9 +54,10 @@ public static class ProxyHost
 
     /// <summary>
     /// Builds the proxy host. <paramref name="configure"/> lets tests and embedders adjust it before it is built.
+    /// <paramref name="overrideServices"/> runs after the proxy's own registrations, so a test can replace one (for example the provider registry).
     /// Throws <see cref="ProxyConfigException"/> when the effective configuration is not valid (the command line exits with code 2).
     /// </summary>
-    public static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null)
+    public static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null, Action<IServiceCollection>? overrideServices = null)
     {
         var builder = CreateBuilder(args);
         var loadGuard = ProxyConfigLoadGuard.Install(builder.Configuration);
@@ -81,6 +82,7 @@ public static class ProxyHost
         UseSharedHost(builder, options, args);
         ConfigureServices(builder.Services, options);
         ConfigureKestrel(builder, options);
+        overrideServices?.Invoke(builder.Services); // a seam for tests: replace a registration made above (the last one wins)
 
         var app = builder.Build();
         if (loaded.Diagnostics.Count > 0)
@@ -88,6 +90,9 @@ public static class ProxyHost
         // Resolves every referenced secret (registering it for redaction), warns about literals, and fails when
         // Proxy:RequireReferencedSecrets is on and one is found.
         app.Services.GetRequiredService<SecretsRuntime>().ValidateStartup(app.Services.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue);
+        ConnectionStartupChecks.WarnAboutTlsOptOuts(
+            app.Services.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue, app.Services.GetRequiredService<SecretsRuntime>(),
+            app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Connections"));
         app.UseDbDataPipeline();
         app.MapDbDataEndpoints();
         app.MapFlightEndpoint();
@@ -144,13 +149,20 @@ public static class ProxyHost
         services.AddSingleton<IJwtValidator, JwtBearerValidator>();
         services.AddSingleton<RequestAuthenticator>();
 
-        // The shared providers: one registry, one composer, one failure model per engine.
-        services.AddSingleton(_ => new DbDataKit.Connections.ProviderRegistry(
-        [
-            new DbDataKit.Connections.Odbc.OdbcProvider(),
-            new DbDataKit.Connections.SqlServer.SqlServerProvider(),
-            new DbDataKit.Connections.DuckDb.DuckDbProvider(),
-        ]));
+        // The shared providers: one registry, one composer, one failure model per engine. With Proxy:LogDriverErrors the providers keep the
+        // (redacted) driver text of failed connections on the failure, for the local log only.
+        services.AddSingleton(sp =>
+        {
+            var redactor = sp.GetRequiredService<IRedactor>();
+            bool raw = sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue.LogDriverErrors;
+            return new DbDataKit.Connections.ProviderRegistry(
+            [
+                new DbDataKit.Connections.Odbc.OdbcProvider(redactor: redactor, includeRawFailures: raw),
+                new DbDataKit.Connections.SqlServer.SqlServerProvider(redactor: redactor, includeRawFailures: raw),
+                new DbDataKit.Connections.DuckDb.DuckDbProvider(redactor: redactor, includeRawFailures: raw),
+            ]);
+        });
+        services.AddSingleton<QueryLimits>();
         if (OperatingSystem.IsWindows())
         {
             services.AddSingleton<WorkerProcessHost>();
