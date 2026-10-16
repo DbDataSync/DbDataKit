@@ -65,8 +65,15 @@ public sealed class DuckDbFailureMapper : IFailureMapper
     {
         if (exception is not DuckDBException) return null;
         string cls = ClassOf(exception.Message);
-        return new ConnectionFailure(Classes.GetValueOrDefault(cls, ConnectionFailureKind.Other), cls.Replace(' ', '-'), engine);
+        var kind = Classes.GetValueOrDefault(cls, ConnectionFailureKind.Other);
+        // A write against a READ_ONLY database or a change to a locked configuration is reported as "Invalid Input Error"; to a caller it is a permission failure.
+        if (kind == ConnectionFailureKind.Other && IsSandboxRefusal(exception.Message)) kind = ConnectionFailureKind.Permission;
+        return new ConnectionFailure(kind, cls.Replace(' ', '-'), engine);
     }
+
+    private static bool IsSandboxRefusal(string message) =>
+        message.StartsWith("Invalid Input Error:", StringComparison.OrdinalIgnoreCase)
+        && (message.Contains("read-only mode", StringComparison.OrdinalIgnoreCase) || message.Contains("has been locked", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The error class named at the start of a message, or <c>other</c>.</summary>
     public static string ClassOf(string message)

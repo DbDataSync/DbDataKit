@@ -216,6 +216,19 @@ public class DuckDbTests
     }
 
     [Fact]
+    public async Task Writes_and_setting_changes_in_the_sandbox_are_permission_failures()
+    {
+        using var dir = new TempDir();
+        await using var c = await new DuckDbProvider().OpenAsync(Ctx(MakeDatabase(dir)));
+        var mapper = new DuckDbFailureMapper();
+        foreach (var sql in new[] { "INSERT INTO t VALUES (4)", "SET enable_external_access = true" })
+        {
+            var ex = Assert.IsAssignableFrom<Exception>(await TryRun(c, sql));
+            Assert.Equal(ConnectionFailureKind.Permission, mapper.Map(ex, DbDataKit.Dialect.EngineId.DuckDb)!.Kind);
+        }
+    }
+
+    [Fact]
     public async Task Raw_failure_text_is_kept_only_when_asked_for_and_never_in_the_public_message()
     {
         using var dir = new TempDir();
