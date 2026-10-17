@@ -1,6 +1,6 @@
 # Monorepo branching, CI and releases
 
-Status: proposed. Supersedes the "monorepo rejected" decision in [00-REPO-STRATEGY.md](00-REPO-STRATEGY.md): the
+Status: decided; the DbDataSync lane's workflows are written (see "Implementation status") and not yet run. Supersedes the "monorepo rejected" decision in [00-REPO-STRATEGY.md](00-REPO-STRATEGY.md): the
 three products move into this repo (DbDataSync first, DbDataProxy and DbDataBuild later). This document adapts
 DbDataSync's `dev` → `test` → `main` model (`DbDataSync/architecture/branching-and-releases.md`) to several
 products in one repository.
@@ -14,7 +14,12 @@ products in one repository.
   plus the shared code and docs, and it is the repository's default branch.
 - DbDataSync's rules carry over per product: work lands on `<product>/dev`; nobody pushes to `<product>/test`
   or `main`; pipelines move them.
-- **`shared/` has no lane of its own.** Shared code is changed through the product branches, like any other
+- **Layout:** every product and the shared code is a top-level folder: `DbDataSync/`, `DbDataProxy/`,
+  `DbDataBuild/`, and `DbDataKit/` for the shared code (renamed from `shared/`). `LICENSE` is at the root.
+  Each product owns its own `docs/`.
+- **Container images are named per product** (`ghcr.io/<owner>/dbdatasync`, ...). Where the image workflow lives
+  (here or in a product repo) doesn't matter to the name; for now it lives here with the product's release.
+- **`DbDataKit/` has no lane of its own.** Shared code is changed through the product branches, like any other
   code (see "Shared code" below).
 - **All products use CalVer** (`YYYY.MM.DD.HHmm`, as DbDataSync does). Proxy's and Build's semver tags end
   when they move in.
@@ -29,6 +34,26 @@ dbdatabuild/dev ─CI green──► dbdatabuild/test ─release (dispatch)─�
                                                                       │
                           main ──immediately, after the merge──► every other <product>/dev
 ```
+
+## Layout
+
+```
+DbDataKit/                    repository root
+  LICENSE
+  .github/workflows/          per-product sets: dbdatasync-ci.yml, dbdatasync-release.yml, ...
+  DbDataSync/                 product (imported with its history)
+  DbDataProxy/                product (still a submodule until it moves in)
+  DbDataBuild/                product (still a submodule until it moves in)
+  DbDataKit/                  shared libraries (DbDataKit.*), one solution: DbDataKit.Shared.slnx
+  docs/                       cross-project plans from before the merge
+```
+
+GitHub only runs workflows from the root `.github/workflows/`, so each product's workflows live there with the
+product's name as a prefix and run their steps inside that product's folder.
+
+**Root `docs/` cleanup is deferred.** Each product has its own docs, so what is in the root `docs/` should
+eventually be moved into the product that owns it, or removed. It isn't urgent and needs no special lane:
+those changes can be merged from any one product's `dev` branch.
 
 ## What changes from the single-product model
 
@@ -52,21 +77,21 @@ products from racing each other into conflicting shared-code merges.
 
 ## Shared code
 
-Because `shared/` is changed through product branches, three things follow:
+Because `DbDataKit/` is changed through product branches, three things follow:
 
 1. **Product CI runs the consumers.** A product's CI always builds and tests its own directory; if the change
-   touches `shared/**` it also builds and tests *every* product against it, since `shared/` is consumed at
+   touches `DbDataKit/**` it also builds and tests *every* product against it, since `DbDataKit/` is consumed at
    the same commit through project references. A shared change cannot go green by only checking its author's
    product.
-2. **The lane guard allows `shared/**`** (and the product's own directory) and rejects anything else on a
+2. **The lane guard allows `DbDataKit/**`** (and the product's own directory) and rejects anything else on a
    `<product>/dev` push or PR, so a stray edit to another product's directory can't make the release merge
    conflict.
-3. **The release merge can conflict on `shared/`** if two products changed the same shared file. The ancestor
+3. **The release merge can conflict on `DbDataKit/`** if two products changed the same shared file. The ancestor
    check above is what turns that into a visible "sync first" instead of a surprise at release time: the
    second product must have the first one's shared change merged in, and its CI re-run, before it can release.
 
-Root files (`LICENSE`, `.gitattributes`, `docs/`) don't have a lane either; either allow a small, explicit
-carve-out in the lane guard or route them through whichever product's branch is touching them.
+Root files (`LICENSE`, `.gitattributes`, `docs/`) have no lane either: they are merged from whichever product's
+`dev` branch is touching them, and the lane guard allows them.
 
 ## Branch protection
 
@@ -83,9 +108,13 @@ must be installed on this repo (Contents: read/write) before any ruleset is enab
 
 ## CI
 
-- **Path-scoped.** One workflow per product (`ci-dbdatasync.yml`, ...) built on a shared reusable workflow.
-  Each triggers on `push` to `<product>/dev` and `pull_request` to `<product>/dev` (carrying over DbDataSync's
-  "CI on `dev` only" decision), with `paths:` limiting it to `<product>/**` plus `shared/**`.
+- **Product-scoped by a `changes` job, not `paths:`.** One workflow per product (`dbdatasync-ci.yml`, ...). It
+  triggers on every `push` and `pull_request` to `<product>/dev` (carrying over DbDataSync's "CI on `dev` only"
+  decision). A first job diffs against `<product>/test` (the last validated commit) and the heavy jobs run only if
+  `<product>/**`, `DbDataKit/**` or the product's workflow files changed. A `paths:` filter was rejected: the
+  post-release back-merge only brings *other* products' files, a path-filtered run would never fire for it, `test`
+  would never advance, and the next release's ancestor check would block forever. With `changes`, such a push runs
+  no suite but is still promoted.
 - **Working directory.** DbDataSync's workflows assume the product is the repo root (`DbDataSync.slnx`,
   `tools/`, `docker/`). They need `defaults.run.working-directory`, path updates, and cache/artifact keys
   prefixed by product. This is a workflow edit, not a code change, but it is real work and is the main risk
@@ -97,8 +126,9 @@ must be installed on this repo (Contents: read/write) before any ruleset is enab
   of the product's CI run, gated on `needs:` the test jobs and `github.event_name == 'push'`. The promotion
   then uses `github.sha` directly, which also resolves DbDataSync's open question about promoting the exact SHA
   CI passed on.
-- **Reuse.** Common steps (restore/build/test matrix, app-token mint, ff-push helper) live in
-  `.github/workflows/_*.yml` reusable workflows, which is what plan 00 already intended for the hub.
+- **Reuse.** Per-product workflows are kept as straight ports of DbDataSync's, so DbDataProxy and DbDataBuild
+  can be added the same way. Extracting shared steps into reusable `_*.yml` workflows is worth doing once a second
+  product exists to show which steps are actually common.
 
 ## Releases, versions and tags
 
@@ -155,17 +185,38 @@ and out of scope for now; do it once all three products are in and NuGet is back
 
 ### Other things tied to the old repo
 
-- **GHCR image name** (`publish-image.yml`) follows the repo. Decide whether the image keeps its name.
+- **GHCR image name** is per product (`ghcr.io/<owner>/dbdatasync`). A package created by the old repository's
+  workflow belongs to that repository: before the first push from here, add `DbDataSync/DbDataKit` with Write
+  under the package's "Manage Actions access", or the push is refused.
+- **Packed README links.** `tools/docs/nuget-readme.mjs` pins the NuGet README's links to
+  `RepositoryUrl/blob/<sha>/docs/…`, and `RepositoryUrl` in `DbDataSync.Cli.csproj` is the old repository. In the
+  monorepo those links would point at a commit and path that don't exist there. This is invisible while NuGet is
+  paused, but must be fixed (a code change) before it resumes.
 - **Existing tags** (`release/v*`, `snapshot-*`) were not carried over by the subtree import. They stay on
   the old repo, which is also where the update client expects them.
 
+## Implementation status
+
+Written, linted with `actionlint`, **not yet run** (they need to be on the default branch, and the App
+installed, to run for real):
+
+| file | ported from | notes |
+| --- | --- | --- |
+| `dbdatasync-ci.yml` | `ci.yml` + `promote-test.yml` | adds `changes`, `dbdatakit`, `promote`, `snapshot` jobs |
+| `dbdatasync-publish-snapshot.yml` | `publish-snapshot.yml` | reusable (`workflow_call`) and dispatchable; releases to the old repo |
+| `dbdatasync-release.yml` | `release.yml` | dispatch on `dbdatasync/test`; main merge; back-merge; NuGet switch off |
+| `dbdatasync-publish-image.yml` | `publish-image.yml` | product folder as context; checks out `dbdatasync/v<version>` |
+
+`promote-test.yml` has no file of its own; it is the `promote` job in the CI workflow.
+
 ## Rollout
 
-1. **Done:** DbDataSync imported with history (`DbDataSync/`), submodule removed.
-2. Cut `dbdatasync/dev` and `dbdatasync/test` from the import commit (DbDataSync's `main`, `dev` and `test`
-   were all at `f1d76ee`, so they start identical). Set `main` as the default branch.
-3. Port DbDataSync's workflows to the root with the path/working-directory changes, branch names, promotion
-   folded into CI, and the NuGet switch off. Run them with no rulesets, on a throwaway change.
+1. **Done:** DbDataSync imported with history (`DbDataSync/`), submodule removed; `shared/` renamed to
+   `DbDataKit/` (the solution builds from the new path); DbDataSync's workflows ported.
+2. Get this branch onto `main` (set `main` as the default branch). Workflows can only be dispatched, and
+   `workflow_dispatch` only listed, once they exist on the default branch.
+3. Cut `dbdatasync/dev` and `dbdatasync/test` from `main` (DbDataSync's own `main`, `dev` and `test` were all at
+   `f1d76ee`, so there is nothing to reconcile). Run CI on a throwaway change, with no rulesets.
 4. Install the pipelines App on this repo (and confirm it on the old one), add the rulesets (`main` first,
    then `*/test`), and do one beta release (`beta=true`) to prove the whole path: old-repo release, `main`
    merge, back-merge.
@@ -177,7 +228,7 @@ and out of scope for now; do it once all three products are in and NuGet is back
 
 ## Open questions
 
-1. GHCR image: keep the current name, or rename it with the monorepo?
-2. Proxy and Build have existing semver tags (`v0.2.0`, `v0.4.0`). Leave them as history, or add CalVer
+1. Proxy and Build have existing semver tags (`v0.2.0`, `v0.4.0`). Leave them as history, or add CalVer
    aliases?
-3. Root files (`LICENSE`, `docs/`): carve-out in the lane guard, or ride along with a product branch?
+2. The lane guard (reject edits outside `<product>/`, `DbDataKit/`, `docs/` and root files on a `<product>/dev`
+   push) is described here but not written yet. Do it as a CI job, or as a ruleset path restriction?
