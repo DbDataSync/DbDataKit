@@ -194,7 +194,8 @@ public class ServiceCommandTests
 
     [Fact]
     public void Elevation_detector_reports_without_throwing() =>
-        Assert.Contains("elevated", ElevationDetector.Message("x"), StringComparison.OrdinalIgnoreCase);
+        // Windows asks for an elevated prompt; elsewhere the advice is to use sudo.
+        Assert.Contains(OperatingSystem.IsWindows() ? "elevated" : "root", ElevationDetector.Message("x"), StringComparison.OrdinalIgnoreCase);
 }
 
 public class CertCommandTests

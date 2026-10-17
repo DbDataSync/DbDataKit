@@ -23,11 +23,23 @@ different ways with three different sets of variable names.
 
 ## Problems found, with evidence
 
-1. **The shared libraries' suite has never run on Linux CI.** DbDataSync's job for it was always skipped and the Proxy's
-   CI does not run it. Run locally on Linux it gives 17 failures in 1873: 14 `Odbc.Metadata` tests that need unixODBC
-   installed, `PlanTests` (the runtime-identifier validator rejects `ubuntu.24.04-x64`, the host's own RID, which is
-   also what `ubuntu-latest` reports), and two environment-sensitive tests (an unreachable-host classification and an
-   elevation check). Which of these also fail on GitHub's runners is not yet known.
+1. **The shared libraries' suite had never run on Linux CI, and it had real Linux defects.** DbDataSync's job for it was
+   always skipped and the Proxy's CI does not run it, so nothing noticed until a merge from `main` brought `DbDataKit/`
+   changes into DbDataSync's lane and its own inline copy of the job (without unixODBC) failed on Ubuntu, which blocked
+   promotion of `dbdatasync/test`. The first baseline of the shared job (`_dbdatakit.yml`) on GitHub's runners: **Windows
+   passed; Linux had 3 failures in 1873**, plus 14 ODBC tests that only need unixODBC installed (the job now installs it).
+   The three, and what they were:
+   - `SqlServerFailureMapper` classified an unreachable server as `Other` on Linux. **A real defect:** on Linux and macOS
+     Microsoft.Data.SqlClient reports every transport-level failure as error number 0, class 20, where Windows reports the
+     socket error number. Fixed: number 0 with class 20 or higher is a network failure.
+   - `ElevationDetector`'s test expected the Windows wording ("elevated"); elsewhere the message says to use sudo. A test
+     assumption. Fixed.
+   - The unknown-ODBC-driver test expected SQLSTATE `IM002` and a "word size" explanation; unixODBC reports `01000` for the
+     same input. A test assumption (the unknown-DSN test, `IM002` on both, was fine). Fixed.
+
+   A fourth defect showed up only on a machine using a distro-packaged .NET: `LibraryValidation.ValidateRuntimeIdentifier`
+   rejected the host's own RID `ubuntu.24.04-x64` (it allowed one dotted version component, and distro RIDs like
+   `ubuntu.24.04-x64` and `alpine.3.20-x64` have two), so planning any library install failed there. Fixed and tested.
 2. **Live tests are skipped everywhere they could matter.** The shared libraries have 50–66 live-gated tests that skip
    because nothing provides the engines. The Proxy's Windows job skips its SQL Server tests (`.\SQLEXPRESS` is not
    reachable on `windows-latest`) and only the Linux job runs them.
@@ -134,7 +146,7 @@ and the NuGet cache are cached; the shared libraries' job runs once per lane pus
 | phase | what | state |
 | --- | --- | --- |
 | 0 | Proxy lanes (`dbdataproxy/dev`, `/test`), Proxy CI and release workflows, the shared `merge-release` action, `_dbdatakit.yml`, Proxy test fixes | in the PR that adds this doc |
-| 1 | Dispatch `_dbdatakit.yml` on Linux and Windows to get the real baseline; fix what is a real defect (the RID validator) and what is an environment prerequisite (unixODBC, already installed by the job) | next |
+| 1 | Baseline of `_dbdatakit.yml` on Linux and Windows, and fix what it found (above); DbDataSync's CI calls the shared job instead of its own copy | done in the PR after this one |
 | 2 | `testenv/`: port DbDataSync's compose and DbDataBuild's engines, canonical variables and mapping files; wire the Proxy and the shared libraries first, since they have the least to migrate; the shared libraries' live tests start running | needs decisions 2, 3 |
 | 3 | `_dotnet-test.yml`; move each product's CI onto it; skipped-test summary; one action version | |
 | 4 | Nightly full matrix on each `*/test`; release gate on it | needs decision 4 |

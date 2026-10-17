@@ -182,13 +182,12 @@ public sealed class UpdateService(
         return results;
     }
 
-    /// <summary>A page a human can read about this exact release. A snapshot already carries its own
-    /// GitHub Release page (<see cref="ReleaseInfo.ReleaseUrl"/>, read off the release's own <c>html_url</c>);
-    /// stable/beta come from nuget.org's flat-container index, which has no such field, so that one is
-    /// built from the package id and version — nuget.org's own URL scheme for a specific version page.</summary>
+    /// <summary>A page a human can read about this exact release: its GitHub Release page
+    /// (<see cref="ReleaseInfo.ReleaseUrl"/>, read off the release's own <c>html_url</c>). A release the catalog
+    /// returned always has one; the fallback is the release page for its tag.</summary>
     private static string ReleaseUrlFor(ReleaseInfo release) =>
         release.ReleaseUrl?.ToString()
-        ?? $"https://www.nuget.org/packages/{ReleaseSources.PackageId}/{release.Version.Text}";
+        ?? $"https://github.com/{ReleaseSources.Repository}/releases/tag/{Uri.EscapeDataString(ReleaseSources.ReleaseTagPrefix + release.Version.Text)}";
 
     private string UserAgent => $"DbDataSync-update/{(ReleaseVersion.TryParse(facts.RunningVersion, out var v) ? v.Text : "unknown")}";
 

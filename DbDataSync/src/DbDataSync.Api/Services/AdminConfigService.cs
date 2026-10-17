@@ -117,7 +117,7 @@ public sealed class AdminConfigService(
                 "needs tables in notes."),
         new("DbDataSync:Updates:Mode",
             "Whether the Updates screen looks up the releases available: manual or disabled. Disabled by " +
-            "default, because looking them up calls nuget.org and GitHub. Updates themselves are applied from " +
+            "default, because looking them up calls GitHub. Updates themselves are applied from " +
             "a shell on the server (`dbdatasync update --apply`); the screen shows the commands either way.",
             SupportsWrite: true, AllowedValues: AllowedValuesFor<UpdatesMode>()),
         new("DbDataSync:Updates:Channels",

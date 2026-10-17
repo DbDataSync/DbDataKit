@@ -335,7 +335,7 @@ verification run's `TaskRuns` row is pruned, but its result file and index entry
 
 | key | env var | default | notes |
 | --- | --- | --- | --- |
-| `Updates:Mode` | `DbDataSync__Updates__Mode` | `disabled` | `manual` or `disabled` — whether the Updates screen looks up the releases available, which calls nuget.org and GitHub. The screen never applies an update; it gives the commands to run on the server either way. See [Installing → Updating](install.md#updating) |
+| `Updates:Mode` | `DbDataSync__Updates__Mode` | `disabled` | `manual` or `disabled` — whether the Updates screen looks up the releases available, which calls GitHub. The screen never applies an update; it gives the commands to run on the server either way. See [Installing → Updating](install.md#updating) |
 | `Updates:Channels` | `DbDataSync__Updates__Channels` | `stable` | which channels the Updates screen lists, comma-separated: `stable`, `beta`, `snapshot`. A snapshot is a development build, checked only against a checksum published beside it |
 
 ### `DbDataSync:Auth:Network:*`

@@ -1,45 +1,31 @@
 name: DbDataSync release
 
-# Ported from DbDataSync/.github/workflows/release.yml; its comments explain the decisions that are unchanged.
-# Cutting a release is dispatching this against dbdatasync/test:
+# Simplified for now: everything runs on the built-in GITHUB_TOKEN. No GitHub App, no locked branches, no NuGet, no
+# container image. Those are deferred (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md); the full versions are in
+# this file's git history (commit b762d5b and earlier in PR #1).
+#
+# Cut a release by dispatching this against dbdatasync/test:
 #
 #   gh workflow run dbdatasync-release.yml --ref dbdatasync/test -f beta=false
 #
-# What is different in the monorepo (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md):
-#   * `main` cannot be fast-forwarded to the released commit: other products release independently, so their
-#     commits are not ancestors of each other. The release MERGES dbdatasync/test into main with a merge commit
-#     instead, so main's first-parent history is the list of releases.
-#   * Because of that, a release refuses unless main is already an ancestor of dbdatasync/test. If another
-#     product released since this one last synced, wait for the back-merge to reach dbdatasync/dev and be promoted.
-#   * The last step merges main back into the other products' dev branches immediately, and brings this product's
-#     own dev and test up to the new main.
-#   * NuGet publishing is paused (input publish_nuget, default false) until all three products are in this repo.
-#   * The GitHub Release is created on the OLD repository, which `dbdatasync update` reads; no code is pushed there.
-#   * The tag in this repo is dbdatasync/v<version>.
+# It refuses unless dbdatasync/test has a green CI run and `main` is already an ancestor of it, then builds and checks
+# the package, tags the commit dbdatasync/v<version>, publishes a GitHub Release in THIS repository with the package
+# attached, merges dbdatasync/test into main (a merge commit, because other products release independently), and merges
+# main back into every <product>/dev branch. Pushes made with GITHUB_TOKEN start no workflows, so after a back-merge this
+# workflow dispatches that branch's CI by hand, which is what promotes it to <product>/test.
 
 on:
   workflow_dispatch:
     inputs:
       beta:
-        description: >-
-          Publish as a prerelease (-beta suffix). nuget.org then hides it from a plain
-          `dotnet tool install` — only an exact --version, or --prerelease, finds it.
-        type: boolean
-        default: false
-      publish_nuget:
-        description: >-
-          Push the package to nuget.org. Off while NuGet publishing is paused: the rest of the release
-          (build, checks, tag, GitHub Release, main merge) still runs. Turning it on needs the Trusted
-          Publishing policy re-registered for this repository and workflow file.
+        description: Publish as a prerelease (-beta suffix on the version, prerelease flag on the GitHub Release).
         type: boolean
         default: false
 
 permissions:
   contents: write
   # Looks up the CI run for this commit rather than re-running the suite.
-  actions: read
-  # NuGet Trusted Publishing's OIDC token (only used when publish_nuget is true).
-  id-token: write
+  actions: write
   # Opens an issue when a back-merge conflicts.
   issues: write
 
@@ -47,48 +33,15 @@ defaults:
   run:
     working-directory: DbDataSync
 
-env:
-  # Where GitHub Releases are published; `dbdatasync update` reads ReleaseSources.Repository, which is this.
-  RELEASES_REPO: DbDataSync/DbDataSync
-  # That repository's last commit before it moved here. Frozen. A release needs a tag, a tag needs a commit that
-  # exists in that repository, and pushing monorepo commits there would be pushing code.
-  RELEASES_TARGET: f1d76ee67091c4416aebcdfeb31868787ff4c889
-
 jobs:
   release:
     runs-on: ubuntu-latest
-    # The version that shipped, as NuGet normalised it — what the tag is named, and what the image job publishes.
-    outputs:
-      version: ${{ steps.pack.outputs.shipped }}
     steps:
-      # A token from the DbDataSync Pipelines GitHub App (id 5026881). The ruleset on `main`/`test`
-      # admits only that app, and GITHUB_TOKEN cannot be given the exception — see promote-test.yml's
-      # own note for why. Only the `main` fast-forward at the end is actually gated by the ruleset (the
-      # tag push is refs/tags, which the ruleset does not target), but the token is wired in at checkout
-      # so every git operation in this job speaks as one identity rather than two.
-      #
-      # `gh api`/`gh release create` below are unaffected: they take GH_TOKEN explicitly, and keep using
-      # GITHUB_TOKEN. So does `id-token: write` for NuGet Trusted Publishing.
-      - uses: actions/create-github-app-token@v3
-        id: app-token
-        with:
-          app-id: "5026881"
-          private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
-      # A second token, scoped to the old repository only, used just to create the GitHub Release there.
-      - uses: actions/create-github-app-token@v3
-        id: releases-token
-        with:
-          app-id: "5026881"
-          private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: DbDataSync
-
       - uses: actions/checkout@v7
         with:
           # The fast-forward of `main` at the end has to prove `main` is an ancestor of this commit
           # before it pushes; the default shallow clone cannot answer that question at all.
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
 
       # A release is cut from `test` — the validated snapshot `promote-test.yml` only ever advances to
       # a commit whose CI run passed — and ends by fast-forwarding `main` to whatever shipped, so
@@ -310,40 +263,7 @@ jobs:
               ;;
           esac
 
-      # Trusted Publishing (phase 127) — no NUGET_API_KEY secret exists anywhere in this repo. This
-      # job's own OIDC identity (repo DbDataSync/DbDataSync, workflow release.yml) is what nuget.org's
-      # Trusted Publishing policy checks; see phase-127-nuget-trusted-publishing.md for the one-time
-      # policy setup on nuget.org's side, which nothing in this repo can do for itself.
-      #
-      # Requested here, immediately before the push that spends it, and not any earlier in the job:
-      # the key nuget.org hands back is valid for one hour and good for exactly one push.
-      - name: NuGet login (OIDC → a one-hour API key)
-        if: ${{ inputs.publish_nuget }}
-        uses: NuGet/login@v1
-        id: nuget-login
-        with:
-          # The nuget.org profile name the Trusted Publishing policy is registered under — not an
-          # email address. Not sensitive in itself; stored as a secret only because that's nuget.org's
-          # own documented pattern, and there's no reason to diverge from a vendor's tested example
-          # for a low-stakes value.
-          user: ${{ secrets.NUGET_USER }}
-
-      # Before the GitHub Release, not after: so that Release's own notes can say "published to
-      # nuget.org" truthfully, rather than promising a step that hasn't run yet.
-      #
-      # steps.pack.outputs.nupkg by exact path, not artifacts/*.nupkg: this repo publishes the CLI
-      # tool only (see the parent planning doc) — a bare glob would also push the incidental
-      # DbDataSync.Drivers.Abstractions package the pack step's own comment explains, which is a real
-      # scope violation, not a cosmetic one.
-      - name: Push to nuget.org
-        if: ${{ inputs.publish_nuget }}
-        run: |
-          dotnet nuget push "${{ steps.pack.outputs.nupkg }}" \
-            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
-            --source https://api.nuget.org/v3/index.json \
-            --skip-duplicate
-
-      # After the nuget.org push, not before: a tag is a claim that this version shipped, and it
+      # After the package is built and checked, not before: a tag is a claim that this version shipped, and it
       # should never exist for one that didn't. This is also *why* a failed run needs no tag cleanup
       # any more, unlike the tag-push-triggered shape this replaced — a run that fails anywhere above
       # this step simply leaves no trace at all, and a retry is just running the workflow again with a
@@ -365,50 +285,40 @@ jobs:
       # dbdatasync:ci locally and never pushes it to a registry, so there is no published image
       # reference a release could point at — attaching one would mean first deciding to publish
       # images somewhere, which is a separate call this phase does not make.
-      # Created on the OLD repository (RELEASES_REPO), because that is what `dbdatasync update` reads; the tag it
-      # creates there is the bare version, pointing at RELEASES_TARGET. The tag that records what shipped is the
-      # dbdatasync/v<version> one pushed to THIS repository above. Notes link the real commit.
-      - name: Publish the GitHub Release (on the old repository)
+      # Created in this repository against the tag pushed above. `dbdatasync update` reads this repository's releases and keeps
+      # the ones whose tag starts with `dbdatasync/` (v<version> for every channel: stable, v<version>-beta, v<version>-snapshot.g<sha>), so
+      # the release has to carry exactly the two assets it looks for: DbDataSync.<version>.nupkg and its .sha512 checksum.
+      # --latest=false because "latest" is one marker for the whole repository, not one per product.
+      - name: Publish the GitHub Release
         env:
-          GH_TOKEN: ${{ steps.releases-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.pack.outputs.shipped }}
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
           NUPKG: ${{ steps.pack.outputs.nupkg }}
-          PUBLISH_NUGET: ${{ inputs.publish_nuget }}
         run: |
           {
-            echo "The \`dbdatasync\` .NET global tool, packed from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
-            echo "(tag \`dbdatasync/v$VERSION\` in $GITHUB_REPOSITORY). This repository's tag for the release points at a frozen"
-            echo "commit, because the source now lives in $GITHUB_REPOSITORY."
+            echo "The \`dbdatasync\` .NET global tool, packed from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA."
             echo
             echo "The version is the UTC date and time this release was built."
             [ "$PRERELEASE" = "true" ] && echo "**This is a prerelease.**"
             echo
-            if [ "$PUBLISH_NUGET" = "true" ]; then
-              echo "Published to nuget.org:"
-              echo
-              echo '```'
-              echo "dotnet tool install --global DbDataSync --version $VERSION"
-              echo '```'
-              echo
-              echo "The attached package is the same bits, for an offline or air-gapped install:"
-            else
-              echo "**NuGet publishing is paused**, so this release is not on nuget.org. Install from the attached package:"
-            fi
+            echo "Install it with \`dbdatasync update --to $VERSION\`, or by hand from the attached package:"
             echo
             echo '```'
             echo "dotnet tool install --global --add-source . DbDataSync --version $VERSION"
             echo '```'
           } > /tmp/release-notes.md
+          # The checksum `dbdatasync update` verifies the download against: base64 of the package's SHA-512, no newline.
+          openssl dgst -sha512 -binary "$NUPKG" | base64 -w0 > "$NUPKG.sha512"
           prerelease_flag=()
           [ "$PRERELEASE" = "true" ] && prerelease_flag=(--prerelease)
-          gh release create "$VERSION" \
-            --repo "$RELEASES_REPO" \
-            --target "$RELEASES_TARGET" \
+          gh release create "dbdatasync/v$VERSION" \
+            --verify-tag \
+            --latest=false \
             --title "DbDataSync $VERSION" \
             --notes-file /tmp/release-notes.md \
             "${prerelease_flag[@]}" \
-            "$NUPKG"
+            "$NUPKG" "$NUPKG.sha512"
 
       # `main` is the integration branch for every product, so it can't be fast-forwarded to this commit; the
       # release merges dbdatasync/test into it with a merge commit (--no-ff, so the first-parent history of main is
@@ -434,13 +344,14 @@ jobs:
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # Immediate back-merge. Bring main (now holding this release) into this product's own lane and into every other
-      # product's dev branch, so nothing waits for the next release to find out it has drifted. Pushes are made with
-      # the pipelines App token, so each dev branch gets its normal CI run and promotion.
+      # product's dev branch, so nothing waits for the next release to find out it has drifted. A push made with
+      # GITHUB_TOKEN starts no workflow, so each merged dev branch gets its CI dispatched by hand (below), and that run's
+      # promote job carries the merge on to <product>/test.
       #
       #   * Own lane, dev unchanged since the release: fast-forward dbdatasync/dev AND dbdatasync/test to the merge
       #     commit. Its tree is a tested commit's tree, so no new run is needed, and it is what lets the next release's
       #     ancestor check pass without waiting for one.
-      #   * Own lane, dev has moved on: merge main into dev; the normal CI run promotes it to test.
+      #   * Own lane, dev has moved on: merge main into dev, then dispatch its CI, which promotes it to test.
       #   * Other products: merge main into <product>/dev. A conflict is never resolved by guessing: the job opens an
       #     issue and fails after trying every branch, and the release itself has already succeeded.
       - name: Merge main back into every dev branch
@@ -467,7 +378,16 @@ jobs:
               continue
             fi
             if git merge --no-ff -m "Merge main into $branch after dbdatasync $VERSION" "$MAIN_SHA"; then
-              git push origin "HEAD:refs/heads/$branch" || failed+=("$branch (push)")
+              if git push origin "HEAD:refs/heads/$branch"; then
+                # A push made with GITHUB_TOKEN starts no workflow, so start the product's CI by hand; its promote job is what
+                # carries the merge to <product>/test. A product with no CI workflow yet has nothing to start.
+                product=${branch%%/*}
+                if git cat-file -e "$MAIN_SHA:.github/workflows/$product-ci.yml" 2>/dev/null; then
+                  gh workflow run "$product-ci.yml" --ref "$branch" || failed+=("$branch (CI dispatch)")
+                fi
+              else
+                failed+=("$branch (push)")
+              fi
             else
               git merge --abort
               failed+=("$branch (conflict)")
@@ -482,15 +402,3 @@ jobs:
             echo "::error::back-merge failed for: ${failed[*]}"
             exit 1
           fi
-
-  # Phase 163: the container image for this release, on ghcr.io. After the release, not part of it: NuGet cannot be published
-  # twice, so an image problem must not be able to unwind (or block) a release that is already out. It fails on its own, visibly,
-  # and publish-image.yml can be dispatched by hand to publish or re-publish a version.
-  image:
-    needs: release
-    permissions:
-      contents: read
-      packages: write
-    uses: ./.github/workflows/dbdatasync-publish-image.yml
-    with:
-      version: ${{ needs.release.outputs.version }}

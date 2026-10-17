@@ -183,6 +183,16 @@ public class SqlServerTests
     public void Error_numbers_map_to_kinds(int number, ConnectionFailureKind kind) =>
         Assert.Equal(kind, SqlServerFailureMapper.KindOf(number));
 
+    [Theory]
+    [InlineData(0, 20, ConnectionFailureKind.Network)]    // what SqlClient reports on Linux and macOS for a refused or unreachable connection
+    [InlineData(0, 0, ConnectionFailureKind.Other)]
+    [InlineData(0, 16, ConnectionFailureKind.Other)]
+    [InlineData(53, 20, ConnectionFailureKind.Network)]   // a known number still wins
+    [InlineData(18456, 14, ConnectionFailureKind.Login)]
+    [InlineData(-2, 11, ConnectionFailureKind.Timeout)]
+    public void Transport_failures_without_a_number_are_network_failures(int number, byte severityClass, ConnectionFailureKind kind) =>
+        Assert.Equal(kind, SqlServerFailureMapper.KindOf(number, severityClass));
+
     [Fact]
     public async Task Unreachable_server_is_a_classified_failure_without_the_host_name()
     {

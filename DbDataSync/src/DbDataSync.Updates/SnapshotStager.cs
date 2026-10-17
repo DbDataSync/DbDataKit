@@ -27,14 +27,14 @@ public sealed class SnapshotStager(HttpClient http, string userAgent = "DbDataSy
 
     public async Task<StagedSnapshot> StageAsync(ReleaseInfo release, string stageRoot, CancellationToken cancellationToken = default)
     {
-        if (release.Channel != ReleaseChannel.Snapshot || release.PackageUrl is null || release.ChecksumUrl is null)
-            throw new ArgumentException("Only a snapshot release has a package to stage.", nameof(release));
+        if (release.PackageUrl is null || release.ChecksumUrl is null)
+            throw new ArgumentException("Only a release with a downloadable package can be staged.", nameof(release));
 
         RequireGitHubReleaseUrl(release.PackageUrl);
         RequireGitHubReleaseUrl(release.ChecksumUrl);
 
         var directory = Path.Combine(stageRoot, release.Version.Text);
-        var nupkgPath = Path.Combine(directory, ReleaseSources.SnapshotNupkgName(release.Version));
+        var nupkgPath = Path.Combine(directory, ReleaseSources.PackageFileName(release.Version));
         var checksumPath = nupkgPath + ".sha512";
         var partialPath = nupkgPath + ".partial";
 
@@ -58,7 +58,7 @@ public sealed class SnapshotStager(HttpClient http, string userAgent = "DbDataSy
         {
             DeleteQuietly(partialPath);
             throw new ReleaseSourceException(
-                $"The downloaded {ReleaseSources.SnapshotNupkgName(release.Version)} does not match its published SHA-512 checksum, " +
+                $"The downloaded {ReleaseSources.PackageFileName(release.Version)} does not match its published SHA-512 checksum, " +
                 "so it was discarded. Try again; if it keeps happening, the release itself may be bad.");
         }
 
@@ -151,7 +151,7 @@ public sealed class SnapshotStager(HttpClient http, string userAgent = "DbDataSy
 
     private static void RequireGitHubReleaseUrl(Uri url)
     {
-        if (!url.AbsoluteUri.StartsWith(ReleaseSources.SnapshotDownloadPrefix, StringComparison.Ordinal))
+        if (!url.AbsoluteUri.StartsWith(ReleaseSources.AssetDownloadPrefix, StringComparison.Ordinal))
             throw new ArgumentException($"'{url}' is not a release asset of {ReleaseSources.Repository}.", nameof(url));
     }
 

@@ -5,7 +5,16 @@ public class UpdateCommandsTests
     private static UpdatePlan Plan(string? installed, string target, ReleaseChannel channel, InstallLocation location, string? source = null) =>
         UpdatePlanner.Build(
             installed is null ? null : ReleaseVersion.Parse(installed),
-            new ReleaseInfo(ReleaseVersion.Parse(target), channel), location, source, ServiceSituation.None, false);
+            Release(ReleaseVersion.Parse(target), channel), location, source, ServiceSituation.None, false);
+
+    // A snapshot is always a downloaded GitHub release asset, so it carries its URLs; the stable and beta releases
+    // here stand for ones installed from a NuGet feed, which is still a path the commands support.
+    private static ReleaseInfo Release(ReleaseVersion version, ReleaseChannel channel) =>
+        channel == ReleaseChannel.Snapshot
+            ? new ReleaseInfo(version, channel,
+                new Uri($"https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/v{version.Text}/DbDataSync.{version.Text}.nupkg"),
+                new Uri($"https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/v{version.Text}/DbDataSync.{version.Text}.nupkg.sha512"))
+            : new ReleaseInfo(version, channel);
 
     private static readonly InstallLocation ToolPath = new(InstallKind.ToolPath, "/opt/dbdatasync");
     private static readonly InstallLocation Global = new(InstallKind.Global, "/home/dan/.dotnet/tools");
