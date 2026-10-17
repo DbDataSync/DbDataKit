@@ -4,12 +4,24 @@ name: DbDataKit tests
 # CI calls this when DbDataKit/** changed, instead of each carrying its own copy of the job. It can also be dispatched by hand
 # on any branch, which is how to see the suite's state independent of a product change.
 #
-# Linux needs unixODBC for DbDataKit.Odbc.Metadata's tests; the live database tests are gated on environment variables and skip
-# unless the shared engines are provided (docs/plans/11-ci-and-testing.md).
+# Linux needs unixODBC for DbDataKit.Odbc.Metadata's tests. The live database tests are gated on environment variables and skip
+# unless the shared engines are provided: with `engines` on, the Linux job starts SQL Server and PostgreSQL from testenv/
+# (docs/plans/11-ci-and-testing.md), installs the SQL Server ODBC driver, and the live tests run and fail if the servers do not
+# answer. Windows cannot run Linux containers, so the Windows leg never starts engines; its live tests skip.
 
 on:
   workflow_call:
+    inputs:
+      engines:
+        description: Start the shared SQL Server and PostgreSQL engines (testenv/) so the live tests run instead of skipping.
+        type: boolean
+        default: false
   workflow_dispatch:
+    inputs:
+      engines:
+        description: Start the shared SQL Server and PostgreSQL engines (testenv/) so the live tests run instead of skipping.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -22,7 +34,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # Observed: Linux 2 minutes, Windows 6. The ceiling is for a hung test or a slow runner, so it fails instead of waiting for GitHub's
+    # six-hour default; engines add a minute or two to start.
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: DbDataKit
@@ -36,9 +50,31 @@ jobs:
       - name: Install unixODBC
         if: runner.os == 'Linux'
         run: sudo apt-get update -q && sudo apt-get install -y -q unixodbc
+
+      - name: Start the shared engines (SQL Server, PostgreSQL)
+        if: runner.os == 'Linux' && inputs.engines
+        working-directory: .
+        run: testenv/testenv.sh up mssql postgres
+      - name: Install the SQL Server ODBC driver
+        if: runner.os == 'Linux' && inputs.engines
+        run: |
+          curl -sSL -O "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb"
+          sudo dpkg -i packages-microsoft-prod.deb
+          sudo apt-get update -q
+          sudo ACCEPT_EULA=Y apt-get install -y -q msodbcsql18
+      - name: Point the suite at the engines
+        if: runner.os == 'Linux' && inputs.engines
+        working-directory: .
+        run: testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
+
       - name: Restore
         run: dotnet restore DbDataKit.Shared.slnx
       - name: Build
         run: dotnet build DbDataKit.Shared.slnx --no-restore -c Release
       - name: Test
         run: dotnet test --solution DbDataKit.Shared.slnx --no-build -c Release
+
+      - name: Stop the shared engines
+        if: always() && runner.os == 'Linux' && inputs.engines
+        working-directory: .
+        run: testenv/testenv.sh down

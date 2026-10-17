@@ -1,0 +1,51 @@
+# The shared test engines, for every product and the shared libraries: one definition of each database, started the same way on a
+# developer machine and in CI. Each engine is a compose *profile*, so `testenv.sh up mssql postgres` starts only what a suite needs.
+# See docs/plans/11-ci-and-testing.md.
+#
+# Host ports are fixed and documented here so a suite's connection settings never depend on discovery:
+#
+#   mssql      14330     SQL Server 2022, user sa
+#   postgres   15432     PostgreSQL 17, user postgres
+#
+# (DbDataSync's own docker-compose.yml still runs its engines on 14330/14331/15432/...; it moves into this file engine by
+# engine, and the two can't run together on one machine until it has.)
+name: dbkit-test
+
+x-password: &password ${DBKIT_TEST_PASSWORD:-DbKit_Test_Pw1}
+
+services:
+  mssql:
+    profiles: [mssql]
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: dbkit-test-mssql
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: *password
+    ports:
+      - "14330:1433"
+    healthcheck:
+      # Images from 2025 onward ship /opt/mssql-tools18 only, whose sqlcmd needs -C for the container's self-signed certificate;
+      # try that first and fall back, since `:2022-latest` moves under you.
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  postgres:
+    profiles: [postgres]
+    image: postgres:17
+    container_name: dbkit-test-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: *password
+      POSTGRES_DB: postgres
+    ports:
+      - "15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s

@@ -1,0 +1,5 @@
+# DbDataProxy's suite: a server name plus SQL login, and a switch that makes a missing server a failure instead of a skip.
+DBPROXY_TEST_SQLSERVER          <- DBKIT_TEST_MSSQL_SERVER
+DBPROXY_TEST_SQLSERVER_USER     <- DBKIT_TEST_MSSQL_USER
+DBPROXY_TEST_SQLSERVER_PASSWORD <- DBKIT_TEST_MSSQL_PASSWORD
+DBPROXY_REQUIRE_SQLSERVER = true if DBKIT_TEST_MSSQL
