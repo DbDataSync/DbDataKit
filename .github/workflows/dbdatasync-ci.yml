@@ -1,7 +1,7 @@
 name: DbDataSync CI
 
 # DbDataSync's lane of the monorepo: dbdatasync/dev -> dbdatasync/test -> main (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md).
-# Ported from .github/workflows/ci.yml as of DbDataSync/DbDataSync@f1d76ee (kept in this repo's history) (and promote-test.yml / publish-snapshot.yml, now jobs of this
+# Ported from .github/workflows/ci.yml as of DbDataSync/DbDataSync@f1d76ee (kept in this repo's history) (and promote-test.yml, now a job of this
 # workflow), whose own comments explain most of the decisions here.
 #
 # What is different from the single-product repo:
@@ -9,8 +9,10 @@ name: DbDataSync CI
 #   * The workflow runs on EVERY push to dbdatasync/dev, but a `changes` job decides whether the suite is needed.
 #     A push that only brings in other products' files (the post-release back-merge) must still be promoted, or
 #     `main` would never be an ancestor of dbdatasync/test and the next release would be blocked.
-#   * Promotion and the snapshot are final jobs of this run, not separate workflow_run workflows. GitHub reads
-#     workflow_run workflows from the DEFAULT branch, and in this repo that is `main`, which only moves at releases.
+#   * Promotion is the final job of this run, not a separate workflow_run workflow. GitHub reads workflow_run workflows
+#     from the DEFAULT branch, and in this repo that is `main`, which only moves at releases.
+#   * Simplified for now: it uses the built-in GITHUB_TOKEN (no GitHub App, no branch rulesets), and snapshot releases
+#     are not published. Both are deferred; see docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md.
 
 on:
   push:
@@ -20,8 +22,11 @@ on:
     tags:
       - "dbdatasync/v*"
   pull_request:
-    # dbdatasync/dev is the only branch a pull request can merge into; the ruleset on main and */test blocks the rest.
+    # dbdatasync/dev is the only branch a pull request should target; main and */test are only moved by pipelines.
     branches: [dbdatasync/dev]
+  # Started by hand, and by dbdatasync-release.yml after it merges main into dbdatasync/dev: a push made with GITHUB_TOKEN
+  # starts no workflow, so that merge would otherwise never be tested or promoted. Run it on dbdatasync/dev.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -499,7 +504,7 @@ jobs:
   # by now. Skipped suites count as passing: `changes` decided they were not needed.
   promote:
     needs: [changes, dbdatakit, dotnet, dotnet-windows, dotnet-integration, web, playwright]
-    if: ${{ always() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/heads/') && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
     concurrency:
       group: dbdatasync-promote
@@ -507,16 +512,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/create-github-app-token@v3
-        id: app-token
-        with:
-          app-id: "5026881"
-          private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
+      # GITHUB_TOKEN is enough while dbdatasync/test has no ruleset; checkout leaves it in git's config for the push below.
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
       - name: Fast-forward dbdatasync/test to this commit
         working-directory: .
         run: |
@@ -529,17 +529,3 @@ jobs:
             echo "::error::dbdatasync/test has commits dbdatasync/dev doesn't — refusing to fast-forward over them. It may have been pushed to directly; investigate before retrying."
             exit 1
           fi
-
-  # A snapshot of every promoted commit that actually changed DbDataSync. Called, not triggered, so it runs in this
-  # same run; `needs: promote` is what stands in for the "green CI for this SHA" lookup it does when run by hand.
-  snapshot:
-    needs: [changes, promote]
-    if: ${{ needs.promote.result == 'success' && needs.changes.outputs.build == 'true' }}
-    permissions:
-      contents: write
-      actions: read
-    uses: ./.github/workflows/dbdatasync-publish-snapshot.yml
-    with:
-      sha: ${{ github.sha }}
-      ci-verified: true
-    secrets: inherit

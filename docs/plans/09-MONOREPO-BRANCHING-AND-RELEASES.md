@@ -95,6 +95,9 @@ Root files (`LICENSE`, `.gitattributes`, `docs/`) have no lane either: they are 
 
 ## Branch protection
 
+> **Deferred.** Not in place; see "Implementation status".
+
+
 Repository rulesets, carried over from DbDataSync with wildcard patterns:
 
 | ruleset | targets | rules |
@@ -147,12 +150,18 @@ Build release on a tag push from `main` today; they adopt the dispatch model whe
 
 ### NuGet
 
+> **Deferred**, together with everything else that needed the App; see "Implementation status".
+
+
 Paused. The release workflow skips the nuget.org push (and the Trusted Publishing token exchange) behind an
 explicit switch, defaulting to off, so the rest of the release (build, smoke test, tag, GitHub Release,
 `main` merge) still runs. When it's turned back on, the Trusted Publishing policy must be re-registered for
 `DbDataSync/DbDataKit` and the new workflow filename, because that policy is bound to repo and workflow file.
 
 ### GitHub Releases on the old repo, without pushing code there
+
+> **Deferred.** Releases are currently created in this repository; see "Implementation status".
+
 
 `dbdatasync update` reads releases from the old repo (`DbDataSync/DbDataSync`, a constant in
 `ReleaseSources.cs`), looks for tags starting `snapshot-`, and downloads assets from under that repo's
@@ -197,17 +206,28 @@ and out of scope for now; do it once all three products are in and NuGet is back
 
 ## Implementation status
 
-On `main`, linted with `actionlint`, **not yet run end to end** (they need the pipelines App installed on this
-repository and the `PIPELINE_APP_PRIVATE_KEY` secret to run for real):
+**Simplified for now.** Locked branches are not being pursued yet, so the workflows on `main` run on the built-in
+`GITHUB_TOKEN` and leave out everything that needed the pipelines GitHub App. Nothing below the line "Deferred" is
+implemented; the full versions (App token, old-repo releases, snapshots, image chain, NuGet switch) are in PR #1's
+history (`b762d5b`) and can be restored.
 
-| file | ported from | notes |
-| --- | --- | --- |
-| `dbdatasync-ci.yml` | `ci.yml` + `promote-test.yml` | adds `changes`, `dbdatakit`, `promote`, `snapshot` jobs |
-| `dbdatasync-publish-snapshot.yml` | `publish-snapshot.yml` | reusable (`workflow_call`) and dispatchable; releases to the old repo |
-| `dbdatasync-release.yml` | `release.yml` | dispatch on `dbdatasync/test`; main merge; back-merge; NuGet switch off |
-| `dbdatasync-publish-image.yml` | `publish-image.yml` | product folder as context; checks out `dbdatasync/v<version>` |
+| file | state |
+| --- | --- |
+| `dbdatasync-ci.yml` | `changes`, `dbdatakit`, the ported suite, and `promote` (fast-forwards `dbdatasync/test` with `GITHUB_TOKEN`). Also runnable by dispatch. |
+| `dbdatasync-release.yml` | dispatch on `dbdatasync/test`; ancestor and CI checks; tag `dbdatasync/v<version>`; GitHub Release **in this repo**; merge into `main`; back-merge into every `*/dev` and dispatch that product's CI. |
+| `dbdatasync-publish-image.yml` | dispatch-only; no longer chained from the release. |
 
-`promote-test.yml` has no file of its own; it is the `promote` job in the CI workflow.
+Consequences of the simplification:
+- **No rulesets, no App.** Anyone with write access can push to `main` and `*/test`; the model is followed by
+  convention, not enforced.
+- **Pushes with `GITHUB_TOKEN` start no workflows.** That is why `promote` lives inside the CI run, and why the release
+  dispatches CI by hand after each back-merge.
+- **Releases are in this repo, not the old one.** `dbdatasync update` reads `DbDataSync/DbDataSync`, so it does not see
+  them until that client is repointed (a code change, deferred).
+- **No snapshots, no image, no NuGet** until they are brought back.
+
+**Deferred:** the pipelines App and rulesets (`main`, `*/test`), snapshot releases, releases on the old repository,
+the container image chained from the release, NuGet publishing, the lane guard.
 
 ## Rollout
 
@@ -216,7 +236,7 @@ repository and the `PIPELINE_APP_PRIVATE_KEY` secret to run for real):
    as a merge commit so the imported history survives).
 2. **Done:** `dbdatasync/dev` and `dbdatasync/test` cut from `main` (both at the merge commit). Stale-reference
    cleanup (release skill, dead workflow copies, doc banners) goes to `dbdatasync/dev` like any other change.
-3. Run CI on a throwaway change, with no rulesets, to exercise `changes`, the suite and the `promote` job.
+3. Run CI on a throwaway change to exercise `changes`, the suite and the `promote` job, then a `--beta` release.
 4. Install the pipelines App on this repo (and confirm it on the old one), add the rulesets (`main` first,
    then `*/test`), and do one beta release (`beta=true`) to prove the whole path: old-repo release, `main`
    merge, back-merge.

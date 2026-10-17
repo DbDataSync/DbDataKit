@@ -4,25 +4,21 @@
 set -euo pipefail
 
 REPO="DbDataSync/DbDataKit"
-RELEASES_REPO="DbDataSync/DbDataSync"
 WORKFLOW_FILE="dbdatasync-release.yml"
 WORKFLOW_NAME="DbDataSync release"
 LANE_TEST="dbdatasync/test"
 BETA=false
-NUGET=false
 
 for arg in "$@"; do
   case "$arg" in
     --beta) BETA=true ;;
-    --nuget) NUGET=true ;;
     -h|--help)
-      echo "Usage: $0 [--beta] [--nuget]"
+      echo "Usage: $0 [--beta]"
       echo "  --beta   Publish as a SemVer 2 prerelease (hidden from a plain dotnet tool install)."
-      echo "  --nuget  Also push to nuget.org. Off by default: NuGet publishing is paused in the monorepo."
       exit 0
       ;;
     *)
-      echo "Unknown argument: $arg (usage: $0 [--beta] [--nuget])" >&2
+      echo "Unknown argument: $arg (usage: $0 [--beta])" >&2
       exit 1
       ;;
   esac
@@ -55,9 +51,9 @@ if [ "$local_sha" != "$remote_sha" ]; then
   exit 1
 fi
 
-echo "Dispatching $WORKFLOW_FILE (beta=$BETA, nuget=$NUGET) against $REPO, ref $LANE_TEST..."
+echo "Dispatching $WORKFLOW_FILE (beta=$BETA) against $REPO, ref $LANE_TEST..."
 before=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-gh workflow run "$WORKFLOW_FILE" --repo "$REPO" --ref "$LANE_TEST" -f beta="$BETA" -f publish_nuget="$NUGET"
+gh workflow run "$WORKFLOW_FILE" --repo "$REPO" --ref "$LANE_TEST" -f beta="$BETA"
 
 # `gh workflow run` doesn't hand back a run id, so find the run it just created: the newest
 # workflow_dispatch-triggered release run created at or after the moment we dispatched. A short
@@ -91,4 +87,4 @@ sha=$(gh run view "$run_id" --repo "$REPO" --json headSha --jq .headSha)
 echo
 echo "Release run succeeded (commit ${sha:0:12})."
 echo "Recent releases:"
-gh release list --repo "$RELEASES_REPO" --limit 3   # releases are published on the old repo, which `dbdatasync update` reads
+gh release list --repo "$REPO" --limit 3
