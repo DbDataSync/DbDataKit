@@ -146,12 +146,12 @@ public sealed class AdminUpdateControllerTests : IDisposable
         var client = await Factory(f =>
         {
             f.Channels = "stable";
-            f.Network = UpdateServiceTests.Network(nugetStatus: HttpStatusCode.BadGateway);
+            f.Network = UpdateServiceTests.Network(gitHubStatus: HttpStatusCode.BadGateway);
         }).SignedInAsAsync(UserRole.Admin);
 
         var response = await client.GetAsync("/api/admin/update/releases");
 
         Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
-        Assert.Contains("nuget.org answered 502", await response.Content.ReadAsStringAsync());
+        Assert.Contains("GitHub answered 502", await response.Content.ReadAsStringAsync());
     }
 }

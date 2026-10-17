@@ -35,7 +35,7 @@ public sealed class ApiOptions
     public const FeatureMode DefaultNugetSearchMode = FeatureMode.Enabled;
     public const NotesRenderer DefaultNotesRenderer = NotesRenderer.Basic;
 
-    // Phase 159/196L: the Updates screen calls nuget.org and GitHub to list releases, so it is closed by default.
+    // Phase 159/196L: the Updates screen calls GitHub to list releases, so it is closed by default.
     public const UpdatesMode DefaultSelfUpdateMode = UpdatesMode.Disabled;
     public const string DefaultSelfUpdateChannels = "stable";
 
