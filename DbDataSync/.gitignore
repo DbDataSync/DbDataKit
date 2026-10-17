@@ -1,0 +1,44 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+
+# Node / Vite
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Local tooling state — session locks, scheduled-task state, etc. Skills are the exception: they're
+# process knowledge worth versioning like anything else in architecture/, not per-machine state.
+.claude/*
+!.claude/skills/
+!.claude/skills/**
+
+# DbDataSync.Api dev-time default RepoRoot/StateDbPath (auto-created git repo + state db from running
+# the API locally) — runtime state, not source.
+src/DbDataSync.Api/dbdatasync-repo/
+# The same default one command below, created by anything run from the repo root without --repo
+# (DbDataSyncHost falls back to <cwd>/dbdatasync-repo). A stray state.db from a manual CLI run all but
+# committed itself once; this is what stops the next one.
+/dbdatasync-repo/
+
+# IDE
+.vs/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test/coverage output
+[Tt]est[Rr]esult*/
+coverage/
+
+# Stray Playwright output if the suite is ever run from the repo root instead of tests/DbDataSync.Web.Tests
+test-results/
+
+# `dotnet test --results-directory TestResults` (ci.yml's dotnet-windows job writes a .trx there, and
+# anyone reproducing that run locally gets one too) — test output, not source.
+TestResults/

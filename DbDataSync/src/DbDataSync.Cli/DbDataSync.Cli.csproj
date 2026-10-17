@@ -1,0 +1,225 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- The command surface, not the web host: asking this tool for help should print text rather than starting Kestrel. -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>dbdatasync</ToolCommandName>
+    <PackageId>DbDataSync</PackageId>
+    <!--
+      Every build not explicitly versioned gets a fresh alpha, dated and timed at evaluation — nobody
+      has to remember to pass one just to `dotnet pack`/`dotnet tool update` this project, which is the
+      whole point of tools/install-local-tool's dev loop. -p:Version=X on the command line still wins
+      outright: MSBuild treats a command-line property as global, and a global property cannot be
+      overwritten by a plain assignment in the project file, conditioned or not — which is exactly what
+      lets .github/workflows/release.yml pass -p:Version=YYYY.MM.DD.HHmm and get a real release version
+      with no alpha label and no change needed here.
+
+      The seconds component exists for this project alone, not for release.yml: a release is one build
+      for one pushed tag, but a dev-loop rerun can happen several times inside the same minute, and
+      `dotnet tool update` needs every one of those to look like a genuinely new version. Unpadded ("s",
+      not "ss") on purpose: a prerelease identifier is SemVer2-numeric and MUST NOT carry a leading
+      zero, unlike the four-part core above it — "-alpha.05" is a hard NETSDK1018 error where "2026.09"
+      is merely normalised away, and this is the one part of the string actually built from a two-digit
+      clock field often small enough to have one.
+    -->
+    <Version>$([System.DateTime]::UtcNow.ToString("yyyy.MM.dd.HHmm'-alpha.'s"))</Version>
+    <Description>Cross-database replication — a git-tracked config repo, a scheduler, and a web console.</Description>
+    <Authors>Dan Shryock</Authors>
+    <PackageTags>database;replication;sync;etl;sql-server;mssql;postgresql;cli;dotnet-tool</PackageTags>
+
+    <!--
+      Feeds the "Source repository" link and the README tab on the nuget.org listing — both were
+      previously blank because nothing here set them, which is a distinct gap from Description above
+      (that one already showed up; a listing can render a summary with no link back to the repo and no
+      rendered docs at all). RepositoryUrl/RepositoryType is the pair NuGet actually reads for the
+      source link; PackageProjectUrl is the separate "Project site" link nuget.org shows alongside it —
+      both point at the same GitHub repo here, so set both rather than lean on one implying the other.
+    -->
+    <RepositoryUrl>https://github.com/DbDataSync/DbDataSync</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/DbDataSync/DbDataSync</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <!-- Packed from the ItemGroup below — the repo root README, not a copy kept here. It's the same
+         page GitHub shows on the repo's front page, so there is exactly one end-user-facing README to
+         keep in sync, not two that quietly drift; anything specific to building from source lives in
+         docs/development.md instead, linked from it rather than folded into the package listing. -->
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <!--
+      Framework-dependent and RID-agnostic. LibGit2Sharp, SQLite and DuckDB.NET all ship their native
+      assets under runtimes/(rid)/ and resolve at run time, so one package serves every platform.
+      Self-contained is ruled out anyway: ProcessSupervisor spawns `dotnet exec`, which needs the
+      muxer on PATH.
+    -->
+    <RollForward>latestMajor</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The `setup` command's TUI (phase 128) — this project's first real package dependency.
+         Managed-only (no runtimes/ native assets), net10.0-targeted like this project itself, so it
+         adds nothing to worry about for `dotnet tool install -g` or the container image. Pinned
+         exact, not a floating range, matching how this repo pins everywhere else. -->
+    <PackageReference Include="Terminal.Gui" Version="2.5.0" />
+    <!-- Phase 136: WindowsServiceEventLog writes/registers directly against the Windows Event Log —
+         cross-platform to reference (its own APIs throw PlatformNotSupportedException off Windows,
+         which is why every call site is [SupportedOSPlatform("windows")]), same "safe to reference
+         everywhere, only does anything real on Windows" reasoning as
+         Microsoft.Extensions.Hosting.WindowsServices in DbDataSync.Api.csproj. Pinned to the same
+         "10.0.0" this repo already uses for that package and for Microsoft.Extensions.Hosting.Systemd. -->
+    <PackageReference Include="System.Diagnostics.EventLog" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataSync.Api\DbDataSync.Api.csproj" />
+    <ProjectReference Include="..\DbDataSync.Certificates\DbDataSync.Certificates.csproj" />
+    <ProjectReference Include="..\DbDataSync.Drivers.Descriptor\DbDataSync.Drivers.Descriptor.csproj" />
+    <ProjectReference Include="..\DbDataSync.Libraries\DbDataSync.Libraries.csproj" />
+    <ProjectReference Include="..\DbDataSync.State\DbDataSync.State.csproj" />
+    <!-- Referenced so the worker lands in the same output directory as the host that spawns it,
+         which is what ApiOptions' beside-the-assembly resolution then finds. -->
+    <ProjectReference Include="..\DbDataSync.TaskRunner\DbDataSync.TaskRunner.csproj" />
+    <ProjectReference Include="..\DbDataSync.Updates\DbDataSync.Updates.csproj" />
+    <!-- Phase 196L: built first, never referenced — its output is copied under launcher/ by the targets at the end. -->
+    <ProjectReference Include="..\DbDataSync.Launcher\DbDataSync.Launcher.csproj" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DbDataSync.Cli.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!--
+    Phase 137: every released nupkg to date has shipped with an empty wwwroot. `dotnet pack`/`dotnet
+    publish` of THIS project never runs DbDataSync.Api.csproj's own BuildSpa target — that target only
+    fires when Api.csproj is published directly, which nothing in this repo's real release path does
+    (confirmed against the SDK's own Microsoft.NET.PackTool.targets, and by real dotnet pack/publish
+    runs). This mirrors the Dockerfile's own already-proven pattern instead: build the SPA once,
+    upstream (CI's own npm ci/npm run build step, ahead of `dotnet pack`), then copy the already-built
+    dist/ into place here — a copy step, not a build step, so an ordinary inner-loop `dotnet
+    build`/`dotnet test` with no dist/ present (and no npm available) is unaffected.
+  -->
+  <PropertyGroup>
+    <WebProjectDir>$(MSBuildProjectDirectory)/../DbDataSync.Web</WebProjectDir>
+  </PropertyGroup>
+
+  <Target Name="CopyPrebuiltSpa" BeforeTargets="Publish" Condition="Exists('$(WebProjectDir)/dist')">
+    <ItemGroup>
+      <_SpaDist Include="$(WebProjectDir)/dist/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_SpaDist)"
+          DestinationFiles="@(_SpaDist->'$(PublishDir)wwwroot/%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
+
+  <!--
+    Phase 160: the docs ship with the app so an operator — an offline one especially — can read the version they
+    are actually running instead of whatever GitHub's main says today. Same shape and same hook as CopyPrebuiltSpa
+    (and for the same reason: pack runs Publish, so this lands in the packed tool's wwwroot, which a build-time
+    copy elsewhere would not). Unconditional on dist/, because docs/ is source, not a build product; conditional
+    only on docs/ existing, which it does not in the Dockerfile's build stage — that stage copies docs/ itself.
+    All of docs/*.md ships, including development.md: other pages link to it.
+  -->
+  <PropertyGroup>
+    <DocsDir>$(MSBuildProjectDirectory)/../../docs</DocsDir>
+  </PropertyGroup>
+
+  <!--
+    Phase 162: the pictures the docs show. They are written `../screenshots/<folder>/<file>.png` — a path that works on GitHub
+    — and shipped at the same place relative to wwwroot/docs, so an embedded page needs no rewriting: `docs/images.txt` lists
+    them (one repo-relative path a line), a vitest test fails if it and the docs ever disagree, and only these ship rather than
+    the whole screenshots/ tree (test evidence, ~12 MB).
+  -->
+  <!--
+    Phase 162: the README that ships in the package is a rewritten copy, not the repository's file. The repository's README
+    (and every doc) is written with relative links, which GitHub renders and an offline checkout follows; nuget.org shows the
+    README away from the repository, where those go nowhere. tools/docs/nuget-readme.mjs makes each one absolute and pins it to
+    the commit being packed (see its header for why not `main`, and why not the release tag). It fails the pack on a link to a
+    file that is not there. Without node — a plain local `dotnet pack` — the repository's own README is packed with a warning;
+    the release and snapshot workflows assert that a shipped README has no relative link left, so that fallback cannot ship.
+    Pass -p:ReadmeRef=<commit> to pin something other than the checked-out HEAD.
+  -->
+  <PropertyGroup>
+    <ReadmeSource>$(MSBuildProjectDirectory)/../../README.md</ReadmeSource>
+    <ReadmeForNuGet>$(MSBuildProjectDirectory)/obj/nuget-readme/README.md</ReadmeForNuGet>
+    <ReadmeScript>$(MSBuildProjectDirectory)/../../tools/docs/nuget-readme.mjs</ReadmeScript>
+  </PropertyGroup>
+
+  <Target Name="PrepareNuGetReadme" BeforeTargets="_GetPackageFiles" Condition="Exists('$(ReadmeScript)')">
+    <Delete Files="$(ReadmeForNuGet)" />
+    <Exec Command="node &quot;$(ReadmeScript)&quot; --in &quot;$(ReadmeSource)&quot; --out &quot;$(ReadmeForNuGet)&quot;" Condition="'$(ReadmeRef)' == ''" ContinueOnError="true" />
+    <Exec Command="node &quot;$(ReadmeScript)&quot; --in &quot;$(ReadmeSource)&quot; --out &quot;$(ReadmeForNuGet)&quot; --ref $(ReadmeRef)" Condition="'$(ReadmeRef)' != ''" ContinueOnError="true" />
+    <Warning Condition="!Exists('$(ReadmeForNuGet)')"
+             Text="The package README was not rewritten (is node installed?): it will carry the repository's relative links. Fine for a local pack; a release checks for this." />
+    <ItemGroup Condition="Exists('$(ReadmeForNuGet)')">
+      <None Remove="..\..\README.md" />
+      <None Include="$(ReadmeForNuGet)" Pack="true" PackagePath="\" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="CopyDocs" BeforeTargets="Publish" Condition="Exists('$(DocsDir)')">
+    <ReadLinesFromFile File="$(DocsDir)/images.txt" Condition="Exists('$(DocsDir)/images.txt')">
+      <Output TaskParameter="Lines" ItemName="_DocImageLine" />
+    </ReadLinesFromFile>
+    <ItemGroup>
+      <_Doc Include="$(DocsDir)/*.md" />
+      <_DocImage Include="$(DocsDir)/../%(_DocImageLine.Identity)" Condition="'%(_DocImageLine.Identity)' != ''">
+        <Dest>%(_DocImageLine.Identity)</Dest>
+      </_DocImage>
+    </ItemGroup>
+    <Copy SourceFiles="@(_Doc)" DestinationFolder="$(PublishDir)wwwroot/docs" />
+    <Copy SourceFiles="@(_DocImage)" DestinationFiles="@(_DocImage->'$(PublishDir)wwwroot/%(Dest)')" />
+  </Target>
+
+  <!--
+    Phase 196L: every package carries the launcher, so any installed version can put it in place or repair it
+    (`service install`, `launcher repair`, and the automatic conversion of a pre-196L install). An apphost is a
+    native per-platform binary and this package is RID-agnostic, so it carries one complete launcher per RID under
+    launcher/<rid>/, and the installer picks by SlotPaths.PortableRuntimeIdentifier().
+
+    Publish (which pack runs) builds every RID in LauncherRuntimeIdentifiers — this needs the apphost packs, so
+    network on first use; set it to `none` where no launcher is wanted (the container image: not a tool install).
+    An ordinary build copies only this machine's launcher, built without a RID, so the inner loop and the tests
+    need nothing new. Its directory is named by the portable RID the installer will look for — not by the SDK's
+    own, which a distribution's source-built SDK reports as e.g. ubuntu.24.04-x64.
+  -->
+  <PropertyGroup>
+    <LauncherProject>$(MSBuildProjectDirectory)/../DbDataSync.Launcher/DbDataSync.Launcher.csproj</LauncherProject>
+    <LauncherRuntimeIdentifiers Condition="'$(LauncherRuntimeIdentifiers)' == ''">win-x64;win-arm64;linux-x64;linux-arm64;linux-musl-x64;linux-musl-arm64;osx-x64;osx-arm64</LauncherRuntimeIdentifiers>
+    <_LauncherArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant())</_LauncherArch>
+    <_LauncherOwnRid Condition="$([MSBuild]::IsOSPlatform('Windows'))">win-$(_LauncherArch)</_LauncherOwnRid>
+    <_LauncherOwnRid Condition="$([MSBuild]::IsOSPlatform('OSX'))">osx-$(_LauncherArch)</_LauncherOwnRid>
+    <_LauncherOwnRid Condition="'$(_LauncherOwnRid)' == ''">linux-$(_LauncherArch)</_LauncherOwnRid>
+    <_DotnetForLauncher>$(DOTNET_HOST_PATH)</_DotnetForLauncher>
+    <_DotnetForLauncher Condition="'$(_DotnetForLauncher)' == ''">dotnet</_DotnetForLauncher>
+  </PropertyGroup>
+
+  <Target Name="CopyOwnLauncher" AfterTargets="Build">
+    <MSBuild Projects="$(LauncherProject)" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" ItemName="_LauncherTarget" />
+    </MSBuild>
+    <ItemGroup>
+      <_OwnLauncherFile Include="%(_LauncherTarget.RootDir)%(_LauncherTarget.Directory)dbdatasync*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_OwnLauncherFile)" DestinationFolder="$(OutDir)launcher/$(_LauncherOwnRid)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="PublishLaunchers" BeforeTargets="Publish" Condition="'$(LauncherRuntimeIdentifiers)' != 'none'">
+    <ItemGroup>
+      <_LauncherRid Include="$(LauncherRuntimeIdentifiers)" />
+    </ItemGroup>
+    <RemoveDir Directories="$(IntermediateOutputPath)launchers" />
+    <Exec Command="&quot;$(_DotnetForLauncher)&quot; build &quot;$(LauncherProject)&quot; -c $(Configuration) -r %(_LauncherRid.Identity) --no-self-contained -o &quot;$(IntermediateOutputPath)launchers/%(_LauncherRid.Identity)&quot; -nologo -v q" />
+    <ItemGroup>
+      <_PublishedLauncher Include="$(IntermediateOutputPath)launchers/**/dbdatasync*" Exclude="$(IntermediateOutputPath)launchers/**/*.pdb" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_PublishedLauncher)" DestinationFiles="@(_PublishedLauncher->'$(PublishDir)launcher/%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
+
+</Project>

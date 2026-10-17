@@ -1,0 +1,427 @@
+name: CI
+
+on:
+  push:
+    # dev only. Phase 156 listed dev/test/main here, reasoning that each stage should mean something on
+    # its own — but nothing ever ran on test or main, because a push made with GITHUB_TOKEN triggers no
+    # workflow and both branches were only ever advanced by one. Putting the pipelines on a GitHub App
+    # token (architecture/branching-and-releases.md) made those pushes start firing, and the result was
+    # three full runs of a single commit: dev → test → main are fast-forwards, so the SHA — and with it
+    # the workflow file, since a push-triggered run reads the workflow from the pushed ref — is identical
+    # at every stage. Re-running it answers a question already answered.
+    #
+    # It also actively misleads. dev and test end up pointing at the same commit, so the promotion's run
+    # flips that commit's status back to in-progress and reads as dev's own green run having restarted.
+    #
+    # Nothing downstream wants the extra runs: promote-test.yml reacts to CI on dev, publish-snapshot.yml
+    # reacts to the promotion rather than to CI, and release.yml's green-CI gate queries by head_sha with
+    # no branch filter — so dev's run is the one it finds, for the very commit it is about to release.
+    branches: [dev]
+    # Only so the package job below can trigger on the same tag push release.yml does — see its `if`.
+    # This does not run the rest of the suite a second time: every other job explicitly skips a tag
+    # push, since release.yml's tag is pushed on top of a commit that already went through this suite
+    # on dev.
+    tags:
+      - "release/v*"
+  pull_request:
+    # dev is the only branch a pull request can still merge into — the ruleset on main and test blocks
+    # every ref update, PR merges included. Running the suite for a PR that cannot merge buys nothing.
+    branches: [dev]
+
+jobs:
+  dotnet:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          # No packages.lock.json in this repo, so the cache key is a hash of every .csproj instead —
+          # any dependency change invalidates it. What's cached is the shared ~/.nuget/packages
+          # download, not a job's own build output, so this is safe to turn on in every job that
+          # restores: it only saves the network round-trip to nuget.org, already-restored packages are
+          # still resolved into each project's own bin/obj exactly as before.
+          cache: true
+          cache-dependency-path: "**/*.csproj"
+      - name: Restore
+        run: dotnet restore
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+      - name: Test
+        # Category=Integration tests need real database instances (SQL Server, Postgres, MySQL,
+        # MariaDB, Oracle) — see the dotnet-integration job below, which brings up docker-compose.yml's
+        # full topology (architecture/implementation/phase-7-e2e-validation.md, extended by phases
+        # 153/154).
+        run: dotnet test --no-build --configuration Release --filter "Category!=Integration"
+
+  # A real windows-latest runner for the `[WindowsOnlyFact]`-gated tests scattered across
+  # DbDataSync.Cli.Tests/Api.Tests/Certificates.Tests (real icacls, the real Windows Event Log, the
+  # real certificate store, real DPAPI-backed key storage — phases 82/83/123/135/136 and others) —
+  # every one of those reports [SKIP] on the `dotnet` job above, by design (`WindowsOnlyFactAttribute`),
+  # so this is the only place any of them actually run and prove anything. Mirrors the `dotnet` job
+  # exactly (same restore/build/test flow, same `Category!=Integration` filter — the DB-backed
+  # integration suite needs the Linux-only containers `dotnet-integration` brings up via
+  # docker-compose.yml, which have no equivalent here) rather than hand-picking which projects to run:
+  # any future Windows-only test anywhere in the solution is covered automatically, with no second list
+  # to keep in sync.
+  dotnet-windows:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "**/*.csproj"
+      - name: Restore
+        run: dotnet restore
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+      - name: Test
+        # Plain `--logger trx`, deliberately without LogFileName: `dotnet test` on the solution runs each
+        # test project separately, and a fixed name makes every one of them overwrite the last — the
+        # first version of this step shipped that way and its artifact held one project's 207 results out
+        # of the suite's ~1,500. The default name is per-project and timestamped, so they coexist.
+        run: dotnet test --no-build --configuration Release --filter "Category!=Integration" --logger trx --results-directory TestResults
+      # The Windows-only tests — real Event Log write/read-back, the real icacls ownership transfer —
+      # report what they actually observed now rather than asserting a bare boolean. But `dotnet test`'s
+      # console reporter prints a *passing* test's captured output nowhere, which is precisely why this
+      # repo could never state, after a green windows-latest run, that the Event Log text those tests
+      # assert had been read by anybody (see
+      # architecture/planning/todo/follow-up-phase-136-140-windows-service-event-log-output-never-read-by-a-human.md).
+      # A .trx carries each test's own output including passing ones — verified against a real run, not
+      # assumed — so the record exists whether this job is red or green. Always, like the playwright
+      # job's own report below and for the same reason: read-on-failure only is what made this a gap.
+      - name: Upload the test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dotnet-windows-trx
+          path: TestResults/
+          retention-days: 7
+
+  # Phase 154: docker-compose.yml, the same file a developer runs locally, rather than a second,
+  # hand-maintained set of GitHub Actions `services:` container definitions. That duplication is what
+  # let phase 147/148's mariadb/oracle containers go missing from CI in the first place (phase 153's
+  # own retrospective) — one topology, defined once, used everywhere, closes that class of drift for
+  # good rather than patching this one instance of it.
+  dotnet-integration:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          # No packages.lock.json in this repo, so the cache key is a hash of every .csproj instead —
+          # any dependency change invalidates it. What's cached is the shared ~/.nuget/packages
+          # download, not a job's own build output, so this is safe to turn on in every job that
+          # restores: it only saves the network round-trip to nuget.org, already-restored packages are
+          # still resolved into each project's own bin/obj exactly as before.
+          cache: true
+          cache-dependency-path: "**/*.csproj"
+      - name: Start the databases
+        # No explicit service names, unlike the playwright job below — this one genuinely needs every
+        # service docker-compose.yml defines, so naming a subset here would just be one more list to
+        # keep in sync with that file as engines get added. --wait blocks on each one's own healthcheck,
+        # already declared in that one file, so the suite never opens a connection too early.
+        #
+        # This also does what phase 153's "Provision Oracle" step above used to do by hand, for free:
+        # docker-compose.yml's oracle service bind-mounts docker/oracle-init/*.sql into the container's
+        # own init directory, and — unlike a GitHub Actions `services:` container, which is created
+        # before actions/checkout ever runs — this step runs after checkout, so those files genuinely
+        # exist on disk the moment the container looks for them. The image's own entrypoint runs them
+        # itself; no separate docker exec/sqlplus step needed any more.
+        run: docker compose up -d --wait
+      - name: Restore
+        run: dotnet restore
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+      - name: Test (Integration)
+        # Same topology as docker-compose.yml (SQL Server source: 14330, target: 14331; Postgres:
+        # 15432; MySQL: 13306; MariaDB: 13307; Oracle: 15210) because it *is* docker-compose.yml now —
+        # the tests' localhost-based defaults work unchanged in CI.
+        run: dotnet test --no-build --configuration Release --filter "Category=Integration"
+
+  web:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/DbDataSync.Web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: src/DbDataSync.Web/package-lock.json
+      - name: Install
+        run: npm ci
+      # Phase 160: the renderer's tests — what markup a document may and may not produce. Plain Node, no browser.
+      - name: Test
+        run: npm test
+      # Phase 162: the script that makes the package README's links absolute (tools/docs/nuget-readme.mjs), tested with
+      # node's own runner — plain Node, nothing to install. Run from the repo root, not this job's working directory.
+      - name: Test the NuGet README rewriter
+        working-directory: .
+        run: node --test tools/docs/*.test.mjs
+      - name: Build
+        run: npm run build
+
+  # The Playwright E2E suite. Not running it anywhere but a developer's machine is what let
+  # apply-button-does-not-cache-provisioned-columns.md's golden-path test 18 sit failing on main from
+  # phase 94 until somebody happened to run it (architecture/planning/done/playwright-suite-in-ci.md).
+  playwright:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    # docker-compose.yml, the same file dotnet-integration above now uses too. This job specifically
+    # needs one thing a GitHub Actions native `services:` container could never have given it, even
+    # before phase 154: the suite's tests/DbDataSync.Web.Tests/test-db.ts reaches SQL Server by
+    # `docker exec dbdatasync-mssql-source sqlcmd ...` — by container *name*, not through a published
+    # port — and a `services:` container is named by the runner, not by this file. Compose's
+    # container_name is what makes that name exist, and it is the same file the suite is already
+    # written against locally, so CI runs the topology unchanged rather than a lookalike.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          # No packages.lock.json in this repo, so the cache key is a hash of every .csproj instead —
+          # any dependency change invalidates it. What's cached is the shared ~/.nuget/packages
+          # download, not a job's own build output, so this is safe to turn on in every job that
+          # restores: it only saves the network round-trip to nuget.org, already-restored packages are
+          # still resolved into each project's own bin/obj exactly as before.
+          cache: true
+          cache-dependency-path: "**/*.csproj"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: |
+            src/DbDataSync.Web/package-lock.json
+            tests/DbDataSync.Web.Tests/package-lock.json
+      - name: Start the databases
+        # --wait blocks on the healthchecks docker-compose.yml already declares, so the suite never
+        # opens a connection to a SQL Server that is still coming up. mysql added alongside the
+        # original three for connection-test-preview.spec.ts (phase 177M) — the only Playwright-level
+        # proof that IConnectionPreviewer's redaction actually reaches the console, and the only
+        # bundled catalog driver (mysql.generic) that exercises it, since every hand-written built-in
+        # (MsSql/Postgres) doesn't implement that interface. Found missing by a real CI failure (three
+        # in a row), not anticipated when that spec was added.
+        run: docker compose up -d --wait mssql-source mssql-target postgres mysql
+      - name: Build the API and the worker
+        # Debug, deliberately: playwright.config.ts's webServer runs
+        # src/DbDataSync.Api/bin/Debug/net10.0/DbDataSync.Api.dll through `dotnet exec`, so a Release
+        # build would leave that path empty and the API would never start.
+        #
+        # DbDataSync.TaskRunner too: the API spawns it as a separate process per run (ApiOptions
+        # resolves it in src/DbDataSync.TaskRunner/bin/Debug), and `dotnet build src/DbDataSync.Api`
+        # does not build it. Without it every triggered run sits Queued forever with nothing to claim
+        # it — which is what silently broke golden-path test 06 on this job.
+        #
+        # DbDataSync.Cli too, since phase 109i: globalSetup shells out to its Debug build
+        # (`config library install duckdb`) to seed a real DuckDB install rather than a hand-rolled
+        # fixture — this job never built the CLI project at all, so the whole suite has been failing
+        # at globalSetup with "The application to execute does not exist" ever since that phase landed.
+        run: |
+          dotnet build src/DbDataSync.Api
+          dotnet build src/DbDataSync.TaskRunner
+          dotnet build src/DbDataSync.Cli
+      - name: Install the SPA's dependencies
+        working-directory: src/DbDataSync.Web
+        run: npm ci
+      - name: Install the suite's dependencies
+        # Its own package.json — @playwright/test lives here, not in the SPA's tree.
+        working-directory: tests/DbDataSync.Web.Tests
+        run: npm ci
+      - name: Install Chromium
+        # The browser binary is not part of npm ci, and the runner has no usable one pre-installed.
+        working-directory: tests/DbDataSync.Web.Tests
+        run: npx playwright install --with-deps chromium
+      - name: Test (Playwright)
+        # The config's webServer array starts and stops both the API and the SPA dev server, and
+        # globalSetup/globalTeardown build and drop the test database — nothing to orchestrate here.
+        working-directory: tests/DbDataSync.Web.Tests
+        run: npx playwright test
+      - name: Upload traces and screenshots from a failed run
+        # trace: 'retain-on-failure' is already on; without this the trace of a CI-only failure is
+        # thrown away with the runner, which is the one case it exists for.
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-failure-artifacts
+          path: tests/DbDataSync.Web.Tests/test-results/
+          retention-days: 7
+      # Phase 144: always, not just on failure — a few KB either way, and it's what lets a green run
+      # actually prove the whole suite ran rather than being read only when something goes red.
+      # playwright.config.ts's reporter list only writes this file when GitHub Actions' own CI=true is
+      # set, so a local `npx playwright test` never produces it — this step only ever runs here anyway.
+      - name: Upload the JSON test report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: tests/DbDataSync.Web.Tests/test-results/results.json
+          retention-days: 7
+
+  # Only on the same release/v* tag push that triggers release.yml — restricted from every push (its
+  # original scope) by request, to stop this job's ~150MB nupkg upload from repeatedly hitting the
+  # account's artifact storage quota (see retention-days below, added first; this is the deliberate
+  # follow-up). The tradeoff accepted: the first time anyone finds out the Dockerfile or the tool
+  # package is broken is now the release itself, not an ordinary push beforehand.
+  package:
+    if: ${{ startsWith(github.ref, 'refs/tags/release/v') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          # No packages.lock.json in this repo, so the cache key is a hash of every .csproj instead —
+          # any dependency change invalidates it. What's cached is the shared ~/.nuget/packages
+          # download, not a job's own build output, so this is safe to turn on in every job that
+          # restores: it only saves the network round-trip to nuget.org, already-restored packages are
+          # still resolved into each project's own bin/obj exactly as before.
+          cache: true
+          cache-dependency-path: "**/*.csproj"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      # Phase 137: dotnet pack of DbDataSync.Cli.csproj never triggers DbDataSync.Api.csproj's own
+      # BuildSpa target (that only fires when Api.csproj is published directly) — build the SPA here,
+      # the same way the Dockerfile's own `web` stage does, and Cli.csproj's new CopyPrebuiltSpa target
+      # picks up the already-built dist/ at pack time.
+      - name: Build the SPA
+        working-directory: src/DbDataSync.Web
+        run: |
+          npm ci
+          npm run build
+      - name: Pack the global tool
+        run: dotnet pack src/DbDataSync.Cli/DbDataSync.Cli.csproj -c Release -o artifacts
+      # Phase 137: the actual reason the missing-wwwroot bug shipped unnoticed — every check before this
+      # only proved the tool runs and answers --help, none of which would ever notice an empty wwwroot.
+      # A .nupkg is a zip; unpack it and fail loud if tools/<tfm>/any/wwwroot/ is missing or empty rather
+      # than silently passing on a `dist/` that built nothing.
+      - name: Assert the packed nupkg actually contains the web console
+        run: |
+          nupkg=$(ls artifacts/*.nupkg | head -n1)
+          rm -rf /tmp/nupkg-contents
+          mkdir -p /tmp/nupkg-contents
+          unzip -q "$nupkg" -d /tmp/nupkg-contents
+          wwwroot=$(find /tmp/nupkg-contents/tools -type d -name wwwroot | head -n1)
+          if [ -z "$wwwroot" ] || [ -z "$(find "$wwwroot" -type f -print -quit)" ]; then
+            echo "packed nupkg has no non-empty tools/<tfm>/any/wwwroot/ — the web console did not get packed"
+            exit 1
+          fi
+      # Phase 160: the docs ship in the package. Compared against docs/ itself rather than a hard-coded count, so
+      # adding a page does not need this edited — and a page that fails to pack does not pass unnoticed.
+      - name: Assert the packed nupkg contains every page of docs/
+        run: |
+          packed=$(find /tmp/nupkg-contents/tools -type d -path '*/wwwroot/docs' | head -n1)
+          if [ -z "$packed" ]; then
+            echo "packed nupkg has no wwwroot/docs/ — the docs did not get packed"
+            exit 1
+          fi
+          for page in docs/*.md; do
+            if [ ! -s "$packed/$(basename "$page")" ]; then
+              echo "packed nupkg is missing or has an empty $(basename "$page")"
+              exit 1
+            fi
+          done
+          while IFS= read -r image; do
+            [ -z "$image" ] && continue
+            if [ ! -s "$packed/../$image" ]; then
+              echo "packed nupkg is missing or has an empty $image, which the docs show"
+              exit 1
+            fi
+          done < <(tr -d '\r' < docs/images.txt)
+      - name: Install it into a clean tool root and run it
+        run: |
+          dotnet tool install --tool-path /tmp/dbdatasync-tool --add-source artifacts DbDataSync
+          /tmp/dbdatasync-tool/dbdatasync version
+          /tmp/dbdatasync-tool/dbdatasync --help
+      - name: Build the container image
+        run: docker build -t dbdatasync:ci .
+      - name: Start it and check it answers
+        run: |
+          docker run -d --name dbdatasync-ci -p 18080:8080 dbdatasync:ci
+          for i in $(seq 1 30); do
+            if docker exec dbdatasync-ci dotnet /app/DbDataSync.Cli.dll health --url http://127.0.0.1:8080; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "the container never became healthy"
+          docker logs dbdatasync-ci
+          exit 1
+      # Phase 137: the Dockerfile's own path was never actually proof this worked either — it sidesteps
+      # BuildSpa entirely (its `web` stage COPYs dist/ straight into wwwroot/), so this asserts the
+      # running container serves real SPA content, not MapFallback's "No web assets are published"
+      # fallback text.
+      - name: Assert the running container serves the web console, not the fallback
+        run: |
+          # Not `curl -sf … | grep -q` on its own: -f turns a 401 into empty output, so the grep found nothing and this
+          # passed — which is how a default deployment answering 401 to `/` went unnoticed (phase 160).
+          body=$(curl -sf http://127.0.0.1:18080/) || { echo "the default image's / did not answer 200 to someone who has not signed in"; exit 1; }
+          if echo "$body" | grep -q "No web assets are published"; then
+            echo "the default image's / answered with the no-web-assets fallback, not the SPA"
+            exit 1
+          fi
+      # Phase 160: same for the image — its docs come from a separate COPY line, not the csproj target.
+      - name: Assert the running container serves the docs
+        run: |
+          for page in docs/*.md; do
+            curl -sf "http://127.0.0.1:18080/docs/$(basename "$page")" -o /dev/null \
+              || { echo "the default image does not serve /docs/$(basename "$page")"; exit 1; }
+          done
+          while IFS= read -r image; do
+            [ -z "$image" ] && continue
+            curl -sf "http://127.0.0.1:18080/$image" -o /dev/null \
+              || { echo "the default image does not serve /$image, which the docs show"; exit 1; }
+          done < <(tr -d '\r' < docs/images.txt)
+      # Phase 121: the slim alternative to the default (SDK-based) image above. Built with the same
+      # single `docker build` this repo's own Dockerfile already defines — --target just picks a
+      # different one of its stages, so there is no second Dockerfile to keep in sync.
+      - name: Build the runtime-only image
+        run: docker build --target runtime -t dbdatasync:ci-runtime .
+      - name: The runtime-only image has no SDK
+        run: |
+          if docker run --rm --entrypoint dotnet dbdatasync:ci-runtime --list-sdks | grep -q .; then
+            echo "the runtime-only image still has an SDK installed"
+            exit 1
+          fi
+      - name: Start the runtime-only image and check it answers
+        run: |
+          docker run -d --name dbdatasync-ci-runtime -p 18082:8080 dbdatasync:ci-runtime
+          for i in $(seq 1 30); do
+            if docker exec dbdatasync-ci-runtime dotnet /app/DbDataSync.Cli.dll health --url http://127.0.0.1:8080; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "the runtime-only container never became healthy"
+          docker logs dbdatasync-ci-runtime
+          exit 1
+      - name: Assert the runtime-only container serves the web console, not the fallback
+        run: |
+          if curl -sf http://127.0.0.1:18082/ | grep -q "No web assets are published"; then
+            echo "the runtime-only image's / answered with the no-web-assets fallback, not the SPA"
+            exit 1
+          fi
+      - name: Upload the tool package
+        # ~150MB every time: it's a framework-dependent, RID-agnostic package (see the csproj comment)
+        # that bundles DuckDB/LibGit2Sharp/SQLite/SqlClient's native binaries for every platform in one
+        # nupkg, so one build serves any OS. This job already proves the package works by installing and
+        # running it a few steps up — the upload is only so a human can grab this exact build, not a
+        # required output — so it does not need the long default retention. Without retention-days this
+        # inherits the account's default (commonly 90 days), and this job runs on every push to main and
+        # every PR: that is what actually let 96 of these pile up into 14.7GB and hit the storage quota,
+        # not the individual size.
+        uses: actions/upload-artifact@v7
+        with:
+          name: dbdatasync-tool
+          path: artifacts/*.nupkg
+          retention-days: 3

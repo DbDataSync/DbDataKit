@@ -1,0 +1,224 @@
+using System.Data;
+using System.Data.Common;
+using System.Net.Security;
+using System.Text;
+using Apache.Arrow.Flight;
+using Apache.Arrow.Flight.Client;
+using Apache.Arrow.Flight.Sql;
+using Apache.Arrow.Flight.Sql.Client;
+using DbDataSync.Core.Sql;
+using Grpc.Core;
+using Grpc.Net.Client;
+
+namespace DbDataSync.Drivers.ArrowFlightSql;
+
+/// <summary>
+/// A read-only ADO.NET connection to an Arrow Flight SQL server.
+/// <para>
+/// Flight SQL has no ADO.NET provider, but everything above the drivers in this codebase — readers,
+/// the connection test, metadata browsing — speaks <see cref="DbConnection"/>, so this adapter is what
+/// lets the existing generic readers run against it unchanged. It is deliberately thin: it opens a gRPC
+/// channel, authenticates, and hands out commands. Transactions and writes are not supported, and say
+/// so rather than pretending.
+/// </para>
+/// <para>
+/// **The credential never leaves this class.** <see cref="ConnectionString"/> is the address alone; the
+/// token or password is held only as the header value attached to calls.
+/// </para>
+/// </summary>
+public sealed class FlightSqlConnection : DbConnection
+{
+    private const string AuthorizationHeader = "authorization";
+
+    private readonly FlightSqlSettings _settings;
+    private string? _catalog;
+    private GrpcChannel? _channel;
+    private string? _authorization;
+    private ConnectionState _state = ConnectionState.Closed;
+
+    public FlightSqlConnection(FlightSqlSettings settings, SqlDialect dialect)
+    {
+        _settings = settings;
+        _catalog = settings.Catalog;
+        Dialect = dialect;
+    }
+
+    /// <summary>The dialect this connection's commands render inline literals with (see
+    /// <see cref="FlightSqlParameterMode.Inline"/>) and read parameter markers by.</summary>
+    internal SqlDialect Dialect { get; }
+
+    internal FlightSqlSettings Settings => _settings;
+
+    /// <summary>Set once the server has refused bound parameters (Unimplemented): later commands skip
+    /// the prepared round trips and send values inline.</summary>
+    internal volatile bool ServerRefusesParameters;
+
+    internal FlightSqlClient Client { get; private set; } = null!;
+
+    /// <summary>
+    /// Streams the record batches behind a ticket, decompressing LZ4/Zstd ones. Used instead of
+    /// <c>Client.DoGetAsync</c>, which cannot read a compressed batch — see <see cref="FlightDataReader"/>.
+    /// </summary>
+    internal IAsyncEnumerable<Apache.Arrow.RecordBatch> DoGetAsync(
+        FlightTicket ticket, FlightCallOptions options, CancellationToken cancellationToken)
+    {
+        var channel = _channel ?? throw new InvalidOperationException("The connection is not open.");
+        DateTime? deadline = options.Timeout > TimeSpan.Zero ? DateTime.UtcNow + options.Timeout : null;
+        return FlightDataReader.ReadAsync(channel.CreateCallInvoker(), ticket, options.Headers, deadline, cancellationToken);
+    }
+
+    /// <summary>A fresh options object per call: <see cref="Metadata"/> is mutable and shared state
+    /// between concurrent calls would be a bug waiting to happen.</summary>
+    internal FlightCallOptions CallOptions(TimeSpan? timeout = null)
+    {
+        var options = new FlightCallOptions();
+        if (_authorization is not null)
+            options.Headers.Add(AuthorizationHeader, _authorization);
+
+        if (_settings.DataSource is { } dataSource)
+            options.Headers.Add(FlightSqlSettings.DataSourceHeader, dataSource);
+        if (_settings.Compression is { } compression)
+            options.Headers.Add(FlightSqlSettings.CompressionHeader, compression);
+
+        var effective = timeout ?? _settings.CommandTimeout;
+        if (effective > TimeSpan.Zero && effective != Timeout.InfiniteTimeSpan)
+            options.Timeout = effective;
+
+        return options;
+    }
+
+    /// <summary>The address only — never a credential. Setting it is not supported: a connection is
+    /// built from its settings.</summary>
+    [System.Diagnostics.CodeAnalysis.AllowNull]
+    public override string ConnectionString
+    {
+        get => _settings.Address.ToString();
+        set => throw new NotSupportedException("A Flight SQL connection is configured when it is created.");
+    }
+
+    public override string Database => _catalog ?? "";
+    public override string DataSource => _settings.Address.Authority;
+
+    /// <summary>Not queried: the version is only available through an optional SqlInfo call that many
+    /// servers and proxies do not implement, and a property that can throw is how
+    /// <c>JdbcConnection.ServerVersion</c> turned a successful test into a crash (phase 171V).</summary>
+    public override string ServerVersion => "Arrow Flight SQL";
+
+    public override ConnectionState State => _state;
+
+    public override void ChangeDatabase(string databaseName) => _catalog = string.IsNullOrWhiteSpace(databaseName) ? null : databaseName;
+
+    public override void Open() => OpenAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+    public override async Task OpenAsync(CancellationToken cancellationToken)
+    {
+        if (_state == ConnectionState.Open)
+            throw new InvalidOperationException("The connection is already open.");
+
+        var handler = new SocketsHttpHandler
+        {
+            EnableMultipleHttp2Connections = true,
+            ConnectTimeout = _settings.ConnectTimeout,
+        };
+
+        if (_settings.SkipCertificateValidation)
+        {
+            // An explicit, per-connection opt-out the operator chose (and was warned about on the form) —
+            // for a proxy with a self-signed or private-CA certificate. Not a global switch.
+            handler.SslOptions = new SslClientAuthenticationOptions
+            {
+                RemoteCertificateValidationCallback = static (_, _, _, _) => true,
+            };
+        }
+
+        _channel = GrpcChannel.ForAddress(_settings.Address, new GrpcChannelOptions
+        {
+            HttpHandler = handler,
+            // Arrow record batches routinely exceed gRPC's 4 MB default; a read must not fail on size.
+            MaxReceiveMessageSize = null,
+            MaxSendMessageSize = null,
+            DisposeHttpClient = true,
+        });
+
+        var flight = new FlightClient(_channel);
+        Client = new FlightSqlClient(flight);
+
+        try
+        {
+            _authorization = _settings.Auth switch
+            {
+                FlightSqlAuthMethod.Bearer => $"Bearer {_settings.Credential}",
+                FlightSqlAuthMethod.Basic => await HandshakeAsync(flight, cancellationToken),
+                _ => null,
+            };
+            _state = ConnectionState.Open;
+        }
+        catch
+        {
+            _channel.Dispose();
+            _channel = null;
+            _authorization = null;
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Basic authentication: the Flight handshake, with the credentials as a Basic header on that one
+    /// call. A server that issues sessions answers with a bearer token (header, or trailer on some),
+    /// which replaces the password on every later call. A server that issues none — a proxy that checks
+    /// Basic credentials on each request — leaves nothing to swap in, so the Basic header itself is kept.
+    /// </summary>
+    private async Task<string> HandshakeAsync(FlightClient flight, CancellationToken cancellationToken)
+    {
+        var basic = "Basic " + Convert.ToBase64String(
+            Encoding.UTF8.GetBytes($"{_settings.UserId}:{_settings.Credential}"));
+
+        var metadata = new Metadata { { AuthorizationHeader, basic } };
+        DateTime? deadline = _settings.ConnectTimeout == Timeout.InfiniteTimeSpan
+            ? null
+            : DateTime.UtcNow + _settings.ConnectTimeout;
+
+        try
+        {
+            using var call = flight.Handshake(metadata, deadline, cancellationToken);
+            await call.RequestStream.WriteAsync(new FlightHandshakeRequest(Google.Protobuf.ByteString.Empty, 0));
+            await call.RequestStream.CompleteAsync();
+
+            var headers = await call.ResponseHeadersAsync;
+            while (await call.ResponseStream.MoveNext(cancellationToken))
+            {
+                // Nothing in the payload is needed; draining the stream is what lets the trailers arrive.
+            }
+
+            var issued = Authorization(headers) ?? Authorization(call.GetTrailers());
+            return issued ?? basic;
+        }
+        catch (Exception ex) when (FlightSqlException.TryWrap(ex, out var wrapped))
+        {
+            throw wrapped;
+        }
+    }
+
+    private static string? Authorization(Metadata? metadata) =>
+        metadata?.FirstOrDefault(e => string.Equals(e.Key, AuthorizationHeader, StringComparison.OrdinalIgnoreCase))?.Value;
+
+    public override void Close()
+    {
+        _channel?.Dispose();
+        _channel = null;
+        _authorization = null;
+        _state = ConnectionState.Closed;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+            Close();
+        base.Dispose(disposing);
+    }
+
+    protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel) =>
+        throw new NotSupportedException("The Arrow Flight SQL driver is read-only and has no transactions.");
+
+    protected override DbCommand CreateDbCommand() => new FlightSqlCommand(this);
+}

@@ -1,0 +1,37 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <!-- Phase 109h: DbDataSync.Drivers.MsSql.csproj's own PackageReference now excludes runtime assets
+         (it compiles against the reference assembly but no longer ships the DLL — see that project's
+         comment), so this test project — which touches Microsoft.Data.SqlClient types directly and
+         needs a real standalone `dotnet test` run to work with no LibraryRegistry-installed library
+         present — needs its own, un-excluded, direct reference to the identical package + version. -->
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DbDataSync.Drivers.MsSql\DbDataSync.Drivers.MsSql.csproj" />
+    <ProjectReference Include="..\..\src\DbDataSync.Scripting\DbDataSync.Scripting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- One scratch-database teardown for every test project that makes one; see its doc comment. -->
+    <Compile Include="..\Shared\MsSqlScratch.cs" Link="Shared\MsSqlScratch.cs" />
+  </ItemGroup>
+
+</Project>

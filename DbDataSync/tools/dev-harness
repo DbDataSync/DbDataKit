@@ -1,0 +1,26 @@
+#!/usr/bin/env sh
+# Launcher for tools/DbDataSync.DevHarness. See `tools/dev-harness help`.
+#
+# `dotnet build` unconditionally, then `exec` into the built assembly. Two deliberate choices:
+#
+#   * Build every time, with no staleness check of our own. MSBuild already decides correctly what
+#     needs rebuilding, including changes in referenced projects such as DbDataSync.Core — which a
+#     hand-rolled check here got wrong, silently running a stale binary.
+#
+#   * `dotnet exec` on the DLL rather than `dotnet run`, and `exec` so this script's own shell is
+#     replaced. Both exist to make the harness exactly ONE process. `dotnet run` forks the app as a
+#     child of a wrapper, so the pid a developer finds with `pgrep` (or an IDE's stop button targets)
+#     is the wrapper, not the harness: SIGKILL it and the harness survives, reparented, still holding
+#     ports 5183/5173 and the scratch state database. That's the same wrapper hazard
+#     AppProcesses.StartApi and playwright.config.ts already avoid, for the same reason.
+#
+# Build output goes to stderr so a verb's own stdout stays clean for piping (`verify` in particular).
+set -e
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(dirname "$script_dir")
+project="$repo_root/tools/DbDataSync.DevHarness/DbDataSync.DevHarness.csproj"
+
+dotnet build "$project" -v quiet --nologo >&2
+
+exec dotnet exec "$repo_root/tools/DbDataSync.DevHarness/bin/Debug/net10.0/DbDataSync.DevHarness.dll" "$@"

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
+    <ProjectReference Include="..\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataSync.Drivers.Generic\DbDataSync.Drivers.Generic.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- A plain reference, not the ExcludeAssets="runtime" + LibraryRegistry treatment the database
+         providers get (phase 109h/109i). That mechanism installs one package whose DbProviderFactory
+         it can name; Flight SQL is a set of managed packages (Apache.Arrow, Apache.Arrow.Flight,
+         Grpc.*) with no factory, so it would need a multi-package catalog entry the installer has
+         not been exercised with. See phase 197F's "Library packaging". -->
+    <PackageReference Include="Apache.Arrow.Flight.Sql" Version="23.0.0" />
+    <!-- The LZ4 and Zstd codecs for Arrow's compressed record batches. Needed even though the Flight client
+         is: its own DoGet reads batches without any codec, so a compressed one throws — see
+         FlightDataReader, which reads DoGet itself so it can hand the codecs to Arrow's stream reader. -->
+    <PackageReference Include="Apache.Arrow.Compression" Version="23.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DbDataSync.Drivers.ArrowFlightSql.Tests" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
