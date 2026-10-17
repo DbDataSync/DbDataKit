@@ -23,7 +23,7 @@ Other metadata code to bring into view:
 
 ### 2.1 Extraction steps
 1. `git subtree split` (or `filter-repo`) the `src/DbDataKit.Odbc.Metadata` and `tests/DbDataKit.Odbc.Metadata.Tests` paths to preserve history,
-   then add under `shared/src` and `shared/tests` of the hub. Proxy then switches to the NuGet package.
+   then add under `DbDataKit/src` and `DbDataKit/tests` of the hub. Proxy then switches to the NuGet package.
 2. Add package metadata: `PackageId`, SemVer starting 0.x, SourceLink, README, `IsPackable`, symbols, deterministic build,
    own `Directory.Build.props` and `Directory.Packages.props` (the project currently inherits `net10.0`, nullable, implicit usings from the Proxy root).
 3. Multi-target `net10.0` (and `net8.0` if any consumer needs it; all three are `net10.0` today, so `net10.0` only unless a reason appears).

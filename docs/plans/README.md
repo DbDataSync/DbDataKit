@@ -1,6 +1,6 @@
 # Implementation Plans: Shared Modules
 
-Plans for extracting shared code into `DbDataKit/shared/`, derived from `docs/review/`. Each plan lists the
+Plans for extracting shared code into `DbDataKit/DbDataKit/`, derived from `docs/review/`. Each plan lists the
 current state per product (with file references from the review), design, package layout, phases with exit
 criteria, risks and acceptance. Plans are proposals; review the "decisions" in each before starting.
 

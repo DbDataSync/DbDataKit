@@ -6,7 +6,7 @@ using DbDataKit.Transfer;
 // Benchmark stub (Plan 07 phase 0/2): compares the two ways of feeding a bulk route from batches, without a database.
 //   reader : ChainedBatchReader over DataBatch readers (what SqlServerBulkWriter does)
 //   table  : buffering rows into a DataTable per 20,000 rows (what Build's BulkCopySqlServerAsync did)
-// Run: dotnet run -c Release --project shared/benchmarks/DbDataKit.Transfer.Benchmarks [rows]
+// Run: dotnet run -c Release --project DbDataKit/benchmarks/DbDataKit.Transfer.Benchmarks [rows]
 // A live throughput comparison against a real SqlBulkCopy / COPY target is the missing half (see the Transfer README).
 
 var total = args.Length > 0 ? int.Parse(args[0]) : 1_000_000;
