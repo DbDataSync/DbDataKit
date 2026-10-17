@@ -6,7 +6,7 @@ namespace DbDataSync.Updates.Tests;
 public class SnapshotStagerTests
 {
     private static readonly ReleaseVersion Version = ReleaseVersion.Parse("2026.9.19.1432-snapshot.g65615e7");
-    private const string BaseUrl = "https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/snapshot-2026.9.19.1432-snapshot.g65615e7/";
+    private const string BaseUrl = "https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/v2026.9.19.1432-snapshot.g65615e7/";
 
     private static readonly ReleaseInfo Release = new(
         Version, ReleaseChannel.Snapshot,

@@ -52,7 +52,7 @@ public sealed class UpdateServiceTests : IDisposable
     private static readonly byte[] Package = Enumerable.Range(0, 5000).Select(i => (byte)(i * 7 % 251)).ToArray();
 
     // The DbDataKit monorepo's releases, as GitHub lists them: DbDataSync's own (dbdatasync/ tag prefix), each with its
-    // package and checksum as assets. Stable and beta are `v` tags; a snapshot is a `snapshot-` tag.
+    // package and checksum as assets. Every channel is a `v<version>` tag; the version's suffix is the channel.
     private static string Release(string tagKind, string version, bool prerelease) =>
         $$"""
         {"tag_name":"dbdatasync/{{tagKind}}{{version}}","draft":false,"prerelease":{{(prerelease ? "true" : "false")}},
@@ -63,7 +63,7 @@ public sealed class UpdateServiceTests : IDisposable
         """;
 
     private static string GitHubJson() => "[" + string.Join(",",
-        Release("snapshot-", Snapshot, prerelease: true),
+        Release("v", Snapshot, prerelease: true),
         Release("v", "2026.9.18.1918", prerelease: false),
         Release("v", "2026.9.16.1005", prerelease: false),
         Release("v", "2026.9.11.532", prerelease: false),
@@ -323,7 +323,7 @@ public sealed class UpdateServiceTests : IDisposable
         var stable = Assert.Single(releases, r => r.Channel == "stable" && r.Version == "2026.9.18.1918");
         Assert.Equal("https://github.com/DbDataSync/DbDataKit/releases/tag/dbdatasync/v2026.9.18.1918", stable.Url);
         var snapshot = Assert.Single(releases, r => r.Channel == "snapshot");
-        Assert.Equal($"https://github.com/DbDataSync/DbDataKit/releases/tag/dbdatasync/snapshot-{Snapshot}", snapshot.Url);
+        Assert.Equal($"https://github.com/DbDataSync/DbDataKit/releases/tag/dbdatasync/v{Snapshot}", snapshot.Url);
     }
 
     [Fact]

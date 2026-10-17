@@ -12,8 +12,8 @@ public class UpdateCommandsTests
     private static ReleaseInfo Release(ReleaseVersion version, ReleaseChannel channel) =>
         channel == ReleaseChannel.Snapshot
             ? new ReleaseInfo(version, channel,
-                new Uri($"https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/snapshot-{version.Text}/DbDataSync.{version.Text}.nupkg"),
-                new Uri($"https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/snapshot-{version.Text}/DbDataSync.{version.Text}.nupkg.sha512"))
+                new Uri($"https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/v{version.Text}/DbDataSync.{version.Text}.nupkg"),
+                new Uri($"https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/v{version.Text}/DbDataSync.{version.Text}.nupkg.sha512"))
             : new ReleaseInfo(version, channel);
 
     private static readonly InstallLocation ToolPath = new(InstallKind.ToolPath, "/opt/dbdatasync");

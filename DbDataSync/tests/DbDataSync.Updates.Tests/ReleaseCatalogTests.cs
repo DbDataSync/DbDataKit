@@ -7,7 +7,7 @@ namespace DbDataSync.Updates.Tests;
 /// The GitHub fixture is **synthetic**, shaped exactly like the release objects GitHub returns for the DbDataKit
 /// monorepo (trimmed to the fields the catalog reads): valid DbDataSync snapshot, stable and beta releases, plus
 /// releases the catalog must skip — other products' (<c>dbdataproxy/…</c>, <c>dbdatabuild/…</c>), a DbDataSync tag carrying
-/// another product's assets, a release whose prerelease flag or tag kind disagrees with its version, a draft,
+/// another product's assets, a release whose prerelease flag disagrees with its version, the retired <c>snapshot-</c> tag form, a draft,
 /// one with no checksum asset, an asset hosted somewhere else, a wrong asset name, a scratch tag, and a tag with
 /// no product prefix at all.
 /// </summary>
@@ -107,10 +107,10 @@ public class ReleaseCatalogTests
             releases.Select(r => r.Version.Text));
 
         var oldest = releases[^1];
-        const string baseUrl = "https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/snapshot-2026.9.19.1432-snapshot.g65615e7/";
+        const string baseUrl = "https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/v2026.9.19.1432-snapshot.g65615e7/";
         Assert.Equal(baseUrl + "DbDataSync.2026.9.19.1432-snapshot.g65615e7.nupkg", oldest.PackageUrl!.AbsoluteUri);
         Assert.Equal(baseUrl + "DbDataSync.2026.9.19.1432-snapshot.g65615e7.nupkg.sha512", oldest.ChecksumUrl!.AbsoluteUri);
-        Assert.Equal("https://github.com/DbDataSync/DbDataKit/releases/tag/dbdatasync/snapshot-2026.9.19.1432-snapshot.g65615e7", oldest.ReleaseUrl!.AbsoluteUri);
+        Assert.Equal("https://github.com/DbDataSync/DbDataKit/releases/tag/dbdatasync/v2026.9.19.1432-snapshot.g65615e7", oldest.ReleaseUrl!.AbsoluteUri);
     }
 
     [Fact]
@@ -280,7 +280,6 @@ public class ReleaseCatalogTests
     {
         Assert.Equal("https://api.github.com/repos/DbDataSync/DbDataKit/releases", ReleaseSources.GitHubReleasesUrl);
         Assert.Equal("dbdatasync/v", ReleaseSources.ReleaseTagPrefix);
-        Assert.Equal("dbdatasync/snapshot-", ReleaseSources.SnapshotTagPrefix);
         Assert.Equal("DbDataSync.2026.9.19.1432-snapshot.g65615e7.nupkg", ReleaseSources.PackageFileName(ReleaseVersion.Parse("2026.9.19.1432-snapshot.g65615e7")));
         Assert.EndsWith(".nupkg.sha512", ReleaseSources.ChecksumFileName(ReleaseVersion.Parse("2026.9.19.1432-snapshot.g65615e7")));
     }

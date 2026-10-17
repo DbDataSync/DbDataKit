@@ -10,9 +10,8 @@ namespace DbDataSync.Updates;
 /// <see cref="ReleaseSources"/> pins, and nowhere else: this repository's GitHub releases.
 /// <para>
 /// The repository publishes every product in the DbDataKit monorepo, so a release counts only if it is
-/// DbDataSync's: its tag is <see cref="ReleaseSources.ReleaseTagPrefix"/> (stable and beta) or
-/// <see cref="ReleaseSources.SnapshotTagPrefix"/> (snapshot) plus a version that parses and belongs to the channel
-/// the tag says, its prerelease flag agrees with that channel, **and** it carries both assets a release is made of
+/// DbDataSync's: its tag is <see cref="ReleaseSources.ReleaseTagPrefix"/> plus a version that parses (the version's
+/// suffix is the channel), its prerelease flag agrees with that channel, **and** it carries both assets a release is made of
 /// (<see cref="ReleaseSources.PackageFileName"/> and its checksum), downloaded from under
 /// <see cref="ReleaseSources.AssetDownloadPrefix"/>. Anything that fails a check is skipped, not reported — a release
 /// listing is not the place to discover that another product's release, or a hand-made one, exists.
@@ -93,28 +92,13 @@ public sealed class ReleaseCatalog(HttpClient http, string? gitHubToken = null, 
         if (tag is null)
             return false;
 
-        // The tag says which kind of release this is; the version has to agree with it.
-        bool snapshotTag;
-        string text;
-        if (tag.StartsWith(ReleaseSources.ReleaseTagPrefix, StringComparison.Ordinal))
-        {
-            snapshotTag = false;
-            text = tag[ReleaseSources.ReleaseTagPrefix.Length..];
-        }
-        else if (tag.StartsWith(ReleaseSources.SnapshotTagPrefix, StringComparison.Ordinal))
-        {
-            snapshotTag = true;
-            text = tag[ReleaseSources.SnapshotTagPrefix.Length..];
-        }
-        else
-        {
+        // One tag form for every channel: the prefix, then the version, whose own suffix (none, -beta, -snapshot.g<sha>)
+        // is the channel.
+        if (!tag.StartsWith(ReleaseSources.ReleaseTagPrefix, StringComparison.Ordinal))
             return false;
-        }
 
+        var text = tag[ReleaseSources.ReleaseTagPrefix.Length..];
         if (!ReleaseVersion.TryParse(text, out var version) || version.Text != text || version.Channel is not { } channel)
-            return false;
-
-        if (snapshotTag != (channel == ReleaseChannel.Snapshot))
             return false;
 
         // Stable is the only channel that is not a prerelease; a mismatch means the release was made by hand.

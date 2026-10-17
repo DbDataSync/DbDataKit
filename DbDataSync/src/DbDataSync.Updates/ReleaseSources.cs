@@ -21,12 +21,10 @@ public static class ReleaseSources
     /// independent check.</summary>
     public const string TagPrefix = "dbdatasync/";
 
-    /// <summary>A stable or beta release's tag is this plus its version (<c>dbdatasync/v2026.10.17.1234</c>,
-    /// <c>dbdatasync/v2026.10.17.1234-beta</c>).</summary>
+    /// <summary>Every release's tag is this plus its version, whatever the channel: the version's own suffix says which
+    /// (<c>dbdatasync/v2026.10.17.1234</c> stable, <c>dbdatasync/v2026.10.17.1234-beta</c> beta,
+    /// <c>dbdatasync/v2026.10.17.1234-snapshot.gabc1234</c> snapshot).</summary>
     public const string ReleaseTagPrefix = TagPrefix + "v";
-
-    /// <summary>A snapshot release's tag is this plus its version (<c>dbdatasync/snapshot-2026.10.17.1234-snapshot.gabc1234</c>).</summary>
-    public const string SnapshotTagPrefix = TagPrefix + "snapshot-";
 
     /// <summary>Every release asset is downloaded from under this — anything else in a release listing is
     /// ignored rather than followed.</summary>

@@ -41,7 +41,7 @@ public class UpdateCommandTests : IDisposable
     private static string Checksum(byte[] bytes) => Convert.ToBase64String(SHA512.HashData(bytes));
 
     // The DbDataKit monorepo's releases, as GitHub lists them: each one DbDataSync's own (dbdatasync/ tag prefix), with the
-    // package and its checksum as assets. Stable and beta are `v` tags; a snapshot is a `snapshot-` tag.
+    // package and its checksum as assets. Every channel is a `v<version>` tag; the version's suffix is the channel.
     private static string Release(string tagKind, string v, bool prerelease) =>
         $$"""
         {"tag_name":"dbdatasync/{{tagKind}}{{v}}","draft":false,"prerelease":{{(prerelease ? "true" : "false")}},"html_url":"https://github.com/DbDataSync/DbDataKit/releases/tag/dbdatasync/{{tagKind}}{{v}}",
@@ -51,7 +51,7 @@ public class UpdateCommandTests : IDisposable
         """;
 
     private static string GitHubJson() => "[" + string.Join(",",
-        new[] { SnapshotB, SnapshotA }.Select(v => Release("snapshot-", v, prerelease: true))
+        new[] { SnapshotB, SnapshotA }.Select(v => Release("v", v, prerelease: true))
             .Concat(new[] { "2026.9.18.1918", "2026.9.16.1005", "2026.9.11.532" }.Select(v => Release("v", v, prerelease: false)))
             .Concat(new[] { "2026.9.12.721-beta" }.Select(v => Release("v", v, prerelease: true)))) + "]";
 

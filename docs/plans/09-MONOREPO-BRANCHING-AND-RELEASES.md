@@ -141,7 +141,6 @@ All products use CalVer, `YYYY.MM.DD.HHmm`, computed from the UTC clock as DbDat
 | --- | --- | --- | --- |
 | release trigger | dispatch against `dbdatasync/test` | dispatch against `dbdataproxy/test` | dispatch against `dbdatabuild/test` |
 | tag in this repo | `dbdatasync/v<version>` | `dbdataproxy/v<version>` | `dbdatabuild/v<version>` |
-| snapshot tag in this repo | `dbdatasync/snapshot-<version>` | n/a yet | n/a yet |
 
 Common release steps, from DbDataSync: refuse unless dispatched against `<product>/test`; require `main` to be
 an ancestor of it; require a green CI run for that exact SHA (look it up, don't re-run); build and publish;
@@ -167,11 +166,12 @@ the product's lowercase name and a slash:
 | --- | --- |
 | stable | `dbdatasync/v<version>` |
 | beta | `dbdatasync/v<version>-beta` |
-| snapshot | `dbdatasync/snapshot-<version>` |
+| snapshot | `dbdatasync/v<version>-snapshot.g<sha>` |
 
 `dbdatasync update` (`ReleaseCatalog`) lists the repository's releases once and keeps one only if its tag starts with
-`dbdatasync/`, the version after the prefix parses and belongs to the channel the tag kind says, the prerelease flag
-agrees with that channel (stable is the only channel that is not a prerelease), and it carries
+`dbdatasync/v`, the version after it parses (its suffix is the channel: none, `-beta` or `-snapshot.g<sha>`, so a snapshot
+tag reads like a beta tag), the prerelease flag agrees with that channel (stable is the only channel that is not a
+prerelease), and it carries
 `DbDataSync.<version>.nupkg` and its `.sha512` hosted under this repository's `releases/download/`. The asset names
 are a second, independent product check. Other products' releases, drafts, hand-made releases and anything
 malformed are skipped silently. A new product just needs its own prefix; DbDataProxy and DbDataBuild releases never

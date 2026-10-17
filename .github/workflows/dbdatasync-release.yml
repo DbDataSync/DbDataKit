@@ -286,7 +286,7 @@ jobs:
       # reference a release could point at — attaching one would mean first deciding to publish
       # images somewhere, which is a separate call this phase does not make.
       # Created in this repository against the tag pushed above. `dbdatasync update` reads this repository's releases and keeps
-      # the ones whose tag starts with `dbdatasync/` (v<version> for stable and beta, snapshot-<version> for snapshots), so
+      # the ones whose tag starts with `dbdatasync/` (v<version> for every channel: stable, v<version>-beta, v<version>-snapshot.g<sha>), so
       # the release has to carry exactly the two assets it looks for: DbDataSync.<version>.nupkg and its .sha512 checksum.
       # --latest=false because "latest" is one marker for the whole repository, not one per product.
       - name: Publish the GitHub Release
