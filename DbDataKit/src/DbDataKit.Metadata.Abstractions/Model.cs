@@ -4,6 +4,9 @@ namespace DbDataKit.Metadata;
 
 public enum TableKind { Table, View, MaterializedView, SystemTable, TemporaryTable, Other }
 
+/// <summary>A schema by its catalog and name. <see cref="Catalog"/> is null where the engine has none.</summary>
+public sealed record SchemaRef(string? Catalog, string Name);
+
 /// <summary>A table or view by its catalog parts. <see cref="Catalog"/> and <see cref="Schema"/> are null where the engine has none.</summary>
 public sealed record TableRef(string? Catalog, string? Schema, string Name, TableKind Kind = TableKind.Table)
 {

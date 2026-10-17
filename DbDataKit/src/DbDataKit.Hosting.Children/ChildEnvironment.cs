@@ -31,7 +31,7 @@ public static class ChildEnvironment
     internal static void Apply(IDictionary<string, string?> environment, ChildLaunchInfo info)
     {
         environment[TokenVariable] = info.Token;
-        environment[EndpointVariable] = info.Endpoint.ToString();
+        if (info.Endpoint.Kind != ChildEndpointKind.None) environment[EndpointVariable] = info.Endpoint.ToString();
         environment[ParentPidVariable] = info.ParentPid.ToString(System.Globalization.CultureInfo.InvariantCulture);
         environment[ParentStartVariable] = info.ParentStartTicks.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }

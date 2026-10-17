@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <Using Include="Xunit" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <None Include="Hosting/Golden/*" CopyToOutputDirectory="PreserveNewest" />
+    <Using Include="Microsoft.AspNetCore.Builder" />
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.Configuration" />
+    <DbDataKitReference Include="Config.Testing" />
+    <None Include="Config\Golden\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\DbDataProxy.Server\appsettings.example.json" Link="appsettings.example.json" CopyToOutputDirectory="PreserveNewest" />
+    <ProjectReference Include="..\..\src\DbDataProxy.Server\DbDataProxy.Server.csproj" />
+    <ProjectReference Include="..\..\src\DbDataProxy.Worker\DbDataProxy.Worker.csproj" />
+  </ItemGroup>
+</Project>

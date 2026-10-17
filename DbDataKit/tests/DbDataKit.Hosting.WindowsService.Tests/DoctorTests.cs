@@ -150,3 +150,38 @@ public class DoctorTests
         Assert.True(Layout[LayoutRole.Current].IsLink);
     }
 }
+
+public class CustomLayoutTests
+{
+    [Fact]
+    public void Create_uses_the_given_entries_and_rejects_duplicate_roles_and_bad_names()
+    {
+        var acl = new AclSpec(true, [new AclRule(LayoutPrincipal.Administrators, AccessRights.Full)]);
+        var data = new LayoutEntry(LayoutRole.Data, @"C:\PD\P", acl, "flat data directory");
+        var layout = DirectoryLayout.Create("P", [data]);
+
+        Assert.Same(data, layout[LayoutRole.Data]);
+        Assert.Single(layout.Entries);
+        Assert.Throws<ArgumentException>(() => DirectoryLayout.Create("P", [data, data]));
+        Assert.Throws<ArgumentException>(() => DirectoryLayout.Create(@"a\b", [data]));
+    }
+}
+
+public class ServiceSidTests
+{
+    // Values reported by "sc showsid" on Windows 11.
+    [Theory]
+    [InlineData("wuauserv", "S-1-5-80-1014140700-3308905587-3330345912-272242898-93311788")]
+    [InlineData("Spooler", "S-1-5-80-3951239711-1671533544-1416304335-3763227691-3930497994")]
+    public void Service_sid_matches_what_windows_reports(string name, string sid) =>
+        Assert.Equal(sid, ServiceSid.FromName(name));
+
+    [Fact]
+    public void Resolver_maps_virtual_accounts_without_a_lookup()
+    {
+        var resolver = new WindowsPrincipalResolver(ServiceAccount.Virtual("Spooler"));
+        Assert.Equal("S-1-5-80-3951239711-1671533544-1416304335-3763227691-3930497994", resolver.ResolveSid(LayoutPrincipal.ServiceAccount));
+        Assert.Equal(WellKnownPrincipalResolver.AdministratorsSid, resolver.ResolveSid(LayoutPrincipal.Administrators));
+        Assert.Equal("S-1-5-18", new WindowsPrincipalResolver(ServiceAccount.LocalSystem).ResolveSid(LayoutPrincipal.ServiceAccount));
+    }
+}

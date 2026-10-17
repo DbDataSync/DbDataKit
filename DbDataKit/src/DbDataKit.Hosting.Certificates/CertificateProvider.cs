@@ -106,6 +106,22 @@ public sealed class CertificateProvider(
         return created;
     }
 
+    /// <summary>
+    /// Replaces the managed self-signed certificate now, whatever its remaining validity (<c>cert renew</c>).
+    /// The new PFX uses the stored password and goes through the same restrict-then-move write as automatic rotation.
+    /// </summary>
+    public X509Certificate2 RenewSelfSigned(CertificateOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (options.Mode != CertificateMode.SelfSigned) throw new NotSupportedException("Only managed self-signed certificates can be renewed here.");
+        if (string.IsNullOrWhiteSpace(options.Path)) throw new InvalidOperationException("SelfSigned mode needs a Path for the managed PFX.");
+        var password = PfxPassword.Resolve(secrets, options.PasswordSecretName ?? "tls-pfx-password");
+        var created = SelfSignedCertificateGenerator.Create(
+            SelfSignedCertificateGenerator.Discover(options.AdditionalHostNames, _time, options.ValidityDays, fqdnLookup));
+        Persist(created, options, password);
+        return created;
+    }
+
     private static bool CoversNames(X509Certificate2 cert, SelfSignedRequest wanted)
     {
         var (dns, ips) = SelfSignedCertificateGenerator.ReadSans(cert);

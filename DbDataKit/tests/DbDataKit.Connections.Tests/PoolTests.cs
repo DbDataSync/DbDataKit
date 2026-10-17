@@ -39,6 +39,41 @@ public class PoolTests
     }
 
     [Fact]
+    public async Task A_cancelled_wait_gives_back_the_per_user_slot_it_had_taken()
+    {
+        var gate = new ConcurrencyGate(1, maxPerUser: 2, acquireTimeout: TimeSpan.FromSeconds(30));
+        var holder = await gate.EnterAsync("other");
+        using var cts = new CancellationTokenSource();
+        var waiter = gate.EnterAsync("alice", cts.Token).AsTask(); // has alice's slot, waits on the global one
+        await Task.Delay(50);
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await waiter);
+        holder.Dispose();
+        using var a = await gate.EnterAsync("alice");
+        a.Dispose();
+        using var b = await new ConcurrencyGate(2, 1).EnterAsync("alice");
+        Assert.Equal(0, gate.Waiting);
+    }
+
+    [Fact]
+    public async Task The_gate_counts_per_user_and_globally_and_ticket_dispose_is_idempotent()
+    {
+        var gate = new ConcurrencyGate(2, maxPerUser: 1, acquireTimeout: TimeSpan.FromMilliseconds(60));
+        var a = await gate.EnterAsync("alice");
+        await Assert.ThrowsAsync<PoolAcquireTimeoutException>(async () => await gate.EnterAsync("alice"));
+        var b = await gate.EnterAsync("bob");
+        await Assert.ThrowsAsync<PoolAcquireTimeoutException>(async () => await gate.EnterAsync("carol"));
+        Assert.Equal(2, gate.Active);
+        Assert.Equal(2, gate.Timeouts);
+        a.Dispose(); a.Dispose();
+        Assert.Equal(1, gate.Active);
+        (await gate.EnterAsync("carol")).Dispose();
+        b.Dispose();
+        Assert.Equal(0, gate.Active);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ConcurrencyGate(0));
+    }
+
+    [Fact]
     public async Task Concurrency_is_capped_and_waiting_times_out()
     {
         var (pool, _) = Make(new() { MaxConcurrency = 2, AcquireTimeout = TimeSpan.FromMilliseconds(80) });

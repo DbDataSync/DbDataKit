@@ -1,0 +1,2 @@
+Proxy:DataSources:x:Provider
+One of: odbc, sqlserver, duckdb

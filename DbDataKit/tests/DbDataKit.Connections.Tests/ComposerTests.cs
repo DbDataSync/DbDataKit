@@ -234,6 +234,16 @@ public class ComposerTests
     }
 
     [Fact]
+    public void The_legacy_sql_server_odbc_driver_gets_no_tls_or_intent_keys_it_does_not_know()
+    {
+        var composer = new OdbcComposer();
+        var ctx = Ctx(d => { d.Address = null; d.Access = AccessMode.Readonly; d.ConnectionString = "Driver={SQL Server};Server=h;Trusted_Connection=Yes"; });
+        var pairs = OdbcConnectionString.Parse(composer.Compose(ctx));
+        Assert.DoesNotContain(pairs, p => p.Key is "encrypt" or "trustservercertificate" or "applicationintent");
+        Assert.Equal(OdbcDriverProfile.SqlServer, OdbcComposer.ProfileOfDriverName("SQL Server Native Client 11.0"));
+    }
+
+    [Fact]
     public void Odbc_postgres_profile_verifies_full_by_default_and_requires_when_trusting()
     {
         var composer = new OdbcComposer();

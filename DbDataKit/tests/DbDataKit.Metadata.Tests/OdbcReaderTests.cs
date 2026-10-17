@@ -124,6 +124,20 @@ public class OdbcReaderTests
     }
 
     [Fact]
+    public async Task Schemas_are_those_that_contain_tables_and_columns_come_from_one_call()
+    {
+        var fake = FakeOdbc.SqlServerLike();
+        var reader = await Open(fake);
+
+        Assert.Equal([new SchemaRef("Shop", "dbo"), new SchemaRef("Shop", "sys")], await ToList(((ICatalogReader)reader).ListSchemasAsync()));
+
+        fake.Calls.Clear();
+        var columns = await reader.GetColumnsAsync(new TableRef("Shop", "dbo", "Orders"));
+        Assert.Equal(["Id", "Name", "Price", "At", "Uid"], columns.Select(c => c.Name).Take(5));
+        Assert.Equal(["SQLColumns(Orders)"], fake.Calls);
+    }
+
+    [Fact]
     public async Task An_unknown_driver_gets_the_generic_odbc_dialect_with_the_reported_quote()
     {
         var fake = new FakeOdbc { Strings = { [17] = "Acme DB", [29] = "`" }, Numbers = { [28] = 1 } };

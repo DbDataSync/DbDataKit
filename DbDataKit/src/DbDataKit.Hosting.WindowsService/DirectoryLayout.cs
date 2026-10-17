@@ -65,6 +65,26 @@ public sealed class DirectoryLayout
 
     public LayoutEntry this[LayoutRole role] => Entries.First(e => e.Role == role);
 
+    /// <summary>
+    /// A product-specific layout (for example a flat data directory instead of the standard
+    /// config/data/secrets/certs split). Entries are used as given; at most one entry per role.
+    /// </summary>
+    public static DirectoryLayout Create(string product, IEnumerable<LayoutEntry> entries)
+    {
+        if (string.IsNullOrWhiteSpace(product) || product.IndexOfAny(['\\', '/', ':']) >= 0)
+        {
+            throw new ArgumentException("Invalid product name.", nameof(product));
+        }
+
+        var list = entries.ToList();
+        if (list.GroupBy(e => e.Role).Any(g => g.Count() > 1))
+        {
+            throw new ArgumentException("A layout may hold only one entry per role.", nameof(entries));
+        }
+
+        return new DirectoryLayout(product, list);
+    }
+
     public static DirectoryLayout ForProduct(string product, string programFiles, string programData)
     {
         if (string.IsNullOrWhiteSpace(product) || product.IndexOfAny(['\\', '/', ':']) >= 0)

@@ -147,6 +147,35 @@ public class ProcessTests
     }
 
     [Fact]
+    public async Task Output_is_drained_and_reported_line_by_line_without_a_transport()
+    {
+        var outLines = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var errLines = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var spec = new ChildProcessSpec
+        {
+            FileName = Dotnet,
+            Arguments = [ChildDll, "chatter", "20000"], // far more than a pipe buffer
+            Transport = ChildEndpointKind.None,
+            OnOutputLine = outLines.Enqueue,
+            OnErrorLine = errLines.Enqueue,
+        };
+        await using var child = ChildProcessHost.Launch(spec);
+        var report = await child.Exited.WaitAsync(TimeSpan.FromSeconds(60));
+        Assert.Equal(0, report.ExitCode);
+        Assert.True(await WaitFor(() => outLines.Count == 20000 && errLines.Count == 20000, 20000));
+        Assert.Throws<InvalidOperationException>(() => child.Endpoint);
+        Assert.False(child.StartInfo.Environment.ContainsKey(ChildEnvironment.EndpointVariable));
+        Assert.True(child.StartInfo.Environment.ContainsKey(ChildEnvironment.ParentPidVariable));
+    }
+
+    [Fact]
+    public async Task Output_is_drained_when_no_handler_is_given()
+    {
+        await using var child = ChildProcessHost.Launch(Spec(null, "chatter", "20000"));
+        Assert.Equal(0, (await child.Exited.WaitAsync(TimeSpan.FromSeconds(60))).ExitCode);
+    }
+
+    [Fact]
     public async Task Token_is_in_the_environment_and_never_in_argv()
     {
         await using var child = ChildProcessHost.Launch(Spec(null, "printenv", ChildEnvironment.TokenVariable));

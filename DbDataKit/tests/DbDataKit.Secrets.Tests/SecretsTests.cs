@@ -7,6 +7,10 @@ namespace DbDataKit.Secrets.Tests;
 
 public class ProviderTests
 {
+    [Fact]
+    public void VariableNameFor_MatchesTheDefaultMapping() =>
+        Assert.Equal("DBDATA_SECRET_DBDATA_PROXY_DATASOURCE_ERP", EnvSecretProvider.VariableNameFor("dbdata:proxy:datasource:erp"));
+
     private static Func<string, string?> Env(params (string, string)[] vars)
     {
         var d = vars.ToDictionary(v => v.Item1, v => v.Item2);

@@ -22,6 +22,8 @@ and otherwise builds the generic ODBC dialect (`OdbcDialect.FromFacts`) from the
 from the product name. `DialectLockFile.Render/Parse` serialise facts + `DialectProfile` (quote, parameter style, case, row-limit style,
 limits, hash) as a deterministic `dialects.lock.yml`-style file. Parsing is strict and rejects a hand-edited profile by its hash.
 
+`ListSchemasAsync` reads `information_schema.schemata` (every schema, including empty ones and system catalogs; override `SchemasSql`), the ODBC reader derives schemas from its tables. `GetColumnsAsync` is the cheap read of one table's columns.
+
 ## Rules the readers follow
 - **Unknown is not empty.** `ShapeSupport` says which parts the source could answer; a driver without SQLPrimaryKeys gives `PrimaryKeys = false`.
   A DbException while reading keys, foreign keys or indexes becomes a warning on the shape plus the flag (permission errors stay visible).
