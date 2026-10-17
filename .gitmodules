@@ -1,6 +1,3 @@
-[submodule "DbDataSync"]
-	path = DbDataSync
-	url = https://github.com/DbDataSync/DbDataSync.git
 [submodule "DbDataProxy"]
 	path = DbDataProxy
 	url = https://github.com/DbDataSync/DbDataProxy.git
