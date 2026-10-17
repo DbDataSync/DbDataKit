@@ -1,7 +1,7 @@
 name: DbDataSync CI
 
 # DbDataSync's lane of the monorepo: dbdatasync/dev -> dbdatasync/test -> main (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md).
-# Ported from DbDataSync/.github/workflows/ci.yml (and promote-test.yml / publish-snapshot.yml, now jobs of this
+# Ported from .github/workflows/ci.yml as of DbDataSync/DbDataSync@f1d76ee (kept in this repo's history) (and promote-test.yml / publish-snapshot.yml, now jobs of this
 # workflow), whose own comments explain most of the decisions here.
 #
 # What is different from the single-product repo:

@@ -1,6 +1,6 @@
 name: DbDataSync release
 
-# Ported from DbDataSync/.github/workflows/release.yml; its comments explain the decisions that are unchanged.
+# Ported from .github/workflows/release.yml as of DbDataSync/DbDataSync@f1d76ee (kept in this repo's history); its comments explain the decisions that are unchanged.
 # Cutting a release is dispatching this against dbdatasync/test:
 #
 #   gh workflow run dbdatasync-release.yml --ref dbdatasync/test -f beta=false

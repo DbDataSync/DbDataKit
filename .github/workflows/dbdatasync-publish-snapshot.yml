@@ -1,6 +1,6 @@
 name: DbDataSync snapshot
 
-# Ported from DbDataSync/.github/workflows/publish-snapshot.yml; its comments explain the decisions that are unchanged.
+# Ported from .github/workflows/publish-snapshot.yml as of DbDataSync/DbDataSync@f1d76ee (kept in this repo's history); its comments explain the decisions that are unchanged.
 #
 # Every promoted commit that changed DbDataSync is published as a GitHub *prerelease* tagged snapshot-<version>, with
 # the tool's nupkg and its .sha512 attached. Nothing goes to nuget.org.

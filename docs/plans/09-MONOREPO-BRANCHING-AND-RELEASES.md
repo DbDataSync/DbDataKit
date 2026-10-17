@@ -1,6 +1,6 @@
 # Monorepo branching, CI and releases
 
-Status: decided; the DbDataSync lane's workflows are written (see "Implementation status") and not yet run. Supersedes the "monorepo rejected" decision in [00-REPO-STRATEGY.md](00-REPO-STRATEGY.md): the
+Status: decided and in place for DbDataSync (merged to `main`; `dbdatasync/dev` and `dbdatasync/test` exist). The workflows have not yet run end to end; see "Implementation status". Supersedes the "monorepo rejected" decision in [00-REPO-STRATEGY.md](00-REPO-STRATEGY.md): the
 three products move into this repo (DbDataSync first, DbDataProxy and DbDataBuild later). This document adapts
 DbDataSync's `dev` → `test` → `main` model (`DbDataSync/architecture/branching-and-releases.md`) to several
 products in one repository.
@@ -21,8 +21,8 @@ products in one repository.
   (here or in a product repo) doesn't matter to the name; for now it lives here with the product's release.
 - **`DbDataKit/` has no lane of its own.** Shared code is changed through the product branches, like any other
   code (see "Shared code" below).
-- **All products use CalVer** (`YYYY.MM.DD.HHmm`, as DbDataSync does). Proxy's and Build's semver tags end
-  when they move in.
+- **All products use CalVer** (`YYYY.MM.DD.HHmm`, as DbDataSync does). Proxy's and Build's existing semver
+  tags and versions are not carried forward; there is no alias or mapping.
 - **Back-merge is immediate**: a release merges `main` into the other products' `dev` branches as its last step.
 - **NuGet publishing is paused** until all three products are in this repo. DbDataSync is the only product
   that has ever published to nuget.org.
@@ -197,8 +197,8 @@ and out of scope for now; do it once all three products are in and NuGet is back
 
 ## Implementation status
 
-Written, linted with `actionlint`, **not yet run** (they need to be on the default branch, and the App
-installed, to run for real):
+On `main`, linted with `actionlint`, **not yet run end to end** (they need the pipelines App installed on this
+repository and the `PIPELINE_APP_PRIVATE_KEY` secret to run for real):
 
 | file | ported from | notes |
 | --- | --- | --- |
@@ -212,23 +212,20 @@ installed, to run for real):
 ## Rollout
 
 1. **Done:** DbDataSync imported with history (`DbDataSync/`), submodule removed; `shared/` renamed to
-   `DbDataKit/` (the solution builds from the new path); DbDataSync's workflows ported.
-2. Get this branch onto `main` (set `main` as the default branch). Workflows can only be dispatched, and
-   `workflow_dispatch` only listed, once they exist on the default branch.
-3. Cut `dbdatasync/dev` and `dbdatasync/test` from `main` (DbDataSync's own `main`, `dev` and `test` were all at
-   `f1d76ee`, so there is nothing to reconcile). Run CI on a throwaway change, with no rulesets.
+   `DbDataKit/` (the solution builds from the new path); DbDataSync's workflows ported; merged to `main` (PR #1,
+   as a merge commit so the imported history survives).
+2. **Done:** `dbdatasync/dev` and `dbdatasync/test` cut from `main` (both at the merge commit). Stale-reference
+   cleanup (release skill, dead workflow copies, doc banners) goes to `dbdatasync/dev` like any other change.
+3. Run CI on a throwaway change, with no rulesets, to exercise `changes`, the suite and the `promote` job.
 4. Install the pipelines App on this repo (and confirm it on the old one), add the rulesets (`main` first,
    then `*/test`), and do one beta release (`beta=true`) to prove the whole path: old-repo release, `main`
    merge, back-merge.
 5. Freeze the old repo as above (not archived).
 6. Repeat 2–5 for DbDataProxy and DbDataBuild when their active work reaches a stopping point; they bring
-   their history the same way and need the dispatch-release workflow written for them, and a decision on
-   how their old tags map to CalVer.
+   their history the same way and need the dispatch-release workflow written for them.
 7. When all three are in: re-enable NuGet, repoint the update client, and retire the bridge.
 
 ## Open questions
 
-1. Proxy and Build have existing semver tags (`v0.2.0`, `v0.4.0`). Leave them as history, or add CalVer
-   aliases?
-2. The lane guard (reject edits outside `<product>/`, `DbDataKit/`, `docs/` and root files on a `<product>/dev`
+1. **Deferred:** the lane guard (reject edits outside `<product>/`, `DbDataKit/`, `docs/` and root files on a `<product>/dev`
    push) is described here but not written yet. Do it as a CI job, or as a ruleset path restriction?
