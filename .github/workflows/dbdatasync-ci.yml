@@ -64,7 +64,7 @@ jobs:
           if git rev-parse --verify --quiet "$base" >/dev/null; then
             changed=$(git diff --name-only "$base"...HEAD)
             echo "changed since $base:"; echo "$changed"
-            echo "$changed" | grep -qE '^(DbDataSync/|DbDataKit/|\.github/workflows/dbdatasync-)' || build=false
+            echo "$changed" | grep -qE '^(DbDataSync/|DbDataKit/|\.github/(workflows/(dbdatasync-|_)|actions/))' || build=false
             echo "$changed" | grep -q '^DbDataKit/' || shared=false
           else
             echo "::notice::$base does not exist yet, so everything is treated as changed."
@@ -72,29 +72,12 @@ jobs:
           echo "build=$build" >> "$GITHUB_OUTPUT"
           echo "shared=$shared" >> "$GITHUB_OUTPUT"
 
-  # DbDataKit/ is a lane-less shared library: it is changed through product branches, so a product's CI proves it.
-  # DbDataSync does not yet reference it by project, hence this job on its own; when other products land, theirs
-  # will run on `shared` too (the "product CI runs the consumers" rule in the plan).
+  # DbDataKit/ is changed through the product branches, so a product's CI proves it. One shared job, called by every lane, on
+  # Linux and Windows (it installs unixODBC for the Linux ODBC tests); not a copy per product.
   dbdatakit:
     needs: changes
     if: ${{ needs.changes.outputs.shared == 'true' && !startsWith(github.ref, 'refs/tags/') }}
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: DbDataKit
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: "10.0.x"
-          cache: true
-          cache-dependency-path: "DbDataKit/**/*.csproj"
-      - name: Restore
-        run: dotnet restore DbDataKit.Shared.slnx
-      - name: Build
-        run: dotnet build DbDataKit.Shared.slnx --no-restore --configuration Release
-      - name: Test
-        run: dotnet test --solution DbDataKit.Shared.slnx --no-build --configuration Release
+    uses: ./.github/workflows/_dbdatakit.yml
 
   # ---- ported jobs ----
   dotnet:
@@ -504,7 +487,7 @@ jobs:
   # by now. Skipped suites count as passing: `changes` decided they were not needed.
   promote:
     needs: [changes, dbdatakit, dotnet, dotnet-windows, dotnet-integration, web, playwright]
-    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/heads/') && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/dbdatasync/dev' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
     concurrency:
       group: dbdatasync-promote
