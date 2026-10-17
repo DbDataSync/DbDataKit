@@ -12,6 +12,11 @@ on:
   pull_request:
     branches: [dbdataproxy/dev]
   workflow_dispatch:
+    inputs:
+      all:
+        description: Run every job, including the shared DbDataKit tests, whatever changed.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -36,7 +41,13 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
+          ALL: ${{ inputs.all }}
         run: |
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$ALL" = "true" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "shared=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ "$EVENT" = "pull_request" ]; then
             base="origin/$BASE_REF"
           else
