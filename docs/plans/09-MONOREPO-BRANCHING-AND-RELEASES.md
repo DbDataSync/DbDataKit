@@ -42,7 +42,7 @@ DbDataKit/                    repository root
   LICENSE
   .github/workflows/          per-product sets: dbdatasync-ci.yml, dbdatasync-release.yml, ...
   DbDataSync/                 product (imported with its history)
-  DbDataProxy/                product (still a submodule until it moves in)
+  DbDataProxy/                product (imported with its history; CI in dbdataproxy-ci.yml, lanes and release still to do)
   DbDataBuild/                product (still a submodule until it moves in)
   DbDataKit/                  shared libraries (DbDataKit.*), one solution: DbDataKit.Shared.slnx
   docs/                       cross-project plans from before the merge

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>DbDataProxy.Worker</AssemblyName>
+    <!-- Published as win-x86 so it can load 32-bit ODBC drivers; see build/publish.ps1. -->
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Apache.Arrow.Flight.AspNetCore" />
+    <ProjectReference Include="..\DbDataProxy.Core\DbDataProxy.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -42,6 +42,14 @@ public class SqlServerTests
     }
 
     [Fact]
+    public void A_string_that_asks_for_strict_encryption_keeps_it_but_never_when_encryption_is_off()
+    {
+        string Compose(bool encrypt) => new SqlServerComposer().Compose(Ctx(d => { d.Address = null; d.Tls.Encrypt = encrypt; d.ConnectionString = "Data Source=h;Encrypt=Strict"; }));
+        Assert.Equal(SqlConnectionEncryptOption.Strict, new SqlConnectionStringBuilder(Compose(true)).Encrypt);
+        Assert.Equal(SqlConnectionEncryptOption.Optional, new SqlConnectionStringBuilder(Compose(false)).Encrypt);
+    }
+
+    [Fact]
     public void A_string_that_says_trust_true_is_overruled_by_the_secure_default()
     {
         var text = new SqlServerComposer().Compose(Ctx(d => { d.Address = null; d.ConnectionString = "Data Source=h;TrustServerCertificate=true;Encrypt=false"; }));

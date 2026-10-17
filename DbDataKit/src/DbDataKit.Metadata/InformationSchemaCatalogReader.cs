@@ -48,6 +48,9 @@ public class InformationSchemaCatalogReader : ICatalogReader
 
     protected virtual string CatalogsSql => "SELECT catalog_name FROM information_schema.schemata";
 
+    /// <summary>Rows: catalog, schema.</summary>
+    protected virtual string SchemasSql => "SELECT catalog_name, schema_name FROM information_schema.schemata";
+
     /// <summary>Rows: catalog, schema, name, type text (see <see cref="MapKind"/>).</summary>
     protected virtual string TablesSql => "SELECT table_catalog, table_schema, table_name, table_type FROM information_schema.tables";
 
@@ -132,6 +135,22 @@ public class InformationSchemaCatalogReader : ICatalogReader
         var rows = await QueryAsync(CatalogsSql, [], cancellationToken).ConfigureAwait(false);
         foreach (string name in rows.Select(r => r.Text(0)).OfType<string>().Where(c => !IsSystemCatalog(c)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
             yield return name;
+    }
+
+    /// <summary>The schema list itself (empty schemas and system catalogs included), ordered by catalog then name.</summary>
+    public virtual async IAsyncEnumerable<SchemaRef> ListSchemasAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var rows = await QueryAsync(SchemasSql, [], cancellationToken).ConfigureAwait(false);
+        var schemas = rows.Where(r => r.Text(1) is not null).Select(r => new SchemaRef(r.Text(0), r.Text(1)!)).Distinct();
+        foreach (var s in schemas.OrderBy(s => s.Catalog, StringComparer.Ordinal).ThenBy(s => s.Name, StringComparer.Ordinal)) yield return s;
+    }
+
+    public virtual async Task<IReadOnlyList<ColumnInfo>> GetColumnsAsync(TableRef table, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        var columns = await ReadColumnsAsync(table, cancellationToken).ConfigureAwait(false);
+        if (columns.Count == 0) throw new KeyNotFoundException($"No columns found for {table} (table missing, or not visible to this login).");
+        return columns;
     }
 
     public virtual async IAsyncEnumerable<TableRef> ListTablesAsync(TableFilter? filter = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)

@@ -1,0 +1,1 @@
+{ "Proxy": { "DataSources": { "x": { "Provider": "duckdb" } } } }

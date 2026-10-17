@@ -55,6 +55,28 @@ public class DuckDbTests(DuckDbFixture fixture) : IClassFixture<DuckDbFixture>
     }
 
     [Fact]
+    public async Task Lists_every_schema_including_empty_ones_and_system_catalogs()
+    {
+        using (var c = Connection.CreateCommand()) { c.CommandText = "CREATE SCHEMA IF NOT EXISTS empty_one"; c.ExecuteNonQuery(); }
+        var schemas = await ToList(new DuckDbCatalogReader(Connection).ListSchemasAsync());
+        Assert.Contains(new SchemaRef("memory", "empty_one"), schemas);
+        Assert.Contains(new SchemaRef("memory", "sales"), schemas);
+        Assert.Contains(schemas, s => s.Catalog == "system" && s.Name == "information_schema");
+        Assert.Equal(schemas.OrderBy(s => s.Catalog, StringComparer.Ordinal).ThenBy(s => s.Name, StringComparer.Ordinal), schemas);
+    }
+
+    [Fact]
+    public async Task Reads_the_columns_alone_and_fails_for_a_missing_table()
+    {
+        var reader = new DuckDbCatalogReader(Connection);
+        var columns = await reader.GetColumnsAsync(new TableRef("memory", "sales", "customers"));
+        Assert.Equal("id", columns[0].Name);
+        Assert.False(columns[0].Nullable);
+        Assert.Equal(CanonicalType.Decimal(18, 3), columns.Single(c => c.Name == "balance").Type);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => reader.GetColumnsAsync(new TableRef(null, "sales", "nope")));
+    }
+
+    [Fact]
     public async Task Lists_tables_and_views_of_a_schema_with_kinds()
     {
         var tables = await ToList(new DuckDbCatalogReader(Connection).ListTablesAsync(new TableFilter(SchemaPattern: "sales")));

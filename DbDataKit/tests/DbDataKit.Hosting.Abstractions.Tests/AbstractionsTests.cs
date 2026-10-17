@@ -119,6 +119,30 @@ public class ModelTests
         Assert.Equal(1, await HealthProbeClient.TryHandleAsync(["--healthcheck", "http://127.0.0.1:1/health"]));
     }
 
+    [Fact]
+    public async Task Health_probe_can_require_http2_and_uses_the_product_default_url()
+    {
+        var seen = new CapturingHandler();
+        var options = new HealthProbeOptions { HttpVersion = HttpVersion.Version20, DefaultUrl = "https://127.0.0.1:8815/health/live" };
+        Assert.Equal(0, await HealthProbeClient.RunAsync(new Uri("https://x/health"), TimeSpan.FromSeconds(1), seen, options));
+        Assert.Equal(HttpVersion.Version20, seen.Request!.Version);
+        Assert.Equal(HttpVersionPolicy.RequestVersionExact, seen.Request.VersionPolicy);
+
+        // --healthcheck with no URL uses the product default (which here refuses the connection: exit 1, not usage 2).
+        Assert.Equal(1, await HealthProbeClient.TryHandleAsync(["--healthcheck"], new HealthProbeOptions { DefaultUrl = "http://127.0.0.1:1/health/live" }));
+    }
+
+    private sealed class CapturingHandler : HttpMessageHandler
+    {
+        public HttpRequestMessage? Request { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Request = request;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+        }
+    }
+
     private sealed class StubHandler(HttpStatusCode code) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>

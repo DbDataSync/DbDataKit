@@ -11,9 +11,10 @@ namespace DbDataKit.Connections;
 /// </summary>
 public abstract class DbProviderBase(
     EngineId engine, IConnectionStringComposer composer, ReadOnlySession readOnly,
-    IFailureMapper? failureMapper = null, DialectCatalog? dialects = null, IRedactor? redactor = null) : IDbProvider
+    IFailureMapper? failureMapper = null, DialectCatalog? dialects = null, IRedactor? redactor = null, bool includeRawFailures = false) : IDbProvider
 {
-    private readonly FailureClassifier _classifier = new(failureMapper is null ? [] : [failureMapper], redactor);
+    // includeRawFailures keeps the (redacted) driver text on ConnectionFailure.Raw for local diagnostics; the public message never has it.
+    private readonly FailureClassifier _classifier = new(failureMapper is null ? [] : [failureMapper], redactor, includeRawFailures);
     private readonly DialectCatalog _dialects = dialects ?? DialectCatalog.Builtin;
 
     public EngineId Engine { get; } = engine;

@@ -15,6 +15,9 @@ public sealed class EnvSecretProvider(Func<string, string?>? env = null, string?
     private readonly Func<string, string?> _env = env ?? Environment.GetEnvironmentVariable;
     private readonly EnvMapping? _mapping = mapping ?? (secretPrefix is null ? null : t => secretPrefix + EnvNames.Sanitize(t));
 
+    /// <summary>The variable a <c>secret:&lt;target&gt;</c> reference reads with the default mapping, for docs and tooling.</summary>
+    public static string VariableNameFor(string secretTarget, string prefix = "DBDATA_SECRET_") => prefix + EnvNames.Sanitize(secretTarget);
+
     public string Name => "env";
 
     public bool CanHandle(SecretRef r) => r.Kind == SecretRefKind.Env || (r.Kind == SecretRefKind.Secret && _mapping is not null);

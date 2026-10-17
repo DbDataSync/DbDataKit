@@ -77,6 +77,27 @@ Packages in `DbDataKit/src`: `DbDataKit.Connections.Abstractions`, `DbDataKit.Co
 - Stubbed or not done: JDBC/IKVM, Flight SQL, MySql/Oracle providers, plugins package, `IDbProvider.Catalog` (waits for Plan 04 part B), `SQL_ATTR_ACCESS_MODE` is reflection based and unrun against a real driver, `DotnetPublishExecutor` unrun, no product adoption, `KnownLibraries`/compat checkers not ported.
 - Conventions: `Microsoft.Data.SqlClient` 7.1.1, `Npgsql` 10.0.3, `DuckDB.NET.Data.Full` 1.5.6 added to `Directory.Packages.props`; `System.Security.Cryptography.Pkcs` pinned to 10.0.13 for a transitive advisory.
 
+## Proxy adoption C5: Connections and Metadata (offline; branches hub-c5 and DbDataProxy adopt-c5)
+
+DbDataProxy now connects through `Connections.*` (providers, composers, failure model), sandboxes read-only DuckDB sources, classifies every database failure
+for clients (kind, code, fixed sentence; raw text only in the redacted log), feeds rejected pass-through logins to the login throttle, defaults SQL Server sources to
+encrypt-and-verify, offers optional concurrency limits, and reads all catalog metadata through `Metadata` readers (golden Flight SQL responses reproduced byte for byte).
+Shared changes made for it (all tested in `shared/tests`; 1873 total, 0 failed, 50 skipped):
+- DuckDB: `AllowedDirectories` sandbox option; in-memory sources work read-only; a second connection to the same file no longer fails on the sandbox lock (DuckDB.NET shares
+  one instance per file, the lock is instance state: later connections verify instead of setting); write/lock refusals map to `Permission`.
+- `ConcurrencyGate` extracted from `ConnectionPool` (limits for things that are not pooled `DbConnection`s); fixes a per-user slot leak on a cancelled wait.
+- SQL Server composer keeps `Encrypt=Strict`; the legacy ODBC driver named `SQL Server` gets no TLS/intent keys; providers can keep redacted raw failure text.
+- Metadata: `ICatalogReader.ListSchemasAsync` and `GetColumnsAsync` (default interface members, real implementations in the INFORMATION_SCHEMA and ODBC readers).
+Friction and gaps seen from a real consumer:
+- The composers write TLS and timeout keys from the definition over whatever the administrator's string said; a consumer with existing strings must first lift explicit
+  values into `TlsSpec`/`TimeoutSpec` (Proxy: `ConnectionHints`). A "keep explicit values" mode or a `FromConnectionString` helper would remove that.
+- `ReadOnlySession` is one static object per provider; per-source variations (allowed directories) need one provider instance per variation.
+- Providers classify open failures only; command and reader exceptions need the consumer to run `FailureClassifier` itself (Proxy: `FailureTranslator`), and
+  `ConnectionFailureException` drops the exception, so raw text must be captured at classification time.
+- Default interface members are not callable on the concrete reader types without a cast; `OdbcCatalogReader` construction reads about a dozen SQLGetInfo values per call.
+- DuckDB: a sandboxed source and a read-write source (or two different sandboxes) cannot share one file in one process (instance cache); documented, fails closed.
+- Not verified: `SQL_ATTR_ACCESS_MODE` against a real 64-bit driver (only the 32-bit text driver is installed); ODBC PostgreSQL TLS keys; Linux/Docker.
+
 ## Overall status (all planned waves merged)
 Packages on main (DbDataKit/): Config (Yaml, Config, Hosting, Testing), Secrets (Abstractions, core, Windows, Keyring stub, Cli), Security.Acl,
 Dialect (Abstractions, core, Arrow, Conformance), Odbc.Metadata, Metadata (Abstractions, core), Connections (Abstractions, core, SqlServer,

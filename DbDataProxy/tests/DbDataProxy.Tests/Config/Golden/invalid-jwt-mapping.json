@@ -1,0 +1,1 @@
+{ "Proxy": { "Auth": { "Jwt": { "Authority": "ftp://x", "Audience": "a", "Mappings": [ { "Claim": "", "Value": "v", "DataSources": ["nope"] } ] } } } }
