@@ -129,16 +129,19 @@ to narrow it, `--json` for scripts, and `--to <version>` to skip the prompt.
 
 | channel | what it is | where it comes from |
 | --- | --- | --- |
-| `stable` | a release | nuget.org |
-| `beta` | a prerelease (`-beta`) | nuget.org — a plain `dotnet tool install` never picks these; only an exact version does |
-| `snapshot` | the newest build that has passed CI, before any release is cut | a GitHub prerelease for every commit promoted to the `test` branch; the newest 20 are kept |
+| `stable` | a release | a GitHub Release in the DbDataKit repository, tag `dbdatasync/v<version>` |
+| `beta` | a prerelease (`-beta`) | a GitHub prerelease, tag `dbdatasync/v<version>-beta` |
+| `snapshot` | the newest build that has passed CI, before any release is cut | a GitHub prerelease for every commit promoted to the `dbdatasync/test` branch, tag `dbdatasync/v<version>-snapshot.g<sha>`; the newest 20 are kept |
 
-A **snapshot** is downloaded for you into a per-user staging folder (`~/.local/share/DbDataSync/updates`,
+DbDataSync is built in a repository shared with other products, so a release is recognised as DbDataSync's by its
+tag prefix (`dbdatasync/`) and by carrying a `DbDataSync.<version>.nupkg` and its checksum; releases of other products in
+the same repository are never listed. Snapshot publishing is not switched on yet, so that channel is empty for now.
+
+A release is downloaded for you into a per-user staging folder (`~/.local/share/DbDataSync/updates`,
 `%LOCALAPPDATA%\DbDataSync\updates`; `--stage-dir` to change it), checked against the SHA-512 published
 beside it, and installed from that folder — no token or private feed is involved.
-That checksum catches a corrupted or truncated download, **not** a tampered release; a snapshot is a
-development build, and its trust rests on TLS to `github.com` and who can publish to the repository.
-Stable and beta go through `dotnet tool` from nuget.org as usual.
+That checksum catches a corrupted or truncated download, **not** a tampered release; trust rests on TLS to
+`github.com` and who can publish to the repository. nuget.org is not used by `update` while NuGet publishing is paused.
 
 If this copy was not installed as a dotnet tool (a development build) or is a container image, there is nothing to
 update in place and it says so. For a container, pull a newer image tag.
@@ -203,7 +206,7 @@ While an update runs from a shell, the page shows its progress. The service is u
 switches; the page keeps asking rather than reporting an error, and you don't have to sign in again (sessions live in
 the state database).
 
-Listing releases on the page calls nuget.org and GitHub, so it is **off by default**. Set `DbDataSync:Updates:Mode` to
+Listing releases on the page calls GitHub, so it is **off by default**. Set `DbDataSync:Updates:Mode` to
 `manual` (Admin → Configuration, or `dbdatasync.config.yaml`) to turn it on. The commands are shown either way. Only
 `stable` is listed unless you allow more with `DbDataSync:Updates:Channels` (`stable`, `beta`, `snapshot`,
 comma-separated). A snapshot is a development build: its download is checked only against a checksum published beside

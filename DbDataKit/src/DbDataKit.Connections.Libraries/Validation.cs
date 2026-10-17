@@ -38,7 +38,7 @@ public static partial class LibraryValidation
     [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*(?:\+[A-Za-z_][A-Za-z0-9_]*)*(?: *, *[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)?\z", RegexOptions.CultureInvariant)]
     private static partial Regex TypeNameRegex();
 
-    [GeneratedRegex(@"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:\.[0-9]+)?(?:-[a-z0-9]+)?\z", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:\.[0-9]+)*(?:-[a-z0-9]+)?\z", RegexOptions.CultureInvariant)]
     private static partial Regex RidRegex();
 
     private static readonly HashSet<string> WindowsReserved = new(StringComparer.OrdinalIgnoreCase)

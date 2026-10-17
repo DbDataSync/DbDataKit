@@ -51,28 +51,35 @@ public sealed class UpdateServiceTests : IDisposable
 
     private static readonly byte[] Package = Enumerable.Range(0, 5000).Select(i => (byte)(i * 7 % 251)).ToArray();
 
-    private static string GitHubJson() =>
+    // The DbDataKit monorepo's releases, as GitHub lists them: DbDataSync's own (dbdatasync/ tag prefix), each with its
+    // package and checksum as assets. Every channel is a `v<version>` tag; the version's suffix is the channel.
+    private static string Release(string tagKind, string version, bool prerelease) =>
         $$"""
-        [{"tag_name":"snapshot-{{Snapshot}}","draft":false,"prerelease":true,
-          "html_url":"https://github.com/DbDataSync/DbDataSync/releases/tag/snapshot-{{Snapshot}}",
+        {"tag_name":"dbdatasync/{{tagKind}}{{version}}","draft":false,"prerelease":{{(prerelease ? "true" : "false")}},
+          "html_url":"https://github.com/DbDataSync/DbDataKit/releases/tag/dbdatasync/{{tagKind}}{{version}}",
           "assets":[
-           {"name":"DbDataSync.{{Snapshot}}.nupkg","browser_download_url":"https://github.com/DbDataSync/DbDataSync/releases/download/snapshot-{{Snapshot}}/DbDataSync.{{Snapshot}}.nupkg"},
-           {"name":"DbDataSync.{{Snapshot}}.nupkg.sha512","browser_download_url":"https://github.com/DbDataSync/DbDataSync/releases/download/snapshot-{{Snapshot}}/DbDataSync.{{Snapshot}}.nupkg.sha512"}]}]
+           {"name":"DbDataSync.{{version}}.nupkg","browser_download_url":"https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/{{tagKind}}{{version}}/DbDataSync.{{version}}.nupkg"},
+           {"name":"DbDataSync.{{version}}.nupkg.sha512","browser_download_url":"https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/{{tagKind}}{{version}}/DbDataSync.{{version}}.nupkg.sha512"}]}
         """;
 
+    private static string GitHubJson() => "[" + string.Join(",",
+        Release("v", Snapshot, prerelease: true),
+        Release("v", "2026.9.18.1918", prerelease: false),
+        Release("v", "2026.9.16.1005", prerelease: false),
+        Release("v", "2026.9.11.532", prerelease: false),
+        Release("v", "2026.9.12.721-beta", prerelease: true)) + "]";
+
     internal static FakeNetwork Network(
-        string? nuget = null, string? github = null, byte[]? served = null, HttpStatusCode? nugetStatus = null,
+        string? github = null, byte[]? served = null, HttpStatusCode? gitHubStatus = null,
         List<string>? requested = null) =>
         new(request =>
         {
             var url = request.RequestUri!.AbsoluteUri;
             requested?.Add(url);
-            if (url == ReleaseSources.NuGetIndexUrl)
-                return nugetStatus is { } status
-                    ? new HttpResponseMessage(status)
-                    : Json(nuget ?? """{"versions":["2026.9.11.532","2026.9.16.1005","2026.9.18.1918","2026.9.12.721-beta"]}""");
             if (url.StartsWith(ReleaseSources.GitHubReleasesUrl, StringComparison.Ordinal))
-                return Json(github ?? GitHubJson());
+                return gitHubStatus is { } status
+                    ? new HttpResponseMessage(status)
+                    : Json(github ?? GitHubJson());
             if (url.EndsWith(".sha512", StringComparison.Ordinal))
                 return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(Convert.ToBase64String(SHA512.HashData(Package))) };
             if (url.EndsWith(".nupkg", StringComparison.Ordinal))
@@ -305,20 +312,18 @@ public sealed class UpdateServiceTests : IDisposable
         Assert.All(releases, r => Assert.Equal("stable", r.Channel));
     }
 
-    /// <summary>A stable/beta release has no page of its own from nuget.org's flat-container index, so
-    /// its Url is built from the nuget.org package-version URL scheme; a snapshot already carries its
-    /// GitHub Release page (<c>html_url</c>) and that is used as-is.</summary>
+    /// <summary>Every release carries its GitHub Release page (<c>html_url</c>), and that is used as-is.</summary>
     [Fact]
-    public async Task Releases_ExposeAHumanReadablePage_NugetForStableAndBeta_GitHubForSnapshot()
+    public async Task Releases_ExposeAHumanReadablePage_TheGitHubReleaseOfEachOne()
     {
         var service = Build();
 
         var releases = await service.ListReleasesAsync(null, 10, [], CancellationToken.None);
 
         var stable = Assert.Single(releases, r => r.Channel == "stable" && r.Version == "2026.9.18.1918");
-        Assert.Equal("https://www.nuget.org/packages/DbDataSync/2026.9.18.1918", stable.Url);
+        Assert.Equal("https://github.com/DbDataSync/DbDataKit/releases/tag/dbdatasync/v2026.9.18.1918", stable.Url);
         var snapshot = Assert.Single(releases, r => r.Channel == "snapshot");
-        Assert.Equal($"https://github.com/DbDataSync/DbDataSync/releases/tag/snapshot-{Snapshot}", snapshot.Url);
+        Assert.Equal($"https://github.com/DbDataSync/DbDataKit/releases/tag/dbdatasync/v{Snapshot}", snapshot.Url);
     }
 
     [Fact]
@@ -332,18 +337,15 @@ public sealed class UpdateServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Releases_OneChannelFailing_IsAWarning_ButAllFailingThrows()
+    public async Task Releases_WhenGitHubFails_EveryChannelIsAWarning_AndItThrows()
     {
-        var partial = Build(network: Network(nugetStatus: HttpStatusCode.BadGateway));
+        // All channels come from the one release listing, so there is no partial failure: it is all or nothing.
+        var service = Build(network: Network(gitHubStatus: HttpStatusCode.BadGateway));
         var warnings = new List<string>();
 
-        var releases = await partial.ListReleasesAsync(null, 10, warnings, CancellationToken.None);
+        await Assert.ThrowsAsync<ReleaseSourceException>(() => service.ListReleasesAsync(null, 10, warnings, CancellationToken.None));
 
-        Assert.Contains(warnings, w => w.StartsWith("stable:", StringComparison.Ordinal));
-        Assert.Contains(releases, r => r.Channel == "snapshot");
-
-        var allFail = Build(
-            options: new() { ["DbDataSync:Updates:Channels"] = "stable" }, network: Network(nugetStatus: HttpStatusCode.BadGateway));
-        await Assert.ThrowsAsync<ReleaseSourceException>(() => allFail.ListReleasesAsync(null, 10, [], CancellationToken.None));
+        Assert.Equal(["stable", "beta", "snapshot"], warnings.Select(w => w[..w.IndexOf(':')]));
+        Assert.All(warnings, w => Assert.Contains("GitHub answered 502", w));
     }
 }

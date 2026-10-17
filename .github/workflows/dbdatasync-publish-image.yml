@@ -1,6 +1,8 @@
 name: DbDataSync image
 
-# Ported from DbDataSync/.github/workflows/publish-image.yml; its comments below still apply. Monorepo differences:
+# Ported from .github/workflows/publish-image.yml as of DbDataSync/DbDataSync@f1d76ee (kept in this repo's history); its comments below still apply. Monorepo differences:
+#   * Dispatch-only for now: dbdatasync-release.yml no longer calls it (the first push of the image needs package access
+#     granted to this repository, below). Run it by hand against an existing dbdatasync/v<version> tag.
 #   * Everything runs in DbDataSync/ (docker context and `run` steps), and the version is checked out from this
 #     repository's tag dbdatasync/v<version>.
 #   * The image keeps one name per product (ghcr.io/<owner>/dbdatasync), not per repository. A package created by the old

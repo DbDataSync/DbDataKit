@@ -56,8 +56,17 @@ public sealed class SqlServerFailureMapper : IFailureMapper
     public ConnectionFailure? Map(Exception exception, EngineId engine)
     {
         if (exception is not SqlException sql) return null;
-        return new ConnectionFailure(KindOf(sql.Number), sql.Number.ToString(CultureInfo.InvariantCulture), engine);
+        return new ConnectionFailure(KindOf(sql.Number, sql.Class), sql.Number.ToString(CultureInfo.InvariantCulture), engine);
     }
+
+    /// <summary>
+    /// The kind for a failure, using its severity class when the number carries no information. On Linux and macOS
+    /// Microsoft.Data.SqlClient reports every transport-level failure (connection refused, unknown host, unreachable
+    /// network) as error number 0 with class 20, where Windows reports the socket error number (53, 10061, ...), so the
+    /// number alone would classify all of them as <see cref="ConnectionFailureKind.Other"/>.
+    /// </summary>
+    public static ConnectionFailureKind KindOf(int number, byte severityClass) =>
+        number == 0 && severityClass >= 20 ? ConnectionFailureKind.Network : KindOf(number);
 
     /// <summary>The kind for a SQL Server error number.</summary>
     public static ConnectionFailureKind KindOf(int n)

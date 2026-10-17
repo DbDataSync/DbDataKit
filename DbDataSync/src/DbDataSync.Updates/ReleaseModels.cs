@@ -1,7 +1,7 @@
 namespace DbDataSync.Updates;
 
-/// <summary>Where a build is published, and so how stable a promise it is. <c>Stable</c> and
-/// <c>Beta</c> live on nuget.org; <c>Snapshot</c> is a GitHub prerelease per promoted <c>test</c> build.</summary>
+/// <summary>How stable a promise a build is. All three are GitHub releases of the DbDataKit repository: <c>Stable</c>
+/// is a release, <c>Beta</c> a prerelease cut on demand, <c>Snapshot</c> a prerelease per promoted <c>test</c> build.</summary>
 public enum ReleaseChannel
 {
     Stable,
@@ -12,9 +12,8 @@ public enum ReleaseChannel
 /// <summary>
 /// One installable version on one channel.
 /// </summary>
-/// <param name="PackageUrl">Where a snapshot's nupkg is downloaded from. Null for stable and beta, which
-/// <c>dotnet tool</c> fetches from nuget.org itself.</param>
-/// <param name="ChecksumUrl">The snapshot's <c>.nupkg.sha512</c> sidecar; null with <see cref="PackageUrl"/>.</param>
+/// <param name="PackageUrl">Where the release's nupkg is downloaded from.</param>
+/// <param name="ChecksumUrl">The release's <c>.nupkg.sha512</c> sidecar; null with <see cref="PackageUrl"/>.</param>
 /// <param name="ReleaseUrl">A page a human can read about it, when there is one.</param>
 public sealed record ReleaseInfo(
     ReleaseVersion Version,

@@ -9,7 +9,7 @@ namespace DbDataSync.Api.Controllers;
 /// <summary>
 /// The console's Updates screen (phase 159; read-only since phase 196L). Admin-only, stated on every action per this
 /// repository's convention. Nothing here changes the install: the status carries the CLI commands that do. Looking up
-/// releases calls out to nuget.org and GitHub, so it is refused unless <c>DbDataSync:Updates:Mode</c> is <c>manual</c>.
+/// releases calls out to GitHub, so it is refused unless <c>DbDataSync:Updates:Mode</c> is <c>manual</c>.
 /// </summary>
 [ApiController]
 [Route("api/admin/update")]

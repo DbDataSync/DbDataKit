@@ -42,7 +42,7 @@ function formatUtc(iso: string | null): string {
  * It still watches: the CLI records what it is doing where this page reads it, so an update started from a shell
  * shows its progress here — including through the few seconds the service is down while it switches.
  *
- * Looking up releases calls nuget.org and GitHub, so that part is off unless `DbDataSync:Updates:Mode` turns it on.
+ * Looking up releases calls GitHub, so that part is off unless `DbDataSync:Updates:Mode` turns it on.
  * The commands are shown either way: `dbdatasync update --list` asks from the server's own shell.
  */
 export function AdminUpdatesPage() {
@@ -104,7 +104,7 @@ export function AdminUpdatesPage() {
           <div className="banner" data-testid="updates-disabled">
             <span className="mark">i</span>
             <span>
-              Looking up releases here is turned off, because it calls nuget.org and GitHub. Set{' '}
+              Looking up releases here is turned off, because it calls GitHub. Set{' '}
               <span className="mono">DbDataSync:Updates:Mode</span> to <span className="mono">manual</span> under
               Configuration to list them on this page — or run <span className="mono">dbdatasync update --list</span>{' '}
               on the server.
