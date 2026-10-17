@@ -278,7 +278,10 @@ internal static class CdcCaptureJob
                     (SELECT COUNT(*) FROM msdb.dbo.sysjobs WHERE name LIKE N'cdc.%_capture' AND enabled = 1),
                     (SELECT COUNT(*) FROM sys.dm_cdc_errors),
                     (SELECT TOP (1) error_message FROM sys.dm_cdc_errors ORDER BY entry_time DESC),
-                    (SELECT COUNT(*) FROM cdc.lsn_time_mapping);
+                    (SELECT COUNT(*) FROM cdc.lsn_time_mapping),
+                    (SELECT STRING_AGG(CONCAT(session_id, ':', ISNULL(program_name, N'?'), ':', status), N', ')
+                       FROM sys.dm_exec_sessions
+                      WHERE database_id = DB_ID() AND session_id <> @@SPID);
                 """;
             await using var reader = await cmd.ExecuteReaderAsync();
             if (!await reader.ReadAsync())
@@ -288,9 +291,10 @@ internal static class CdcCaptureJob
             var errorCount = reader.GetInt32(1);
             var lastError = reader.IsDBNull(2) ? null : reader.GetString(2);
             var mappingRows = reader.GetInt32(3);
+            var otherSessions = reader.IsDBNull(4) ? "none" : reader.GetString(4);
             return $"capture jobs enabled: {enabledJobs}; CDC scan errors: {errorCount}"
                 + (lastError is null ? "" : $" (last: {lastError})")
-                + $"; lsn_time_mapping rows: {mappingRows}";
+                + $"; lsn_time_mapping rows: {mappingRows}; other sessions in this database (id:program:status): {otherSessions}";
         }
         catch (Exception ex)
         {

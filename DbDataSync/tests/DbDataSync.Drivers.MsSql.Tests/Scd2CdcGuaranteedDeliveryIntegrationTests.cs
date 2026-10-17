@@ -256,7 +256,7 @@ public sealed class Scd2CdcGuaranteedDeliveryIntegrationTests(MsSqlTestDatabase 
     // "sp_replcmds" collision, re-enabled 2026-09-29 with the Agent capture job dropped rather than stopped
     // (CdcCaptureJob.RemoveCaptureJobAsync). See
     // architecture/planning/todo/follow-up-phase-154-scd2-cdc-timestamp-mapping-race.md's 2026-09-29 sections.
-    [Fact]
+    [Fact(Skip = "CDC log-reader stall on CI, disabled again 2026-10-17 per the CDC flake policy; see architecture/planning/todo/follow-up-phase-154-scd2-cdc-timestamp-mapping-race.md (2026-10-17 section).")]
     public async Task APassWithDuplicateAndSingletonKeys_AppliesEveryKeyCorrectly_WithNoPkViolation()
     {
         await ExecuteAsync(_sourceConnection, $"""
@@ -367,7 +367,7 @@ public sealed class Scd2CdcGuaranteedDeliveryIntegrationTests(MsSqlTestDatabase 
     /// </summary>
     // Disabled and re-enabled with the sibling test above, for the same reasons; see
     // architecture/planning/todo/follow-up-phase-154-scd2-cdc-timestamp-mapping-race.md's 2026-09-29 sections.
-    [Fact]
+    [Fact(Skip = "CDC log-reader stall on CI, disabled again 2026-10-17 per the CDC flake policy; see architecture/planning/todo/follow-up-phase-154-scd2-cdc-timestamp-mapping-race.md (2026-10-17 section).")]
     public async Task ADuplicateKeyStartingOrEndingInADelete_LeavesTheSameVersionsTheRowByRowLoopDid()
     {
         await ExecuteAsync(_sourceConnection, $"""
