@@ -1,0 +1,367 @@
+using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Config;
+using DbDataSync.Core.Git;
+using DbDataSync.Drivers.Abstractions;
+using DbDataSync.Libraries;
+
+namespace DbDataSync.Cli;
+
+/// <summary>
+/// <c>dbdatasync config library install|sync|list|uninstall</c> — restores an ADO.NET library package
+/// DbDataSync does not reference at compile time into <c>&lt;repo&gt;/libraries/&lt;id&gt;/</c>, so a
+/// vendor's fix is a package swap, not a DbDataSync build. See
+/// <c>architecture/planning/todo/nuget-loaded-drivers.md</c> §*The provider layer*.
+/// </summary>
+public static class LibraryCommand
+{
+    public static async Task<int> RunAsync(string[] args)
+    {
+        if (args.Length == 0)
+        {
+            PrintUsage();
+            return 1;
+        }
+
+        var repoRoot = DbDataSyncRoot.Resolve(args);
+        var rest = args[1..];
+
+        return args[0].ToLowerInvariant() switch
+        {
+            "install" => await InstallAsync(repoRoot, rest),
+            "sync" => await SyncAsync(repoRoot, rest),
+            "list" => List(repoRoot),
+            "uninstall" => Uninstall(repoRoot, rest),
+            "validate" => await ValidateAsync(repoRoot, rest),
+            var other => Unknown(other),
+        };
+    }
+
+    /// <summary>
+    /// <c>library install &lt;packageId&gt;[ &lt;packageId&gt;...] [--as &lt;id&gt;] [--version v]
+    /// [--factory-type type] [--source feed]</c>. The first package id is the library's own id unless
+    /// <c>--as</c> names a different one (a multi-package library whose primary assembly isn't first,
+    /// or an id an operator wants to spell differently from the package).
+    /// <para>
+    /// A single argument naming a <see cref="KnownLibraries"/> catalog id (<c>mysql-connector</c>) is
+    /// shorthand for that entry's real package id and factory type — <c>--version</c> is still
+    /// required (the "pinned, never latest" rule holds for a catalog install too), but
+    /// <c>--factory-type</c> is not.
+    /// </para>
+    /// <para>
+    /// Neither is it required for a non-catalog package: with no <c>--factory-type</c> and no catalog
+    /// match, <see cref="LibraryInstaller.InstallAsync"/> restores the package first and then tries
+    /// phase 122's reflection-assist against the result before giving up and requiring one explicitly.
+    /// </para>
+    /// </summary>
+    private static async Task<int> InstallAsync(string repoRoot, string[] args)
+    {
+        // Options interleave with positional package ids in the raw args; strip every "--flag value"
+        // pair to leave only the bare package ids. "--repo" is DbDataSyncRoot's own global option —
+        // already consumed into repoRoot above, but still present in this method's own args slice.
+        var packageIds = StripFlagValues(args, "--as", "--version", "--factory-type", "--source", "--repo")
+            .Where(a => !a.StartsWith("--", StringComparison.Ordinal)).ToList();
+
+        if (packageIds.Count == 0)
+        {
+            Console.Error.WriteLine(
+                "Usage: dbdatasync config library install <packageId>[ <packageId>...] [--as <id>] " +
+                "[--version v] [--factory-type type] [--source feed]");
+            return 1;
+        }
+
+        var version = CliOptions.Read(args, "--version");
+        var source = CliOptions.Read(args, "--source");
+
+        var catalogEntry = packageIds.Count == 1 ? KnownLibraries.TryGetById(packageIds[0]) : null;
+        // A library's id is always its real NuGet package id — a catalog id like "mysql-connector" is
+        // shorthand for typing the package id, never a name the install itself gets keyed under (see
+        // architecture/planning/todo/follow-up-library-install-paths-disagree-on-the-resulting-library-id.md).
+        // --as still overrides explicitly, same as it always has.
+        var id = CliOptions.Read(args, "--as") ?? catalogEntry?.PackageId ?? packageIds[0];
+        // Null is fine here — LibraryInstaller.InstallAsync tries phase 122's reflection-assist against
+        // the restored closure before it requires --factory-type explicitly.
+        var factoryType = CliOptions.Read(args, "--factory-type") ?? catalogEntry?.FactoryType ?? KnownLibraries.TryGet(packageIds[0]);
+
+        if (version is null && packageIds.Count == 1)
+        {
+            Console.Error.WriteLine("Pass --version <version> — a library install is pinned, never \"latest\".");
+            return 1;
+        }
+
+        var packages = catalogEntry is not null
+            ? [new PackageRef(catalogEntry.PackageId, version ?? "")]
+            : packageIds.Select(pid => new PackageRef(pid, version ?? "")).ToList();
+        if (packages.Any(p => string.IsNullOrEmpty(p.Version)))
+        {
+            Console.Error.WriteLine("Every package needs a version; pass --version for a single-package install.");
+            return 1;
+        }
+
+        try
+        {
+            var result = await LibraryInstaller.InstallOrDeferAsync(repoRoot, id, packages, factoryType, nugetSource: source);
+            var manifest = result.Manifest;
+            var packageList = string.Join(", ", packages.Select(p => $"{p.Id} {p.Version}"));
+            switch (result.Outcome)
+            {
+                case LibraryInstaller.LibraryInstallOutcome.InstalledFromCache:
+                    Console.WriteLine($"Installed library '{manifest.Id}' ({packageList}) from the in-image catalog cache — no SDK, no network.");
+                    Console.WriteLine($"Factory: {manifest.FactoryType}");
+                    break;
+                case LibraryInstaller.LibraryInstallOutcome.PendingRestore:
+                    Console.WriteLine($"Wrote library '{manifest.Id}' ({packageList}), but there is no SDK here to restore it.");
+                    Console.WriteLine($"Factory: {manifest.FactoryType}");
+                    Console.WriteLine($"Run `dbdatasync config library sync {manifest.Id}` on a host with the SDK to finish it.");
+                    break;
+                default:
+                    Console.WriteLine($"Installed library '{manifest.Id}' ({packageList}).");
+                    Console.WriteLine($"Factory: {manifest.FactoryType}");
+                    break;
+            }
+            PrintCompatibilityWarnings(repoRoot, manifest.Id);
+            return 0;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
+    private static async Task<int> SyncAsync(string repoRoot, string[] args)
+    {
+        var librariesRoot = LibraryPaths.LibrariesDir(repoRoot);
+        if (!Directory.Exists(librariesRoot))
+        {
+            Console.WriteLine("No libraries installed.");
+            return 0;
+        }
+
+        var ids = args.Length > 0 && !args[0].StartsWith("--", StringComparison.Ordinal)
+            ? [args[0]]
+            : Directory.EnumerateDirectories(librariesRoot)
+                .Where(d => File.Exists(LibraryPaths.ManifestPath(d)))
+                .Select(Path.GetFileName)
+                .Cast<string>()
+                .ToList();
+
+        foreach (var id in ids)
+        {
+            await LibraryInstaller.SyncAsync(repoRoot, id);
+            Console.WriteLine($"Synced library '{id}'.");
+            PrintCompatibilityWarnings(repoRoot, id);
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// <c>dbdatasync config library validate &lt;id&gt; --connection &lt;name&gt;</c> — phase 109j's
+    /// deeper, connection-scoped check: drives the connection's own driver's *native* (first-registered)
+    /// staging provider and writer against a real scratch table on the real target, with a handful of
+    /// synthetic rows. Deliberately not under <c>internal</c>: this is operator-facing (directly, or via
+    /// the API spawning this exact command as a child process — see
+    /// <c>DbDataSync.Api.Services.LibraryValidationLauncher</c>), and <c>InternalCommand</c> is
+    /// documented as build-only.
+    /// <para>
+    /// Resolves the connection through the same <see cref="ConfigRepository"/> + <see cref="SecretStore"/>
+    /// path every other CLI command already uses — no new credential-resolution mechanism.
+    /// </para>
+    /// </summary>
+    private static async Task<int> ValidateAsync(string repoRoot, string[] args)
+    {
+        if (args.Length == 0)
+        {
+            Console.Error.WriteLine("Usage: dbdatasync config library validate <id> --connection <name>");
+            return 1;
+        }
+
+        var libraryId = args[0];
+        var connectionName = CliOptions.Read(args, "--connection");
+        if (connectionName is null)
+        {
+            Console.Error.WriteLine(
+                "Pass --connection <name> — validate needs a real, credentialed connection to prove " +
+                "staging and writing actually work against it.");
+            return 1;
+        }
+
+        var secretStore = new SecretStore("DbDataSync", true);
+        var configRepository = new ConfigRepository(
+            Path.Combine(repoRoot, "config"), new GitCommitService(repoRoot), secretStore);
+
+        ConnectionConfig connection;
+        try
+        {
+            connection = configRepository.LoadConnection(connectionName);
+        }
+        catch (FileNotFoundException)
+        {
+            Console.Error.WriteLine($"Connection '{connectionName}' does not exist.");
+            return 1;
+        }
+
+        var driver = BuiltInDrivers.All.FirstOrDefault(d => d.DriverType == connection.DriverType);
+        if (driver is null)
+        {
+            Console.Error.WriteLine(
+                $"Connection '{connectionName}' uses driver '{connection.DriverType}', which has no " +
+                "compiled staging/writer pipeline to validate (only built-in drivers do).");
+            return 1;
+        }
+
+        if (!string.Equals(driver.RequiredLibraryId, libraryId, StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine(
+                $"Connection '{connectionName}' uses driver '{connection.DriverType}', which requires " +
+                $"library '{driver.RequiredLibraryId ?? "(none)"}' — not '{libraryId}'.");
+            return 1;
+        }
+
+        if (driver.StagingProviders.Count == 0 || driver.Writers.Count == 0)
+        {
+            Console.Error.WriteLine(
+                $"The '{connection.DriverType}' driver has no staging provider/writer registered — " +
+                "there is nothing to stage or write end to end for this engine. " +
+                "(Its static IL-surface compatibility check still runs from `library install`/`sync`/`config check`.)");
+            return 1;
+        }
+
+        // Arms this process's own resolver so the driver's typed provider assembly (e.g.
+        // Microsoft.Data.SqlClient) is loadable here — safe, because this whole process is the
+        // isolation boundary: it opens a real connection, exercises the real library, and exits,
+        // exactly like DbDataSync.TaskRunner's own worker process (Program.cs does the identical
+        // `new LibraryRegistry(repoRoot).LoadAll()` for the identical reason).
+        new LibraryRegistry(repoRoot).LoadAll();
+
+        var result = await LibraryValidationRunner.RunAsync(driver, connection, secretStore, CancellationToken.None);
+        if (!result.Succeeded)
+        {
+            Console.Error.WriteLine($"Validation failed: {result.Error}");
+            return 1;
+        }
+
+        Console.WriteLine(
+            $"Library '{libraryId}' validated against connection '{connectionName}': staged and wrote " +
+            $"{result.RowsWritten} row(s) via {result.StagingProviderKind}/{result.WriterKind}. Scratch table cleaned up.");
+        return 0;
+    }
+
+    private static int List(string repoRoot)
+    {
+        var registry = new LibraryRegistry(repoRoot).LoadAll();
+        if (registry.Installed.Count == 0)
+        {
+            Console.WriteLine("No libraries installed.");
+            return 0;
+        }
+
+        foreach (var manifest in registry.Installed.Values.OrderBy(m => m.Id, StringComparer.Ordinal))
+        {
+            var packages = string.Join(", ", manifest.Packages.Select(p => $"{p.Id} {p.Version}"));
+            var libDir = LibraryPaths.LibDir(LibraryPaths.LibraryDir(repoRoot, manifest.Id));
+            var status = !Directory.Exists(libDir)
+                ? "PENDING RESTORE — run `dbdatasync config library sync " + manifest.Id + "`"
+                : TryResolves(registry, manifest.Id) ? "resolves" : "DOES NOT RESOLVE";
+            Console.WriteLine($"{manifest.Id}  [{packages}]  factory: {manifest.FactoryType}  {status}");
+        }
+
+        return 0;
+    }
+
+    private static bool TryResolves(LibraryRegistry registry, string id)
+    {
+        try
+        {
+            registry.GetFactory(id);
+            return true;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or TypeLoadException)
+        {
+            return false;
+        }
+    }
+
+    private static int Uninstall(string repoRoot, string[] args)
+    {
+        if (args.Length == 0)
+        {
+            Console.Error.WriteLine("Usage: dbdatasync config library uninstall <id>");
+            return 1;
+        }
+
+        var libraryDir = LibraryPaths.LibraryDir(repoRoot, args[0]);
+        if (!Directory.Exists(libraryDir))
+        {
+            Console.Error.WriteLine($"Library '{args[0]}' is not installed.");
+            return 1;
+        }
+
+        Directory.Delete(libraryDir, recursive: true);
+        Console.WriteLine($"Uninstalled library '{args[0]}'.");
+        return 0;
+    }
+
+    /// <summary>
+    /// Phase 109j: the earliest possible feedback for the static, no-execution half of library
+    /// compatibility checking — run right after a successful install or sync, before anything tries to
+    /// actually use the library. For every built-in driver whose <see cref="IDriver.RequiredLibraryId"/>
+    /// matches <paramref name="justInstalledId"/>, prints the specific members (if any) the installed
+    /// version is missing. Never a failure: a missing member here is a warning, not a reason to fail an
+    /// install that otherwise succeeded — the same posture as this command's existing "no
+    /// --factory-type guess" behaviour.
+    /// </summary>
+    private static void PrintCompatibilityWarnings(string repoRoot, string justInstalledId)
+    {
+        var registry = new LibraryRegistry(repoRoot).LoadAll();
+        foreach (var driver in BuiltInDrivers.All)
+        {
+            if (!string.Equals(driver.RequiredLibraryId, justInstalledId, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var result = DriverLibraryCompatibility.Check(driver, registry, repoRoot);
+            if (result is null || result.Compatible)
+                continue;
+
+            Console.WriteLine(
+                $"WARNING: the installed '{result.LibraryId}' ({result.AssemblyName}) is missing " +
+                $"{result.MissingMembers.Count} member(s) the '{result.DriverType}' driver uses:");
+            foreach (var member in result.MissingMembers)
+                Console.WriteLine($"    {member}");
+        }
+    }
+
+    private static List<string> StripFlagValues(string[] args, params string[] flags)
+    {
+        var result = new List<string>();
+        for (var i = 0; i < args.Length; i++)
+        {
+            if (flags.Contains(args[i], StringComparer.OrdinalIgnoreCase))
+            {
+                i++; // skip its value
+                continue;
+            }
+            result.Add(args[i]);
+        }
+        return result;
+    }
+
+    private static int Unknown(string sub)
+    {
+        Console.Error.WriteLine($"Unknown library subcommand '{sub}'.");
+        PrintUsage();
+        return 1;
+    }
+
+    private static void PrintUsage()
+    {
+        Console.Error.WriteLine("""
+            Usage:
+              dbdatasync config library install <packageId>[ <packageId>...] [--as <id>] --version <v> [--factory-type type] [--source feed]
+              dbdatasync config library sync [<id>]
+              dbdatasync config library list
+              dbdatasync config library uninstall <id>
+              dbdatasync config library validate <id> --connection <name>
+            """);
+    }
+}

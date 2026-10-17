@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
+    <ProjectReference Include="..\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataSync.Drivers.Generic\DbDataSync.Drivers.Generic.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ExcludeAssets="runtime" (phase 109h): the reference assembly stays available to the compiler —
+         every SqlBulkCopy/SqlDbType/SqlConnectionStringBuilder call site keeps compiling unchanged — but
+         the real DLL is neither copied into this project's own output nor listed in the hosting
+         project's (DbDataSync.Api/DbDataSync.Cli) .deps.json. LibraryRegistry's AssemblyLoadContext
+         .Resolving handler (already armed for the descriptor/state-store paths) serves the real assembly
+         from <repo>/libraries/microsoft-data-sqlclient/lib/ at first touch instead. -->
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Segment predicate rendering and bucket-boundary maths are internal (they're an implementation
+         detail of this driver's readers/writers, not part of the engine-neutral abstraction), but are
+         exactly the pure, table-free logic worth unit-testing without a live SQL Server. -->
+    <InternalsVisibleTo Include="DbDataSync.Drivers.MsSql.Tests" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

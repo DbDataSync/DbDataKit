@@ -1,0 +1,83 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.11" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <!-- Phase 109h: a dozen of this project's own integration tests use Microsoft.Data.SqlClient
+         directly (scratch-database scaffolding against the real MsSql containers), previously supplied
+         transitively through DbDataSync.Drivers.MsSql's own PackageReference, which now excludes runtime
+         assets. A real gap beyond the phase doc's own "two driver test projects" framing, found by
+         running the full suite. -->
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
+    <!-- Phase 109i: the identical gap, for DuckDB — DuckDbQueryPreviewTests.cs and
+         PositionCapturingContractTests.cs `new DuckDBConnection(...)` directly in their own scaffolding,
+         previously supplied transitively through DbDataSync.Drivers.DuckDb (or DbDataSync.Verification/
+         .Scripting via DbDataSync.Api) before 109i's ExcludeAssets. -->
+    <PackageReference Include="DuckDB.NET.Data.Full" Version="1.5.5" />
+    <!-- Phase 38: the same gap again, for Npgsql, but reached a different way — nothing in this project
+         uses Npgsql directly. ChangeReaderFirstPassContractTests reflects over every driver assembly
+         with GetTypes(), and PgCopyStagingProvider's async methods put NpgsqlConnection and
+         NpgsqlBinaryImporter into compiler-generated state-machine *fields*, which type loading has to
+         resolve. Before phase 38 the Postgres driver touched Npgsql only inside non-async method
+         bodies, so its assembly happened to stay reflectable without it. Production is unaffected:
+         every GetTypes() call in src/ already handles ReflectionTypeLoadException, and
+         LibrarySurfaceExtractor reads metadata without loading at all. That test deliberately does not
+         handle it — a sweep that silently covered fewer readers than it appeared to is the exact
+         failure mode the file exists to prevent. -->
+    <PackageReference Include="Npgsql" Version="9.0.3" />
+    <!-- JdbcTestQueryTests' own real-host-startup case: DbDataSync.Drivers.Jdbc excludes IKVM's
+         runtime/build/native assets (resolved from libraries/ikvm/lib/ via LibraryRegistry in a real
+         deployment) — a standalone `dotnet test` here needs the real IKVM assets locally too, the same
+         reason DbDataSync.Drivers.Jdbc.Tests carries this identical, un-excluded reference. -->
+    <PackageReference Include="IKVM" Version="8.16.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DbDataSync.Api\DbDataSync.Api.csproj" />
+    <!-- Reuses FixturePublisher (publishes tests/fixtures/DbDataSync.Drivers.LoaderTestFixture once)
+         for CompiledDriverApiFactory, rather than duplicating that dotnet-publish shell-out here. -->
+    <ProjectReference Include="..\DbDataSync.Drivers.Loader.Tests\DbDataSync.Drivers.Loader.Tests.csproj" />
+  </ItemGroup>
+
+  <!-- JdbcTestQueryApiFactory's own driver.yaml needs a real pgJDBC jar on disk before the host loads
+       it — the identical mechanism (and reasoning) as DbDataSync.Drivers.Jdbc.Tests' own copy, and kept
+       separate for the same reason that project's own comment gives for its un-excluded Npgsql
+       reference: this project's own real host-startup test shouldn't depend on a sibling test project's
+       build output existing at a guessed relative path. -->
+  <PropertyGroup>
+    <JdbcTestJarVersion>42.7.13</JdbcTestJarVersion>
+    <JdbcTestJarPath>$(BaseIntermediateOutputPath)jdbc-jars\postgresql-$(JdbcTestJarVersion).jar</JdbcTestJarPath>
+  </PropertyGroup>
+
+  <Target Name="DownloadJdbcTestJar" BeforeTargets="BeforeBuild" Condition="!Exists('$(JdbcTestJarPath)')">
+    <MakeDir Directories="$(BaseIntermediateOutputPath)jdbc-jars" />
+    <DownloadFile
+      SourceUrl="https://repo1.maven.org/maven2/org/postgresql/postgresql/$(JdbcTestJarVersion)/postgresql-$(JdbcTestJarVersion).jar"
+      DestinationFolder="$(BaseIntermediateOutputPath)jdbc-jars" />
+  </Target>
+
+  <ItemGroup>
+    <None Include="$(JdbcTestJarPath)" CopyToOutputDirectory="PreserveNewest" Link="postgresql.jar" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- One scratch-database teardown for every test project that makes one; see its doc comment. -->
+    <Compile Include="..\Shared\MsSqlScratch.cs" Link="Shared\MsSqlScratch.cs" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,126 @@
+using DbDataSync.Cli;
+using Xunit;
+
+namespace DbDataSync.Libraries.Tests;
+
+/// <summary>Drives <c>dbdatasync config library ...</c> exactly as an operator would, through
+/// <see cref="LibraryCommand.RunAsync"/> rather than the lower-level <see cref="LibraryInstaller"/>
+/// this exercises indirectly.</summary>
+[Trait("Category", "Integration")]
+public sealed class LibraryCommandTests : IAsyncLifetime
+{
+    private readonly string _repoRoot = Path.Combine(Path.GetTempPath(), $"dbdatasync-library-cmd-test-{Guid.NewGuid():N}");
+    private readonly StringWriter _output = new();
+    private readonly StringWriter _error = new();
+
+    public Task InitializeAsync()
+    {
+        Directory.CreateDirectory(_repoRoot);
+        Console.SetOut(_output);
+        Console.SetError(_error);
+        return Task.CompletedTask;
+    }
+
+    public Task DisposeAsync()
+    {
+        Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
+        Console.SetError(new StreamWriter(Console.OpenStandardError()) { AutoFlush = true });
+        try { Directory.Delete(_repoRoot, recursive: true); } catch (IOException) { /* best effort */ }
+        return Task.CompletedTask;
+    }
+
+    private Task<int> RunAsync(params string[] args) =>
+        LibraryCommand.RunAsync([.. args, "--repo", _repoRoot]);
+
+    [Fact]
+    public async Task InstallThenList_ReportsTheInstalledLibrary()
+    {
+        Assert.Equal(0, await RunAsync("install", "MySqlConnector", "--version", "2.4.0"));
+
+        _output.GetStringBuilder().Clear();
+        Assert.Equal(0, await RunAsync("list"));
+
+        Assert.Contains("MySqlConnector", _output.ToString());
+        Assert.Contains("resolves", _output.ToString());
+    }
+
+    [Fact]
+    public async Task Uninstall_RemovesTheLibraryDirectory()
+    {
+        await RunAsync("install", "MySqlConnector", "--version", "2.4.0");
+        var libraryDir = LibraryPaths.LibraryDir(_repoRoot, "MySqlConnector");
+        Assert.True(Directory.Exists(libraryDir));
+
+        Assert.Equal(0, await RunAsync("uninstall", "MySqlConnector"));
+
+        Assert.False(Directory.Exists(libraryDir));
+    }
+
+    [Fact]
+    public async Task Sync_RebuildsLibFromTheManifestAlone()
+    {
+        await RunAsync("install", "MySqlConnector", "--version", "2.4.0");
+        var libDir = LibraryPaths.LibDir(LibraryPaths.LibraryDir(_repoRoot, "MySqlConnector"));
+        Directory.Delete(libDir, recursive: true);
+        Assert.False(Directory.Exists(libDir));
+
+        Assert.Equal(0, await RunAsync("sync", "MySqlConnector"));
+
+        Assert.True(File.Exists(Path.Combine(libDir, "MySqlConnector.dll")));
+    }
+
+    /// <summary>A real, restorable package with no <c>DbProviderFactory</c> subclass at all — phase
+    /// 122's reflection-assist restores it, finds nothing, and only then falls back to requiring
+    /// <c>--factory-type</c>, so this no longer fails before the restore even runs.</summary>
+    [Fact]
+    public async Task Install_WithoutAKnownFactoryType_TriesReflectionFirst_ThenRequiresOneExplicitly()
+    {
+        var exitCode = await RunAsync("install", "Newtonsoft.Json", "--version", "13.0.3");
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("DbProviderFactory", _error.ToString());
+    }
+
+    /// <summary>A real ADO.NET provider that is deliberately not one of <see cref="KnownLibraries"/>'s
+    /// bundled entries (eight as of phase 109i's <c>duckdb</c> addition) — <c>config library
+    /// install</c>'s own version of phase 122's acceptance criterion: no <c>--factory-type</c>, no
+    /// catalog match, and it still installs correctly.</summary>
+    [Fact]
+    public async Task Install_ANonCatalogPackage_WithNoFactoryType_DiscoversItByReflection()
+    {
+        Assert.Equal(0, await RunAsync("install", "System.Data.SqlClient", "--version", "4.9.0"));
+
+        var manifest = LibraryManifest.Read(
+            LibraryPaths.ManifestPath(LibraryPaths.LibraryDir(_repoRoot, "System.Data.SqlClient")));
+        Assert.Equal("System.Data.SqlClient.SqlClientFactory, System.Data.SqlClient", manifest.FactoryType);
+        Assert.Contains("System.Data.SqlClient.SqlClientFactory, System.Data.SqlClient", _output.ToString());
+    }
+
+    /// <summary>A library's id is always its real NuGet package id — typing the catalog shorthand
+    /// resolves the package and factory type from it, but the library still ends up keyed by
+    /// <c>MySqlConnector</c>, not <c>mysql-connector</c> (see
+    /// `follow-up-library-install-paths-disagree-on-the-resulting-library-id.md`).</summary>
+    [Fact]
+    public async Task InstallByCatalogId_FillsPackageIdAndFactoryTypeFromTheCatalog_AndIsKeyedByThePackageId()
+    {
+        Assert.Equal(0, await RunAsync("install", "mysql-connector", "--version", "2.4.0"));
+
+        var manifest = LibraryManifest.Read(LibraryPaths.ManifestPath(LibraryPaths.LibraryDir(_repoRoot, "MySqlConnector")));
+        Assert.Equal("MySqlConnector", manifest.Id);
+        var package = Assert.Single(manifest.Packages);
+        Assert.Equal("MySqlConnector", package.Id);
+        Assert.Equal("2.4.0", package.Version);
+        Assert.Equal("MySqlConnector.MySqlConnectorFactory, MySqlConnector", manifest.FactoryType);
+    }
+
+    /// <summary><c>--as</c> is still an explicit, honored override — the canonicalization to the
+    /// package id only fills in when the operator didn't already choose a name.</summary>
+    [Fact]
+    public async Task InstallByCatalogId_WithAnExplicitAs_UsesThatIdInstead()
+    {
+        Assert.Equal(0, await RunAsync("install", "mysql-connector", "--as", "my-mysql", "--version", "2.4.0"));
+
+        var manifest = LibraryManifest.Read(LibraryPaths.ManifestPath(LibraryPaths.LibraryDir(_repoRoot, "my-mysql")));
+        Assert.Equal("my-mysql", manifest.Id);
+    }
+}

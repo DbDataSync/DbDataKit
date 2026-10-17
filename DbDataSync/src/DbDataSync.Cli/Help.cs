@@ -1,0 +1,101 @@
+namespace DbDataSync.Cli;
+
+public static class Help
+{
+    public static void Print()
+    {
+        Console.WriteLine($"""
+            dbdatasync — cross-database replication.
+
+              dbdatasync setup [--repo <path>]
+                  Interactive walk-through for a fresh install, or a review screen for an existing
+                  one. Refuses to run when stdin/stdout aren't a real console.
+
+              dbdatasync serve [--repo <path>] [--state-db <path>] [--url <url>]
+                  Starts the API, the scheduler and the web console in one process.
+                  Defaults: --repo {CliOptions.DefaultRoot}, --url http://localhost:5080
+
+              dbdatasync service install|uninstall|status [--repo <path>] [--url <url>] [--account <account>]
+                  On Windows: registers this tool as a Windows service. Needs an elevated prompt.
+              dbdatasync service install|uninstall|status [--repo <path>] [--url <url>] [--user <user>]
+                  On Linux: registers a systemd unit (default user: dbdatasync). Needs root
+                  (`sudo`); enables but does not start it — run `systemctl start dbdatasync` next.
+                  Either way the service runs the launcher, and a machine-wide install made before
+                  versioned slots is converted to them first (it says so).
+
+              dbdatasync tool install|uninstall [--dir <path>]
+                  Puts a `dotnet tool install --tool-path <dir>` copy of this CLI on the machine's
+                  PATH — a /usr/local/bin symlink (Linux/other Unix), an /etc/paths.d entry (macOS),
+                  or the Machine PATH (Windows). Needs root/an elevated prompt. Defaults --dir to
+                  this executable's own directory; see docs/install.md for the full sequence.
+
+              dbdatasync update [--list] [--channel stable|beta|snapshot|all] [--limit <n>] [--json]
+              dbdatasync update --to <version> [--stage-dir <dir>]
+                  Lists the versions available on each release channel (stable and beta from
+                  nuget.org, snapshots of every promoted test build from GitHub), lets you choose
+                  one, downloads it if it is a snapshot, and prints the commands that install it.
+                  Set GITHUB_TOKEN to raise GitHub's anonymous rate limit; it is never required.
+              dbdatasync update --to <version> --apply [--yes] [--url <url>] [--health-timeout <seconds>]
+                  Carries the update out instead of printing it: installs it into the slot that is not
+                  running, stops the service, switches slots, starts it and checks it answers — switching
+                  back if it does not. Needs root/an elevated prompt. The first run on a machine-wide
+                  install made before versioned slots converts it (it says so).
+              dbdatasync update --rollback [--yes] [--url <url>] [--health-timeout <seconds>]
+                  Switches back to the version in the other slot, the same way. Nothing is downloaded.
+              dbdatasync update --status
+                  Shows both slots, what the last update did, and the recent history.
+
+              dbdatasync launcher repair [--repo <path>]
+                  Re-copies the running version's launcher (what the service and PATH run) over the
+                  installed one and re-points a registered service at it. Rarely needed.
+
+              dbdatasync invite [--role Admin|Viewer] [--repo <path>] [--url <url>]
+                  Prints a fresh single-use invitation URL. For when the first-run one has scrolled
+                  away, or the process is a service with nowhere to print it.
+
+              dbdatasync health [--url <url>]
+                  Exits 0 if a running DbDataSync answers, 1 if it does not. What the container's
+                  health check runs.
+
+              dbdatasync config check|get|set|cert|secret|library|driver
+                  Every configuration-related command, grouped under one root:
+
+                    check     [--repo <path>] [--json]
+                        Non-interactive readiness check — repo, state store, libraries/drivers,
+                        auth, binding, first admin. Exits 1 if anything fails; what `setup`'s
+                        review screen runs.
+
+                    cert      use-pem --cert <path> --key <path> | use-pfx --pfx <path>
+                        Points Kestrel at a certificate file — unencrypted PEM key or
+                        unprotected PFX. Any platform.
+                    cert      status|list|new-self-signed|enroll|renew|retrieve|templates|bind
+                        Issues, installs, binds and renews a certificate from the Windows
+                        certificate store or an AD CS CA. `status` also works on any platform
+                        (reports whichever of the two above is configured); the rest are
+                        Windows only. Run `dbdatasync config cert` with no subcommand to see
+                        every subcommand's flags.
+
+                    secret    set <ref> <value>|list [<ref> ...]|remove <ref>
+                        Stores, checks, or removes a secret in the OS credential store — e.g. the
+                        state database's password:
+                        dbdatasync config secret set dbdatasync:config:stateConnectionString "Password=..."
+
+                    library   install <packageId>[ <packageId>...] [--as <id>] --version <v> [--factory-type type] [--source feed]
+                    library   sync [<id>] | list | uninstall <id>
+                        Restores an ADO.NET library package (Microsoft.Data.SqlClient, Npgsql,
+                        MySqlConnector, ...) into <repo>/libraries/<id>/, so it can be swapped by
+                        installing a new version rather than by rebuilding DbDataSync. Runs
+                        `dotnet publish` under the hood — no network access from the running host
+                        itself.
+
+                    driver    install <id> --library <name> --version <v> [--factory-type type] [--from mysql] [--display-name name]
+                    driver    list | uninstall <id>
+                        Adds a whole new SQL engine — a driver.yaml descriptor plus its restored
+                        library — without a DbDataSync rebuild. Watermark and batch-reload
+                        replication only; see docs/drivers-and-libraries.md
+                        for what a descriptor can and can't do.
+
+              dbdatasync version
+            """);
+    }
+}
