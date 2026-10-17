@@ -6,7 +6,7 @@ namespace DbDataSync.Updates.Tests;
 public class SnapshotStagerTests
 {
     private static readonly ReleaseVersion Version = ReleaseVersion.Parse("2026.9.19.1432-snapshot.g65615e7");
-    private const string BaseUrl = "https://github.com/DbDataSync/DbDataSync/releases/download/snapshot-2026.9.19.1432-snapshot.g65615e7/";
+    private const string BaseUrl = "https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/snapshot-2026.9.19.1432-snapshot.g65615e7/";
 
     private static readonly ReleaseInfo Release = new(
         Version, ReleaseChannel.Snapshot,
@@ -169,7 +169,7 @@ public class SnapshotStagerTests
     }
 
     [Fact]
-    public async Task Stage_RefusesAReleaseThatIsNotASnapshot()
+    public async Task Stage_RefusesAReleaseWithNoDownloadableAssets()
     {
         using var temp = new TempDirectory();
         var stable = new ReleaseInfo(ReleaseVersion.Parse("2026.9.18.1918"), ReleaseChannel.Stable);

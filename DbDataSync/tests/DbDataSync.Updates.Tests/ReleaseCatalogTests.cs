@@ -4,12 +4,12 @@ using System.Net;
 namespace DbDataSync.Updates.Tests;
 
 /// <summary>
-/// The nuget.org fixture is a real response, captured from the live index. The GitHub fixture is a real
-/// response for this repository's releases (trimmed to the fields the catalog reads) with **synthetic**
-/// snapshot entries added in front: no snapshot has been published yet, so those are shaped exactly like the
-/// real release objects but invented — three valid ones, and seven each broken in one way the catalog must
-/// skip (draft, not a prerelease, no checksum asset, an asset hosted somewhere else, the wrong asset name,
-/// a scratch tag, a tag that is not a snapshot's).
+/// The GitHub fixture is **synthetic**, shaped exactly like the release objects GitHub returns for the DbDataKit
+/// monorepo (trimmed to the fields the catalog reads): valid DbDataSync snapshot, stable and beta releases, plus
+/// releases the catalog must skip — other products' (<c>dbdataproxy/…</c>, <c>dbdatabuild/…</c>), a DbDataSync tag carrying
+/// another product's assets, a release whose prerelease flag or tag kind disagrees with its version, a draft,
+/// one with no checksum asset, an asset hosted somewhere else, a wrong asset name, a scratch tag, and a tag with
+/// no product prefix at all.
 /// </summary>
 public class ReleaseCatalogTests
 {
@@ -17,18 +17,17 @@ public class ReleaseCatalogTests
 
     private static ReleaseCatalog Catalog(FakeHttpHandler handler, string? token = null) => new(handler.Client(), token);
 
-    private static FakeHttpHandler Serving(string nuget, string github) => new(request =>
+    private static FakeHttpHandler Serving(string github) => new(request =>
         request.RequestUri!.AbsoluteUri switch
         {
-            ReleaseSources.NuGetIndexUrl => Http.Ok(nuget),
             var url when url.StartsWith(ReleaseSources.GitHubReleasesUrl, StringComparison.Ordinal) => Http.Ok(github),
             _ => Http.Status(HttpStatusCode.NotFound),
         });
 
-    private static FakeHttpHandler Fixtures() => Serving(Fixture.Read("nuget-flat-container.json"), Fixture.Read("github-releases.json"));
+    private static FakeHttpHandler Fixtures() => Serving(Fixture.Read("github-releases.json"));
 
     [Fact]
-    public async Task Stable_ListsNuGetsStableVersions_NewestFirst()
+    public async Task Stable_ListsTheStableReleases_NewestFirst_WithTheirDownloadUrls()
     {
         var releases = await Catalog(Fixtures()).ListAsync(ReleaseChannel.Stable, 10);
 
@@ -38,8 +37,10 @@ public class ReleaseCatalogTests
         Assert.All(releases, r =>
         {
             Assert.Equal(ReleaseChannel.Stable, r.Channel);
-            Assert.Null(r.PackageUrl);
-            Assert.Null(r.ChecksumUrl);
+            Assert.Equal(
+                $"https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/v{r.Version.Text}/DbDataSync.{r.Version.Text}.nupkg",
+                r.PackageUrl!.AbsoluteUri);
+            Assert.EndsWith(".nupkg.sha512", r.ChecksumUrl!.AbsoluteUri);
         });
     }
 
@@ -68,12 +69,32 @@ public class ReleaseCatalogTests
     }
 
     [Fact]
-    public async Task NuGet_IgnoresVersionsThatAreNotOneOfTheProductsChannels()
+    public async Task AReleaseIsSkippedUnlessItIsThisProductsAndWellFormed()
     {
-        var handler = Serving("""{"versions":["2026.9.18.1918","2026.09.19.1432-alpha.1789","not-a-version","2026.9.12.721-beta"]}""", "[]");
+        // Stable: only the five real ones survive. Not here: another product's releases, our tag with another product's
+        // assets, a stable version flagged prerelease, a draft, a missing checksum and an unprefixed tag.
+        var stable = await Catalog(Fixtures()).ListAsync(ReleaseChannel.Stable, 100);
+        Assert.Equal(5, stable.Count);
+        Assert.All(stable, r => Assert.StartsWith("2026.9.", r.Version.Text, StringComparison.Ordinal));
 
-        Assert.Equal(["2026.9.18.1918"], (await Catalog(handler).ListAsync(ReleaseChannel.Stable, 10)).Select(r => r.Version.Text));
-        Assert.Equal(["2026.9.12.721-beta"], (await Catalog(handler).ListAsync(ReleaseChannel.Beta, 10)).Select(r => r.Version.Text));
+        // Beta: a beta version that is not flagged prerelease is skipped, and a release tag carrying a snapshot version
+        // is neither a beta nor a snapshot.
+        var beta = await Catalog(Fixtures()).ListAsync(ReleaseChannel.Beta, 100);
+        Assert.Equal(3, beta.Count);
+        Assert.DoesNotContain(await Catalog(Fixtures()).ListAsync(ReleaseChannel.Snapshot, 100), r => r.Version.Text.Contains("cafe123", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("2026.10.1.1000")]
+    [InlineData("2026.10.2.0900")]
+    [InlineData("2026.10.1.0800-snapshot.g1111111")]
+    public async Task AnotherProductsReleases_NeverAppearInAnyChannel(string version)
+    {
+        foreach (var channel in Enum.GetValues<ReleaseChannel>())
+        {
+            var releases = await Catalog(Fixtures()).ListAsync(channel, 100);
+            Assert.DoesNotContain(releases, r => r.Version.Text == version);
+        }
     }
 
     [Fact]
@@ -86,10 +107,10 @@ public class ReleaseCatalogTests
             releases.Select(r => r.Version.Text));
 
         var oldest = releases[^1];
-        const string baseUrl = "https://github.com/DbDataSync/DbDataSync/releases/download/snapshot-2026.9.19.1432-snapshot.g65615e7/";
+        const string baseUrl = "https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/snapshot-2026.9.19.1432-snapshot.g65615e7/";
         Assert.Equal(baseUrl + "DbDataSync.2026.9.19.1432-snapshot.g65615e7.nupkg", oldest.PackageUrl!.AbsoluteUri);
         Assert.Equal(baseUrl + "DbDataSync.2026.9.19.1432-snapshot.g65615e7.nupkg.sha512", oldest.ChecksumUrl!.AbsoluteUri);
-        Assert.Equal("https://github.com/DbDataSync/DbDataSync/releases/tag/snapshot-2026.9.19.1432-snapshot.g65615e7", oldest.ReleaseUrl!.AbsoluteUri);
+        Assert.Equal("https://github.com/DbDataSync/DbDataKit/releases/tag/dbdatasync/snapshot-2026.9.19.1432-snapshot.g65615e7", oldest.ReleaseUrl!.AbsoluteUri);
     }
 
     [Fact]
@@ -119,15 +140,6 @@ public class ReleaseCatalogTests
         await Catalog(authenticated, token: "ghp_example").ListAsync(ReleaseChannel.Snapshot, 5);
 
         Assert.Equal("Bearer ghp_example", Assert.Single(authenticated.Sent).Authorization);
-    }
-
-    [Fact]
-    public async Task NuGet_NeverCarriesTheGitHubToken()
-    {
-        var handler = Fixtures();
-        await Catalog(handler, token: "ghp_example").ListAsync(ReleaseChannel.Stable, 5);
-
-        Assert.Null(Assert.Single(handler.Sent).Authorization);
     }
 
     [Fact]
@@ -168,28 +180,6 @@ public class ReleaseCatalogTests
 
         Assert.Equal(3, releases.Count);
         Assert.Equal(2, handler.Sent.Count);
-    }
-
-    [Fact]
-    public async Task NuGet_ANon200_IsAnActionableError()
-    {
-        var handler = new FakeHttpHandler(_ => Http.Status(HttpStatusCode.ServiceUnavailable));
-
-        var ex = await Assert.ThrowsAsync<ReleaseSourceException>(() => Catalog(handler).ListAsync(ReleaseChannel.Stable, 5));
-
-        Assert.Contains("nuget.org answered 503", ex.Message);
-    }
-
-    [Theory]
-    [InlineData("not json")]
-    [InlineData("[]")]
-    [InlineData("""{"versions":"nope"}""")]
-    [InlineData("""{"other":[]}""")]
-    public async Task NuGet_AnUnexpectedBody_IsAnError_NotAnEmptyList(string body)
-    {
-        var handler = new FakeHttpHandler(_ => Http.Ok(body));
-
-        await Assert.ThrowsAsync<ReleaseSourceException>(() => Catalog(handler).ListAsync(ReleaseChannel.Stable, 5));
     }
 
     [Fact]
@@ -269,7 +259,7 @@ public class ReleaseCatalogTests
 
         var ex = await Assert.ThrowsAsync<ReleaseSourceException>(() => Catalog(handler).ListAsync(ReleaseChannel.Stable, 5));
 
-        Assert.Contains("Could not reach nuget.org", ex.Message);
+        Assert.Contains("Could not reach GitHub", ex.Message);
         Assert.Contains("Name or service not known", ex.Message);
     }
 
@@ -288,9 +278,10 @@ public class ReleaseCatalogTests
     [Fact]
     public void TheSourcesArePinnedConstants()
     {
-        Assert.Equal("https://api.nuget.org/v3-flatcontainer/dbdatasync/index.json", ReleaseSources.NuGetIndexUrl);
-        Assert.Equal("https://api.github.com/repos/DbDataSync/DbDataSync/releases", ReleaseSources.GitHubReleasesUrl);
-        Assert.Equal("DbDataSync.2026.9.19.1432-snapshot.g65615e7.nupkg", ReleaseSources.SnapshotNupkgName(ReleaseVersion.Parse("2026.9.19.1432-snapshot.g65615e7")));
-        Assert.EndsWith(".nupkg.sha512", ReleaseSources.SnapshotChecksumName(ReleaseVersion.Parse("2026.9.19.1432-snapshot.g65615e7")));
+        Assert.Equal("https://api.github.com/repos/DbDataSync/DbDataKit/releases", ReleaseSources.GitHubReleasesUrl);
+        Assert.Equal("dbdatasync/v", ReleaseSources.ReleaseTagPrefix);
+        Assert.Equal("dbdatasync/snapshot-", ReleaseSources.SnapshotTagPrefix);
+        Assert.Equal("DbDataSync.2026.9.19.1432-snapshot.g65615e7.nupkg", ReleaseSources.PackageFileName(ReleaseVersion.Parse("2026.9.19.1432-snapshot.g65615e7")));
+        Assert.EndsWith(".nupkg.sha512", ReleaseSources.ChecksumFileName(ReleaseVersion.Parse("2026.9.19.1432-snapshot.g65615e7")));
     }
 }

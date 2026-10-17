@@ -1908,7 +1908,7 @@ export interface UpdateRelease {
   builtUtc: string | null
   installed: boolean
   newer: boolean
-  /** A page a human can read about this exact version — nuget.org for stable/beta, the GitHub Release page for a snapshot. */
+  /** A page a human can read about this exact version — the GitHub Release page. */
   url: string
 }
 

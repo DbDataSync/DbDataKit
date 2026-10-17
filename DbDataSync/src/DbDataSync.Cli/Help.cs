@@ -31,9 +31,10 @@ public static class Help
 
               dbdatasync update [--list] [--channel stable|beta|snapshot|all] [--limit <n>] [--json]
               dbdatasync update --to <version> [--stage-dir <dir>]
-                  Lists the versions available on each release channel (stable and beta from
-                  nuget.org, snapshots of every promoted test build from GitHub), lets you choose
-                  one, downloads it if it is a snapshot, and prints the commands that install it.
+                  Lists the versions available on each release channel (stable, beta, and
+                  snapshots of every promoted test build, all from this product's GitHub
+                  releases), lets you choose one, downloads and verifies it, and prints the
+                  commands that install it.
                   Set GITHUB_TOKEN to raise GitHub's anonymous rate limit; it is never required.
               dbdatasync update --to <version> --apply [--yes] [--url <url>] [--health-timeout <seconds>]
                   Carries the update out instead of printing it: installs it into the slot that is not

@@ -34,8 +34,8 @@ public sealed record ServiceSituation(ServiceManager Manager, string? Name)
 /// update does.
 /// </summary>
 /// <param name="Installed">The running version, or null when it could not be read.</param>
-/// <param name="SourceDirectory">The staged folder to use as <c>--add-source</c>. Set for a snapshot, null for
-/// stable and beta (nuget.org serves those).</param>
+/// <param name="SourceDirectory">The staged folder to use as <c>--add-source</c>. Set for any release downloaded
+/// from GitHub, which is every release the catalog returns; null only for an install from a feed.</param>
 /// <param name="NeedsElevation">True when the install location is not the current user's own — the
 /// commands then need <c>sudo</c> or an elevated prompt.</param>
 public sealed record UpdatePlan(
@@ -64,11 +64,11 @@ public static class UpdatePlanner
             _ => PlanOperation.Reinstall,
         };
 
-    /// <summary>Whether a package has to be downloaded before this plan means anything: a snapshot has no
-    /// feed to be fetched from, so unless there is nothing to install (already there) or nowhere to install
-    /// it (a container image), it is staged first.</summary>
+    /// <summary>Whether a package has to be downloaded before this plan means anything: a release is a GitHub
+    /// release asset, not something a NuGet feed serves, so unless there is nothing to install (already there)
+    /// or nowhere to install it (a container image), it is staged first.</summary>
     public static bool NeedsStagedPackage(ReleaseInfo target, InstallLocation location, PlanOperation operation) =>
-        target.Channel == ReleaseChannel.Snapshot
+        target.PackageUrl is not null
         && location.Kind != InstallKind.Container
         && operation != PlanOperation.AlreadyInstalled;
 
@@ -87,11 +87,11 @@ public static class UpdatePlanner
 
         var plan = new UpdatePlan(
             installed, target, location, operation,
-            target.Channel == ReleaseChannel.Snapshot ? stagedDirectory : null,
+            target.PackageUrl is not null ? stagedDirectory : null,
             service, needsElevation);
 
         if (plan.IsUpdatable && !alreadyOnDisk && NeedsStagedPackage(target, location, operation) && stagedDirectory is null)
-            throw new ArgumentException("A snapshot has to be staged before it can be planned.", nameof(stagedDirectory));
+            throw new ArgumentException("A release has to be staged before it can be planned.", nameof(stagedDirectory));
 
         return plan;
     }

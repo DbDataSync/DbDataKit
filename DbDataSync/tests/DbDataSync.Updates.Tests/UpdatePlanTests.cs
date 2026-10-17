@@ -4,7 +4,10 @@ public class UpdatePlanTests
 {
     private static readonly ReleaseInfo Stable = new(ReleaseVersion.Parse("2026.9.18.1918"), ReleaseChannel.Stable);
     private static readonly ReleaseInfo Beta = new(ReleaseVersion.Parse("2026.9.12.721-beta"), ReleaseChannel.Beta);
-    private static readonly ReleaseInfo Snapshot = new(ReleaseVersion.Parse("2026.9.19.1432-snapshot.g65615e7"), ReleaseChannel.Snapshot);
+    private static readonly ReleaseInfo Snapshot = new(
+        ReleaseVersion.Parse("2026.9.19.1432-snapshot.g65615e7"), ReleaseChannel.Snapshot,
+        new Uri("https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/snapshot-2026.9.19.1432-snapshot.g65615e7/DbDataSync.2026.9.19.1432-snapshot.g65615e7.nupkg"),
+        new Uri("https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/snapshot-2026.9.19.1432-snapshot.g65615e7/DbDataSync.2026.9.19.1432-snapshot.g65615e7.nupkg.sha512"));
 
     private static readonly InstallLocation ToolPath = new(InstallKind.ToolPath, "/opt/dbdatasync");
     private static readonly InstallLocation Global = new(InstallKind.Global, "/home/dan/.dotnet/tools");

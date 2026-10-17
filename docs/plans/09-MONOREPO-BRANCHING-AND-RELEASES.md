@@ -158,12 +158,36 @@ explicit switch, defaulting to off, so the rest of the release (build, smoke tes
 `main` merge) still runs. When it's turned back on, the Trusted Publishing policy must be re-registered for
 `DbDataSync/DbDataKit` and the new workflow filename, because that policy is bound to repo and workflow file.
 
+### How the app tells products apart
+
+One repository now holds every product's releases, so a release belongs to a product by its **tag prefix**, which is
+the product's lowercase name and a slash:
+
+| release | tag |
+| --- | --- |
+| stable | `dbdatasync/v<version>` |
+| beta | `dbdatasync/v<version>-beta` |
+| snapshot | `dbdatasync/snapshot-<version>` |
+
+`dbdatasync update` (`ReleaseCatalog`) lists the repository's releases once and keeps one only if its tag starts with
+`dbdatasync/`, the version after the prefix parses and belongs to the channel the tag kind says, the prerelease flag
+agrees with that channel (stable is the only channel that is not a prerelease), and it carries
+`DbDataSync.<version>.nupkg` and its `.sha512` hosted under this repository's `releases/download/`. The asset names
+are a second, independent product check. Other products' releases, drafts, hand-made releases and anything
+malformed are skipped silently. A new product just needs its own prefix; DbDataProxy and DbDataBuild releases never
+show up in DbDataSync's list, and vice versa.
+
+Every channel now goes through the same download, checksum and `--add-source` install that snapshots always used.
+The listing is read once per run and shared across channels, because GitHub allows only 60 anonymous requests an
+hour. Releases are created with `--latest=false`: "latest" is one marker per repository, not per product.
+
 ### GitHub Releases on the old repo, without pushing code there
 
-> **Deferred.** Releases are currently created in this repository; see "Implementation status".
+> **Superseded.** `dbdatasync update` now reads this repository's releases (see above), so publishing to the old
+> repository is no longer needed. Kept as the record of the bridge that was considered.
 
 
-`dbdatasync update` reads releases from the old repo (`DbDataSync/DbDataSync`, a constant in
+`dbdatasync update` used to read releases from the old repo (`DbDataSync/DbDataSync`, a constant in
 `ReleaseSources.cs`), looks for tags starting `snapshot-`, and downloads assets from under that repo's
 `releases/download/`. It never looks at the source tree. So the monorepo's release job can publish *there*
 with the Releases API, from here, and the client keeps working unchanged:
@@ -222,12 +246,12 @@ Consequences of the simplification:
   convention, not enforced.
 - **Pushes with `GITHUB_TOKEN` start no workflows.** That is why `promote` lives inside the CI run, and why the release
   dispatches CI by hand after each back-merge.
-- **Releases are in this repo, not the old one.** `dbdatasync update` reads `DbDataSync/DbDataSync`, so it does not see
-  them until that client is repointed (a code change, deferred).
+- **Releases are in this repo, and `dbdatasync update` reads them from here.** See "How the app tells products apart".
+  Stable, beta and snapshot all come from this repository's GitHub releases; the old repository is no longer a source.
 - **No snapshots, no image, no NuGet** until they are brought back.
 
-**Deferred:** the pipelines App and rulesets (`main`, `*/test`), snapshot releases, releases on the old repository,
-the container image chained from the release, NuGet publishing, the lane guard.
+**Deferred:** the pipelines App and rulesets (`main`, `*/test`), snapshot releases (the client's snapshot channel is
+simply empty until they come back), the container image chained from the release, NuGet publishing, the lane guard.
 
 ## Rollout
 

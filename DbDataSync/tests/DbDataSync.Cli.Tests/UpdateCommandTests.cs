@@ -40,15 +40,20 @@ public class UpdateCommandTests : IDisposable
 
     private static string Checksum(byte[] bytes) => Convert.ToBase64String(SHA512.HashData(bytes));
 
-    private static string GitHubJson() => "[" + string.Join(",", new[] { SnapshotB, SnapshotA }.Select(v =>
+    // The DbDataKit monorepo's releases, as GitHub lists them: each one DbDataSync's own (dbdatasync/ tag prefix), with the
+    // package and its checksum as assets. Stable and beta are `v` tags; a snapshot is a `snapshot-` tag.
+    private static string Release(string tagKind, string v, bool prerelease) =>
         $$"""
-        {"tag_name":"snapshot-{{v}}","draft":false,"prerelease":true,"html_url":"https://github.com/DbDataSync/DbDataSync/releases/tag/snapshot-{{v}}",
+        {"tag_name":"dbdatasync/{{tagKind}}{{v}}","draft":false,"prerelease":{{(prerelease ? "true" : "false")}},"html_url":"https://github.com/DbDataSync/DbDataKit/releases/tag/dbdatasync/{{tagKind}}{{v}}",
          "assets":[
-          {"name":"DbDataSync.{{v}}.nupkg","browser_download_url":"https://github.com/DbDataSync/DbDataSync/releases/download/snapshot-{{v}}/DbDataSync.{{v}}.nupkg"},
-          {"name":"DbDataSync.{{v}}.nupkg.sha512","browser_download_url":"https://github.com/DbDataSync/DbDataSync/releases/download/snapshot-{{v}}/DbDataSync.{{v}}.nupkg.sha512"}]}
-        """)) + "]";
+          {"name":"DbDataSync.{{v}}.nupkg","browser_download_url":"https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/{{tagKind}}{{v}}/DbDataSync.{{v}}.nupkg"},
+          {"name":"DbDataSync.{{v}}.nupkg.sha512","browser_download_url":"https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/{{tagKind}}{{v}}/DbDataSync.{{v}}.nupkg.sha512"}]}
+        """;
 
-    private const string NuGetJson = """{"versions":["2026.9.11.532","2026.9.16.1005","2026.9.18.1918","2026.9.12.721-beta"]}""";
+    private static string GitHubJson() => "[" + string.Join(",",
+        new[] { SnapshotB, SnapshotA }.Select(v => Release("snapshot-", v, prerelease: true))
+            .Concat(new[] { "2026.9.18.1918", "2026.9.16.1005", "2026.9.11.532" }.Select(v => Release("v", v, prerelease: false)))
+            .Concat(new[] { "2026.9.12.721-beta" }.Select(v => Release("v", v, prerelease: true)))) + "]";
 
     private sealed class FakeNetwork(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
@@ -62,12 +67,10 @@ public class UpdateCommandTests : IDisposable
     }
 
     private FakeNetwork Network(
-        HttpStatusCode? gitHubStatus = null, HttpStatusCode? nugetStatus = null, byte[]? served = null, byte[]? checksumOf = null) =>
+        HttpStatusCode? gitHubStatus = null, byte[]? served = null, byte[]? checksumOf = null) =>
         new(request =>
         {
             var url = request.RequestUri!.AbsoluteUri;
-            if (url == ReleaseSources.NuGetIndexUrl)
-                return nugetStatus is { } n ? new HttpResponseMessage(n) : Json(NuGetJson);
             if (url.StartsWith(ReleaseSources.GitHubReleasesUrl, StringComparison.Ordinal))
                 return gitHubStatus is { } g ? new HttpResponseMessage(g) : Json(GitHubJson());
             if (url.EndsWith(".sha512", StringComparison.Ordinal))
@@ -224,24 +227,13 @@ public class UpdateCommandTests : IDisposable
     }
 
     [Fact]
-    public async Task ASourceThatFails_IsAWarning_WhileAnotherAnswers()
-    {
-        var (exit, output, error) = await RunAsync(["--list"], Env(), Network(gitHubStatus: HttpStatusCode.Forbidden));
-
-        Assert.Equal(0, exit);
-        Assert.Contains("snapshot: GitHub answered 403", error);
-        Assert.Contains("\nstable\n", output);
-        Assert.DoesNotContain("\nsnapshot\n", output);
-    }
-
-    [Fact]
     public async Task EverySourceFailing_IsAFailure()
     {
         var (exit, _, error) = await RunAsync(
-            ["--list"], Env(), Network(gitHubStatus: HttpStatusCode.BadGateway, nugetStatus: HttpStatusCode.BadGateway));
+            ["--list"], Env(), Network(gitHubStatus: HttpStatusCode.BadGateway));
 
         Assert.Equal(1, exit);
-        Assert.Contains("stable: nuget.org answered 502", error);
+        Assert.Contains("stable: GitHub answered 502", error);
         Assert.Contains("snapshot: GitHub answered 502", error);
     }
 
@@ -265,16 +257,22 @@ public class UpdateCommandTests : IDisposable
     // --- choosing by version ----------------------------------------------------------------------------
 
     [Fact]
-    public async Task To_AStableVersion_PrintsTheCommands_WithoutDownloadingAnything()
+    public async Task To_AStableVersion_StagesItLikeAnyOtherRelease_BecauseItIsAGitHubReleaseNotAFeedPackage()
     {
         var network = Network();
 
-        var (exit, output, _) = await RunAsync(["--to", "2026.9.18.1918"], Env(), network);
+        var (exit, output, error) = await RunAsync(["--to", "2026.9.18.1918"], Env(), network);
 
         Assert.Equal(0, exit);
+        Assert.Equal("", error);
+        var directory = Path.Combine(_temp, "stage", "2026.9.18.1918");
+        Assert.Equal(_package, await File.ReadAllBytesAsync(Path.Combine(directory, "DbDataSync.2026.9.18.1918.nupkg")));
         Assert.Contains("Selected    2026.9.18.1918  (stable)", output);
-        Assert.Contains("dotnet tool update --tool-path /opt/dbdatasync DbDataSync --version 2026.9.18.1918", output);
-        Assert.Equal([ReleaseSources.NuGetIndexUrl], network.Requested);
+        Assert.Contains("--add-source", output);
+        Assert.Contains("--version 2026.9.18.1918", output);
+        // Nothing but GitHub is asked: the listing, then the package and its checksum.
+        Assert.All(network.Requested, url => Assert.StartsWith("https://", url, StringComparison.Ordinal));
+        Assert.DoesNotContain(network.Requested, url => url.Contains("nuget.org", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -377,7 +375,8 @@ public class UpdateCommandTests : IDisposable
 
         Assert.Equal(0, exit);
         Assert.Contains("dotnet tool uninstall --tool-path /opt/dbdatasync DbDataSync", output);
-        Assert.Contains("dotnet tool install --tool-path /opt/dbdatasync DbDataSync --version 2026.9.11.532", output);
+        Assert.Contains("dotnet tool install --tool-path /opt/dbdatasync DbDataSync --add-source ", output);
+        Assert.Contains("--version 2026.9.11.532", output);
     }
 
     [Fact]
@@ -449,7 +448,8 @@ public class UpdateCommandTests : IDisposable
 
         Assert.Contains("sc.exe stop DbDataSync", output);
         Assert.Contains("sc.exe start DbDataSync", output);
-        Assert.Contains("--tool-path \"C:\\Program Files\\DbDataSync\" DbDataSync --version 2026.9.18.1918", output);
+        Assert.Contains("--tool-path \"C:\\Program Files\\DbDataSync\" DbDataSync --add-source ", output);
+        Assert.Contains("--version 2026.9.18.1918", output);
     }
 
     [Fact]
@@ -556,7 +556,7 @@ public class UpdateCommandTests : IDisposable
     }
 
     private string InstallIntoB(string version = "2026.9.18.1918") =>
-        $"dotnet tool install --tool-path {SlotB} DbDataSync --version {version}";
+        $"dotnet tool install --tool-path {SlotB} DbDataSync --add-source {Path.Combine(_temp, "stage", version)} --version {version}";
 
     [Fact]
     public async Task Apply_UnderAService_InstallsIntoTheOtherSlot_ThenStopsSwitchesStartsAndChecks()
@@ -828,7 +828,8 @@ public class UpdateCommandTests : IDisposable
 
         Assert.Equal(1, exit);
         Assert.Contains("A global tool", error);
-        Assert.Contains("dotnet tool update --global DbDataSync --version 2026.9.18.1918", output);
+        Assert.Contains("dotnet tool update --global DbDataSync --add-source ", output);
+        Assert.Contains("--version 2026.9.18.1918", output);
         Assert.Empty(_events);
     }
 

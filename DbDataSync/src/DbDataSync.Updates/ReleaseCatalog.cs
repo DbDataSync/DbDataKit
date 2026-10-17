@@ -6,15 +6,16 @@ using System.Text.Json;
 namespace DbDataSync.Updates;
 
 /// <summary>
-/// Lists what can be installed, per channel, newest first — from the two places
-/// <see cref="ReleaseSources"/> pins, and nowhere else.
+/// Lists what can be installed, per channel, newest first — from the one place
+/// <see cref="ReleaseSources"/> pins, and nowhere else: this repository's GitHub releases.
 /// <para>
-/// <c>Stable</c> and <c>Beta</c> are read from nuget.org's flat-container index. <c>Snapshot</c> is read from
-/// this repository's GitHub releases: a release counts only if it is a published prerelease whose tag is
-/// <see cref="ReleaseSources.SnapshotTagPrefix"/> plus a version that parses as a snapshot, **and** it carries
-/// both assets a snapshot is made of, downloaded from under <see cref="ReleaseSources.SnapshotDownloadPrefix"/>.
-/// Anything that fails a check is skipped, not reported — a release listing is not the place to discover
-/// that a hand-made release exists.
+/// The repository publishes every product in the DbDataKit monorepo, so a release counts only if it is
+/// DbDataSync's: its tag is <see cref="ReleaseSources.ReleaseTagPrefix"/> (stable and beta) or
+/// <see cref="ReleaseSources.SnapshotTagPrefix"/> (snapshot) plus a version that parses and belongs to the channel
+/// the tag says, its prerelease flag agrees with that channel, **and** it carries both assets a release is made of
+/// (<see cref="ReleaseSources.PackageFileName"/> and its checksum), downloaded from under
+/// <see cref="ReleaseSources.AssetDownloadPrefix"/>. Anything that fails a check is skipped, not reported — a release
+/// listing is not the place to discover that another product's release, or a hand-made one, exists.
 /// </para>
 /// </summary>
 /// <param name="gitHubToken">Optional. Raises GitHub's limit from 60 requests an hour per address; sent only
@@ -24,95 +25,100 @@ public sealed class ReleaseCatalog(HttpClient http, string? gitHubToken = null, 
     private const int PageSize = 100;
     private const int MaxPages = 3;
 
+    // Every channel is read from the same release listing, so a page is fetched once per catalog and shared: listing all
+    // three channels costs one request for a typical repository, not three — it matters against GitHub's anonymous limit.
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly List<ReleaseInfo> _read = [];
+    private int _pagesRead;
+    private bool _exhausted;
+
     public async Task<IReadOnlyList<ReleaseInfo>> ListAsync(
         ReleaseChannel channel, int limit, CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
 
-        var releases = channel == ReleaseChannel.Snapshot
-            ? await ListSnapshotsAsync(limit, cancellationToken)
-            : await ListNuGetAsync(channel, cancellationToken);
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            while (_read.Count(r => r.Channel == channel) < limit && !_exhausted && _pagesRead < MaxPages)
+                await ReadNextPageAsync(cancellationToken);
 
-        return releases.OrderByDescending(r => r.Version).Take(limit).ToList();
+            return _read.Where(r => r.Channel == channel).OrderByDescending(r => r.Version).Take(limit).ToList();
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
-    private async Task<List<ReleaseInfo>> ListNuGetAsync(ReleaseChannel channel, CancellationToken cancellationToken)
+    private async Task ReadNextPageAsync(CancellationToken cancellationToken)
     {
-        using var request = NewRequest(ReleaseSources.NuGetIndexUrl);
-        using var response = await SendAsync(request, "nuget.org", cancellationToken);
+        var page = _pagesRead + 1;
+        using var request = NewRequest($"{ReleaseSources.GitHubReleasesUrl}?per_page={PageSize}&page={page}");
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        if (!string.IsNullOrEmpty(gitHubToken))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", gitHubToken);
+
+        using var response = await SendAsync(request, "GitHub", cancellationToken);
         if (!response.IsSuccessStatusCode)
-            throw new ReleaseSourceException($"nuget.org answered {(int)response.StatusCode} when asked for the {ReleaseSources.PackageId} version list.");
+            throw GitHubFailure(response);
 
-        var versions = new List<ReleaseInfo>();
-        using var document = await ReadJsonAsync(response, "nuget.org", cancellationToken);
-        if (document.RootElement.ValueKind != JsonValueKind.Object
-            || !document.RootElement.TryGetProperty("versions", out var list)
-            || list.ValueKind != JsonValueKind.Array)
-            throw new ReleaseSourceException("nuget.org's version list was not in the expected shape.");
+        using var document = await ReadJsonAsync(response, "GitHub", cancellationToken);
+        if (document.RootElement.ValueKind != JsonValueKind.Array)
+            throw new ReleaseSourceException("GitHub's release list was not in the expected shape.");
 
-        foreach (var item in list.EnumerateArray())
+        var count = 0;
+        foreach (var release in document.RootElement.EnumerateArray())
         {
-            if (item.ValueKind == JsonValueKind.String
-                && ReleaseVersion.TryParse(item.GetString(), out var version)
-                && version.Channel == channel)
-            {
-                versions.Add(new ReleaseInfo(version, channel));
-            }
+            count++;
+            if (TryReadRelease(release, out var info))
+                _read.Add(info);
         }
 
-        return versions;
+        _pagesRead = page;
+        if (count < PageSize)
+            _exhausted = true;
     }
 
-    private async Task<List<ReleaseInfo>> ListSnapshotsAsync(int limit, CancellationToken cancellationToken)
+    private static bool TryReadRelease(JsonElement release, out ReleaseInfo info)
     {
-        var found = new List<ReleaseInfo>();
-
-        for (var page = 1; page <= MaxPages; page++)
-        {
-            using var request = NewRequest($"{ReleaseSources.GitHubReleasesUrl}?per_page={PageSize}&page={page}");
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-            if (!string.IsNullOrEmpty(gitHubToken))
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", gitHubToken);
-
-            using var response = await SendAsync(request, "GitHub", cancellationToken);
-            if (!response.IsSuccessStatusCode)
-                throw GitHubFailure(response);
-
-            using var document = await ReadJsonAsync(response, "GitHub", cancellationToken);
-            if (document.RootElement.ValueKind != JsonValueKind.Array)
-                throw new ReleaseSourceException("GitHub's release list was not in the expected shape.");
-
-            var count = 0;
-            foreach (var release in document.RootElement.EnumerateArray())
-            {
-                count++;
-                if (TryReadSnapshot(release, out var snapshot))
-                    found.Add(snapshot);
-            }
-
-            if (found.Count >= limit || count < PageSize)
-                break;
-        }
-
-        return found;
-    }
-
-    private static bool TryReadSnapshot(JsonElement release, out ReleaseInfo snapshot)
-    {
-        snapshot = null!;
+        info = null!;
         if (release.ValueKind != JsonValueKind.Object)
             return false;
 
-        if (GetBool(release, "draft") || !GetBool(release, "prerelease"))
+        if (GetBool(release, "draft"))
             return false;
 
         var tag = GetString(release, "tag_name");
-        if (tag is null || !tag.StartsWith(ReleaseSources.SnapshotTagPrefix, StringComparison.Ordinal))
+        if (tag is null)
             return false;
 
-        if (!ReleaseVersion.TryParse(tag[ReleaseSources.SnapshotTagPrefix.Length..], out var version)
-            || version.Channel != ReleaseChannel.Snapshot
-            || version.Text != tag[ReleaseSources.SnapshotTagPrefix.Length..])
+        // The tag says which kind of release this is; the version has to agree with it.
+        bool snapshotTag;
+        string text;
+        if (tag.StartsWith(ReleaseSources.ReleaseTagPrefix, StringComparison.Ordinal))
+        {
+            snapshotTag = false;
+            text = tag[ReleaseSources.ReleaseTagPrefix.Length..];
+        }
+        else if (tag.StartsWith(ReleaseSources.SnapshotTagPrefix, StringComparison.Ordinal))
+        {
+            snapshotTag = true;
+            text = tag[ReleaseSources.SnapshotTagPrefix.Length..];
+        }
+        else
+        {
+            return false;
+        }
+
+        if (!ReleaseVersion.TryParse(text, out var version) || version.Text != text || version.Channel is not { } channel)
+            return false;
+
+        if (snapshotTag != (channel == ReleaseChannel.Snapshot))
+            return false;
+
+        // Stable is the only channel that is not a prerelease; a mismatch means the release was made by hand.
+        if (GetBool(release, "prerelease") != (channel != ReleaseChannel.Stable))
             return false;
 
         Uri? packageUrl = null, checksumUrl = null;
@@ -122,13 +128,13 @@ public sealed class ReleaseCatalog(HttpClient http, string? gitHubToken = null, 
             {
                 var name = GetString(asset, "name");
                 var url = GetString(asset, "browser_download_url");
-                if (name is null || url is null || !url.StartsWith(ReleaseSources.SnapshotDownloadPrefix, StringComparison.Ordinal)
+                if (name is null || url is null || !url.StartsWith(ReleaseSources.AssetDownloadPrefix, StringComparison.Ordinal)
                     || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
                     continue;
 
-                if (name == ReleaseSources.SnapshotNupkgName(version))
+                if (name == ReleaseSources.PackageFileName(version))
                     packageUrl = uri;
-                else if (name == ReleaseSources.SnapshotChecksumName(version))
+                else if (name == ReleaseSources.ChecksumFileName(version))
                     checksumUrl = uri;
             }
         }
@@ -137,7 +143,7 @@ public sealed class ReleaseCatalog(HttpClient http, string? gitHubToken = null, 
             return false;
 
         Uri? page = Uri.TryCreate(GetString(release, "html_url"), UriKind.Absolute, out var html) ? html : null;
-        snapshot = new ReleaseInfo(version, ReleaseChannel.Snapshot, packageUrl, checksumUrl, page);
+        info = new ReleaseInfo(version, channel, packageUrl, checksumUrl, page);
         return true;
     }
 
