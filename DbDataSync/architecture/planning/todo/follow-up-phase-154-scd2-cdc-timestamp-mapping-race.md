@@ -398,3 +398,21 @@ tests loses nothing.
 ever meant to show the tests could run stably locally before CI was worth worrying about, and they already have.
 If either test recurs now, the Agent-job theory is falsified. The next step would then be recording who
 `session ID N` is (`sys.dm_exec_sessions` `program_name`/`login_name`) at the moment of the error, not another fix.
+
+## 2026-10-17: stalled again after the job drop, in the monorepo's CI — both tests disabled again
+
+The `dotnet-integration` job failed in two runs on the same code (monorepo `dev`, run `39065381725`, and `dbdatasync/dev`, run
+`39065384490`; both merges of `main` with no CDC change), and again on the re-run of `dev`. The re-run of `dbdatasync/dev`
+passed, so it is intermittent. Both stalls were these two tests, with a **new shape**:
+
+> `cdc.lsn_time_mapping did not record a transaction after … within 90s (727 scan attempts …). capture jobs enabled: 0;
+> CDC scan errors: 0; lsn_time_mapping rows: 5` (and `… 719 attempts … rows: 10`)
+
+`capture jobs enabled: 0` is what the 2026-09-29 change should produce, and **no `sp_replcmds` error was logged**. So the
+Agent-capture-job theory is falsified as the whole story: with the job gone and no scan error, `sp_cdc_scan` still never produced
+a new mapping point in 90s across ~700 attempts. (Caveat: `enabled` counts all of `msdb`, not this database.)
+
+**Decision:** both tests are skipped again per the CDC policy, not deleted, and no further fix is attempted in the same pass.
+`DiagnoseAsync` now also lists the other sessions in the test's database (`id:program:status`), so the next occurrence
+shows who, if anyone, is there. Re-enable only with CI evidence: for example a `workflow_dispatch` job that runs just this class
+repeatedly against CI's own SQL Server container (local runs have never predicted CI here).
