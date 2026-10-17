@@ -96,6 +96,9 @@ public sealed class ShippedFilesTests
     [Fact]
     public void Shipped_example_validates_comments_trailing_commas_and_all()
     {
+        // The example is written for the Windows service (C:\data\parquet, ...), and the shared absolute-path check rejects a
+        // Windows path elsewhere. Windows validates it; the shipped appsettings.json is validated on every platform above.
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The shipped example uses Windows paths");
         var load = ConfigTestSupport.LoadFile(Shipped("appsettings.example.json"));
         Assert.True(load.Ok, ConfigTestSupport.Format(load));
         var o = load.Value!;

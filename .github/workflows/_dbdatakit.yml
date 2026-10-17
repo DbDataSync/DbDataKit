@@ -1,0 +1,44 @@
+name: DbDataKit tests
+
+# The shared libraries' own suite, on Linux and Windows. DbDataKit/ is changed through the product branches, so every product's
+# CI calls this when DbDataKit/** changed, instead of each carrying its own copy of the job. It can also be dispatched by hand
+# on any branch, which is how to see the suite's state independent of a product change.
+#
+# Linux needs unixODBC for DbDataKit.Odbc.Metadata's tests; the live database tests are gated on environment variables and skip
+# unless the shared engines are provided (docs/plans/11-ci-and-testing.md).
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: DbDataKit (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: DbDataKit
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "DbDataKit/**/*.csproj"
+      - name: Install unixODBC
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q unixodbc
+      - name: Restore
+        run: dotnet restore DbDataKit.Shared.slnx
+      - name: Build
+        run: dotnet build DbDataKit.Shared.slnx --no-restore -c Release
+      - name: Test
+        run: dotnet test --solution DbDataKit.Shared.slnx --no-build -c Release

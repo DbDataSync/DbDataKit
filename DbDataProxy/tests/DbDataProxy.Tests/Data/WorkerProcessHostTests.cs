@@ -117,7 +117,14 @@ public sealed class WorkerProcessHostTests
         // an ordinary child of this test process is not.
         Assert.True(InAnyJob(worker), "the worker was not assigned to a job object");
         using var plain = Process.Start(new ProcessStartInfo("ping.exe", "-n 20 127.0.0.1") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true })!;
-        try { Assert.False(InAnyJob(plain)); }
+        try
+        {
+            // GitHub Actions (and other CI) run every step inside a job object, and a child inherits its parent's job, so
+            // "an ordinary child is in no job" only holds when this test process is not itself in one.
+            using var self = Process.GetCurrentProcess();
+            if (!InAnyJob(self))
+                Assert.False(InAnyJob(plain));
+        }
         finally { plain.Kill(true); }
     }
 
