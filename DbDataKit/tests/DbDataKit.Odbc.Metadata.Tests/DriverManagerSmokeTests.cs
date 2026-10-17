@@ -25,10 +25,20 @@ public class DriverManagerSmokeTests
         var ex = await Assert.ThrowsAsync<OdbcCatalogException>(() => catalog.TablesAsync());
 
         Assert.Equal("SQLDriverConnect", ex.Function);
-        Assert.Equal("IM002", ex.SqlState);
         Assert.False(ex.NotSupported);
         Assert.DoesNotContain("No Such Driver", ex.Message);
-        Assert.Contains("word size", OdbcDiagnostics.Explain(ex).ToString());
+
+        // The Windows driver manager reports IM002 for a driver name it does not know and the library explains it as a
+        // word-size mismatch. unixODBC reports 01000 ("can't open lib") for the same input, so there is no IM002 to explain.
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Equal("IM002", ex.SqlState);
+            Assert.Contains("word size", OdbcDiagnostics.Explain(ex).ToString());
+        }
+        else
+        {
+            Assert.Equal("01000", ex.SqlState);
+        }
     }
 
     [Fact]

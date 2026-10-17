@@ -318,4 +318,32 @@ public class PlanTests
         Assert.Equal(1, args.Count(a => a == "--source"));
         Assert.Equal(plan.Source, args[args.ToList().IndexOf("--source") + 1]);
     }
+
+    [Theory]
+    [InlineData("win-x64")]
+    [InlineData("win10-x64")]
+    [InlineData("linux-x64")]
+    [InlineData("linux-musl-arm64")]
+    [InlineData("osx-arm64")]
+    [InlineData("osx.14-arm64")]
+    [InlineData("ubuntu.24.04-x64")]   // what a distro-packaged .NET on Ubuntu reports as its own RID
+    [InlineData("alpine.3.20-x64")]
+    [InlineData("debian.12-x64")]
+    [InlineData("rhel.9-x64")]
+    public void Real_runtime_identifiers_are_accepted_including_distro_specific_ones(string rid) =>
+        LibraryValidation.ValidateRuntimeIdentifier(rid);
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("../linux-x64")]
+    [InlineData("linux x64")]
+    [InlineData("Linux-x64")]
+    [InlineData("linux-x64;rm")]
+    [InlineData("ubuntu..24-x64")]
+    [InlineData("ubuntu.24.-x64")]
+    [InlineData(".24-x64")]
+    [InlineData("a/b")]
+    [InlineData("a\\b")]
+    public void Things_that_are_not_runtime_identifiers_are_refused(string rid) =>
+        Assert.Throws<LibraryValidationException>(() => LibraryValidation.ValidateRuntimeIdentifier(rid));
 }
