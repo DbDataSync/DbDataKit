@@ -31,6 +31,8 @@ defaults:
 jobs:
   release:
     runs-on: windows-latest
+    # Observed: 3 minutes. The ceiling fails a hung build fast instead of after GitHub's six-hour default.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
