@@ -1,0 +1,133 @@
+name: DbDataProxy release
+
+# Cut a release by dispatching this against dbdataproxy/test:
+#
+#   gh workflow run dbdataproxy-release.yml --ref dbdataproxy/test -f beta=false
+#
+# Same model as dbdatasync-release.yml (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md), on the built-in GITHUB_TOKEN. It refuses
+# unless dbdataproxy/test has a green CI run and `main` is already an ancestor of it, packages the Windows zip, tags the commit
+# dbdataproxy/v<version>, publishes a GitHub Release in THIS repository (zip, SHA256SUMS, install.ps1), then merges into main
+# and back into every <product>/dev through the shared merge-release action.
+#
+# The version is CalVer, YYYY.M.D.HHmm from the UTC clock, like every product.
+
+on:
+  workflow_dispatch:
+    inputs:
+      beta:
+        description: Publish as a prerelease (-beta suffix on the version, prerelease flag on the GitHub Release).
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: write
+  issues: write
+
+defaults:
+  run:
+    working-directory: DbDataProxy
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Refuse to release from anything but dbdataproxy/test
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF_NAME" != "dbdataproxy/test" ]; then
+            echo "::error::dbdataproxy-release.yml must be dispatched against 'dbdataproxy/test' (got '$GITHUB_REF_NAME'). See docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md."
+            exit 1
+          fi
+
+      # main moves by MERGE, so it is not an ancestor of every released commit by construction. Requiring it keeps the merge
+      # conflict-free: every product's released state, and every shared-code change, must already be in this lane first.
+      - name: Require main to be an ancestor of dbdataproxy/test
+        shell: bash
+        working-directory: .
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor origin/main "$GITHUB_SHA"; then
+            echo "::error::main has commits that dbdataproxy/test does not. Another product has released since this lane last synced. Its back-merge into dbdataproxy/dev, and that branch's promotion to dbdataproxy/test, must land first."
+            exit 1
+          fi
+
+      - name: Require a green CI run for this exact commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          green=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&status=success" \
+            --jq '[.workflow_runs[] | select(.name == "DbDataProxy CI")] | length')
+          echo "successful CI runs for $GITHUB_SHA: $green"
+          if [ "$green" -lt 1 ]; then
+            echo "::error::No successful CI run for $GITHUB_SHA. Releasing a commit whose CI has not passed is exactly what this check exists to prevent."
+            exit 1
+          fi
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: DbDataProxy/global.json
+
+      - name: Compute the version
+        id: version
+        shell: bash
+        env:
+          BETA: ${{ inputs.beta }}
+        run: |
+          IFS=. read -r y m d hm <<< "$(date -u +%Y.%m.%d.%H%M)"
+          version="$((10#$y)).$((10#$m)).$((10#$d)).$((10#$hm))"
+          prerelease=false
+          if [ "$BETA" = "true" ]; then
+            version="${version}-beta"
+            prerelease=true
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      - name: Package
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: ./build/package.ps1 -Version $env:VERSION
+
+      # After the package is built, not before: a tag is a claim that this version shipped, so a failed run leaves nothing to clean up.
+      - name: Tag this commit with the released version
+        shell: bash
+        working-directory: .
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git tag "dbdataproxy/v$VERSION"
+          git push origin "refs/tags/dbdataproxy/v$VERSION"
+
+      - name: Publish the GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          prerelease_flag=()
+          [ "$PRERELEASE" = "true" ] && prerelease_flag=(--prerelease)
+          # --latest=false: "latest" is one marker for the whole repository, not one per product.
+          gh release create "dbdataproxy/v$VERSION" \
+            --verify-tag \
+            --latest=false \
+            --title "DbDataProxy $VERSION" \
+            --notes "DbDataProxy $VERSION, packed from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA. The version is the UTC date and time this release was built." \
+            "${prerelease_flag[@]}" \
+            artifacts/release/* scripts/install.ps1
+
+      - name: Merge into main and back into every dev branch
+        uses: ./.github/actions/merge-release
+        with:
+          product: dbdataproxy
+          version: ${{ steps.version.outputs.version }}
+          sha: ${{ github.sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
