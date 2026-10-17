@@ -1,0 +1,10 @@
+# The shared libraries' suite. DBDATA_TEST_SQLSERVER is a full connection string for the SqlServer and Transfer tests; the ODBC
+# metadata tests take the server, user and password separately (see SqlServerCatalogTests), so they get their own variables.
+DBDATA_TEST_SQLSERVER           <- DBKIT_TEST_MSSQL
+DBDATA_TEST_SQLSERVER_SERVER    <- DBKIT_TEST_MSSQL_SERVER
+DBDATA_TEST_SQLSERVER_USER      <- DBKIT_TEST_MSSQL_USER
+DBDATA_TEST_SQLSERVER_PASSWORD  <- DBKIT_TEST_MSSQL_PASSWORD
+DBDATA_TEST_ODBC                <- DBKIT_TEST_MSSQL_ODBC
+DBDATA_TEST_POSTGRES            <- DBKIT_TEST_POSTGRES
+# Engines the job started are required: a server that does not answer fails the run instead of skipping its tests.
+DBDATA_REQUIRE_SQLSERVER = true if DBKIT_TEST_MSSQL

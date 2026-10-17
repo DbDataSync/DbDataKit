@@ -29,6 +29,7 @@ jobs:
   # Is there anything here that the suite has not already validated? Compared with dbdataproxy/test, the last promoted commit.
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       build: ${{ steps.diff.outputs.build }}
       shared: ${{ steps.diff.outputs.shared }}
@@ -58,7 +59,7 @@ jobs:
           if git rev-parse --verify --quiet "$base" >/dev/null; then
             changed=$(git diff --name-only "$base"...HEAD)
             echo "changed since $base:"; echo "$changed"
-            echo "$changed" | grep -qE '^(DbDataProxy/|DbDataKit/|\.github/(workflows/(dbdataproxy-|_)|actions/))' || build=false
+            echo "$changed" | grep -qE '^(DbDataProxy/|DbDataKit/|testenv/|\.github/(workflows/(dbdataproxy-|_)|actions/))' || build=false
             echo "$changed" | grep -q '^DbDataKit/' || shared=false
           else
             echo "::notice::$base does not exist yet, so everything is treated as changed."
@@ -78,6 +79,8 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: windows-latest
+    # Observed: 3 minutes (the installer tests add a little). The ceiling fails a hung test fast.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -97,35 +100,28 @@ jobs:
           pwsh -NoProfile -File scripts/install.tests.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
-  # Linux against a real SQL Server (the ODBC and SqlClient paths), plus everything that is not Windows-specific.
+  # Linux against a real SQL Server (the ODBC and SqlClient paths), plus everything that is not Windows-specific. The server is the
+  # shared one from testenv/, the same SQL Server the shared libraries' live tests use.
   linux:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
-    services:
-      mssql:
-        image: mcr.microsoft.com/mssql/server:2022-latest
-        env:
-          ACCEPT_EULA: 'Y'
-          MSSQL_SA_PASSWORD: Dbproxy-Ci-Passw0rd
-        ports:
-          - 1433:1433
-        options: >-
-          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P $MSSQL_SA_PASSWORD -Q 'SELECT 1' -b"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 30
-          --health-start-period 15s
-    env:
-      DBPROXY_TEST_SQLSERVER: localhost,1433
-      DBPROXY_TEST_SQLSERVER_USER: sa
-      DBPROXY_TEST_SQLSERVER_PASSWORD: Dbproxy-Ci-Passw0rd
-      DBPROXY_REQUIRE_SQLSERVER: 'true'
+    # Observed: 1.5 minutes. Starting the engine adds a minute.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: DbDataProxy/global.json
+      - name: Test the test-environment scripts
+        working-directory: .
+        run: testenv/selftest.sh
+      - name: Start SQL Server (shared test engines)
+        working-directory: .
+        run: testenv/testenv.sh up mssql
+      - name: Point the suite at it
+        working-directory: .
+        run: testenv/testenv.sh env dbdataproxy --dotenv >> "$GITHUB_ENV"
       - name: Install the SQL Server ODBC driver
         run: |
           curl -sSL -O "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb"
@@ -134,6 +130,10 @@ jobs:
           sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
       - run: dotnet build -c Release
       - run: dotnet test --project tests/DbDataProxy.Tests -c Release --no-build --minimum-expected-tests 100
+      - name: Stop the shared engines
+        if: always()
+        working-directory: .
+        run: testenv/testenv.sh down
 
   # dbdataproxy/dev -> dbdataproxy/test, on a green run. Nobody pushes to dbdataproxy/test; this is the only thing that moves it,
   # and it fast-forwards to the exact commit this run validated. Only a run on dbdataproxy/dev itself promotes: a manual run on
@@ -143,6 +143,7 @@ jobs:
     needs: [changes, dbdatakit, windows, linux]
     if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/dbdataproxy/dev' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     concurrency:
       group: dbdataproxy-promote
       cancel-in-progress: false

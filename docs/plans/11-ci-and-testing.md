@@ -115,6 +115,20 @@ rather than skips when they are missing (the Proxy's `DBPROXY_REQUIRE_SQLSERVER`
 Cancel superseded PR runs (not `dev` pushes); the existing `changes` job keeps unrelated lanes from running; image pulls
 and the NuGet cache are cached; the shared libraries' job runs once per lane push, not once per product.
 
+## Implemented: `testenv/` (phase 2, first slice)
+
+`testenv/docker-compose.yml` has a profile per engine; so far `mssql` (port 14330) and `postgres` (port 15432).
+`testenv/testenv.sh` drives it: `up [engines]`, `down`, `status`, and `env [product] [--dotenv]`.
+
+- **Canonical variables**, each emitted only while its engine is running: `DBKIT_TEST_MSSQL`, `DBKIT_TEST_MSSQL_SERVER`,
+  `_USER`, `_PASSWORD`, `_ODBC`; `DBKIT_TEST_POSTGRES`, `DBKIT_TEST_POSTGRES_HOST`, `_PORT`, `_USER`, `_PASSWORD`, `_DB`.
+- **Mapping files** (`testenv/env/<product>.map`) re-export the canonical values under the names a suite already reads.
+  Line forms: `TARGET <- SOURCE` and `TARGET = literal if SOURCE`. Present: `dbdataproxy`, `dbdatakit`.
+- `testenv/selftest.sh` checks the generation and mappings without Docker (17 checks).
+- Wired into: the Proxy Linux job (replaces its `services:` container) and `_dbdatakit.yml` (opt-in `engines` input).
+  The lane gates keep `engines` off until a manual dispatch with `engines=true` shows the live tests green.
+- Every workflow job now has a `timeout-minutes`.
+
 ## Rollout
 
 | phase | what | state |
