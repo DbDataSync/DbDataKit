@@ -2,8 +2,8 @@
   <!--
     Shared DbDataKit.* libraries are declared in project files as <DbDataKitReference Include="Odbc.Metadata" /> (the package
     id without the DbDataKit. prefix). By default each becomes a PackageReference (version from Directory.Packages.props);
-    in local-source mode (UseLocalDbDataKit=true, on automatically while the hub checkout sits next to this repo) each becomes
-    a ProjectReference into DbDataKit/shared. Set -p:UseLocalDbDataKit=false to restore from the feed.
+    in local-source mode (UseLocalDbDataKit=true, on automatically in the monorepo, where DbDataKit/ sits next to this folder) each becomes
+    a ProjectReference into the sibling DbDataKit/ folder. Set -p:UseLocalDbDataKit=false to restore from the feed.
   -->
   <ItemGroup Condition="'$(UseLocalDbDataKit)' != 'true'">
     <PackageReference Include="@(DbDataKitReference->'DbDataKit.%(Identity)')" />

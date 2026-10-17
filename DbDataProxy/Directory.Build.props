@@ -7,8 +7,8 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
   <PropertyGroup>
-    <!-- Hub checkout layout: DbDataKit/DbDataProxy next to DbDataKit/shared. -->
-    <DbDataKitRoot Condition="'$(DbDataKitRoot)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', 'shared'))</DbDataKitRoot>
+    <!-- Monorepo layout: DbDataProxy/ and DbDataKit/ (the shared libraries) are sibling folders at the repository root. -->
+    <DbDataKitRoot Condition="'$(DbDataKitRoot)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', 'DbDataKit'))</DbDataKitRoot>
     <DbDataKitRoot>$([MSBuild]::EnsureTrailingSlash('$(DbDataKitRoot)'))</DbDataKitRoot>
     <UseLocalDbDataKit Condition="'$(UseLocalDbDataKit)' == '' and Exists('$(DbDataKitRoot)src')">true</UseLocalDbDataKit>
   </PropertyGroup>

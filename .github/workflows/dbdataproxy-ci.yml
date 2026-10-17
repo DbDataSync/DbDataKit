@@ -1,9 +1,21 @@
-name: CI
+name: DbDataProxy CI
 
+# Ported from DbDataProxy/.github/workflows/ci.yml. Runs when this product or the shared libraries it builds against
+# (DbDataKit/, consumed through project references at the same commit) change. Branch lanes and the release
+# workflow follow docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md and are not set up for the Proxy yet.
 on:
   push:
-    branches: [main]
+    branches: [main, dbdataproxy/dev]
+    paths: ['DbDataProxy/**', 'DbDataKit/**', '.github/workflows/dbdataproxy-ci.yml']
   pull_request:
+    paths: ['DbDataProxy/**', 'DbDataKit/**', '.github/workflows/dbdataproxy-ci.yml']
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: DbDataProxy
 
 jobs:
   # Windows: the 32-bit worker, the Microsoft Text ODBC driver and the packaging need a Windows runner.
@@ -13,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          global-json-file: global.json
+          global-json-file: DbDataProxy/global.json
       - run: dotnet build -c Release
       # Fails if fewer tests than expected ran (a discovery or filter problem would otherwise look like a pass).
       - run: dotnet test --project tests/DbDataProxy.Tests -c Release --no-build --minimum-expected-tests 100
@@ -49,7 +61,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          global-json-file: global.json
+          global-json-file: DbDataProxy/global.json
       - name: Install the SQL Server ODBC driver
         run: |
           curl -sSL -O "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb"
