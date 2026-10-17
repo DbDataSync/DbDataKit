@@ -1,0 +1,82 @@
+name: Repo CI
+
+# The repo-wide lane: dev -> test -> main (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md). Shared DbDataKit changes and
+# cross-cutting changes (testenv/, workflows, build files) go through here so every product is proven against them in lock step.
+# The per-product lanes (<product>/dev -> <product>/test) stay for product-only work.
+#
+# No change detection: every run exercises the shared libraries once and every product's full suite, by calling the product
+# workflows with `all`. `promote` (the last job, built-in GITHUB_TOKEN) fast-forwards `test` to the commit this run validated.
+# A push made with GITHUB_TOKEN starts no workflow, so anything that merges into `dev` from a pipeline dispatches this by hand.
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+    inputs:
+      engines:
+        description: Start the shared SQL Server and PostgreSQL engines (testenv/) for the shared libraries' live tests.
+        type: boolean
+        default: false
+
+# A newer push to a PR supersedes the older run; runs on dev always complete (each one promotes).
+concurrency:
+  group: repo-ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  dbdatakit:
+    uses: ./.github/workflows/_dbdatakit.yml
+    with:
+      engines: ${{ inputs.engines || false }}
+
+  # The product workflows' own `promote` jobs are skipped here (github.ref is `dev`, not <product>/dev), but a called workflow
+  # may not ask for more permission than its caller grants, and those jobs declare contents: write.
+  dbdatasync:
+    uses: ./.github/workflows/dbdatasync-ci.yml
+    with:
+      all: true
+      shared: false
+    permissions:
+      contents: write
+
+  dbdataproxy:
+    uses: ./.github/workflows/dbdataproxy-ci.yml
+    with:
+      all: true
+      shared: false
+    permissions:
+      contents: write
+
+  # dev -> test, on a green run. Nobody pushes to test; this is the only thing that moves it. It fast-forwards to the exact
+  # commit this run validated (github.sha), not to whatever the branch tip is by now.
+  promote:
+    needs: [dbdatakit, dbdatasync, dbdataproxy]
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/dev' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: repo-promote
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Fast-forward test to this commit
+        run: |
+          git fetch origin test
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/test; then
+            echo "::notice::test already contains $GITHUB_SHA — nothing to promote."
+          elif git merge-base --is-ancestor origin/test "$GITHUB_SHA"; then
+            git push origin "$GITHUB_SHA:refs/heads/test"
+          else
+            echo "::error::test has commits dev doesn't — refusing to fast-forward over them. It may have been pushed to directly; investigate before retrying."
+            exit 1
+          fi

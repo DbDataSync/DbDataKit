@@ -102,6 +102,25 @@ runs:
           fi
         done
 
+        # The repo-wide lane (dev -> test, repo-ci.yml) gets the same merge, and its CI promotes it to test.
+        if git rev-parse --verify --quiet origin/dev >/dev/null; then
+          git switch --detach origin/dev
+          if ! git merge-base --is-ancestor "$MAIN_SHA" HEAD; then
+            if git merge --no-ff -m "Merge main into dev after $PRODUCT $VERSION" "$MAIN_SHA"; then
+              if git push origin "HEAD:refs/heads/dev"; then
+                if git cat-file -e "$MAIN_SHA:.github/workflows/repo-ci.yml" 2>/dev/null; then
+                  gh workflow run repo-ci.yml --ref dev || failed+=("dev (CI dispatch)")
+                fi
+              else
+                failed+=("dev (push)")
+              fi
+            else
+              git merge --abort
+              failed+=("dev (conflict)")
+            fi
+          fi
+        fi
+
         if [ "${#failed[@]}" -gt 0 ]; then
           printf '%s\n' "${failed[@]}" > "$RUNNER_TEMP/failed-backmerges.txt"
           gh issue create \

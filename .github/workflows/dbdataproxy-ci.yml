@@ -17,6 +17,18 @@ on:
         description: Run every job, including the shared DbDataKit tests, whatever changed.
         type: boolean
         default: false
+  # Called by repo-ci.yml (the repo-wide dev -> test lane), which runs every suite whatever changed and runs the shared
+  # DbDataKit job itself once. `promote` is skipped there: github.ref is the caller's ref, not dbdataproxy/dev.
+  workflow_call:
+    inputs:
+      all:
+        description: Run every job, including the shared DbDataKit tests, whatever changed.
+        type: boolean
+        default: false
+      shared:
+        description: Run the shared DbDataKit tests (false when the caller runs them).
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -43,10 +55,11 @@ jobs:
           EVENT: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
           ALL: ${{ inputs.all }}
+          SHARED: ${{ inputs.shared }}
         run: |
-          if [ "$EVENT" = "workflow_dispatch" ] && [ "$ALL" = "true" ]; then
+          if [ "$ALL" = "true" ]; then
             echo "build=true" >> "$GITHUB_OUTPUT"
-            echo "shared=true" >> "$GITHUB_OUTPUT"
+            if [ "$SHARED" = "false" ]; then echo "shared=false" >> "$GITHUB_OUTPUT"; else echo "shared=true" >> "$GITHUB_OUTPUT"; fi
             exit 0
           fi
           if [ "$EVENT" = "pull_request" ]; then
