@@ -136,11 +136,12 @@ jobs:
       - run: dotnet test --project tests/DbDataProxy.Tests -c Release --no-build --minimum-expected-tests 100
 
   # dbdataproxy/dev -> dbdataproxy/test, on a green run. Nobody pushes to dbdataproxy/test; this is the only thing that moves it,
-  # and it fast-forwards to the exact commit this run validated. Skipped suites count as passing: `changes` decided they were
+  # and it fast-forwards to the exact commit this run validated. Only a run on dbdataproxy/dev itself promotes: a manual run on
+  # any other branch (a pull request's, say) is a test run, and must never move test. Skipped suites count as passing: `changes` decided they were
   # not needed.
   promote:
     needs: [changes, dbdatakit, windows, linux]
-    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/heads/') && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/dbdataproxy/dev' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
     concurrency:
       group: dbdataproxy-promote
