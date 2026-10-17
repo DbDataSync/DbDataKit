@@ -15,6 +15,7 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 06 | [Connections / providers](06-connections.md) | Sync `IDriver`, Proxy `IDbProvider`, Build logins | One definition, composer, read-only recipes, failure model |
 | 07 | [Data transfer, staging, loading](07-data-transfer.md) | Sync pipeline, Build copy models | Shared converters, bulk writers, strategies, write gate |
 | 08 | [Install and update](08-update-system.md) | Sync Updates, Proxy install.ps1, Build Scoop | Signed manifest, service swap with rollback |
+| 09 | [Monorepo branching, CI, releases](09-MONOREPO-BRANCHING-AND-RELEASES.md) | DbDataSync model, per-product lanes | Per-product dev/test, main as integration |
 
 ## Dependency graph
 
