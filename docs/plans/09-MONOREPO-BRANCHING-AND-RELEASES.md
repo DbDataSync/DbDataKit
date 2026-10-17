@@ -19,8 +19,10 @@ products in one repository.
   Each product owns its own `docs/`.
 - **Container images are named per product** (`ghcr.io/<owner>/dbdatasync`, ...). Where the image workflow lives
   (here or in a product repo) doesn't matter to the name; for now it lives here with the product's release.
-- **`DbDataKit/` has no lane of its own.** Shared code is changed through the product branches, like any other
-  code (see "Shared code" below).
+- **`DbDataKit/` has no lane of its own, but the repo does.** Product-only work goes through the product lanes.
+  Shared code and cross-cutting changes (`DbDataKit/`, `testenv/`, shared workflows, build files) go through the
+  repo-wide lane `dev` -> `test` -> `main`, so every product is proven against them in lock step (see "Repo-wide
+  lane" below).
 - **All products use CalVer** (`YYYY.MM.DD.HHmm`, as DbDataSync does). Proxy's and Build's existing semver
   tags and versions are not carried forward; there is no alias or mapping.
 - **Back-merge is immediate**: a release merges `main` into the other products' `dev` branches as its last step.
@@ -108,6 +110,23 @@ Repository rulesets, carried over from DbDataSync with wildcard patterns:
 The **DbDataSync Pipelines** GitHub App (id 5026881) is currently installed on the DbDataSync repo only. It
 must be installed on this repo (Contents: read/write) before any ruleset is enabled. Follow DbDataSync's
 "ordering trap" lesson: land the workflows first, lock `main` first, `*/test` last.
+
+## Repo-wide lane
+
+`dev` and `test` (no prefix) are the repo's own lane, for changes that must land everywhere at once.
+
+```
+dev ──repo-ci.yml green──► test ──(PR, merge commit)──► main ──back-merge──► every <product>/dev
+```
+
+- `repo-ci.yml` runs on every push and pull request to `dev`. It has no `changes` job: it runs the shared DbDataKit
+  suite once and calls each product's CI workflow (`workflow_call`, input `all: true`, `shared: false`), so every
+  product's full suite runs whatever changed. Its last job fast-forwards `test` to the commit it validated.
+- The product workflows' own `promote` jobs are skipped when called (`github.ref` is `dev`, not `<product>/dev`).
+- `test` reaches `main` by a pull request merged with a merge commit, until a release workflow owns that step. Product
+  releases still cut from `<product>/test`; a release's back-merge now also covers `dev`.
+- Lanes meet at `main`: after `test` is merged, `main` is merged back into every `<product>/dev` and `dev`.
+- Cost: a push to `dev` runs everything, including DbDataSync's Windows, integration and Playwright suites.
 
 ## CI
 
