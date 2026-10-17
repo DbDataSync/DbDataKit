@@ -1,0 +1,30 @@
+name: Release
+
+# Push a tag such as v1.2.3 to build, test and publish a GitHub release.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet test -c Release
+      - name: Package
+        shell: pwsh
+        run: ./build/package.ps1 -Version ('${{ github.ref_name }}'.TrimStart('v'))
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $prerelease = if ('${{ github.ref_name }}' -match '-') { '--prerelease' } else { $null }
+          gh release create '${{ github.ref_name }}' artifacts/release/* scripts/install.ps1 `
+            --title '${{ github.ref_name }}' --generate-notes $prerelease
