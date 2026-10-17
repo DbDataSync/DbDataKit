@@ -216,10 +216,131 @@ public class DuckDbTests
     }
 
     [Fact]
+    public async Task Writes_and_setting_changes_in_the_sandbox_are_permission_failures()
+    {
+        using var dir = new TempDir();
+        await using var c = await new DuckDbProvider().OpenAsync(Ctx(MakeDatabase(dir)));
+        var mapper = new DuckDbFailureMapper();
+        foreach (var sql in new[] { "INSERT INTO t VALUES (4)", "SET enable_external_access = true" })
+        {
+            var ex = Assert.IsAssignableFrom<Exception>(await TryRun(c, sql));
+            Assert.Equal(ConnectionFailureKind.Permission, mapper.Map(ex, DbDataKit.Dialect.EngineId.DuckDb)!.Kind);
+        }
+    }
+
+    [Fact]
+    public async Task Connections_to_the_same_file_can_be_open_together_and_all_stay_sandboxed()
+    {
+        // DuckDB.NET shares one database instance per file, and the lock is a setting of that instance: a second query while the first is still streaming
+        // used to fail on its first SET.
+        using var dir = new TempDir();
+        string db = MakeDatabase(dir);
+        string secret = dir.File("secret.csv");
+        await File.WriteAllTextAsync(secret, "a\n1\n");
+        var provider = new DuckDbProvider();
+
+        await using var first = await provider.OpenAsync(Ctx(db));
+        await using var second = await provider.OpenAsync(Ctx(db));
+        await using var third = await provider.OpenAsync(Ctx(db));
+        foreach (var c in new[] { first, second, third })
+        {
+            Assert.Null(await TryRun(c, "SELECT sum(x) FROM t"));
+            Assert.NotNull(await TryRun(c, $"SELECT * FROM read_csv('{secret.Replace('\\', '/')}')"));
+            Assert.NotNull(await TryRun(c, "INSERT INTO t VALUES (4)"));
+            Assert.NotNull(await TryRun(c, "SET enable_external_access = true"));
+        }
+    }
+
+    [Fact]
+    public async Task A_second_connection_with_other_allowed_directories_fails_closed_instead_of_inheriting_the_first()
+    {
+        using var dir = new TempDir();
+        string db = MakeDatabase(dir);
+        string a = System.IO.Path.Combine(dir.Path, "a");
+        string b = System.IO.Path.Combine(dir.Path, "b");
+        Directory.CreateDirectory(a);
+        Directory.CreateDirectory(b);
+
+        await using var first = await new DuckDbProvider(new DuckDbSandboxOptions { AllowedDirectories = [a] }).OpenAsync(Ctx(db));
+        await using var same = await new DuckDbProvider(new DuckDbSandboxOptions { AllowedDirectories = [a] }).OpenAsync(Ctx(db));
+        var other = await Assert.ThrowsAsync<ConnectionPolicyException>(async () => await new DuckDbProvider(new DuckDbSandboxOptions { AllowedDirectories = [b] }).OpenAsync(Ctx(db)));
+        Assert.Contains("different sandbox", other.Message);
+        await Assert.ThrowsAsync<ConnectionPolicyException>(async () => await new DuckDbProvider().OpenAsync(Ctx(db)));
+    }
+
+    [Fact]
+    public async Task Raw_failure_text_is_kept_only_when_asked_for_and_never_in_the_public_message()
+    {
+        using var dir = new TempDir();
+        var missing = Ctx(dir.File("missing.duckdb"));
+        var plain = await Assert.ThrowsAsync<ConnectionFailureException>(async () => await new DuckDbProvider().OpenAsync(missing));
+        Assert.Null(plain.Failure.Raw);
+
+        var redactor = new DbDataKit.Secrets.Redactor();
+        redactor.Register("missing.duckdb");
+        var raw = await Assert.ThrowsAsync<ConnectionFailureException>(async () => await new DuckDbProvider(redactor: redactor, includeRawFailures: true).OpenAsync(missing));
+        Assert.NotNull(raw.Failure.Raw);
+        Assert.DoesNotContain("missing.duckdb", raw.Failure.Raw, StringComparison.Ordinal);
+        Assert.DoesNotContain(dir.Path, raw.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Test_connection_works()
     {
         using var dir = new TempDir();
         var r = await new DuckDbProvider().TestAsync(Ctx(MakeDatabase(dir)));
         Assert.True(r.Success, r.Failure?.ToString());
+    }
+
+    // ---- AllowedDirectories: a deliberate exception, not a blanket off -------------------------------
+
+    [Fact]
+    public async Task Allowed_directories_permit_reads_below_them_and_nothing_else()
+    {
+        using var dir = new TempDir();
+        string db = MakeDatabase(dir);
+        string data = System.IO.Path.Combine(dir.Path, "lake");
+        string elsewhere = System.IO.Path.Combine(dir.Path, "private");
+        Directory.CreateDirectory(data);
+        Directory.CreateDirectory(elsewhere);
+        await File.WriteAllTextAsync(System.IO.Path.Combine(data, "ok.csv"), "a,b\n1,2\n");
+        await File.WriteAllTextAsync(System.IO.Path.Combine(elsewhere, "no.csv"), "a,b\n1,2\n");
+        string F(string p) => p.Replace('\\', '/');
+
+        var provider = new DuckDbProvider(new DuckDbSandboxOptions { AllowedDirectories = [data] });
+        await using var c = await provider.OpenAsync(Ctx(db));
+
+        Assert.Null(await TryRun(c, $"SELECT * FROM read_csv('{F(System.IO.Path.Combine(data, "ok.csv"))}')"));
+        Assert.NotNull(await TryRun(c, $"SELECT * FROM read_csv('{F(System.IO.Path.Combine(elsewhere, "no.csv"))}')"));
+        Assert.NotNull(await TryRun(c, $"ATTACH '{F(System.IO.Path.Combine(elsewhere, "x.duckdb"))}' AS o"));
+        Assert.NotNull(await TryRun(c, "INSTALL httpfs"));
+        Assert.NotNull(await TryRun(c, "SET allowed_directories = []"));
+        Assert.NotNull(await TryRun(c, "SET enable_external_access = true"));
+        Assert.NotNull(await TryRun(c, "INSERT INTO t VALUES (4)"));
+    }
+
+    [Theory]
+    [InlineData("relative/dir")]
+    [InlineData("")]
+    public void Allowed_directories_must_be_absolute_and_clean(string directory) =>
+        Assert.Throws<ConnectionPolicyException>(() => DuckDbProvider.AllowedDirectoriesStatement([directory]));
+
+    [Fact]
+    public void Allowed_directory_quotes_are_doubled()
+    {
+        string root = OperatingSystem.IsWindows() ? "C:/" : "/";
+        Assert.Equal($"SET allowed_directories = ['{root}it''s']", DuckDbProvider.AllowedDirectoriesStatement([root + "it's"]));
+    }
+
+    [Fact]
+    public async Task An_in_memory_database_works_read_only_with_the_rest_of_the_recipe()
+    {
+        var p = new DuckDbProvider();
+        var ctx = Ctx(":memory:");
+        Assert.DoesNotContain("access_mode", p.Composer.Compose(ctx), StringComparison.OrdinalIgnoreCase);
+        await using var c = await p.OpenAsync(ctx);
+        Assert.Null(await TryRun(c, "SELECT 1"));
+        Assert.NotNull(await TryRun(c, "INSTALL httpfs"));
+        Assert.NotNull(await TryRun(c, "SET enable_external_access = true"));
     }
 }

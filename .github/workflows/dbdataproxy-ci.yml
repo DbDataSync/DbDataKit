@@ -1,0 +1,73 @@
+name: DbDataProxy CI
+
+# Ported from DbDataProxy/.github/workflows/ci.yml. Runs when this product or the shared libraries it builds against
+# (DbDataKit/, consumed through project references at the same commit) change. Branch lanes and the release
+# workflow follow docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md and are not set up for the Proxy yet.
+on:
+  push:
+    branches: [main, dbdataproxy/dev]
+    paths: ['DbDataProxy/**', 'DbDataKit/**', '.github/workflows/dbdataproxy-ci.yml']
+  pull_request:
+    paths: ['DbDataProxy/**', 'DbDataKit/**', '.github/workflows/dbdataproxy-ci.yml']
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: DbDataProxy
+
+jobs:
+  # Windows: the 32-bit worker, the Microsoft Text ODBC driver and the packaging need a Windows runner.
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: DbDataProxy/global.json
+      - run: dotnet build -c Release
+      # Fails if fewer tests than expected ran (a discovery or filter problem would otherwise look like a pass).
+      - run: dotnet test --project tests/DbDataProxy.Tests -c Release --no-build --minimum-expected-tests 100
+      - name: Package (smoke test)
+        run: ./build/package.ps1 -Version 0.0.0-ci
+        shell: pwsh
+
+  # Linux: the SQL Server tests (SqlClient, ODBC, metadata, parameters, pass-through) against a real SQL Server in Docker.
+  # GitHub's Windows runners cannot run Linux containers, hence the separate job. DBPROXY_REQUIRE_SQLSERVER turns an
+  # unreachable server into a failure instead of a skip.
+  sql-server:
+    runs-on: ubuntu-latest
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: Dbproxy-Ci-Passw0rd
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P $MSSQL_SA_PASSWORD -Q 'SELECT 1' -b"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+          --health-start-period 15s
+    env:
+      DBPROXY_TEST_SQLSERVER: localhost,1433
+      DBPROXY_TEST_SQLSERVER_USER: sa
+      DBPROXY_TEST_SQLSERVER_PASSWORD: Dbproxy-Ci-Passw0rd
+      DBPROXY_REQUIRE_SQLSERVER: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: DbDataProxy/global.json
+      - name: Install the SQL Server ODBC driver
+        run: |
+          curl -sSL -O "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb"
+          sudo dpkg -i packages-microsoft-prod.deb
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
+      - run: dotnet build -c Release
+      # Fails if fewer tests than expected ran (a discovery or filter problem would otherwise look like a pass).
+      - run: dotnet test --project tests/DbDataProxy.Tests -c Release --no-build --minimum-expected-tests 100

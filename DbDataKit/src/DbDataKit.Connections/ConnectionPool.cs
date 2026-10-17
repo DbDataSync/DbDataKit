@@ -41,12 +41,12 @@ public interface IConnectionPool : IAsyncDisposable
 public sealed class ConnectionLease : IAsyncDisposable
 {
     private readonly ConnectionPool _pool;
-    private readonly string? _user;
+    private readonly GateTicket _ticket;
     private int _released;
 
-    internal ConnectionLease(ConnectionPool pool, DbConnection connection, string? user, int commandTimeoutSeconds)
+    internal ConnectionLease(ConnectionPool pool, DbConnection connection, GateTicket ticket, int commandTimeoutSeconds)
     {
-        _pool = pool; Connection = connection; _user = user; DefaultCommandTimeoutSeconds = commandTimeoutSeconds;
+        _pool = pool; Connection = connection; _ticket = ticket; DefaultCommandTimeoutSeconds = commandTimeoutSeconds;
     }
 
     public DbConnection Connection { get; }
@@ -66,7 +66,7 @@ public sealed class ConnectionLease : IAsyncDisposable
     }
 
     public ValueTask DisposeAsync() =>
-        Interlocked.Exchange(ref _released, 1) == 0 ? _pool.ReleaseAsync(this, _user) : ValueTask.CompletedTask;
+        Interlocked.Exchange(ref _released, 1) == 0 ? _pool.ReleaseAsync(this, _ticket) : ValueTask.CompletedTask;
 }
 
 /// <summary>
@@ -77,13 +77,11 @@ public sealed class ConnectionPool : IConnectionPool
 {
     private readonly Func<CancellationToken, ValueTask<DbConnection>> _open;
     private readonly ConnectionPoolOptions _o;
-    private readonly SemaphoreSlim _global;
-    private readonly Dictionary<string, SemaphoreSlim> _perUser = [];
+    private readonly ConcurrencyGate _limits;
     private readonly LinkedList<(DbConnection Connection, DateTimeOffset Since)> _idle = new();
     private readonly object _gate = new();
     private readonly ITimer? _timer;
-    private int _active, _waiting;
-    private long _acquired, _created, _reaped, _timeouts, _discarded;
+    private long _acquired, _created, _reaped, _discarded;
     private bool _disposed;
 
     public ConnectionPool(Func<CancellationToken, ValueTask<DbConnection>> open, ConnectionPoolOptions? options = null)
@@ -91,7 +89,7 @@ public sealed class ConnectionPool : IConnectionPool
         _open = open ?? throw new ArgumentNullException(nameof(open));
         _o = options ?? new();
         if (_o.MaxConcurrency < 1) throw new ArgumentOutOfRangeException(nameof(options), "MaxConcurrency must be at least 1.");
-        _global = new SemaphoreSlim(_o.MaxConcurrency, _o.MaxConcurrency);
+        _limits = new ConcurrencyGate(_o.MaxConcurrency, _o.MaxPerUser, _o.AcquireTimeout, _o.TimeProvider);
         if (_o.ReapInterval is { } every) _timer = _o.TimeProvider.CreateTimer(_ => ReapIdle(), null, every, every);
     }
 
@@ -100,47 +98,24 @@ public sealed class ConnectionPool : IConnectionPool
         get
         {
             lock (_gate)
-                return new PoolMetrics(Volatile.Read(ref _active), _idle.Count, Volatile.Read(ref _waiting), Interlocked.Read(ref _acquired),
-                    Interlocked.Read(ref _created), Interlocked.Read(ref _reaped), Interlocked.Read(ref _timeouts), Interlocked.Read(ref _discarded));
+                return new PoolMetrics(_limits.Active, _idle.Count, _limits.Waiting, Interlocked.Read(ref _acquired),
+                    Interlocked.Read(ref _created), Interlocked.Read(ref _reaped), _limits.Timeouts, Interlocked.Read(ref _discarded));
         }
     }
 
     public async ValueTask<ConnectionLease> AcquireAsync(string? userKey = null, CancellationToken ct = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        var started = _o.TimeProvider.GetTimestamp();
-        SemaphoreSlim? user = null;
-        Interlocked.Increment(ref _waiting);
-        try
-        {
-            if (userKey is not null && _o.MaxPerUser is int cap)
-            {
-                lock (_gate) { if (!_perUser.TryGetValue(userKey, out user)) _perUser[userKey] = user = new SemaphoreSlim(cap, cap); }
-                if (!await user.WaitAsync(_o.AcquireTimeout, ct).ConfigureAwait(false)) { Interlocked.Increment(ref _timeouts); throw new PoolAcquireTimeoutException(_o.AcquireTimeout); }
-            }
-            var remaining = _o.AcquireTimeout - _o.TimeProvider.GetElapsedTime(started);
-            if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
-            if (!await _global.WaitAsync(remaining, ct).ConfigureAwait(false))
-            {
-                user?.Release();
-                Interlocked.Increment(ref _timeouts);
-                throw new PoolAcquireTimeoutException(_o.AcquireTimeout);
-            }
-        }
-        catch (OperationCanceledException) { throw; }
-        finally { Interlocked.Decrement(ref _waiting); }
-
+        var ticket = await _limits.EnterAsync(userKey, ct).ConfigureAwait(false);
         try
         {
             var connection = TakeIdle() ?? await OpenNewAsync(ct).ConfigureAwait(false);
-            Interlocked.Increment(ref _active);
             Interlocked.Increment(ref _acquired);
-            return new ConnectionLease(this, connection, userKey, _o.DefaultCommandTimeoutSeconds);
+            return new ConnectionLease(this, connection, ticket, _o.DefaultCommandTimeoutSeconds);
         }
         catch
         {
-            _global.Release();
-            user?.Release();
+            ticket.Dispose();
             throw;
         }
     }
@@ -168,9 +143,8 @@ public sealed class ConnectionPool : IConnectionPool
         }
     }
 
-    internal async ValueTask ReleaseAsync(ConnectionLease lease, string? user)
+    internal async ValueTask ReleaseAsync(ConnectionLease lease, GateTicket ticket)
     {
-        Interlocked.Decrement(ref _active);
         bool keep = !lease.Broken && !_disposed && _o.MaxIdle > 0 && lease.Connection.State == System.Data.ConnectionState.Open;
         if (keep)
         {
@@ -185,13 +159,7 @@ public sealed class ConnectionPool : IConnectionPool
             Interlocked.Increment(ref _discarded);
             await lease.Connection.DisposeAsync().ConfigureAwait(false);
         }
-        _global.Release();
-        if (user is not null)
-        {
-            SemaphoreSlim? s;
-            lock (_gate) _perUser.TryGetValue(user, out s);
-            s?.Release();
-        }
+        ticket.Dispose();
     }
 
     public int ReapIdle()

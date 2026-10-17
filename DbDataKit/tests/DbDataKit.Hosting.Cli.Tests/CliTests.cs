@@ -56,6 +56,47 @@ public class ServiceCommandTests
     }
 
     [Fact]
+    public void Context_start_mode_failure_policy_and_data_dir_mapping_are_applied()
+    {
+        var scm = new InMemoryServiceControlManager();
+        var ctx = new ServiceCommandContext
+        {
+            ServiceName = "Prod",
+            BinaryPath = @"C:\Program Files\Prod\Prod.exe",
+            Layout = DirectoryLayout.ForProduct("Prod", @"C:\PF", @"C:\PD"),
+            PrincipalResolver = _ => new WellKnownPrincipalResolver("S-1-5-80-1"),
+            StartMode = ServiceStartMode.Automatic,
+            Failure = new FailurePolicy([TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5)], TimeSpan.FromDays(1)),
+            DataDirectoryArgument = path => [$"--Prod:DataDirectory={path}"],
+        };
+        var cmd = new ServiceCommand(ctx, scm, new RecordingAcl(), new Elevated(true), null, false, _ => Task.CompletedTask);
+        Assert.Equal(0, cmd.Execute(["install", "--data-dir", @"D:\data"], new BufferConsole()));
+        var cfg = scm.GetConfig("Prod")!;
+        Assert.Equal(ServiceStartMode.Automatic, cfg.StartMode);
+        Assert.Equal(2, cfg.FailureRestartActions);
+        Assert.Contains(@"--Prod:DataDirectory=D:\data", cfg.BinaryPathName);
+        Assert.DoesNotContain("--data-dir", cfg.BinaryPathName);
+    }
+
+    [Fact]
+    public void Failing_to_apply_directory_permissions_is_reported_not_thrown()
+    {
+        var scm = new InMemoryServiceControlManager();
+        var ctx = new ServiceCommandContext
+        {
+            ServiceName = "Prod",
+            BinaryPath = @"C:\Prod\Prod.exe",
+            Layout = DirectoryLayout.ForProduct("Prod", @"C:\PF", @"C:\PD"),
+            PrincipalResolver = _ => throw new ArgumentException("no such account"),
+        };
+        var cmd = new ServiceCommand(ctx, scm, new RecordingAcl(), new Elevated(true), null, true, _ => Task.CompletedTask);
+        var console = new BufferConsole();
+        Assert.Equal(ExitCodes.Failure, cmd.Execute(["install"], console));
+        Assert.NotNull(scm.GetConfig("Prod")); // registered
+        Assert.Contains("run 'service install' again", console.ErrorWriter.ToString());
+    }
+
+    [Fact]
     public void Install_without_elevation_is_refused_but_dry_run_is_fine()
     {
         var (cmd, scm, _) = Make(elevated: false);
@@ -208,6 +249,60 @@ public class CertCommandTests
             var console = new BufferConsole();
             Assert.Equal(ExitCodes.Failure, later.Execute(["check"], console));
             Assert.Contains("ExpiringSoon", console.OutWriter.ToString());
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void Show_is_status_and_renew_replaces_the_certificate_now()
+    {
+        var (cmd, dir, options) = Make();
+        try
+        {
+            Assert.Equal(0, cmd.Execute(["ensure"], new BufferConsole()));
+            var shown = new BufferConsole();
+            Assert.Equal(0, cmd.Execute(["show"], shown));
+            var before = shown.OutWriter.ToString();
+
+            var renewed = new BufferConsole();
+            Assert.Equal(0, cmd.Execute(["renew"], renewed));
+            Assert.Contains("renewed", renewed.OutWriter.ToString());
+
+            var after = new BufferConsole();
+            Assert.Equal(0, cmd.Execute(["show"], after));
+            Assert.NotEqual(before, after.OutWriter.ToString()); // new thumbprint and expiry
+            Assert.Contains("Thumbprint", after.OutWriter.ToString());
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void Renew_is_refused_for_non_self_signed_modes()
+    {
+        var secrets = new InMemorySecretSource();
+        var cmd = new CertCommand(new CertificateOptions { Mode = CertificateMode.Store, Thumbprint = "AB" }, secrets, new CertificateProvider(secrets));
+        Assert.Equal(ExitCodes.Usage, cmd.Execute(["renew"], new BufferConsole()));
+    }
+
+    [Fact]
+    public void Status_reports_a_certificate_that_cannot_be_opened_instead_of_crashing()
+    {
+        var (_, dir, options) = Make();
+        try
+        {
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(options.Path!, "not a pfx");
+            var secrets = new InMemorySecretSource();
+            var cmd = new CertCommand(options, secrets, new CertificateProvider(secrets, fqdnLookup: _ => null));
+            var console = new BufferConsole();
+            Assert.Equal(ExitCodes.Failure, cmd.Execute(["show"], console));
+            Assert.Contains("cannot be opened", console.OutWriter.ToString());
         }
         finally
         {

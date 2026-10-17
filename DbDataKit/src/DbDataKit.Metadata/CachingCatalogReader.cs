@@ -61,7 +61,13 @@ public sealed class CachingCatalogReader(ICatalogReader inner, ICatalogCache cac
 
     public IAsyncEnumerable<string> ListCatalogsAsync(CancellationToken cancellationToken = default) => inner.ListCatalogsAsync(cancellationToken);
 
+    public IAsyncEnumerable<SchemaRef> ListSchemasAsync(CancellationToken cancellationToken = default) => inner.ListSchemasAsync(cancellationToken);
+
     public IAsyncEnumerable<TableRef> ListTablesAsync(TableFilter? filter = null, CancellationToken cancellationToken = default) => inner.ListTablesAsync(filter, cancellationToken);
+
+    /// <summary>Columns are read through the cached shape when there is one, otherwise straight from the inner reader (a columns-only read is cheap and not worth a cache entry).</summary>
+    public async Task<IReadOnlyList<ColumnInfo>> GetColumnsAsync(TableRef table, CancellationToken cancellationToken = default) =>
+        cache.TryGet<TableShape>(Key("shape:" + table.Key), out var hit) ? hit!.Columns : await inner.GetColumnsAsync(table, cancellationToken).ConfigureAwait(false);
 
     public async Task<TableShape> GetShapeAsync(TableRef table, CancellationToken cancellationToken = default)
     {

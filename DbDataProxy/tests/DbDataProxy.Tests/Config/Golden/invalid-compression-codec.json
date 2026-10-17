@@ -1,0 +1,1 @@
+{ "Proxy": { "Compression": { "Mode": "Arrow", "Codec": "gzip" } } }

@@ -1,0 +1,6 @@
+{ "Proxy": { "Users": [
+  { "Name": "a", "PasswordHash": "h", "DataSources": ["*"] },
+  { "Name": "A", "PasswordHash": "h", "DataSources": ["*"] },
+  { "Name": "", "PasswordHash": "h", "DataSources": ["*"] },
+  { "Name": "nohash", "DataSources": ["*"] }
+] } }

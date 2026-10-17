@@ -116,6 +116,15 @@ public sealed class OdbcCatalogReader : ICatalogReader, IAsyncDisposable
 
     // ---- Shapes -----------------------------------------------------------------------------------------------------
 
+    /// <summary>One SQLColumns call, nothing else.</summary>
+    public async Task<IReadOnlyList<ColumnInfo>> GetColumnsAsync(TableRef table, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        var columns = await session.Catalog.ColumnsAsync(table.Catalog, table.Schema, table.Name, cancellationToken).ConfigureAwait(false);
+        if (columns.Count == 0) throw new KeyNotFoundException($"No columns found for {table} (table missing, or not visible to this login).");
+        return columns.Select(Column).ToList();
+    }
+
     public async Task<TableShape> GetShapeAsync(TableRef table, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(table);

@@ -26,7 +26,9 @@ public sealed class SqlServerComposer() : BuilderComposer(EngineId.SqlServer)
 
     protected override void ApplyTls(IKeyBag bag, TlsSpec tls, ConnectionContext ctx)
     {
-        bag.Set("Encrypt", tls.Encrypt ? "Mandatory" : "Optional");
+        // An administrator string that asks for TDS 8.0 (Encrypt=Strict) keeps it: Strict is stronger than Mandatory, never weaker.
+        bool strict = tls.Encrypt && bag.TryGet("Encrypt", out var current) && string.Equals(current, "Strict", StringComparison.OrdinalIgnoreCase);
+        bag.Set("Encrypt", strict ? "Strict" : tls.Encrypt ? "Mandatory" : "Optional");
         bag.Set("Trust Server Certificate", tls.EffectiveVerify ? "False" : "True");
         if (tls.CaFile is not null && tls.EffectiveVerify) bag.Set("Server Certificate", tls.CaFile);
     }
@@ -82,8 +84,11 @@ public sealed class SqlServerProvider : DbProviderBase
         new Dictionary<string, string> { ["Application Intent"] = "ReadOnly" },
         "Routing hint only. Enforce with a read login that has db_datareader and nothing else; ApplicationIntent does not stop writes on a primary.");
 
-    public SqlServerProvider(DialectCatalog? dialects = null)
-        : base(EngineId.SqlServer, new SqlServerComposer(), ReadOnlyRecipe, new SqlServerFailureMapper(), dialects) { }
+    /// <param name="dialects">Dialect catalog; null for the built-in one.</param>
+    /// <param name="redactor">Scrubs the raw driver text kept when <paramref name="includeRawFailures"/> is on.</param>
+    /// <param name="includeRawFailures">Keep the redacted driver text on <c>ConnectionFailure.Raw</c> (local diagnostics only).</param>
+    public SqlServerProvider(DialectCatalog? dialects = null, DbDataKit.Secrets.IRedactor? redactor = null, bool includeRawFailures = false)
+        : base(EngineId.SqlServer, new SqlServerComposer(), ReadOnlyRecipe, new SqlServerFailureMapper(), dialects, redactor, includeRawFailures) { }
 
     protected override DbConnection NewConnection(string connectionString, ConnectionContext context)
     {

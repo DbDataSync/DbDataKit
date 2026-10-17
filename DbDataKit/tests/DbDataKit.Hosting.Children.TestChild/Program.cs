@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using DbDataKit.Hosting.Children;
 
-// Tiny helper child used by the Children tests. Commands: echo | printenv NAME | exit N | sleep FILE | spawn FILE | watch FILE
+// Tiny helper child used by the Children tests. Commands: echo | printenv NAME | exit N | sleep FILE | spawn FILE | watch FILE | chatter N
 var cmd = args.Length > 0 ? args[0] : "";
 switch (cmd)
 {
@@ -18,6 +18,15 @@ switch (cmd)
     }
     case "printenv":
         Console.Out.Write(Environment.GetEnvironmentVariable(args[1]) ?? "<null>");
+        return 0;
+    case "chatter":
+        // Writes more than a pipe buffer holds to both streams, then reports done; blocks forever if nobody drains.
+        for (var i = 0; i < int.Parse(args[1]); i++)
+        {
+            Console.Out.WriteLine("out line " + i);
+            Console.Error.WriteLine("err line " + i);
+        }
+
         return 0;
     case "exit":
         return int.Parse(args[1]);

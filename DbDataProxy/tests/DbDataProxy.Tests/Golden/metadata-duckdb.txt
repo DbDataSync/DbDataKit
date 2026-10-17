@@ -1,0 +1,151 @@
+== GetCatalogs
+schema: catalog_name:utf8
+row: golden
+row: system
+row: temp
+rows: 3
+== GetDbSchemas
+schema: catalog_name:utf8?, db_schema_name:utf8
+row: golden | empty_schema
+row: golden | main
+row: golden | sales
+row: system | information_schema
+row: system | main
+row: system | pg_catalog
+row: temp | main
+rows: 7
+== GetDbSchemas schema=sal%
+schema: catalog_name:utf8?, db_schema_name:utf8
+row: golden | sales
+rows: 1
+== GetDbSchemas schema=no_such_%
+schema: catalog_name:utf8?, db_schema_name:utf8
+rows: 0
+== GetDbSchemas catalog=golden
+schema: catalog_name:utf8?, db_schema_name:utf8
+row: golden | empty_schema
+row: golden | main
+row: golden | sales
+rows: 3
+== GetDbSchemas catalog=missing
+schema: catalog_name:utf8?, db_schema_name:utf8
+rows: 0
+== GetTableTypes
+schema: table_type:utf8
+row: TABLE
+row: VIEW
+rows: 2
+== GetTables
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, table_type:utf8
+row: golden | main | Odd Name | TABLE
+row: golden | main | customers | TABLE
+row: golden | main | fk_child | TABLE
+row: golden | main | nokey | TABLE
+row: golden | main | v_customers | VIEW
+row: golden | sales | orders | TABLE
+row: golden | sales | v_totals | VIEW
+rows: 7
+== GetTables catalog=golden
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, table_type:utf8
+row: golden | main | Odd Name | TABLE
+row: golden | main | customers | TABLE
+row: golden | main | fk_child | TABLE
+row: golden | main | nokey | TABLE
+row: golden | main | v_customers | VIEW
+row: golden | sales | orders | TABLE
+row: golden | sales | v_totals | VIEW
+rows: 7
+== GetTables schema=sales
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, table_type:utf8
+row: golden | sales | orders | TABLE
+row: golden | sales | v_totals | VIEW
+rows: 2
+== GetTables table=c%
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, table_type:utf8
+row: golden | main | customers | TABLE
+rows: 1
+== GetTables table=_ustomers
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, table_type:utf8
+row: golden | main | customers | TABLE
+rows: 1
+== GetTables types=VIEW
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, table_type:utf8
+row: golden | main | v_customers | VIEW
+row: golden | sales | v_totals | VIEW
+rows: 2
+== GetTables types=TABLE
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, table_type:utf8
+row: golden | main | Odd Name | TABLE
+row: golden | main | customers | TABLE
+row: golden | main | fk_child | TABLE
+row: golden | main | nokey | TABLE
+row: golden | sales | orders | TABLE
+rows: 5
+== GetTables types=SYSTEM TABLE
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, table_type:utf8
+rows: 0
+== GetTables include_schema catalog=golden
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, table_type:utf8, table_schema:binary
+row: golden | main | Odd Name | TABLE | {weird col:int32?, x"y:utf8?}
+row: golden | main | customers | TABLE | {id:int32, name:utf8, balance:decimal128(12,2)?, created:timestamp[Microsecond]?, ratio:double?, flag:bool?, day:date32?}
+row: golden | main | fk_child | TABLE | {id:int32, cust:int32?}
+row: golden | main | nokey | TABLE | {a:int32?, b:double?}
+row: golden | main | v_customers | VIEW | {id:int32?, name:utf8?}
+row: golden | sales | orders | TABLE | {order_id:int64, line:int32, sku:utf8?, qty:int32, price:decimal128(10,4)?}
+row: golden | sales | v_totals | VIEW | {order_id:int64?, q:utf8?}
+rows: 7
+== GetTables include_schema schema=sales
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, table_type:utf8, table_schema:binary
+row: golden | sales | orders | TABLE | {order_id:int64, line:int32, sku:utf8?, qty:int32, price:decimal128(10,4)?}
+row: golden | sales | v_totals | VIEW | {order_id:int64?, q:utf8?}
+rows: 2
+== GetTables include_schema table=nokey
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, table_type:utf8, table_schema:binary
+row: golden | main | nokey | TABLE | {a:int32?, b:double?}
+rows: 1
+== GetTables include_schema table=Odd%
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, table_type:utf8, table_schema:binary
+row: golden | main | Odd Name | TABLE | {weird col:int32?, x"y:utf8?}
+rows: 1
+== GetPrimaryKeys customers
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, column_name:utf8, key_name:utf8?, key_sequence:int32
+row: golden | main | customers | id | customers_id_pkey | 1
+rows: 1
+== GetPrimaryKeys orders schema=sales
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, column_name:utf8, key_name:utf8?, key_sequence:int32
+row: golden | sales | orders | order_id | orders_order_id_line_pkey | 1
+row: golden | sales | orders | line | orders_order_id_line_pkey | 2
+rows: 2
+== GetPrimaryKeys orders (no schema)
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, column_name:utf8, key_name:utf8?, key_sequence:int32
+row: golden | sales | orders | order_id | orders_order_id_line_pkey | 1
+row: golden | sales | orders | line | orders_order_id_line_pkey | 2
+rows: 2
+== GetPrimaryKeys nokey
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, column_name:utf8, key_name:utf8?, key_sequence:int32
+rows: 0
+== GetPrimaryKeys v_customers
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, column_name:utf8, key_name:utf8?, key_sequence:int32
+rows: 0
+== GetPrimaryKeys missing
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, column_name:utf8, key_name:utf8?, key_sequence:int32
+rows: 0
+== GetPrimaryKeys fk_child catalog=golden schema=main
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, column_name:utf8, key_name:utf8?, key_sequence:int32
+row: golden | main | fk_child | id | fk_child_id_pkey | 1
+rows: 1
+== GetSqlInfo
+schema: info_name:uint32, value:union<string_value:utf8|bool_value:bool|bigint_value:int64|int32_bitmask:int32|string_list:list<item:utf8?>|int32_to_int32_list_map:map>
+row: 0 = DuckDB
+row: 1 = <version>
+row: 2 = <version>
+row: 3 = True
+row: 4 = True
+row: 5 = False
+row: 9 = False
+row: 10 = False
+row: 503 = 1
+row: 504 = "
+row: 505 = 1
+row: 507 = 3
+rows: 12

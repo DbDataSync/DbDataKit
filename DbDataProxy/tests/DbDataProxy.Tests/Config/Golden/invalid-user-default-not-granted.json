@@ -1,0 +1,4 @@
+{ "Proxy": {
+  "DataSources": { "erp": { "ConnectionString": "Driver=x" }, "dw": { "ConnectionString": "Driver=y" } },
+  "Users": [ { "Name": "a", "PasswordHash": "h", "DataSources": [ "erp" ], "DefaultDataSource": "dw" } ]
+} }

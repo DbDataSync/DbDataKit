@@ -1,0 +1,7 @@
+**/bin/
+**/obj/
+DbDataProxy/artifacts/
+.git/
+.vs/
+DbDataSync/
+DbDataBuild/

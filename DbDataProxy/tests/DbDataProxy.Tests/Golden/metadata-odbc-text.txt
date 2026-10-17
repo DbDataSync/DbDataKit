@@ -1,0 +1,47 @@
+== GetCatalogs
+schema: catalog_name:utf8
+row: <dir>
+rows: 1
+== GetDbSchemas
+schema: catalog_name:utf8?, db_schema_name:utf8
+rows: 0
+== GetTableTypes
+schema: table_type:utf8
+row: TABLE
+row: VIEW
+rows: 2
+== GetTables
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, table_type:utf8
+row: <dir> | <null> | orders.csv | TABLE
+row: <dir> | <null> | people.csv | TABLE
+rows: 2
+== GetTables table=p%
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, table_type:utf8
+row: <dir> | <null> | people.csv | TABLE
+rows: 1
+== GetTables types=VIEW
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, table_type:utf8
+rows: 0
+== GetTables include_schema
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, table_type:utf8, table_schema:binary
+row: <dir> | <null> | orders.csv | TABLE | {id:int32?, total:double?}
+row: <dir> | <null> | people.csv | TABLE | {name:utf8?, age:int32?, joined:timestamp[Microsecond]?}
+rows: 2
+== GetPrimaryKeys people#csv
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, column_name:utf8, key_name:utf8?, key_sequence:int32
+rows: 0
+== GetPrimaryKeys missing
+schema: catalog_name:utf8?, db_schema_name:utf8?, table_name:utf8, column_name:utf8, key_name:utf8?, key_sequence:int32
+rows: 0
+== GetSqlInfo
+schema: info_name:uint32, value:union<string_value:utf8|bool_value:bool|bigint_value:int64|int32_bitmask:int32|string_list:list<item:utf8?>|int32_to_int32_list_map:map>
+row: 0 = TEXT
+row: 1 = <version>
+row: 2 = <version>
+row: 3 = True
+row: 4 = True
+row: 5 = False
+row: 9 = False
+row: 10 = False
+row: 504 = `
+rows: 9
