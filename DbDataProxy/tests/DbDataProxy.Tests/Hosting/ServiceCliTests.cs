@@ -81,6 +81,8 @@ public sealed class ServiceCliTests
     [Fact]
     public void Install_locks_the_data_directory_to_the_service_and_administrators()
     {
+        // The service verbs are Windows-only and this test feeds them Windows paths, which Path treats as relative elsewhere.
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows service verbs, Windows paths");
         var rig = new Rig();
         Assert.Equal(0, rig.Run("install"));
 
@@ -100,6 +102,7 @@ public sealed class ServiceCliTests
     [Fact]
     public void Data_dir_option_reaches_the_service_as_configuration_and_the_acl_target()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows service verbs, Windows paths");
         var rig = new Rig();
         Assert.Equal(0, rig.Run("install", "--name", "ProxyB", "--data-dir", @"D:\proxy data"));
 

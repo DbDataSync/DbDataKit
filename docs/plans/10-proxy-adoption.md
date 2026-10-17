@@ -2,7 +2,7 @@
 
 Status: proposed. Scope: hub CI and publishing of `DbDataKit.*`, how Proxy depends on them, and the order in which
 Proxy adopts each one. **Out of scope: the update system** (`DbDataKit.Update.*`, `dbdata-updater`, signed manifests,
-side-by-side service swap). Proxy keeps `scripts/install.ps1` and `release.yml` as they are; see "Deliberately skipped".
+side-by-side service swap). Proxy keeps `scripts/install.ps1` and its release process as they were when this plan was written; see "Deliberately skipped". (Since the monorepo move, `install.ps1` reads `dbdataproxy/v*` releases from DbDataKit and the release is `dbdataproxy-release.yml`; see plan 09 and `DbDataProxy/README.md`.)
 
 Inputs: `docs/review/detail/DbDataProxy.md`, `docs/review/SECURITY.md`, plans 01-07, `docs/plans/STATUS.md`.
 Finding IDs (H2-H4, S-1, S-2, S-6, S-9, S-10) are the ones used in those documents.

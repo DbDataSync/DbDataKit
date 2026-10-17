@@ -17,6 +17,7 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 08 | [Install and update](08-update-system.md) | Sync Updates, Proxy install.ps1, Build Scoop | Signed manifest, service swap with rollback |
 | 09 | [Monorepo branching, CI, releases](09-MONOREPO-BRANCHING-AND-RELEASES.md) | DbDataSync model, per-product lanes | Per-product dev/test, main as integration |
 | 10 | [Proxy adoption](10-proxy-adoption.md) | Plans 01-07 applied to DbDataProxy | Hub CI and publishing, feed and override, per-library adoption order (update system skipped) |
+| 11 | [CI and testing](11-ci-and-testing.md) | Three products plus the shared libraries, their test setups | One engine catalogue, shared workflows, Linux and Windows split, nightly full matrix |
 
 ## Dependency graph
 

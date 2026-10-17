@@ -96,20 +96,35 @@ this for you.
 
 ## Releases and installation
 
-CI (`.github/workflows/ci.yml`) builds, tests and smoke-packages every push and pull request on a Windows runner.
-Pushing a tag such as `v1.2.3` runs `.github/workflows/release.yml`, which tests, runs `build/package.ps1` and creates a
-GitHub release containing `DbDataProxy-<version>-win-x64.zip`, `SHA256SUMS` and `install.ps1` (tags containing `-`,
-such as `v1.2.3-rc1`, are marked as pre-releases).
+DbDataProxy lives in the DbDataKit repository, with its own branches: work lands on `dbdataproxy/dev`, and a green
+CI run (`.github/workflows/dbdataproxy-ci.yml`: Windows and Linux suites, plus the package smoke test) promotes it to
+`dbdataproxy/test`. A release is cut by dispatching `.github/workflows/dbdataproxy-release.yml` against `dbdataproxy/test`.
+It builds with `build/package.ps1` and publishes a GitHub release in this repository containing
+`DbDataProxy-<version>-win-x64.zip`, `SHA256SUMS` and `install.ps1`, tagged `dbdataproxy/v<version>`. The version is the UTC
+build time, `YYYY.M.D.HHmm` (for example `2026.10.17.1530`); a `-beta` suffix marks a prerelease. See
+`docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md` at the repository root.
 
-To install or upgrade from a release, run from an elevated PowerShell prompt:
+Releases of the other products are published in the same repository, so a DbDataProxy release is recognised by its
+`dbdataproxy/v` tag. GitHub's own "latest release" is not used (it is one marker for the whole repository).
+
+To install or upgrade from a release, run from an elevated PowerShell prompt (Windows PowerShell 5.1 or later):
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/DbDataSync/DbDataProxy/releases/latest/download/install.ps1))) -InstallService
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/DbDataSync/DbDataKit/main/DbDataProxy/scripts/install.ps1))) -InstallService
 ```
 
-The script verifies the download against `SHA256SUMS`, installs to `%ProgramFiles%\DbDataProxy` (`-InstallDir`),
-keeps an existing `appsettings.json`, stops and restarts a running service around an upgrade, and registers the
-service only with `-InstallService`. `-Version 1.2.3` selects a specific release.
+`main` always holds the script that shipped with the last DbDataProxy release, so that address is the "latest" one. The script
+finds the newest stable DbDataProxy release, verifies the download against `SHA256SUMS`, installs to
+`%ProgramFiles%\DbDataProxy` (`-InstallDir`), keeps an existing `appsettings.json`, stops and restarts a running service
+around an upgrade, and registers the service only with `-InstallService`.
+
+* `-Version 2026.10.17.1530` selects a specific release (`v2026.10.17.1530` and `dbdataproxy/v2026.10.17.1530` also work).
+* `-IncludePrerelease` lets "latest" choose a `-beta` release; without it betas are only installed by exact `-Version`.
+* `-DryRun` prints which release and files would be used, and installs nothing; it needs no elevation.
+* `-Repo <owner>/<repository>` installs from a fork or mirror of the repository.
+
+The script's release selection is tested by `scripts/install.tests.ps1` against a mocked GitHub API; CI runs it under both
+Windows PowerShell 5.1 and PowerShell 7.
 
 ## Configuration
 
