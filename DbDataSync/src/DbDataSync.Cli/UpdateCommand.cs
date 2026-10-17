@@ -212,7 +212,7 @@ public static class UpdateCommand
         {
             // Absolute: it ends up on a `dotnet` command line, which is run from a working directory of its own.
             var stageRoot = Path.GetFullPath(options.StageDirectory ?? env.DefaultStageDirectory);
-            output.WriteLine($"Downloading {ReleaseSources.SnapshotNupkgName(chosen.Version)} …");
+            output.WriteLine($"Downloading {ReleaseSources.PackageFileName(chosen.Version)} …");
             var staged = await new SnapshotStager(http, userAgent).StageAsync(chosen, stageRoot, cancellationToken);
             output.WriteLine(staged.Reused
                 ? $"Already staged and verified ({FormatSize(staged.SizeBytes)})."

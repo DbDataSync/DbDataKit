@@ -1,6 +1,6 @@
 # Monorepo branching, CI and releases
 
-Status: decided; the DbDataSync lane's workflows are written (see "Implementation status") and not yet run. Supersedes the "monorepo rejected" decision in [00-REPO-STRATEGY.md](00-REPO-STRATEGY.md): the
+Status: decided and in place for DbDataSync (merged to `main`; `dbdatasync/dev` and `dbdatasync/test` exist). The workflows have not yet run end to end; see "Implementation status". Supersedes the "monorepo rejected" decision in [00-REPO-STRATEGY.md](00-REPO-STRATEGY.md): the
 three products move into this repo (DbDataSync first, DbDataProxy and DbDataBuild later). This document adapts
 DbDataSync's `dev` → `test` → `main` model (`DbDataSync/architecture/branching-and-releases.md`) to several
 products in one repository.
@@ -21,8 +21,8 @@ products in one repository.
   (here or in a product repo) doesn't matter to the name; for now it lives here with the product's release.
 - **`DbDataKit/` has no lane of its own.** Shared code is changed through the product branches, like any other
   code (see "Shared code" below).
-- **All products use CalVer** (`YYYY.MM.DD.HHmm`, as DbDataSync does). Proxy's and Build's semver tags end
-  when they move in.
+- **All products use CalVer** (`YYYY.MM.DD.HHmm`, as DbDataSync does). Proxy's and Build's existing semver
+  tags and versions are not carried forward; there is no alias or mapping.
 - **Back-merge is immediate**: a release merges `main` into the other products' `dev` branches as its last step.
 - **NuGet publishing is paused** until all three products are in this repo. DbDataSync is the only product
   that has ever published to nuget.org.
@@ -95,6 +95,9 @@ Root files (`LICENSE`, `.gitattributes`, `docs/`) have no lane either: they are 
 
 ## Branch protection
 
+> **Deferred.** Not in place; see "Implementation status".
+
+
 Repository rulesets, carried over from DbDataSync with wildcard patterns:
 
 | ruleset | targets | rules |
@@ -138,7 +141,6 @@ All products use CalVer, `YYYY.MM.DD.HHmm`, computed from the UTC clock as DbDat
 | --- | --- | --- | --- |
 | release trigger | dispatch against `dbdatasync/test` | dispatch against `dbdataproxy/test` | dispatch against `dbdatabuild/test` |
 | tag in this repo | `dbdatasync/v<version>` | `dbdataproxy/v<version>` | `dbdatabuild/v<version>` |
-| snapshot tag in this repo | `dbdatasync/snapshot-<version>` | n/a yet | n/a yet |
 
 Common release steps, from DbDataSync: refuse unless dispatched against `<product>/test`; require `main` to be
 an ancestor of it; require a green CI run for that exact SHA (look it up, don't re-run); build and publish;
@@ -147,14 +149,45 @@ Build release on a tag push from `main` today; they adopt the dispatch model whe
 
 ### NuGet
 
+> **Deferred**, together with everything else that needed the App; see "Implementation status".
+
+
 Paused. The release workflow skips the nuget.org push (and the Trusted Publishing token exchange) behind an
 explicit switch, defaulting to off, so the rest of the release (build, smoke test, tag, GitHub Release,
 `main` merge) still runs. When it's turned back on, the Trusted Publishing policy must be re-registered for
 `DbDataSync/DbDataKit` and the new workflow filename, because that policy is bound to repo and workflow file.
 
+### How the app tells products apart
+
+One repository now holds every product's releases, so a release belongs to a product by its **tag prefix**, which is
+the product's lowercase name and a slash:
+
+| release | tag |
+| --- | --- |
+| stable | `dbdatasync/v<version>` |
+| beta | `dbdatasync/v<version>-beta` |
+| snapshot | `dbdatasync/v<version>-snapshot.g<sha>` |
+
+`dbdatasync update` (`ReleaseCatalog`) lists the repository's releases once and keeps one only if its tag starts with
+`dbdatasync/v`, the version after it parses (its suffix is the channel: none, `-beta` or `-snapshot.g<sha>`, so a snapshot
+tag reads like a beta tag), the prerelease flag agrees with that channel (stable is the only channel that is not a
+prerelease), and it carries
+`DbDataSync.<version>.nupkg` and its `.sha512` hosted under this repository's `releases/download/`. The asset names
+are a second, independent product check. Other products' releases, drafts, hand-made releases and anything
+malformed are skipped silently. A new product just needs its own prefix; DbDataProxy and DbDataBuild releases never
+show up in DbDataSync's list, and vice versa.
+
+Every channel now goes through the same download, checksum and `--add-source` install that snapshots always used.
+The listing is read once per run and shared across channels, because GitHub allows only 60 anonymous requests an
+hour. Releases are created with `--latest=false`: "latest" is one marker per repository, not per product.
+
 ### GitHub Releases on the old repo, without pushing code there
 
-`dbdatasync update` reads releases from the old repo (`DbDataSync/DbDataSync`, a constant in
+> **Superseded.** `dbdatasync update` now reads this repository's releases (see above), so publishing to the old
+> repository is no longer needed. Kept as the record of the bridge that was considered.
+
+
+`dbdatasync update` used to read releases from the old repo (`DbDataSync/DbDataSync`, a constant in
 `ReleaseSources.cs`), looks for tags starting `snapshot-`, and downloads assets from under that repo's
 `releases/download/`. It never looks at the source tree. So the monorepo's release job can publish *there*
 with the Releases API, from here, and the client keeps working unchanged:
@@ -197,38 +230,46 @@ and out of scope for now; do it once all three products are in and NuGet is back
 
 ## Implementation status
 
-Written, linted with `actionlint`, **not yet run** (they need to be on the default branch, and the App
-installed, to run for real):
+**Simplified for now.** Locked branches are not being pursued yet, so the workflows on `main` run on the built-in
+`GITHUB_TOKEN` and leave out everything that needed the pipelines GitHub App. Nothing below the line "Deferred" is
+implemented; the full versions (App token, old-repo releases, snapshots, image chain, NuGet switch) are in PR #1's
+history (`b762d5b`) and can be restored.
 
-| file | ported from | notes |
-| --- | --- | --- |
-| `dbdatasync-ci.yml` | `ci.yml` + `promote-test.yml` | adds `changes`, `dbdatakit`, `promote`, `snapshot` jobs |
-| `dbdatasync-publish-snapshot.yml` | `publish-snapshot.yml` | reusable (`workflow_call`) and dispatchable; releases to the old repo |
-| `dbdatasync-release.yml` | `release.yml` | dispatch on `dbdatasync/test`; main merge; back-merge; NuGet switch off |
-| `dbdatasync-publish-image.yml` | `publish-image.yml` | product folder as context; checks out `dbdatasync/v<version>` |
+| file | state |
+| --- | --- |
+| `dbdatasync-ci.yml` | `changes`, `dbdatakit`, the ported suite, and `promote` (fast-forwards `dbdatasync/test` with `GITHUB_TOKEN`). Also runnable by dispatch. |
+| `dbdatasync-release.yml` | dispatch on `dbdatasync/test`; ancestor and CI checks; tag `dbdatasync/v<version>`; GitHub Release **in this repo**; merge into `main`; back-merge into every `*/dev` and dispatch that product's CI. |
+| `dbdatasync-publish-image.yml` | dispatch-only; no longer chained from the release. |
 
-`promote-test.yml` has no file of its own; it is the `promote` job in the CI workflow.
+Consequences of the simplification:
+- **No rulesets, no App.** Anyone with write access can push to `main` and `*/test`; the model is followed by
+  convention, not enforced.
+- **Pushes with `GITHUB_TOKEN` start no workflows.** That is why `promote` lives inside the CI run, and why the release
+  dispatches CI by hand after each back-merge.
+- **Releases are in this repo, and `dbdatasync update` reads them from here.** See "How the app tells products apart".
+  Stable, beta and snapshot all come from this repository's GitHub releases; the old repository is no longer a source.
+- **No snapshots, no image, no NuGet** until they are brought back.
+
+**Deferred:** the pipelines App and rulesets (`main`, `*/test`), snapshot releases (the client's snapshot channel is
+simply empty until they come back), the container image chained from the release, NuGet publishing, the lane guard.
 
 ## Rollout
 
 1. **Done:** DbDataSync imported with history (`DbDataSync/`), submodule removed; `shared/` renamed to
-   `DbDataKit/` (the solution builds from the new path); DbDataSync's workflows ported.
-2. Get this branch onto `main` (set `main` as the default branch). Workflows can only be dispatched, and
-   `workflow_dispatch` only listed, once they exist on the default branch.
-3. Cut `dbdatasync/dev` and `dbdatasync/test` from `main` (DbDataSync's own `main`, `dev` and `test` were all at
-   `f1d76ee`, so there is nothing to reconcile). Run CI on a throwaway change, with no rulesets.
+   `DbDataKit/` (the solution builds from the new path); DbDataSync's workflows ported; merged to `main` (PR #1,
+   as a merge commit so the imported history survives).
+2. **Done:** `dbdatasync/dev` and `dbdatasync/test` cut from `main` (both at the merge commit). Stale-reference
+   cleanup (release skill, dead workflow copies, doc banners) goes to `dbdatasync/dev` like any other change.
+3. Run CI on a throwaway change to exercise `changes`, the suite and the `promote` job, then a `--beta` release.
 4. Install the pipelines App on this repo (and confirm it on the old one), add the rulesets (`main` first,
    then `*/test`), and do one beta release (`beta=true`) to prove the whole path: old-repo release, `main`
    merge, back-merge.
 5. Freeze the old repo as above (not archived).
 6. Repeat 2–5 for DbDataProxy and DbDataBuild when their active work reaches a stopping point; they bring
-   their history the same way and need the dispatch-release workflow written for them, and a decision on
-   how their old tags map to CalVer.
+   their history the same way and need the dispatch-release workflow written for them.
 7. When all three are in: re-enable NuGet, repoint the update client, and retire the bridge.
 
 ## Open questions
 
-1. Proxy and Build have existing semver tags (`v0.2.0`, `v0.4.0`). Leave them as history, or add CalVer
-   aliases?
-2. The lane guard (reject edits outside `<product>/`, `DbDataKit/`, `docs/` and root files on a `<product>/dev`
+1. **Deferred:** the lane guard (reject edits outside `<product>/`, `DbDataKit/`, `docs/` and root files on a `<product>/dev`
    push) is described here but not written yet. Do it as a CI job, or as a ruleset path restriction?

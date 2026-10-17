@@ -1,116 +1,73 @@
 ---
 name: nuget-release
 description: >-
-  Publish a new DbDataSync release: dispatches the release.yml GitHub Actions workflow (manual
-  trigger, Trusted Publishing to nuget.org — no stored API key), watches it to completion, and
-  confirms the tag, the GitHub Release, and the published package. Use this whenever the user asks
-  to cut, ship, publish, or release a new version of DbDataSync — including a beta or prerelease —
-  or wants the dbdatasync CLI tool updated on nuget.org. Trigger on phrases like "let's release",
-  "publish a new version", "ship a beta", "cut a release", "push a new nuget package", "release
-  what's on main" — even if the user doesn't name the workflow, nuget.org, or GitHub Actions
-  explicitly.
+  Publish a new DbDataSync release from the DbDataKit monorepo: dispatches the dbdatasync-release.yml
+  GitHub Actions workflow against dbdatasync/test, watches it to completion, and confirms the tag and the
+  GitHub Release. Use this whenever the user asks to cut,
+  ship, publish, or release a new version of DbDataSync — including a beta or prerelease — or wants the
+  dbdatasync CLI tool updated. Trigger on phrases like "let's release", "publish a new version", "ship a
+  beta", "cut a release", "push a new nuget package" — even if the user doesn't name the workflow or
+  GitHub Actions explicitly.
 ---
 
-# Releasing DbDataSync to nuget.org
+# Releasing DbDataSync
 
-One package, one workflow, no stored secret: `.github/workflows/release.yml` packs
-`DbDataSync.Cli` (the `dbdatasync` global tool, nuget.org package id `DbDataSync`), publishes it via
-Trusted Publishing (a short-lived OIDC-exchanged API key, nothing long-lived stored anywhere), tags
-the released commit itself once the publish is confirmed, and creates the GitHub Release. It never
-publishes `DbDataSync.Drivers.Abstractions` — that package exists for a future third-party compiled
-driver plugin and is deliberately out of scope here.
+DbDataSync lives in the **`DbDataSync/DbDataKit`** monorepo. One workflow cuts a release:
+`.github/workflows/dbdatasync-release.yml` (at the repository root, not in `DbDataSync/`). It packs
+`DbDataSync.Cli` (the `dbdatasync` global tool), tags the released commit `dbdatasync/v<version>`, publishes a
+GitHub Release in this repository with the package attached, merges the lane into `main`, and merges `main` back into
+every `*/dev` branch. Read `docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md` and the workflow's header comment before
+changing anything.
 
-The repo is **`DbDataSync/DbDataSync`**.
+**This is the simplified setup.** It uses only the built-in `GITHUB_TOKEN`. There is no nuget.org push (paused until all
+three products are in the monorepo), no container image (dispatch `dbdatasync-publish-image.yml` by hand if needed), and
+no GitHub App or branch rulesets. `dbdatasync update` still reads releases from the old repository
+(`DbDataSync/DbDataSync`), so a release made here is not visible to it until that client is repointed.
 
 ## Running a release
 
-The workflow always builds whatever is on `origin/test` — not your working tree, not a local commit
-that hasn't been pushed, and not `main` (`release.yml` refuses outright unless dispatched against
-`test` — see `architecture/branching-and-releases.md`; there is no separate `test` → `main` PR or push,
-cutting the release *is* what fast-forwards `main`). Before dispatching, make sure the repo you're
-releasing from is clean and pushed to `dev`, and that `dev` has already been promoted to `test` (only
-happens automatically after a green CI run — check `git log --oneline -1 origin/test`).
-`scripts/release.sh` checks this itself and refuses to run otherwise, so the common case is just:
+The workflow always builds what is on `origin/dbdatasync/test` — not your working tree, not an unpushed commit, and not
+`main`; it refuses unless dispatched against `dbdatasync/test`. It also refuses unless `main` is already an ancestor of
+that commit: if another product released since, wait for the post-release back-merge to reach `dbdatasync/dev` and be
+promoted. Before dispatching, make sure the checkout is clean, pushed to `dbdatasync/dev`, and promoted to
+`dbdatasync/test` (automatic after a green CI run — check `git log --oneline -1 origin/dbdatasync/test`).
+`scripts/release.sh` checks this and refuses otherwise, so the common case is:
 
 ```sh
-.claude/skills/nuget-release/scripts/release.sh          # a real, stable release
-.claude/skills/nuget-release/scripts/release.sh --beta    # a prerelease
+DbDataSync/.claude/skills/nuget-release/scripts/release.sh           # a stable release
+DbDataSync/.claude/skills/nuget-release/scripts/release.sh --beta    # a prerelease
 ```
 
-It dispatches `release.yml`, finds the run it just created (`gh workflow run` doesn't hand back a
-run id, so the script matches the newest `workflow_dispatch` Release run created after the moment it
-dispatched), watches it to completion with `--exit-status`, and on success prints the resulting
-version and the release list. Requires `gh` authenticated with access to the repo, run from inside a
-clone of it — nothing else.
-
-If the script refuses because of uncommitted or unpushed changes, commit and push them first (or
-confirm with the user that releasing an older commit is actually what they want, then run the raw
-`gh` commands below instead of the script).
-
-If the script isn't available for some other reason:
+Run it from inside a clone with `dbdatasync/test` checked out (HEAD must equal `origin/dbdatasync/test`), with `gh`
+authenticated. If it isn't available:
 
 ```sh
-gh workflow run release.yml --repo DbDataSync/DbDataSync --ref test -f beta=false   # or beta=true
-gh run list --repo DbDataSync/DbDataSync --workflow Release --limit 3               # find the new run's id
-gh run watch <id> --repo DbDataSync/DbDataSync --exit-status
+gh workflow run dbdatasync-release.yml --repo DbDataSync/DbDataKit --ref dbdatasync/test -f beta=false
+gh run list --repo DbDataSync/DbDataKit --workflow "DbDataSync release" --limit 3
+gh run watch <id> --repo DbDataSync/DbDataKit --exit-status
 ```
 
 ## Beta or stable — default to stable unless told otherwise
 
-**Default to a real, stable release** (`beta=false`, the workflow's own default) unless the user
-explicitly asks for a beta, a prerelease, or says they want to test the pipeline itself. A stable
-release is a permanent, fully-listed public nuget.org version — don't reach for `--beta` just
-because a release feels like a big or risky action; that caution belongs in *confirming with the
-user before running the script*, not in silently downgrading what they asked for.
-
-A beta run appends `-beta` to the computed version (a real SemVer 2 prerelease label) and marks the
-GitHub Release as a prerelease. nuget.org hides a prerelease from a plain `dotnet tool install` —
-only an exact `--version` or `--prerelease` finds it — which is the right shape for exercising the
-pipeline itself, not for a release meant to be found normally. No need to go prove that hiding
-behavior after every beta; it's an established property of nuget.org, not something this workflow
-could get wrong per run.
+Default to a stable release (`beta=false`) unless the user asks for a beta/prerelease or says they are
+testing the pipeline. Caution belongs in *confirming with the user before running the script*, not in
+silently downgrading the request. A beta appends `-beta` to the version and marks the GitHub Release a
+prerelease; nuget.org (when publishing is on) hides it from a plain `dotnet tool install`.
 
 ## What a successful run means
 
-- The version is computed from the UTC clock at run time (`YYYY.M.D.Hmm`, leading zeros already
-  stripped so it matches exactly what NuGet and the assembly's own reported version agree on) —
-  never typed by a human, never read from a tag.
-- The run itself creates and pushes a lightweight git tag named after that exact version, **only
-  after** the nuget.org push is confirmed — so a tag existing is proof the version really shipped,
-  and a failed run leaves no tag to clean up. Retrying a failed release is just running the script
-  again; the next run computes a fresh, always-different version.
-- The GitHub Release (`gh release view <version> --repo DbDataSync/DbDataSync`) is created from that
-  tag, titled and named after the version, carrying the `.nupkg` as its one asset.
-- The version is on nuget.org: `https://www.nuget.org/packages/DbDataSync/<version>`.
-
-A green workflow run is the real confirmation that the release shipped — nuget.org publishing
-doesn't need to be independently re-proven every time.
-
-## nuget.org indexing can lag behind the push by several minutes
-
-Let the user know this rather than treating a not-yet-visible package as something wrong: nuget.org
-has indexed a fresh publish anywhere from under a minute to as long as ~15 minutes after the workflow
-reports success, and that's without anything having failed — see
-`architecture/implementation/done/phase-127-nuget-trusted-publishing.md` (bugs 5–6) for the real
-numbers this was measured against. If someone wants to confirm a specific version is live, this is
-the one command that actually answers it (an unversioned `--global` install can misleadingly resolve
-from a local cache instead, so this uses a scratch path and skips that cache):
-
-```sh
-dotnet tool install --tool-path /tmp/verify-release DbDataSync --version <version> --no-cache
-```
-
-If that doesn't find it yet, it's very likely just still indexing — wait a few minutes and try again
-rather than assuming the release failed (the GitHub Release existing and the workflow having gone
-green already established that it published).
+- The version is `YYYY.M.D.Hmm` from the UTC clock at run time — never typed, never read from a tag.
+- `dbdatasync/v<version>` is pushed only after the package is built and checked, so a tag existing means the version
+  shipped; a failed run leaves nothing to clean up.
+- The GitHub Release (`gh release view dbdatasync/v<version> --repo DbDataSync/DbDataKit`) carries the `.nupkg`.
+- `main` has a new merge commit ("Release dbdatasync <version>") whose first-parent history is the release log.
+- Every `*/dev` branch has had `main` merged in and its CI dispatched (a push made with `GITHUB_TOKEN` starts no
+  workflow, so the release does it by hand). If a back-merge conflicted, the run fails after the release itself
+  succeeded and opens an issue; resolve it by merging `main` into that branch by hand.
 
 ## Reference
 
-- `.github/workflows/release.yml` — the workflow itself, heavily commented; read it before changing
-  anything about the release process.
-- `architecture/implementation/done/phase-127-nuget-trusted-publishing.md` — the full design
-  rationale, the nuget.org Trusted Publishing policy setup, and every real bug found building this
-  (worth reading before assuming something "should just work").
-- `architecture/planning/done/nuget-org-publishing-and-github-hosting-move.md` — why Trusted
-  Publishing over a stored API key, and why the trigger is a manual dispatch with no extra approval
-  gate.
+- `.github/workflows/dbdatasync-release.yml` — the workflow itself; heavily commented.
+- `docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md` — the branching and release model.
+- `architecture/implementation/done/phase-127-nuget-trusted-publishing.md` — the original design rationale and
+  every real bug found building Trusted Publishing (history, from the single-repo era).
