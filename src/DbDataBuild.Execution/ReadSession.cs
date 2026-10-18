@@ -376,7 +376,19 @@ internal sealed class AdoRowReader(DbCommand command, DbDataReader reader, DbTra
 
     public Task<bool> ReadAsync(CancellationToken ct) => reader.ReadAsync(ct);
 
-    public async ValueTask<object?> ValueAsync(int column, CancellationToken ct) => await reader.IsDBNullAsync(column, ct) ? null : reader.GetValue(column);
+    /// <summary>A binary value is copied out here: DuckDB's driver answers a BLOB with a stream over the result chunk's own memory, which is not valid once the reader moves on, and a row is read after that (the destination conversion, or a caller that collects rows).</summary>
+    public async ValueTask<object?> ValueAsync(int column, CancellationToken ct)
+    {
+        if (await reader.IsDBNullAsync(column, ct)) return null;
+        var value = reader.GetValue(column);
+        if (value is not Stream stream) return value;
+        using (stream)
+        {
+            using var copy = new MemoryStream();
+            await stream.CopyToAsync(copy, ct);
+            return copy.ToArray();
+        }
+    }
 
     public void Cancel() { try { command.Cancel(); } catch (Exception) { /* the statement ended */ } }
 
