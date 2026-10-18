@@ -138,7 +138,8 @@ and the NuGet cache are cached; the shared libraries' job runs once per lane pus
   Line forms: `TARGET <- SOURCE` and `TARGET = literal if SOURCE`. Present: `dbdataproxy`, `dbdatakit`.
 - `testenv/selftest.sh` checks the generation and mappings without Docker (17 checks).
 - Wired into: the Proxy Linux job (replaces its `services:` container) and `_dbdatakit.yml` (opt-in `engines` input).
-  The lane gates keep `engines` off until a manual dispatch with `engines=true` shows the live tests green.
+  A manual dispatch with `engines=true` was green on CI, so `repo-ci.yml` now runs the shared suite with the engines on for every
+  run of the repo-wide lane. The product lanes' own `dbdatakit` jobs keep them off for now.
 - Every workflow job now has a `timeout-minutes`.
 - Both containers speak TLS with throwaway self-signed certificates (the Postgres one generates its own at start), so the live
   tests run with the libraries' secure default (encrypt) and certificate verification switched off, as a developer's local

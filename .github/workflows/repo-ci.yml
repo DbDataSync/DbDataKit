@@ -18,7 +18,7 @@ on:
       engines:
         description: Start the shared SQL Server and PostgreSQL engines (testenv/) for the shared libraries' live tests.
         type: boolean
-        default: false
+        default: true
 
 # A newer push to a PR supersedes the older run; runs on dev always complete (each one promotes).
 concurrency:
@@ -32,7 +32,8 @@ jobs:
   dbdatakit:
     uses: ./.github/workflows/_dbdatakit.yml
     with:
-      engines: ${{ inputs.engines || false }}
+      # The live tests run against the shared engines on every run of this lane (a dispatch can still switch them off).
+      engines: ${{ github.event_name != 'workflow_dispatch' || inputs.engines }}
 
   # The product workflows' own `promote` jobs are skipped here (github.ref is `dev`, not <product>/dev), but a called workflow
   # may not ask for more permission than its caller grants, and those jobs declare contents: write.
