@@ -128,6 +128,29 @@ dev ──repo-ci.yml green──► test ──(PR, merge commit)──► main
 - Lanes meet at `main`: after `test` is merged, `main` is merged back into every `<product>/dev` and `dev`.
 - Cost: a push to `dev` runs everything, including DbDataSync's Windows, integration and Playwright suites.
 
+## Trunk model (DbDataBuild first)
+
+The product lanes cost more than they return when unreleased code only sits in a lane briefly: back-merges, the "`main` is an ancestor
+of `<product>/test`" guard, a CI dispatch after every bot push (a push made with `GITHUB_TOKEN` starts nothing), merge commits that make
+lanes drift. DbDataBuild is the first product on a simpler model; the others move when this has worked.
+
+- **`main` is the only long-lived branch.** Work happens on short feature branches and reaches `main` by pull request, merged with
+  **rebase** (linear history). No ruleset is set on `main` for now: the only committer is Claude, at the owner's direction.
+- **Change-based CI.** `dbdatabuild-ci.yml` runs on pull requests and on pushes to `main`. A `changes` job skips the suites when nothing of
+  the product's (or `testenv/`, or its workflows) changed. A pull request runs the unit suite on Linux and Windows and the core conformance
+  groups; the slow engines (SQL Server 2025, Oracle, Spark, BigQuery) run after a merge, nightly, and on a PR labelled `ci:full`. A rebase
+  merge makes new commits, so the run on `main` is the one that validates what landed.
+- **Nightly.** `dbdatabuild-conformance-full.yml` runs every engine in one job on `main`, skipped when nothing of the product's changed in
+  the last day. It replaces the old weekly run and the soak that `test` was meant to give.
+- **A release is a tag, not a branch move.** `dbdatabuild-release.yml` is dispatched against `main` (or `-f sha=` for an older commit on
+  `main`). It runs the full conformance suite on that exact commit, builds, tags `dbdatabuild/v<version>` and publishes the GitHub Release.
+  It pushes no branch, so there is nothing to merge back and no ancestor guard.
+- **Scoop.** A stable release fills in `DbDataBuild/bucket/dbdatabuild.json` (now a template) and replaces it as the asset of one fixed
+  release, `dbdatabuild/scoop`, so the install URL never changes and no commit is needed. It is a prerelease so it stays out of the way.
+- **Not changed:** DbDataSync and DbDataProxy keep their lanes, and the repo-wide `dev` -> `test` -> `main` lane keeps proving the shared code
+  against them. DbDataBuild does not use `DbDataKit/`, so shared changes do not need to run its suites. `dbdatabuild/dev` and
+  `dbdatabuild/test` are retired.
+
 ## CI
 
 - **Product-scoped by a `changes` job, not `paths:`.** One workflow per product (`dbdatasync-ci.yml`, ...). It
@@ -259,9 +282,9 @@ history (`b762d5b`) and can be restored.
 | `dbdatasync-ci.yml` | `changes`, `dbdatakit`, the ported suite, and `promote` (fast-forwards `dbdatasync/test` with `GITHUB_TOKEN`). Also runnable by dispatch. |
 | `dbdatasync-release.yml` | dispatch on `dbdatasync/test`; ancestor and CI checks; tag `dbdatasync/v<version>`; GitHub Release **in this repo**; merge into `main`; back-merge into every `*/dev` and dispatch that product's CI. |
 | `dbdatasync-publish-image.yml` | dispatch-only; no longer chained from the release. |
-| `dbdatabuild-ci.yml` | `changes`, the unit suite on Linux and Windows, the conformance groups against real engines (`DbDataBuild/scripts/test-engines.sh`), and `promote`. Also callable (`workflow_call`) from `repo-ci.yml`. |
-| `dbdatabuild-conformance-full.yml` | every engine in one job: weekly (on `main`'s code), on request, and as the gate inside the release. |
-| `dbdatabuild-release.yml` | dispatch on `dbdatabuild/test`; ancestor and CI checks; full conformance; builds and smoke-tests the linux-x64 and win-x64 executables; tag `dbdatabuild/v<version>`; GitHub Release in this repo (archives, `SHA256SUMS`); for a stable release also a `scoop: ...` commit on `dbdatabuild/test` (and `dev` if unmoved) pointing `DbDataBuild/bucket/dbdatabuild.json` at it, made *before* the merge so the manifest travels with the release and `main` stays an ancestor of every lane; then the shared merge-release. |
+| `dbdatabuild-ci.yml` | trunk model (see above): `changes`, the unit suite on Linux and Windows, the core conformance groups, and the slow engines after a merge or with `ci:full`. No `promote`, no lane. |
+| `dbdatabuild-conformance-full.yml` | every engine in one job: nightly on `main`, on request, and as the gate inside the release. |
+| `dbdatabuild-release.yml` | dispatch against `main` (or an older `sha` on `main`); full conformance on that commit; builds and smoke-tests the linux-x64 and win-x64 executables; tag `dbdatabuild/v<version>`; GitHub Release in this repo (archives, `SHA256SUMS`); a stable release also replaces the Scoop manifest asset of the fixed `dbdatabuild/scoop` release. Pushes no branch. |
 
 **DbDataBuild, not moved:** the native library (`polyglot_sql_ffi`) keeps its old arrangement for now. `DbDataBuild/scripts/fetch-native.sh`
 and `publish-native.sh` still use the old repository's `native-<pin>` release, and its manual workflow stays where it was, unported, in

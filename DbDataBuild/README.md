@@ -16,10 +16,10 @@ It is explicit, offline-first and plan-then-apply:
 
 Releases carry a single self-contained executable for **Windows** (x64) and **Linux** (x64, glibc 2.34+), with a `SHA256SUMS` file: <https://github.com/DbDataSync/DbDataKit/releases> (this repository holds several products; DbDataBuild's are tagged `dbdatabuild/v<version>`).
 
-Windows, with [Scoop](https://scoop.sh) (the manifest is updated by each release):
+Windows, with [Scoop](https://scoop.sh) (each stable release replaces the manifest at this fixed URL, which `scoop update` re-reads):
 
 ```
-scoop install https://raw.githubusercontent.com/DbDataSync/DbDataKit/main/DbDataBuild/bucket/dbdatabuild.json
+scoop install https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabuild/scoop/dbdatabuild.json
 ```
 
 ## A first look

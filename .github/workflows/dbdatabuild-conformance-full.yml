@@ -1,13 +1,19 @@
 name: DbDataBuild conformance (full)
 
 # Everything, in one job, with every engine running: the groups dbdatabuild-ci.yml splits up, the release group, and the preview engines.
-# Runs every Sunday (on main's code: a schedule always runs from the default branch), on request, and before a release
-# (dbdatabuild-release.yml calls it).
+# Runs nightly on `main` (a schedule always runs from the default branch), on request, and inside every release
+# (dbdatabuild-release.yml calls it with the commit it is about to release). The nightly run is skipped when nothing of DbDataBuild's
+# or of the shared test environment has changed in the last day.
 on:
   schedule:
-    - cron: '0 5 * * 0'
+    - cron: '0 5 * * *'
   workflow_dispatch:
   workflow_call:
+    inputs:
+      ref:
+        description: The commit to test. Empty means the commit the workflow was started on.
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -17,11 +23,37 @@ defaults:
     working-directory: DbDataBuild
 
 jobs:
+  changed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.since.outputs.run }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: since
+        working-directory: .
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          run=true
+          if [ "$EVENT" = "schedule" ]; then
+            n=$(git log --since='25 hours ago' --oneline -- DbDataBuild testenv .github/workflows/dbdatabuild-conformance-full.yml | wc -l)
+            echo "commits touching DbDataBuild in the last day: $n"
+            [ "$n" -gt 0 ] || run=false
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
   conformance-full:
+    needs: changed
+    if: ${{ needs.changed.outputs.run == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: DbDataBuild/global.json

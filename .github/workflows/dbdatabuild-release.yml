@@ -1,20 +1,21 @@
 name: DbDataBuild release
 
-# Cut a release by dispatching this against dbdatabuild/test:
+# Cut a release by dispatching this against main (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md, "Trunk model"):
 #
-#   gh workflow run dbdatabuild-release.yml --ref dbdatabuild/test -f beta=false
+#   gh workflow run dbdatabuild-release.yml --ref main -f beta=false
+#   gh workflow run dbdatabuild-release.yml --ref main -f sha=<an older commit on main>
 #
-# Same model as dbdatasync-release.yml and dbdataproxy-release.yml (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md), on the built-in
-# GITHUB_TOKEN. It refuses unless dbdatabuild/test has a green CI run and `main` is already an ancestor of it, runs the full conformance
-# suite on every engine, builds the single-file executables for linux-x64 and win-x64 and smoke-tests them, tags the commit
-# dbdatabuild/v<version>, publishes a GitHub Release in THIS repository (archives and SHA256SUMS), then merges into main and back into
-# every <product>/dev through the shared merge-release action.
+# It releases the newest commit on main, or `sha` (which must be on main). The gate is inside this workflow: the full conformance suite
+# on every engine, then the unit suite and a smoke test of each executable, all on that exact commit. It builds the single-file
+# executables for linux-x64 and win-x64, tags the commit dbdatabuild/v<version>, and publishes a GitHub Release in THIS repository
+# (archives and SHA256SUMS). No branch is pushed or merged: a release is a tag and its assets.
 #
 # The version is CalVer, YYYY.M.D.HHmm from the UTC clock, like every product (the old repo's v0.4.x tags are not carried forward).
 #
-# Stable releases also point the Scoop manifest (DbDataBuild/bucket/dbdatabuild.json) at the new Windows archive. That is a commit on
-# dbdatabuild/test made BEFORE the merge, so it travels into main with the release: a commit made on main afterwards would be one no lane
-# contains, and `main` would stop being an ancestor of every <product>/test.
+# A stable release also publishes the Scoop manifest, filled in from DbDataBuild/bucket/dbdatabuild.json, as the asset of one fixed
+# release, `dbdatabuild/scoop`, replaced each time, so its URL never changes:
+#   scoop install https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabuild/scoop/dbdatabuild.json
+# Scoop re-reads that URL on `scoop update`. A prerelease leaves it alone.
 
 on:
   workflow_dispatch:
@@ -23,11 +24,13 @@ on:
         description: Publish as a prerelease (-beta suffix on the version, prerelease flag on the GitHub Release). A prerelease does not touch the Scoop manifest.
         type: boolean
         default: false
+      sha:
+        description: The commit to release. Empty means the newest commit on main. It must be on main.
+        type: string
+        default: ''
 
 permissions:
   contents: write
-  actions: write
-  issues: write
 
 defaults:
   run:
@@ -38,6 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
+      sha: ${{ steps.pick.outputs.sha }}
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
@@ -45,39 +49,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Refuse to release from anything but dbdatabuild/test
-        shell: bash
-        run: |
-          if [ "$GITHUB_REF_NAME" != "dbdatabuild/test" ]; then
-            echo "::error::dbdatabuild-release.yml must be dispatched against 'dbdatabuild/test' (got '$GITHUB_REF_NAME'). See docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md."
-            exit 1
-          fi
-
-      # main moves by MERGE, so it is not an ancestor of every released commit by construction. Requiring it keeps the merge
-      # conflict-free: every product's released state, and every shared-code change, must already be in this lane first.
-      - name: Require main to be an ancestor of dbdatabuild/test
+      - name: Pick the commit, which must be on main
+        id: pick
         shell: bash
         working-directory: .
-        run: |
-          git fetch origin main
-          if ! git merge-base --is-ancestor origin/main "$GITHUB_SHA"; then
-            echo "::error::main has commits that dbdatabuild/test does not. Another product has released since this lane last synced. Its back-merge into dbdatabuild/dev, and that branch's promotion to dbdatabuild/test, must land first."
-            exit 1
-          fi
-
-      - name: Require a green CI run for this exact commit
-        shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WANTED: ${{ inputs.sha }}
         run: |
-          green=$(gh api \
-            "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&status=success" \
-            --jq '[.workflow_runs[] | select(.name == "DbDataBuild CI")] | length')
-          echo "successful CI runs for $GITHUB_SHA: $green"
-          if [ "$green" -lt 1 ]; then
-            echo "::error::No successful CI run for $GITHUB_SHA. Releasing a commit whose CI has not passed is exactly what this check exists to prevent."
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "::error::dbdatabuild-release.yml must be dispatched against 'main' (got '$GITHUB_REF_NAME'); pass -f sha=<commit> to release an older commit."
             exit 1
           fi
+          git fetch origin main
+          sha=$(git rev-parse "${WANTED:-origin/main}^{commit}")
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::$sha is not on main. Only commits on main are released."
+            exit 1
+          fi
+          echo "releasing $sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Compute the version
         id: version
@@ -95,10 +85,12 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
-  # A release is built only after every conformance group has passed on every engine.
+  # A release is built only after every conformance group has passed on every engine, on the commit being released.
   conformance-full:
     needs: guard
     uses: ./.github/workflows/dbdatabuild-conformance-full.yml
+    with:
+      ref: ${{ needs.guard.outputs.sha }}
 
   build:
     needs: [guard, conformance-full]
@@ -115,6 +107,8 @@ jobs:
       VERSION: ${{ needs.guard.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.sha }}
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: DbDataBuild/global.json
@@ -153,14 +147,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
+      SHA: ${{ needs.guard.outputs.sha }}
       VERSION: ${{ needs.guard.outputs.version }}
       PRERELEASE: ${{ needs.guard.outputs.prerelease }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
+          ref: ${{ needs.guard.outputs.sha }}
 
       - uses: actions/download-artifact@v8
         with:
@@ -171,41 +165,11 @@ jobs:
         working-directory: dist
         run: sha256sum * > SHA256SUMS && cat SHA256SUMS
 
-      # Stable releases only. A commit on dbdatabuild/test (and on dbdatabuild/dev while it has not moved), so it is released with the
-      # code it describes and merged into main with it; see the comment at the top of this file.
-      - name: Point the Scoop manifest at this release
-        id: manifest
-        if: ${{ env.PRERELEASE != 'true' }}
-        working-directory: .
-        run: |
-          python3 - <<'PY'
-          import json, os
-          version = os.environ["VERSION"]
-          name = f"dbdatabuild-v{version}-win-x64"
-          sums = {l.split()[1]: l.split()[0] for l in open("dist/SHA256SUMS") if l.strip()}
-          path = "DbDataBuild/bucket/dbdatabuild.json"
-          m = json.load(open(path))
-          arch = m["architecture"]["64bit"]
-          m["version"] = version
-          arch["url"] = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/dbdatabuild/v{version}/{name}.zip"
-          arch["hash"] = sums[f"{name}.zip"]
-          arch["extract_dir"] = name
-          open(path, "w", newline="\n").write(json.dumps(m, indent=4) + "\n")
-          PY
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add DbDataBuild/bucket/dbdatabuild.json
-          git commit -m "scoop: dbdatabuild $VERSION [skip ci]"
-          git push origin "HEAD:refs/heads/dbdatabuild/test"
-          # dev follows while nothing has landed on it since the released commit; if it has moved on, it gets this commit through the merge back.
-          git push origin "HEAD:refs/heads/dbdatabuild/dev" || echo "::notice::dbdatabuild/dev has moved on; it gets the manifest commit through the merge back from main."
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
       # After everything is built, not before: a tag is a claim that this version shipped, so a failed run leaves nothing to clean up.
-      - name: Tag this commit with the released version
+      - name: Tag the released commit
         working-directory: .
         run: |
-          git tag "dbdatabuild/v$VERSION"
+          git tag "dbdatabuild/v$VERSION" "$SHA"
           git push origin "refs/tags/dbdatabuild/v$VERSION"
 
       - name: Publish the GitHub Release
@@ -218,14 +182,34 @@ jobs:
             --verify-tag \
             --latest=false \
             --title "DbDataBuild $VERSION" \
-            --notes "DbDataBuild $VERSION, built from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$(git rev-parse HEAD). The version is the UTC date and time this release was built." \
+            --notes "DbDataBuild $VERSION, built from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$SHA. The version is the UTC date and time this release was built." \
             "${prerelease_flag[@]}" \
             dist/*
 
-      - name: Merge into main and back into every dev branch
-        uses: ./.github/actions/merge-release
-        with:
-          product: dbdatabuild
-          version: ${{ env.VERSION }}
-          sha: ${{ steps.manifest.outputs.sha || github.sha }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the Scoop manifest (stable releases only)
+        if: ${{ env.PRERELEASE != 'true' }}
+        working-directory: .
+        run: |
+          mkdir scoop
+          python3 - <<'PY'
+          import json, os
+          version = os.environ["VERSION"]
+          name = f"dbdatabuild-v{version}-win-x64"
+          sums = {l.split()[1]: l.split()[0] for l in open("dist/SHA256SUMS") if l.strip()}
+          m = json.load(open("DbDataBuild/bucket/dbdatabuild.json"))
+          m.pop("##", None)
+          arch = m["architecture"]["64bit"]
+          m["version"] = version
+          arch["url"] = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/dbdatabuild/v{version}/{name}.zip"
+          arch["hash"] = sums[f"{name}.zip"]
+          arch["extract_dir"] = name
+          open("scoop/dbdatabuild.json", "w", newline="\n").write(json.dumps(m, indent=4) + "\n")
+          PY
+          cat scoop/dbdatabuild.json
+          # One fixed release whose asset is replaced, so the manifest URL is stable. A prerelease keeps it out of the way of the real ones.
+          if ! gh release view dbdatabuild/scoop > /dev/null 2>&1; then
+            gh release create dbdatabuild/scoop --target "$SHA" --prerelease --latest=false \
+              --title "DbDataBuild Scoop manifest" \
+              --notes "The Scoop manifest for the newest stable DbDataBuild release, replaced by each one. Install: scoop install $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/dbdatabuild/scoop/dbdatabuild.json"
+          fi
+          gh release upload dbdatabuild/scoop scoop/dbdatabuild.json --clobber
