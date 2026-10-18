@@ -121,6 +121,10 @@ public static class ConformanceRunner
         null => "<null>",
         DBNull => "<null>",
         decimal m => m.ToString("0.#########", CultureInfo.InvariantCulture),
+        // Some drivers (SqlClient) hand back a DateTime for a date column and a TimeSpan for a time column: the column's canonical
+        // type, not the CLR type the driver chose, says what the value means.
+        DateTime dt when type.Kind == CanonicalKind.Date => dt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        TimeSpan ts when type.Kind == CanonicalKind.Time => TimeOnly.FromTimeSpan(ts).ToString("HH:mm:ss.ffffff", CultureInfo.InvariantCulture),
         DateTime dt => dt.ToString("yyyy-MM-dd HH:mm:ss.ffffff", CultureInfo.InvariantCulture),
         DateTimeOffset o => o.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss.ffffff", CultureInfo.InvariantCulture),
         DateOnly d => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
