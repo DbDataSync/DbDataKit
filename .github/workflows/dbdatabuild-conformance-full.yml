@@ -1,22 +1,30 @@
-name: conformance-full
-# Everything, in one job, with every engine running: the groups ci.yml splits up, the release group, and the preview engines. Runs every Sunday, on request, and before a release (release.yml calls it).
+name: DbDataBuild conformance (full)
+
+# Everything, in one job, with every engine running: the groups dbdatabuild-ci.yml splits up, the release group, and the preview engines.
+# Runs every Sunday (on main's code: a schedule always runs from the default branch), on request, and before a release
+# (dbdatabuild-release.yml calls it).
 on:
   schedule:
     - cron: '0 5 * * 0'
   workflow_dispatch:
   workflow_call:
+
 permissions:
   contents: read
+
+defaults:
+  run:
+    working-directory: DbDataBuild
 
 jobs:
   conformance-full:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
-          global-json-file: global.json
+          global-json-file: DbDataBuild/global.json
       - name: Prebuilt polyglot library
         env:
           GH_TOKEN: ${{ github.token }}
