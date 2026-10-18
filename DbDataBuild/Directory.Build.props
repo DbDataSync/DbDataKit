@@ -10,12 +10,12 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <!-- the release version of a development build; scripts/publish.sh stamps the real one (VERSION=...), and a release bumps this -->
+    <!-- the version of a development build; a release stamps the real one, CalVer, from the release workflow (VERSION=... in scripts/publish.sh) -->
     <Version>0.4.0</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Authors>Dan Shryock</Authors>
     <Copyright>Copyright (c) 2026 Dan Shryock</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/danshryock/DbDataBuild</RepositoryUrl>
+    <RepositoryUrl>https://github.com/DbDataSync/DbDataKit</RepositoryUrl>
   </PropertyGroup>
 </Project>

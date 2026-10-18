@@ -53,10 +53,17 @@ jobs:
     permissions:
       contents: write
 
+  dbdatabuild:
+    uses: ./.github/workflows/dbdatabuild-ci.yml
+    with:
+      all: true
+    permissions:
+      contents: write
+
   # dev -> test, on a green run. Nobody pushes to test; this is the only thing that moves it. It fast-forwards to the exact
   # commit this run validated (github.sha), not to whatever the branch tip is by now.
   promote:
-    needs: [dbdatakit, dbdatasync, dbdataproxy]
+    needs: [dbdatakit, dbdatasync, dbdataproxy, dbdatabuild]
     if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/dev' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -259,6 +259,13 @@ history (`b762d5b`) and can be restored.
 | `dbdatasync-ci.yml` | `changes`, `dbdatakit`, the ported suite, and `promote` (fast-forwards `dbdatasync/test` with `GITHUB_TOKEN`). Also runnable by dispatch. |
 | `dbdatasync-release.yml` | dispatch on `dbdatasync/test`; ancestor and CI checks; tag `dbdatasync/v<version>`; GitHub Release **in this repo**; merge into `main`; back-merge into every `*/dev` and dispatch that product's CI. |
 | `dbdatasync-publish-image.yml` | dispatch-only; no longer chained from the release. |
+| `dbdatabuild-ci.yml` | `changes`, the unit suite on Linux and Windows, the conformance groups against real engines (`DbDataBuild/scripts/test-engines.sh`), and `promote`. Also callable (`workflow_call`) from `repo-ci.yml`. |
+| `dbdatabuild-conformance-full.yml` | every engine in one job: weekly (on `main`'s code), on request, and as the gate inside the release. |
+| `dbdatabuild-release.yml` | dispatch on `dbdatabuild/test`; ancestor and CI checks; full conformance; builds and smoke-tests the linux-x64 and win-x64 executables; tag `dbdatabuild/v<version>`; GitHub Release in this repo (archives, `SHA256SUMS`); for a stable release also a `scoop: ...` commit on `dbdatabuild/test` (and `dev` if unmoved) pointing `DbDataBuild/bucket/dbdatabuild.json` at it, made *before* the merge so the manifest travels with the release and `main` stays an ancestor of every lane; then the shared merge-release. |
+
+**DbDataBuild, not moved:** the native library (`polyglot_sql_ffi`) keeps its old arrangement for now. `DbDataBuild/scripts/fetch-native.sh`
+and `publish-native.sh` still use the old repository's `native-<pin>` release, and its manual workflow stays where it was, unported, in
+`DbDataBuild/.github/workflows/native.yml`. Whether to fetch the library straight from its own upstream release is open.
 
 Consequences of the simplification:
 - **No rulesets, no App.** Anyone with write access can push to `main` and `*/test`; the model is followed by

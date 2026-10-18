@@ -1,0 +1,169 @@
+name: DbDataBuild CI
+
+# DbDataBuild's lane of the monorepo: dbdatabuild/dev -> dbdatabuild/test -> main (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md).
+# Ported from the product's own ci.yml (kept in this repo's history under DbDataBuild/). Same shape as dbdataproxy-ci.yml: a `changes` job
+# decides whether the suites are needed, the unit suite runs on Linux and Windows, the conformance suite runs in groups against real
+# engines (scripts/test-engines.sh), and `promote` (the last job, using the built-in GITHUB_TOKEN) fast-forwards dbdatabuild/test to the
+# commit this run validated. A push made with GITHUB_TOKEN starts no workflow, so the release dispatches this after it merges main back
+# into dbdatabuild/dev, and that run's promote job carries the merge to test.
+
+on:
+  push:
+    branches: [dbdatabuild/dev]
+  pull_request:
+    branches: [dbdatabuild/dev]
+  workflow_dispatch:
+    inputs:
+      all:
+        description: Run every job whatever changed.
+        type: boolean
+        default: false
+  # Called by repo-ci.yml (the repo-wide dev -> test lane), which runs every suite whatever changed.
+  # `promote` is skipped there: github.ref is the caller's ref, not dbdatabuild/dev.
+  workflow_call:
+    inputs:
+      all:
+        description: Run every job whatever changed.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: DbDataBuild
+
+jobs:
+  # Is there anything here that the suites have not already validated? Compared with dbdatabuild/test, the last promoted commit.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.diff.outputs.build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        working-directory: .
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          ALL: ${{ inputs.all }}
+        run: |
+          if [ "$ALL" = "true" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$EVENT" = "pull_request" ]; then
+            base="origin/$BASE_REF"
+          else
+            base="origin/dbdatabuild/test"
+          fi
+          build=true
+          if git rev-parse --verify --quiet "$base" >/dev/null; then
+            changed=$(git diff --name-only "$base"...HEAD)
+            echo "changed since $base:"; echo "$changed"
+            echo "$changed" | grep -qE '^(DbDataBuild/|testenv/|\.github/(workflows/(dbdatabuild-|_)|actions/))' || build=false
+          else
+            echo "::notice::$base does not exist yet, so everything is treated as changed."
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
+  unit:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    # Windows runs the same suite natively: the Wine runs in docs/progress entry 34 are no substitute.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    name: unit (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25                 # the unit suite takes a few minutes; a hang should fail, not run for hours
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: DbDataBuild/global.json
+      - name: Prebuilt polyglot library
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/fetch-native.sh
+      - run: dotnet build -c Release
+      - run: dotnet test tests/DbDataBuild.Tests.Unit -c Release --no-build
+
+  # The conformance suite against real engines, in groups that run side by side (each starts only the engines it needs): `quick` is everything
+  # not named below, `apply` is the whole plan and apply loop, `templates` builds the sample projects and compares every table with DuckDB,
+  # `release` (the sample projects again with the rewrites off) runs only in dbdatabuild-conformance-full.yml, `mssql2025` runs the dialect probes
+  # and one whole load against a SQL Server 2025 (database compatibility level 170, and 160). The preview engines (Oracle, Spark SQL, the
+  # BigQuery emulator) are only probed for their dialect: a failure there means a case that agreed with DuckDB no longer does (tests/.../Baselines).
+  conformance:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { group: quick,     engines: "mssql pg", filter: "Group!=apply&Group!=templates&Group!=release" }
+          - { group: apply,     engines: "mssql pg", filter: "Group=apply" }
+          - { group: templates, engines: "mssql pg", filter: "Group=templates&Group!=release" }
+          - { group: mssql2025, engines: "mssql2025", filter: "DisplayName~sqlserver2025|DisplayName~A_project_at_version_17" }
+          - { group: oracle,    engines: "oracle",   filter: "DisplayName~EngineDifferenceProbes&DisplayName~oracle" }
+          - { group: spark,     engines: "spark",    filter: "DisplayName~EngineDifferenceProbes&DisplayName~spark" }
+          - { group: bigquery,  engines: "bigquery", filter: "DisplayName~EngineDifferenceProbes&DisplayName~bigquery" }
+    name: conformance (${{ matrix.group }})
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: DbDataBuild/global.json
+      - name: Prebuilt polyglot library
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/fetch-native.sh
+      - run: dotnet build -c Release
+      - name: Start the engines
+        run: scripts/test-engines.sh up ${{ matrix.engines }}
+      - name: Conformance tests
+        run: |
+          eval "$(scripts/test-engines.sh env)"
+          dotnet test tests/DbDataBuild.Tests.Conformance -c Release --no-build --filter "${{ matrix.filter }}"
+      - name: Stop the engines
+        if: always()
+        run: scripts/test-engines.sh down
+
+  # dbdatabuild/dev -> dbdatabuild/test, on a green run. Nobody pushes to dbdatabuild/test; this is the only thing that moves it
+  # (the release also adds its Scoop manifest commit). It fast-forwards to the exact commit this run validated (github.sha), not to
+  # whatever the branch tip is by now. Skipped suites count as passing: `changes` decided they were not needed.
+  promote:
+    needs: [changes, unit, conformance]
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/dbdatabuild/dev' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: dbdatabuild-promote
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Fast-forward dbdatabuild/test to this commit
+        working-directory: .
+        run: |
+          git fetch origin dbdatabuild/test
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/dbdatabuild/test; then
+            echo "::notice::dbdatabuild/test already contains $GITHUB_SHA — nothing to promote."
+          elif git merge-base --is-ancestor origin/dbdatabuild/test "$GITHUB_SHA"; then
+            git push origin "$GITHUB_SHA:refs/heads/dbdatabuild/test"
+          else
+            echo "::error::dbdatabuild/test has commits dbdatabuild/dev doesn't — refusing to fast-forward over them. It may have been pushed to directly; investigate before retrying."
+            exit 1
+          fi
