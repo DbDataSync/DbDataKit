@@ -1,0 +1,18 @@
+# description: marts.dim_employee takes the department they are in now, the pay rate in force, and the years with the company
+# tags: marts
+cases:
+  - name: an employee who moved department and had a raise
+    given:
+      staging.employees:
+        - {employee_id: 1, login_id: 'adventure-works\alex1', user_name: alex1, job_title: Buyer, birth_date: 1980-02-03, marital_status: single, gender: female, hire_date: 2015-06-30, is_salaried: true, vacation_hours: 10, sick_leave_hours: 5, is_current: true}
+      staging.department_history:
+        - {employee_id: 1, department_id: 5, start_date: 2015-06-30, end_date: 2019-12-31}
+        - {employee_id: 1, department_id: 6, start_date: 2020-01-01, end_date: null}
+      staging.departments:
+        - {department_id: 5, department_name: Purchasing, department_group: Inventory Management}
+        - {department_id: 6, department_name: Finance, department_group: Executive General and Administration}
+      staging.pay_history:
+        - {employee_id: 1, rate_change_date: 2015-06-30, rate: 20.0000, pay_frequency: 1}
+        - {employee_id: 1, rate_change_date: 2018-01-01, rate: 25.0000, pay_frequency: 2}
+    expect:
+      - {employee_id: 1, user_name: alex1, job_title: Buyer, marital_status: single, gender: female, hire_date: 2015-06-30, tenure_years: 10, is_salaried: true, department_name: Finance, department_group: Executive General and Administration, current_pay_rate: 25.0000, pay_frequency: biweekly}

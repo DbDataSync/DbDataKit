@@ -1,0 +1,31 @@
+name: staging.special_offers
+kind: view
+grain:
+  - special_offer_id
+columns:
+  - name: special_offer_id
+    type: INTEGER
+    nullable: false
+  - name: description
+    type: VARCHAR(255)
+    nullable: false
+  - name: discount_pct
+    type: DECIMAL(10, 4)
+    nullable: false
+  - name: offer_type
+    type: VARCHAR(50)
+    nullable: false
+  - name: category
+    type: VARCHAR(50)
+    nullable: false
+  - name: start_date
+    type: DATE
+    nullable: false
+  - name: end_date
+    type: DATE
+    nullable: false
+  - name: min_qty
+    type: INTEGER
+    nullable: false
+  - name: max_qty
+    type: INTEGER

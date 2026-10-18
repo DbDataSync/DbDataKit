@@ -1,0 +1,14 @@
+name: marts.rpt_revenue_by_color_year
+kind: full
+grain:
+  - color_group
+columns:
+  - name: color_group
+    type: VARCHAR
+    nullable: false
+  - name: revenue_2022
+    type: DECIMAL(38, 4)
+  - name: revenue_2023
+    type: DECIMAL(38, 4)
+  - name: revenue_2024
+    type: DECIMAL(38, 4)

@@ -1,0 +1,51 @@
+name: marts.dim_product
+kind: full
+grain:
+  - product_id
+columns:
+  - name: product_id
+    type: INTEGER
+    nullable: false
+  - name: product_name
+    type: VARCHAR(60)
+    nullable: false
+  - name: product_number
+    type: VARCHAR(25)
+    nullable: false
+  - name: category_name
+    type: VARCHAR(50)
+    nullable: false
+  - name: subcategory_name
+    type: VARCHAR(50)
+    nullable: false
+  - name: is_made_in_house
+    type: BOOLEAN
+    nullable: false
+  - name: color
+    type: VARCHAR
+    nullable: false
+  - name: color_group
+    type: VARCHAR
+  - name: size
+    type: VARCHAR(5)
+  - name: weight
+    type: DECIMAL(8, 2)
+  - name: standard_cost
+    type: DECIMAL(19, 4)
+    nullable: false
+  - name: list_price
+    type: DECIMAL(19, 4)
+    nullable: false
+  - name: margin
+    type: DECIMAL(19, 4)
+  - name: margin_percent
+    type: DECIMAL(5, 1)
+  - name: price_band
+    type: VARCHAR
+  - name: sell_start_date
+    type: DATE
+    nullable: false
+  - name: sell_end_date
+    type: DATE
+  - name: is_discontinued
+    type: BOOLEAN

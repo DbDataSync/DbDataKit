@@ -1,0 +1,34 @@
+# Load strategies (DESIGN.md 6.6): one row per strategy, status per target. Same entry format as constructs.yml, without `detect`.
+# test: conformance/<strategy> names a case in tests/DbDataBuild.Tests.Conformance: the strategy's rendered scripts are executed on the
+# target engine and the result is compared with a DuckDB reference implementation on synthetic data, including rerun idempotency.
+# Fabric entries are unverified: no Fabric engine was available. They use the T-SQL statements verified on SQL Server.
+
+- id: strategy.full_replace
+  duckdb: native
+  sqlserver: { status: translated, test: conformance/full_replace, note: "Stage, DELETE, INSERT in one transaction (XACT_ABORT ON)." }
+  fabric:    { status: unverified, note: "Same T-SQL as SQL Server; temp tables, DROP TABLE IF EXISTS and transactions on Fabric are not tested." }
+  postgres:  { status: translated, test: conformance/full_replace, note: "Stage (CREATE TEMP TABLE ... ON COMMIT DROP), DELETE, INSERT in one transaction." }
+
+- id: strategy.delete_insert_by_key
+  duckdb: native
+  sqlserver: { status: translated, test: conformance/delete_insert_by_key, note: "Stage, delete rows whose key is in the stage, insert the stage. Rows with a NULL key never match." }
+  fabric:    { status: unverified, note: "Same T-SQL as SQL Server; not tested on Fabric." }
+  postgres:  { status: translated, test: conformance/delete_insert_by_key }
+
+- id: strategy.merge_by_key
+  duckdb: native
+  sqlserver: { status: translated, test: conformance/merge_by_key, note: "MERGE from the stage: update matches, insert the rest." }
+  fabric:    { status: unverified, note: "Microsoft documents MERGE as supported in Fabric Data Warehouse, but it is not tested here; the design expected it to need emulation." }
+  postgres:  { status: translated, min_version: 15, test: conformance/merge_by_key, note: "MERGE exists from PostgreSQL 15." }
+
+- id: strategy.delete_insert_by_range
+  duckdb: native
+  sqlserver: { status: translated, test: conformance/delete_insert_by_range, note: "Reload [start, end) of the range column: stage the query's rows for the range, delete the range, insert. start and end are bound parameters." }
+  fabric:    { status: unverified, note: "Same T-SQL as SQL Server; not tested on Fabric." }
+  postgres:  { status: translated, test: conformance/delete_insert_by_range }
+
+- id: strategy.watermark_append
+  duckdb: native
+  sqlserver: { status: translated, test: conformance/watermark_append, note: "Rows newer than the watermark are appended; with a lookback the window from the watermark is replaced, never duplicated. The watermark comes from a committed resolver query." }
+  fabric:    { status: unverified, note: "Same T-SQL as SQL Server; not tested on Fabric." }
+  postgres:  { status: translated, test: conformance/watermark_append }

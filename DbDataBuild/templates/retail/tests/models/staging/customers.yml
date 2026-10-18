@@ -1,0 +1,11 @@
+# description: staging.customers splits the one name column into first and last name
+# tags: staging
+cases:
+  - name: the first name is what comes before the first space, the rest is the last name
+    given:
+      shop.customers:
+        - {customer_id: 1, full_name: Ada Lovelace, email: ada@example.com, country_code: GB, signup_date: 2023-01-02, marketing_opt_in: true}
+        - {customer_id: 2, full_name: Piet van Dijk, email: piet@mail.example.nl, country_code: NL, signup_date: 2023-02-03, marketing_opt_in: false}
+    expect:
+      - {customer_id: 1, first_name: Ada, last_name: Lovelace, email: ada@example.com, email_domain: example.com, country_code: GB, signup_date: 2023-01-02, marketing_opt_in: true}
+      - {customer_id: 2, first_name: Piet, last_name: van Dijk, email: piet@mail.example.nl, email_domain: mail.example.nl, country_code: NL, signup_date: 2023-02-03, marketing_opt_in: false}

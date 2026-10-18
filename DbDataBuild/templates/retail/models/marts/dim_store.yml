@@ -1,0 +1,15 @@
+name: marts.dim_store
+kind: full
+grain: [store_id]
+columns:
+  - {name: store_id, type: INTEGER, nullable: false}
+  - {name: store_name, type: "VARCHAR(60)", nullable: false}
+  - {name: country_code, type: "VARCHAR(2)", nullable: false}
+  - {name: region, type: "VARCHAR(20)", nullable: false}
+  - {name: channel_code, type: "VARCHAR(4)", nullable: false}
+  - {name: channel_group, type: "VARCHAR(10)", nullable: false}
+  - {name: floor_area_m2, type: INTEGER}
+  - {name: size_band, type: "VARCHAR(6)", nullable: false}
+  - {name: opened_date, type: DATE, nullable: false}
+indexes:
+  - {name: ux_dim_store_store_id, columns: [store_id], unique: true}

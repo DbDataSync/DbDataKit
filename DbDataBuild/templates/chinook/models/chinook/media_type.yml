@@ -1,0 +1,6 @@
+name: chinook.media_type
+kind: mapped
+grain: [media_type_id]
+columns:
+  - {name: media_type_id, type: INTEGER, nullable: false}
+  - {name: name, type: "VARCHAR(40)", nullable: false}

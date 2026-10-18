@@ -1,0 +1,20 @@
+# description: marts.rpt_territory_top_products lists the best three products of each territory, however many it has
+# tags: marts
+cases:
+  - name: four products in one territory give three rows; a territory with one gives one
+    given:
+      marts.dim_territory:
+        - {territory_id: 1, territory_name: Northwest, country_region_code: US, territory_group: North America, currency_code: USD}
+        - {territory_id: 2, territory_name: Canada, country_region_code: CA, territory_group: North America, currency_code: CAD}
+        - {territory_id: 3, territory_name: Nowhere, country_region_code: XX, territory_group: None, currency_code: USD}
+      marts.fct_sales_lines:
+        - {sales_order_id: 1, sales_order_detail_id: 1, date_key: 20240101, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 10, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 50.0, discount_usd: 0.0, revenue_usd: 50.0, cost_usd: 30.0, margin_usd: 20.0}
+        - {sales_order_id: 1, sales_order_detail_id: 2, date_key: 20240101, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 11, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 40.0, discount_usd: 0.0, revenue_usd: 40.0, cost_usd: 30.0, margin_usd: 10.0}
+        - {sales_order_id: 1, sales_order_detail_id: 3, date_key: 20240101, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 12, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 30.0, discount_usd: 0.0, revenue_usd: 30.0, cost_usd: 20.0, margin_usd: 10.0}
+        - {sales_order_id: 1, sales_order_detail_id: 4, date_key: 20240101, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 13, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 20.0, discount_usd: 0.0, revenue_usd: 20.0, cost_usd: 10.0, margin_usd: 10.0}
+        - {sales_order_id: 2, sales_order_detail_id: 5, date_key: 20240102, customer_id: 2, sales_person_id: null, territory_id: 2, product_id: 10, special_offer_id: 1, order_qty: 1, currency_code: CAD, rate_to_usd: 0.8, gross_usd: 8.0, discount_usd: 0.0, revenue_usd: 8.0, cost_usd: 5.0, margin_usd: 3.0}
+    expect:
+      - {territory_id: 1, territory_name: Northwest, product_id: 10, revenue: 50.00}
+      - {territory_id: 1, territory_name: Northwest, product_id: 11, revenue: 40.00}
+      - {territory_id: 1, territory_name: Northwest, product_id: 12, revenue: 30.00}
+      - {territory_id: 2, territory_name: Canada, product_id: 10, revenue: 8.00}

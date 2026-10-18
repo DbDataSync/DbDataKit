@@ -1,0 +1,10 @@
+name: sales.customer
+kind: mapped
+grain: [customer_id]
+columns:
+  - {name: customer_id, type: INTEGER, nullable: false}
+  - {name: first_name, type: "VARCHAR(50)", nullable: false}
+  - {name: last_name, type: "VARCHAR(50)", nullable: false}
+  - {name: email, type: "VARCHAR(80)", nullable: false}
+  - {name: territory_id, type: INTEGER, nullable: false}
+  - {name: store_name, type: "VARCHAR(60)"}

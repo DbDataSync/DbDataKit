@@ -1,0 +1,14 @@
+name: staging.departments
+kind: view
+grain:
+  - department_id
+columns:
+  - name: department_id
+    type: INTEGER
+    nullable: false
+  - name: department_name
+    type: VARCHAR(50)
+    nullable: false
+  - name: department_group
+    type: VARCHAR(50)
+    nullable: false

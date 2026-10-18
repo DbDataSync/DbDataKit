@@ -1,0 +1,33 @@
+name: conformance-full
+# Everything, in one job, with every engine running: the groups ci.yml splits up, the release group, and the preview engines. Runs every Sunday, on request, and before a release (release.yml calls it).
+on:
+  schedule:
+    - cron: '0 5 * * 0'
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+
+jobs:
+  conformance-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Prebuilt polyglot library
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/fetch-native.sh
+      - run: dotnet build -c Release
+      - name: Start every engine
+        run: scripts/test-engines.sh up all
+      - name: Conformance tests
+        run: |
+          eval "$(scripts/test-engines.sh env)"
+          dotnet test tests/DbDataBuild.Tests.Conformance -c Release --no-build
+      - name: Stop the engines
+        if: always()
+        run: scripts/test-engines.sh down

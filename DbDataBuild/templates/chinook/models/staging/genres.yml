@@ -1,0 +1,11 @@
+name: staging.genres
+kind: view
+grain:
+  - genre_id
+columns:
+  - name: genre_id
+    type: INTEGER
+    nullable: false
+  - name: genre_name
+    type: VARCHAR(40)
+    nullable: false

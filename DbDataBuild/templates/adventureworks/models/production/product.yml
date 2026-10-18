@@ -1,0 +1,17 @@
+name: production.product
+kind: mapped
+grain: [product_id]
+columns:
+  - {name: product_id, type: INTEGER, nullable: false}
+  - {name: name, type: "VARCHAR(60)", nullable: false}
+  - {name: product_number, type: "VARCHAR(25)", nullable: false}
+  - {name: make_flag, type: BOOLEAN, nullable: false}
+  - {name: color, type: "VARCHAR(15)"}
+  - {name: size, type: "VARCHAR(5)"}
+  - {name: weight, type: "DECIMAL(8, 2)"}
+  - {name: standard_cost, type: "DECIMAL(19, 4)", nullable: false}
+  - {name: list_price, type: "DECIMAL(19, 4)", nullable: false}
+  - {name: product_subcategory_id, type: INTEGER, nullable: false}
+  - {name: sell_start_date, type: DATE, nullable: false}
+  - {name: sell_end_date, type: DATE}
+  - {name: attributes, type: VARCHAR}

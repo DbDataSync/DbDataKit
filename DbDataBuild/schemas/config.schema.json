@@ -1,0 +1,1400 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "config.schema.json",
+  "title": "DbDataBuild project configuration",
+  "description": "dbdatabuild.yml at the project root. Offline settings only: credentials are never stored here, they come from the runtime environment. Every key is optional; an absent key takes the built-in default, which every command prints in its header. This schema is for editors; `dbdatabuild project compile` applies the same rules with diagnostic codes.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "defaults": {
+      "description": "Model settings every model inherits from this file; a folder's _dbdatabuild.yml has the same section and layers onto it, and a model's own file layers on top (the nearest wins). A list appends, a mapping merges by key, a scalar replaces; a key suffix changes that for the key: `key=` replaces what was inherited, `key-` removes the listed items or keys, `key+` merges (the default). The settings themselves are those of a model file (model.schema.json); they are checked where they are merged into a model.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^(connections|kind|hooks|rewrites|lint_ignore|tags|properties|refresh)[=+-]?$"
+      },
+      "properties": {
+        "connections": {
+          "description": "Connections a model is built on when its own file and the folders above it say nothing different. Default: [sqlserver]. Lists append: a model that lists its own connections adds to these unless it writes `connections=`.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/connectionName"
+          }
+        },
+        "connections=": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/connectionName"
+          }
+        },
+        "connections+": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/connectionName"
+          }
+        }
+      }
+    },
+    "parameters": {
+      "description": "The project's parameters, referenced as `${project.name}`; a folder's _dbdatabuild.yml may override them for what is beneath it (and a connection's parameters, under `connections.<name>.parameters`).",
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9_]*$": {
+          "$ref": "#/$defs/parameterValue"
+        }
+      }
+    },
+    "connections": {
+      "description": "Named database endpoints. A connection named after an engine (sqlserver, fabric, postgres) exists without being declared; declaring it sets its version. Any other name needs an `engine`. The name is part of the login's environment variable: DBDATABUILD_<NAME>_READ and _WRITE.",
+      "type": "object",
+      "properties": {
+        "sqlserver": {
+          "description": "The connection named after the engine `sqlserver`: it needs no declaration, and an entry only sets its version.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "engine": {
+              "$ref": "#/$defs/engineKeywords"
+            },
+            "version": {
+              "description": "The engine's major version, or the T-SQL level to generate for: 16 for SQL Server 2022 (and a 2025 server at compatibility level 160), 17 for 2025 at level 170. Lets the matrix linter resolve min_version rows.",
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*$"
+                }
+              ]
+            },
+            "parameters": {
+              "description": "Values this connection carries, which differ between connections of one application (a store id, a region). Referenced as `${connection.name}`, or `${origin.name}` by a copy that reads from the connection. Names are lowercase words with underscores; values are single values, read as text.",
+              "type": "object",
+              "additionalProperties": false,
+              "patternProperties": {
+                "^[a-z][a-z0-9_]*$": {
+                  "$ref": "#/$defs/parameterValue"
+                }
+              }
+            },
+            "tracking": {
+              "description": "`none` (not tracked, no warning), or another tracking connection (and schema name) for this connection's records.",
+              "oneOf": [
+                {
+                  "const": "none"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "connection": {
+                      "description": "The connection that keeps the records of what the tool built (a connection of this project: its read and write logins are used). Without it, nothing is tracked and every command that would record something warns.",
+                      "$ref": "#/$defs/connectionName"
+                    },
+                    "schema": {
+                      "description": "The schema name of the tracking tables on that connection. Default: dbdatabuild.",
+                      "type": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                    }
+                  }
+                }
+              ]
+            },
+            "timezone": {
+              "description": "An IANA time zone name (for example `Europe/Berlin`). It decides what `current_date` and `now()` mean in an `expression` resolver of a load on this connection; it wins over the project's. Default: the project's, else UTC. The machine's own zone is never used.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "allow_native_commands": {
+              "description": "Whether a native command (a procedure call that returns rows, `kind: {native: {access: command}}`) may be run on this connection. Default false: a procedure can write, so each connection that runs one says so. The read login's permissions are what keep it read-only; the call also runs in a transaction that is rolled back.",
+              "type": "boolean"
+            },
+            "max_parallel": {
+              "description": "How many sessions one refresh may have open at this connection at once. At an origin of a copy it counts the sessions that read rows for it (and the checks and `source` resolvers that go with them); at the destination it caps `parallel`, the loads that run together. A limit holds within one run (another process has its own). Default: no limit.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "string_semantics": {
+              "$ref": "#/$defs/stringSemantics"
+            },
+            "plans": {
+              "description": "This connection's own plan policy; what it leaves out is the project's.",
+              "$ref": "#/$defs/planSettings"
+            },
+            "refresh": {
+              "description": "This connection's own refresh check; what it leaves out is the project's.",
+              "$ref": "#/$defs/refreshSettings"
+            },
+            "title": {
+              "description": "A short display name, one line, at most 200 characters. Never inherited.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[^\\n]*$"
+            },
+            "description": {
+              "description": "Free text, at most 4000 characters. Never inherited.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "tags": {
+              "description": "Labels: words of letters, digits, `_`, `-`, `.` and `:`, at most 128 characters each.",
+              "type": "array",
+              "uniqueItems": true,
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:\\-]*$"
+              }
+            },
+            "properties": {
+              "description": "Free key-value data. A value is text, a number or true or false (a number written as plain digits is a number, text in quotes is text); keys are at most 128 characters, values at most 4000.",
+              "type": "object",
+              "propertyNames": {
+                "maxLength": 128,
+                "pattern": "^[A-Za-z_]([A-Za-z0-9_.:\\-]*[A-Za-z0-9_.:])?$"
+              },
+              "additionalProperties": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "fabric": {
+          "description": "The connection named after the engine `fabric`: it needs no declaration, and an entry only sets its version.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "engine": {
+              "$ref": "#/$defs/engineKeywords"
+            },
+            "version": {
+              "description": "The engine's major version, or the T-SQL level to generate for: 16 for SQL Server 2022 (and a 2025 server at compatibility level 160), 17 for 2025 at level 170. Lets the matrix linter resolve min_version rows.",
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*$"
+                }
+              ]
+            },
+            "parameters": {
+              "description": "Values this connection carries, which differ between connections of one application (a store id, a region). Referenced as `${connection.name}`, or `${origin.name}` by a copy that reads from the connection. Names are lowercase words with underscores; values are single values, read as text.",
+              "type": "object",
+              "additionalProperties": false,
+              "patternProperties": {
+                "^[a-z][a-z0-9_]*$": {
+                  "$ref": "#/$defs/parameterValue"
+                }
+              }
+            },
+            "tracking": {
+              "description": "`none` (not tracked, no warning), or another tracking connection (and schema name) for this connection's records.",
+              "oneOf": [
+                {
+                  "const": "none"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "connection": {
+                      "description": "The connection that keeps the records of what the tool built (a connection of this project: its read and write logins are used). Without it, nothing is tracked and every command that would record something warns.",
+                      "$ref": "#/$defs/connectionName"
+                    },
+                    "schema": {
+                      "description": "The schema name of the tracking tables on that connection. Default: dbdatabuild.",
+                      "type": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                    }
+                  }
+                }
+              ]
+            },
+            "timezone": {
+              "description": "An IANA time zone name (for example `Europe/Berlin`). It decides what `current_date` and `now()` mean in an `expression` resolver of a load on this connection; it wins over the project's. Default: the project's, else UTC. The machine's own zone is never used.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "allow_native_commands": {
+              "description": "Whether a native command (a procedure call that returns rows, `kind: {native: {access: command}}`) may be run on this connection. Default false: a procedure can write, so each connection that runs one says so. The read login's permissions are what keep it read-only; the call also runs in a transaction that is rolled back.",
+              "type": "boolean"
+            },
+            "max_parallel": {
+              "description": "How many sessions one refresh may have open at this connection at once. At an origin of a copy it counts the sessions that read rows for it (and the checks and `source` resolvers that go with them); at the destination it caps `parallel`, the loads that run together. A limit holds within one run (another process has its own). Default: no limit.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "string_semantics": {
+              "$ref": "#/$defs/stringSemantics"
+            },
+            "plans": {
+              "description": "This connection's own plan policy; what it leaves out is the project's.",
+              "$ref": "#/$defs/planSettings"
+            },
+            "refresh": {
+              "description": "This connection's own refresh check; what it leaves out is the project's.",
+              "$ref": "#/$defs/refreshSettings"
+            },
+            "title": {
+              "description": "A short display name, one line, at most 200 characters. Never inherited.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[^\\n]*$"
+            },
+            "description": {
+              "description": "Free text, at most 4000 characters. Never inherited.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "tags": {
+              "description": "Labels: words of letters, digits, `_`, `-`, `.` and `:`, at most 128 characters each.",
+              "type": "array",
+              "uniqueItems": true,
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:\\-]*$"
+              }
+            },
+            "properties": {
+              "description": "Free key-value data. A value is text, a number or true or false (a number written as plain digits is a number, text in quotes is text); keys are at most 128 characters, values at most 4000.",
+              "type": "object",
+              "propertyNames": {
+                "maxLength": 128,
+                "pattern": "^[A-Za-z_]([A-Za-z0-9_.:\\-]*[A-Za-z0-9_.:])?$"
+              },
+              "additionalProperties": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "postgres": {
+          "description": "The connection named after the engine `postgres`: it needs no declaration, and an entry only sets its version.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "engine": {
+              "$ref": "#/$defs/engineKeywords"
+            },
+            "version": {
+              "description": "The engine's major version, or the T-SQL level to generate for: 16 for SQL Server 2022 (and a 2025 server at compatibility level 160), 17 for 2025 at level 170. Lets the matrix linter resolve min_version rows.",
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*$"
+                }
+              ]
+            },
+            "parameters": {
+              "description": "Values this connection carries, which differ between connections of one application (a store id, a region). Referenced as `${connection.name}`, or `${origin.name}` by a copy that reads from the connection. Names are lowercase words with underscores; values are single values, read as text.",
+              "type": "object",
+              "additionalProperties": false,
+              "patternProperties": {
+                "^[a-z][a-z0-9_]*$": {
+                  "$ref": "#/$defs/parameterValue"
+                }
+              }
+            },
+            "tracking": {
+              "description": "`none` (not tracked, no warning), or another tracking connection (and schema name) for this connection's records.",
+              "oneOf": [
+                {
+                  "const": "none"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "connection": {
+                      "description": "The connection that keeps the records of what the tool built (a connection of this project: its read and write logins are used). Without it, nothing is tracked and every command that would record something warns.",
+                      "$ref": "#/$defs/connectionName"
+                    },
+                    "schema": {
+                      "description": "The schema name of the tracking tables on that connection. Default: dbdatabuild.",
+                      "type": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                    }
+                  }
+                }
+              ]
+            },
+            "timezone": {
+              "description": "An IANA time zone name (for example `Europe/Berlin`). It decides what `current_date` and `now()` mean in an `expression` resolver of a load on this connection; it wins over the project's. Default: the project's, else UTC. The machine's own zone is never used.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "allow_native_commands": {
+              "description": "Whether a native command (a procedure call that returns rows, `kind: {native: {access: command}}`) may be run on this connection. Default false: a procedure can write, so each connection that runs one says so. The read login's permissions are what keep it read-only; the call also runs in a transaction that is rolled back.",
+              "type": "boolean"
+            },
+            "max_parallel": {
+              "description": "How many sessions one refresh may have open at this connection at once. At an origin of a copy it counts the sessions that read rows for it (and the checks and `source` resolvers that go with them); at the destination it caps `parallel`, the loads that run together. A limit holds within one run (another process has its own). Default: no limit.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "string_semantics": {
+              "$ref": "#/$defs/stringSemantics"
+            },
+            "plans": {
+              "description": "This connection's own plan policy; what it leaves out is the project's.",
+              "$ref": "#/$defs/planSettings"
+            },
+            "refresh": {
+              "description": "This connection's own refresh check; what it leaves out is the project's.",
+              "$ref": "#/$defs/refreshSettings"
+            },
+            "title": {
+              "description": "A short display name, one line, at most 200 characters. Never inherited.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[^\\n]*$"
+            },
+            "description": {
+              "description": "Free text, at most 4000 characters. Never inherited.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "tags": {
+              "description": "Labels: words of letters, digits, `_`, `-`, `.` and `:`, at most 128 characters each.",
+              "type": "array",
+              "uniqueItems": true,
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:\\-]*$"
+              }
+            },
+            "properties": {
+              "description": "Free key-value data. A value is text, a number or true or false (a number written as plain digits is a number, text in quotes is text); keys are at most 128 characters, values at most 4000.",
+              "type": "object",
+              "propertyNames": {
+                "maxLength": 128,
+                "pattern": "^[A-Za-z_]([A-Za-z0-9_.:\\-]*[A-Za-z0-9_.:])?$"
+              },
+              "additionalProperties": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "patternProperties": {
+        "^(?!(sqlserver|fabric|postgres)$)[A-Za-z][A-Za-z0-9_]*$": {
+          "$ref": "#/$defs/connectionOfAnEngine"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dialects": {
+      "description": "Dialect profiles for read-only origins: what the tool needs to know about the SQL a system takes (it reads from it, never builds on it). A profile starts from what it `extends` (a built-in: ansi, duckdb, sqlserver, postgres, fabric; or another profile here; ansi when it says nothing) and changes the fields it names. A name is lower case and may not be a keyword of `engine`. Used by a connection whose `engine` names it (`readonly odbc legacy_sql`); a dialect is named after the system behind the connection, not after the server in front of it.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "extends": {
+            "description": "The dialect this one starts from.",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "quote": {
+            "description": "The identifier quote: a double quote, a backtick, or `[ ]` (square brackets).",
+            "enum": [
+              "\"",
+              "`",
+              "[ ]",
+              "[]"
+            ]
+          },
+          "parameters": {
+            "description": "How a parameter is written: `@name`, a positional `?`, or numbered `$1`. The plan records the order in which positional values are bound.",
+            "enum": [
+              "named_at",
+              "positional",
+              "numbered"
+            ]
+          },
+          "ping": {
+            "description": "The one SELECT `connection inspect` sends to see that the connection answers.",
+            "type": "string",
+            "minLength": 1
+          },
+          "catalog": {
+            "description": "Where the tables and columns are read from: the standard `information_schema` views; `odbc`, the ODBC driver's own catalog functions (SQLTables, SQLColumns, SQLPrimaryKeys, SQLForeignKeys, SQLStatistics), for a system with no information_schema (an `odbc` connection only); or nowhere (`none`: declare the tables by hand).",
+            "enum": [
+              "information_schema",
+              "odbc",
+              "none"
+            ]
+          },
+          "identifier_case": {
+            "description": "What a name written without quotes becomes in the system. The structure check of a copy uses it to find a declared table that is stored in the other case (and says how the declaration must be spelled, because the read quotes the name as declared).",
+            "enum": [
+              "preserve",
+              "upper",
+              "lower"
+            ]
+          },
+          "limit": {
+            "description": "How a bounded read is written: `LIMIT n`, `SELECT TOP n`, `FETCH FIRST n ROWS ONLY`. The one bounded read the tool makes of an origin is the zero-row read that learns the columns of a native query when the driver cannot say them without running it.",
+            "enum": [
+              "limit",
+              "top",
+              "fetch"
+            ]
+          },
+          "types": {
+            "description": "The catalog's type names (lower case) and the logical type each is read as, for `project import` and the structure check; they are added to those of the dialect it extends. A decimal and a varchar take their precision, scale and length from the catalog.",
+            "type": "object",
+            "additionalProperties": {
+              "enum": [
+                "BIGINT",
+                "INTEGER",
+                "SMALLINT",
+                "BOOLEAN",
+                "DECIMAL",
+                "DOUBLE",
+                "FLOAT",
+                "DATE",
+                "TIMESTAMP",
+                "TIME",
+                "TIMESTAMP WITH TIME ZONE",
+                "UUID",
+                "BLOB",
+                "VARCHAR"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "tracking": {
+      "description": "Where the records of what the tool built are kept (drift baselines, the DDL and run logs, acknowledgements, plan history, metadata), for every connection that is written; each record names the connection it is about, so one tracking connection can hold many. Default: nothing is tracked, with a warning on the commands that would have recorded something. `none` is the explicit choice: not tracked, no warning. A connection can say its own (`connections.<name>.tracking`).",
+      "oneOf": [
+        {
+          "const": "none"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "connection": {
+              "description": "The connection that keeps the records of what the tool built (a connection of this project: its read and write logins are used). Without it, nothing is tracked and every command that would record something warns.",
+              "$ref": "#/$defs/connectionName"
+            },
+            "schema": {
+              "description": "The schema name of the tracking tables on that connection. Default: dbdatabuild.",
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            }
+          }
+        }
+      ]
+    },
+    "string_semantics": {
+      "description": "The project's string comparison profile (DESIGN.md 7.4). Default: case-insensitive, accent-sensitive, trailing spaces ignored (SQL Server style).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "case": {
+          "enum": [
+            "sensitive",
+            "insensitive"
+          ]
+        },
+        "accent": {
+          "enum": [
+            "sensitive",
+            "insensitive"
+          ]
+        },
+        "trailing_space": {
+          "enum": [
+            "significant",
+            "ignored"
+          ]
+        },
+        "collations": {
+          "description": "Logical collation name to per-engine collation name.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "duckdb": {
+                "$ref": "#/$defs/collation"
+              },
+              "sqlserver": {
+                "$ref": "#/$defs/collation"
+              },
+              "fabric": {
+                "$ref": "#/$defs/collation"
+              },
+              "postgres": {
+                "$ref": "#/$defs/collation"
+              }
+            }
+          }
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "severity": {
+          "description": "Severity of matrix findings. `unsupported` findings are always errors and cannot be configured.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "approximated": {
+              "$ref": "#/$defs/severity"
+            },
+            "emulated": {
+              "$ref": "#/$defs/severity"
+            },
+            "unverified": {
+              "$ref": "#/$defs/severity"
+            },
+            "not_covered": {
+              "$ref": "#/$defs/severity"
+            },
+            "native_definition_changed": {
+              "description": "Severity of a change to a routine a native model lists under `track_definition` since the last apply. A warning by default.",
+              "$ref": "#/$defs/severity"
+            },
+            "history_inconsistency": {
+              "description": "Severity of a model being planned that reads (directly or through other models) a column whose recorded history contradicts what a person decided and nobody has acknowledged (DDB-240; the column itself is DDB-443). A warning by default; `error` refuses the plan until it is acknowledged (`ack history`).",
+              "$ref": "#/$defs/severity"
+            }
+          }
+        }
+      }
+    },
+    "hook_groups": {
+      "description": "Named, ordered sets of hooks that models reference with `use: <group>`. Groups do not nest. Hook names inside a group are prefixed with the group name in plans (`group.name`).",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_\\-]*$"
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/hook"
+        }
+      }
+    },
+    "metadata": {
+      "description": "Metadata stored in the target for introspection (`publish-metadata`). `store_on_apply: true` also stores the project and the applied models' documents, and the plan, after every successful `apply`. Default false.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "store_on_apply": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "lowering": {
+      "description": "Model queries are bound by DuckDB and lowered to one explicit query before they are checked and transpiled (committed under rendered/lowered/). `enabled: false` turns that stage off and transpiles the author's SQL directly, as before; there is no per-model fallback. Default true.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "lint": {
+      "description": "Advisory lints. `indexes: false` turns off the index advice (DDB-223, DDB-224) and `slices: false` the slice advice (DDB-225, DDB-239) for the whole project; a model can silence single codes with `lint_ignore`. Both default to true.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "indexes": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        },
+        "slices": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "rewrites": {
+      "description": "Which rewrites make the engines give DuckDB's answers (`dbdatabuild help matrix --rewrites` lists them). The default is `fidelity: exact`: all of them. `fidelity: native` turns off every rewrite the targets can do without, for shorter queries and simpler plans, at the price of each engine's own behavior (a trailing space not counted, an integer cut instead of rounded, a week counted another way); `disable` and `enable` change single rewrites. A rewrite a target cannot do without (SQL Server has no LPAD, PostgreSQL's round takes no double) cannot be turned off (DDB-229). A model's section is applied on top of the project's.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fidelity": {
+          "enum": [
+            "exact",
+            "native"
+          ]
+        },
+        "disable": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "length-trailing-spaces",
+              "round-double",
+              "try-cast-parse",
+              "double-to-int",
+              "decimal-to-int",
+              "double-to-decimal",
+              "avg-double",
+              "sum-widen",
+              "date-to-timestamp",
+              "weekday-datefirst",
+              "date-diff-boundaries",
+              "date-diff-weeks",
+              "date-plus-days",
+              "concat-plus",
+              "pad-to-length",
+              "split-part",
+              "string-agg-array",
+              "now-with-zone"
+            ]
+          }
+        },
+        "enable": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "length-trailing-spaces",
+              "round-double",
+              "try-cast-parse",
+              "double-to-int",
+              "decimal-to-int",
+              "double-to-decimal",
+              "avg-double",
+              "sum-widen",
+              "date-to-timestamp",
+              "weekday-datefirst",
+              "date-diff-boundaries",
+              "date-diff-weeks",
+              "date-plus-days",
+              "concat-plus",
+              "pad-to-length",
+              "split-part",
+              "string-agg-array",
+              "now-with-zone"
+            ]
+          }
+        }
+      }
+    },
+    "tests": {
+      "description": "Settings for the project's tests (tests/). `gate` names the tags of the tests that `plan`, `check` and `run` run first (offline, in DuckDB): a failing test refuses the plan, and nothing is read from the target.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tags"
+          ],
+          "properties": {
+            "tags": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "model_layout": {
+      "description": "How the files of a model are named. A model's name (`schema_name.object_name`) is always the `name:` in its definition file; this says whether the files must spell it too. `folder`: models/<schema name>/<object>.yml (the path is the name; default). `dotted`: <schema name>.<object>.yml in any folder. `object`: <object>.yml in any folder. `none`: no check.",
+      "enum": [
+        "folder",
+        "dotted",
+        "object",
+        "none"
+      ]
+    },
+    "plans": {
+      "description": "How the project is meant to operate: what is kept of a plan and what is recorded of each event, per lane. Defaults: deploy `committed`/`full`, refresh `committed`/`standard`.",
+      "$ref": "#/$defs/planSettings"
+    },
+    "timezone": {
+      "description": "An IANA time zone name (for example `Europe/Berlin`). It decides what `current_date` and `now()` mean in an `expression` resolver of a load (docs/research/refresh-plans.md, section 8); a connection may set its own. Default UTC. The machine's own zone is never used.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "refresh": {
+      "description": "The safety check before a refresh and what a failed check does. A refresh can run without querying the connection's metadata (`check: none`).",
+      "$ref": "#/$defs/refreshSettings"
+    },
+    "retention": {
+      "description": "How long local files are kept.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "statement_logs_days": {
+          "description": "Statement logs (.dbdatabuild/statement-log/) older than this many days are removed by the next deploy or refresh; 0 keeps them all. Default 30.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "title": {
+      "description": "A short display name, one line, at most 200 characters. Never inherited.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[^\\n]*$"
+    },
+    "description": {
+      "description": "Free text, at most 4000 characters. Never inherited.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "tags": {
+      "description": "Labels: words of letters, digits, `_`, `-`, `.` and `:`, at most 128 characters each.",
+      "type": "array",
+      "uniqueItems": true,
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:\\-]*$"
+      }
+    },
+    "properties": {
+      "description": "Free key-value data. A value is text, a number or true or false (a number written as plain digits is a number, text in quotes is text); keys are at most 128 characters, values at most 4000.",
+      "type": "object",
+      "propertyNames": {
+        "maxLength": 128,
+        "pattern": "^[A-Za-z_]([A-Za-z0-9_.:\\-]*[A-Za-z0-9_.:])?$"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "maxLength": 4000
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "severity": {
+      "enum": [
+        "error",
+        "warning",
+        "note"
+      ]
+    },
+    "collation": {
+      "type": "string",
+      "minLength": 1
+    },
+    "hook": {
+      "title": "hook",
+      "description": "A native-SQL script attached to a plan event. `script` is one path, or a path per target; the file is executed exactly as committed. The list order is the run order.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "event",
+        "script"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_\\-]*$"
+        },
+        "event": {
+          "description": "pre_ or post_ create, alter, load or backfill. pre_drop and post_drop are reserved: the planner has no drop step yet, so they are refused.",
+          "enum": [
+            "pre_create",
+            "post_create",
+            "pre_alter",
+            "post_alter",
+            "pre_load",
+            "post_load",
+            "pre_backfill",
+            "post_backfill"
+          ]
+        },
+        "script": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^(?!/)(?!.*\\\\)(?!.*:)(?!.*(^|/)\\.\\.?(/|$))[^/].*\\.[sS][qQ][lL]$"
+            },
+            {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {
+                "enum": [
+                  "sqlserver",
+                  "fabric",
+                  "postgres"
+                ]
+              },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*:)(?!.*(^|/)\\.\\.?(/|$))[^/].*\\.[sS][qQ][lL]$"
+              }
+            }
+          ]
+        },
+        "connections": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "sqlserver",
+              "fabric",
+              "postgres"
+            ]
+          }
+        },
+        "effect": {
+          "description": "What the script may do: ddl (default) or data. `run` runs only data hooks.",
+          "enum": [
+            "ddl",
+            "data"
+          ]
+        },
+        "risk": {
+          "description": "The author's declaration, which sets the plan step's risk class. Default safe.",
+          "enum": [
+            "safe",
+            "risky",
+            "destructive"
+          ]
+        }
+      }
+    },
+    "connectionName": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+    },
+    "connectionOfAnEngine": {
+      "description": "Any other connection: it names its engine.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine"
+      ],
+      "properties": {
+        "engine": {
+          "$ref": "#/$defs/engineKeywords"
+        },
+        "version": {
+          "description": "The engine's major version, or the T-SQL level to generate for: 16 for SQL Server 2022 (and a 2025 server at compatibility level 160), 17 for 2025 at level 170. Lets the matrix linter resolve min_version rows.",
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          ]
+        },
+        "parameters": {
+          "description": "Values this connection carries, which differ between connections of one application (a store id, a region). Referenced as `${connection.name}`, or `${origin.name}` by a copy that reads from the connection. Names are lowercase words with underscores; values are single values, read as text.",
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*$": {
+              "$ref": "#/$defs/parameterValue"
+            }
+          }
+        },
+        "tracking": {
+          "description": "`none` (not tracked, no warning), or another tracking connection (and schema name) for this connection's records.",
+          "oneOf": [
+            {
+              "const": "none"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "connection": {
+                  "description": "The connection that keeps the records of what the tool built (a connection of this project: its read and write logins are used). Without it, nothing is tracked and every command that would record something warns.",
+                  "$ref": "#/$defs/connectionName"
+                },
+                "schema": {
+                  "description": "The schema name of the tracking tables on that connection. Default: dbdatabuild.",
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                }
+              }
+            }
+          ]
+        },
+        "timezone": {
+          "description": "An IANA time zone name (for example `Europe/Berlin`). It decides what `current_date` and `now()` mean in an `expression` resolver of a load on this connection; it wins over the project's. Default: the project's, else UTC. The machine's own zone is never used.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "allow_native_commands": {
+          "description": "Whether a native command (a procedure call that returns rows, `kind: {native: {access: command}}`) may be run on this connection. Default false: a procedure can write, so each connection that runs one says so. The read login's permissions are what keep it read-only; the call also runs in a transaction that is rolled back.",
+          "type": "boolean"
+        },
+        "max_parallel": {
+          "description": "How many sessions one refresh may have open at this connection at once. At an origin of a copy it counts the sessions that read rows for it (and the checks and `source` resolvers that go with them); at the destination it caps `parallel`, the loads that run together. A limit holds within one run (another process has its own). Default: no limit.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "string_semantics": {
+          "$ref": "#/$defs/stringSemantics"
+        },
+        "plans": {
+          "description": "This connection's own plan policy; what it leaves out is the project's.",
+          "$ref": "#/$defs/planSettings"
+        },
+        "refresh": {
+          "description": "This connection's own refresh check; what it leaves out is the project's.",
+          "$ref": "#/$defs/refreshSettings"
+        },
+        "title": {
+          "description": "A short display name, one line, at most 200 characters. Never inherited.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\n]*$"
+        },
+        "description": {
+          "description": "Free text, at most 4000 characters. Never inherited.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "tags": {
+          "description": "Labels: words of letters, digits, `_`, `-`, `.` and `:`, at most 128 characters each.",
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:\\-]*$"
+          }
+        },
+        "properties": {
+          "description": "Free key-value data. A value is text, a number or true or false (a number written as plain digits is a number, text in quotes is text); keys are at most 128 characters, values at most 4000.",
+          "type": "object",
+          "propertyNames": {
+            "maxLength": 128,
+            "pattern": "^[A-Za-z_]([A-Za-z0-9_.:\\-]*[A-Za-z0-9_.:])?$"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "parameterValue": {
+      "description": "A single value (text), or `{type, value}` for a typed one. The type matters where the value reaches a query.",
+      "oneOf": [
+        {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "VARCHAR",
+                "BIGINT",
+                "INTEGER",
+                "SMALLINT",
+                "DATE",
+                "TIMESTAMP",
+                "NAME"
+              ]
+            },
+            "value": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "stringSemantics": {
+      "description": "How strings compare: the project's, or a connection's own over it (a field left out is the project's).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "case": {
+          "enum": [
+            "sensitive",
+            "insensitive"
+          ]
+        },
+        "accent": {
+          "enum": [
+            "sensitive",
+            "insensitive"
+          ]
+        },
+        "trailing_space": {
+          "enum": [
+            "significant",
+            "ignored"
+          ]
+        },
+        "collations": {
+          "description": "Logical collation name to per-engine collation name.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "duckdb": {
+                "$ref": "#/$defs/collation"
+              },
+              "sqlserver": {
+                "$ref": "#/$defs/collation"
+              },
+              "fabric": {
+                "$ref": "#/$defs/collation"
+              },
+              "postgres": {
+                "$ref": "#/$defs/collation"
+              }
+            }
+          }
+        }
+      }
+    },
+    "planKeep": {
+      "description": "Where a plan lives: `committed` (a file in the project, and in the tracking tables), `database` (only in the tracking tables), `ephemeral` (made and applied in one step, nothing kept).",
+      "enum": [
+        "committed",
+        "database",
+        "ephemeral"
+      ]
+    },
+    "auditLevel": {
+      "description": "How much an event records: `minimal` (the event and its steps), `standard` (adds the plan's hash, who and the commit), `full` (adds the plan text).",
+      "enum": [
+        "minimal",
+        "standard",
+        "full"
+      ]
+    },
+    "planSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "deploy": {
+          "description": "Deploy plans (a change of structure).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "keep": {
+              "$ref": "#/$defs/planKeep"
+            },
+            "audit": {
+              "$ref": "#/$defs/auditLevel"
+            },
+            "require_clean_tree": {
+              "description": "Refuse a deploy or a refresh from a working tree with uncommitted changes (`--allow-dirty` lifts it for one run). Default true: a deploy or refresh from a tree with changes is refused unless you say so.",
+              "type": "boolean"
+            }
+          }
+        },
+        "refresh": {
+          "description": "Refresh plans (the routine loads), compiled by `project compile`.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "keep": {
+              "$ref": "#/$defs/planKeep"
+            },
+            "audit": {
+              "$ref": "#/$defs/auditLevel"
+            }
+          }
+        }
+      }
+    },
+    "refreshSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "check": {
+          "description": "The safety check before a refresh: `none` (nothing; the engine's errors are the check), `project` (the project's structure was deployed to this connection), `objects` (each object the refresh uses against what was last deployed, from the tracking tables; the default), `live` (each object against the catalog as it is now).",
+          "enum": [
+            "none",
+            "project",
+            "objects",
+            "live"
+          ]
+        },
+        "on_fail": {
+          "description": "What a failed check does: `block` (the default) stops the refresh, `warn` reports and runs.",
+          "enum": [
+            "block",
+            "warn"
+          ]
+        },
+        "plans": {
+          "description": "The refresh plans the project declares (`hourly`, `daily`), so a typo in a model's plan name is an error. Project level only. `default` always exists.",
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "tags": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:\\-]*$"
+                }
+              },
+              "properties": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                }
+              },
+              "on_failure": {
+                "description": "What happens when a load of the plan fails: `stop` (the failed load is recorded, nothing more starts and the rest are `not run`), `continue` (the default: what reads the failed load inside the plan is skipped, the rest run) or `ignore` (recorded as a warning; what reads it runs on the data it had). A membership may override it.",
+                "enum": [
+                  "stop",
+                  "continue",
+                  "ignore"
+                ]
+              },
+              "on_busy": {
+                "description": "What a run does with a load another run holds (a lock per load, kept as long as the load runs): `skip` (the default: the load is skipped this cycle, which is not a failure, and what reads it still runs), `wait` (queue, up to `max_wait`) or `fail` (the load fails and `on_failure` applies).",
+                "enum": [
+                  "skip",
+                  "wait",
+                  "fail"
+                ]
+              },
+              "max_wait": {
+                "description": "With `on_busy: wait`, how long to wait for a busy load, for example `10m`. Without it the run waits until the load is free. A load still busy after it fails.",
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,5}[smhdw]$"
+              },
+              "max_runtime": {
+                "description": "Opt-in: how long one load of the plan may run, for example `30m`, before its statement in flight is cancelled; the transaction rolls back and the load counts as failed. A load's own `max_runtime` wins.",
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,5}[smhdw]$"
+              },
+              "expected_every": {
+                "description": "How often the plan is meant to run, for example `15m`, `1h`, `1d`, `1w`. `connection status` and `connection monitor` warn when the last run is older than this (overdue) or took longer (slow) and name the slowest load.",
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,5}[smhdw]$"
+              },
+              "parallel": {
+                "description": "How many loads may run together. Validated and kept; parallelism is a later step.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 64
+              },
+              "check": {
+                "description": "This plan's refresh check, instead of the connection's or the project's.",
+                "enum": [
+                  "none",
+                  "project",
+                  "objects",
+                  "live"
+                ]
+              },
+              "on_fail": {
+                "description": "What a failed check does for this plan.",
+                "enum": [
+                  "block",
+                  "warn"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "engineKeywords": {
+      "description": "What kind of connection this is, as keywords in any order, separated by spaces or commas (or a YAML list). Access: `readonly` (the tool only reads it: never a destination, a tracking connection or a deploy target, and no _WRITE login is read; the default is read and write). Driver, exactly one: sqlserver, postgres, fabric, duckdb, odbc, flightsql (duckdb, odbc and flightsql need `readonly`). The read login of an odbc connection is an ODBC connection string or a DSN with its credentials; the machine needs the ODBC driver manager and the vendor's driver. The read login of a flightsql connection is a URI with options, `grpc+tls://host:port;token=...` or `grpc://host:port;user=...;password=...` (options: token, token_env, token_command, user, password, tls_skip_verify, ca_file, header.<name>). Dialect, at most one: ansi, duckdb, sqlserver, postgres, fabric or a name from `dialects:`; the engines the tool builds on and duckdb bring their own, odbc and flightsql default to ansi. Examples: `postgres`, `readonly postgres`, `readonly odbc ansi`, `readonly flightsql postgres`, `readonly odbc legacy_sql`.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*([ ,]+[a-z][a-z0-9_]*)*$"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        }
+      ]
+    }
+  }
+}

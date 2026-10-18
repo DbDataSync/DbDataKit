@@ -1,0 +1,8 @@
+name: staging.budgets
+kind: view
+grain: [budget_month, region, category_code]
+columns:
+  - {name: budget_month, type: INTEGER, nullable: false}
+  - {name: region, type: "VARCHAR(20)", nullable: false}
+  - {name: category_code, type: "VARCHAR(10)", nullable: false}
+  - {name: budget_amount, type: "DECIMAL(12, 2)", nullable: false}

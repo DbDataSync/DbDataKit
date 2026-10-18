@@ -1,0 +1,18 @@
+# description: staging.orders maps the status code to a word and cuts the timestamp
+# tags: staging
+cases:
+  - name: every status code gets a word, an unknown one is "unknown"
+    given:
+      shop.orders:
+        - {order_id: 1, customer_id: 1, store_id: 1, order_ts: "2024-03-05 10:30:00", status_code: OP, discount_amount: 0, shipping_fee: 4.50, coupon_code: null}
+        - {order_id: 2, customer_id: 1, store_id: 1, order_ts: "2024-03-06 23:59:59", status_code: SH, discount_amount: 1.00, shipping_fee: 0, coupon_code: SPRING}
+        - {order_id: 3, customer_id: 2, store_id: 2, order_ts: "2024-12-31 00:00:00", status_code: DL, discount_amount: 0, shipping_fee: 0, coupon_code: null}
+        - {order_id: 4, customer_id: 2, store_id: 2, order_ts: "2024-01-01 12:00:00", status_code: CX, discount_amount: 0, shipping_fee: 0, coupon_code: null}
+        - {order_id: 5, customer_id: 3, store_id: 2, order_ts: "2024-01-01 12:00:00", status_code: ZZ, discount_amount: 0, shipping_fee: 0, coupon_code: null}
+    assert: >
+      SELECT order_id FROM result WHERE NOT (
+           (order_id = 1 AND status = 'open' AND order_date = DATE '2024-03-05' AND order_month = 202403 AND NOT used_coupon)
+        OR (order_id = 2 AND status = 'shipped' AND order_date = DATE '2024-03-06' AND used_coupon)
+        OR (order_id = 3 AND status = 'delivered' AND order_month = 202412)
+        OR (order_id = 4 AND status = 'cancelled')
+        OR (order_id = 5 AND status = 'unknown'))

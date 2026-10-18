@@ -1,0 +1,25 @@
+# description: marts.orders pivots the payments of an order into one column per method
+# tags: marts, critical
+cases:
+  - name: payments become columns and add up
+    given:
+      staging.orders:
+        - {order_id: 1, customer_id: 7, order_date: 2024-02-01, status: completed, status_group: fulfilled}
+        - {order_id: 2, customer_id: 7, order_date: 2024-02-02, status: placed, status_group: open}
+      staging.payments:
+        - {payment_id: 1, order_id: 1, payment_method: credit_card, amount: 30.00}
+        - {payment_id: 2, order_id: 1, payment_method: coupon, amount: 5.50}
+        - {payment_id: 3, order_id: 1, payment_method: credit_card, amount: 4.50}
+    expect:
+      - {order_id: 1, customer_id: 7, order_date: 2024-02-01, status: completed, status_group: fulfilled, credit_card_amount: 34.50, bank_transfer_amount: 0, coupon_amount: 5.50, gift_card_amount: 0, amount: 40.00}
+      - {order_id: 2, customer_id: 7, order_date: 2024-02-02, status: placed, status_group: open, credit_card_amount: 0, bank_transfer_amount: 0, coupon_amount: 0, gift_card_amount: 0, amount: 0}
+  - name: the pieces always add up to the amount
+    given:
+      staging.orders:
+        - {order_id: 1, customer_id: 1, order_date: 2024-02-01, status: completed, status_group: fulfilled}
+      staging.payments:
+        - {payment_id: 1, order_id: 1, payment_method: bank_transfer, amount: 12.34}
+        - {payment_id: 2, order_id: 1, payment_method: gift_card, amount: 0.66}
+    assert: >
+      SELECT order_id FROM result
+      WHERE credit_card_amount + bank_transfer_amount + coupon_amount + gift_card_amount <> amount

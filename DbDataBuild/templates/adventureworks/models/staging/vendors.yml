@@ -1,0 +1,20 @@
+name: staging.vendors
+kind: view
+grain:
+  - vendor_id
+columns:
+  - name: vendor_id
+    type: INTEGER
+    nullable: false
+  - name: vendor_name
+    type: VARCHAR(60)
+    nullable: false
+  - name: credit_rating
+    type: SMALLINT
+    nullable: false
+  - name: is_preferred
+    type: BOOLEAN
+    nullable: false
+  - name: is_active
+    type: BOOLEAN
+    nullable: false

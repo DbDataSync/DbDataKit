@@ -1,0 +1,11 @@
+name: shop.shipments
+kind: mapped
+grain: [shipment_id]
+columns:
+  - {name: shipment_id, type: INTEGER, nullable: false}
+  - {name: order_id, type: INTEGER, nullable: false}
+  - {name: shipped_date, type: DATE, nullable: false}
+  - {name: carrier_code, type: "VARCHAR(4)", nullable: false}
+  - {name: packages, type: INTEGER, nullable: false}
+  - {name: total_weight_grams, type: INTEGER, nullable: false}
+  - {name: freight_cost, type: "DECIMAL(10, 2)", nullable: false}

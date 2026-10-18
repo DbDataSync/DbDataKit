@@ -1,0 +1,10 @@
+name: staging.stores
+kind: view
+grain: [store_id]
+columns:
+  - {name: store_id, type: INTEGER, nullable: false}
+  - {name: store_name, type: "VARCHAR(60)", nullable: false}
+  - {name: country_code, type: "VARCHAR(2)", nullable: false}
+  - {name: channel_code, type: "VARCHAR(4)", nullable: false}
+  - {name: floor_area_m2, type: INTEGER}
+  - {name: opened_date, type: DATE, nullable: false}

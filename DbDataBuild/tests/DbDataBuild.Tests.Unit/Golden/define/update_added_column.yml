@@ -1,0 +1,27 @@
+# Orders fact (hand-written)
+name: marts.fct_orders
+kind:
+  incremental_by_unique_key:   # keyed upsert
+    unique_key: [order_id]
+
+grain: [order_id]
+connections: [sqlserver, fabric]
+columns:
+  # identifiers
+  - name: order_id
+    type: BIGINT
+    nullable: false
+  - name: customer_id
+    type: BIGINT
+  - name: amount
+    type: DECIMAL(14, 2)   # money
+  - name: discount_code
+    type: VARCHAR(20)
+    nullable: false
+  - name: order_date
+    type: DATE
+    nullable: false
+  - name: created_at
+    type: TIMESTAMP
+
+# trailing comment

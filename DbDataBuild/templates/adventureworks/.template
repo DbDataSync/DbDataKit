@@ -1,0 +1,1 @@
+A bicycle maker (after the AdventureWorks sample database): products and their price history, bills of materials, work orders, sales in several currencies, purchasing and people; slowly changing dimensions, as-of joins, a recursive parts explosion, quotas and rankings.

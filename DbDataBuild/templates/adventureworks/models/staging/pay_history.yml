@@ -1,0 +1,18 @@
+name: staging.pay_history
+kind: view
+grain:
+  - employee_id
+  - rate_change_date
+columns:
+  - name: employee_id
+    type: INTEGER
+    nullable: false
+  - name: rate_change_date
+    type: DATE
+    nullable: false
+  - name: rate
+    type: DECIMAL(10, 4)
+    nullable: false
+  - name: pay_frequency
+    type: SMALLINT
+    nullable: false

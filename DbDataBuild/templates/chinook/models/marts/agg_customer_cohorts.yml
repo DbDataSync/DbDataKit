@@ -1,0 +1,15 @@
+name: marts.agg_customer_cohorts
+kind: full
+grain:
+  - cohort
+  - months_since_first
+columns:
+  - name: cohort
+    type: BIGINT
+    nullable: false
+  - name: months_since_first
+    type: BIGINT
+    nullable: false
+  - name: active_customers
+    type: BIGINT
+    nullable: false

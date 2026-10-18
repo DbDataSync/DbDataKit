@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "answers.schema.json",
+  "title": "DbDataBuild answers file",
+  "description": "Answers to the questions that `dbdatabuild project model update` and `dbdatabuild connection deploy` ask. Question ids are deterministic, so a file can be reused. Every answer is explicit: a `choice` (with a `value` for options that take one), or `accept: inferred` to accept the question's inferred proposal. Nothing is answered by default. This schema is for editors; the tool applies the same rules and also checks the choices against each question's options (DDB-411, DDB-412, DDB-413).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["answers"],
+  "properties": {
+    "answers": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "title": "explicit choice",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "choice"],
+            "properties": {
+              "id": { "$ref": "#/$defs/questionId" },
+              "choice": { "description": "An option key listed in the question, for example `not_backfilled`.", "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+              "value": { "description": "The value for options that take one, for example the new column name of `rename_to`.", "type": "string", "minLength": 1 },
+              "note": { "description": "Free text, kept with the answer in the plan's audit trail.", "type": "string", "minLength": 1 }
+            }
+          },
+          {
+            "title": "accept the inferred proposal",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "accept"],
+            "properties": {
+              "id": { "$ref": "#/$defs/questionId" },
+              "accept": { "const": "inferred" },
+              "note": { "type": "string", "minLength": 1 }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "questionId": {
+      "description": "Q-<area>-<subject>, for example Q-history-marts.fct_orders.discount_code.",
+      "type": "string",
+      "pattern": "^Q-(define|history|rename|param|adopt)-[A-Za-z0-9_.-]+$"
+    }
+  }
+}

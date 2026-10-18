@@ -1,0 +1,18 @@
+name: marts.agg_product_abc
+kind: full
+grain:
+  - product_id
+columns:
+  - name: product_id
+    type: INTEGER
+    nullable: false
+  - name: revenue_rank
+    type: BIGINT
+  - name: revenue
+    type: DECIMAL(19, 2)
+  - name: units
+    type: BIGINT
+  - name: cumulative_share
+    type: DECIMAL(9, 4)
+  - name: abc_class
+    type: VARCHAR

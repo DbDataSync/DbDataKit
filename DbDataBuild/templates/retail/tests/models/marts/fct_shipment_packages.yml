@@ -1,0 +1,13 @@
+# description: marts.fct_shipment_packages splits a shipment into one row per package without losing a gram or a cent
+# tags: marts, critical
+cases:
+  - name: weight and freight add up to the shipment
+    given:
+      staging.shipments:
+        - {shipment_id: 1, order_id: 1, shipped_date: 2024-03-06, carrier_code: UPSX, packages: 3, total_weight_grams: 1000, freight_cost: 10.00}
+        - {shipment_id: 2, order_id: 2, shipped_date: 2024-03-07, carrier_code: DHLX, packages: 1, total_weight_grams: 250, freight_cost: 3.99}
+    expect:
+      - {shipment_id: 1, package_no: 1, order_id: 1, shipped_date_key: 20240306, carrier_code: UPSX, weight_grams: 333, freight_cost: 3.33}
+      - {shipment_id: 1, package_no: 2, order_id: 1, shipped_date_key: 20240306, carrier_code: UPSX, weight_grams: 333, freight_cost: 3.33}
+      - {shipment_id: 1, package_no: 3, order_id: 1, shipped_date_key: 20240306, carrier_code: UPSX, weight_grams: 334, freight_cost: 3.34}
+      - {shipment_id: 2, package_no: 1, order_id: 2, shipped_date_key: 20240307, carrier_code: DHLX, weight_grams: 250, freight_cost: 3.99}

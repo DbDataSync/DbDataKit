@@ -1,0 +1,11 @@
+name: staging.artists
+kind: view
+grain:
+  - artist_id
+columns:
+  - name: artist_id
+    type: INTEGER
+    nullable: false
+  - name: artist_name
+    type: VARCHAR(120)
+    nullable: false

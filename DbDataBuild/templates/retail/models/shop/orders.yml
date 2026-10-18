@@ -1,0 +1,12 @@
+name: shop.orders
+kind: mapped
+grain: [order_id]
+columns:
+  - {name: order_id, type: INTEGER, nullable: false}
+  - {name: customer_id, type: INTEGER, nullable: false}
+  - {name: store_id, type: INTEGER, nullable: false}
+  - {name: order_ts, type: TIMESTAMP, nullable: false}
+  - {name: status_code, type: "VARCHAR(2)", nullable: false}
+  - {name: discount_amount, type: "DECIMAL(10, 2)", nullable: false}
+  - {name: shipping_fee, type: "DECIMAL(10, 2)", nullable: false}
+  - {name: coupon_code, type: "VARCHAR(12)"}

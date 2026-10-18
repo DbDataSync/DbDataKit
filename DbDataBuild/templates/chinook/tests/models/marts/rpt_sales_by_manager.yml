@@ -1,0 +1,21 @@
+# description: marts.rpt_sales_by_manager rolls revenue up the management chain
+# tags: marts, critical
+cases:
+  - name: a manager's team revenue is the revenue of everyone below, and an agent's is zero
+    given:
+      marts.dim_employee:
+        - {employee_id: 1, full_name: Ada Boss, title: General Manager, reports_to: null, level: 1, path: Ada Boss}
+        - {employee_id: 2, full_name: Ben Lead, title: Manager, reports_to: 1, level: 2, path: "Ada Boss > Ben Lead"}
+        - {employee_id: 3, full_name: Cy Agent, title: Agent, reports_to: 2, level: 3, path: "Ada Boss > Ben Lead > Cy Agent"}
+        - {employee_id: 4, full_name: Di Agent, title: Agent, reports_to: 2, level: 3, path: "Ada Boss > Ben Lead > Di Agent"}
+      marts.fct_invoice_lines:
+        - {invoice_line_id: 1, invoice_id: 1, date_key: 20240101, customer_id: 10, track_id: 1, quantity: 1, unit_price: 0.99, line_amount: 0.99}
+        - {invoice_line_id: 2, invoice_id: 1, date_key: 20240101, customer_id: 11, track_id: 1, quantity: 2, unit_price: 0.99, line_amount: 1.98}
+      staging.customers:
+        - {customer_id: 10, full_name: One, company: null, city: X, state: null, country: Y, postal_code: null, phone: null, email: o@x, support_rep_id: 3}
+        - {customer_id: 11, full_name: Two, company: null, city: X, state: null, country: Y, postal_code: null, phone: null, email: t@x, support_rep_id: 4}
+    expect:
+      - {employee_id: 1, full_name: Ada Boss, title: General Manager, level: 1, own_revenue: 0, team_revenue: 2.97}
+      - {employee_id: 2, full_name: Ben Lead, title: Manager, level: 2, own_revenue: 0, team_revenue: 2.97}
+      - {employee_id: 3, full_name: Cy Agent, title: Agent, level: 3, own_revenue: 0.99, team_revenue: 0}
+      - {employee_id: 4, full_name: Di Agent, title: Agent, level: 3, own_revenue: 1.98, team_revenue: 0}

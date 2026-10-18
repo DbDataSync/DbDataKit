@@ -1,0 +1,27 @@
+name: staging.tracks
+kind: view
+grain:
+  - track_id
+columns:
+  - name: track_id
+    type: INTEGER
+    nullable: false
+  - name: track_name
+    type: VARCHAR(200)
+    nullable: false
+  - name: album_id
+    type: INTEGER
+  - name: media_type_id
+    type: INTEGER
+    nullable: false
+  - name: genre_id
+    type: INTEGER
+  - name: composer
+    type: VARCHAR(220)
+  - name: length_seconds
+    type: INTEGER
+  - name: size_mb
+    type: DECIMAL(10, 2)
+  - name: unit_price
+    type: DECIMAL(10, 2)
+    nullable: false

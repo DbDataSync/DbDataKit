@@ -1,0 +1,14 @@
+name: staging.product_subcategories
+kind: view
+grain:
+  - product_subcategory_id
+columns:
+  - name: product_subcategory_id
+    type: INTEGER
+    nullable: false
+  - name: product_category_id
+    type: INTEGER
+    nullable: false
+  - name: subcategory_name
+    type: VARCHAR(50)
+    nullable: false

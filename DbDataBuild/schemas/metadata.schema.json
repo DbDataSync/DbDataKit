@@ -1,0 +1,1057 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dbdatabuild:schemas:metadata",
+  "title": "DbDataBuild metadata documents",
+  "description": "The kinds of metadata document: one per project (`dbdatabuild.project/2`) and one per model (`dbdatabuild.model/3`), of any of the seven model kinds: the five the tool builds (view, full, incremental_by_unique_key, incremental_by_time_range, copy) and the two it declares (mapped, native). `kind` is the model kind as a plain string and its settings are `kind_settings`; a declared model has no query, loads, hooks or lineage, so those properties are left out of its document. The same documents are printed by `project compile` and `project show metadata` with `--format json`, and stored in the target's tracking tables (`connection publish`, views `metadata_current` and `metadata_columns`). Null values are omitted, never written as null. A new optional key is not a version change; a removed or retyped key is.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/project"
+    },
+    {
+      "$ref": "#/$defs/model"
+    }
+  ],
+  "$defs": {
+    "hook": {
+      "description": "A hook entry as written: a reference to a group, or a named script on an event.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "use": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "use"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "event": {
+              "type": "string"
+            },
+            "script": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "connections": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "effect": {
+              "enum": [
+                "ddl",
+                "data"
+              ]
+            },
+            "risk": {
+              "enum": [
+                "safe",
+                "risky",
+                "destructive"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "event",
+            "script",
+            "effect",
+            "risk"
+          ]
+        }
+      ]
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "dbdatabuild.project/2"
+        },
+        "tool_version": {
+          "type": "string"
+        },
+        "matrix_version": {
+          "type": "string"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "default_connections": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "connections": {
+              "type": "object",
+              "description": "The project's connections by name: the engine and, when set, the version the tool generates for. A connection named after an engine exists without being declared.",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "engine": {
+                    "description": "The driver of the connection (sqlserver, postgres, fabric, duckdb, odbc, flightsql).",
+                    "type": "string"
+                  },
+                  "read_only": {
+                    "description": "Present and true when the connection's `engine` says `readonly`: the tool only reads it.",
+                    "const": true
+                  },
+                  "dialect": {
+                    "description": "The SQL dialect of an origin whose driver does not bring its own (odbc, flightsql): a built-in or a name from `dialects:`.",
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "integer"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "tags": {
+                    "description": "Sorted; omitted when there are none.",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "properties": {
+                    "description": "Key to value (a string, a number or a boolean), keys sorted; omitted when there are none.",
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": [
+                        "string",
+                        "number",
+                        "boolean"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "engine"
+                ]
+              }
+            },
+            "target_versions": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer"
+              }
+            },
+            "tracking_schema": {
+              "type": "string"
+            },
+            "string_semantics": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "case": {
+                  "type": "string"
+                },
+                "accent": {
+                  "type": "string"
+                },
+                "trailing_space": {
+                  "type": "string"
+                },
+                "collations": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "policy": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "hook_groups": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/hook"
+                }
+              }
+            },
+            "rewrites": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "fidelity": {
+                  "enum": [
+                    "exact",
+                    "native"
+                  ]
+                },
+                "disable": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "enable": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "fidelity",
+                "disable",
+                "enable"
+              ]
+            }
+          }
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "description": "The model kind, as a plain string (see `model.kind`).",
+                "enum": [
+                  "view",
+                  "full",
+                  "incremental_by_unique_key",
+                  "incremental_by_time_range",
+                  "copy",
+                  "mapped",
+                  "native"
+                ]
+              },
+              "connections": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "definition_hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "file": {
+                "description": "The project-relative path of the file that defines the model.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "kind",
+              "file"
+            ]
+          }
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "tags": {
+          "description": "Sorted; omitted when there are none.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "properties": {
+          "description": "Key to value (a string, a number or a boolean), keys sorted; omitted when there are none.",
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "tool_version",
+        "matrix_version",
+        "config",
+        "models"
+      ]
+    },
+    "column": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "logical_type": {
+          "type": "string"
+        },
+        "duckdb_type": {
+          "type": "string"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "collation": {
+          "type": "string"
+        },
+        "native": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "collation": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "type": "string"
+                  },
+                  "found": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "error"
+                ]
+              }
+            ]
+          }
+        },
+        "lineage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "transform": {
+              "type": "string"
+            },
+            "cast_type": {
+              "type": "string"
+            },
+            "inferred_nullability": {
+              "type": "string"
+            },
+            "upstream": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "table": {
+                    "type": "string"
+                  },
+                  "column": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "tags": {
+          "description": "Sorted; omitted when there are none.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "properties": {
+          "description": "Key to value (a string, a number or a boolean), keys sorted; omitted when there are none.",
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "required": [
+        "name",
+        "logical_type",
+        "nullable"
+      ]
+    },
+    "load": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "strategy": {
+          "type": "string"
+        },
+        "is_default": {
+          "type": "boolean"
+        },
+        "matrix_status": {
+          "type": "string"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "script_path": {
+          "type": "string"
+        },
+        "script_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "resolver_path": {
+          "type": "string"
+        },
+        "resolver_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "constraint": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "required": [
+        "connection",
+        "operation",
+        "strategy",
+        "is_default"
+      ]
+    },
+    "index": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unique": {
+          "type": "boolean"
+        },
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "connections": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "tags": {
+          "description": "Sorted; omitted when there are none.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "properties": {
+          "description": "Key to value (a string, a number or a boolean), keys sorted; omitted when there are none.",
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "required": [
+        "name",
+        "columns",
+        "unique"
+      ]
+    },
+    "hookResolved": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "event": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string"
+        },
+        "script_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "effect": {
+          "type": "string"
+        },
+        "risk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "event",
+        "script"
+      ]
+    },
+    "indexAdvice": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "DDB-223",
+            "DDB-224"
+          ]
+        },
+        "severity": {
+          "enum": [
+            "warning",
+            "note"
+          ]
+        },
+        "reason": {
+          "enum": [
+            "merge_key",
+            "time_column",
+            "watermark",
+            "range_column"
+          ]
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unique": {
+          "type": "boolean"
+        },
+        "suggested": {
+          "type": "string"
+        },
+        "existing_index": {
+          "type": "string"
+        },
+        "connections": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "silenced": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "severity",
+        "reason",
+        "columns",
+        "unique",
+        "suggested",
+        "connections",
+        "silenced"
+      ]
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "dbdatabuild.model/3"
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "description": "The model kind, as a plain string: any of the seven. The settings of the kind are in `kind_settings`.",
+          "enum": [
+            "view",
+            "full",
+            "incremental_by_unique_key",
+            "incremental_by_time_range",
+            "copy",
+            "mapped",
+            "native"
+          ]
+        },
+        "grain": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tags": {
+          "description": "Sorted; omitted when there are none.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "connections": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "files": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "definition": {
+              "type": "string"
+            },
+            "query": {
+              "description": "Absent for a model with no query file (a copy, a mapped or native model).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "definition"
+          ]
+        },
+        "inherited": {
+          "description": "The settings the model took from a project file above it (`defaults:` of dbdatabuild.yml or of a folder's _dbdatabuild.yml), one scalar each, with the file and line it was written on.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "file",
+              "line",
+              "value"
+            ]
+          }
+        },
+        "definition_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "upstream": {
+          "description": "What the model depends on directly (a built model's query, a native model's `reads`), by name: `category` says what sort of thing it is (a model of the project, a macro of the project, or a table that is none of the project's) and `kind` which of the seven model kinds when it is a model.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "category": {
+                "enum": [
+                  "model",
+                  "macro",
+                  "unknown"
+                ]
+              },
+              "kind": {
+                "description": "The model kind; absent for a macro or an unknown table.",
+                "enum": [
+                  "view",
+                  "full",
+                  "incremental_by_unique_key",
+                  "incremental_by_time_range",
+                  "copy",
+                  "mapped",
+                  "native"
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "category"
+            ]
+          }
+        },
+        "lowered": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "file": {
+              "type": "string"
+            },
+            "hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "output": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "duckdb_type": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "duckdb_type"
+                ]
+              }
+            }
+          }
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/column"
+          }
+        },
+        "expected_shape_hash": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "error"
+                ]
+              }
+            ]
+          }
+        },
+        "renames": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ]
+          }
+        },
+        "loads": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/load"
+          }
+        },
+        "indexes": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/index"
+          }
+        },
+        "hooks": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/hookResolved"
+            }
+          }
+        },
+        "index_advice": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/indexAdvice"
+          }
+        },
+        "rewrites_off": {
+          "description": "The rewrites that are off for this model, after the project's settings and the model's own (empty by default).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "properties": {
+          "description": "Key to value (a string, a number or a boolean), keys sorted; omitted when there are none.",
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        },
+        "kind_settings": {
+          "description": "The settings of the kind, each kind its own, and an empty object for a kind that has none. incremental_by_unique_key: `unique_key`. incremental_by_time_range: `time_column`, `lookback`. copy: `from`, `slice`, `on_mismatch`, `unique_key`, `watermark`. native: `access`, `connections`, `text_hash`, `reads`; mapped: none.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "unique_key": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "time_column": {
+              "type": "string"
+            },
+            "lookback": {
+              "type": "string"
+            },
+            "from": {
+              "description": "A copy: the model it copies, `schema_name.table_name`.",
+              "type": "string"
+            },
+            "slice": {
+              "description": "A copy: which rows are an origin's.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "column": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                },
+                "type": {
+                  "description": "The column's SQL type, when the copy adds the column.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "column",
+                "value"
+              ]
+            },
+            "on_mismatch": {
+              "enum": [
+                "fail",
+                "skip"
+              ]
+            },
+            "watermark": {
+              "description": "A copy: only the rows at or after the newest value the destination holds, less `lookback`.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "column": {
+                  "type": "string"
+                },
+                "lookback": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "column"
+              ]
+            },
+            "access": {
+              "enum": [
+                "select",
+                "command"
+              ]
+            },
+            "connections": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "text_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "reads": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "foreign_keys": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "columns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "references": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "table": {
+                    "type": "string"
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "table",
+                  "columns"
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "columns",
+              "references"
+            ]
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "name",
+        "kind",
+        "kind_settings",
+        "grain",
+        "connections",
+        "files",
+        "definition_hash",
+        "columns",
+        "indexes"
+      ]
+    }
+  }
+}

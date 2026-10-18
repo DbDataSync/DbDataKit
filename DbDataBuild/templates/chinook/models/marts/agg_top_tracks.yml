@@ -1,0 +1,30 @@
+name: marts.agg_top_tracks
+kind: full
+grain:
+  - genre_name
+  - genre_rank
+columns:
+  - name: genre_name
+    type: VARCHAR
+    nullable: false
+  - name: genre_rank
+    type: BIGINT
+    nullable: false
+  - name: track_id
+    type: INTEGER
+    nullable: false
+  - name: track_name
+    type: VARCHAR(200)
+    nullable: false
+  - name: units
+    type: BIGINT
+  - name: units_2021
+    type: BIGINT
+  - name: units_2022
+    type: BIGINT
+  - name: units_2023
+    type: BIGINT
+  - name: units_2024
+    type: BIGINT
+  - name: genre_units
+    type: BIGINT

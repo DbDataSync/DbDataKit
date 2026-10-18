@@ -1,0 +1,20 @@
+# description: marts.agg_sales_territory_quarter adds the running total of the year and compares with the same quarter a year before
+# tags: marts
+cases:
+  - name: two quarters of 2023 and 2024
+    given:
+      marts.dim_date:
+        - {date_key: 20230115, date: 2023-01-15, year: 2023, quarter: 1, month: 1, year_month: 202301, month_name: January, iso_weekday: 7, is_weekend: true, fiscal_year: 2023, fiscal_quarter: 3}
+        - {date_key: 20230415, date: 2023-04-15, year: 2023, quarter: 2, month: 4, year_month: 202304, month_name: April, iso_weekday: 6, is_weekend: true, fiscal_year: 2023, fiscal_quarter: 4}
+        - {date_key: 20240115, date: 2024-01-15, year: 2024, quarter: 1, month: 1, year_month: 202401, month_name: January, iso_weekday: 1, is_weekend: false, fiscal_year: 2024, fiscal_quarter: 3}
+        - {date_key: 20240415, date: 2024-04-15, year: 2024, quarter: 2, month: 4, year_month: 202404, month_name: April, iso_weekday: 1, is_weekend: false, fiscal_year: 2024, fiscal_quarter: 4}
+      marts.fct_sales_lines:
+        - {sales_order_id: 1, sales_order_detail_id: 1, date_key: 20230115, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 1, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 100.0, discount_usd: 0.0, revenue_usd: 100.0, cost_usd: 60.0, margin_usd: 40.0}
+        - {sales_order_id: 2, sales_order_detail_id: 2, date_key: 20230415, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 1, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 200.0, discount_usd: 0.0, revenue_usd: 200.0, cost_usd: 120.0, margin_usd: 80.0}
+        - {sales_order_id: 3, sales_order_detail_id: 3, date_key: 20240115, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 1, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 150.0, discount_usd: 0.0, revenue_usd: 150.0, cost_usd: 90.0, margin_usd: 60.0}
+        - {sales_order_id: 4, sales_order_detail_id: 4, date_key: 20240415, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 1, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 100.0, discount_usd: 0.0, revenue_usd: 100.0, cost_usd: 60.0, margin_usd: 40.0}
+    expect:
+      - {territory_id: 1, year: 2023, quarter: 1, revenue: 100.00, margin: 40.00, orders: 1, revenue_year_to_date: 100.00, revenue_prior_year: null, growth_percent: null}
+      - {territory_id: 1, year: 2023, quarter: 2, revenue: 200.00, margin: 80.00, orders: 1, revenue_year_to_date: 300.00, revenue_prior_year: null, growth_percent: null}
+      - {territory_id: 1, year: 2024, quarter: 1, revenue: 150.00, margin: 60.00, orders: 1, revenue_year_to_date: 150.00, revenue_prior_year: 100.00, growth_percent: 50.0}
+      - {territory_id: 1, year: 2024, quarter: 2, revenue: 100.00, margin: 40.00, orders: 1, revenue_year_to_date: 250.00, revenue_prior_year: 200.00, growth_percent: -50.0}

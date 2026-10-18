@@ -1,0 +1,20 @@
+name: marts.dim_territory
+kind: full
+grain:
+  - territory_id
+columns:
+  - name: territory_id
+    type: INTEGER
+    nullable: false
+  - name: territory_name
+    type: VARCHAR(50)
+    nullable: false
+  - name: country_region_code
+    type: VARCHAR(3)
+    nullable: false
+  - name: territory_group
+    type: VARCHAR(50)
+    nullable: false
+  - name: currency_code
+    type: VARCHAR(3)
+    nullable: false

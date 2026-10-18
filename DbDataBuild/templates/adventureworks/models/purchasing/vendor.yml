@@ -1,0 +1,9 @@
+name: purchasing.vendor
+kind: mapped
+grain: [vendor_id]
+columns:
+  - {name: vendor_id, type: INTEGER, nullable: false}
+  - {name: name, type: "VARCHAR(60)", nullable: false}
+  - {name: credit_rating, type: SMALLINT, nullable: false}
+  - {name: preferred_vendor, type: BOOLEAN, nullable: false}
+  - {name: active, type: BOOLEAN, nullable: false}

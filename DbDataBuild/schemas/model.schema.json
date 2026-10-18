@@ -1,0 +1,1364 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "model.schema.json",
+  "title": "DbDataBuild model definition",
+  "description": "A model definition file (models/**/<name>.yml), the companion of the plain DuckDB-dialect <name>.sql body. This schema is for editors; `dbdatabuild project compile` applies the same rules plus semantic checks (name against path, grain against unique_key, column references) with diagnostic codes. The tool reads every scalar as a string, so values here that YAML would type (nullable) accept the quoted and unquoted forms. A file that says `kind: mapped` is a mapped model (or `native`: a table the engine computes from its own query) and is checked against declared-model.schema.json instead.",
+  "if": {
+    "required": [
+      "kind"
+    ],
+    "properties": {
+      "kind": {
+        "anyOf": [
+          {
+            "enum": [
+              "mapped",
+              "native"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "mapped"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "native"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "then": {
+    "$ref": "declared-model.schema.json"
+  },
+  "else": {
+    "$ref": "#/$defs/builtModel"
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "columnList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/nonEmptyString"
+      }
+    },
+    "kind": {
+      "description": "The model kind, keyed by its name with that kind's settings beneath it (`kind: {copy: {from: pos.orders}}`), or a plain value for a kind that has no settings (`kind: view`). Exactly one key; a setting that does not belong to the kind is refused by the shape.",
+      "oneOf": [
+        {
+          "title": "view (plain value)",
+          "description": "View over upstream. DDL only; apply issues no data statements. With no settings it may be written as a plain value: `kind: view`.",
+          "const": "view"
+        },
+        {
+          "title": "view",
+          "description": "View over upstream. DDL only; apply issues no data statements.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "view"
+          ],
+          "properties": {
+            "view": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {}
+            }
+          }
+        },
+        {
+          "title": "full (plain value)",
+          "description": "Table fully reloaded: transactional delete and insert. With no settings it may be written as a plain value: `kind: full`.",
+          "const": "full"
+        },
+        {
+          "title": "full",
+          "description": "Table fully reloaded: transactional delete and insert.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "full"
+          ],
+          "properties": {
+            "full": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {}
+            }
+          }
+        },
+        {
+          "title": "incremental_by_unique_key",
+          "description": "Upsert by key. Requires unique_key.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "incremental_by_unique_key"
+          ],
+          "properties": {
+            "incremental_by_unique_key": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "unique_key": {
+                  "$ref": "#/$defs/columnList"
+                }
+              },
+              "required": [
+                "unique_key"
+              ]
+            }
+          }
+        },
+        {
+          "title": "incremental_by_time_range",
+          "description": "Time-sliced incremental. The range comes from MAX(time_column) in the target minus lookback. Requires time_column.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "incremental_by_time_range"
+          ],
+          "properties": {
+            "incremental_by_time_range": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "time_column": {
+                  "$ref": "#/$defs/nonEmptyString"
+                },
+                "lookback": {
+                  "description": "For example `3 days` (minutes, hours, days, weeks or months; a DATE column takes days, weeks or months).",
+                  "$ref": "#/$defs/duration"
+                }
+              },
+              "required": [
+                "time_column"
+              ]
+            }
+          }
+        },
+        {
+          "title": "copy",
+          "description": "A table filled by copying the rows of another model that lives on another connection. No query and no columns: the columns are the origin's. Always persisted; the load is a full replace from a staging table.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "copy"
+          ],
+          "properties": {
+            "copy": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "from": {
+                  "description": "The model to copy: a model, a mapped model or another copy, `schema_name.table_name`, on exactly one connection other than this model's.",
+                  "type": "string",
+                  "pattern": "^[^.\\s/\\\\]+\\.[^.\\s/\\\\]+$"
+                },
+                "slice": {
+                  "description": "For a copy from several connections (or one that adds a column): which rows are an origin's. `value` may use `${origin.name}` (the origin connection's parameter) or `${connection.name}` (the destination's). When the origin has no `column`, the copy adds it (give it a `type`) and writes the value into every row; a run replaces only the rows of the origin it loads.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "column",
+                    "value"
+                  ],
+                  "properties": {
+                    "column": {
+                      "$ref": "#/$defs/nonEmptyString"
+                    },
+                    "value": {
+                      "$ref": "#/$defs/nonEmptyString"
+                    },
+                    "type": {
+                      "$ref": "#/$defs/nonEmptyString"
+                    }
+                  }
+                },
+                "on_mismatch": {
+                  "description": "What `plan` does about an origin whose table differs from its declaration: stop (`fail`, the default) or leave that origin out (`skip`), never silently.",
+                  "enum": [
+                    "fail",
+                    "skip"
+                  ]
+                },
+                "unique_key": {
+                  "description": "The rows an incremental copy reads again replace the rows with these key columns.",
+                  "$ref": "#/$defs/columnList"
+                },
+                "watermark": {
+                  "description": "Makes the copy incremental: only rows whose `column` is at or after the newest value the destination holds (less `lookback`, for rows that arrive late or change) are read. Needs `unique_key`. The first run, with nothing in the destination, reads everything.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "column"
+                  ],
+                  "properties": {
+                    "column": {
+                      "$ref": "#/$defs/nonEmptyString"
+                    },
+                    "lookback": {
+                      "$ref": "#/$defs/duration"
+                    }
+                  }
+                }
+              },
+              "required": [
+                "from"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "column": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "type": {
+          "description": "A SQL type written as a plain string, for example `BIGINT` or `DECIMAL(14, 2)`.",
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "nullable": {
+          "description": "Defaults to true.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        },
+        "collation": {
+          "description": "Logical collation name from the project's string_semantics.collations. The project default applies if omitted.",
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "trimmed": {
+          "description": "Declared: no value of this column ends in a space, so it compares the same on every engine. `check` counts the rows that break it.",
+          "type": "boolean"
+        },
+        "title": {
+          "description": "A short display name, one line, at most 200 characters. Never inherited.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\n]*$"
+        },
+        "description": {
+          "description": "Free text, at most 4000 characters. Never inherited.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "tags": {
+          "description": "Labels: words of letters, digits, `_`, `-`, `.` and `:`, at most 128 characters each.",
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:\\-]*$"
+          }
+        },
+        "properties": {
+          "description": "Free key-value data. A value is text, a number or true or false (a number written as plain digits is a number, text in quotes is text); keys are at most 128 characters, values at most 4000.",
+          "type": "object",
+          "propertyNames": {
+            "maxLength": 128,
+            "pattern": "^[A-Za-z_]([A-Za-z0-9_.:\\-]*[A-Za-z0-9_.:])?$"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "rename": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to"
+      ],
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "to": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "duration": {
+      "type": "string",
+      "pattern": "^[0-9]+ (minute|hour|day|week|month)s?$"
+    },
+    "boolish": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "enum": [
+            "true",
+            "false"
+          ]
+        }
+      ]
+    },
+    "loadInputs": {
+      "description": "The values the load needs and where each comes from (docs/research/refresh-plans.md, section 8). An input has a `type`, a `default`, and/or a `resolver` that computes it when the load runs: an `expression` (a DuckDB expression, evaluated in the tool in a sandboxed in-memory database; it may name the load's other inputs, `${project.x}` and `${connection.x}` parameters and the run variables `run_started`, `plan` and `connection`), a `target` (a SELECT in DuckDB dialect over the project's models, lowered for the engine and run on the load's connection) or a `source` (the same for a copy, run at the copy's origin). The result is exactly one row; NULL goes to `on_null`. `provides` makes one resolver answer several inputs (named columns). The inputs `start` and `end` of a range load are its parameters. A `--input` flag or a membership's value replaces the resolver, which is then not run.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "description": "The input's type. Optional for `start` and `end` of a range load (the range column's type) and for a resolver that provides others.",
+            "enum": [
+              "DATE",
+              "TIMESTAMP",
+              "INTEGER",
+              "BIGINT",
+              "SMALLINT",
+              "VARCHAR"
+            ]
+          },
+          "default": {
+            "description": "The value when there is no resolver; with a resolver, the value `on_null: initial` falls back to. May be a `${project.name}` or `${connection.name}` reference.",
+            "$ref": "#/$defs/nonEmptyString"
+          },
+          "resolver": {
+            "description": "How the value is computed when the load runs: exactly one of `expression`, `target`, `source`.",
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "maxProperties": 1,
+            "properties": {
+              "expression": {
+                "description": "A DuckDB expression (`current_date - days`), or a SELECT without FROM (`SELECT current_date - 7 AS start, current_date + 1 AS end`, for `provides`). A table reference is an error: there is nothing to read.",
+                "$ref": "#/$defs/nonEmptyString"
+              },
+              "target": {
+                "description": "A SELECT in DuckDB dialect over the project's models, returning one row; lowered for the engine of the load's connection and run there on the read login, as committed.",
+                "$ref": "#/$defs/nonEmptyString"
+              },
+              "source": {
+                "description": "Only for a copy: a SELECT in DuckDB dialect over the origin's tables, returning one row; lowered for the origin's engine and run at the origin on its read login.",
+                "$ref": "#/$defs/nonEmptyString"
+              }
+            }
+          },
+          "on_null": {
+            "description": "What to do when the resolver finds NULL: `fail` (the default), `initial` (use `default`) or `skip_load` (the load does not run; not a failure).",
+            "enum": [
+              "fail",
+              "initial",
+              "skip_load"
+            ]
+          },
+          "provides": {
+            "description": "The inputs this resolver answers, as the names of its columns. Each is declared in `inputs` with a type (or is `start`/`end` of a range load) and has no resolver of its own.",
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            }
+          }
+        }
+      }
+    },
+    "loadOperation": {
+      "oneOf": [
+        {
+          "title": "full_replace",
+          "description": "Delete and insert the whole contents in one transaction.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "full_replace"
+            },
+            "default": {
+              "description": "The operation `run` uses when `--op` is not given. At most one per target.",
+              "$ref": "#/$defs/boolish"
+            },
+            "connections": {
+              "description": "Restrict the operation to these targets. Without it the operation applies to every target the model declares.",
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/connectionName"
+              }
+            },
+            "inputs": {
+              "$ref": "#/$defs/loadInputs"
+            },
+            "max_runtime": {
+              "description": "Opt-in: how long a refresh lets this load run (for example `30s`, `15m`, `2h`) before it cancels the statement in flight; the transaction rolls back and the load counts as failed. Wins over the plan's `max_runtime`.",
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,5}[smhdw]$"
+            }
+          }
+        },
+        {
+          "title": "delete_insert_by_key",
+          "description": "Stage the query result, delete target rows whose key is in it, insert it. One transaction.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "delete_insert_by_key"
+            },
+            "default": {
+              "description": "The operation `run` uses when `--op` is not given. At most one per target.",
+              "$ref": "#/$defs/boolish"
+            },
+            "connections": {
+              "description": "Restrict the operation to these targets. Without it the operation applies to every target the model declares.",
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/connectionName"
+              }
+            },
+            "key": {
+              "description": "Key columns. Defaults to the kind's unique_key.",
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/nonEmptyString"
+              }
+            },
+            "inputs": {
+              "$ref": "#/$defs/loadInputs"
+            },
+            "max_runtime": {
+              "description": "Opt-in: how long a refresh lets this load run (for example `30s`, `15m`, `2h`) before it cancels the statement in flight; the transaction rolls back and the load counts as failed. Wins over the plan's `max_runtime`.",
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,5}[smhdw]$"
+            }
+          }
+        },
+        {
+          "title": "merge_by_key",
+          "description": "Stage the query result and MERGE it by key (update matches, insert the rest). One transaction.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "merge_by_key"
+            },
+            "default": {
+              "description": "The operation `run` uses when `--op` is not given. At most one per target.",
+              "$ref": "#/$defs/boolish"
+            },
+            "connections": {
+              "description": "Restrict the operation to these targets. Without it the operation applies to every target the model declares.",
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/connectionName"
+              }
+            },
+            "key": {
+              "description": "Key columns. Defaults to the kind's unique_key.",
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/nonEmptyString"
+              }
+            },
+            "inputs": {
+              "$ref": "#/$defs/loadInputs"
+            },
+            "max_runtime": {
+              "description": "Opt-in: how long a refresh lets this load run (for example `30s`, `15m`, `2h`) before it cancels the statement in flight; the transaction rolls back and the load counts as failed. Wins over the plan's `max_runtime`.",
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,5}[smhdw]$"
+            }
+          }
+        },
+        {
+          "title": "delete_insert_by_range",
+          "description": "Reload a range [start, end) of the range column: delete it in the target and insert the query's rows for it. `start` and `end` are runtime parameters.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "delete_insert_by_range"
+            },
+            "default": {
+              "description": "The operation `run` uses when `--op` is not given. At most one per target.",
+              "$ref": "#/$defs/boolish"
+            },
+            "connections": {
+              "description": "Restrict the operation to these targets. Without it the operation applies to every target the model declares.",
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/connectionName"
+              }
+            },
+            "column": {
+              "description": "The range column. Defaults to the kind's time_column.",
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "params": {
+              "description": "Types of the `start` and `end` parameters; they must match the range column. Defaults to the column's type.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "start",
+                "end"
+              ],
+              "properties": {
+                "start": {
+                  "$ref": "#/$defs/nonEmptyString"
+                },
+                "end": {
+                  "$ref": "#/$defs/nonEmptyString"
+                }
+              }
+            },
+            "max_span": {
+              "description": "The longest range one run may reload, for example `400 days`. Enforced at plan time.",
+              "$ref": "#/$defs/duration"
+            },
+            "inputs": {
+              "$ref": "#/$defs/loadInputs"
+            },
+            "max_runtime": {
+              "description": "Opt-in: how long a refresh lets this load run (for example `30s`, `15m`, `2h`) before it cancels the statement in flight; the transaction rolls back and the load counts as failed. Wins over the plan's `max_runtime`.",
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,5}[smhdw]$"
+            }
+          }
+        },
+        {
+          "title": "watermark_append",
+          "description": "Load rows newer than a watermark read from the target (never from a state table). With a lookback, rows in the lookback window are replaced, never duplicated.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy",
+            "watermark"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "watermark_append"
+            },
+            "default": {
+              "description": "The operation `run` uses when `--op` is not given. At most one per target.",
+              "$ref": "#/$defs/boolish"
+            },
+            "connections": {
+              "description": "Restrict the operation to these targets. Without it the operation applies to every target the model declares.",
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/connectionName"
+              }
+            },
+            "watermark": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "column",
+                "resolver"
+              ],
+              "properties": {
+                "column": {
+                  "$ref": "#/$defs/nonEmptyString"
+                },
+                "resolver": {
+                  "description": "How the watermark is determined. Rendered and committed.",
+                  "const": "target_max"
+                },
+                "lookback": {
+                  "description": "Re-read this far before the watermark, for example `3 days`.",
+                  "$ref": "#/$defs/duration"
+                },
+                "on_null": {
+                  "description": "What an empty target means. `require_param` asks for a value; `initial` uses the committed literal. Default: require_param.",
+                  "enum": [
+                    "require_param",
+                    "initial"
+                  ]
+                },
+                "initial": {
+                  "description": "The committed literal used when `on_null: initial` and the target is empty.",
+                  "$ref": "#/$defs/nonEmptyString"
+                },
+                "overridable": {
+                  "description": "Allow an explicit `--param watermark=...`, recorded in the plan as an override. Default: false.",
+                  "$ref": "#/$defs/boolish"
+                }
+              },
+              "if": {
+                "required": [
+                  "on_null"
+                ],
+                "properties": {
+                  "on_null": {
+                    "const": "initial"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "initial"
+                ]
+              },
+              "else": {
+                "not": {
+                  "required": [
+                    "initial"
+                  ]
+                }
+              }
+            },
+            "inputs": {
+              "$ref": "#/$defs/loadInputs"
+            },
+            "max_runtime": {
+              "description": "Opt-in: how long a refresh lets this load run (for example `30s`, `15m`, `2h`) before it cancels the statement in flight; the transaction rolls back and the load counts as failed. Wins over the plan's `max_runtime`.",
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,5}[smhdw]$"
+            }
+          }
+        }
+      ]
+    },
+    "index": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "columns"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "columns": {
+          "description": "Key columns, in order.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "unique": {
+          "description": "Engine-enforced uniqueness. Never implied by `unique_key`: the operator decides what the database enforces.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        },
+        "include": {
+          "description": "Covering (non-key) columns.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "connections": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/connectionName"
+          }
+        },
+        "title": {
+          "description": "A short display name, one line, at most 200 characters. Never inherited.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\n]*$"
+        },
+        "description": {
+          "description": "Free text, at most 4000 characters. Never inherited.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "tags": {
+          "description": "Labels: words of letters, digits, `_`, `-`, `.` and `:`, at most 128 characters each.",
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:\\-]*$"
+          }
+        },
+        "properties": {
+          "description": "Free key-value data. A value is text, a number or true or false (a number written as plain digits is a number, text in quotes is text); keys are at most 128 characters, values at most 4000.",
+          "type": "object",
+          "propertyNames": {
+            "maxLength": 128,
+            "pattern": "^[A-Za-z_]([A-Za-z0-9_.:\\-]*[A-Za-z0-9_.:])?$"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "hook": {
+      "title": "hook",
+      "description": "A native-SQL script attached to a plan event. `script` is one path, or a path per target; the file is executed exactly as committed. The list order is the run order.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "event",
+        "script"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_\\-]*$"
+        },
+        "event": {
+          "description": "pre_ or post_ create, alter, load or backfill. pre_drop and post_drop are reserved: the planner has no drop step yet, so they are refused.",
+          "enum": [
+            "pre_create",
+            "post_create",
+            "pre_alter",
+            "post_alter",
+            "pre_load",
+            "post_load",
+            "pre_backfill",
+            "post_backfill"
+          ]
+        },
+        "script": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^(?!/)(?!.*\\\\)(?!.*:)(?!.*(^|/)\\.\\.?(/|$))[^/].*\\.[sS][qQ][lL]$"
+            },
+            {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {
+                "enum": [
+                  "sqlserver",
+                  "fabric",
+                  "postgres"
+                ]
+              },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*:)(?!.*(^|/)\\.\\.?(/|$))[^/].*\\.[sS][qQ][lL]$"
+              }
+            }
+          ]
+        },
+        "connections": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/connectionName"
+          }
+        },
+        "effect": {
+          "description": "What the script may do: ddl (default) or data. `run` runs only data hooks.",
+          "enum": [
+            "ddl",
+            "data"
+          ]
+        },
+        "risk": {
+          "description": "The author's declaration, which sets the plan step's risk class. Default safe.",
+          "enum": [
+            "safe",
+            "risky",
+            "destructive"
+          ]
+        }
+      }
+    },
+    "hookUse": {
+      "title": "group reference",
+      "description": "Inserts the hooks of a group defined under `hook_groups` in dbdatabuild.yml, in place and in order.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "use"
+      ],
+      "properties": {
+        "use": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_\\-]*$"
+        }
+      }
+    },
+    "connectionName": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+    },
+    "builtModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(connections|kind|hooks|rewrites|lint_ignore|tags|properties)[=+-]$": {
+          "description": "A suffix on a setting that inherits from the project files above (`defaults:` in dbdatabuild.yml and in each folder's _dbdatabuild.yml): `key=` replaces what was inherited, `key-` removes the listed items or keys, `key+` merges (what happens without a suffix)."
+        }
+      },
+      "properties": {
+        "name": {
+          "description": "Model name, schema name and object name (`marts.fct_orders`): the name of the model wherever its file is. With the default `model_layout: folder` it must equal the path under models/ with '/' replaced by '.' (models/marts/fct_orders.yml); `dotted` and `object` check the file's name instead (`marts.fct_orders.yml`, `fct_orders.yml`), and `none` does not check.",
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "kind": {
+          "$ref": "#/$defs/kind"
+        },
+        "grain": {
+          "description": "Columns that uniquely identify an output row. Required for incremental kinds; for incremental_by_unique_key it must equal unique_key.",
+          "$ref": "#/$defs/columnList"
+        },
+        "connections": {
+          "description": "Connections the model is on: built natively on each. The `defaults.connections` of the project files above the model are inherited and this list adds to them; write `connections=` to replace them.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/connectionName"
+          }
+        },
+        "columns": {
+          "description": "The declared output schema. Required for every model: it drives the shape hash, the plan's DDL, and offline validation.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/column"
+          }
+        },
+        "renames": {
+          "description": "Declared column renames. Renames are never inferred.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/rename"
+          }
+        },
+        "loads": {
+          "description": "Named load operations (DESIGN.md 6.6). Without `loads`, the kind supplies a single operation named `default`: full_replace for full, delete_insert_by_key for incremental_by_unique_key, and a watermark load over the time column for incremental_by_time_range. A view has no loads. Declared operations replace the implicit one. At most one operation per target may be the default.",
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/loadOperation"
+          }
+        },
+        "indexes": {
+          "description": "Indexes the operator wants on the table. Created by `plan` when missing; an index that exists but is not declared is left alone and reported. Merging or loading by a key never requires an index or constraint.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/index"
+          }
+        },
+        "hooks": {
+          "description": "Ordered hooks: native-SQL scripts run before or after plan steps (events pre_/post_ create, alter, load, backfill), or `use:` a group of hooks defined in dbdatabuild.yml.",
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/hook"
+              },
+              {
+                "$ref": "#/$defs/hookUse"
+              }
+            ]
+          }
+        },
+        "tags": {
+          "description": "Labels: words of letters, digits, `_`, `-`, `.` and `:`, at most 128 characters each. Lists append across the project files above (a folder's `defaults:`); `tags=` replaces and `tags-` removes. `tag:<name>` in a model selector selects by them.",
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:\\-]*$"
+          }
+        },
+        "lint_ignore": {
+          "description": "Advisory lint codes to silence for this model: DDB-223 (a key-based load has no index on its key), DDB-224 (a load's column has no leading index), DDB-225 (a load's slice cannot be applied below part of the query), DDB-239 (a load's slice column is read from a source column no index leads) and DDB-236 (the model compares strings on connections that compare them differently).",
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "DDB-223",
+              "DDB-224",
+              "DDB-225",
+              "DDB-236",
+              "DDB-239"
+            ]
+          }
+        },
+        "rewrites": {
+          "description": "Which rewrites make the engines give DuckDB's answers (`dbdatabuild help matrix --rewrites` lists them). The default is `fidelity: exact`: all of them. `fidelity: native` turns off every rewrite the targets can do without, for shorter queries and simpler plans, at the price of each engine's own behavior (a trailing space not counted, an integer cut instead of rounded, a week counted another way); `disable` and `enable` change single rewrites. A rewrite a target cannot do without (SQL Server has no LPAD, PostgreSQL's round takes no double) cannot be turned off (DDB-229). A model's section is applied on top of the project's.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fidelity": {
+              "enum": [
+                "exact",
+                "native"
+              ]
+            },
+            "disable": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "length-trailing-spaces",
+                  "round-double",
+                  "try-cast-parse",
+                  "double-to-int",
+                  "decimal-to-int",
+                  "double-to-decimal",
+                  "avg-double",
+                  "sum-widen",
+                  "date-to-timestamp",
+                  "weekday-datefirst",
+                  "date-diff-boundaries",
+                  "date-diff-weeks",
+                  "date-plus-days",
+                  "concat-plus",
+                  "pad-to-length",
+                  "split-part",
+                  "string-agg-array",
+                  "now-with-zone"
+                ]
+              }
+            },
+            "enable": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "length-trailing-spaces",
+                  "round-double",
+                  "try-cast-parse",
+                  "double-to-int",
+                  "decimal-to-int",
+                  "double-to-decimal",
+                  "avg-double",
+                  "sum-widen",
+                  "date-to-timestamp",
+                  "weekday-datefirst",
+                  "date-diff-boundaries",
+                  "date-diff-weeks",
+                  "date-plus-days",
+                  "concat-plus",
+                  "pad-to-length",
+                  "split-part",
+                  "string-agg-array",
+                  "now-with-zone"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": {
+          "description": "The model's own parameters, referenced as `${model.name}`. Declared here and only here: they are never inherited.",
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*$": {
+              "$ref": "#/$defs/parameterValue"
+            }
+          }
+        },
+        "title": {
+          "description": "A short display name, one line, at most 200 characters. Never inherited.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\n]*$"
+        },
+        "description": {
+          "description": "Free text, at most 4000 characters. Never inherited.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "properties": {
+          "description": "Free key-value data. A value is text, a number or true or false (a number written as plain digits is a number, text in quotes is text); keys are at most 128 characters, values at most 4000. Mappings merge by key across the project files above (a folder's `defaults:`), the nearest winning; `properties=` replaces and `properties-: [key]` removes keys. `property:key=value` in a model selector selects by them.",
+          "type": "object",
+          "propertyNames": {
+            "maxLength": 128,
+            "pattern": "^[A-Za-z_]([A-Za-z0-9_.:\\-]*[A-Za-z0-9_.:])?$"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        },
+        "refresh": {
+          "description": "The refresh plans the model's loads are in: plan name to a membership or a list of them. It layers like `tags` (a list appends, `refresh=` replaces what a folder gave). A model with a default load and no `refresh:` anywhere is in the plan `default`. A plan the project does not declare is an error when the project declares any (`refresh.plans` in dbdatabuild.yml).",
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "description": "One place a load is in a plan: the load's name, or a mapping. `as` names the membership inside the plan (the load's name by default; unique for the model within the plan), `inputs` gives values for the load's inputs for this plan, `on_failure` overrides the plan's.",
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*$"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "load"
+                    ],
+                    "properties": {
+                      "load": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]*$"
+                      },
+                      "as": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]*$"
+                      },
+                      "inputs": {
+                        "type": "object",
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "additionalProperties": {
+                          "type": [
+                            "string",
+                            "number",
+                            "boolean"
+                          ]
+                        }
+                      },
+                      "on_failure": {
+                        "enum": [
+                          "stop",
+                          "continue",
+                          "ignore"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "description": "One place a load is in a plan: the load's name, or a mapping. `as` names the membership inside the plan (the load's name by default; unique for the model within the plan), `inputs` gives values for the load's inputs for this plan, `on_failure` overrides the plan's.",
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_]*$"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "load"
+                      ],
+                      "properties": {
+                        "load": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]*$"
+                        },
+                        "as": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]*$"
+                        },
+                        "inputs": {
+                          "type": "object",
+                          "propertyNames": {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                          },
+                          "additionalProperties": {
+                            "type": [
+                              "string",
+                              "number",
+                              "boolean"
+                            ]
+                          }
+                        },
+                        "on_failure": {
+                          "enum": [
+                            "stop",
+                            "continue",
+                            "ignore"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "allOf": [
+        {
+          "description": "A copy has the columns of the model it copies and declares none; every other model declares its columns.",
+          "if": {
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "copy"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "copy"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "columns"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "columns"
+            ]
+          }
+        },
+        {
+          "description": "Incremental kinds require a grain.",
+          "if": {
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "incremental_by_unique_key"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "incremental_by_unique_key"
+                    ]
+                  },
+                  {
+                    "const": "incremental_by_time_range"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "incremental_by_time_range"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "grain"
+            ]
+          }
+        },
+        {
+          "description": "A view has no data load.",
+          "if": {
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "view"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "view"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "loads"
+                  ]
+                },
+                {
+                  "required": [
+                    "indexes"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "description": "As a file read alone `name` is required; the project lets a definition leave out `name` and `kind` when its query file starts with a head (`CREATE TABLE schema_name.object_name WITH (kind = ...) AS`), which says them; the project checks that one of the two does.",
+      "required": [
+        "name"
+      ]
+    },
+    "parameterValue": {
+      "description": "A single value (text), or `{type, value}` for a typed one. The type matters where the value reaches a query.",
+      "oneOf": [
+        {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "VARCHAR",
+                "BIGINT",
+                "INTEGER",
+                "SMALLINT",
+                "DATE",
+                "TIMESTAMP",
+                "NAME"
+              ]
+            },
+            "value": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

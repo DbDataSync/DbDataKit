@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="ddb-token" content="__TOKEN__">
+<title>dbdatabuild: __PROJECT__</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1d2328; --muted: #5d6872; --line: #dcdfe3; --accent: #1f6feb; --accent-ink: #ffffff;
+  --ok: #1a7f37; --warn: #9a6700; --bad: #cf222e; --note: #0969da; --src: #8250df; --code-bg: #f1f2f4; --hi: #fff3bf;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14181c; --panel: #1c2127; --ink: #e6e9ec; --muted: #9aa6b1; --line: #313941; --accent: #4c9aff; --accent-ink: #0b1218;
+    --ok: #3fb950; --warn: #d29922; --bad: #f85149; --note: #58a6ff; --src: #b392f0; --code-bg: #232a31; --hi: #5a4a10;
+  }
+}
+/* the host of an MCP app says light or dark: that wins over the system setting */
+:root[data-theme="dark"] {
+  --bg: #14181c; --panel: #1c2127; --ink: #e6e9ec; --muted: #9aa6b1; --line: #313941; --accent: #4c9aff; --accent-ink: #0b1218;
+  --ok: #3fb950; --warn: #d29922; --bad: #f85149; --note: #58a6ff; --src: #b392f0; --code-bg: #232a31; --hi: #5a4a10;
+}
+html.mcp .list, html.mcp .graph { max-height: 560px; }
+html.mcp header { position: static; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+header h1 small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+nav { display: flex; gap: 4px; flex-wrap: wrap; }
+nav a { padding: 5px 12px; border-radius: 6px; color: var(--muted); text-decoration: none; }
+nav a.on { background: var(--accent); color: var(--accent-ink); }
+nav a:not(.on):hover { background: var(--code-bg); }
+.spacer { flex: 1; }
+button, select, input[type=search], input[type=text] { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; }
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button:disabled:hover { border-color: var(--line); }
+main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+.cards { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 16px; min-width: 120px; }
+.card b { display: block; font-size: 22px; }
+.card span { color: var(--muted); font-size: 12px; }
+.ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); } .note { color: var(--note); } .muted { color: var(--muted); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; }
+.panel h2 { font-size: 14px; margin: 0 0 8px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; position: sticky; top: 0; background: var(--panel); }
+code, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; }
+pre { background: var(--code-bg); border-radius: 6px; padding: 10px 12px; overflow: auto; max-height: 560px; margin: 8px 0; tab-size: 4; }
+pre .ln { color: var(--muted); user-select: none; display: inline-block; width: 4ch; text-align: right; margin-right: 1.5ch; }
+pre .hit { background: var(--hi); display: block; }
+.badge { display: inline-block; padding: 0 7px; border-radius: 10px; font-size: 12px; border: 1px solid currentColor; }
+nav a .lane { margin-left: 6px; padding: 0 5px; font-size: 10px; border: 1px solid currentColor; border-radius: 8px; opacity: .7; }
+.tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 12px; background: var(--code-bg); margin: 0 4px 2px 0; }
+a.link, .link { color: var(--accent); cursor: pointer; text-decoration: none; }
+a.link:hover, .link:hover { text-decoration: underline; }
+.split > * { min-width: 0; }
+.split { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; }
+@media (max-width: 800px) { .split { grid-template-columns: 1fr; } }
+.list { max-height: calc(100vh - 150px); overflow: auto; }
+.list div { padding: 4px 8px; border-radius: 5px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list div:hover { background: var(--code-bg); }
+.list div.on { background: var(--accent); color: var(--accent-ink); }
+.list h3 { font-size: 11px; text-transform: uppercase; color: var(--muted); margin: 10px 8px 2px; letter-spacing: .04em; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 8px; flex-wrap: wrap; }
+.tabs a:focus-visible, [role=button]:focus-visible, button:focus-visible, nav a:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.graph .node:focus-visible { outline: none; }
+.graph .node:focus-visible rect { stroke-width: 3; stroke: var(--accent); }
+.tabs a { padding: 6px 12px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; }
+.tabs a.on { color: var(--ink); border-bottom-color: var(--accent); }
+.graph { overflow: auto; max-height: calc(100vh - 190px); border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.graph svg text { font: 12px system-ui, sans-serif; fill: var(--ink); pointer-events: none; }
+.graph .node rect { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; rx: 5; cursor: pointer; }
+.graph .node.mapped rect, .graph .node.native rect { stroke: var(--src); }
+.graph .node.built rect { stroke: var(--accent); }
+.graph .node.sel rect { fill: var(--accent); }
+.graph .node.sel text { fill: var(--accent-ink); }
+.graph .node.dim { opacity: .18; }
+.graph .edge { fill: none; stroke: var(--muted); stroke-width: 1; opacity: .5; }
+.graph .edge.hi { stroke: var(--accent); stroke-width: 1.8; opacity: 1; }
+.graph .edge.dim { opacity: .07; }
+.bar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.empty { color: var(--muted); padding: 24px; text-align: center; }
+dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); width: min(1000px, 94vw); max-height: 88vh; padding: 0; }
+dialog::backdrop { background: rgba(0,0,0,.45); }
+dialog .head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+dialog .body { padding: 6px 14px 14px; overflow: auto; max-height: calc(88vh - 56px); }
+.err { color: var(--bad); white-space: pre-wrap; }
+.spin { color: var(--muted); padding: 24px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>dbdatabuild<small id="proj">__PROJECT__</small></h1>
+  <nav id="nav" aria-label="Screens"></nav>
+  <span class="spacer"></span>
+  <span class="muted" id="stamp"></span>
+  <button id="refresh" title="Run the commands again">Refresh</button>
+</header>
+<main id="view" aria-live="polite"></main>
+<dialog id="dlg" aria-labelledby="dlgTitle"><div class="head"><b id="dlgTitle"></b><span class="spacer"></span><button id="dlgClose">Close</button></div><div class="body" id="dlgBody"></div></dialog>
+
+<script>
+"use strict";
+const TOKEN = document.querySelector('meta[name="ddb-token"]').content;
+// the token came in the address; take it out of the visible URL and the history
+if (location.search) history.replaceState(null, "", location.pathname + location.hash);
+
+// ---- small helpers -------------------------------------------------------------------------------------------------------------------------------------
+// Everything from the project is put in the page as text (textContent), never as markup.
+function h(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") e.className = v;
+    else if (k === "onclick" && !["a", "button", "input", "select"].includes(tag)) { e.addEventListener("click", v); makeKeyboardOperable(e); }
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat(Infinity)) if (kid != null && kid !== false) e.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  return e;
+}
+// A clickable element that is not a button or a link can be reached with Tab and used with Enter or Space.
+function makeKeyboardOperable(e) {
+  e.setAttribute("tabindex", "0");
+  e.setAttribute("role", "button");
+  e.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); e.click(); } });
+}
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---- the host: the same page runs as a web page (HTTP to the local server) or as an MCP app (tool calls through the host) -------------------------------
+// Everything below talks to `call(op, payload)`; only this function knows which of the two it is.
+
+const TRANSPORT = "__TRANSPORT__";
+const http = {
+  run: (p) => post("/api/run", p), file: (p) => get("/api/file?path=" + encodeURIComponent(p.path), true), capabilities: () => get("/api/capabilities"), answers: (p) => post("/api/answers", p),
+  apply: (p) => post("/api/apply", p), job: (p) => get(`/api/job?id=${encodeURIComponent(p.id)}&from=${p.from || 0}`), stop: (p) => post("/api/job/stop?id=" + encodeURIComponent(p.id), {}),
+};
+async function fetchText(path, init) {
+  const res = await fetch(path, { ...init, headers: { "Content-Type": "application/json", "X-DDB-Token": TOKEN } });
+  const text = await res.text();
+  if (!res.ok) { const e = new Error(text || res.statusText); e.status = res.status; throw e; }
+  return text;
+}
+async function get(path, asText) { const t = await fetchText(path); return asText ? { text: t } : (t ? JSON.parse(t) : {}); }
+async function post(path, body) { const t = await fetchText(path, { method: "POST", body: JSON.stringify(body) }); return t ? JSON.parse(t) : {}; }
+
+const mcp = {
+  pending: new Map(), next: 1, toolResult: null,
+  rpc(method, params) { return new Promise((resolve, reject) => { const id = this.next++; this.pending.set(id, { resolve, reject }); window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*"); }); },
+  notify(method, params) { window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*"); },
+  async tool(name, args) {
+    const res = await this.rpc("tools/call", { name, arguments: args });
+    const text = res.content?.[0]?.text ?? "";
+    if (res.isError) { const e = new Error(text || "The tool failed."); e.status = 400; throw e; }
+    return text ? JSON.parse(text) : {};
+  },
+  async start() {
+    addEventListener("message", (ev) => {
+      if (ev.source !== window.parent) return;                                // only the host that embeds this page
+      const m = ev.data;
+      if (!m || m.jsonrpc !== "2.0") return;
+      if (m.id !== undefined && m.method === undefined) {
+        const p = this.pending.get(m.id);
+        if (p) { this.pending.delete(m.id); m.error ? p.reject(new Error(m.error.message || "The host refused.")) : p.resolve(m.result); }
+      } else if (m.method === "ping" && m.id !== undefined) window.parent.postMessage({ jsonrpc: "2.0", id: m.id, result: {} }, "*");
+      else if (m.method === "ui/resource-teardown" && m.id !== undefined) window.parent.postMessage({ jsonrpc: "2.0", id: m.id, result: {} }, "*");
+      else if (m.method === "ui/notifications/tool-result") routeFromResult(m.params);
+      else if (m.method === "ui/notifications/host-context-changed") applyContext(m.params);
+    });
+    const init = await this.rpc("ui/initialize", { appInfo: { name: "dbdatabuild", version: "0.1.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" });
+    applyContext(init?.hostContext);
+    this.notify("ui/notifications/initialized", {});
+    // tell the host how tall the page is, as it changes
+    let last = 0;
+    new ResizeObserver(() => { const hgt = Math.ceil(document.documentElement.getBoundingClientRect().height); if (hgt !== last) { last = hgt; this.notify("ui/notifications/size-changed", { width: Math.ceil(document.documentElement.getBoundingClientRect().width), height: hgt }); } }).observe(document.body);
+  },
+};
+function applyContext(ctx) { if (ctx?.theme) document.documentElement.setAttribute("data-theme", ctx.theme); }
+
+// The screen that shows what the tool the model called returned.
+function routeFromResult(result) {
+  const doc = result?.structuredContent;
+  const data = doc?.data;
+  if (doc?.command === "show" && views[doc.screen]) { go(doc.screen); return; }
+  const where = { "project compile": "health", "project tests run": "tests", "project show graph": "lineage", "project show metadata": "models", "help matrix": "matrix", "project sample": "sample", "connection compare": "diff", "connection deploy": "plans", "project show plan": "plans" }[doc?.command];
+  if (!where) return;
+  if (doc.command === "project show plan" && data?.path) go("plans", data.path);
+  else go(where);
+}
+
+async function call(op, payload = {}) { return TRANSPORT === "mcp" ? mcp.tool("ui_" + op, payload) : http[op](payload); }
+
+const cache = new Map();
+async function run(command, args = {}, fresh = false) {
+  const key = command + JSON.stringify(args);
+  if (!fresh && cache.has(key)) return cache.get(key);
+  const out = await call("run", { command, arguments: args });
+  if (!out.document) throw new Error(out.text || "The command gave no document.");
+  cache.set(key, out.document);
+  return out.document;
+}
+async function readFile(path) {
+  try { return await call("file", { path }); }
+  catch (e) { return { error: e.status === 404 ? "This file does not exist." : e.message }; }
+}
+
+// the paths the page used to fetch, as operations
+async function api(path, body) {
+  const url = new URL(path, "http://x");
+  if (url.pathname === "/api/capabilities") return call("capabilities");
+  if (url.pathname === "/api/answers") return call("answers", body);
+  if (url.pathname === "/api/apply") return call("apply", body);
+  if (url.pathname === "/api/job/stop") return call("stop", { id: url.searchParams.get("id") });
+  if (url.pathname === "/api/job") return call("job", { id: url.searchParams.get("id"), from: Number(url.searchParams.get("from") || 0) });
+  throw new Error("Unknown request " + path);
+}
+
+function codeBlock(text, hitLine) {
+  const pre = h("pre");
+  text.replace(/\n$/, "").split("\n").forEach((line, i) => {
+    pre.append(h("span", { class: hitLine === i + 1 ? "hit" : null }, h("span", { class: "ln" }, i + 1), line, "\n"));
+  });
+  return pre;
+}
+
+async function openFile(path, line) {
+  $("dlgTitle").textContent = path + (line ? ":" + line : "");
+  const body = $("dlgBody");
+  body.replaceChildren(h("div", { class: "spin" }, "Loading…"));
+  $("dlg").showModal();
+  const f = await readFile(path);
+  body.replaceChildren(f.error ? h("div", { class: "err" }, f.error) : codeBlock(f.text, line));
+  const hit = body.querySelector(".hit");
+  if (hit) hit.scrollIntoView({ block: "center" });
+}
+$("dlgClose").addEventListener("click", () => $("dlg").close());
+
+async function openExplain(code) {
+  $("dlgTitle").textContent = code;
+  const body = $("dlgBody");
+  body.replaceChildren(h("div", { class: "spin" }, "Loading…"));
+  $("dlg").showModal();
+  try {
+    const d = (await run("help_code", { code })).data.code;
+    body.replaceChildren(h("h3", null, d.title), h("p", null, d.explanation), h("p", null, h("b", null, "Supported: "), d.supported), h("p", null, h("b", null, "Fix: "), d.fix));
+  } catch (e) { body.replaceChildren(h("div", { class: "err" }, e.message)); }
+}
+
+const sevClass = { error: "bad", warning: "warn", note: "note" };
+const statusClass = { pass: "ok", fail: "bad", warn: "warn", error: "bad" };
+function badge(text, cls) { return h("span", { class: "badge " + (cls || "") }, text); }
+// the five kinds the tool builds; mapped and native models it only declares
+function isBuilt(kind) { return kind !== "mapped" && kind !== "native"; }
+function modelLink(name) { return h("a", { class: "link", href: "#/models/" + encodeURIComponent(name) }, name); }
+function fileLink(file, line) { return h("span", { class: "link", onclick: () => openFile(file, line) }, file + (line ? ":" + line : "")); }
+function loading() { return h("div", { class: "spin" }, "Running the commands…"); }
+function failure(e) { return h("div", { class: "panel" }, h("div", { class: "err" }, "Could not load: " + e.message)); }
+
+// ---- health ---------------------------------------------------------------------------------------------------------------------------------------------
+
+async function healthView() {
+  const [v, t] = await Promise.all([run("project_compile"), run("project_tests_run")]);
+  const counts = v.data.counts, tc = t.data.counts;
+  const filters = { error: true, warning: true, note: counts.errors + counts.warnings === 0 };
+  const cards = h("div", { class: "cards" },
+    card(counts.models, "models"), card(counts.errors, "errors", counts.errors ? "bad" : "ok"), card(counts.warnings, "warnings", counts.warnings ? "warn" : "ok"), card(counts.notes, "notes"),
+    card(`${tc.passed}/${tc.total}`, "tests passed", tc.failed + tc.errored ? "bad" : "ok"));
+  const holder = h("div");
+  const bar = h("div", { class: "bar" }, h("b", null, "Findings"),
+    ["error", "warning", "note"].map((s) => h("label", null, h("input", { type: "checkbox", checked: filters[s], onchange: (e) => { filters[s] = e.target.checked; draw(); } }), " " + s + "s")));
+  function draw() {
+    const shown = v.diagnostics.filter((d) => filters[d.severity]);
+    if (!shown.length) { holder.replaceChildren(h("div", { class: "empty" }, v.diagnostics.length ? "Nothing at the selected severities." : "No findings.")); return; }
+    // a finding in a lowered query belongs to its model: that file only exists once `project compile` has run
+    const place = (d) => { const m = /^rendered\/lowered\/([^/]+)\//.exec(d.location.file || ""); return m ? m[1] : d.location.file || "(project)"; };
+    const byFile = Map.groupBy(shown, place);
+    holder.replaceChildren(...[...byFile].sort((a, b) => a[0].localeCompare(b[0])).map(([file, ds]) => h("div", { class: "panel" },
+      h("h2", null, /^(models|tests)\//.test(file) ? fileLink(file) : /^[a-z_]+\.[A-Za-z0-9_]+$/.test(file) ? [modelLink(file), h("span", { class: "muted" }, " (lowered query)")] : file, " ", h("span", { class: "muted" }, `(${ds.length})`)),
+      h("table", null, h("tbody", null, ds.map((d) => h("tr", null,
+        h("td", null, badge(d.severity, sevClass[d.severity])),
+        h("td", { style: "white-space:nowrap" }, h("span", { class: "link", onclick: () => openExplain(d.code) }, d.code)),
+        h("td", null, h("div", null, h("b", null, d.title), d.location.line ? h("span", { class: "muted" }, "  line " + d.location.line) : null), h("div", null, d.found), d.fix ? h("div", { class: "muted" }, "Fix: " + d.fix) : null))))))));
+  }
+  draw();
+  const failing = t.data.tests.filter((x) => x.status !== "pass");
+  return h("div", null, cards, bar, holder, failing.length ? h("div", { class: "panel" }, h("h2", null, "Tests that did not pass"), testsTable(failing)) : null);
+}
+function card(value, label, cls) { return h("div", { class: "card" }, h("b", { class: cls }, value), h("span", null, label)); }
+
+// ---- lineage --------------------------------------------------------------------------------------------------------------------------------------------
+
+async function lineageView(selected) {
+  const g = (await run("project_show_graph", { columns: true })).data;
+  const nodes = g.nodes, byName = new Map(nodes.map((n) => [n.name, n]));
+  const up = new Map(), down = new Map();
+  for (const e of g.edges) { (down.get(e.from) ?? down.set(e.from, []).get(e.from)).push(e.to); (up.get(e.to) ?? up.set(e.to, []).get(e.to)).push(e.from); }
+  const levels = Map.groupBy(nodes, (n) => n.level);
+  const W = 230, H = 26, GX = 80, GY = 10;
+  const pos = new Map();
+  let maxRows = 0;
+  for (const [lvl, ns] of levels) {
+    ns.sort((a, b) => a.name.localeCompare(b.name));
+    ns.forEach((n, i) => pos.set(n.name, { x: 20 + lvl * (W + GX), y: 20 + i * (H + GY) }));
+    maxRows = Math.max(maxRows, ns.length);
+  }
+  const width = 40 + (Math.max(...levels.keys()) + 1) * (W + GX), height = 40 + maxRows * (H + GY);
+  const svgNs = "http://www.w3.org/2000/svg";
+  const s = (tag, attrs, ...kids) => { const e = document.createElementNS(svgNs, tag); for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v); for (const kid of kids) e.append(kid); return e; };
+  const svg = s("svg", { width, height, viewBox: `0 0 ${width} ${height}` });
+  const edgeEls = g.edges.map((e) => {
+    const a = pos.get(e.from), b = pos.get(e.to);
+    if (!a || !b) return null;
+    const x1 = a.x + W, y1 = a.y + H / 2, x2 = b.x, y2 = b.y + H / 2, mx = (x1 + x2) / 2;
+    const p = s("path", { class: "edge", d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}` });
+    svg.append(p);
+    return { e, p };
+  }).filter(Boolean);
+  const nodeEls = new Map();
+  for (const n of nodes) {
+    const p = pos.get(n.name);
+    const label = n.name.length > 31 ? n.name.slice(0, 30) + "…" : n.name;
+    const el = s("g", { class: "node " + (n.kind == null ? n.category : isBuilt(n.kind) ? "built " + n.kind : n.kind), transform: `translate(${p.x},${p.y})` }, s("rect", { width: W, height: H }), s("text", { x: 8, y: 17 }, document.createTextNode(label)));
+    el.append(s("title", {}, document.createTextNode(n.name + (n.connections?.length ? "  (" + n.connections.join(", ") + ")" : ""))));
+    el.addEventListener("click", () => select(selectedName === n.name ? null : n.name));
+    makeKeyboardOperable(el);
+    el.setAttribute("aria-label", n.name + " (" + (n.kind ?? n.category) + ")");
+    svg.append(el); nodeEls.set(n.name, el);
+  }
+  const side = h("div", { class: "panel" });
+  const search = h("input", { type: "search", placeholder: "Find a table…", "aria-label": "Find a table", oninput: () => find() });
+  let selectedName = null;
+  function reach(start, map) { const seen = new Set(); const q = [start]; while (q.length) for (const nx of map.get(q.pop()) ?? []) if (!seen.has(nx)) { seen.add(nx); q.push(nx); } return seen; }
+  function select(name) {
+    selectedName = name;
+    const keep = name ? new Set([name, ...reach(name, up), ...reach(name, down)]) : null;
+    for (const [n, el] of nodeEls) { el.classList.toggle("sel", n === name); el.classList.toggle("dim", !!keep && !keep.has(n)); }
+    for (const { e, p } of edgeEls) { const inside = !keep || (keep.has(e.from) && keep.has(e.to)); p.classList.toggle("hi", !!keep && inside); p.classList.toggle("dim", !!keep && !inside); }
+    side.replaceChildren(...describe(name, keep).flat(Infinity).filter(Boolean));
+    if (name) nodeEls.get(name).scrollIntoView({ block: "nearest", inline: "center" });
+  }
+  function describe(name, keep) {
+    if (!name) return [h("h2", null, "Lineage"), h("div", { class: "muted" }, `${nodes.filter((n) => n.kind && !isBuilt(n.kind)).length} declared models, ${nodes.filter((n) => n.kind && isBuilt(n.kind)).length} built models, ${g.edges.length} dependencies. Click a table to follow what it reads and what reads it; click it again to clear.`)];
+    const n = byName.get(name);
+    const into = g.column_edges.filter((c) => c.to_model === name), outOf = g.column_edges.filter((c) => c.from_table === name);
+    return [h("h2", null, n.kind ? modelLink(name) : name, " ", badge(n.kind ?? n.category, n.kind && isBuilt(n.kind) ? "note" : "")),
+      h("div", { class: "muted" }, `${keep.size - 1} connected: ${reach(name, up).size} upstream, ${reach(name, down).size} downstream`), n.file ? h("div", null, fileLink(n.file)) : null,
+      into.length ? [h("h3", null, "Columns read from upstream"), colTable(into, (c) => `${c.from_table}.${c.from_column}`, (c) => c.to_column)] : null,
+      outOf.length ? [h("h3", null, "Columns used downstream"), colTable(outOf, (c) => `${c.to_model}.${c.to_column}`, (c) => c.from_column)] : null];
+  }
+  function colTable(rows, other, own) {
+    return h("table", null, h("thead", null, h("tr", null, h("th", null, "column"), h("th", null, "related"), h("th", null, "how"))),
+      h("tbody", null, rows.map((c) => h("tr", null, h("td", null, h("code", null, own(c))), h("td", null, h("code", null, other(c))), h("td", { class: "muted" }, c.transform)))));
+  }
+  function find() {
+    const q = search.value.trim().toLowerCase();
+    if (!q) return;
+    const hit = nodes.find((n) => n.name.toLowerCase().includes(q));
+    if (hit) select(hit.name);
+  }
+  select(selected && byName.has(selected) ? selected : null);
+  return h("div", null, h("div", { class: "bar" }, search), h("div", { class: "split", style: "grid-template-columns: 1fr 360px" }, h("div", { class: "graph" }, svg), side));
+}
+
+// ---- models ---------------------------------------------------------------------------------------------------------------------------------------------
+
+async function modelsView(name, tab) {
+  const meta = (await run("project_show_metadata")).data;
+  const models = meta.models;
+  const filter = h("input", { type: "search", placeholder: "Filter…", "aria-label": "Filter models", oninput: () => drawList() });
+  const list = h("div", { class: "list" });
+  function drawList() {
+    const q = filter.value.trim().toLowerCase();
+    const layers = Map.groupBy(models.filter((m) => m.name.toLowerCase().includes(q)), (m) => m.name.split(".")[0]);
+    list.replaceChildren(...[...layers].map(([layer, ms]) => [h("h3", null, layer),
+      ms.map((m) => h("div", { class: m.name === name ? "on" : null, onclick: () => go("models", m.name) }, m.name.slice(layer.length + 1), isBuilt(m.kind) ? null : h("span", { class: "muted" }, "  " + m.kind)))]).flat(Infinity).filter(Boolean));
+  }
+  drawList();
+  const detail = h("div");
+  const model = models.find((m) => m.name === name);
+  if (model) await modelDetail(detail, model, tab || "columns");
+  else detail.append(h("div", { class: "empty" }, `${models.length} models (${Object.entries(Object.groupBy(models, (m) => m.kind)).map(([k, v]) => v.length + " " + k).join(", ")}). Choose one.`));
+  return h("div", { class: "split" }, h("div", null, h("div", { class: "bar" }, filter), list), detail);
+}
+
+async function modelDetail(root, m, tab) {
+  const targets = m.connections || [];
+  const tabs = isBuilt(m.kind) ? [["columns", "Columns"], ["sql", "Query"], ["lowered", "Lowered"], ...targets.map((t) => ["connection:" + t, t])] : [["columns", "Columns"], ["definition", "Definition"]];
+  const body = h("div");
+  root.append(
+    h("div", { class: "panel" }, h("h2", null, m.name, " ", badge(m.kind, "note")),
+      h("div", null, h("span", { class: "muted" }, "grain "), (m.grain || []).length ? m.grain.map((g) => h("span", { class: "tag" }, g)) : h("span", { class: "warn" }, "not declared")),
+      h("div", null, h("span", { class: "muted" }, "connections "), targets.map((t) => h("span", { class: "tag" }, t))),
+      h("div", null, h("span", { class: "muted" }, "reads "), (m.upstream || []).map((u) => [h("span", { class: "tag" }, h("a", { class: "link", href: "#/models/" + encodeURIComponent(u.name) }, u.name), u.kind && isBuilt(u.kind) ? null : h("span", { class: "muted" }, " " + u.kind)), " "])),
+      (m.rewrites_off || []).length ? h("div", null, h("span", { class: "muted" }, "rewrites off "), m.rewrites_off.map((r) => h("span", { class: "tag" }, r))) : null),
+    h("div", { class: "panel" }, h("div", { class: "tabs" }, tabs.map(([id, label]) => h("a", { class: id === tab ? "on" : null, href: "#/models/" + encodeURIComponent(m.name) + "/" + id, "aria-current": id === tab ? "page" : null }, label))), body));
+  if (tab === "columns") body.append(columnsTable(m, targets));
+  else if (tab === "sql") await showFile(body, m.files?.query);
+  else if (tab === "definition") await showFile(body, m.files?.definition);
+  else if (tab === "lowered") {
+    if (m.lowered?.rules?.length) body.append(h("div", null, h("span", { class: "muted" }, "type rules that fired "), m.lowered.rules.map((r) => h("span", { class: "tag" }, r))));
+    await showRendered(body, m.name, (f) => f.path.startsWith("rendered/lowered/"));
+  } else if (tab.startsWith("connection:")) {
+    const t = tab.slice(11);
+    const ops = (m.loads || []).filter((l) => !l.connection || l.connection === t);
+    if (ops.length) body.append(h("div", { class: "muted" }, "load: " + ops.map((o) => `${o.operation ?? o.name ?? "default"} (${o.strategy ?? ""})`).join(", ")));
+    await showRendered(body, m.name, (f) => f.path.startsWith(`rendered/${t}/`));
+  }
+}
+
+// The lowered and rendered scripts come from `project compile --content`: made now from the current models, not read from rendered/ (which may be out of date or not written).
+async function showRendered(body, model, pick) {
+  try {
+    const doc = await run("project_compile", { models: [model], content: true });
+    const files = (doc.data.files || []).filter(pick);
+    if (!files.length) { body.append(h("div", { class: "muted" }, "Nothing renders for this model here" + (doc.diagnostics?.length ? ": " + doc.diagnostics[0].found : "."))); return; }
+    for (const f of files) body.append(h("div", { class: "muted" }, f.path), codeBlock(f.content ?? ""));
+  } catch (e) { body.append(h("div", { class: "err" }, e.message)); }
+}
+
+function columnsTable(m, targets) {
+  return h("table", null,
+    h("thead", null, h("tr", null, h("th", null, "column"), h("th", null, "type"), h("th", null, "null"), targets.map((t) => h("th", null, t)), h("th", null, "from"))),
+    h("tbody", null, (m.columns || []).map((c) => h("tr", null,
+      h("td", null, h("code", null, c.name), (m.grain || []).includes(c.name) ? h("span", { class: "tag" }, "grain") : null),
+      h("td", null, h("code", null, c.logical_type ?? c.duckdb_type)),
+      h("td", null, c.nullable ? "yes" : "no"),
+      targets.map((t) => h("td", null, h("code", null, nativeType(c.native?.[t])))),
+      h("td", { class: "muted" }, c.lineage ? [c.lineage.transform, " ", (c.lineage.upstream || []).map((u) => u.table + "." + u.column).join(", ")] : "")))));
+}
+function nativeType(n) { return n ? n.type + (n.length != null ? `(${n.length})` : "") : ""; }
+
+async function showFile(body, path) {
+  if (!path) { body.append(h("div", { class: "muted" }, "No file.")); return; }
+  const f = await readFile(path);
+  body.append(h("div", { class: "muted" }, fileLink(path)), f.error ? h("div", { class: "muted" }, f.error) : codeBlock(f.text));
+}
+
+// ---- tests ---------------------------------------------------------------------------------------------------------------------------------------------
+
+function testsTable(tests) {
+  return h("table", null, h("thead", null, h("tr", null, h("th", null, "status"), h("th", null, "kind"), h("th", null, "test"), h("th", null, "violations"))),
+    h("tbody", null, tests.map((t) => {
+      const detail = h("tr", { hidden: true }, h("td", { colspan: 4 }, t.description ? h("div", { class: "muted" }, t.description) : null, t.file ? h("div", null, fileLink(t.file)) : null,
+        t.rows?.length ? h("table", null, h("thead", null, h("tr", null, (t.columns || []).map((c) => h("th", null, c)))), h("tbody", null, t.rows.slice(0, 50).map((r) => h("tr", null, (Array.isArray(r) ? r : (t.columns || []).map((c) => r[c])).map((v) => h("td", null, v == null ? "∅" : String(v))))))) : null));
+      return [h("tr", { style: "cursor:pointer", onclick: () => { detail.hidden = !detail.hidden; } },
+        h("td", null, badge(t.status, statusClass[t.status])), h("td", null, t.kind), h("td", null, t.name.replace("::", " · ")), h("td", null, t.violations ?? "")), detail];
+    })));
+}
+
+async function testsView() {
+  const t = (await run("project_tests_run")).data;
+  return h("div", null, h("div", { class: "cards" }, card(t.counts.total, "tests"), card(t.counts.passed, "passed", "ok"), card(t.counts.failed, "failed", t.counts.failed ? "bad" : ""), card(t.counts.warned, "warned", t.counts.warned ? "warn" : ""), card(t.counts.errored, "errored", t.counts.errored ? "bad" : "")),
+    h("div", { class: "panel" }, testsTable(t.tests)));
+}
+
+// ---- support matrix --------------------------------------------------------------------------------------------------------------------------------------
+
+async function matrixView() {
+  const m = (await run("help_matrix")).data;
+  const targets = ["sqlserver", "fabric", "postgres"];
+  const tone = { supported: "ok", approximated: "warn", unsupported: "bad", unverified: "muted" };
+  const filter = h("input", { type: "search", placeholder: "Filter constructs…", "aria-label": "Filter constructs", oninput: () => draw() });
+  const only = h("select", { "aria-label": "Status", onchange: () => draw() }, h("option", { value: "" }, "any status"), ["supported", "approximated", "unsupported", "unverified"].map((s) => h("option", { value: s }, s)));
+  const holder = h("div");
+  function draw() {
+    const q = filter.value.trim().toLowerCase(), st = only.value;
+    const rows = m.constructs.filter((c) => c.id.toLowerCase().includes(q) && (!st || targets.some((t) => c.engines[t]?.status === st)));
+    holder.replaceChildren(h("table", null, h("thead", null, h("tr", null, h("th", null, "construct"), targets.map((t) => h("th", null, t)))),
+      h("tbody", null, rows.map((c) => h("tr", null, h("td", null, h("code", null, c.id)), targets.map((t) => { const x = c.engines[t]; return h("td", { title: x?.note || "" }, x ? badge(x.status, tone[x.status]) : ""); }))))));
+  }
+  draw();
+  return h("div", null, h("div", { class: "muted", style: "margin-bottom:8px" }, `Matrix ${m.version}: ${m.constructs.length} constructs. Hover a status for the note.`),
+    h("div", { class: "panel" }, h("div", { class: "bar" }, filter, only), holder),
+    h("div", { class: "panel" }, h("h2", null, "Rewrites that make an engine give DuckDB's answers"),
+      h("table", null, h("thead", null, h("tr", null, h("th", null, "rewrite"), h("th", null, "connections"), h("th", null, "required on"), h("th", null, "with it"), h("th", null, "without it"))),
+        h("tbody", null, m.rewrites.map((r) => h("tr", null, h("td", null, h("code", null, r.name)), h("td", null, r.engines.join(", ")), h("td", null, r.required_on.join(", ")), h("td", null, r.exact), h("td", { class: "muted" }, r.native)))))));
+}
+
+// ---- plans ----------------------------------------------------------------------------------------------------------------------------------------------
+// Plans are read here and never applied: applying is a person at a terminal with the named allowances.
+
+const riskClass = { safe: "ok", risky: "warn", destructive: "bad" };
+
+let capabilities = null;
+
+async function plansView(file) {
+  capabilities ??= await api("/api/capabilities");
+  const list = (await run("project_show_plan", {}, true)).data.plans;
+  const side = h("div", { class: "list" },
+    h("div", { class: !file ? "on" : null, onclick: () => go("plans") }, "+ New plan"),
+    list.length ? list.map((p) => h("div", { class: p.path === file ? "on" : null, title: p.path, onclick: () => go("plans", p.path) }, (p.intact ? "" : "⚠ ") + p.id + "  ·  " + p.connection)) : h("div", { class: "muted" }, "No plans yet."));
+  const detail = h("div");
+  if (file) await planDetail(detail, file);
+  else detail.append(await newPlanPanel());
+  return h("div", { class: "split" }, side, detail);
+}
+
+// ---- making a plan, and answering what it asks ----------------------------------------------------------------------------------------------------------
+// `connection deploy --write-plan` reads the connection (the read login of the server's environment) and writes plan files into the project. When it cannot decide something by itself it asks; the person answers each question
+// here (nothing is answered for them), the answers are written as the answers file the command reads, and the plan is made again.
+
+const planState = { answers: new Map() };
+
+async function newPlanPanel() {
+  const out = h("div");
+  const target = h("select", { "aria-label": "Connection" }, h("option", { value: "" }, "the project's default connection"), ["sqlserver", "postgres", "fabric"].map((t) => h("option", { value: t }, t)));
+  const models = h("input", { type: "text", placeholder: "selectors, e.g. changed:HEAD+ or marts.fct_orders (default: every model)", "aria-label": "Models or selectors", style: "min-width:340px" });
+  async function make() {
+    out.replaceChildren(h("div", { class: "spin" }, "Planning: reading the target…"));
+    try {
+      const args = {};
+      if (target.value) args.connection = target.value;
+      if (models.value.trim()) args.models = models.value.trim().split(/\s+/);
+      if (planState.answers.size) { const saved = await api("/api/answers", { answers: [...planState.answers.values()] }); args.answers = saved.path; }
+      const doc = await run("connection_deploy", { ...args, write_plan: true }, true);
+      const questions = doc.data?.open_questions || [];
+      if (questions.length) { out.replaceChildren(questionsForm(questions, make)); return; }
+      if (doc.data?.files?.plan) { planState.answers.clear(); cache.delete("review{}"); go("plans", doc.data.files.plan); return; }
+      out.replaceChildren(outcome(doc));
+    } catch (e) { out.replaceChildren(h("div", { class: "err" }, e.message)); }
+  }
+  return h("div", null,
+    h("div", { class: "panel" }, h("h2", null, "Make a plan"),
+      h("div", { class: "muted" }, "Reads the target with the read login and writes a plan file under plans/. It changes nothing in the database."),
+      h("div", { class: "bar", style: "margin-top:8px" }, target, models, h("button", { onclick: make }, "Make a plan"))),
+    out);
+}
+
+function outcome(doc) {
+  return h("div", { class: "panel" }, h("h2", null, doc.ok ? "Done" : "Nothing was planned"),
+    (doc.messages || []).filter((m) => !m.startsWith("dbdatabuild ")).map((m) => h("div", null, m)),
+    (doc.diagnostics || []).map((d) => h("div", { class: sevClass[d.severity] }, `${d.code}: ${d.found}`)),
+    (doc.errors || []).map((m) => h("div", { class: "err" }, m)));
+}
+
+function questionsForm(questions, again) {
+  const rows = questions.map((q) => {
+    const group = "q-" + q.id;
+    const value = h("input", { type: "text", "aria-label": "Value", hidden: true });
+    const note = h("input", { type: "text", placeholder: "note (optional, kept in the plan)", "aria-label": "Note" });
+    const radios = q.options.map((o) => {
+      const r = h("input", { type: "radio", name: group, value: o.key, onchange: () => { value.hidden = !o.takes_value; if (o.takes_value) value.placeholder = o.value_hint || "value"; update(); } });
+      return { o, r, el: h("label", { style: "display:block;margin:3px 0" }, r, " ", h("b", null, o.key), " ", o.description, o.consequence ? h("div", { class: "muted", style: "margin-left:24px" }, o.consequence) : null) };
+    });
+    const proposal = q.proposal ? h("div", { class: "muted", style: "margin:6px 0" }, `The tool suggests ${q.proposal.option}${q.proposal.value ? " = " + q.proposal.value : ""} (${q.proposal.certainty}): ${(q.proposal.evidence || []).join("; ")} `,
+      h("button", { onclick: () => { const x = radios.find((y) => y.o.key === q.proposal.option); if (x) { x.r.checked = true; x.r.dispatchEvent(new Event("change")); if (q.proposal.value) value.value = q.proposal.value; update(); } } }, "Choose that")) : null;
+    value.addEventListener("input", () => update());
+    const get = () => { const c = radios.find((x) => x.r.checked); return c ? { question_id: q.id, choice: c.o.key, value: c.o.takes_value ? value.value.trim() : undefined, note: note.value.trim() || undefined, complete: !c.o.takes_value || value.value.trim().length > 0 } : null; };
+    return { q, get, el: h("div", { class: "panel" }, h("h2", null, q.prompt), (q.context || []).map((c) => h("div", { class: "muted" }, c)), proposal, radios.map((x) => x.el), value, h("div", { style: "margin-top:6px" }, note)) };
+  });
+  const go1 = h("button", { disabled: true, onclick: () => { for (const r of rows) { const a = r.get(); planState.answers.set(a.question_id, { question_id: a.question_id, choice: a.choice, value: a.value, note: a.note }); } again(); } }, "Answer and plan again");
+  function update() { go1.disabled = !rows.every((r) => r.get()?.complete); }
+  return h("div", null, h("div", { class: "panel" }, h("b", null, `${questions.length} question${questions.length === 1 ? "" : "s"} to answer before a plan can be made. `), h("span", { class: "muted" }, "Each one is yours to decide: nothing is chosen for you.")),
+    rows.map((r) => r.el), go1);
+}
+
+async function planDetail(root, file) {
+  const doc = await run("project_show_plan", { plan: file });
+  const d = doc.data;
+  if (!d.intact) { root.append(h("div", { class: "panel" }, h("h2", null, file, " ", badge("not intact", "bad")), h("div", null, "This plan does not parse or its hash does not match: it was edited or damaged, and `apply` would refuse it. Make a new plan."), (doc.diagnostics || []).map((x) => h("div", { class: "muted" }, x.found)))); return; }
+  const plan = d.plan;
+  const needs = [d.apply_needs.allow_risky ? "--allow-risky" : null, ...d.apply_needs.allow_destructive.map((o) => "--allow-destructive " + o)].filter(Boolean);
+  root.append(...[
+    h("div", { class: "cards" }, card(plan.steps.length, "steps"), card(d.risky, "risky", d.risky ? "warn" : ""), card(d.destructive, "destructive", d.destructive ? "bad" : ""), card(plan.connection, "target")),
+    h("div", { class: "panel" }, h("h2", null, plan.id, " ", badge("intact", "ok")),
+      h("div", { class: "muted" }, `tool ${plan.tool_version}` + (plan.git_commit ? `, commit ${plan.git_commit}${plan.git_dirty ? " (working tree was dirty)" : ""}` : "")),
+      h("div", null, h("span", { class: "muted" }, "a person applies it with "), h("code", null, `dbdatabuild connection deploy --apply-plan ${file}` + (needs.length ? " " + needs.join(" ") : ""))),
+      null),
+    applyPanel(file, plan, d, needs),
+    h("div", { class: "panel" }, h("h2", null, "Steps"), stepsTable(plan.steps)),
+    plan.answers?.length ? h("div", { class: "panel" }, h("h2", null, "Answers this plan was made with"), h("pre", null, JSON.stringify(plan.answers, null, 2))) : null,
+    plan.noticed?.length ? h("div", { class: "panel" }, h("h2", null, "Noticed"), h("ul", null, plan.noticed.map((n) => h("li", null, n)))) : null,
+    plan.bases?.length ? h("div", { class: "panel" }, h("h2", null, "What the plan assumed about each object"), h("table", null, h("thead", null, h("tr", null, h("th", null, "object"), h("th", null, "state"))), h("tbody", null, plan.bases.map((b) => h("tr", null, h("td", null, modelLink(b.object)), h("td", null, b.state)))))) : null,
+    d.report ? h("div", { class: "panel" }, h("h2", null, "Report"), h("pre", null, d.report)) : null].filter(Boolean));
+}
+
+function stepsTable(steps) {
+  return h("table", null, h("thead", null, h("tr", null, h("th", null, "#"), h("th", null, "type"), h("th", null, "risk"), h("th", null, "object"), h("th", null, "what"))),
+    h("tbody", null, steps.map((s) => {
+      const detail = h("tr", { hidden: true }, h("td", { colspan: 5 },
+        s.reasons?.length ? h("div", null, h("span", { class: "muted" }, "why "), s.reasons.map((r) => h("span", { class: "tag" }, r))) : null,
+        (s.parameters || []).map((p) => h("div", null, h("code", null, `@${p.name}`), h("span", { class: "muted" }, ` (${p.type}, ${p.source}) = `), p.value ?? "NULL")),
+        s.has_resolver ? h("div", { class: "muted" }, "resolver result at plan time: " + (s.resolver_result ?? "NULL")) : null,
+        s.hash_after ? h("div", { class: "muted" }, "shape afterwards " + s.hash_after.slice(0, 16) + "…") : null,
+        codeBlock(s.text), s.resolver_text ? [h("div", { class: "muted" }, "resolver"), codeBlock(s.resolver_text)] : null));
+      return [h("tr", { style: "cursor:pointer", onclick: () => { detail.hidden = !detail.hidden; } },
+        h("td", null, s.id), h("td", null, s.type), h("td", null, badge(s.risk, riskClass[s.risk])), h("td", null, h("code", null, s.object)), h("td", null, s.description)), detail];
+    })));
+}
+
+// ---- applying -------------------------------------------------------------------------------------------------------------------------------------------
+// Only when the server was started with --allow-apply. The person reads the plan above, names each allowance, and types the target; the server checks all of it against the plan file again.
+
+function applyPanel(file, plan, d) {
+  if (!capabilities?.apply) return h("div", { class: "panel" }, h("h2", null, "Apply"), h("div", { class: "muted" }, "This page was not started with --allow-apply, so it cannot apply plans. Apply at a terminal with the command above, or restart with `dbdatabuild ui web --allow-apply`."));
+  const out = h("div");
+  const risky = h("input", { type: "checkbox", "aria-label": "Allow the risky steps", onchange: () => update() });
+  const destructive = d.apply_needs.allow_destructive.map((o) => ({ o, box: h("input", { type: "checkbox", "aria-label": "Allow destructive steps on " + o, onchange: () => update() }) }));
+  const typed = h("input", { type: "text", placeholder: "type " + plan.connection + " to confirm", "aria-label": "Type the target name to confirm", oninput: () => update(), autocomplete: "off", spellcheck: "false" });
+  const dry = h("button", { onclick: () => start(true) }, "Dry run (changes nothing)");
+  const go1 = h("button", { disabled: true, onclick: () => start(false), style: "font-weight:600" }, "Apply to " + plan.connection);
+  function update() { go1.disabled = !(typed.value === plan.connection && (!d.apply_needs.allow_risky || risky.checked) && destructive.every((x) => x.box.checked)); }
+  async function start(dryRun) {
+    out.replaceChildren(h("div", { class: "spin" }, "Starting…"));
+    try {
+      const { job } = await api("/api/apply", { plan: file, dry_run: dryRun, allow_risky: risky.checked, allow_destructive: destructive.filter((x) => x.box.checked).map((x) => x.o), confirm: { connection: typed.value, plan_id: plan.id } });
+      // the confirmation is for this run only: the next one has to be confirmed again
+      typed.value = ""; risky.checked = false; destructive.forEach((x) => { x.box.checked = false; }); update(); dry.disabled = true;
+      await follow(out, job, dryRun);
+      dry.disabled = false;
+    } catch (e) { out.replaceChildren(h("div", { class: "err" }, e.message)); }
+  }
+  return h("div", { class: "panel" }, h("h2", null, "Apply"),
+    h("div", { class: "muted" }, "Runs exactly the statements of this plan on " + plan.connection + ", with the write login of the server's environment. A dry run runs every check and changes nothing."),
+    d.apply_needs.allow_risky ? h("label", { style: "display:block;margin:6px 0" }, risky, " I allow the ", h("b", null, d.risky + " risky step" + (d.risky === 1 ? "" : "s"))) : null,
+    destructive.map((x) => h("label", { style: "display:block;margin:6px 0" }, x.box, " I allow the destructive steps on ", h("code", null, x.o))),
+    h("div", { class: "bar", style: "margin-top:8px" }, typed, dry, go1), out);
+}
+
+async function follow(out, job, dryRun) {
+  const log = h("pre", { style: "max-height:260px" }, "");
+  const stop = h("button", { onclick: async () => { stop.disabled = true; await api("/api/job/stop?id=" + job, {}); stop.textContent = "Stop asked: it stops between steps"; } }, "Stop after this step");
+  out.replaceChildren(h("div", { class: "bar" }, h("b", null, dryRun ? "Dry run" : "Applying"), stop), log);
+  let from = 0;
+  for (;;) {
+    let st;
+    try { st = await api(`/api/job?id=${job}&from=${from}`); } catch (e) { out.append(h("div", { class: "err" }, e.message)); return; }
+    if (st.lines.length) { log.append(st.lines.join("\n") + "\n"); from = st.next; }
+    if (st.done) {
+      stop.remove();
+      const doc = st.document;
+      out.append(h("div", { class: "panel" }, h("h2", null, badge(st.exit === 0 ? (dryRun ? "dry run passed" : "applied") : "exit " + st.exit, st.exit === 0 ? "ok" : "bad")),
+        (doc?.messages || [st.text]).filter(Boolean).map((m) => h("div", null, m)),
+        (doc?.diagnostics || []).map((x) => h("div", { class: sevClass[x.severity] }, `${x.code}: ${x.found}`)),
+        h("div", { class: "muted", style: "margin-top:8px" }, dryRun ? "Nothing was changed." : "See `dbdatabuild connection monitor` for what was recorded. A plan that stopped part-way continues when the same plan is applied again at a terminal.")));
+      cache.clear();
+      return;
+    }
+    await sleep(700);
+  }
+}
+
+// ---- table diff -----------------------------------------------------------------------------------------------------------------------------------------
+// `connection compare` compares two tables of one target inside the engine, with the read login of the server's environment. By default only counts are read; values come only when the person ticks the box.
+
+async function diffView() {
+  const out = h("div");
+  const field = (label, input) => h("label", { style: "display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--muted)" }, label, input);
+  const table = h("input", { type: "text", placeholder: "marts.fct_orders", "aria-label": "Table", style: "min-width:220px" });
+  const against = h("input", { type: "text", placeholder: "dev.fct_orders", "aria-label": "Compare with table", style: "min-width:220px" });
+  const schema = h("input", { type: "text", placeholder: "dev", "aria-label": "Compare with the same table in this schema", style: "min-width:140px" });
+  const key = h("input", { type: "text", placeholder: "default: the grain", "aria-label": "Key columns, separated by commas", style: "min-width:180px" });
+  const target = h("select", { "aria-label": "Connection" }, h("option", { value: "" }, "default connection"), ["sqlserver", "postgres", "fabric"].map((t) => h("option", { value: t }, t)));
+  const values = h("input", { type: "checkbox", "aria-label": "Show values" });
+  async function compare() {
+    out.replaceChildren(h("div", { class: "spin" }, "Comparing inside the engine…"));
+    try {
+      const args = { table: table.value.trim() };
+      if (against.value.trim()) args.against = against.value.trim(); else if (schema.value.trim()) args.against_schema = schema.value.trim();
+      if (key.value.trim()) args.key = key.value.split(",").map((x) => x.trim()).filter(Boolean);
+      if (target.value) args.connection = target.value;
+      if (values.checked) args.show_values = true;
+      const doc = await run("connection_compare", args, true);
+      out.replaceChildren(doc.data?.left ? diffResult(doc.data) : outcome(doc));
+    } catch (e) { out.replaceChildren(h("div", { class: "err" }, e.message)); }
+  }
+  return h("div", null, h("div", { class: "panel" }, h("h2", null, "Compare two tables"),
+    h("div", { class: "muted" }, "Counts are computed inside the engine and only counts are read. Values are read only if you tick the box, and are shown to you here, never to an agent."),
+    h("div", { class: "bar", style: "margin-top:8px;align-items:flex-end" }, field("Table", table), field("Compare with table", against), field("or the same table in schema", schema), field("Key", key), field("Connection", target)),
+    h("div", { class: "bar" }, h("label", null, values, " Show values (reads real data from the target)"), h("button", { onclick: compare }, "Compare"))), out);
+}
+
+function diffResult(d) {
+  const r = d.rows, sc = d.schema;
+  const same = d.identical;
+  const list = (items) => items.length ? items.map((c) => h("span", { class: "tag" }, c)) : h("span", { class: "muted" }, "none");
+  return h("div", null,
+    h("div", { class: "cards" }, card(d.left.rows.toLocaleString(), d.left.table), card(d.right.rows.toLocaleString(), d.right.table),
+      card(same ? "identical" : "differ", `on ${d.connection}`, same ? "ok" : "warn"),
+      r.compared ? [card(r.matched.toLocaleString(), "rows match", "ok"), card(r.differing.toLocaleString(), "rows differ", r.differing ? "bad" : ""), card(r.only_left.toLocaleString(), "only in " + d.left.table, r.only_left ? "bad" : ""), card(r.only_right.toLocaleString(), "only in " + d.right.table, r.only_right ? "bad" : "")] : null),
+    h("div", { class: "panel" }, h("h2", null, "Key"), h("div", null, list(d.key.columns), " ", h("span", { class: "muted" }, "from " + d.key.source.replace("_", " "))),
+      d.duplicate_keys && (d.duplicate_keys.left || d.duplicate_keys.right) ? h("div", { class: "warn" }, `Duplicate keys: ${d.duplicate_keys.left} on the left, ${d.duplicate_keys.right} on the right; rows are not compared.`) : null),
+    h("div", { class: "panel" }, h("h2", null, "Columns"),
+      h("div", null, h("span", { class: "muted" }, "compared "), list(sc.compared_columns)),
+      sc.only_left.length ? h("div", null, h("span", { class: "muted" }, "only in " + d.left.table + " "), list(sc.only_left)) : null,
+      sc.only_right.length ? h("div", null, h("span", { class: "muted" }, "only in " + d.right.table + " "), list(sc.only_right)) : null,
+      sc.type_differences.length ? h("table", null, h("thead", null, h("tr", null, h("th", null, "column"), h("th", null, d.left.table), h("th", null, d.right.table))), h("tbody", null, sc.type_differences.map((t) => h("tr", null, h("td", null, h("code", null, t.column)), h("td", null, t.left_type), h("td", null, t.right_type))))) : null,
+      sc.not_compared.length ? h("div", { class: "muted" }, "not compared: " + sc.not_compared.map((n) => `${n.column} (${n.reason})`).join("; ")) : null),
+    r.compared && Object.keys(r.differing_by_column).length ? h("div", { class: "panel" }, h("h2", null, "Rows that differ, by column"),
+      h("table", null, h("tbody", null, Object.entries(r.differing_by_column).sort((a, b) => b[1] - a[1]).map(([c, n]) => h("tr", null, h("td", null, h("code", null, c)), h("td", null, n.toLocaleString())))))) : null,
+    d.column_stats?.length ? h("div", { class: "panel" }, h("h2", null, "Column statistics"),
+      h("table", null, h("thead", null, h("tr", null, h("th", null, "column"), h("th", null, "non-null left"), h("th", null, "non-null right"), d.column_stats.some((c) => c.left_min != null) ? [h("th", null, "min left"), h("th", null, "min right"), h("th", null, "max left"), h("th", null, "max right")] : null)),
+        h("tbody", null, d.column_stats.map((c) => h("tr", null, h("td", null, h("code", null, c.column)), h("td", null, c.left_non_null.toLocaleString()), h("td", null, c.right_non_null.toLocaleString()),
+          d.column_stats.some((x) => x.left_min != null) ? [c.left_min, c.right_min, c.left_max, c.right_max].map((v) => h("td", null, v ?? "")) : null))))) : null,
+    d.samples ? samplesPanel(d) : null);
+}
+
+function samplesPanel(d) {
+  const kv = (o) => Object.entries(o).map(([k, v]) => `${k}=${v ?? "∅"}`).join(", ");
+  const part = (title, rows, render) => rows?.length ? [h("h3", null, title), h("table", null, h("tbody", null, rows.map((x) => h("tr", null, h("td", null, h("code", null, kv(x.key))), h("td", null, render(x)))))) ] : null;
+  return h("div", { class: "panel" }, h("h2", null, "Sample rows (real values)"),
+    part("Only in " + d.left.table, d.samples.only_left, (x) => kv(x.values)), part("Only in " + d.right.table, d.samples.only_right, (x) => kv(x.values)),
+    part("Differing", d.samples.differing, (x) => Object.entries(x.columns).map(([c, v]) => `${c}: ${v.left ?? "∅"} → ${v.right ?? "∅"}`).join("; ")));
+}
+
+// ---- sample data ----------------------------------------------------------------------------------------------------------------------------------------
+// `sample` runs models in DuckDB on generated rows (the project's seeds, or its own sample data) and shows what they give. Offline: no target is read.
+
+async function sampleView() {
+  const meta = (await run("project_show_metadata")).data;
+  const out = h("div");
+  const list = h("datalist", { id: "sample-models" }, meta.models.map((m) => h("option", { value: m.name })));
+  const models = h("input", { type: "text", list: "sample-models", placeholder: "model names or selectors (default: every model)", "aria-label": "Models", style: "min-width:360px" });
+  const num = (label, value, min) => { const i = h("input", { type: "text", value, "aria-label": label, size: 6 }); i.dataset.min = min; return i; };
+  const rows = num("Rows per declared model", "50", 1), seed = num("Seed", "1", 0), limit = num("Rows to show", "20", 1), scale = num("Scale", "", 1);
+  const declared = h("input", { type: "checkbox", "aria-label": "Also show the declared models" });
+  async function go1() {
+    out.replaceChildren(h("div", { class: "spin" }, "Running the models in DuckDB…"));
+    try {
+      const args = {};
+      if (models.value.trim()) args.models = models.value.trim().split(/\s+/);
+      for (const [name, el] of [["rows", rows], ["seed", seed], ["limit", limit], ["scale", scale]]) if (el.value.trim() !== "") { const n = Number(el.value); if (!Number.isInteger(n) || n < +el.dataset.min) throw new Error(`${name} must be a whole number from ${el.dataset.min}`); args[name] = n; }
+      if (declared.checked) args.declared = true;
+      const doc = await run("project_sample", args, true);
+      out.replaceChildren(doc.data?.tables ? sampleResult(doc.data) : outcome(doc));
+    } catch (e) { out.replaceChildren(h("div", { class: "err" }, e.message)); }
+  }
+  return h("div", null, list, h("div", { class: "panel" }, h("h2", null, "Run models on sample data"),
+    h("div", { class: "muted" }, "Offline, in DuckDB, on generated rows: nothing is read from a target. The rows are made up by the project's seeds."),
+    h("div", { class: "bar", style: "margin-top:8px" }, models, h("label", null, "rows ", rows), h("label", null, "seed ", seed), h("label", null, "show ", limit), h("label", null, "scale ", scale), h("label", null, declared, " declared models too"), h("button", { onclick: go1 }, "Run"))), out);
+}
+
+function sampleResult(d) {
+  return h("div", null, d.tables.map((t) => h("div", { class: "panel" },
+    h("h2", null, modelLink(t.name), " ", badge(t.kind, isBuilt(t.kind) ? "note" : ""), " ", h("span", { class: "muted" }, `${t.row_count.toLocaleString()} row${t.row_count === 1 ? "" : "s"}` + (t.row_count > t.rows.length ? `, first ${t.rows.length}` : ""))),
+    t.error ? h("div", { class: "err" }, t.error) : null, (t.warnings || []).map((w) => h("div", { class: "warn" }, w)),
+    t.rows.length ? h("div", { style: "overflow:auto;max-height:420px" }, h("table", null, h("thead", null, h("tr", null, t.columns.map((c) => h("th", { title: c.type }, c.name)))),
+      h("tbody", null, t.rows.map((r) => h("tr", null, r.map((v) => h("td", null, v == null ? h("span", { class: "muted" }, "∅") : v))))))) : (t.error ? null : h("div", { class: "muted" }, "No rows.")))));
+}
+
+// ---- routing --------------------------------------------------------------------------------------------------------------------------------------------
+
+const views = { health: "Health", lineage: "Lineage", models: "Models", plans: "Plans", sample: "Sample data", diff: "Table diff", tests: "Tests", matrix: "Support matrix" };
+// the lane of each screen and what it touches, said in words next to its name (the same words as the command headers: project, inspect, deploy, help)
+const lanes = {
+  health: ["project", "Reads the project's files and runs its checks. Opens no database."], lineage: ["project", "Reads the project's files. Opens no database."], models: ["project", "Reads the project's files. Opens no database."],
+  plans: ["deploy", "Plans are made from the project and a connection (read login); applying one changes the connection's structure and needs the page started with --allow-apply."],
+  sample: ["project", "Runs models on generated data in memory. Opens no database."], diff: ["inspect", "Reads two tables on a connection with the read login; counts only unless values are asked for."],
+  tests: ["project", "Runs the project's tests in memory. Opens no database."], matrix: ["help", "Reference: what each engine supports."],
+};
+function go(view, a, b) { location.hash = "#/" + [view, a && encodeURIComponent(a), b].filter(Boolean).join("/"); }
+
+async function render() {
+  const [, view = "health", a, b] = location.hash.split("/");
+  const current = views[view] ? view : "health";
+  $("nav").replaceChildren(...Object.entries(views).map(([id, label]) => h("a", { href: "#/" + id, class: id === current ? "on" : null, "aria-current": id === current ? "page" : null, title: lanes[id][1] }, label, h("span", { class: "lane" }, lanes[id][0]))));
+  const main = $("view");
+  main.replaceChildren(loading());
+  const name = a ? decodeURIComponent(a) : null;
+  try {
+    const node = await ({ health: healthView, lineage: () => lineageView(name), models: () => modelsView(name, b), plans: () => plansView(name), sample: sampleView, diff: diffView, tests: testsView, matrix: matrixView })[current]();
+    main.replaceChildren(node);
+    $("stamp").textContent = "loaded " + new Date().toLocaleTimeString();
+  } catch (e) { main.replaceChildren(failure(e)); }
+}
+$("refresh").addEventListener("click", () => { cache.clear(); render(); });
+addEventListener("hashchange", render);
+if (TRANSPORT === "mcp") { document.documentElement.classList.add("mcp"); mcp.start().then(render, (e) => { $("view").replaceChildren(failure(e)); }); }
+else {
+  // a link from `show` names the screen to open first (?screen=plans)
+  const first = new URLSearchParams(location.search).get("screen");
+  if (first && views[first] && !location.hash) location.hash = "#/" + first;
+  render();
+}
+</script>
+</body>
+</html>

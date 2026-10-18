@@ -1,0 +1,17 @@
+name: staging.product_price_history
+kind: view
+grain:
+  - product_id
+  - valid_from
+columns:
+  - name: product_id
+    type: INTEGER
+    nullable: false
+  - name: valid_from
+    type: DATE
+    nullable: false
+  - name: valid_to
+    type: DATE
+  - name: list_price
+    type: DECIMAL(19, 4)
+    nullable: false

@@ -1,0 +1,18 @@
+# description: marts.fct_purchase_lines gives the lead time, the share received and rejected, and whether the vendor shipped on time
+# tags: marts
+cases:
+  - name: on time, late, and not shipped yet
+    given:
+      staging.purchase_orders:
+        - {purchase_order_id: 1, vendor_id: 1, order_date: 2024-01-01, ship_date: 2024-01-10, status: 4, sub_total: 100.0, tax_amt: 8.0, freight: 3.0}
+        - {purchase_order_id: 2, vendor_id: 1, order_date: 2024-01-01, ship_date: 2024-01-25, status: 4, sub_total: 100.0, tax_amt: 8.0, freight: 3.0}
+        - {purchase_order_id: 3, vendor_id: 2, order_date: 2024-01-01, ship_date: null, status: 2, sub_total: 100.0, tax_amt: 8.0, freight: 3.0}
+      staging.purchase_lines:
+        - {purchase_order_id: 1, purchase_order_detail_id: 1, product_id: 40, order_qty: 100, unit_price: 1.0, received_qty: 100.0, rejected_qty: 5.0, due_date: 2024-01-15, line_total: 100.0}
+        - {purchase_order_id: 2, purchase_order_detail_id: 2, product_id: 40, order_qty: 100, unit_price: 1.0, received_qty: 80.0, rejected_qty: 0.0, due_date: 2024-01-15, line_total: 100.0}
+        - {purchase_order_id: 3, purchase_order_detail_id: 3, product_id: 40, order_qty: 100, unit_price: 1.0, received_qty: 0.0, rejected_qty: 0.0, due_date: 2024-01-15, line_total: 100.0}
+    assert: >
+      SELECT purchase_order_id FROM result WHERE NOT (
+           (purchase_order_id = 1 AND lead_days = 9 AND received_percent = 100.0 AND rejected_percent = 5.00 AND shipped_on_time)
+        OR (purchase_order_id = 2 AND lead_days = 24 AND received_percent = 80.0 AND rejected_percent = 0.00 AND NOT shipped_on_time)
+        OR (purchase_order_id = 3 AND lead_days IS NULL AND received_percent = 0.0 AND rejected_percent IS NULL AND shipped_on_time IS NULL))

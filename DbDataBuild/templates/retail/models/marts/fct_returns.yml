@@ -1,0 +1,16 @@
+name: marts.fct_returns
+kind: full
+grain: [return_id]
+columns:
+  - {name: return_id, type: INTEGER, nullable: false}
+  - {name: order_id, type: INTEGER, nullable: false}
+  - {name: line_no, type: INTEGER, nullable: false}
+  - {name: date_key, type: BIGINT, nullable: false}
+  - {name: product_id, type: INTEGER, nullable: false}
+  - {name: quantity, type: INTEGER, nullable: false}
+  - {name: refund_amount, type: "DECIMAL(18, 2)", nullable: false}
+  - {name: reason_code, type: "VARCHAR(4)", nullable: false}
+  - {name: reason_group, type: "VARCHAR(20)", nullable: false}
+  - {name: is_our_fault, type: BOOLEAN, nullable: false}
+indexes:
+  - {name: ux_fct_returns_return_id, columns: [return_id], unique: true}

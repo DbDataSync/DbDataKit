@@ -1,0 +1,21 @@
+name: marts.rpt_product_revenue_spread
+kind: full
+grain:
+  - product_id
+columns:
+  - name: product_id
+    type: INTEGER
+    nullable: false
+  - name: lines
+    type: BIGINT
+    nullable: false
+  - name: median_revenue
+    type: DECIMAL(19, 4)
+  - name: p90_revenue
+    type: DECIMAL(19, 4)
+  - name: p25_revenue
+    type: DECIMAL(19, 4)
+  - name: min_revenue
+    type: DECIMAL(19, 4)
+  - name: max_revenue
+    type: DECIMAL(19, 4)

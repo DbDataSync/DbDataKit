@@ -1,0 +1,8 @@
+name: marts.dim_customer
+kind: full
+columns:
+  - name: customer_id
+    type: BIGINT
+    nullable: false
+  - name: name
+    type: VARCHAR(50)

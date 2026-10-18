@@ -1,0 +1,44 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataBuild.Core\DbDataBuild.Core.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Models\DbDataBuild.Models.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Sql\DbDataBuild.Sql.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Define\DbDataBuild.Define.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Targets\DbDataBuild.Targets.csproj" />
+    <ProjectReference Include="..\DbDataBuild.State\DbDataBuild.State.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Execution\DbDataBuild.Execution.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Planning\DbDataBuild.Planning.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Apply\DbDataBuild.Apply.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Lowering\DbDataBuild.Lowering.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Sample\DbDataBuild.Sample.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Tui\DbDataBuild.Tui.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Targets.DuckDb\DbDataBuild.Targets.DuckDb.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" Version="2.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="AgentKit\SKILL.md" LogicalName="agentkit/SKILL.md" />
+    <EmbeddedResource Include="Web\index.html" LogicalName="web/index.html" />
+    <EmbeddedResource Include="..\..\schemas\*.json" LogicalName="agentkit/schemas/%(Filename)%(Extension)" />
+    <!-- project templates (DESIGN.md 15.7): templates/<name>/** is written out by `dbdatabuild project create <name>`; the dot files too -->
+    <EmbeddedResource Include="..\..\templates\**\*" LogicalName="templates/$([System.String]::Copy('%(RecursiveDir)').Replace('\','/'))%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DbDataBuild.Tests.Unit" />
+    <InternalsVisibleTo Include="DbDataBuild.Tests.Conformance" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>dbdatabuild</AssemblyName>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

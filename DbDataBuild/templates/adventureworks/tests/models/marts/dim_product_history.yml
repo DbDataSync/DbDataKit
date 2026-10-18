@@ -1,0 +1,15 @@
+# description: marts.dim_product_history has a row for every period in which neither the cost nor the price changed
+# tags: marts, critical
+cases:
+  - name: the cost changes in January and the price in July, so three periods
+    given:
+      staging.product_cost_history:
+        - {product_id: 1, valid_from: 2023-01-01, valid_to: 2023-12-31, standard_cost: 10.0000}
+        - {product_id: 1, valid_from: 2024-01-01, valid_to: null, standard_cost: 12.0000}
+      staging.product_price_history:
+        - {product_id: 1, valid_from: 2023-01-01, valid_to: 2023-06-30, list_price: 20.0000}
+        - {product_id: 1, valid_from: 2023-07-01, valid_to: null, list_price: 25.0000}
+    expect:
+      - {product_id: 1, valid_from: 2023-01-01, valid_to: 2023-06-30, standard_cost: 10.0000, list_price: 20.0000, margin: 10.0000, is_current: false}
+      - {product_id: 1, valid_from: 2023-07-01, valid_to: 2023-12-31, standard_cost: 10.0000, list_price: 25.0000, margin: 15.0000, is_current: false}
+      - {product_id: 1, valid_from: 2024-01-01, valid_to: null, standard_cost: 12.0000, list_price: 25.0000, margin: 13.0000, is_current: true}

@@ -1,0 +1,8 @@
+name: sales.currency_rate
+kind: mapped
+grain: [currency_rate_date, to_currency_code]
+columns:
+  - {name: currency_rate_date, type: DATE, nullable: false}
+  - {name: to_currency_code, type: "VARCHAR(3)", nullable: false}
+  - {name: average_rate, type: "DECIMAL(10, 4)", nullable: false}
+  - {name: end_of_day_rate, type: "DECIMAL(10, 4)", nullable: false}

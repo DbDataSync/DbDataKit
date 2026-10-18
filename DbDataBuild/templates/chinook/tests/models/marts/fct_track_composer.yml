@@ -1,0 +1,17 @@
+# description: marts.fct_track_composer splits the composer text into one row per name
+# tags: marts, critical
+cases:
+  - name: names separated by a comma or a slash each get a row and a position
+    given:
+      staging.tracks:
+        - {track_id: 1, track_name: A, album_id: 1, media_type_id: 1, genre_id: 1, composer: "Ana Reyes", length_seconds: 100, size_mb: 1.5, unit_price: 0.99}
+        - {track_id: 2, track_name: B, album_id: 1, media_type_id: 1, genre_id: 1, composer: "Ana Reyes, Ben Okafor", length_seconds: 100, size_mb: 1.5, unit_price: 0.99}
+        - {track_id: 3, track_name: C, album_id: 1, media_type_id: 1, genre_id: 1, composer: "Ana Reyes / Ben Okafor / Chloe Martin", length_seconds: 100, size_mb: 1.5, unit_price: 0.99}
+        - {track_id: 4, track_name: D, album_id: 1, media_type_id: 1, genre_id: 1, composer: null, length_seconds: 100, size_mb: 1.5, unit_price: 0.99}
+    expect:
+      - {track_id: 1, position: 1, composer: Ana Reyes}
+      - {track_id: 2, position: 1, composer: Ana Reyes}
+      - {track_id: 2, position: 2, composer: Ben Okafor}
+      - {track_id: 3, position: 1, composer: Ana Reyes}
+      - {track_id: 3, position: 2, composer: Ben Okafor}
+      - {track_id: 3, position: 3, composer: Chloe Martin}

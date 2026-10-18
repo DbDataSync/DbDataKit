@@ -1,0 +1,28 @@
+.mode list
+SELECT 'int div //' AS probe;
+SELECT 7 // 2 AS r;
+SELECT 5 // 0 AS r;
+SELECT 'null type' AS probe;
+DESCRIBE SELECT NULL AS x;
+CREATE TABLE tn AS SELECT NULL AS x;
+DESCRIBE tn;
+SELECT 'regex' AS probe;
+SELECT regexp_matches('abc','b') AS m, 'abc' ~ 'b' AS tilde, regexp_full_match('abc','b') AS f;
+SELECT 'lambda' AS probe;
+SELECT list_transform([1,2],x -> x+1) AS l;
+SELECT 'collations' AS probe;
+SELECT 'a' COLLATE NOCASE = 'A' AS nocase, 'é' COLLATE NOACCENT = 'e' AS noacc, 'a' COLLATE NOCASE.NOACCENT = 'Á' AS both, 'é' COLLATE NFC = 'é' AS nfc;
+SET default_collation='NOCASE';
+CREATE TABLE c(s VARCHAR);
+INSERT INTO c VALUES ('a'),('A'),('b');
+SELECT s, count(*) FROM c GROUP BY s ORDER BY ALL;
+SELECT 'timestamps' AS probe;
+SELECT TIMESTAMP '2024-01-01 10:00:00' AS ts, CAST('2024-01-01 10:00:00+02' AS TIMESTAMP) AS tz_cast;
+SELECT 'unsigned negate' AS probe;
+SELECT -(1::UTINYINT) AS neg;
+SELECT 'string agg + sum types' AS probe;
+DESCRIBE SELECT sum(1::INTEGER) AS s, avg(1::INTEGER) AS a, 1/2 AS d, 7::DECIMAL(10,2)/3 AS dd, round(2.675::DOUBLE,2) AS r;
+SELECT 'try_cast' AS probe;
+SELECT TRY_CAST('' AS INTEGER) AS e, TRY_CAST(' 12 ' AS INTEGER) AS sp, TRY_CAST('12.7' AS INTEGER) AS dec;
+SELECT 'FROM string' AS probe;
+SELECT * FROM 'nonexistent_file.csv';

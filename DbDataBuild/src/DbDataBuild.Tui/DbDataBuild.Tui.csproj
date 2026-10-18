@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataBuild.Core\DbDataBuild.Core.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Models\DbDataBuild.Models.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Planning\DbDataBuild.Planning.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Terminal.Gui" Version="2.5.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Terminal.Gui 2.5 marks TextView obsolete in favour of a separate editor package; a read-only scrolling text pane is all that is needed here -->
+    <NoWarn>$(NoWarn);CS0618</NoWarn>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,38 @@
+name: staging.employees
+kind: view
+grain:
+  - employee_id
+columns:
+  - name: employee_id
+    type: INTEGER
+    nullable: false
+  - name: login_id
+    type: VARCHAR(256)
+    nullable: false
+  - name: user_name
+    type: VARCHAR
+  - name: job_title
+    type: VARCHAR(50)
+    nullable: false
+  - name: birth_date
+    type: DATE
+    nullable: false
+  - name: marital_status
+    type: VARCHAR
+  - name: gender
+    type: VARCHAR
+  - name: hire_date
+    type: DATE
+    nullable: false
+  - name: is_salaried
+    type: BOOLEAN
+    nullable: false
+  - name: vacation_hours
+    type: SMALLINT
+    nullable: false
+  - name: sick_leave_hours
+    type: SMALLINT
+    nullable: false
+  - name: is_current
+    type: BOOLEAN
+    nullable: false

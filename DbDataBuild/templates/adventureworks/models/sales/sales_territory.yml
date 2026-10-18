@@ -1,0 +1,9 @@
+name: sales.sales_territory
+kind: mapped
+grain: [territory_id]
+columns:
+  - {name: territory_id, type: INTEGER, nullable: false}
+  - {name: name, type: "VARCHAR(50)", nullable: false}
+  - {name: country_region_code, type: "VARCHAR(3)", nullable: false}
+  - {name: group_name, type: "VARCHAR(50)", nullable: false}
+  - {name: currency_code, type: "VARCHAR(3)", nullable: false}

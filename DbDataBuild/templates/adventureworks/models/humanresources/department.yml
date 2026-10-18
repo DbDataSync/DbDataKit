@@ -1,0 +1,7 @@
+name: humanresources.department
+kind: mapped
+grain: [department_id]
+columns:
+  - {name: department_id, type: INTEGER, nullable: false}
+  - {name: name, type: "VARCHAR(50)", nullable: false}
+  - {name: group_name, type: "VARCHAR(50)", nullable: false}

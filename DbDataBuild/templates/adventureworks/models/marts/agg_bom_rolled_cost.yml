@@ -1,0 +1,18 @@
+name: marts.agg_bom_rolled_cost
+kind: full
+grain:
+  - product_id
+columns:
+  - name: product_id
+    type: INTEGER
+    nullable: false
+  - name: leaf_parts
+    type: BIGINT
+    nullable: false
+  - name: rolled_up_cost
+    type: DECIMAL(19, 4)
+  - name: standard_cost
+    type: DECIMAL(19, 4)
+    nullable: false
+  - name: variance
+    type: DECIMAL(19, 4)

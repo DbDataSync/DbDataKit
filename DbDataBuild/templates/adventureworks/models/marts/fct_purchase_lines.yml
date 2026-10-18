@@ -1,0 +1,45 @@
+name: marts.fct_purchase_lines
+kind: full
+grain:
+  - purchase_order_id
+  - purchase_order_detail_id
+columns:
+  - name: purchase_order_id
+    type: INTEGER
+    nullable: false
+  - name: purchase_order_detail_id
+    type: INTEGER
+    nullable: false
+  - name: vendor_id
+    type: INTEGER
+    nullable: false
+  - name: product_id
+    type: INTEGER
+    nullable: false
+  - name: order_date
+    type: DATE
+    nullable: false
+  - name: ship_date
+    type: DATE
+  - name: due_date
+    type: DATE
+    nullable: false
+  - name: order_qty
+    type: SMALLINT
+    nullable: false
+  - name: received_qty
+    type: DECIMAL(8, 2)
+    nullable: false
+  - name: rejected_qty
+    type: DECIMAL(8, 2)
+    nullable: false
+  - name: line_total
+    type: DECIMAL(19, 4)
+  - name: received_percent
+    type: DECIMAL(5, 1)
+  - name: rejected_percent
+    type: DECIMAL(6, 2)
+  - name: lead_days
+    type: BIGINT
+  - name: shipped_on_time
+    type: BOOLEAN

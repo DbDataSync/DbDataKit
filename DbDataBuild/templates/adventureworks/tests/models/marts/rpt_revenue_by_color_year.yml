@@ -1,0 +1,18 @@
+# description: marts.rpt_revenue_by_color_year pivots the years into columns
+# tags: marts
+cases:
+  - name: one row per colour group, a column per year, NULL where there was no revenue
+    given:
+      marts.dim_date:
+        - {date_key: 20220115, date: 2022-01-15, year: 2022, quarter: 1, month: 1, year_month: 202201, month_name: January, iso_weekday: 6, is_weekend: true, fiscal_year: 2022, fiscal_quarter: 3}
+        - {date_key: 20230115, date: 2023-01-15, year: 2023, quarter: 1, month: 1, year_month: 202301, month_name: January, iso_weekday: 7, is_weekend: true, fiscal_year: 2023, fiscal_quarter: 3}
+      marts.dim_product:
+        - {product_id: 1, product_name: A, product_number: BK-1, category_name: Bikes, subcategory_name: Road, is_made_in_house: true, color: Black, color_group: neutral, size: null, weight: 1.0, standard_cost: 1.0, list_price: 2.0, margin: 1.0, margin_percent: 50.0, price_band: budget, sell_start_date: 2020-01-01, sell_end_date: null, is_discontinued: false}
+        - {product_id: 2, product_name: B, product_number: BK-2, category_name: Bikes, subcategory_name: Road, is_made_in_house: true, color: Red, color_group: colorful, size: null, weight: 1.0, standard_cost: 1.0, list_price: 2.0, margin: 1.0, margin_percent: 50.0, price_band: budget, sell_start_date: 2020-01-01, sell_end_date: null, is_discontinued: false}
+      marts.fct_sales_lines:
+        - {sales_order_id: 1, sales_order_detail_id: 1, date_key: 20220115, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 1, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 10.0, discount_usd: 0.0, revenue_usd: 10.0, cost_usd: 5.0, margin_usd: 5.0}
+        - {sales_order_id: 2, sales_order_detail_id: 2, date_key: 20230115, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 1, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 20.0, discount_usd: 0.0, revenue_usd: 20.0, cost_usd: 5.0, margin_usd: 15.0}
+        - {sales_order_id: 3, sales_order_detail_id: 3, date_key: 20230115, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 2, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 7.0, discount_usd: 0.0, revenue_usd: 7.0, cost_usd: 5.0, margin_usd: 2.0}
+    expect:
+      - {color_group: neutral, revenue_2022: 10.0000, revenue_2023: 20.0000, revenue_2024: null}
+      - {color_group: colorful, revenue_2022: null, revenue_2023: 7.0000, revenue_2024: null}

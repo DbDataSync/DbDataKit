@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataBuild.Core\DbDataBuild.Core.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Models\DbDataBuild.Models.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Sql\DbDataBuild.Sql.csproj" />
+    <ProjectReference Include="..\DbDataBuild.State\DbDataBuild.State.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Targets\DbDataBuild.Targets.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\matrix\decision-table.yml" LogicalName="matrix/decision-table.yml" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

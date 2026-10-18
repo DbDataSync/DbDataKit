@@ -1,0 +1,13 @@
+name: chinook.track
+kind: mapped
+grain: [track_id]
+columns:
+  - {name: track_id, type: INTEGER, nullable: false}
+  - {name: name, type: "VARCHAR(200)", nullable: false}
+  - {name: album_id, type: INTEGER}
+  - {name: media_type_id, type: INTEGER, nullable: false}
+  - {name: genre_id, type: INTEGER}
+  - {name: composer, type: "VARCHAR(220)"}
+  - {name: milliseconds, type: INTEGER, nullable: false}
+  - {name: bytes, type: INTEGER, nullable: false}
+  - {name: unit_price, type: "DECIMAL(10, 2)", nullable: false}

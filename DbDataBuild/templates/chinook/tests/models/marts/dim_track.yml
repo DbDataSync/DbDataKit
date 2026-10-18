@@ -1,0 +1,22 @@
+# description: marts.dim_track writes the length as mm:ss and bands it
+# tags: marts
+cases:
+  - name: seconds become zero-padded minutes and seconds, and a band
+    given:
+      staging.tracks:
+        - {track_id: 1, track_name: Short, album_id: 1, media_type_id: 1, genre_id: 1, composer: null, length_seconds: 65, size_mb: 1.0, unit_price: 0.99}
+        - {track_id: 2, track_name: Middle, album_id: 1, media_type_id: 1, genre_id: null, composer: null, length_seconds: 240, size_mb: 3.0, unit_price: 0.99}
+        - {track_id: 3, track_name: Long, album_id: null, media_type_id: 1, genre_id: 1, composer: null, length_seconds: 3725, size_mb: 50.0, unit_price: 0.99}
+      staging.albums:
+        - {album_id: 1, album_title: First, artist_id: 1}
+      staging.artists:
+        - {artist_id: 1, artist_name: The Band}
+      staging.genres:
+        - {genre_id: 1, genre_name: Rock}
+      staging.media_types:
+        - {media_type_id: 1, media_type_name: MPEG audio file}
+    assert: >
+      SELECT track_id FROM result WHERE NOT (
+           (track_id = 1 AND length_text = '01:05' AND length_band = 'short' AND genre_name = 'Rock' AND artist_name = 'The Band')
+        OR (track_id = 2 AND length_text = '04:00' AND length_band = 'standard' AND genre_name = 'Unknown')
+        OR (track_id = 3 AND length_text = '62:05' AND length_band = 'long' AND album_title IS NULL))

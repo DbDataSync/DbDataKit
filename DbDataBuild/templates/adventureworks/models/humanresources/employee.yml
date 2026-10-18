@@ -1,0 +1,15 @@
+name: humanresources.employee
+kind: mapped
+grain: [employee_id]
+columns:
+  - {name: employee_id, type: INTEGER, nullable: false}
+  - {name: login_id, type: "VARCHAR(256)", nullable: false}
+  - {name: job_title, type: "VARCHAR(50)", nullable: false}
+  - {name: birth_date, type: DATE, nullable: false}
+  - {name: marital_status, type: "VARCHAR(1)", nullable: false}
+  - {name: gender, type: "VARCHAR(1)", nullable: false}
+  - {name: hire_date, type: DATE, nullable: false}
+  - {name: salaried_flag, type: BOOLEAN, nullable: false}
+  - {name: vacation_hours, type: SMALLINT, nullable: false}
+  - {name: sick_leave_hours, type: SMALLINT, nullable: false}
+  - {name: current_flag, type: BOOLEAN, nullable: false}

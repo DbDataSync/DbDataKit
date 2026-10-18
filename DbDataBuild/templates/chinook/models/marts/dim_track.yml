@@ -1,0 +1,34 @@
+name: marts.dim_track
+kind: full
+grain:
+  - track_id
+columns:
+  - name: track_id
+    type: INTEGER
+    nullable: false
+  - name: track_name
+    type: VARCHAR(200)
+    nullable: false
+  - name: album_title
+    type: VARCHAR(160)
+  - name: artist_name
+    type: VARCHAR(120)
+  - name: genre_name
+    type: VARCHAR
+    nullable: false
+  - name: media_type_name
+    type: VARCHAR(40)
+    nullable: false
+  - name: composer
+    type: VARCHAR(220)
+  - name: length_seconds
+    type: INTEGER
+  - name: length_text
+    type: VARCHAR
+  - name: length_band
+    type: VARCHAR
+  - name: size_mb
+    type: DECIMAL(10, 2)
+  - name: unit_price
+    type: DECIMAL(10, 2)
+    nullable: false

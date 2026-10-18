@@ -1,0 +1,20 @@
+name: staging.customers
+kind: view
+grain:
+  - customer_id
+columns:
+  - name: customer_id
+    type: INTEGER
+    nullable: false
+  - name: customer_name
+    type: VARCHAR
+  - name: email
+    type: VARCHAR(80)
+    nullable: false
+  - name: territory_id
+    type: INTEGER
+    nullable: false
+  - name: store_name
+    type: VARCHAR(60)
+  - name: customer_type
+    type: VARCHAR

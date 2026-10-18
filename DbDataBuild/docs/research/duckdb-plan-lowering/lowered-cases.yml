@@ -1,0 +1,81 @@
+- { id: int_division, sql: "SELECT (7 / 2) AS x", expect: translate }
+- { id: int_division_cols, sql: "SELECT (CAST(a AS DOUBLE) / CAST(b AS DOUBLE)) AS x FROM t", expect: translate }
+- { id: cast_varchar_nolen, sql: "SELECT s AS x FROM t", expect: translate }
+- { id: cast_varchar_len, sql: "SELECT s AS x FROM t", expect: translate }
+- { id: unicode_literal, sql: "SELECT 'h\u00e9llo' AS x", expect: translate }
+- { id: concat_pipes, sql: "SELECT (s || s) AS x FROM t", expect: translate }
+- { id: concat_null, sql: "SELECT CAST(NULL AS INTEGER) AS col1 FROM t", expect: translate }
+- { id: length_fn, sql: "SELECT length(s) AS x FROM t", expect: translate }
+- { id: substr_fn, sql: "SELECT substr(s, 2, 3) AS x FROM t", expect: translate }
+- { id: lower_upper, sql: "SELECT lower(s) AS col1, upper(s) AS col2 FROM t", expect: translate }
+- { id: coalesce, sql: "SELECT coalesce(a, b, 0) AS x FROM t", expect: translate }
+- { id: ifnull, sql: "SELECT coalesce(a, 0) AS x FROM t", expect: translate }
+- { id: like_case, sql: "SELECT id, a, b, s, d, ts, d1, d2, x FROM t WHERE (s LIKE 'abc%')", expect: translate }
+- { id: ilike, sql: "SELECT id, a, b, s, d, ts, d1, d2, x FROM t WHERE (s ILIKE 'abc%')", expect: translate }
+- { id: regexp, sql: "SELECT id, a, b, s, d, ts, d1, d2, x FROM t WHERE regexp_matches(s, '^a.*z$')", expect: translate }
+- { id: limit_offset, sql: "SELECT id, a, b, s, d, ts, d1, d2, x FROM t ORDER BY a LIMIT 10 OFFSET 5", expect: translate }
+- { id: qualify, sql: "SELECT a, b FROM ( SELECT a, b, row_number() OVER (PARTITION BY a ORDER BY b) AS col3 FROM t ) AS s1 WHERE (col3 = 1)", expect: translate }
+- { id: date_trunc_month, sql: "SELECT CAST(date_trunc('month', d) AS TIMESTAMP) AS x FROM t", expect: translate }
+- { id: date_trunc_day, sql: "SELECT date_trunc('day', ts) AS x FROM t", expect: translate }
+- { id: date_add_interval, sql: "SELECT CAST((d + INTERVAL 3 DAY) AS TIMESTAMP) AS x FROM t", expect: translate }
+- { id: date_diff, sql: "SELECT date_diff('day', d1, d2) AS x FROM t", expect: translate }
+- { id: extract_year, sql: "SELECT date_part('year', d) AS x FROM t", expect: translate }
+- { id: group_by_ordinal, sql: "SELECT a AS \"0\", count(*) AS \"count_star()\" FROM t GROUP BY a", expect: translate }
+- { id: group_by_all, sql: "SELECT a, count(*) AS \"count_star()\" FROM t GROUP BY a", expect: translate }
+- { id: distinct, sql: "SELECT DISTINCT a, b FROM t", expect: translate }
+- { id: union_dedupe, sql: "SELECT a FROM t UNION SELECT a FROM u", expect: translate }
+- { id: union_all, sql: "SELECT a FROM t UNION ALL SELECT a FROM u", expect: translate }
+- { id: row_number, sql: "SELECT row_number() OVER (PARTITION BY a ORDER BY b) AS rn FROM t", expect: translate }
+- { id: window_sum, sql: "SELECT sum(x) OVER (PARTITION BY a ORDER BY b ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS s FROM t", expect: translate }
+- { id: lag_lead, sql: "SELECT lag(x, 1) OVER (ORDER BY b) AS p FROM t", expect: translate }
+- { id: nulls_last, sql: "SELECT id, a, b, s, d, ts, d1, d2, x FROM t ORDER BY a", expect: translate }
+- { id: bool_predicate, sql: "SELECT (a > 1) AS flag FROM t", expect: translate }
+- { id: bool_literal, sql: "SELECT TRUE AS x", expect: translate }
+- { id: decimal_mult, sql: "SELECT (CAST(a AS DECIMAL(18, 4)) * CAST(b AS DECIMAL(18, 4))) AS x FROM t", expect: translate }
+- { id: cte, sql: "WITH c AS ( SELECT a FROM t ) SELECT a FROM c", expect: translate }
+- { id: left_join, sql: "SELECT t.a, u.b FROM t LEFT JOIN u ON (t.a = u.a)", expect: translate }
+- { id: case_when, sql: "SELECT CASE WHEN (a > 1) THEN 'x' ELSE 'y' END AS c FROM t", expect: translate }
+- { id: in_list, sql: "SELECT id, a, b, s, d, ts, d1, d2, x FROM t WHERE (a IN (1, 2, 3))", expect: translate }
+- { id: int_overflow, sql: "SELECT (2147483647 + 1) AS x", expect: translate }
+- { id: try_cast, sql: "SELECT TRY_CAST(s AS INTEGER) AS x FROM t", expect: translate }
+- { id: bool_and_or_not, sql: "SELECT id, a, b, s, d, ts, d1, d2, x FROM t WHERE (((a > 1) AND (b < 5)) OR (a <> 7))", expect: translate }
+- { id: str_eq_profile, sql: "SELECT id, a, b, s, d, ts, d1, d2, x FROM t WHERE (s = 'abc')", expect: translate }
+- { id: str_in_profile, sql: "SELECT id, a, b, s, d, ts, d1, d2, x FROM t WHERE (s IN ('abc', 'x'))", expect: translate }
+- { id: compare_ops, sql: "SELECT id, a, b, s, d, ts, d1, d2, x FROM t WHERE (a >= 2) AND (b <= 3) AND (a <> b) AND (a <> 7)", expect: translate }
+- { id: arithmetic_ops, sql: "SELECT (a + b) AS s, (a - b) AS d, (a * b) AS m, (a % 3) AS r FROM t", expect: translate }
+- { id: unary_minus, sql: "SELECT (-a) AS n FROM t", expect: translate }
+- { id: aggregates, sql: "SELECT count(*) AS \"count_star()\", count(a) AS \"count(a)\", count(DISTINCT a) AS \"count(DISTINCT a)\", sum(a) AS \"sum(a)\", min(a) AS \"min(a)\", max(a) AS \"max(a)\" FROM t", expect: translate }
+- { id: avg_int, sql: "SELECT avg(CAST(a AS DOUBLE)) AS x FROM t", expect: translate }
+- { id: avg_decimal, sql: "SELECT avg(CAST(CAST(a AS DECIMAL(10, 2)) AS DOUBLE)) AS x FROM t", expect: translate }
+- { id: left_join_using, sql: "SELECT t.id, t.a, t.b, t.s, t.d, t.ts, t.d1, t.d2, t.x, u.b AS b_2 FROM t LEFT JOIN u ON (t.a = u.a)", expect: translate }
+- { id: natural_join, sql: "SELECT t.id, t.a, t.b, t.s, t.d, t.ts, t.d1, t.d2, t.x FROM t JOIN u ON (t.b = u.b) AND (t.a = u.a)", expect: translate }
+- { id: cte_multi, sql: "WITH c1 AS ( SELECT a FROM t ), c2 AS ( SELECT a FROM u ) SELECT c1.a FROM c1 JOIN c2 ON (c1.a = c2.a)", expect: translate }
+- { id: group_having, sql: "SELECT a, count(*) AS n FROM t GROUP BY a HAVING (count(*) > 1)", expect: translate }
+- { id: between, sql: "SELECT id, a, b, s, d, ts, d1, d2, x FROM t WHERE (a >= 2) AND (a <= 5)", expect: translate }
+- { id: is_null, sql: "SELECT id, a, b, s, d, ts, d1, d2, x FROM t WHERE ((a IS NULL) OR (b IS NOT NULL))", expect: translate }
+- { id: not_in, sql: "SELECT id, a, b, s, d, ts, d1, d2, x FROM t WHERE (a NOT IN (1, 2))", expect: translate }
+- { id: inner_join, sql: "SELECT t.a, u.b AS ub FROM t JOIN u ON (t.a = u.a)", expect: translate }
+- { id: subquery_from, sql: "SELECT a FROM t WHERE (a > 1)", expect: translate }
+- { id: intersect_except, sql: "SELECT a FROM t INTERSECT SELECT a FROM u", expect: translate }
+- { id: except, sql: "SELECT a FROM t EXCEPT SELECT a FROM u", expect: translate }
+- { id: nullif_fn, sql: "SELECT CASE WHEN (a = 0) THEN CAST(NULL AS INTEGER) ELSE a END AS x FROM t", expect: translate }
+- { id: abs_round, sql: "SELECT abs((a - 5)) AS x, round((CAST(CAST(a AS DECIMAL(10, 2)) AS DOUBLE) / 3), 1) AS r FROM t", expect: translate }
+- { id: trim_fns, sql: "SELECT trim(s) AS col1, ltrim(s) AS col2, rtrim(s) AS col3 FROM t", expect: translate }
+- { id: replace_fn, sql: "SELECT replace(s, 'a', 'z') AS x FROM t", expect: translate }
+- { id: case_simple, sql: "SELECT CASE WHEN (a = 1) THEN 'one' WHEN (a = 2) THEN 'two' ELSE CAST(NULL AS VARCHAR) END AS x FROM t", expect: translate }
+- { id: full_outer_join, sql: "SELECT t.a, u.a AS ua FROM t FULL JOIN u ON (t.a = u.a)", expect: translate }
+- { id: cross_join, sql: "SELECT t.a, u.b FROM t CROSS JOIN u", expect: translate }
+- { id: date_literal_cast, sql: "SELECT DATE '2024-01-15' AS x", expect: translate }
+- { id: max_by_cast_int, sql: "SELECT CAST(s AS INTEGER) AS x FROM t WHERE (s = 'abc')", expect: translate }
+- { id: count_over_window, sql: "SELECT a, rank() OVER (ORDER BY a) AS r, dense_rank() OVER (ORDER BY a) AS d FROM t", expect: translate }
+- { id: cast_int, sql: "SELECT a AS x FROM t", expect: translate }
+- { id: cast_bigint, sql: "SELECT CAST(a AS BIGINT) AS x FROM t", expect: translate }
+- { id: cast_smallint, sql: "SELECT CAST(a AS SMALLINT) AS x FROM t", expect: translate }
+- { id: cast_double, sql: "SELECT CAST(a AS DOUBLE) AS x FROM t", expect: translate }
+- { id: cast_timestamp, sql: "SELECT CAST(d AS TIMESTAMP) AS x FROM t", expect: translate }
+- { id: cast_boolean, sql: "SELECT CAST(a AS BOOLEAN) AS x FROM t", expect: translate }
+- { id: cast_ts_to_date, sql: "SELECT CAST(ts AS DATE) AS x FROM t", expect: translate }
+- { id: abs_fn, sql: "SELECT abs((a - 5)) AS x FROM t", expect: translate }
+- { id: round_decimal, sql: "SELECT round(CAST(a AS DECIMAL(10, 2)), 1) AS x FROM t", expect: translate }
+- { id: floor_ceil, sql: "SELECT floor(CAST(a AS DOUBLE)) AS f, ceil(CAST(a AS DOUBLE)) AS c FROM t", expect: translate }
+- { id: right_join, sql: "SELECT t.a, u.b FROM u LEFT JOIN t ON (u.a = t.a)", expect: translate }

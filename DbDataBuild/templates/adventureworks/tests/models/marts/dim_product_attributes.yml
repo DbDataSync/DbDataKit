@@ -1,0 +1,13 @@
+# description: marts.dim_product_attributes reads values out of the JSON document of a product, and gives NULL where there is none
+# tags: marts
+cases:
+  - name: a bike with a frame, a product with tags only, a product with no document
+    given:
+      staging.products:
+        - {product_id: 1, product_name: Bike, product_number: BK-0001, is_made_in_house: true, color: Red, size: null, weight: 9.5, standard_cost: 100.0000, list_price: 200.0000, product_subcategory_id: 1, sell_start_date: 2020-01-01, sell_end_date: null, attributes: '{"frame": {"material": "alloy", "gears": 21}, "tags": ["road", "new"]}'}
+        - {product_id: 2, product_name: Glove, product_number: CL-0002, is_made_in_house: false, color: Black, size: M, weight: null, standard_cost: 5.0000, list_price: 9.0000, product_subcategory_id: 9, sell_start_date: 2020-01-01, sell_end_date: null, attributes: '{"tags": ["basic"]}'}
+        - {product_id: 3, product_name: Cap, product_number: CL-0003, is_made_in_house: false, color: N/A, size: null, weight: null, standard_cost: 3.0000, list_price: 6.0000, product_subcategory_id: 9, sell_start_date: 2020-01-01, sell_end_date: null, attributes: null}
+    expect:
+      - {product_id: 1, frame_material: alloy, gears: 21, first_tag: road, has_attributes: true}
+      - {product_id: 2, frame_material: null, gears: null, first_tag: basic, has_attributes: true}
+      - {product_id: 3, frame_material: null, gears: null, first_tag: null, has_attributes: false}

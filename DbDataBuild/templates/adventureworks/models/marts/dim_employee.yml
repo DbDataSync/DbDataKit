@@ -1,0 +1,36 @@
+name: marts.dim_employee
+kind: full
+grain:
+  - employee_id
+columns:
+  - name: employee_id
+    type: INTEGER
+    nullable: false
+  - name: user_name
+    type: VARCHAR
+  - name: job_title
+    type: VARCHAR(50)
+    nullable: false
+  - name: marital_status
+    type: VARCHAR
+  - name: gender
+    type: VARCHAR
+  - name: hire_date
+    type: DATE
+    nullable: false
+  - name: tenure_years
+    type: BIGINT
+  - name: is_salaried
+    type: BOOLEAN
+    nullable: false
+  - name: department_name
+    type: VARCHAR(50)
+    nullable: false
+  - name: department_group
+    type: VARCHAR(50)
+    nullable: false
+  - name: current_pay_rate
+    type: DECIMAL(10, 4)
+    nullable: false
+  - name: pay_frequency
+    type: VARCHAR

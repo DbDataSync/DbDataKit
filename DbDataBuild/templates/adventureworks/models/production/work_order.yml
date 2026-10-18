@@ -1,0 +1,11 @@
+name: production.work_order
+kind: mapped
+grain: [work_order_id]
+columns:
+  - {name: work_order_id, type: INTEGER, nullable: false}
+  - {name: product_id, type: INTEGER, nullable: false}
+  - {name: order_qty, type: INTEGER, nullable: false}
+  - {name: scrapped_qty, type: INTEGER, nullable: false}
+  - {name: start_date, type: DATE, nullable: false}
+  - {name: end_date, type: DATE}
+  - {name: due_date, type: DATE, nullable: false}

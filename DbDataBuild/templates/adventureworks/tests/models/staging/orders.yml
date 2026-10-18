@@ -1,0 +1,14 @@
+# description: staging.orders turns the status number into words and adds the total due
+# tags: staging
+cases:
+  - name: every status number has a name, an unknown one is "unknown"
+    given:
+      sales.sales_order_header:
+        - {sales_order_id: 1, order_date: 2024-01-05, due_date: 2024-01-17, ship_date: 2024-01-08, status: 5, online_order_flag: true, customer_id: 1, sales_person_id: null, territory_id: 1, currency_code: USD, sub_total: 100.0000, tax_amt: 7.2500, freight: 2.5000}
+        - {sales_order_id: 2, order_date: 2024-01-05, due_date: 2024-01-17, ship_date: null, status: 6, online_order_flag: false, customer_id: 1, sales_person_id: 3, territory_id: 1, currency_code: USD, sub_total: 10.0000, tax_amt: 0.7250, freight: 0.2500}
+        - {sales_order_id: 3, order_date: 2024-01-05, due_date: 2024-01-17, ship_date: null, status: 9, online_order_flag: false, customer_id: 1, sales_person_id: 3, territory_id: 1, currency_code: USD, sub_total: 0.0000, tax_amt: 0.0000, freight: 0.0000}
+    assert: >
+      SELECT sales_order_id FROM result WHERE NOT (
+           (sales_order_id = 1 AND status_name = 'shipped' AND is_online AND total_due = 109.75)
+        OR (sales_order_id = 2 AND status_name = 'cancelled' AND NOT is_online)
+        OR (sales_order_id = 3 AND status_name = 'unknown'))

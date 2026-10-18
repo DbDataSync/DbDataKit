@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="JsonSchema.Net" Version="7.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.6.0" />
+    <PackageReference Include="xunit" Version="2.4.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.5">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector" Version="6.0.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DbDataBuild.Core\DbDataBuild.Core.csproj" />
+    <ProjectReference Include="..\..\src\DbDataBuild.Tui\DbDataBuild.Tui.csproj" />
+    <ProjectReference Include="..\..\src\DbDataBuild.Models\DbDataBuild.Models.csproj" />
+    <ProjectReference Include="..\..\src\DbDataBuild.Cli\DbDataBuild.Cli.csproj" />
+    <ProjectReference Include="..\..\src\DbDataBuild.Sql\DbDataBuild.Sql.csproj" />
+    <ProjectReference Include="..\..\src\DbDataBuild.Targets.DuckDb\DbDataBuild.Targets.DuckDb.csproj" />
+    <ProjectReference Include="..\..\src\DbDataBuild.Define\DbDataBuild.Define.csproj" />
+    <ProjectReference Include="..\..\src\DbDataBuild.Targets\DbDataBuild.Targets.csproj" />
+    <ProjectReference Include="..\..\src\DbDataBuild.State\DbDataBuild.State.csproj" />
+    <ProjectReference Include="..\..\src\DbDataBuild.Execution\DbDataBuild.Execution.csproj" />
+    <ProjectReference Include="..\..\src\DbDataBuild.Planning\DbDataBuild.Planning.csproj" />
+    <ProjectReference Include="..\..\src\DbDataBuild.Apply\DbDataBuild.Apply.csproj" />
+    <ProjectReference Include="..\..\src\DbDataBuild.Lowering\DbDataBuild.Lowering.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,71 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    # Windows runs the same suite natively: the Wine runs in docs/progress entry 34 are no substitute.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25                 # the unit suite takes about a minute; a hang should fail, not run for hours
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Prebuilt polyglot library
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/fetch-native.sh
+      - run: dotnet build -c Release
+      - run: dotnet test tests/DbDataBuild.Tests.Unit -c Release --no-build
+
+  # The conformance suite against real engines, in groups that run side by side (each starts only the engines it needs): `quick` is everything not named below, `apply` is the whole plan and apply loop,
+  # `templates` builds the sample projects and compares every table with DuckDB, `release` (the sample projects again with the rewrites off) runs only in conformance-full.yml, `mssql2025` runs the dialect probes and one whole
+  # load against a SQL Server 2025 (database compatibility level 170, and 160). The preview engines (Oracle, Spark SQL, the BigQuery emulator) are only probed for their dialect: a failure there means a case that agreed
+  # with DuckDB no longer does (tests/.../Baselines).
+  conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { group: quick,     engines: "mssql pg", filter: "Group!=apply&Group!=templates&Group!=release" }
+          - { group: apply,     engines: "mssql pg", filter: "Group=apply" }
+          - { group: templates, engines: "mssql pg", filter: "Group=templates&Group!=release" }
+          - { group: mssql2025, engines: "mssql2025", filter: "DisplayName~sqlserver2025|DisplayName~A_project_at_version_17" }
+          - { group: oracle,    engines: "oracle",   filter: "DisplayName~EngineDifferenceProbes&DisplayName~oracle" }
+          - { group: spark,     engines: "spark",    filter: "DisplayName~EngineDifferenceProbes&DisplayName~spark" }
+          - { group: bigquery,  engines: "bigquery", filter: "DisplayName~EngineDifferenceProbes&DisplayName~bigquery" }
+    name: conformance (${{ matrix.group }})
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Prebuilt polyglot library
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/fetch-native.sh
+      - run: dotnet build -c Release
+      - name: Start the engines
+        run: scripts/test-engines.sh up ${{ matrix.engines }}
+      - name: Conformance tests
+        run: |
+          eval "$(scripts/test-engines.sh env)"
+          dotnet test tests/DbDataBuild.Tests.Conformance -c Release --no-build --filter "${{ matrix.filter }}"
+      - name: Stop the engines
+        if: always()
+        run: scripts/test-engines.sh down

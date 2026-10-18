@@ -1,0 +1,19 @@
+# description: marts.rpt_customer_rfm cuts customers into five groups on recency, frequency and spend
+# tags: marts
+cases:
+  - name: five customers each land in their own group on every measure
+    given:
+      marts.dim_date:
+        - {date_key: 20240101, date: 2024-01-01, year: 2024, quarter: 1, month: 1, year_month: 202401, month_name: January, iso_weekday: 1, is_weekend: false, fiscal_year: 2024, fiscal_quarter: 3}
+        - {date_key: 20240201, date: 2024-02-01, year: 2024, quarter: 1, month: 2, year_month: 202402, month_name: February, iso_weekday: 4, is_weekend: false, fiscal_year: 2024, fiscal_quarter: 3}
+        - {date_key: 20240301, date: 2024-03-01, year: 2024, quarter: 1, month: 3, year_month: 202403, month_name: March, iso_weekday: 5, is_weekend: false, fiscal_year: 2024, fiscal_quarter: 3}
+        - {date_key: 20240401, date: 2024-04-01, year: 2024, quarter: 2, month: 4, year_month: 202404, month_name: April, iso_weekday: 1, is_weekend: false, fiscal_year: 2024, fiscal_quarter: 4}
+        - {date_key: 20240501, date: 2024-05-01, year: 2024, quarter: 2, month: 5, year_month: 202405, month_name: May, iso_weekday: 3, is_weekend: false, fiscal_year: 2024, fiscal_quarter: 4}
+      marts.fct_sales_lines:
+        - {sales_order_id: 1, sales_order_detail_id: 1, date_key: 20240101, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 1, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 10.0, discount_usd: 0.0, revenue_usd: 10.0, cost_usd: 5.0, margin_usd: 5.0}
+        - {sales_order_id: 2, sales_order_detail_id: 2, date_key: 20240201, customer_id: 2, sales_person_id: null, territory_id: 1, product_id: 1, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 20.0, discount_usd: 0.0, revenue_usd: 20.0, cost_usd: 5.0, margin_usd: 15.0}
+        - {sales_order_id: 3, sales_order_detail_id: 3, date_key: 20240301, customer_id: 3, sales_person_id: null, territory_id: 1, product_id: 1, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 30.0, discount_usd: 0.0, revenue_usd: 30.0, cost_usd: 5.0, margin_usd: 25.0}
+        - {sales_order_id: 4, sales_order_detail_id: 4, date_key: 20240401, customer_id: 4, sales_person_id: null, territory_id: 1, product_id: 1, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 40.0, discount_usd: 0.0, revenue_usd: 40.0, cost_usd: 5.0, margin_usd: 35.0}
+        - {sales_order_id: 5, sales_order_detail_id: 5, date_key: 20240501, customer_id: 5, sales_person_id: null, territory_id: 1, product_id: 1, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 50.0, discount_usd: 0.0, revenue_usd: 50.0, cost_usd: 5.0, margin_usd: 45.0}
+    assert: >
+      SELECT customer_id FROM result WHERE NOT (r_score = customer_id AND m_score = customer_id AND f_score BETWEEN 1 AND 5)

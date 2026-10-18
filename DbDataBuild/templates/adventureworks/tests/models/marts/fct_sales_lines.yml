@@ -1,0 +1,23 @@
+# description: marts.fct_sales_lines converts at the latest rate on or before the order date and takes the cost of that day
+# tags: marts, critical
+cases:
+  - name: a Saturday order in euros uses Friday's rate; the cost is the one in force on the day; cancelled orders are left out
+    given:
+      staging.orders:
+        - {sales_order_id: 1, order_date: 2024-03-02, due_date: 2024-03-14, ship_date: 2024-03-04, status: 5, status_name: shipped, is_online: true, customer_id: 7, sales_person_id: null, territory_id: 8, currency_code: EUR, sub_total: 200.0000, tax_amt: 0.0000, freight: 0.0000, total_due: 200.0000}
+        - {sales_order_id: 2, order_date: 2024-03-02, due_date: 2024-03-14, ship_date: null, status: 6, status_name: cancelled, is_online: true, customer_id: 7, sales_person_id: null, territory_id: 8, currency_code: EUR, sub_total: 50.0000, tax_amt: 0.0000, freight: 0.0000, total_due: 50.0000}
+        - {sales_order_id: 3, order_date: 2024-03-02, due_date: 2024-03-14, ship_date: 2024-03-04, status: 5, status_name: shipped, is_online: false, customer_id: 9, sales_person_id: 3, territory_id: 1, currency_code: USD, sub_total: 100.0000, tax_amt: 0.0000, freight: 0.0000, total_due: 100.0000}
+      staging.order_lines:
+        - {sales_order_id: 1, sales_order_detail_id: 1, product_id: 5, order_qty: 2, unit_price: 100.0000, unit_price_discount: 0.1000, special_offer_id: 5, line_total: 180.0000}
+        - {sales_order_id: 2, sales_order_detail_id: 2, product_id: 5, order_qty: 1, unit_price: 50.0000, unit_price_discount: 0.0000, special_offer_id: 1, line_total: 50.0000}
+        - {sales_order_id: 3, sales_order_detail_id: 3, product_id: 5, order_qty: 1, unit_price: 100.0000, unit_price_discount: 0.0000, special_offer_id: 1, line_total: 100.0000}
+      staging.currency_rates:
+        - {rate_date: 2024-02-29, currency_code: EUR, average_rate: 1.0800, end_of_day_rate: 1.0800}
+        - {rate_date: 2024-03-01, currency_code: EUR, average_rate: 1.1000, end_of_day_rate: 1.1000}
+        - {rate_date: 2024-03-04, currency_code: EUR, average_rate: 1.2000, end_of_day_rate: 1.2000}
+      staging.product_cost_history:
+        - {product_id: 5, valid_from: 2023-01-01, valid_to: 2024-02-29, standard_cost: 30.0000}
+        - {product_id: 5, valid_from: 2024-03-01, valid_to: null, standard_cost: 40.0000}
+    expect:
+      - {sales_order_id: 1, sales_order_detail_id: 1, date_key: 20240302, customer_id: 7, sales_person_id: null, territory_id: 8, product_id: 5, special_offer_id: 5, order_qty: 2, currency_code: EUR, rate_to_usd: 1.1000, gross_usd: 220.0000, discount_usd: 22.0000, revenue_usd: 198.0000, cost_usd: 80.0000, margin_usd: 118.0000}
+      - {sales_order_id: 3, sales_order_detail_id: 3, date_key: 20240302, customer_id: 9, sales_person_id: 3, territory_id: 1, product_id: 5, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0000, gross_usd: 100.0000, discount_usd: 0.0000, revenue_usd: 100.0000, cost_usd: 40.0000, margin_usd: 60.0000}

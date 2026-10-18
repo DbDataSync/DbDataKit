@@ -1,0 +1,5568 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dbdatabuild:schemas:output",
+  "title": "DbDataBuild command output (--format json)",
+  "description": "The one JSON document a command writes to standard output with `--format json`. `data` holds what the command found or did, and its shape is checked per command below (`$defs.data_<command>`): keys are present when the command got far enough to produce them (a command refused early has few or none), and null values are omitted rather than written as null. `diagnostics` are the structured form of what text mode prints on standard error; `messages` and `errors` keep the human text so nothing is lost. Exit codes are the same as in text mode: 0 ok, 1 findings, 2 usage, 3 not implemented, 70 internal error. Metadata documents (`project compile`, `project show metadata`) are defined in metadata.schema.json (id urn:dbdatabuild:schemas:metadata).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "command",
+    "tool_version",
+    "exit_code",
+    "ok",
+    "data",
+    "diagnostics",
+    "messages",
+    "errors"
+  ],
+  "properties": {
+    "schema": {
+      "const": "dbdatabuild.output/1"
+    },
+    "command": {
+      "type": "string"
+    },
+    "tool_version": {
+      "type": "string"
+    },
+    "exit_code": {
+      "enum": [
+        0,
+        1,
+        2,
+        3,
+        70
+      ]
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "data": {
+      "type": "object"
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "severity",
+          "title",
+          "location",
+          "found",
+          "supported",
+          "fix"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^DDB-[1-69][0-9][0-9]$"
+          },
+          "severity": {
+            "enum": [
+              "error",
+              "warning",
+              "note"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "location": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "file",
+              "line",
+              "column"
+            ],
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "column": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "found": {
+            "type": "string"
+          },
+          "supported": {
+            "type": "string"
+          },
+          "fix": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next": {
+      "description": "What to do next, as commands (the `Next:` block of the text). Present when the command has a suggestion.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "project compile"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_compile"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "project show metadata"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_show_metadata"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "help matrix"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_help_matrix"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "help dialects"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_help_dialects"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "help code"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_help_code"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "project show loads"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_show_loads"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "project update"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_update"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "project model update"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_model_update"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "connection init"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_connection_init"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "connection status"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_connection_status"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "connection deploy"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_connection_deploy"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "connection refresh"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_connection_refresh"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "connection monitor"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_connection_monitor"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "project sample"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_sample"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "project agent-kit"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_agent_kit"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "connection publish"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_connection_publish"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "project import"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_import"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "project tests run"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_tests_run"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "project show graph"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_show_graph"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "connection compare"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_connection_compare"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "project seed"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_seed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "project create"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_create"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "connection seed"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_connection_seed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "project show plan"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_show_plan"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "project tests list"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_tests_list"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "connection inspect"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_connection_inspect"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "project model create"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_model_create"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "project show refresh"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_show_refresh"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "context": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "consequence": {
+                "type": "string"
+              },
+              "takes_value": {
+                "type": "boolean"
+              },
+              "value_hint": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "key",
+              "description",
+              "takes_value"
+            ]
+          }
+        },
+        "proposal": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "option": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
+            "certainty": {
+              "type": "string"
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "option",
+            "certainty",
+            "evidence"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "options"
+      ]
+    },
+    "answer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "question_id": {
+          "type": "string"
+        },
+        "choice": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "file",
+            "interactive",
+            "accepted_proposal",
+            "accepted_proposal_by_flag"
+          ]
+        }
+      },
+      "required": [
+        "question_id",
+        "choice",
+        "source"
+      ]
+    },
+    "param": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "planned": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "source"
+      ]
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "ddl",
+            "load",
+            "backfill",
+            "hook",
+            "track"
+          ]
+        },
+        "object": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "risk": {
+          "enum": [
+            "safe",
+            "risky",
+            "destructive"
+          ]
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "hash_after": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/param"
+          }
+        },
+        "resolver_text": {
+          "type": "string"
+        },
+        "resolver_result": {
+          "type": "string"
+        },
+        "has_resolver": {
+          "type": "boolean"
+        },
+        "file_hash": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "shape_source": {
+          "type": "string"
+        },
+        "definition_hash": {
+          "type": "string"
+        },
+        "expect": {
+          "type": "string"
+        },
+        "hook": {
+          "type": "string"
+        },
+        "effect": {
+          "enum": [
+            "ddl",
+            "data"
+          ]
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/plannedInput"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "object",
+        "description",
+        "text",
+        "risk",
+        "reasons",
+        "parameters",
+        "has_resolver"
+      ]
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        },
+        "git_commit": {
+          "type": "string"
+        },
+        "git_dirty": {
+          "type": "boolean"
+        },
+        "tool_version": {
+          "type": "string"
+        },
+        "bases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "object": {
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "missing",
+                  "untracked",
+                  "in_sync",
+                  "out_of_band"
+                ]
+              },
+              "live_shape_hash": {
+                "type": "string"
+              },
+              "recorded_shape_hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "object",
+              "state"
+            ]
+          }
+        },
+        "answers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/answer"
+          }
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        },
+        "noticed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "project_hash": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "connection",
+        "git_dirty",
+        "tool_version",
+        "bases",
+        "answers",
+        "steps",
+        "noticed"
+      ]
+    },
+    "docRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "subject_kind": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "subject_kind",
+        "subject",
+        "hash"
+      ]
+    },
+    "loadRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "strategy": {
+          "type": "string"
+        },
+        "is_default": {
+          "type": "boolean"
+        },
+        "matrix_status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "model",
+        "connection",
+        "operation",
+        "strategy",
+        "is_default",
+        "matrix_status"
+      ]
+    },
+    "filesHashed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "hash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "hash"
+        ]
+      }
+    },
+    "filesHashedWithContent": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string",
+            "description": "The file's text (render --content)."
+          }
+        },
+        "required": [
+          "path",
+          "hash"
+        ]
+      }
+    },
+    "data_project_compile": {
+      "description": "validation (counts, config, and the metadata when it is clean), then what the compile did: --content: files (with text) and operations; default: files, wrote, removed; --check: files, out_of_date. A project that does not validate stops there.",
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "counts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "models": {
+                  "type": "integer"
+                },
+                "by_kind": {
+                  "description": "The models counted by model kind, all seven kinds (0 for a kind the project has none of).",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "view": { "type": "integer" },
+                    "full": { "type": "integer" },
+                    "incremental_by_unique_key": { "type": "integer" },
+                    "incremental_by_time_range": { "type": "integer" },
+                    "copy": { "type": "integer" },
+                    "mapped": { "type": "integer" },
+                    "native": { "type": "integer" }
+                  },
+                  "required": ["view", "full", "incremental_by_unique_key", "incremental_by_time_range", "copy", "mapped", "native"]
+                },
+                "errors": {
+                  "type": "integer"
+                },
+                "warnings": {
+                  "type": "integer"
+                },
+                "notes": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "models",
+                "by_kind",
+                "errors",
+                "warnings",
+                "notes"
+              ]
+            },
+            "config": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "file": {
+                  "type": "string"
+                },
+                "effective": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "effective"
+              ]
+            },
+            "project": {
+              "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/project"
+            },
+            "models": {
+              "type": "array",
+              "items": {
+                "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/model"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "counts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "models": {
+                  "type": "integer"
+                },
+                "by_kind": {
+                  "description": "The models counted by model kind, all seven kinds (0 for a kind the project has none of).",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "view": { "type": "integer" },
+                    "full": { "type": "integer" },
+                    "incremental_by_unique_key": { "type": "integer" },
+                    "incremental_by_time_range": { "type": "integer" },
+                    "copy": { "type": "integer" },
+                    "mapped": { "type": "integer" },
+                    "native": { "type": "integer" }
+                  },
+                  "required": ["view", "full", "incremental_by_unique_key", "incremental_by_time_range", "copy", "mapped", "native"]
+                },
+                "errors": {
+                  "type": "integer"
+                },
+                "warnings": {
+                  "type": "integer"
+                },
+                "notes": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "models",
+                "by_kind",
+                "errors",
+                "warnings",
+                "notes"
+              ]
+            },
+            "config": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "file": {
+                  "type": "string"
+                },
+                "effective": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "effective"
+              ]
+            },
+            "project": {
+              "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/project"
+            },
+            "models": {
+              "type": "array",
+              "items": {
+                "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/model"
+              }
+            },
+            "files": {
+              "$ref": "#/$defs/filesHashedWithContent"
+            },
+            "operations": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "counts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "models": {
+                  "type": "integer"
+                },
+                "by_kind": {
+                  "description": "The models counted by model kind, all seven kinds (0 for a kind the project has none of).",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "view": { "type": "integer" },
+                    "full": { "type": "integer" },
+                    "incremental_by_unique_key": { "type": "integer" },
+                    "incremental_by_time_range": { "type": "integer" },
+                    "copy": { "type": "integer" },
+                    "mapped": { "type": "integer" },
+                    "native": { "type": "integer" }
+                  },
+                  "required": ["view", "full", "incremental_by_unique_key", "incremental_by_time_range", "copy", "mapped", "native"]
+                },
+                "errors": {
+                  "type": "integer"
+                },
+                "warnings": {
+                  "type": "integer"
+                },
+                "notes": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "models",
+                "by_kind",
+                "errors",
+                "warnings",
+                "notes"
+              ]
+            },
+            "config": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "file": {
+                  "type": "string"
+                },
+                "effective": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "effective"
+              ]
+            },
+            "project": {
+              "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/project"
+            },
+            "models": {
+              "type": "array",
+              "items": {
+                "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/model"
+              }
+            },
+            "files": {
+              "$ref": "#/$defs/filesHashed"
+            },
+            "wrote": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "removed": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "counts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "models": {
+                  "type": "integer"
+                },
+                "by_kind": {
+                  "description": "The models counted by model kind, all seven kinds (0 for a kind the project has none of).",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "view": { "type": "integer" },
+                    "full": { "type": "integer" },
+                    "incremental_by_unique_key": { "type": "integer" },
+                    "incremental_by_time_range": { "type": "integer" },
+                    "copy": { "type": "integer" },
+                    "mapped": { "type": "integer" },
+                    "native": { "type": "integer" }
+                  },
+                  "required": ["view", "full", "incremental_by_unique_key", "incremental_by_time_range", "copy", "mapped", "native"]
+                },
+                "errors": {
+                  "type": "integer"
+                },
+                "warnings": {
+                  "type": "integer"
+                },
+                "notes": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "models",
+                "by_kind",
+                "errors",
+                "warnings",
+                "notes"
+              ]
+            },
+            "config": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "file": {
+                  "type": "string"
+                },
+                "effective": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "effective"
+              ]
+            },
+            "project": {
+              "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/project"
+            },
+            "models": {
+              "type": "array",
+              "items": {
+                "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/model"
+              }
+            },
+            "files": {
+              "$ref": "#/$defs/filesHashed"
+            },
+            "out_of_date": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "data_project_show_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "project": {
+          "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/project"
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/model"
+          }
+        }
+      }
+    },
+    "data_help_dialects": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "description": "The fields of a dialect profile under `dialects:`.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "choices": { "type": "array", "items": { "type": "string" } },
+              "default": { "type": "string" },
+              "meaning": { "type": "string" },
+              "used_by": { "type": "string" }
+            },
+            "required": [ "name", "choices", "default", "meaning", "used_by" ]
+          }
+        },
+        "built_in": {
+          "description": "The built-in dialects, as the tool has them.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "quote": { "type": "string" },
+              "parameters": { "enum": [ "named_at", "positional", "numbered" ] },
+              "ping": { "type": "string" },
+              "catalog": { "enum": [ "information_schema", "odbc", "none" ] },
+              "identifier_case": { "enum": [ "preserve", "upper", "lower" ] },
+              "limit": { "enum": [ "limit", "top", "fetch" ] },
+              "types": { "description": "How many catalog type names the dialect maps.", "type": "integer" }
+            },
+            "required": [ "name", "quote", "parameters", "ping", "catalog", "identifier_case", "limit", "types" ]
+          }
+        },
+        "keywords": {
+          "description": "The closed classes of the keywords of a connection's `engine`.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "access": { "type": "array", "items": { "type": "string" } },
+            "driver": { "type": "array", "items": { "type": "string" } },
+            "dialect": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": [ "access", "driver", "dialect" ]
+        },
+        "example": {
+          "description": "A project's dialects and connections for a proxy in front of several systems.",
+          "type": "string"
+        }
+      },
+      "required": [ "fields", "built_in", "keywords", "example" ]
+    },
+    "data_help_matrix": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "constructs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "engines": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "native",
+                        "translated",
+                        "approximated",
+                        "emulated",
+                        "unsupported",
+                        "unverified"
+                      ]
+                    },
+                    "min_version": {
+                      "type": "integer"
+                    },
+                    "note": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "id",
+              "engines"
+            ]
+          }
+        },
+        "covered_entries": {
+          "type": "integer"
+        },
+        "rewrites": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "layer": {
+                "enum": [
+                  "lowering",
+                  "target",
+                  "both"
+                ]
+              },
+              "engines": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "required_on": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "exact": {
+                "type": "string"
+              },
+              "native": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "layer",
+              "engines",
+              "required_on",
+              "exact",
+              "native"
+            ]
+          }
+        }
+      }
+    },
+    "data_help_code": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "default_severity": {
+              "enum": [
+                "error",
+                "warning",
+                "note"
+              ]
+            },
+            "supported": {
+              "type": "string"
+            },
+            "fix": {
+              "type": "string"
+            },
+            "explanation": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "title",
+            "default_severity",
+            "supported",
+            "fix",
+            "explanation"
+          ]
+        }
+      }
+    },
+    "data_project_show_loads": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/loadRow"
+          }
+        }
+      }
+    },
+    "data_project_model_update": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "check",
+            "write",
+            "interactive"
+          ]
+        },
+        "definitions": {
+          "type": "integer"
+        },
+        "differences": {
+          "type": "integer"
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "definition": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "in_sync",
+                  "unchanged",
+                  "created",
+                  "updated",
+                  "incomplete",
+                  "failed",
+                  "skipped"
+                ]
+              },
+              "notes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "open_questions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/question"
+                }
+              }
+            },
+            "required": [
+              "query",
+              "definition",
+              "status",
+              "notes",
+              "open_questions"
+            ]
+          }
+        },
+        "connections": {
+          "description": "The connections the metadata of mapped models and copy origins was read from, or why one was skipped.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "connection": {
+                "type": "string"
+              },
+              "driver": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "read",
+                  "skipped"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "connection",
+              "driver",
+              "status"
+            ]
+          }
+        },
+        "mapped_models": {
+          "description": "The mapped models (and the tables copies read) compared with their tables: what differs, per model.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "object_kind": {
+                "enum": [
+                  "table",
+                  "view",
+                  "unknown"
+                ]
+              },
+              "file": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "connection": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "new",
+                  "changed",
+                  "unchanged",
+                  "stale",
+                  "invalid",
+                  "skipped"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "changes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "column": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "detail"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "name",
+              "status",
+              "changes"
+            ]
+          }
+        },
+        "catalog_notes": {
+          "description": "What an origin's catalog could not say (indexes where it has no way to, keys a driver does not offer), once each.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "online": {
+          "description": "False with --offline: no connection was read.",
+          "type": "boolean"
+        },
+        "written": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "data_connection_init": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "type": "string"
+        },
+        "tracking_schema": {
+          "type": "string"
+        },
+        "layout_version": {
+          "type": "integer"
+        },
+        "unverified": {
+          "type": "boolean"
+        },
+        "applied": {
+          "type": "boolean"
+        },
+        "statements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "description",
+              "text"
+            ]
+          }
+        }
+      }
+    },
+    "data_connection_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "effect": {
+          "type": "string"
+        },
+        "login": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "connection": {
+          "type": "string"
+        },
+        "objects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "missing",
+                  "untracked",
+                  "in_sync",
+                  "out_of_band"
+                ]
+              },
+              "live_shape_hash": {
+                "type": "string"
+              },
+              "recorded_shape_hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "state"
+            ]
+          }
+        },
+        "preview": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "steps": {
+              "type": "integer"
+            },
+            "risky": {
+              "type": "integer"
+            },
+            "destructive": {
+              "type": "integer"
+            },
+            "questions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/question"
+              }
+            },
+            "blocked": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "skipped": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "steps",
+            "risky",
+            "destructive",
+            "questions",
+            "blocked",
+            "skipped"
+          ]
+        },
+        "noticed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "summary": {
+          "description": "The landing view: structure (in_sync, pending or attention), the newest deploy and refresh event, and the policy in force.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "structure": {
+              "enum": [
+                "in_sync",
+                "pending",
+                "attention"
+              ]
+            },
+            "steps": {
+              "type": "integer"
+            },
+            "risky": {
+              "type": "integer"
+            },
+            "destructive": {
+              "type": "integer"
+            },
+            "blocked": {
+              "type": "integer"
+            },
+            "changed_outside_the_tool": {
+              "type": "integer"
+            },
+            "last_deploy": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "utc": {
+                  "type": "string"
+                }
+              }
+            },
+            "last_refresh": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "utc": {
+                  "type": "string"
+                }
+              }
+            },
+            "policy": {
+              "type": "string"
+            },
+            "loads": {
+              "type": "integer"
+            }
+          }
+        },
+        "plans": {
+          "description": "One entry per refresh plan compiled for the connection: its last run and how it ended.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "plan": {
+                "type": "string"
+              },
+              "last_run": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "outcome": {
+                "type": "string"
+              },
+              "utc": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "complete": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "last_complete_utc": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "health": {
+                "$ref": "#/$defs/plan_health"
+              }
+            },
+            "required": [
+              "plan",
+              "outcome"
+            ]
+          }
+        }
+      }
+    },
+    "data_connection_deploy": {
+      "description": "the plan (questions, plan, files), or the apply of one (outcomes, statements), or an acknowledgement, by the option given.",
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "effect": {
+              "type": "string"
+            },
+            "login": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "open_questions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/question"
+              }
+            },
+            "connection": {
+              "type": "string"
+            },
+            "questions_asked": {
+              "type": "integer"
+            },
+            "answers": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/answer"
+              }
+            },
+            "noticed": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "blocked": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "skipped": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "plan": {
+              "$ref": "#/$defs/plan"
+            },
+            "files": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "plan": {
+                  "type": "string"
+                },
+                "report": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "plan",
+                "report"
+              ]
+            },
+            "inputs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "operation": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  },
+                  "origin": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "model",
+                  "operation",
+                  "name",
+                  "type",
+                  "source"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "effect": {
+              "type": "string"
+            },
+            "connection": {
+              "type": "string"
+            },
+            "dry_run": {
+              "type": "boolean"
+            },
+            "plan_id": {
+              "type": "string"
+            },
+            "outcomes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "step": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "detail": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "step",
+                  "description",
+                  "status"
+                ]
+              }
+            },
+            "statement_log": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "success": {
+              "type": "boolean"
+            },
+            "statements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "step": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "enum": [
+                      "ddl",
+                      "load",
+                      "backfill",
+                      "hook",
+                      "track"
+                    ]
+                  },
+                  "risk": {
+                    "enum": [
+                      "safe",
+                      "risky",
+                      "destructive"
+                    ]
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "parameters": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/param"
+                    }
+                  }
+                },
+                "required": [
+                  "step",
+                  "type",
+                  "risk",
+                  "text",
+                  "parameters"
+                ]
+              }
+            },
+            "metadata_stored": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/docRow"
+              }
+            },
+            "moved_inputs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "operation": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "planned": {
+                    "type": "string"
+                  },
+                  "now": {
+                    "type": "string"
+                  },
+                  "override": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "model",
+                  "operation",
+                  "name",
+                  "override"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "acknowledged": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "by": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "subject",
+                  "key",
+                  "by",
+                  "reason"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "data_connection_refresh": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "effect": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "plan_id": {
+          "type": "string"
+        },
+        "outcomes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "step": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "step",
+              "description",
+              "status"
+            ]
+          }
+        },
+        "statement_log": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "statements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "step": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "ddl",
+                  "load",
+                  "backfill",
+                  "hook",
+                  "track"
+                ]
+              },
+              "risk": {
+                "enum": [
+                  "safe",
+                  "risky",
+                  "destructive"
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "parameters": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/param"
+                }
+              }
+            },
+            "required": [
+              "step",
+              "type",
+              "risk",
+              "text",
+              "parameters"
+            ]
+          }
+        },
+        "check": {
+          "description": "The safety check that ran before the loads.",
+          "enum": [
+            "none",
+            "project",
+            "objects",
+            "live"
+          ]
+        },
+        "on_fail": {
+          "description": "What a failed check does.",
+          "enum": [
+            "block",
+            "warn"
+          ]
+        },
+        "parallel": {
+          "description": "How many loads ran at once at most: the flag, else the plan's setting, else 1, capped by the destination's max_parallel (1 in a dry run).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "parallel_effective": {
+          "description": "How many loads ran at once at most in the end: `parallel`, or 1 when it was above 1 and the loads file carries no dependency graph (compiled by an older version: the loads then run in plan order, and `warnings` says so).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "loads": {
+          "description": "The loads of the plan that were selected, in the order they run, with the inputs each runs with.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "model": {
+                "type": "string"
+              },
+              "operation": {
+                "type": "string"
+              },
+              "member": {
+                "type": "string"
+              },
+              "inputs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "description": "flag, membership, parameter, resolver:target or initial (resolver before the load runs)",
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "type",
+                    "source"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "model",
+              "operation"
+            ]
+          }
+        },
+        "findings": {
+          "description": "The codes of what the check found.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "plan": {
+          "description": "The refresh plan that ran; null for loads named directly.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "plan_hash": {
+          "description": "The hash of the plan's file (for loads named directly, of their load plans).",
+          "type": "string"
+        },
+        "selection": {
+          "description": "The selectors given after the plan; null when the whole plan ran.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refresh_plan": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "plans": {
+          "description": "When no plan could be chosen: the plans compiled for the connection.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "outcome": {
+          "description": "How the run ended: completed, completed_with_failures (some loads failed or were skipped), stopped (a load failed under on_failure stop, or the operator stopped it) or failed (nothing was done).",
+          "enum": [
+            "completed",
+            "completed_with_failures",
+            "stopped",
+            "failed"
+          ]
+        },
+        "results": {
+          "description": "Every load of the run and how it ended.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "model": {
+                "type": "string"
+              },
+              "member": {
+                "type": "string"
+              },
+              "load": {
+                "type": "string"
+              },
+              "state": {
+                "description": "done, failed, skipped or not run",
+                "enum": [
+                  "done",
+                  "failed",
+                  "skipped",
+                  "not run"
+                ]
+              },
+              "reason": {
+                "description": "Why it failed or was skipped: check, max runtime, busy, input, upstream failed, stopped, check failed; null otherwise.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "status": {
+                "description": "The text run_log records: ok, failed, failed: <kind>, skipped: <reason> or not run.",
+                "type": "string"
+              },
+              "rows": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "duration_ms": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "detail": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "note": {
+                "description": "upstream skipped: busy, on a load that ran although a load it reads was skipped because it was busy.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "model",
+              "member",
+              "load",
+              "state",
+              "status"
+            ]
+          }
+        },
+        "warnings": {
+          "description": "Failures that on_failure: ignore let pass.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "last_run": {
+          "description": "With --only-failed: the event whose loads were repeated.",
+          "type": "string"
+        },
+        "moved_inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "model": {
+                "type": "string"
+              },
+              "operation": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "planned": {
+                "type": "string"
+              },
+              "now": {
+                "type": "string"
+              },
+              "override": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "model",
+              "operation",
+              "name",
+              "override"
+            ]
+          }
+        },
+        "resolved_inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "model": {
+                "type": "string"
+              },
+              "operation": {
+                "type": "string"
+              },
+              "member": {
+                "type": "string"
+              },
+              "inputs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "resolver_hash": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "type",
+                    "source"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "model",
+              "operation",
+              "member",
+              "inputs"
+            ]
+          }
+        }
+      }
+    },
+    "data_connection_monitor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "type": "string"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "when_utc": {
+                "type": "string"
+              },
+              "event": {
+                "type": "string"
+              },
+              "lane": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "by": {
+                "type": "string"
+              },
+              "commit": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "when_utc",
+              "event",
+              "lane",
+              "status"
+            ]
+          }
+        },
+        "ddl": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "when_utc": {
+                "type": "string"
+              },
+              "object": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "plan": {
+                "type": "string"
+              },
+              "statement": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "when_utc",
+              "object",
+              "status",
+              "plan"
+            ]
+          }
+        },
+        "loads": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "started_utc": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "operation": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "rows": {
+                "type": "string"
+              },
+              "plan": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "started_utc",
+              "model",
+              "operation",
+              "status"
+            ]
+          }
+        },
+        "objects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "object": {
+                "type": "string"
+              },
+              "shapes_recorded": {
+                "type": "string"
+              },
+              "last_recorded_utc": {
+                "type": "string"
+              },
+              "now": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "object",
+              "now"
+            ]
+          }
+        },
+        "column_history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "model": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "decision": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "needs_attention": {
+                "type": "boolean"
+              },
+              "acknowledgement": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "by": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "utc": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "by",
+                  "reason",
+                  "utc"
+                ]
+              }
+            },
+            "required": [
+              "model",
+              "column",
+              "decision",
+              "text",
+              "needs_attention"
+            ]
+          }
+        },
+        "needs_attention": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "origins": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "model": {
+                "type": "string"
+              },
+              "origin": {
+                "type": "string"
+              },
+              "last_good_utc": {
+                "type": "string"
+              },
+              "rows": {
+                "type": "string"
+              },
+              "latest_attempt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "model",
+              "origin",
+              "last_good_utc",
+              "rows",
+              "latest_attempt"
+            ]
+          }
+        },
+        "event": {
+          "description": "With --event: one event in detail.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "lane": {
+              "enum": [
+                "deploy",
+                "refresh"
+              ]
+            },
+            "states": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "when_utc": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "by": {
+                    "type": "string"
+                  },
+                  "commit": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "when_utc",
+                  "status"
+                ]
+              }
+            },
+            "ddl": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "when_utc": {
+                    "type": "string"
+                  },
+                  "object": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "statement": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "when_utc",
+                  "object",
+                  "status"
+                ]
+              }
+            },
+            "loads": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "started_utc": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "operation": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "rows": {
+                    "type": "string"
+                  },
+                  "ended_utc": {
+                    "type": "string"
+                  },
+                  "watermark": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "started_utc",
+                  "model",
+                  "operation",
+                  "status"
+                ]
+              }
+            }
+          },
+          "required": [
+            "id",
+            "lane",
+            "states",
+            "ddl",
+            "loads"
+          ]
+        },
+        "plan": {
+          "description": "With a plan named: its runs, the last complete run and the last partial one apart, and each member's last success and failure.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "last_complete": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "started_utc": {
+                      "type": "string"
+                    },
+                    "last_utc": {
+                      "type": "string"
+                    },
+                    "complete": {
+                      "type": "boolean"
+                    },
+                    "selection": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "selected": {
+                      "type": "integer"
+                    },
+                    "members": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "status",
+                    "complete",
+                    "selected",
+                    "members"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "last_partial": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "started_utc": {
+                      "type": "string"
+                    },
+                    "last_utc": {
+                      "type": "string"
+                    },
+                    "complete": {
+                      "type": "boolean"
+                    },
+                    "selection": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "selected": {
+                      "type": "integer"
+                    },
+                    "members": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "status",
+                    "complete",
+                    "selected",
+                    "members"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "runs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "started_utc": {
+                    "type": "string"
+                  },
+                  "last_utc": {
+                    "type": "string"
+                  },
+                  "complete": {
+                    "type": "boolean"
+                  },
+                  "selection": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "selected": {
+                    "type": "integer"
+                  },
+                  "members": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "status",
+                  "complete",
+                  "selected",
+                  "members"
+                ]
+              }
+            },
+            "members": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "member": {
+                    "type": "string"
+                  },
+                  "last_status": {
+                    "type": "string"
+                  },
+                  "last_success_utc": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "last_failure_utc": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "last_duration_ms": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "last_rows": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "model",
+                  "member",
+                  "last_status"
+                ]
+              }
+            },
+            "health": {
+              "$ref": "#/$defs/plan_health"
+            }
+          },
+          "required": [
+            "name",
+            "runs",
+            "members"
+          ]
+        }
+      }
+    },
+    "data_project_sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rows_per_declared_model": {
+          "type": "integer"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "description": "The model kind of the table: a built kind for a result, `mapped` or `native` for a declared model that was filled.",
+                "enum": [
+                  "view",
+                  "full",
+                  "incremental_by_unique_key",
+                  "incremental_by_time_range",
+                  "copy",
+                  "mapped",
+                  "native"
+                ]
+              },
+              "origin": {
+                "type": "string"
+              },
+              "columns": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "type"
+                  ]
+                }
+              },
+              "row_count": {
+                "type": "integer"
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "error": {
+                "type": "string"
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "kind",
+              "columns",
+              "row_count",
+              "rows",
+              "warnings"
+            ]
+          }
+        },
+        "scale": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "data_project_agent_kit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "files": {
+          "$ref": "#/$defs/filesHashed"
+        },
+        "wrote": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "out_of_date": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mcp": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "With --mcp: the project's .mcp.json.",
+          "properties": {
+            "file": {
+              "type": "string"
+            },
+            "up_to_date": {
+              "type": "boolean"
+            },
+            "wrote": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "file",
+            "up_to_date",
+            "wrote"
+          ]
+        }
+      }
+    },
+    "data_connection_publish": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "type": "string"
+        },
+        "dependencies": {
+          "description": "The rows of the tracking table metadata_dependency: how many the project has, and for how many models (and native models) this publish wrote them again because they differed from the stored ones.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "rows": {
+              "type": "integer"
+            },
+            "subjects_written": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "rows",
+            "subjects_written"
+          ]
+        },
+        "written": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docRow"
+          }
+        },
+        "unchanged": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docRow"
+          }
+        }
+      }
+    },
+    "data_project_update": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "check",
+            "write"
+          ]
+        },
+        "online": {
+          "description": "False with --offline: no connection was read.",
+          "type": "boolean"
+        },
+        "differences": {
+          "description": "With --check: how many things would change (definitions out of step with their queries, mapped models that differ from their tables, dialects that are new or changed).",
+          "type": "integer"
+        },
+        "written": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "definitions": {
+          "description": "The definitions of the models, from their queries (what project model update does).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "checked_models": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "models": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/data_project_model_update/properties/models/items"
+              }
+            }
+          }
+        },
+        "dialects": {
+          "description": "One row per connection in scope: the dialect a Flight SQL server reports, or why none was asked.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "connection": {
+                "type": "string"
+              },
+              "driver": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "new",
+                  "changed",
+                  "unchanged",
+                  "version_changed",
+                  "explicit",
+                  "nothing_to_discover",
+                  "skipped",
+                  "removed"
+                ]
+              },
+              "dialect": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "profile_hash": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "server": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "server_version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "identifier_quote": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "identifier_case": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "read_only": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "changes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "connection",
+              "driver",
+              "status",
+              "changes"
+            ]
+          }
+        },
+        "dialects_file": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "unchanged",
+                "new",
+                "changed",
+                "removed"
+              ]
+            }
+          },
+          "required": [
+            "path",
+            "status"
+          ]
+        },
+        "connections": {
+          "description": "The connections the metadata of mapped models and copy origins was read from, or why one was skipped.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "connection": {
+                "type": "string"
+              },
+              "driver": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "read",
+                  "skipped"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "connection",
+              "driver",
+              "status"
+            ]
+          }
+        },
+        "mapped_models": {
+          "description": "The mapped models (and the tables copies read) compared with their tables: what differs, per model.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "object_kind": {
+                "enum": [
+                  "table",
+                  "view",
+                  "unknown"
+                ]
+              },
+              "file": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "connection": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "new",
+                  "changed",
+                  "unchanged",
+                  "stale",
+                  "invalid",
+                  "skipped"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "changes": {
+                "type": "array",
+                "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "column": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "detail"
+            ]
+          }
+              }
+            },
+            "required": [
+              "name",
+              "status",
+              "changes"
+            ]
+          }
+        },
+        "catalog_notes": {
+          "description": "What an origin's catalog could not say (indexes where it has no way to, keys a driver does not offer), once each.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "data_project_import": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "type": "string"
+        },
+        "catalog_notes": {
+          "description": "What the origin's catalog could not say (indexes where it has no way to, keys a driver does not offer), once each.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mode": {
+          "enum": [
+            "preview",
+            "check",
+            "write"
+          ]
+        },
+        "mapped_models": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "object_kind": {
+                "enum": [
+                  "table",
+                  "view",
+                  "unknown"
+                ]
+              },
+              "file": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "status": {
+                "enum": [
+                  "new",
+                  "changed",
+                  "unchanged",
+                  "stale",
+                  "invalid"
+                ]
+              },
+              "grain": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "changes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "new",
+                        "columnadded",
+                        "columnremoved",
+                        "typechanged",
+                        "nullabilitychanged",
+                        "grainadded",
+                        "indexadded",
+                        "indexremoved",
+                        "indexchanged",
+                        "foreignkeyadded",
+                        "foreignkeyremoved",
+                        "foreignkeychanged"
+                      ]
+                    },
+                    "column": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "detail"
+                  ]
+                }
+              },
+              "columns": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "native_type": {
+                      "type": "string"
+                    },
+                    "logical_type": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "fit": {
+                      "enum": [
+                        "exact",
+                        "widened",
+                        "lossy",
+                        "none"
+                      ]
+                    },
+                    "reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "nullable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "native_type",
+                    "fit",
+                    "nullable"
+                  ]
+                }
+              },
+              "indexes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "unique": {
+                      "type": "boolean"
+                    },
+                    "include": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "columns",
+                    "unique",
+                    "include"
+                  ]
+                }
+              },
+              "foreign_keys": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "references": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "table": {
+                          "type": "string"
+                        },
+                        "columns": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "table",
+                        "columns"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "columns",
+                    "references"
+                  ]
+                }
+              },
+              "notes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "object_kind",
+              "status",
+              "grain",
+              "changes"
+            ]
+          }
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "object": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "object",
+              "reason"
+            ]
+          }
+        },
+        "written": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "data_project_tests_run": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "total": {
+              "type": "integer"
+            },
+            "passed": {
+              "type": "integer"
+            },
+            "failed": {
+              "type": "integer"
+            },
+            "warned": {
+              "type": "integer"
+            },
+            "errored": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "total",
+            "passed",
+            "failed",
+            "warned",
+            "errored"
+          ]
+        },
+        "tests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "metadata",
+                  "model"
+                ]
+              },
+              "file": {
+                "type": "string"
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "case": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "error",
+                  "warning"
+                ]
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "status": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "warn",
+                  "error"
+                ]
+              },
+              "violations": {
+                "type": "integer"
+              },
+              "columns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                },
+                "description": "The first violating rows (--limit), each an object of the rule's columns."
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "kind",
+              "file",
+              "severity",
+              "tags",
+              "status",
+              "violations",
+              "columns",
+              "rows"
+            ]
+          }
+        }
+      }
+    },
+    "data_project_show_graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "category": {
+                "description": "What the node is: a model of the project (any of the seven kinds; `kind` says which), a macro, or a table that is none of the project's.",
+                "enum": [
+                  "model",
+                  "macro",
+                  "unknown"
+                ]
+              },
+              "kind": {
+                "description": "The model kind of a model node; absent for a macro or an unknown table.",
+                "enum": [
+                  "view",
+                  "full",
+                  "incremental_by_unique_key",
+                  "incremental_by_time_range",
+                  "copy",
+                  "mapped",
+                  "native",
+                  null
+                ]
+              },
+              "level": {
+                "type": "integer"
+              },
+              "file": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "connections": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "category",
+              "level",
+              "connections"
+            ]
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ]
+          }
+        },
+        "unknown_tables": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "column_edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "from_table": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "from_column": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "to_model": {
+                "type": "string"
+              },
+              "to_column": {
+                "type": "string"
+              },
+              "transform": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "to_model",
+              "to_column",
+              "transform"
+            ]
+          }
+        },
+        "column_lineage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "column": {
+              "type": "string"
+            },
+            "upstream": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "table": {
+                    "type": "string"
+                  },
+                  "column": {
+                    "type": "string"
+                  },
+                  "distance": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "table",
+                  "column",
+                  "distance"
+                ]
+              }
+            },
+            "downstream": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "table": {
+                    "type": "string"
+                  },
+                  "column": {
+                    "type": "string"
+                  },
+                  "distance": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "table",
+                  "column",
+                  "distance"
+                ]
+              }
+            }
+          },
+          "required": [
+            "column",
+            "upstream",
+            "downstream"
+          ]
+        },
+        "diagram": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "data_connection_compare": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "type": "string"
+        },
+        "against_connection": {
+          "description": "The connection of the right-hand table when it is not the left one's; the comparison is then by digests computed in each engine.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "left": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "rows": {
+              "type": "integer"
+            },
+            "columns": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "table",
+            "rows",
+            "columns"
+          ]
+        },
+        "right": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "rows": {
+              "type": "integer"
+            },
+            "columns": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "table",
+            "rows",
+            "columns"
+          ]
+        },
+        "key": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "source": {
+              "enum": [
+                "option",
+                "grain",
+                "unique_key"
+              ]
+            }
+          },
+          "required": [
+            "columns",
+            "source"
+          ]
+        },
+        "schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "compared_columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "only_left": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "only_right": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "not_compared": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "column": {
+                    "type": "string"
+                  },
+                  "left_type": {
+                    "type": "string"
+                  },
+                  "right_type": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "column",
+                  "left_type",
+                  "right_type",
+                  "reason"
+                ]
+              }
+            },
+            "type_differences": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "column": {
+                    "type": "string"
+                  },
+                  "left_type": {
+                    "type": "string"
+                  },
+                  "right_type": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "column",
+                  "left_type",
+                  "right_type"
+                ]
+              }
+            }
+          },
+          "required": [
+            "compared_columns",
+            "only_left",
+            "only_right",
+            "not_compared",
+            "type_differences"
+          ]
+        },
+        "duplicate_keys": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "left": {
+              "type": "integer"
+            },
+            "right": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "left",
+            "right"
+          ]
+        },
+        "rows": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "compared": {
+              "type": "boolean"
+            },
+            "only_left": {
+              "type": "integer"
+            },
+            "only_right": {
+              "type": "integer"
+            },
+            "matched": {
+              "type": "integer"
+            },
+            "differing": {
+              "type": "integer"
+            },
+            "differing_by_column": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer"
+              }
+            },
+            "partial": {
+              "description": "Across connections only: so many rows differ that the comparison stopped at the buckets of the key. The counts above are then not known; this says how many buckets differ, how many rows they hold and which columns differ.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "buckets_differing": {
+                  "type": "integer"
+                },
+                "buckets": {
+                  "type": "integer"
+                },
+                "rows_in_differing_buckets": {
+                  "type": "integer"
+                },
+                "columns_differing": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "buckets_differing",
+                "buckets",
+                "rows_in_differing_buckets",
+                "columns_differing"
+              ]
+            }
+          },
+          "required": [
+            "compared",
+            "only_left",
+            "only_right",
+            "matched",
+            "differing",
+            "differing_by_column"
+          ]
+        },
+        "column_stats": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "column": {
+                "type": "string"
+              },
+              "left_non_null": {
+                "type": "integer"
+              },
+              "right_non_null": {
+                "type": "integer"
+              },
+              "left_min": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "left_max": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "right_min": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "right_max": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "column",
+              "left_non_null",
+              "right_non_null"
+            ]
+          }
+        },
+        "samples": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "description": "Present only with --show-values: real values, in the output the operator asked for.",
+          "properties": {
+            "only_left": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "values": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "key",
+                  "values"
+                ]
+              }
+            },
+            "only_right": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "values": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "key",
+                  "values"
+                ]
+              }
+            },
+            "differing": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "columns": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "left": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "right": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "description": "A side that is NULL is left out."
+                    }
+                  }
+                },
+                "required": [
+                  "key",
+                  "columns"
+                ]
+              }
+            }
+          }
+        },
+        "identical": {
+          "type": "boolean"
+        }
+      }
+    },
+    "data_project_seed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "scale": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "seed_file": {
+                "type": "string"
+              },
+              "rows": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "name",
+              "seed_file",
+              "rows"
+            ]
+          }
+        },
+        "declared_models_without_a_seed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "data_project_create": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "templates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "files": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "name",
+              "description",
+              "files"
+            ]
+          }
+        },
+        "directory": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "written": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "data_connection_seed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "type": "string"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "scale": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "replace": {
+          "type": "boolean"
+        },
+        "applied": {
+          "type": "boolean"
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "rows": {
+                "type": "integer"
+              },
+              "statements": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "name",
+              "rows",
+              "statements"
+            ]
+          }
+        }
+      }
+    },
+    "data_project_show_plan": {
+      "description": "no plan: plans; a plan file: path, intact, plan, report, risky, destructive, apply_needs (a plan that does not parse: path and intact false).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "plans": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "connection": {
+                "type": "string"
+              },
+              "steps": {
+                "type": "integer"
+              },
+              "risky": {
+                "type": "integer"
+              },
+              "destructive": {
+                "type": "integer"
+              },
+              "intact": {
+                "type": "boolean"
+              },
+              "problems": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "path",
+              "id",
+              "connection",
+              "steps",
+              "risky",
+              "destructive",
+              "intact",
+              "problems"
+            ]
+          }
+        },
+        "path": {
+          "type": "string"
+        },
+        "intact": {
+          "type": "boolean"
+        },
+        "plan": {
+          "$ref": "#/$defs/plan"
+        },
+        "report": {
+          "type": "string"
+        },
+        "risky": {
+          "type": "integer"
+        },
+        "destructive": {
+          "type": "integer"
+        },
+        "apply_needs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allow_risky": {
+              "type": "boolean"
+            },
+            "allow_destructive": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "allow_risky",
+            "allow_destructive"
+          ]
+        }
+      }
+    },
+    "data_project_tests_list": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "metadata",
+                  "model"
+                ]
+              },
+              "file": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "cases": {
+                "type": "integer"
+              },
+              "description": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "kind",
+              "file",
+              "cases",
+              "severity",
+              "tags"
+            ]
+          }
+        },
+        "damaged": {
+          "type": "integer"
+        }
+      }
+    },
+    "data_connection_inspect": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "logins": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "read",
+                  "write"
+                ]
+              },
+              "variable": {
+                "type": "string"
+              },
+              "set": {
+                "type": "boolean"
+              },
+              "user": {
+                "type": "string"
+              },
+              "connects": {
+                "type": "boolean"
+              },
+              "server": {
+                "type": "string"
+              },
+              "problem": {
+                "type": "string"
+              },
+              "can_create_tables": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "kind",
+              "variable",
+              "set"
+            ]
+          }
+        },
+        "tracking": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "state": {
+              "enum": [
+                "ready",
+                "missing",
+                "other_layout",
+                "unreachable",
+                "none",
+                "not_configured"
+              ]
+            },
+            "detail": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "state",
+            "detail"
+          ]
+        },
+        "schema_names": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "exists": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        }
+      }
+    },
+    "data_project_model_create": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "data_project_show_refresh": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "plans": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "connection": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "hash": {
+                "type": "string"
+              },
+              "members": {
+                "type": "integer"
+              },
+              "settings": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "on_failure": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "on_busy": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "expected_every": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "parallel": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "check": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "on_fail": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "load_members": {
+                "description": "Only when a plan is named: its members in the order they run.",
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "member": {
+                          "type": "string"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "load": {
+                          "type": "string"
+                        },
+                        "load_plan": {
+                          "type": "string"
+                        },
+                        "strategy": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "on_failure": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "waits_for": {
+                          "description": "What this member's model waits for among the models of the plan, from the dependency graph in loads.yml: the model, its model kind and how many steps away (1 is direct). Null when the loads file carries no graph.",
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "depends_on": { "type": "string" },
+                              "depends_on_kind": { "type": "string" },
+                              "depth": { "type": "integer" }
+                            },
+                            "required": [ "depends_on", "depends_on_kind", "depth" ]
+                          }
+                        },
+                        "inputs": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "resolver": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "resolver_text": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "on_null": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "resolved_value": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "resolved_source": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "free": {
+                                "type": [
+                                  "boolean",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "type",
+                              "source"
+                            ]
+                          }
+                        },
+                        "resolve_error": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "not_resolved": {
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "member",
+                        "model",
+                        "load",
+                        "load_plan",
+                        "inputs"
+                      ]
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dependencies": {
+                "description": "The dependency graph loads.yml carries, among the models of this plan: one edge per model and thing it waits for, direct (depth 1) and through others, with the model kind of each side. Null when the loads file carries no graph (compiled by an older version).",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": { "type": "string" },
+                    "model_kind": { "type": "string" },
+                    "depends_on": { "type": "string" },
+                    "depends_on_kind": { "type": "string" },
+                    "depth": { "type": "integer" }
+                  },
+                  "required": [ "model", "model_kind", "depends_on", "depends_on_kind", "depth" ]
+                }
+              },
+              "excluded": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": {
+                      "type": "string"
+                    },
+                    "member": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "member",
+                    "reason"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "connection",
+              "name",
+              "hash",
+              "members",
+              "settings",
+              "excluded"
+            ]
+          }
+        },
+        "resolved_at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "plans"
+      ],
+      "description": "The compiled refresh plans: one entry per plan and connection."
+    },
+    "plan_health": {
+      "description": "Whether a plan keeps to its expected_every: overdue (its last run began longer ago than that, or it never ran) and slow (its last run took longer than that, with the slowest load named). All fields are null or false when the plan declares no expected_every.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "expected_every": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "overdue": {
+          "type": "boolean"
+        },
+        "slow": {
+          "type": "boolean"
+        },
+        "last_run_seconds": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "age_seconds": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "slowest_load": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "slowest_load_ms": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "overdue",
+        "slow"
+      ]
+    },
+    "inputRecipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "free": {
+          "type": "boolean"
+        },
+        "provided_by": {
+          "type": "string"
+        },
+        "on_null": {
+          "type": "string"
+        },
+        "initial": {
+          "type": "string"
+        },
+        "resolver": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "file": {
+              "type": "string"
+            },
+            "file_hash": {
+              "type": "string"
+            },
+            "engine": {
+              "type": "string"
+            },
+            "provides": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "parameters": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "type",
+                  "value"
+                ]
+              }
+            },
+            "hash": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        "provides": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "needs_resolver": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "source"
+      ]
+    },
+    "plannedInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "def": {
+          "$ref": "#/$defs/inputRecipe"
+        },
+        "source": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "resolver_hash": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "is_computed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "def",
+        "source"
+      ]
+    }
+  }
+}

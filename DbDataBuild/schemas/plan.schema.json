@@ -1,0 +1,419 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plan.schema.json",
+  "title": "DbDataBuild plan file",
+  "description": "A plan written by `dbdatabuild connection deploy` (plans/<connection>/<id>.plan.yml). It is for reading and for editors only: plans are never edited by hand. `apply` refuses any file that is not byte for byte what `plan` wrote, checked by the content hash in `plan.hash`, which this schema cannot verify.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "plan"
+  ],
+  "properties": {
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "hash",
+        "connection",
+        "tool_version",
+        "git_dirty"
+      ],
+      "properties": {
+        "id": {
+          "description": "The date and the first 8 hex characters of a hash over the plan's content.",
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{8}$"
+        },
+        "hash": {
+          "description": "SHA-256 over everything else in the file.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "connection": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+          "description": "The connection the plan is for."
+        },
+        "tool_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "git_commit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "git_dirty": {
+          "type": "boolean"
+        },
+        "project_hash": {
+          "description": "The structure the compiled project expected of the connection when the plan was made (a hash over each table model's declared shape and each view's definition). A deploy records it on its event, so a refresh can ask whether this project was deployed.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "bases": {
+      "description": "What the plan assumed about each object. A different live state at apply time makes the plan stale.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "object",
+          "state"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "minLength": 1
+          },
+          "state": {
+            "enum": [
+              "missing",
+              "untracked",
+              "in_sync",
+              "out_of_band"
+            ]
+          },
+          "live_shape_hash": {
+            "$ref": "#/$defs/hash"
+          },
+          "recorded_shape_hash": {
+            "$ref": "#/$defs/hash"
+          }
+        }
+      }
+    },
+    "answers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "choice",
+          "source"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^Q-[a-z]+-[A-Za-z0-9_.\\-]+$"
+          },
+          "choice": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "value": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "file",
+              "interactive",
+              "accepted_proposal",
+              "accepted_proposal_by_flag"
+            ]
+          }
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "type",
+          "object",
+          "description",
+          "risk",
+          "reasons",
+          "text"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "type": {
+            "enum": [
+              "ddl",
+              "load",
+              "backfill",
+              "hook",
+              "track",
+              "transfer"
+            ]
+          },
+          "object": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "risk": {
+            "enum": [
+              "safe",
+              "risky",
+              "destructive"
+            ]
+          },
+          "reasons": {
+            "description": "The reason chain. The first entry is a decision-table row id (matrix/decision-table.yml).",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "hash_after": {
+            "$ref": "#/$defs/hash"
+          },
+          "operation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "file_hash": {
+            "$ref": "#/$defs/hash"
+          },
+          "shape_source": {
+            "enum": [
+              "adopted",
+              "out_of_band"
+            ]
+          },
+          "definition_hash": {
+            "$ref": "#/$defs/hash"
+          },
+          "hook": {
+            "description": "For a hook step: the hook's name (`group.name` for a group member). `operation` holds its event.",
+            "type": "string",
+            "minLength": 1
+          },
+          "effect": {
+            "description": "For a hook step: what the script may do. `run` runs only data hooks.",
+            "enum": [
+              "ddl",
+              "data"
+            ]
+          },
+          "expect": {
+            "description": "For an index step: `index:<name>=<canonical definition>`, what the catalog must report afterwards.",
+            "type": "string",
+            "pattern": "^index:[A-Za-z_][A-Za-z0-9_]*=unique=[01];keys=.*;include=.*$"
+          },
+          "resolver": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "text"
+            ],
+            "properties": {
+              "text": {
+                "type": "string",
+                "minLength": 1
+              },
+              "result": {
+                "type": "string"
+              }
+            }
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "type",
+                "source"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                },
+                "type": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "source": {
+                  "enum": [
+                    "runtime",
+                    "resolver",
+                    "parameter"
+                  ]
+                },
+                "value": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "text": {
+            "description": "The full statement or script, executed exactly as written.",
+            "type": "string",
+            "minLength": 1
+          },
+          "transfer": {
+            "description": "For a transfer step: where the rows come from. The step's `text` is the DDL that (re)creates the staging table; apply then reads `read` on `origin` (a single SELECT), converts each value by the declared type of its column, and writes the rows to `staging` on the plan's connection.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "origin",
+              "staging",
+              "read",
+              "columns"
+            ],
+            "properties": {
+              "origin": {
+                "description": "The connection the rows are read from (its read login, `DBDATABUILD_<NAME>_READ`).",
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+              },
+              "staging": {
+                "description": "`schema_name.table_name` of the staging table on the plan's connection.",
+                "type": "string",
+                "minLength": 1
+              },
+              "read": {
+                "description": "The query that reads the rows on the origin, in the origin's dialect, hashed with the plan.",
+                "type": "string",
+                "minLength": 1
+              },
+              "parameter_order": {
+                "description": "For an origin whose dialect takes parameters by position (`?`, `$1`): the names of the values in the order they are bound. A name that the text uses twice for `?` appears twice. Absent when the read binds by name.",
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "columns": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "type"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              },
+              "slice": {
+                "description": "For a copy from several connections: the rows of this origin carry `value` in `column`. When `added` the origin has no such column and apply writes the value into every row; otherwise every row the origin returns must already hold it.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "column",
+                  "value",
+                  "added"
+                ],
+                "properties": {
+                  "column": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "value": {
+                    "type": "string"
+                  },
+                  "added": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "watermark": {
+                "description": "For an incremental copy: the read is limited to rows whose `column` is at or after `value` (bound to `@watermark`). Absent: everything is read.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "column",
+                  "type",
+                  "value"
+                ],
+                "properties": {
+                  "column": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "type": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "value": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "parameters": {
+                "description": "For a native origin: the values bound in its text, by placeholder name.",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "type",
+                    "value"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "value": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "command": {
+                "description": "True when `read` is a native command (a call that returns rows): run as written inside a transaction that is rolled back, its result columns matched to `columns` by name.",
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    },
+    "noticed": {
+      "description": "Things the planner noticed and did not act on.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

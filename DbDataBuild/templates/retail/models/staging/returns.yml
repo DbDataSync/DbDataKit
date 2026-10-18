@@ -1,0 +1,10 @@
+name: staging.returns
+kind: view
+grain: [return_id]
+columns:
+  - {name: return_id, type: INTEGER, nullable: false}
+  - {name: order_id, type: INTEGER, nullable: false}
+  - {name: line_no, type: INTEGER, nullable: false}
+  - {name: return_date, type: DATE, nullable: false}
+  - {name: reason_code, type: "VARCHAR(4)", nullable: false}
+  - {name: quantity, type: INTEGER, nullable: false}

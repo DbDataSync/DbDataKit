@@ -1,0 +1,48 @@
+# Four connections in three roles (docs/concepts.md): two shop systems that are only read (store_east, store_west: `readonly`, so the tool
+# never reads a write login for them and refuses to build on them),
+# a warehouse the models are built on (sqlserver) and a reporting database (postgres). A connection is a name; its logins are
+# DBDATABUILD_<NAME>_READ and DBDATABUILD_<NAME>_WRITE (for store_east: DBDATABUILD_STORE_EAST_READ).
+title: Two shops
+description: "Two shop systems copied into one warehouse and reported on a PostgreSQL database."
+tags: [example, multi-connection]
+properties: {owner: analytics}
+connections:
+  sqlserver: { version: 16, title: Warehouse, description: "Holds the models and, centrally, the tool's records.", tags: [warehouse], properties: {role: build} }
+  postgres:
+    title: Reporting
+    description: "The database the report is read from."
+    tags: [reporting]
+    properties: {role: serve}
+    string_semantics: { trailing_space: significant }
+  # what differs between the systems goes in parameters; a copy reads them as ${origin.store_id}
+  store_east: { engine: readonly postgres, parameters: { store_id: E01 }, title: East shop, tags: [source], properties: {role: origin, region: east} }
+  store_west: { engine: readonly postgres, parameters: { store_id: W01 }, title: West shop, tags: [source], properties: {role: origin, region: west} }
+# models are built on the warehouse unless they say otherwise
+defaults: {connections: [sqlserver]}
+# the records of everything the tool builds, on every connection, are kept on the warehouse (central tracking)
+tracking: { connection: sqlserver }
+
+# The refresh plans (docs/concepts.md): named sets of loads that run on a schedule. A model says which plans its loads are in
+# (`refresh:` in its file); `connection refresh sqlserver hourly` runs one. The copy `warehouse.orders` is a load like any other, in
+# both plans: the refresh reads each shop (it needs the shops' read logins) and loads the report after the copy.
+refresh:
+  plans:
+    hourly: { title: Orders and report, description: "The new orders of both shops, then the report over them.", expected_every: 1h, on_failure: continue }
+    daily:  { title: Orders and report, description: "The copy of the shops' orders (a week back from the newest), then the report.", expected_every: 1d, on_failure: continue }
+    weekly: { title: Full re-read, description: "Both shops read in full, replacing what the warehouse holds for each (rows deleted at a shop go), then the report.", expected_every: 7d, on_failure: continue }
+
+# How this project is meant to operate (docs/concepts.md). What is written here is the default; leave it out to keep it.
+#   plans:
+#     deploy:  { keep: committed, audit: full }
+#     refresh: { keep: committed, audit: standard }
+#   refresh: { check: objects, on_fail: block }
+#   retention: { statement_logs_days: 30 }
+
+# Text behaves differently on the two engines (SQL Server ignores trailing spaces when it compares, PostgreSQL does not), and one
+# profile cannot be exact on both. The project's profile fits SQL Server; the connection on the other engine says its own, over it
+# (docs/operations.md). A model built on both gets advice (DDB-236) where its query compares text, unless the columns are `trimmed`.
+string_semantics:
+  case: sensitive
+  trailing_space: ignored
+  collations:
+    default: { duckdb: NFC, sqlserver: Latin1_General_100_CS_AS, postgres: C }

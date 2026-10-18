@@ -1,0 +1,24 @@
+name: marts.fct_inventory_snapshot
+kind: full
+grain:
+  - snapshot_date
+  - product_id
+columns:
+  - name: snapshot_date
+    type: DATE
+    nullable: false
+  - name: year_month
+    type: BIGINT
+  - name: product_id
+    type: INTEGER
+    nullable: false
+  - name: quantity
+    type: INTEGER
+    nullable: false
+  - name: units_sold
+    type: BIGINT
+    nullable: false
+  - name: units_sold_3m_avg
+    type: DECIMAL(12, 2)
+  - name: months_of_supply
+    type: DECIMAL(12, 2)

@@ -1,0 +1,34 @@
+# Where the models are built, and how text behaves there (docs/operations.md, DESIGN.md 7.4).
+#
+# SQL Server ignores trailing spaces when it compares text and PostgreSQL does not, so one project profile cannot
+# be exact on both: the engine the profile does not fit is reported (DDB-310) when you validate. This template is set
+# up for SQL Server. For PostgreSQL, replace the next lines with:
+#   defaults: {connections: [postgres]}
+#   tracking: { connection: postgres }
+#   string_semantics: { case: sensitive, trailing_space: significant, collations: { default: { duckdb: NFC, postgres: C } } }
+defaults: {connections: [sqlserver]}
+# where the records of what the tool builds are kept (drift, history, acknowledgements): nothing is tracked without it
+tracking: { connection: sqlserver }
+
+# How this project is meant to operate (docs/concepts.md). What is written here is the default; leave it out to keep it.
+# Chinook is a small catalog that changes rarely, so the example keeps little of a plan and lets a refresh warn instead of stop.
+#   plans:
+#     deploy:  { keep: ephemeral, audit: minimal }   # made and applied in one step; only the hash and the event are kept
+#     refresh: { keep: committed, audit: minimal }   # the refresh plan is compiled by `project compile` into rendered/<connection>/loads.yml and refresh/<plan>.yml
+#   refresh: { check: project, on_fail: warn }       # none | project | objects | live: `project` asks only whether this structure was deployed here
+#   retention: { statement_logs_days: 7 }            # local statement logs older than this are removed by the next deploy or refresh
+string_semantics:
+  case: sensitive
+  trailing_space: ignored
+  collations:
+    default: { duckdb: NFC, sqlserver: Latin1_General_100_CS_AS }
+
+# marts.dim_date uses generate_series, which SQL Server has from version 16 (2022).
+connections:
+  sqlserver: { version: 16 }
+
+# `validate` says where a construct behaves slightly differently on the engine than in DuckDB (DDB-302). Those findings are
+# real and worth reading once; the project below has been checked, so they are notes here rather than warnings.
+policy:
+  severity:
+    approximated: note

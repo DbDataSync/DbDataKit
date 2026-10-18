@@ -1,0 +1,22 @@
+name: marts.fct_orders
+kind:
+  incremental_by_unique_key:
+    unique_key: [order_id]
+grain: [order_id]
+connections=: [sqlserver, fabric]
+columns:
+  - name: order_id
+    type: BIGINT
+    nullable: false
+  - name: customer_id
+    type: BIGINT
+  - name: amount
+    type: DECIMAL(14, 2)
+  - name: discount_code
+    type: VARCHAR(20)
+    nullable: false
+  - name: order_date
+    type: DATE
+    nullable: false
+indexes:
+  - {name: ux_fct_orders_order_id, columns: [order_id], unique: true}

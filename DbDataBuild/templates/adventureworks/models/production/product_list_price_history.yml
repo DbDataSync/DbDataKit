@@ -1,0 +1,8 @@
+name: production.product_list_price_history
+kind: mapped
+grain: [product_id, start_date]
+columns:
+  - {name: product_id, type: INTEGER, nullable: false}
+  - {name: start_date, type: DATE, nullable: false}
+  - {name: end_date, type: DATE}
+  - {name: list_price, type: "DECIMAL(19, 4)", nullable: false}

@@ -1,0 +1,11 @@
+name: staging.playlists
+kind: view
+grain:
+  - playlist_id
+columns:
+  - name: playlist_id
+    type: INTEGER
+    nullable: false
+  - name: playlist_name
+    type: VARCHAR(60)
+    nullable: false

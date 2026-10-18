@@ -1,0 +1,1 @@
+SELECT bill_of_materials_id, product_assembly_id, component_id, per_assembly_qty, unit_measure_code FROM production.bill_of_materials

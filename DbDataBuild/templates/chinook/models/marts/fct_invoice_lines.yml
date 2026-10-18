@@ -1,0 +1,30 @@
+name: marts.fct_invoice_lines
+kind:
+  incremental_by_unique_key:
+    unique_key: [invoice_line_id]
+grain: [invoice_line_id]
+columns:
+  - name: invoice_line_id
+    type: INTEGER
+    nullable: false
+  - name: invoice_id
+    type: INTEGER
+    nullable: false
+  - name: date_key
+    type: BIGINT
+  - name: customer_id
+    type: INTEGER
+    nullable: false
+  - name: track_id
+    type: INTEGER
+    nullable: false
+  - name: quantity
+    type: INTEGER
+    nullable: false
+  - name: unit_price
+    type: DECIMAL(10, 2)
+    nullable: false
+  - name: line_amount
+    type: DECIMAL(18, 2)
+indexes:
+  - {name: ux_fct_invoice_lines_invoice_line_id, columns: [invoice_line_id], unique: true}

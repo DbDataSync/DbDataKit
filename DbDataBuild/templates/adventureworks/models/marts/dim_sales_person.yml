@@ -1,0 +1,23 @@
+name: marts.dim_sales_person
+kind: full
+grain:
+  - sales_person_id
+columns:
+  - name: sales_person_id
+    type: INTEGER
+    nullable: false
+  - name: user_name
+    type: VARCHAR
+  - name: job_title
+    type: VARCHAR(50)
+    nullable: false
+  - name: territory_name
+    type: VARCHAR(50)
+  - name: yearly_quota
+    type: DECIMAL(19, 4)
+  - name: bonus
+    type: DECIMAL(19, 4)
+    nullable: false
+  - name: commission_pct
+    type: DECIMAL(10, 4)
+    nullable: false

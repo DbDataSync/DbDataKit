@@ -1,0 +1,27 @@
+name: staging.employees
+kind: view
+grain:
+  - employee_id
+columns:
+  - name: employee_id
+    type: INTEGER
+    nullable: false
+  - name: full_name
+    type: VARCHAR
+  - name: title
+    type: VARCHAR(40)
+    nullable: false
+  - name: reports_to
+    type: INTEGER
+  - name: hire_date
+    type: DATE
+    nullable: false
+  - name: city
+    type: VARCHAR(40)
+    nullable: false
+  - name: country
+    type: VARCHAR(40)
+    nullable: false
+  - name: email
+    type: VARCHAR(60)
+    nullable: false

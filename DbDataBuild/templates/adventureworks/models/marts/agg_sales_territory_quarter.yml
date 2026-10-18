@@ -1,0 +1,29 @@
+name: marts.agg_sales_territory_quarter
+kind: full
+grain:
+  - territory_id
+  - year
+  - quarter
+columns:
+  - name: territory_id
+    type: INTEGER
+    nullable: false
+  - name: year
+    type: BIGINT
+    nullable: false
+  - name: quarter
+    type: BIGINT
+    nullable: false
+  - name: revenue
+    type: DECIMAL(19, 2)
+  - name: margin
+    type: DECIMAL(19, 2)
+  - name: orders
+    type: BIGINT
+    nullable: false
+  - name: revenue_year_to_date
+    type: DECIMAL(19, 2)
+  - name: revenue_prior_year
+    type: DECIMAL(19, 2)
+  - name: growth_percent
+    type: DECIMAL(9, 1)

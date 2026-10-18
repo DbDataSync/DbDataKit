@@ -1,0 +1,15 @@
+name: marts.agg_daily_sales
+kind: full
+grain: [date_key, region, channel_group]
+columns:
+  - {name: date_key, type: BIGINT, nullable: false}
+  - {name: region, type: "VARCHAR(20)", nullable: false}
+  - {name: channel_group, type: "VARCHAR(10)", nullable: false}
+  - {name: orders, type: BIGINT, nullable: false}
+  - {name: units, type: BIGINT}
+  - {name: gross_amount, type: "DECIMAL(18, 2)"}
+  - {name: net_amount, type: "DECIMAL(18, 2)"}
+  - {name: margin_amount, type: "DECIMAL(18, 2)"}
+  - {name: region_net_to_date, type: "DECIMAL(18, 2)"}
+indexes:
+  - {name: ux_agg_daily_sales, columns: [date_key, region, channel_group], unique: true}

@@ -1,0 +1,15 @@
+name: marts.agg_customer_value
+kind: full
+grain: [customer_id]
+columns:
+  - {name: customer_id, type: INTEGER, nullable: false}
+  - {name: region, type: "VARCHAR(20)", nullable: false}
+  - {name: orders, type: BIGINT, nullable: false}
+  - {name: net_amount, type: "DECIMAL(18, 2)"}
+  - {name: average_order_value, type: "DECIMAL(18, 2)"}
+  - {name: first_date_key, type: BIGINT}
+  - {name: last_date_key, type: BIGINT}
+  - {name: segment, type: "VARCHAR(8)", nullable: false}
+  - {name: revenue_rank, type: BIGINT, nullable: false}
+indexes:
+  - {name: ux_agg_customer_value, columns: [customer_id], unique: true}

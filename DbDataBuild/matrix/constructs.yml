@@ -1,0 +1,578 @@
+# Support matrix (DESIGN.md section 7): one row per construct with a known portability consequence.
+# detect:  node:<polyglot Expression tag> | fn:<FUNCTION NAME> | detector:<name, see Detectors.cs>
+# Per target: status (native|translated|approximated|emulated|unsupported|unverified), optional min_version, note, test.
+# `tsql:` is shorthand for sqlserver + fabric; a specific key overrides it. (Not used below: no Fabric engine was available, so Fabric entries
+# are `unverified` unless Microsoft's documentation settles them. Never copy a SQL Server result to Fabric.)
+# test: spike/<id> points at a case in spike/constructs.yml until the conformance suite replaces it (milestone 3).
+# Every status except native and unverified must name a test. Rows reflect polyglot-sql at the pinned commit (spike/RESULTS.md).
+
+- id: op.div
+  detect: node:div
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/int_division_cols, note: "DuckDB 1.5 returns inf for x/0; the rewrite (CAST AS FLOAT / NULLIF) returns NULL." }
+  fabric:    { status: unverified, note: "polyglot's fabric dialect emits plain `/` where its tsql dialect adds CAST AS FLOAT / NULLIF. On SQL Server that text is integer division (7/2 = 3, DuckDB gives 3.5); Fabric is expected to behave the same but this was not tested." }
+  postgres:  { status: approximated, test: spike/abs_round, note: "Rewritten to DOUBLE PRECISION / NULLIF: x/0 gives NULL (not inf) and ROUND(<result>, n) fails (no round(double precision, int))." }
+
+- id: fn.avg
+  detect: node:avg
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/avg_int, note: "AVG over integers truncates (4, DuckDB gives 4.5714...); DECIMAL results have a different scale (spike/avg_decimal)." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: native }
+
+- id: fn.length
+  detect: node:length
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/length_fn, note: "LEN() ignores trailing spaces; DuckDB length() counts them (str.len). A query that went through lowering is rewritten by the target rule length-trailing-spaces (LEN(s + 'x') - 1) and no longer reports this; a query that is not lowered still does. LEN counts UTF-16 code units: a character outside the Basic Multilingual Plane (an emoji) counts as 2, DuckDB counts 1." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: native }
+
+- id: fn.try_cast
+  detect: node:try_cast
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/try_cast, note: "TRY_CAST('' AS INT) is 0 on T-SQL, NULL in DuckDB. Lowered string-to-number and string-to-date casts are rewritten by the target rule try-cast-parse (blank becomes NULL) and no longer report this. Still differs: a string DuckDB reads as a number the engine refuses ('12.7' as INTEGER is 13, '1e3' as INTEGER is 1000; NULL on SQL Server)." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: unsupported, test: spike/try_cast, note: "No native try-cast: polyglot emits CAST, which raises an error on bad data. Lowered string-to-integer, -decimal and -double casts are rewritten by the target rule try-cast-parse (a CASE that tests the text and the range first) and no longer report this; a string-to-date cast, and any other TRY_CAST, still does. The same '12.7' and '1e3' differences as SQL Server apply." }
+
+- id: type.cast_varchar_length
+  detect: detector:cast_varchar_length
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/cast_varchar_len, note: "CAST(x AS VARCHAR(n)) is emitted as VARCHAR(MAX): the length is lost. Declared `columns` stay the source of truth for lengths." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: approximated, test: spike/cast_varchar_len, note: "Emitted as TEXT: the length is lost." }
+
+- id: str.unicode_literal
+  detect: detector:unicode_literal
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/unicode_literal, note: "No N'...' prefix is emitted, so characters outside the database code page are corrupted. Matches only when the code page covers them." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: native }
+
+- id: str.eq
+  detect: detector:string_equality
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/str_eq_profile, note: "Equality, inequality and IN against string literals follow the target collation and trailing-space rules, not DuckDB's (str.eq.case, str.eq.trailing_space; DESIGN.md 7.4). Column-to-column comparisons are not yet detected (needs declared types)." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: native }
+
+- id: str.like.case
+  detect: node:like
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/like_case, note: "LIKE follows the column collation: case-insensitive under *_CI_* collations, case-sensitive in DuckDB." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: native }
+
+- id: str.ilike
+  detect: node:i_like
+  duckdb: native
+  sqlserver: { status: translated, test: spike/ilike, note: "Rewritten to LOWER(x) LIKE LOWER(y)." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: native }
+
+- id: str.concat
+  detect: node:concat
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/concat_pipes, note: "|| becomes +, which adds numbers when both operands are numeric. Only safe for string operands. A lowered query is rewritten by the target rule concat-plus (every || is written as +, because the transpile leaves || inside the arguments of strpos, starts_with and the like) and casts non-text operands itself, so it no longer reports this." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: approximated, test: spike/concat_pipes, note: "|| on non-string operands is an error on Postgres; DuckDB concatenates them." }
+
+- id: fn.current_date
+  detect: fn:CURRENT_DATE
+  duckdb: native
+  sqlserver: { status: emulated, test: spike/current_date_fn, note: "Written as CAST(GETDATE() AS DATE). The date is the one on each engine's own clock in its own time zone (DuckDB: its TimeZone setting, which `sample` and `test` use; SQL Server: the server's local time; PostgreSQL: the session TimeZone), so near midnight engines in different time zones return different dates. The spike matches on SQL Server 2022 and 2025 and PostgreSQL when the zones are the same (run with TZ=UTC), and does not when the DuckDB host is in another zone. Pass the date as a parameter when it must not depend on a clock." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: native, note: "CURRENT_DATE is the date in the session TimeZone; see the SQL Server note for what that means across time zones." }
+
+- id: fn.replace
+  detect: fn:REPLACE
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/replace_fn, note: "REPLACE matches using the collation: case-insensitive under *_CI_* collations, case-sensitive in DuckDB." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: native }
+
+- id: fn.regexp
+  detect: [fn:REGEXP_MATCHES, fn:REGEXP_LIKE, node:regexp_like, node:regexp_i_like]
+  duckdb: native
+  sqlserver: { status: translated, min_version: 17, test: spike/regexp, note: "REGEXP_LIKE exists from SQL Server 2025 at database compatibility level 170 (version 17). It is not recognized on 2022, nor on a 2025 server at level 160 (checked on both): set targets.sqlserver.version to the level you run, 16 or 17." }
+  fabric:    { status: unverified, note: "Fabric support for REGEXP_LIKE not checked." }
+  postgres:  { status: translated, test: spike/regexp, note: "Rewritten to the ~ operator." }
+
+- id: fn.generate_series
+  detect: [fn:GENERATE_SERIES]
+  duckdb: native
+  sqlserver: { status: translated, min_version: 16, test: spike/generate_series, note: "Verified end to end by the conformance test Integer_series_become_the_engines_own_generate_series_and_join_to_tables. The spike run (2026-10-07) reports SYNTAX_ERR on SQL Server for polyglot's raw text (`GENERATE_SERIES(1, 5) AS g(x)`: the column list is not accepted); the renderer's own output, which is what the test runs, is. Integer series only (lowering refuses the rest). GENERATE_SERIES exists from SQL Server 2022 (version 16) and names its column `value`; the renderer drops the column list T-SQL does not accept." }
+  fabric:    { status: unverified, note: "Fabric support for GENERATE_SERIES not checked." }
+  postgres:  { status: native }
+
+- id: syntax.qualify
+  detect: detector:qualify
+  duckdb: native
+  sqlserver: { status: emulated, test: spike/qualify, note: "Rewritten to a subquery with a window column filtered in an outer WHERE." }
+  fabric:    { status: unverified, note: "Microsoft documents QUALIFY as supported in Fabric Data Warehouse (T-SQL surface area, checked 2026-09-30) and polyglot leaves it in place. Not tested on Fabric; the SQL Server proxy rejects it." }
+  postgres:  { status: emulated, test: spike/qualify, note: "Rewritten to a subquery." }
+
+- id: syntax.group_by_ordinal
+  detect: detector:group_by_ordinal
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/group_by_ordinal, note: "GROUP BY 1 is emitted unchanged; SQL Server rejects it at run time, and ScriptDOM accepts it. Name the columns." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: native }
+
+- id: syntax.group_by_all
+  detect: detector:group_by_all
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/group_by_all, note: "GROUP BY ALL is emitted unchanged and is a syntax error on SQL Server 2022. List the grouping columns." }
+  fabric:    { status: unverified, note: "Microsoft documents GROUP BY ALL as supported in Fabric Data Warehouse (T-SQL surface area, checked 2026-09-30) and polyglot emits it unchanged. Not tested on Fabric." }
+  postgres: { status: unsupported, test: spike/group_by_all, note: "Emitted unchanged; PostgreSQL 17 rejects it." }
+
+- id: type.list
+  detect: node:array_func
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/list_literal, note: "List literals are emitted as [..], which T-SQL reads as a bracketed identifier." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: unverified, note: "Rewritten to ARRAY[..]; semantics (indexing, NULL handling) not verified." }
+
+- id: type.struct
+  detect: node:map_func
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/struct_literal, note: "Struct/map literals are emitted unchanged and are a syntax error." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: unsupported, test: spike/struct_literal, note: "Emitted unchanged; PostgreSQL rejects it." }
+
+- id: fn.unnest
+  detect: [fn:UNNEST, node:unnest]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/unnest, note: "UNNEST is not a T-SQL function." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: unverified, note: "Matched on one case; array semantics not verified." }
+
+- id: fn.date_trunc
+  detect: fn:DATE_TRUNC
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/date_trunc_month, note: "Rewritten to DATETRUNC, which returns DATE for DATE input; DuckDB returns TIMESTAMP. The result type differs, so cast explicitly to the declared column type." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: native }
+
+- id: op.interval_add
+  detect: node:interval
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/date_add_interval, note: "DATE + INTERVAL becomes DATEADD and stays DATE; DuckDB returns TIMESTAMP. Cast explicitly to the declared column type." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: native }
+
+- id: fn.date_diff
+  detect: fn:DATE_DIFF
+  duckdb: native
+  sqlserver: { status: translated, test: spike/date_diff, note: "DATEDIFF counts boundaries, as DuckDB does, except for week, which counts boundaries from the first day of the week the session sets (@@DATEFIRST) where DuckDB counts whole periods of seven days: a lowered query is rewritten by the target rule date-diff-weeks (the days between, divided by seven, toward zero)." }
+  fabric:    { status: unverified, note: "Same text as SQL Server; Fabric not checked." }
+  postgres:  { status: approximated, test: spike/date_diff, note: "day is exact. A lowered query is rewritten by the target rule date-diff-boundaries for year, quarter and month (the difference of the calendar fields, which counts the boundaries crossed as DuckDB does) and no longer reports this; polyglot alone writes AGE(), which counts whole elapsed months and years (2024-01-31 to 2024-03-01 is 2 months in DuckDB, 1 on PostgreSQL). week is rewritten by the target rule date-diff-weeks (below). The time units are as probed." }
+
+- id: syntax.order_nulls
+  detect: detector:order_nulls
+  duckdb: native
+  sqlserver: { status: emulated, test: spike/nulls_last, note: "Every ORDER BY is rewritten with a CASE WHEN x IS NULL expression to put NULLs last, as DuckDB does. This can defeat index use." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: native }
+
+- id: syntax.join.using
+  detect: detector:join_using
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/left_join_using, note: "JOIN ... USING is emitted unchanged and is a syntax error. Use ON." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: native }
+
+- id: syntax.join.natural
+  detect: detector:join_natural
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/natural_join, note: "NATURAL JOIN is emitted unchanged and is a syntax error. Use ON." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: native }
+
+- id: syntax.distinct_on
+  detect: detector:distinct_on
+  duckdb: native
+  sqlserver: { status: unverified, note: "Rewritten to ROW_NUMBER() filtering. DuckDB picks an arbitrary row per key without ORDER BY, so a deterministic differential test is not possible. Add ORDER BY to the model." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: native }
+
+- id: syntax.sample
+  detect: detector:sample
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/sample_clause, note: "USING SAMPLE is emitted unchanged and is a syntax error." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres: { status: unsupported, test: spike/sample_clause, note: "Emitted unchanged; PostgreSQL rejects it." }
+
+- id: syntax.lateral
+  detect: detector:lateral_subquery
+  duckdb: native
+  sqlserver: { status: translated, test: spike/lateral_join, note: "Rewritten to CROSS APPLY." }
+  fabric:    { status: unverified, note: "Same text as SQL Server; Fabric support for APPLY not checked." }
+  postgres:  { status: native }
+
+- id: syntax.values_list
+  detect: node:values
+  duckdb: native
+  sqlserver: { status: translated, test: spike/values_list, note: "A VALUES list (inline or as `(VALUES ...) AS t(a, b)`) is the table value constructor on both engines. Lowering gives every cell DuckDB's column type (a cast of the cell), names the columns col0, col1, ... as DuckDB does, and refuses a column type the engines cannot hold exactly (TINYINT, unsigned and 128-bit integers, TIME, intervals, lists, structs). A list that reads the columns of another table (`LATERAL (VALUES (t.a, ...))`, or a correlated list inside EXISTS or a scalar subquery) is lowered as a lateral join, which is CROSS APPLY (OUTER APPLY for LEFT JOIN LATERAL ... ON TRUE) on SQL Server and LATERAL on PostgreSQL; a list with a subquery in a cell is refused. SQL Server takes 1000 rows in one constructor: the target rule values-chunks writes a longer list as UNION ALL of lists of 1000. Verified on SQL Server 2022 by the conformance tests in ValuesListConformance." }
+  fabric:    { status: unverified, note: "Fabric is expected to follow SQL Server (1000 rows per constructor, the same rule); nothing was run there." }
+  postgres:  { status: native }
+
+- id: str.case_mapping
+  detect: [node:upper, node:lower]
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/case_mapping, note: "UPPER and LOWER use the engine's Unicode tables: DuckDB maps 'ß' to 'ẞ', SQL Server leaves it. ASCII and the usual accents agree." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: approximated, test: spike/case_mapping, note: "Under the C collation (the usual profile for PostgreSQL) upper() and lower() change ASCII letters only: 'é' stays 'é'. Under a UTF-8 locale collation they agree with DuckDB." }
+
+- id: fn.pad
+  detect: [fn:LPAD, fn:RPAD]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/pad_fn, note: "SQL Server has no LPAD or RPAD before 2025. A lowered query is rewritten by the target rule pad-to-length (LEFT(REPLICATE(p, n), n - LEN(s)) + s, and LEFT(s, n) for a string that is too long, as DuckDB cuts it) when the length is a literal up to 4000 and the pad a non-empty literal, and no longer reports this; any other use still does." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: native }
+
+- id: fn.split_part
+  detect: [fn:SPLIT_PART, fn:STRING_SPLIT, fn:ARRAY_EXTRACT]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/split_part_fn, note: "SQL Server has no split_part, and STRING_SPLIT returns a table (one character as the separator, and the position only from 2022). Split with CHARINDEX and SUBSTRING, or load the pieces some other way." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: unsupported, test: spike/split_part_fn, note: "DuckDB's split_part reaches the plan as array_extract(string_split(s, sep), n), which PostgreSQL does not have. A lowered query is rewritten by the target rule split-part (PostgreSQL's own split_part, which also gives '' past the last piece) and no longer reports this; string_split anywhere else still does. Differs: position 0 is an error on PostgreSQL and '' in DuckDB." }
+
+- id: fn.contains
+  detect: [node:contains, fn:CONTAINS]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/contains_fn, note: "CONTAINS is a full-text predicate on SQL Server, not a function. Write strpos(s, x) > 0 (CHARINDEX) or LIKE." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: unsupported, test: spike/contains_fn, note: "There is no contains(text, text) function. Write strpos(s, x) > 0." }
+
+- id: fn.mode
+  detect: [node:mode, fn:MODE]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/mode_fn, note: "No MODE aggregate. Group and count, then take the top row." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: unsupported, test: spike/mode_fn, note: "mode() is an ordered-set aggregate there (mode() WITHIN GROUP (ORDER BY x)), which polyglot does not produce." }
+
+- id: fn.corr
+  detect: [fn:CORR]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/corr_fn, note: "No CORR aggregate." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: native }
+
+- id: fn.string_agg
+  detect: [node:string_agg]
+  duckdb: native
+  sqlserver: { status: translated, test: spike/string_agg_fn, note: "STRING_AGG(x, sep) WITHIN GROUP (ORDER BY ...). The separator and the ORDER BY are kept by lowering. NULL values are skipped, as in DuckDB." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: unsupported, test: spike/string_agg_fn, note: "polyglot writes LISTAGG for PostgreSQL, which has no such function (string_agg is the PostgreSQL name). A lowered query is rewritten by the target rule string-agg-array (array_to_string(array_agg(x ORDER BY ...), sep): NULLs skipped, NULL for no rows) and no longer reports this; a string_agg without a separator still does." }
+
+- id: fn.substring_negative
+  detect: [detector:substring_negative_start]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/substr_negative, note: "A negative start counts from the end of the string in DuckDB; SUBSTRING does not do that (and the two-argument form needs a length, which lowering adds). Use right(s, n) or substr(s, length(s) - n + 1)." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: approximated, test: spike/substr_negative, note: "A negative start does not count from the end: SUBSTRING(s FROM -2) is the whole string." }
+
+- id: syntax.recursive_cte
+  detect: detector:recursive_cte
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/recursive_cte, note: "The lowerer writes WITH RECURSIVE and the transpile drops the keyword. SQL Server stops at 100 levels of recursion (error 530) where DuckDB goes on, allows only UNION ALL between the parts (error 252 otherwise) and, in the anchor and the recursive part, wants every column to have the same type: the lowerer casts text and decimal columns in both parts. OPTION (MAXRECURSION n) cannot be put in a view, so a deeper hierarchy fails loudly there." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: native }
+
+- id: fn.greatest_least
+  detect: [fn:GREATEST, fn:LEAST]
+  duckdb: native
+  sqlserver: { status: translated, min_version: 16, test: spike/greatest_least_fn, note: "GREATEST and LEAST exist from SQL Server 2022 (version 16). Both skip NULL arguments, as DuckDB does (the engine probes compare them with NULLs in the data)." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: native }
+
+- id: type.decimal_product_wide
+  detect: detector:wide_decimal_product
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/decimal_product_wide, note: "A product of decimals that would be wider than 38 digits: DuckDB casts the operands to DECIMAL(38, s) and multiplies exactly (and raises an error on overflow); SQL Server cuts the scale of the result to 6 (never below) and rounds there, at every product of a chain. A chain of products with more than 6 decimals in all can differ in the last digit after the final cast (observed: a price times a discount times an exchange rate, in the fourth decimal). Keep the scales of a chain at 6 or less in all, round between the steps, or multiply as DOUBLE and round." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: native }
+
+- id: fn.nth_value
+  detect: [node:nth_value, fn:NTH_VALUE]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/nth_value_fn, note: "SQL Server has no NTH_VALUE (FIRST_VALUE and LAST_VALUE only). Rank the rows with row_number() and take the one at the position, in a CTE or a subquery." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: native }
+
+- id: fn.json_extract_string
+  detect: [fn:JSON_EXTRACT_STRING]
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/json_extract_string_fn, note: "Rewritten to JSON_VALUE, which gives the same text for a scalar, NULL for a missing path, and agrees on the probes (numbers, booleans, nested names, array positions, null). It gives NULL where DuckDB gives the JSON text of an object or an array. The result is nvarchar(4000)." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: unsupported, test: spike/json_extract_string_fn, note: "polyglot writes `x ->> '$.a.b'`, which PostgreSQL rejects for text and which takes a key, not a path. A lowered query with a literal path of names and positions is rewritten by the target rule json-extract-string (json_extract_path_text) and no longer reports this; a computed path or a wildcard still does. The text of an object keeps the spacing of the document (DuckDB writes it without) ({\"x\": 1})." }
+
+- id: fn.json_other
+  detect: [fn:JSON_EXTRACT, node:json_extract, fn:JSON_VALID, fn:JSON_TYPE, fn:JSON_KEYS]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/json_other_fn, note: "json_extract returns JSON (a string keeps its quotes), which JSON_QUERY does not (it returns objects and arrays only); json_valid, json_type and json_keys have no counterpart. Use json_extract_string for a scalar, or keep the document apart from the query." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: unsupported, test: spike/json_other_fn, note: "json_extract is written as json_extract_path, which takes json (not text) and returns json; json_valid is not a function (PostgreSQL 16 has `IS JSON`). Use json_extract_string for a scalar." }
+
+- id: fn.json_array_length
+  detect: [node:json_array_length, fn:JSON_ARRAY_LENGTH]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/json_array_length_fn, note: "SQL Server has no JSON_ARRAY_LENGTH. Count the elements with OPENJSON in a subquery." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: unsupported, test: spike/json_array_length_fn, note: "A lowered query is rewritten by the target rule json-array-length (the text is cast to json) and no longer reports this. A value that is not an array raises on PostgreSQL where DuckDB gives 0." }
+
+- id: fn.regexp_full_match
+  detect: [fn:REGEXP_FULL_MATCH, node:regexp_full_match]
+  duckdb: native
+  sqlserver: { status: translated, min_version: 17, test: spike/regexp_full_match_fn, note: "SQL Server 2025 (version 17, database compatibility level 170) only: REGEXP_LIKE does not exist on 2022 nor on a 2025 server at level 160. A lowered query is rewritten by the target rule regexp-full-match (the pattern anchored, as DuckDB's full match is) and agrees with DuckDB on the probed patterns; the flavors (both RE2-like) are not compared beyond them." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: unsupported, test: spike/regexp_full_match_fn, note: "polyglot writes the unanchored `~` operator, so a partial match counts. A lowered query is rewritten by the target rule regexp-full-match (the pattern anchored) and no longer reports this. DuckDB's RE2 and PostgreSQL's ARE agree on common patterns, not on all." }
+
+- id: fn.regexp_extract
+  detect: [fn:REGEXP_EXTRACT, node:regexp_extract]
+  duckdb: native
+  sqlserver: { status: translated, min_version: 17, test: spike/regexp_extract_fn, note: "SQL Server 2025 (version 17) only. A lowered query with a literal group number is rewritten by the target rule regexp-extract to REGEXP_SUBSTR with the group, and '' for no match or a group that did not take part (REGEXP_SUBSTR gives NULL; DuckDB gives '')." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: unsupported, test: spike/regexp_extract_fn, note: "PostgreSQL has no regexp_extract. A lowered query with a literal group number is rewritten by the target rule regexp-extract (regexp_match, '' for no match) and no longer reports this." }
+
+- id: fn.regexp_replace
+  detect: [fn:REGEXP_REPLACE, node:regexp_replace, fn:DDB_REGEXP_REPLACE]      # the last is how the target rule regexp-replace-first writes the call for SQL Server, until the transpile has run
+  duckdb: native
+  sqlserver: { status: translated, min_version: 17, test: spike/regexp_replace_fn, note: "SQL Server 2025 (version 17) only. REGEXP_REPLACE replaces every match unless it is given the occurrence; DuckDB replaces the first, or all with the 'g' flag. A lowered query is rewritten by the target rule regexp-replace-first (occurrence 1, or 0 for 'g'). Other option strings ('i', 's') are not translated. (A 2025 server at level 160 has REGEXP_REPLACE too; a project at version 16 does not use it.)" }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: native }
+
+- id: fn.log
+  detect: detector:log_single_argument
+  duckdb: native
+  sqlserver: { status: approximated, test: spike/log_fn, note: "log(x) is the base-10 logarithm in DuckDB and the natural logarithm in T-SQL (log(2.5): 0.398 and 0.916). A query is rewritten by the target rule log-base-ten (LOG10(x)) and no longer reports this. log(b, x) is written LOG(x, b) and agrees." }
+  fabric:    { status: unverified, note: "The target rule log-base-ten is applied; not run on Fabric." }
+  postgres: { status: native }
+
+- id: op.interval_text
+  detect: detector:interval_unreadable
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/interval_text, note: "SQL Server has no interval type. The target rule interval-dateadd writes `date + INTERVAL '1 month 2 days 03:04:05'` (and `-`, an interval on the left, and sums of constant intervals) as nested DATEADD calls in DuckDB's order: months, then days, then the time. What reaches this row is an interval the rule cannot read exactly: text with a unit written short (`1 d`), a fraction of a day, month or year, a count that is not a literal, or an interval multiplied or divided. Write the parts as separate intervals (INTERVAL 1 MONTH + INTERVAL 2 DAY), or compute the date by hand." }
+  fabric:    { status: unverified, note: "The target rule interval-dateadd is applied; not run on Fabric." }
+  postgres: { status: native }
+
+- id: op.shift
+  detect: [node:bitwise_left_shift, node:bitwise_right_shift]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/shift_ops, note: "T-SQL has no << or >> (SQL Server 2022 has LEFT_SHIFT and RIGHT_SHIFT, which wrap silently and fill with zeros). A lowered query is rewritten by the target rules shift-left and shift-right (exact arithmetic: a product in DECIMAL(38, 0) cast back to the type, and a floor division by a power of two) and no longer reports this; a model that is not lowered still does. Only SMALLINT, INTEGER and BIGINT are shifted." }
+  fabric:    { status: unverified, note: "The same target rules are applied; not run on Fabric." }
+  postgres:  { status: translated, test: spike/shift_ops, note: "PostgreSQL's << wraps silently on overflow (DuckDB raises) and its >> takes the count modulo the width. A lowered query is rewritten by shift-left (a product, cast back, which raises on overflow) and shift-right (>> for the counts inside the width, 0 outside, as in DuckDB). With the rewrites turned off the engine's own operators apply." }
+
+- id: fn.factorial
+  detect: [fn:FACTORIAL, fn:DDB_FACTORIAL]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/factorial_fn, note: "SQL Server has no factorial. A lowered query is rewritten by the target rule factorial-table (the 34 exact values, DECIMAL(38, 0); an overflow error for any other number, as in DuckDB) and no longer reports this." }
+  fabric:    { status: unverified, note: "The same target rule is applied; not run on Fabric." }
+  postgres:  { status: approximated, test: spike/factorial_fn, note: "PostgreSQL's factorial gives a numeric for 34 and beyond where DuckDB raises. A lowered query is rewritten by factorial-table and no longer reports this." }
+
+- id: fn.xor
+  detect: [fn:XOR]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/xor_fn, note: "T-SQL's exclusive or is the operator ^. A lowered query is rewritten by the target rule bit-operators (a ^ b) and no longer reports this." }
+  fabric:    { status: unverified, note: "The same target rule is applied; not run on Fabric." }
+  postgres:  { status: native }
+
+- id: fn.power
+  detect: [fn:POWER, fn:POW, node:power]
+  duckdb: native
+  sqlserver: { status: translated, test: spike/power_ops, note: "power(x, y), pow and the operators ^ and ** are POWER on doubles (a whole-number constant is written as a double: T-SQL's POWER(2, -1) is 0). Where DuckDB gives Infinity or NaN (an overflow, 0 to a negative power, a negative base to a fraction) SQL Server raises an error." }
+  fabric:    { status: unverified, note: "Observed on SQL Server only; no Fabric engine was available to test." }
+  postgres:  { status: translated, test: spike/power_ops, note: "As on SQL Server: where DuckDB gives Infinity or NaN PostgreSQL raises an error." }
+
+# ---- Functions an engine does not have (docs/research/function-matrix.md). Each row lists the DuckDB functions that gave "is not a recognized built-in function name" on SQL Server 2022, or that are not in pg_proc on
+# PostgreSQL 17, for every overload; a function the tool writes out from others (FunctionTemplates) is not here. A call that reaches the lint is refused at compile (DDB-301) instead of failing at apply.
+
+- id: fn.missing.statistics
+  detect: [fn:APPROX_TOP_K, fn:ENTROPY, fn:FAVG, fn:FSUM, fn:KAHAN_SUM, fn:SUMKAHAN, fn:KURTOSIS, fn:KURTOSIS_POP, fn:SKEWNESS, fn:MAD, fn:SEM, fn:PRODUCT, fn:HISTOGRAM, fn:STATS, fn:IS_HISTOGRAM_OTHER_BIN]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_statistics, note: "SQL Server 2022 has no function named APPROX_TOP_K, ENTROPY, FAVG, FSUM, KAHAN_SUM, SUMKAHAN, KURTOSIS, KURTOSIS_POP, SKEWNESS, MAD, SEM, PRODUCT, HISTOGRAM, STATS, IS_HISTOGRAM_OTHER_BIN (the engine answers 'is not a recognized built-in function name'). Compute it from SUM, COUNT and the other aggregates in a subquery (or in a DuckDB step before the load)." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: unsupported, test: spike/missing_statistics, note: "PostgreSQL 17 has no function named APPROX_TOP_K, ENTROPY, FAVG, FSUM, KAHAN_SUM, SUMKAHAN, KURTOSIS, KURTOSIS_POP, SKEWNESS, MAD, SEM, PRODUCT, HISTOGRAM, STATS, IS_HISTOGRAM_OTHER_BIN (not in pg_proc). Compute it from SUM, COUNT and the other aggregates in a subquery (or in a DuckDB step before the load)." }
+
+- id: fn.missing.statistics.sqlserver
+  detect: [fn:COVAR_POP, fn:COVAR_SAMP, fn:REGR_AVGX, fn:REGR_AVGY, fn:REGR_COUNT, fn:REGR_INTERCEPT, fn:REGR_R2, fn:REGR_SLOPE, fn:REGR_SXX, fn:REGR_SXY, fn:REGR_SYY, node:bitwise_and_agg, fn:BIT_AND, node:bitwise_or_agg, fn:BIT_OR, node:bitwise_xor_agg, fn:BIT_XOR]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_statistics_sqlserver, note: "SQL Server 2022 has no function named COVAR_POP, COVAR_SAMP, REGR_AVGX, REGR_AVGY, REGR_COUNT, REGR_INTERCEPT, REGR_R2, REGR_SLOPE, REGR_SXX, REGR_SXY, REGR_SYY, BIT_AND, BIT_OR, BIT_XOR (the engine answers 'is not a recognized built-in function name'). Compute it from SUM, COUNT and the other aggregates in a subquery (or in a DuckDB step before the load)." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: native }
+
+- id: fn.missing.statistics.postgres
+  detect: [node:approx_count_distinct, fn:APPROX_COUNT_DISTINCT, fn:EQUI_WIDTH_BINS]
+  duckdb: native
+  sqlserver: { status: native }
+  fabric:    { status: native }
+  postgres:  { status: unsupported, test: spike/missing_statistics_postgres, note: "PostgreSQL 17 has no function named APPROX_COUNT_DISTINCT, EQUI_WIDTH_BINS (not in pg_proc). Compute it from SUM, COUNT and the other aggregates in a subquery (or in a DuckDB step before the load)." }
+
+- id: fn.missing.picks
+  detect: [fn:ARG_MAX, fn:ARG_MAX_NULL, fn:ARG_MAX_NULLS_LAST, fn:ARG_MIN, fn:ARG_MIN_NULL, fn:ARG_MIN_NULLS_LAST, fn:ARGMAX, fn:ARGMIN, fn:MAX_BY, fn:MIN_BY, node:first, fn:FIRST, fn:LAST, node:last]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_picks, note: "SQL Server 2022 has no function named ARG_MAX, ARG_MAX_NULL, ARG_MAX_NULLS_LAST, ARG_MIN, ARG_MIN_NULL, ARG_MIN_NULLS_LAST, ARGMAX, ARGMIN, MAX_BY, MIN_BY, FIRST, LAST (the engine answers 'is not a recognized built-in function name'). Rank the rows with row_number() (ORDER BY the value) in a CTE or subquery and take the one at position 1." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: unsupported, test: spike/missing_picks, note: "PostgreSQL 17 has no function named ARG_MAX, ARG_MAX_NULL, ARG_MAX_NULLS_LAST, ARG_MIN, ARG_MIN_NULL, ARG_MIN_NULLS_LAST, ARGMAX, ARGMIN, MAX_BY, MIN_BY, FIRST, LAST (not in pg_proc). Rank the rows with row_number() (ORDER BY the value) in a CTE or subquery and take the one at position 1." }
+
+- id: fn.missing.lists
+  detect: [fn:ARRAY_SLICE, fn:ARRAY_VALUE, fn:LIST_ELEMENT, fn:LIST_EXTRACT, fn:LIST_PACK, fn:LIST_SLICE, fn:UNPIVOT_LIST, fn:STRING_SPLIT_REGEX, fn:STR_SPLIT_REGEX, fn:REGEXP_EXTRACT_ALL]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_lists, note: "SQL Server 2022 has no function named ARRAY_SLICE, ARRAY_VALUE, LIST_ELEMENT, LIST_EXTRACT, LIST_PACK, LIST_SLICE, UNPIVOT_LIST, STRING_SPLIT_REGEX, STR_SPLIT_REGEX, REGEXP_EXTRACT_ALL (the engine answers 'is not a recognized built-in function name'). A list, array or row is a type the engines do not have as a value (the matrix row type.list); split text with a join to a numbers table, or keep the pieces in separate columns." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: unsupported, test: spike/missing_lists, note: "PostgreSQL 17 has no function named ARRAY_SLICE, ARRAY_VALUE, LIST_ELEMENT, LIST_EXTRACT, LIST_PACK, LIST_SLICE, UNPIVOT_LIST, STRING_SPLIT_REGEX, STR_SPLIT_REGEX, REGEXP_EXTRACT_ALL (not in pg_proc). A list, array or row is a type the engines do not have as a value (the matrix row type.list); split text with a join to a numbers table, or keep the pieces in separate columns." }
+
+- id: fn.missing.lists.sqlserver
+  detect: [fn:LIST, node:array_agg, fn:ARRAY_AGG, fn:ROW, fn:SPLIT, fn:STR_SPLIT, fn:STRING_TO_ARRAY, fn:REGEXP_SPLIT_TO_ARRAY]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_lists_sqlserver, note: "SQL Server 2022 has no function named LIST, ARRAY_AGG, ROW, SPLIT, STR_SPLIT, STRING_TO_ARRAY, REGEXP_SPLIT_TO_ARRAY (the engine answers 'is not a recognized built-in function name'). A list, array or row is a type the engines do not have as a value (the matrix row type.list); split text with a join to a numbers table, or keep the pieces in separate columns." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: native }
+
+- id: fn.missing.encoding
+  detect: [fn:BASE64, fn:TO_BASE64, fn:FROM_BASE64, fn:BIN, fn:TO_BINARY, fn:UNBIN, fn:FROM_BINARY, fn:UNHEX, fn:FROM_HEX, fn:BITSTRING, fn:URL_ENCODE, fn:URL_DECODE, fn:TO_BASE, fn:MD5_NUMBER, fn:SHA1, fn:HASH]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_encoding, note: "SQL Server 2022 has no function named BASE64, TO_BASE64, FROM_BASE64, BIN, TO_BINARY, UNBIN, FROM_BINARY, UNHEX, FROM_HEX, BITSTRING, URL_ENCODE, URL_DECODE, TO_BASE, MD5_NUMBER, SHA1, HASH (the engine answers 'is not a recognized built-in function name'). Binary and text encodings are written differently on each engine (and over UTF-16 on SQL Server); do the conversion in the source or in DuckDB, or write it with the engine's own function in a native query." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: unsupported, test: spike/missing_encoding, note: "PostgreSQL 17 has no function named BASE64, TO_BASE64, FROM_BASE64, BIN, TO_BINARY, UNBIN, FROM_BINARY, UNHEX, FROM_HEX, BITSTRING, URL_ENCODE, URL_DECODE, TO_BASE, MD5_NUMBER, SHA1, HASH (not in pg_proc). Binary and text encodings are written differently on each engine (and over UTF-16 on SQL Server); do the conversion in the source or in DuckDB, or write it with the engine's own function in a native query." }
+
+- id: fn.missing.encoding.sqlserver
+  detect: [fn:HEX, fn:TO_HEX, fn:ENCODE, fn:DECODE]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_encoding_sqlserver, note: "SQL Server 2022 has no function named HEX, TO_HEX, ENCODE, DECODE (the engine answers 'is not a recognized built-in function name'). Binary and text encodings are written differently on each engine (and over UTF-16 on SQL Server); do the conversion in the source or in DuckDB, or write it with the engine's own function in a native query." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: native }
+
+- id: fn.missing.similarity
+  detect: [fn:DAMERAU_LEVENSHTEIN, fn:EDITDIST3, fn:HAMMING, fn:MISMATCHES, fn:JACCARD, fn:JARO_SIMILARITY, fn:JARO_WINKLER_SIMILARITY, fn:LEVENSHTEIN]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_similarity, note: "SQL Server 2022 has no function named DAMERAU_LEVENSHTEIN, EDITDIST3, HAMMING, MISMATCHES, JACCARD, JARO_SIMILARITY, JARO_WINKLER_SIMILARITY, LEVENSHTEIN (the engine answers 'is not a recognized built-in function name'). String distances are not built in to the engines; compute them in DuckDB (a DuckDB step) or in the source." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: unsupported, test: spike/missing_similarity, note: "PostgreSQL 17 has no function named DAMERAU_LEVENSHTEIN, EDITDIST3, HAMMING, MISMATCHES, JACCARD, JARO_SIMILARITY, JARO_WINKLER_SIMILARITY, LEVENSHTEIN (not in pg_proc). String distances are not built in to the engines; compute them in DuckDB (a DuckDB step) or in the source." }
+
+- id: fn.missing.text
+  detect: [fn:ORD, fn:STRLEN, fn:STRIP_ACCENTS, fn:NFC_NORMALIZE, fn:PRINTF, fn:REGEXP_ESCAPE, fn:LEFT_GRAPHEME, fn:RIGHT_GRAPHEME, fn:LENGTH_GRAPHEME, fn:SUBSTRING_GRAPHEME, fn:NOT_LIKE_ESCAPE, fn:ILIKE_ESCAPE, fn:NOT_ILIKE_ESCAPE, fn:PARSE_DIRNAME, fn:PARSE_DIRPATH, fn:PARSE_FILENAME, fn:PARSE_PATH, fn:FORMAT_BYTES, fn:FORMATREADABLESIZE, fn:FORMATREADABLEDECIMALSIZE, fn:PARSE_FORMATTED_BYTES]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_text, note: "SQL Server 2022 has no function named ORD, STRLEN, STRIP_ACCENTS, NFC_NORMALIZE, PRINTF, REGEXP_ESCAPE, LEFT_GRAPHEME, RIGHT_GRAPHEME, LENGTH_GRAPHEME, SUBSTRING_GRAPHEME, NOT_LIKE_ESCAPE, ILIKE_ESCAPE, NOT_ILIKE_ESCAPE, PARSE_DIRNAME, PARSE_DIRPATH, PARSE_FILENAME, PARSE_PATH, FORMAT_BYTES, FORMATREADABLESIZE, FORMATREADABLEDECIMALSIZE, PARSE_FORMATTED_BYTES (the engine answers 'is not a recognized built-in function name'). No counterpart on the engines; use the string functions the matrix lists, or prepare the text in the source." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: unsupported, test: spike/missing_text, note: "PostgreSQL 17 has no function named ORD, STRLEN, STRIP_ACCENTS, NFC_NORMALIZE, PRINTF, REGEXP_ESCAPE, LEFT_GRAPHEME, RIGHT_GRAPHEME, LENGTH_GRAPHEME, SUBSTRING_GRAPHEME, NOT_LIKE_ESCAPE, ILIKE_ESCAPE, NOT_ILIKE_ESCAPE, PARSE_DIRNAME, PARSE_DIRPATH, PARSE_FILENAME, PARSE_PATH, FORMAT_BYTES, FORMATREADABLESIZE, FORMATREADABLEDECIMALSIZE, PARSE_FORMATTED_BYTES (not in pg_proc). No counterpart on the engines; use the string functions the matrix lists, or prepare the text in the source." }
+
+- id: fn.missing.text.sqlserver
+  detect: [fn:LIKE_ESCAPE, fn:PG_SIZE_PRETTY]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_text_sqlserver, note: "SQL Server 2022 has no function named LIKE_ESCAPE, PG_SIZE_PRETTY (the engine answers 'is not a recognized built-in function name'). No counterpart on the engines; use the string functions the matrix lists, or prepare the text in the source." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: native }
+
+- id: fn.missing.json
+  detect: [fn:JSON_CONTAINS, fn:JSON_MERGE_PATCH, fn:JSON_PRETTY, fn:JSON_SERIALIZE_PLAN, fn:JSON_SERIALIZE_SQL, fn:JSON_STRUCTURE, fn:JSON_TRANSFORM, fn:JSON_TRANSFORM_STRICT, fn:FROM_JSON, fn:FROM_JSON_STRICT]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_json, note: "SQL Server 2022 has no function named JSON_CONTAINS, JSON_MERGE_PATCH, JSON_PRETTY, JSON_SERIALIZE_PLAN, JSON_SERIALIZE_SQL, JSON_STRUCTURE, JSON_TRANSFORM, JSON_TRANSFORM_STRICT, FROM_JSON, FROM_JSON_STRICT (the engine answers 'is not a recognized built-in function name'). The JSON functions other than json_extract_string and json_array_length (matrix rows fn.json_*) have no counterpart; extract the value with json_extract_string, or keep the document apart from the query." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: unsupported, test: spike/missing_json, note: "PostgreSQL 17 has no function named JSON_CONTAINS, JSON_MERGE_PATCH, JSON_PRETTY, JSON_SERIALIZE_PLAN, JSON_SERIALIZE_SQL, JSON_STRUCTURE, JSON_TRANSFORM, JSON_TRANSFORM_STRICT, FROM_JSON, FROM_JSON_STRICT (not in pg_proc). The JSON functions other than json_extract_string and json_array_length (matrix rows fn.json_*) have no counterpart; extract the value with json_extract_string, or keep the document apart from the query." }
+
+- id: fn.missing.json.sqlserver
+  detect: [fn:JSON_EXISTS]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_json_sqlserver, note: "SQL Server 2022 has no function named JSON_EXISTS (the engine answers 'is not a recognized built-in function name'). The JSON functions other than json_extract_string and json_array_length (matrix rows fn.json_*) have no counterpart; extract the value with json_extract_string, or keep the document apart from the query." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: native }
+
+- id: fn.missing.math
+  detect: [fn:EVEN, fn:GAMMA, fn:LGAMMA, fn:NEXTAFTER, fn:SIGNBIT, fn:BAR]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_math, note: "SQL Server 2022 has no function named EVEN, GAMMA, LGAMMA, NEXTAFTER, SIGNBIT, BAR (the engine answers 'is not a recognized built-in function name'). No counterpart on the engines; write it with arithmetic the engines have, or compute it in the source." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: unsupported, test: spike/missing_math, note: "PostgreSQL 17 has no function named EVEN, GAMMA, LGAMMA, NEXTAFTER, SIGNBIT, BAR (not in pg_proc). No counterpart on the engines; write it with arithmetic the engines have, or compute it in the source." }
+
+- id: fn.missing.math.sqlserver
+  detect: [fn:GCD, fn:LCM, fn:GREATEST_COMMON_DIVISOR, fn:LEAST_COMMON_MULTIPLE, fn:ISFINITE]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_math_sqlserver, note: "SQL Server 2022 has no function named GCD, LCM, GREATEST_COMMON_DIVISOR, LEAST_COMMON_MULTIPLE, ISFINITE (the engine answers 'is not a recognized built-in function name'). No counterpart on the engines; write it with arithmetic the engines have, or compute it in the source." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: native }
+
+- id: fn.missing.math.postgres
+  detect: [fn:ROUND_EVEN, fn:ROUNDBANKERS]
+  duckdb: native
+  sqlserver: { status: native }
+  fabric:    { status: native }
+  postgres:  { status: unsupported, test: spike/missing_math_postgres, note: "PostgreSQL 17 has no function named ROUND_EVEN, ROUNDBANKERS (not in pg_proc). No counterpart on the engines; write it with arithmetic the engines have, or compute it in the source." }
+
+- id: fn.missing.random
+  detect: [fn:UUIDV7]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_random, note: "SQL Server 2022 has no function named UUIDV7 (the engine answers 'is not a recognized built-in function name'). A random or time-ordered identifier is not reproducible across engines (and a rendered script must be deterministic): generate it in the source or in the engine's own native query." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: unsupported, test: spike/missing_random, note: "PostgreSQL 17 has no function named UUIDV7 (not in pg_proc). A random or time-ordered identifier is not reproducible across engines (and a rendered script must be deterministic): generate it in the source or in the engine's own native query." }
+
+- id: fn.missing.random.sqlserver
+  detect: [fn:UUIDV4, fn:GEN_RANDOM_UUID, fn:UUID_EXTRACT_VERSION, fn:SETSEED]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_random_sqlserver, note: "SQL Server 2022 has no function named UUIDV4, GEN_RANDOM_UUID, UUID_EXTRACT_VERSION, SETSEED (the engine answers 'is not a recognized built-in function name'). A random or time-ordered identifier is not reproducible across engines (and a rendered script must be deterministic): generate it in the source or in the engine's own native query." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: native }
+
+- id: fn.missing.internal
+  detect: [fn:ALIAS, fn:VECTOR_TYPE, fn:IN_SEARCH_PATH]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_internal, note: "SQL Server 2022 has no function named ALIAS, VECTOR_TYPE, IN_SEARCH_PATH (the engine answers 'is not a recognized built-in function name'). A DuckDB internal with no counterpart on the engines." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: unsupported, test: spike/missing_internal, note: "PostgreSQL 17 has no function named ALIAS, VECTOR_TYPE, IN_SEARCH_PATH (not in pg_proc). A DuckDB internal with no counterpart on the engines." }
+
+- id: fn.normalized_interval
+  detect: [fn:NORMALIZED_INTERVAL]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/normalized_interval_fn, note: "normalized_interval(x) is DuckDB's own wrapper for comparing, ordering and testing intervals for equality (a month counts as 30 days). Neither engine has it, and SQL Server has no interval type. Compare the parts instead: date_diff('day', a, b) or date_part on the dates." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: translated, test: spike/normalized_interval_fn, note: "normalized_interval(x) is DuckDB's own wrapper for comparing intervals; PostgreSQL has no such function. The target rule normalized-interval writes x: PostgreSQL's interval comparison is the same ordering (a month counts as 30 days; 1600 of 1600 pairs of ages ordered identically)." }
+
+- id: fn.missing.datetime
+  detect: [fn:EPOCH_NS, fn:EPOCH_US, fn:NANOSECOND, fn:TIMEZONE_HOUR, fn:TIMEZONE_MINUTE, fn:TIME_BUCKET, fn:STRPTIME, fn:TRY_STRPTIME, fn:MAKE_TIMESTAMP_MS, fn:MAKE_TIMESTAMP_NS, fn:DATE_SUB, fn:DATESUB]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_datetime, note: "SQL Server 2022 has no function named EPOCH_NS, EPOCH_US, NANOSECOND, TIMEZONE_HOUR, TIMEZONE_MINUTE, TIME_BUCKET, STRPTIME, TRY_STRPTIME, MAKE_TIMESTAMP_MS, MAKE_TIMESTAMP_NS, DATE_SUB, DATESUB (the engine answers 'is not a recognized built-in function name'). These date and time functions have no counterpart on the engines; the parts of a date are read with date_part (year, month, day, quarter, week, isoyear, yearweek, dow, isodow, doy, decade, century, millennium, era, julian, epoch, hour, minute, second, millisecond, microsecond), cut with date_trunc and counted with date_diff." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: unsupported, test: spike/missing_datetime, note: "PostgreSQL 17 has no function named EPOCH_NS, EPOCH_US, NANOSECOND, TIMEZONE_HOUR, TIMEZONE_MINUTE, TIME_BUCKET, STRPTIME, TRY_STRPTIME, MAKE_TIMESTAMP_MS, MAKE_TIMESTAMP_NS, DATE_SUB, DATESUB (not in pg_proc). These date and time functions have no counterpart on the engines; the parts of a date are read with date_part (year, month, day, quarter, week, isoyear, yearweek, dow, isodow, doy, decade, century, millennium, era, julian, epoch, hour, minute, second, millisecond, microsecond), cut with date_trunc and counted with date_diff." }
+
+- id: fn.missing.datetime.sqlserver
+  detect: [node:epoch_ms, fn:TIMEZONE, fn:MAKE_TIMESTAMP, fn:MAKE_TIMESTAMPTZ, fn:TO_TIMESTAMP]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/missing_datetime_sqlserver, note: "SQL Server 2022 has no function named EPOCH_MS, TIMEZONE, MAKE_TIMESTAMP, MAKE_TIMESTAMPTZ, TO_TIMESTAMP (the engine answers 'is not a recognized built-in function name'). These date and time functions have no counterpart on the engines; the parts of a date are read with date_part (year, month, day, quarter, week, isoyear, yearweek, dow, isodow, doy, decade, century, millennium, era, julian, epoch, hour, minute, second, millisecond, microsecond), cut with date_trunc and counted with date_diff." }
+  fabric:    { status: unverified, note: "The text is the same as for SQL Server, where the function does not exist; not run on Fabric." }
+  postgres:  { status: native }
+
+- id: fn.missing.datetime.postgres
+  detect: [fn:AGO]
+  duckdb: native
+  sqlserver: { status: native }
+  fabric:    { status: native }
+  postgres:  { status: unsupported, test: spike/missing_datetime_postgres, note: "PostgreSQL 17 has no function named AGO (not in pg_proc). These date and time functions have no counterpart on the engines; the parts of a date are read with date_part (year, month, day, quarter, week, isoyear, yearweek, dow, isodow, doy, decade, century, millennium, era, julian, epoch, hour, minute, second, millisecond, microsecond), cut with date_trunc and counted with date_diff." }
+
+- id: fn.date_unit
+  detect: detector:date_unit_unsupported
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/date_unit_fn, note: "Only the units the tool translates exactly are accepted by date_part (year month day quarter doy dow isodow week isoyear yearweek decade century millennium era julian epoch hour minute second millisecond microsecond), date_trunc and date_diff (year quarter month week day hour minute second millisecond microsecond decade century millennium); they are rewritten by the target rules date-part-units, date-trunc-units and date-diff-units (table FunctionTemplates, each unit run against DuckDB and both engines). Any other unit, or a unit that is not a literal, is refused: the engines name them differently or count them differently." }
+  fabric:    { status: unverified, note: "The same target rules are applied; not run on Fabric." }
+  postgres:  { status: unsupported, test: spike/date_unit_fn, note: "Only the units the tool translates exactly are accepted (see SQL Server); any other, or a unit that is not a literal, is refused." }
+
+- id: fn.strftime
+  detect: [fn:STRFTIME]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/strftime_fn, note: "FORMAT and TO_CHAR do not use DuckDB's letters (%A %B %j come out as A B DDD). A lowered query writes strftime out as the pieces of its text for the specifiers %Y %y %m %d %H %M %S %f %j %I %p %a %A %b %B %w %u %% and the unpadded %-d %-m %-H %-I %-M %-S %-j, and refuses any other specifier (week numbers, zones, locale formats) with its name; only a model that is not lowered reaches this row." }
+  fabric:    { status: unverified, note: "The same lowering; not run on Fabric." }
+  postgres:  { status: unsupported, test: spike/strftime_fn, note: "As on SQL Server: TO_CHAR writes %A as %A. A lowered query is rewritten into pieces of text; a model that is not lowered reaches this row." }
+
+- id: fn.format
+  detect: [fn:FORMAT]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/format_fn, note: "DuckDB's format('{}|{}', a, b) takes {} placeholders; T-SQL's FORMAT takes a value and a .NET pattern. A lowered query writes the placeholders {} out as a concatenation of text (arguments of type VARCHAR, integers and DATE) and refuses {:05d} and the other specifications and arguments whose text differs between DuckDB and the engines (DOUBLE); only a model that is not lowered reaches this row." }
+  fabric:    { status: unverified, note: "The same lowering; not run on Fabric." }
+  postgres:  { status: unsupported, test: spike/format_fn, note: "PostgreSQL's format is printf-like (%s): format('{}|{}', a, b) comes back unchanged. A lowered query writes {} out as a concatenation; a model that is not lowered reaches this row." }
+
+- id: fn.age
+  detect: [fn:AGE]
+  duckdb: native
+  sqlserver: { status: unsupported, test: spike/age_fn, note: "SQL Server has no AGE and no interval type. The target rule age-parts writes date_part(unit, age(a, b)) for year, month, day, hour, minute and second, and the comparison, ordering and equality of an age with an interval or another age, in T-SQL with DuckDB's borrowing rule (proven equal on 5449 pairs). What reaches this row cannot be exact: an age as a value or output column, in arithmetic, with the epoch or a sub-second part, over TIMESTAMP WITH TIME ZONE, or over an operand that holds a subquery or a random value (the expression repeats it). Write date_diff('month', a, b) or compute the parts." }
+  fabric:    { status: unverified, note: "The same target rule is applied; not run on Fabric." }
+  postgres:  { status: native, note: "PostgreSQL's AGE is DuckDB's exactly (5449 of 5449 pairs). The second of an age is the whole second (rule age-second); an age as an output column has no DDL type." }
+

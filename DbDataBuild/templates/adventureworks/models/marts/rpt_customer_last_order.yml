@@ -1,0 +1,18 @@
+name: marts.rpt_customer_last_order
+kind: full
+grain:
+  - customer_id
+columns:
+  - name: customer_id
+    type: INTEGER
+    nullable: false
+  - name: sales_order_id
+    type: INTEGER
+    nullable: false
+  - name: order_date
+    type: DATE
+    nullable: false
+  - name: status_name
+    type: VARCHAR
+  - name: total_due
+    type: DECIMAL(21, 4)

@@ -1,0 +1,18 @@
+name: staging.currency_rates
+kind: view
+grain:
+  - rate_date
+  - currency_code
+columns:
+  - name: rate_date
+    type: DATE
+    nullable: false
+  - name: currency_code
+    type: VARCHAR(3)
+    nullable: false
+  - name: average_rate
+    type: DECIMAL(10, 4)
+    nullable: false
+  - name: end_of_day_rate
+    type: DECIMAL(10, 4)
+    nullable: false
