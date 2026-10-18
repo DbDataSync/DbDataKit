@@ -58,8 +58,7 @@ internal static class WindowsServiceEventLog
         if (!OperatingSystem.IsWindows())
             return;
 
-        EventLog.WriteEntry(
-            SourceName, message ?? $"{exception.GetType().Name}: {exception.Message}", EventLogEntryType.Error);
+        Writer.WriteError(exception, message);
     }
 
     /// <summary>One milestone, not a duplicate console transcript — see <see cref="ServeCommand.RunAsync"/>'s
@@ -69,6 +68,13 @@ internal static class WindowsServiceEventLog
         if (!OperatingSystem.IsWindows())
             return;
 
-        EventLog.WriteEntry(SourceName, message, EventLogEntryType.Information);
+        Writer.WriteInformation(message);
+    }
+
+    private static readonly ServiceEventLogWriter Writer = new(new RealSink());
+
+    private sealed class RealSink : IEventLogSink
+    {
+        public void Write(string message, EventLogEntryType type) => EventLog.WriteEntry(SourceName, message, type);
     }
 }
