@@ -1,0 +1,7 @@
+# Text is LF on every platform and every checkout (CLAUDE.md): documents, YAML and source files are parsed, hashed and compared by tests,
+# and a Windows checkout with autocrlf would otherwise turn them into CRLF.
+* text=auto eol=lf
+# Rendered load operations are hashed (manifest.yml) and executed exactly as committed, so their line endings must never change.
+rendered/** text eol=lf
+# Golden files compare as text
+tests/**/Golden/** text eol=lf

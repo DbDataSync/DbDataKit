@@ -1,0 +1,48 @@
+# The planning decision table (DESIGN.md 11) as data. One row per cell of the table the planner can reach.
+#   owner: planner  - decided by Planner.Plan from the live catalog snapshot, tracking records and answers; `test` names the PlannerTests method that proves it
+#          command  - decided before planning, by the `plan` command (it refuses to call the planner)
+#          apply    - decided when the plan is applied
+#   result: ddl | track | load | question | block | skip | refuse
+# Every step the planner emits names its row id first in its reason chain. A test fails on an id that is not in this file, on a planner row
+# without a test, and on a test that does not exist.
+
+- { id: obj.missing.table, owner: planner, kinds: "full, incremental_*", when: "the object does not exist on the target", result: ddl, risk: safe, test: Missing_table_creates_the_schema_and_the_table }
+- { id: obj.missing.view, owner: planner, kinds: view, when: "the object does not exist on the target", result: ddl, risk: safe, test: Missing_view_is_created_after_the_table_it_reads }
+- { id: obj.untracked, owner: planner, kinds: any, when: "the object exists and the tool has no record of it", result: question, code: "Q-adopt", test: An_existing_untracked_table_asks_whether_to_adopt_it }
+- { id: obj.untracked.declined, owner: planner, kinds: any, when: "adoption was answered `stop`", result: block, code: DDB-432, test: Declining_adoption_blocks_the_model_and_skips_what_reads_it }
+- { id: obj.drift, owner: planner, kinds: any, when: "the live shape differs from the last recorded shape", result: block, code: DDB-430, test: An_out_of_band_change_blocks_until_acknowledged }
+- { id: obj.drift.acknowledged, owner: planner, kinds: any, when: "the live shape differs and a person acknowledged exactly that shape", result: track, risk: safe, test: An_acknowledged_change_is_recorded_and_planning_continues }
+- { id: col.added, owner: planner, kinds: "full, incremental_*", when: "the model declares a nullable column the table lacks", result: ddl, risk: safe, code: "Q-history", test: A_new_nullable_column_asks_about_history_and_adds_it }
+- { id: col.added.notnull, owner: planner, kinds: "full, incremental_*", when: "the model declares a NOT NULL column the table lacks", result: ddl, risk: risky, code: "Q-history", test: A_new_not_null_column_is_risky }
+- { id: col.removed, owner: planner, kinds: "full, incremental_*", when: "the table has a column the model no longer declares", result: ddl, risk: destructive, test: A_removed_column_is_a_destructive_drop }
+- { id: col.renamed, owner: planner, kinds: "full, incremental_*", when: "the model declares a rename, or a rename question is answered rename_to", result: ddl, risk: risky, code: "Q-rename", test: Declared_and_answered_renames_become_rename_steps }
+- { id: col.rename.invalid, owner: planner, kinds: "full, incremental_*", when: "a rename answer names a column that is not a free new column", result: block, code: DDB-412, test: A_rename_answer_must_name_a_free_new_column }
+- { id: col.type.widen, owner: planner, kinds: "full, incremental_*", when: "the declared type holds every value of the live type", result: ddl, risk: safe, test: Widening_is_safe_and_narrowing_is_destructive }
+- { id: col.type.other, owner: planner, kinds: "full, incremental_*", when: "the declared type narrows or changes family", result: ddl, risk: destructive, test: Widening_is_safe_and_narrowing_is_destructive }
+- { id: col.null.relax, owner: planner, kinds: "full, incremental_*", when: "a NOT NULL column becomes nullable", result: ddl, risk: safe, test: Nullability_and_collation_changes_are_graded }
+- { id: col.null.tighten, owner: planner, kinds: "full, incremental_*", when: "a nullable column becomes NOT NULL", result: ddl, risk: risky, test: Nullability_and_collation_changes_are_graded }
+- { id: col.collation, owner: planner, kinds: "full, incremental_*", when: "the declared collation differs from the live one", result: ddl, risk: risky, test: Nullability_and_collation_changes_are_graded }
+- { id: index.added, owner: planner, kinds: "full, incremental_*", when: "the model declares an index the table does not have", result: ddl, risk: safe, test: Declared_indexes_are_created_changed_and_never_dropped }
+- { id: index.changed, owner: planner, kinds: "full, incremental_*", when: "a declared index exists with a different definition", result: ddl, risk: risky, test: Declared_indexes_are_created_changed_and_never_dropped }
+- { id: index.unmanaged, owner: planner, kinds: "full, incremental_*", when: "an index exists on the target that the model does not declare", result: note, test: Declared_indexes_are_created_changed_and_never_dropped }
+- { id: index.unsupported, owner: planner, kinds: "full, incremental_*", when: "the model declares an index for a target that has none (Fabric)", result: block, code: DDB-322, test: An_index_on_fabric_is_refused }
+- { id: index.constraint_name, owner: planner, kinds: "full, incremental_*", when: "a declared index has the name of a PRIMARY KEY or UNIQUE constraint", result: block, code: DDB-434, test: A_declared_index_cannot_take_a_constraints_name }
+- { id: hook.fired, owner: planner, kinds: any, when: "the model has a hook for an event the plan reaches (pre/post create, alter, load, backfill)", result: hook, risk: "as declared", test: Hooks_wrap_the_steps_of_their_event_in_the_order_written }
+- { id: view.changed, owner: planner, kinds: view, when: "the rendered view statement differs from the last one applied", result: ddl, risk: safe, test: A_changed_view_statement_alters_the_view }
+- { id: load.routine, owner: planner, kinds: "full, incremental_*", when: "the model has a rendered default load operation", result: load, risk: safe, test: A_load_step_carries_the_committed_script_and_its_parameters }
+- { id: load.backfill, owner: planner, kinds: "full, incremental_*", when: "a backfill of a named operation was requested for the model", result: load, risk: risky, test: A_requested_backfill_is_a_risky_backfill_step_of_the_named_operation }
+- { id: load.operation.missing, owner: planner, kinds: any, when: "the requested operation is not rendered for the target, or several are declared and none is the default", result: block, code: DDB-434, test: A_missing_operation_blocks_the_load }
+- { id: load.definition_changed, owner: planner, kinds: "incremental_*", when: "the query changed since the last recorded load and nobody acknowledged it", result: block, code: DDB-431, test: A_changed_incremental_query_blocks_until_acknowledged }
+- { id: load.param.missing, owner: planner, kinds: any, when: "a runtime parameter has no value", result: question, code: "Q-param", test: A_runtime_parameter_without_a_value_is_a_question }
+- { id: load.watermark.null, owner: planner, kinds: any, when: "the watermark resolver returned NULL", result: question, code: "Q-param", test: A_null_watermark_follows_the_declared_on_null }
+- { id: load.resolver.invalid, owner: planner, kinds: any, when: "a resolver did not return one row and one column", result: block, code: DDB-222, test: An_unusable_resolver_result_blocks_the_load }
+- { id: load.param.invalid, owner: planner, kinds: any, when: "a parameter value does not fit its type, or a range exceeds max_span", result: block, code: DDB-412, test: Parameter_values_are_checked_against_their_type_and_max_span }
+- { id: upstream.blocked, owner: planner, kinds: any, when: "a model it reads from is blocked or skipped", result: skip, code: DDB-433, test: Declining_adoption_blocks_the_model_and_skips_what_reads_it }
+- { id: model.cycle, owner: planner, kinds: any, when: "models depend on each other in a cycle", result: block, code: DDB-221, test: A_dependency_cycle_is_reported_and_plans_nothing }
+- { id: type.unmappable, owner: planner, kinds: any, when: "a declared type has no native type on the target", result: block, code: DDB-321, test: An_unmappable_type_blocks_only_that_model }
+- { id: def.out_of_sync, owner: command, kinds: any, when: "declared columns differ from the query's resolved output", result: refuse, code: DDB-420 }
+- { id: render.stale, owner: command, kinds: any, when: "a committed rendered file differs from a fresh render", result: refuse, code: DDB-424 }
+- { id: pair.unsupported, owner: command, kinds: any, when: "a declared model x target x operation pair has no supported rendering", result: refuse, code: DDB-317 }
+- { id: tracking.missing, owner: command, kinds: any, when: "the tracking tables are missing or have an unknown layout", result: refuse, code: DDB-505 }
+- { id: resolver.stale, owner: apply, kinds: any, when: "a resolver value at apply differs from the plan", result: refuse }
+- { id: base.stale, owner: apply, kinds: any, when: "a live hash differs from the plan's base hash", result: refuse }

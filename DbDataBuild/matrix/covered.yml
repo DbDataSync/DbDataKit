@@ -1,0 +1,91 @@
+# Nodes, functions and cast data types verified as plain SQL: seen only in spike cases that matched DuckDB on every target.
+# Anything else the linter finds is reported as DDB-305 (not covered), never assumed safe.
+# Generated from spike results with `dotnet run --project spike/DbDataBuild.Spike -- covered . <results.md>`; extend by adding a spike case.
+# Rows in constructs.yml take priority over this list.
+- { datatype: big_int, evidence: [cast_bigint] }
+- { datatype: boolean, evidence: [cast_boolean] }
+- { datatype: date, evidence: [date_literal_cast, cast_ts_to_date] }
+- { datatype: decimal, evidence: [decimal_mult, round_decimal] }
+- { datatype: double, evidence: [cast_double, floor_ceil] }
+- { datatype: int, evidence: [cast_int] }
+- { datatype: small_int, evidence: [cast_smallint] }
+- { datatype: timestamp, evidence: [cast_timestamp] }
+- { function: LEFT, evidence: [left_fn] }
+- { function: REPEAT, evidence: [repeat_fn] }
+- { datatype: text, evidence: [cast_varchar_nolen] }
+- { datatype: var_char, evidence: [cast_varchar_nolen, cast_varchar_len] }
+- { function: CURRENT_TIMESTAMP, evidence: [current_ts] }
+- { function: DATE_DIFF, evidence: [date_diff] }
+- { function: DATE_PART, evidence: [date_part_year] }
+- { function: SIGN, evidence: [sign_fn] }
+- { function: TRUNC, evidence: [trunc_fn] }
+- { function: DATE_TRUNC, evidence: [date_trunc_day] }
+- { function: LTRIM, evidence: [trim_fns] }
+- { function: NULLIF, evidence: [nullif_fn] }
+- { function: ROUND, evidence: [round_decimal] }
+- { function: RTRIM, evidence: [trim_fns] }
+- { node: abs, evidence: [abs_fn] }
+- { node: add, evidence: [arithmetic_ops] }
+- { node: alias, evidence: [cast_varchar_nolen, cast_varchar_len, unicode_literal] }
+- { node: and, evidence: [bool_and_or_not, compare_ops] }
+- { node: between, evidence: [between] }
+- { node: boolean, evidence: [bool_literal] }
+- { node: case, evidence: [case_when, case_simple] }
+- { node: cast, evidence: [cast_varchar_nolen, cast_varchar_len, decimal_mult] }
+- { node: ceil, evidence: [floor_ceil] }
+- { node: coalesce, evidence: [coalesce, ifnull] }
+- { node: column, evidence: [cast_varchar_nolen, cast_varchar_len, concat_pipes] }
+- { node: concat, evidence: [concat_pipes, concat_null] }
+- { node: count, evidence: [aggregates, group_having] }
+- { node: dense_rank, evidence: [count_over_window] }
+- { node: eq, evidence: [left_join, bool_and_or_not, cte_multi] }
+- { node: except, evidence: [except] }
+- { node: exists, evidence: [exists_subquery] }
+- { node: extract, evidence: [extract_year] }
+- { node: floor, evidence: [floor_ceil] }
+- { node: gt, evidence: [bool_predicate, case_when, bool_and_or_not] }
+- { node: gte, evidence: [compare_ops] }
+- { node: i_like, evidence: [ilike] }
+- { node: in, evidence: [in_list, not_in, in_subquery] }
+- { node: intersect, evidence: [intersect_except] }
+- { node: is_null, evidence: [is_null] }
+- { node: lag, evidence: [lag_lead] }
+- { node: lead, evidence: [lead_fn] }
+- { node: values, evidence: [unpivot_values] }
+- { node: null_safe_eq, evidence: [null_safe_eq_fn] }
+- { node: null_safe_neq, evidence: [null_safe_eq_fn] }
+- { node: n_tile, evidence: [ntile_fn] }
+- { node: percent_rank, evidence: [percent_rank_fn] }
+- { node: cume_dist, evidence: [cume_dist_fn] }
+- { node: first_value, evidence: [first_last_value_fn] }
+- { node: last_value, evidence: [first_last_value_fn] }
+- { node: literal, evidence: [unicode_literal, substr_fn, coalesce] }
+- { node: lower, evidence: [lower_upper] }
+- { node: lt, evidence: [bool_and_or_not] }
+- { node: lte, evidence: [compare_ops] }
+- { node: max, evidence: [aggregates] }
+- { node: min, evidence: [aggregates] }
+- { node: mod, evidence: [arithmetic_ops] }
+- { node: mul, evidence: [decimal_mult, arithmetic_ops] }
+- { node: neg, evidence: [unary_minus] }
+- { node: neq, evidence: [compare_ops] }
+- { node: not, evidence: [bool_and_or_not] }
+- { node: or, evidence: [bool_and_or_not, is_null] }
+- { node: paren, evidence: [bool_predicate, bool_and_or_not] }
+- { node: rank, evidence: [count_over_window] }
+- { node: select, evidence: [cast_varchar_nolen, cast_varchar_len, unicode_literal] }
+- { node: star, evidence: [ilike, limit, limit_offset] }
+- { node: str_position, evidence: [strpos_fn] }
+- { node: sub, evidence: [arithmetic_ops, abs_fn] }
+- { node: subquery, evidence: [lateral_join, subquery_from] }
+- { node: substring, evidence: [substr_fn] }
+- { node: sum, evidence: [window_sum, aggregates] }
+- { node: table, evidence: [cast_varchar_nolen, cast_varchar_len, concat_pipes] }
+- { node: trim, evidence: [trim_fns] }
+- { node: union, evidence: [union_dedupe, union_all] }
+- { node: upper, evidence: [lower_upper] }
+- { node: window_function, evidence: [row_number, window_sum, lag_lead] }
+- { node: bitwise_and, evidence: [bit_ops] }
+- { node: bitwise_or, evidence: [bit_ops] }
+- { node: bitwise_not, evidence: [bit_ops] }
+- { node: starts_with, evidence: [starts_with_op] }

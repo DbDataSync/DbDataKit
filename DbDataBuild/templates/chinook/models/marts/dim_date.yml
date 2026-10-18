@@ -1,0 +1,24 @@
+name: marts.dim_date
+kind: full
+grain:
+  - date_key
+columns:
+  - name: date_key
+    type: BIGINT
+    nullable: false
+  - name: date
+    type: DATE
+  - name: year
+    type: BIGINT
+  - name: quarter
+    type: BIGINT
+  - name: month
+    type: BIGINT
+  - name: year_month
+    type: BIGINT
+  - name: month_start
+    type: TIMESTAMP
+  - name: iso_weekday
+    type: BIGINT
+  - name: is_weekend
+    type: BOOLEAN

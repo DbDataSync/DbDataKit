@@ -1,0 +1,15 @@
+# description: marts.agg_customer_cohorts counts the customers of a cohort who bought again in later months
+# tags: marts
+cases:
+  - name: cohort by first purchase month, months since first, distinct customers
+    given:
+      staging.invoices:
+        - {invoice_id: 1, customer_id: 1, invoiced_at: "2023-01-10 10:00:00", invoice_date: 2023-01-10, billing_city: A, billing_country: B, total: 1.00}
+        - {invoice_id: 2, customer_id: 1, invoiced_at: "2023-01-20 10:00:00", invoice_date: 2023-01-20, billing_city: A, billing_country: B, total: 1.00}
+        - {invoice_id: 3, customer_id: 1, invoiced_at: "2023-03-05 10:00:00", invoice_date: 2023-03-05, billing_city: A, billing_country: B, total: 1.00}
+        - {invoice_id: 4, customer_id: 2, invoiced_at: "2023-01-15 10:00:00", invoice_date: 2023-01-15, billing_city: A, billing_country: B, total: 1.00}
+        - {invoice_id: 5, customer_id: 3, invoiced_at: "2023-03-01 10:00:00", invoice_date: 2023-03-01, billing_city: A, billing_country: B, total: 1.00}
+    expect:
+      - {cohort: 202301, months_since_first: 0, active_customers: 2}
+      - {cohort: 202301, months_since_first: 2, active_customers: 1}
+      - {cohort: 202303, months_since_first: 0, active_customers: 1}

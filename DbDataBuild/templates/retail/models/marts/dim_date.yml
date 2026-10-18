@@ -1,0 +1,16 @@
+name: marts.dim_date
+kind: full
+grain: [date_key]
+columns:
+  - {name: date_key, type: BIGINT, nullable: false}
+  - {name: date, type: DATE, nullable: false}
+  - {name: year, type: BIGINT, nullable: false}
+  - {name: quarter, type: BIGINT, nullable: false}
+  - {name: month, type: BIGINT, nullable: false}
+  - {name: year_month, type: BIGINT, nullable: false}
+  - {name: month_name, type: "VARCHAR(3)", nullable: false}
+  - {name: iso_weekday, type: BIGINT, nullable: false}
+  - {name: weekday_name, type: "VARCHAR(3)", nullable: false}
+  - {name: is_weekend, type: BOOLEAN, nullable: false}
+indexes:
+  - {name: ux_dim_date_date_key, columns: [date_key], unique: true}

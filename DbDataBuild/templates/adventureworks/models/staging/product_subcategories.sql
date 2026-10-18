@@ -1,0 +1,1 @@
+SELECT product_subcategory_id, product_category_id, name AS subcategory_name FROM production.product_subcategory

@@ -1,0 +1,26 @@
+name: staging.invoices
+kind: view
+grain:
+  - invoice_id
+columns:
+  - name: invoice_id
+    type: INTEGER
+    nullable: false
+  - name: customer_id
+    type: INTEGER
+    nullable: false
+  - name: invoiced_at
+    type: TIMESTAMP
+    nullable: false
+  - name: invoice_date
+    type: DATE
+    nullable: false
+  - name: billing_city
+    type: VARCHAR(40)
+    nullable: false
+  - name: billing_country
+    type: VARCHAR(40)
+    nullable: false
+  - name: total
+    type: DECIMAL(10, 2)
+    nullable: false

@@ -1,0 +1,8 @@
+name: staging.payments
+kind: view
+grain: [payment_id]
+columns:
+  - {name: payment_id, type: INTEGER, nullable: false}
+  - {name: order_id, type: INTEGER, nullable: false}
+  - {name: payment_method, type: "VARCHAR(20)", nullable: false}
+  - {name: amount, type: "DECIMAL(13, 2)", nullable: false}

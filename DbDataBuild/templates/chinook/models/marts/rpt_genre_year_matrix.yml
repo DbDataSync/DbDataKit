@@ -1,0 +1,16 @@
+name: marts.rpt_genre_year_matrix
+kind: full
+grain:
+  - genre_name
+columns:
+  - name: genre_name
+    type: VARCHAR
+    nullable: false
+  - name: revenue_2021
+    type: DECIMAL(38, 2)
+  - name: revenue_2022
+    type: DECIMAL(38, 2)
+  - name: revenue_2023
+    type: DECIMAL(38, 2)
+  - name: revenue_2024
+    type: DECIMAL(38, 2)

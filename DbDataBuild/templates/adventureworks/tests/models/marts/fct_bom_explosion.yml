@@ -1,0 +1,15 @@
+# description: marts.fct_bom_explosion walks the bill of materials and multiplies the quantity down the levels
+# tags: marts, critical
+cases:
+  - name: a bike made of a wheel (two spokes sets) and a frame, the wheel made of rims
+    given:
+      staging.bom:
+        - {bill_of_materials_id: 1, product_assembly_id: 1, component_id: 31, per_assembly_qty: 2.00, unit_measure_code: EA}
+        - {bill_of_materials_id: 2, product_assembly_id: 1, component_id: 32, per_assembly_qty: 1.00, unit_measure_code: EA}
+        - {bill_of_materials_id: 3, product_assembly_id: 31, component_id: 91, per_assembly_qty: 0.50, unit_measure_code: EA}
+        - {bill_of_materials_id: 4, product_assembly_id: 31, component_id: 92, per_assembly_qty: 3.00, unit_measure_code: EA}
+    expect:
+      - {finished_product_id: 1, component_id: 31, bom_level: 1, path: "1>31", quantity_per_finished: 2.00, is_leaf: false}
+      - {finished_product_id: 1, component_id: 32, bom_level: 1, path: "1>32", quantity_per_finished: 1.00, is_leaf: true}
+      - {finished_product_id: 1, component_id: 91, bom_level: 2, path: "1>31>91", quantity_per_finished: 1.00, is_leaf: true}
+      - {finished_product_id: 1, component_id: 92, bom_level: 2, path: "1>31>92", quantity_per_finished: 6.00, is_leaf: true}

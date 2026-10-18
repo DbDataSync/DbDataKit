@@ -1,0 +1,13 @@
+# description: staging.payments turns cents into dollars exactly
+# tags: staging
+cases:
+  - name: cents become dollars
+    given:
+      raw.payments:
+        - {id: 1, order_id: 10, payment_method: credit_card, amount_cents: 1999}
+        - {id: 2, order_id: 10, payment_method: coupon, amount_cents: 1}
+        - {id: 3, order_id: 11, payment_method: gift_card, amount_cents: 100000}
+    expect:
+      - {payment_id: 1, order_id: 10, payment_method: credit_card, amount: 19.99}
+      - {payment_id: 2, order_id: 10, payment_method: coupon, amount: 0.01}
+      - {payment_id: 3, order_id: 11, payment_method: gift_card, amount: 1000.00}

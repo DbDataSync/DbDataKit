@@ -1,0 +1,22 @@
+name: marts.rpt_quota_long
+kind: full
+grain:
+  - sales_person_id
+  - year
+  - quarter
+  - measure
+columns:
+  - name: sales_person_id
+    type: INTEGER
+    nullable: false
+  - name: year
+    type: BIGINT
+    nullable: false
+  - name: quarter
+    type: BIGINT
+    nullable: false
+  - name: measure
+    type: VARCHAR
+    nullable: false
+  - name: amount
+    type: DECIMAL(21, 4)

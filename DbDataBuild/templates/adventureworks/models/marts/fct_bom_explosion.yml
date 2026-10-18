@@ -1,0 +1,21 @@
+name: marts.fct_bom_explosion
+kind: full
+grain:
+  - finished_product_id
+  - path
+columns:
+  - name: finished_product_id
+    type: INTEGER
+    nullable: false
+  - name: component_id
+    type: INTEGER
+    nullable: false
+  - name: bom_level
+    type: INTEGER
+  - name: path
+    type: VARCHAR
+    nullable: false
+  - name: quantity_per_finished
+    type: DECIMAL(8, 2)
+  - name: is_leaf
+    type: BOOLEAN

@@ -1,0 +1,9 @@
+name: chinook.invoice_line
+kind: mapped
+grain: [invoice_line_id]
+columns:
+  - {name: invoice_line_id, type: INTEGER, nullable: false}
+  - {name: invoice_id, type: INTEGER, nullable: false}
+  - {name: track_id, type: INTEGER, nullable: false}
+  - {name: unit_price, type: "DECIMAL(10, 2)", nullable: false}
+  - {name: quantity, type: INTEGER, nullable: false}

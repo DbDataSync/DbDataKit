@@ -1,0 +1,12 @@
+name: shop.products
+kind: mapped
+grain: [product_id]
+columns:
+  - {name: product_id, type: INTEGER, nullable: false}
+  - {name: sku, type: "VARCHAR(20)", nullable: false}
+  - {name: product_name, type: "VARCHAR(80)", nullable: false}
+  - {name: category_code, type: "VARCHAR(10)", nullable: false}
+  - {name: unit_price, type: "DECIMAL(10, 2)", nullable: false}
+  - {name: unit_cost, type: "DECIMAL(10, 2)", nullable: false}
+  - {name: weight_grams, type: INTEGER, nullable: false}
+  - {name: active, type: BOOLEAN, nullable: false}

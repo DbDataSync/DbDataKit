@@ -1,0 +1,8 @@
+name: raw.orders
+kind: mapped
+grain: [id]
+columns:
+  - {name: id, type: INTEGER, nullable: false}
+  - {name: user_id, type: INTEGER, nullable: false}
+  - {name: order_date, type: DATE, nullable: false}
+  - {name: status, type: "VARCHAR(20)", nullable: false}

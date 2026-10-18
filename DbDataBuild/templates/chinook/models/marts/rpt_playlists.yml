@@ -1,0 +1,21 @@
+name: marts.rpt_playlists
+kind: full
+grain:
+  - playlist_id
+columns:
+  - name: playlist_id
+    type: INTEGER
+    nullable: false
+  - name: playlist_name
+    type: VARCHAR(60)
+    nullable: false
+  - name: tracks
+    type: BIGINT
+    nullable: false
+  - name: hours
+    type: DECIMAL(10, 2)
+  - name: genres
+    type: BIGINT
+    nullable: false
+  - name: common_genres
+    type: VARCHAR

@@ -1,0 +1,12 @@
+name: purchasing.purchase_order_detail
+kind: mapped
+grain: [purchase_order_id, purchase_order_detail_id]
+columns:
+  - {name: purchase_order_id, type: INTEGER, nullable: false}
+  - {name: purchase_order_detail_id, type: INTEGER, nullable: false}
+  - {name: product_id, type: INTEGER, nullable: false}
+  - {name: order_qty, type: SMALLINT, nullable: false}
+  - {name: unit_price, type: "DECIMAL(19, 4)", nullable: false}
+  - {name: received_qty, type: "DECIMAL(8, 2)", nullable: false}
+  - {name: rejected_qty, type: "DECIMAL(8, 2)", nullable: false}
+  - {name: due_date, type: DATE, nullable: false}

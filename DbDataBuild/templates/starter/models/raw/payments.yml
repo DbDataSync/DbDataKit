@@ -1,0 +1,8 @@
+name: raw.payments
+kind: mapped
+grain: [id]
+columns:
+  - {name: id, type: INTEGER, nullable: false}
+  - {name: order_id, type: INTEGER, nullable: false}
+  - {name: payment_method, type: "VARCHAR(20)", nullable: false}
+  - {name: amount_cents, type: INTEGER, nullable: false}

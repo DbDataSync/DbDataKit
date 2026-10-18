@@ -1,0 +1,7 @@
+name: staging.channels
+kind: view
+grain: [channel_code]
+columns:
+  - {name: channel_code, type: "VARCHAR(4)", nullable: false}
+  - {name: channel_name, type: "VARCHAR(30)", nullable: false}
+  - {name: channel_group, type: "VARCHAR(10)", nullable: false}

@@ -1,0 +1,13 @@
+name: marts.rpt_budget_vs_actual
+kind: full
+grain: [budget_month, region, category_code, store_id]
+columns:
+  - {name: budget_month, type: INTEGER, nullable: false}
+  - {name: region, type: "VARCHAR(20)", nullable: false}
+  - {name: category_code, type: "VARCHAR(10)", nullable: false}
+  - {name: store_id, type: INTEGER, nullable: false}
+  - {name: allocated_budget, type: "DECIMAL(18, 2)"}
+  - {name: net_sales, type: "DECIMAL(18, 2)"}
+  - {name: variance, type: "DECIMAL(18, 2)"}
+indexes:
+  - {name: ux_rpt_budget_vs_actual, columns: [budget_month, region, category_code, store_id], unique: true}

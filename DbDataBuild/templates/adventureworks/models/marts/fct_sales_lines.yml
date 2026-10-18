@@ -1,0 +1,49 @@
+name: marts.fct_sales_lines
+kind:
+  incremental_by_unique_key:
+    unique_key: [sales_order_id, sales_order_detail_id]
+grain: [sales_order_id, sales_order_detail_id]
+columns:
+  - name: sales_order_id
+    type: INTEGER
+    nullable: false
+  - name: sales_order_detail_id
+    type: INTEGER
+    nullable: false
+  - name: date_key
+    type: BIGINT
+  - name: customer_id
+    type: INTEGER
+    nullable: false
+  - name: sales_person_id
+    type: INTEGER
+  - name: territory_id
+    type: INTEGER
+    nullable: false
+  - name: product_id
+    type: INTEGER
+    nullable: false
+  - name: special_offer_id
+    type: INTEGER
+    nullable: false
+  - name: order_qty
+    type: SMALLINT
+    nullable: false
+  - name: currency_code
+    type: VARCHAR(3)
+    nullable: false
+  - name: rate_to_usd
+    type: DECIMAL(10, 4)
+    nullable: false
+  - name: gross_usd
+    type: DECIMAL(19, 4)
+  - name: discount_usd
+    type: DECIMAL(19, 4)
+  - name: revenue_usd
+    type: DECIMAL(19, 4)
+  - name: cost_usd
+    type: DECIMAL(19, 4)
+  - name: margin_usd
+    type: DECIMAL(19, 4)
+indexes:
+  - {name: ux_fct_sales_lines_sales_order_id_sales_order_detail_id, columns: [sales_order_id, sales_order_detail_id], unique: true}

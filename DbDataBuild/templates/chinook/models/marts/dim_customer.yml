@@ -1,0 +1,26 @@
+name: marts.dim_customer
+kind: full
+grain:
+  - customer_id
+columns:
+  - name: customer_id
+    type: INTEGER
+    nullable: false
+  - name: full_name
+    type: VARCHAR
+  - name: company
+    type: VARCHAR(80)
+  - name: customer_type
+    type: VARCHAR
+  - name: city
+    type: VARCHAR(40)
+    nullable: false
+  - name: state
+    type: VARCHAR(40)
+  - name: country
+    type: VARCHAR(40)
+    nullable: false
+  - name: email_domain
+    type: VARCHAR
+  - name: support_rep
+    type: VARCHAR

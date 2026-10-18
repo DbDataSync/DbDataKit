@@ -1,0 +1,8 @@
+name: ref.return_reasons
+kind: mapped
+grain: [reason_code]
+columns:
+  - {name: reason_code, type: "VARCHAR(4)", nullable: false}
+  - {name: reason_name, type: "VARCHAR(40)", nullable: false}
+  - {name: reason_group, type: "VARCHAR(20)", nullable: false}
+  - {name: is_our_fault, type: BOOLEAN, nullable: false}

@@ -1,0 +1,13 @@
+# description: marts.rpt_quota_long unpivots revenue and quota into one row per measure
+# tags: marts
+cases:
+  - name: two columns become two rows
+    given:
+      marts.rpt_sales_person_quota:
+        - {sales_person_id: 1, year: 2024, quarter: 1, sales_quota: 100.0000, revenue: 120.00, attainment: 1.2, attainment_rank: 1, percentile: 1.0, met_quota: true}
+        - {sales_person_id: 2, year: 2024, quarter: 1, sales_quota: 200.0000, revenue: 0.00, attainment: 0.0, attainment_rank: 2, percentile: 0.0, met_quota: false}
+    expect:
+      - {sales_person_id: 1, year: 2024, quarter: 1, measure: revenue, amount: 120.00}
+      - {sales_person_id: 1, year: 2024, quarter: 1, measure: sales_quota, amount: 100.00}
+      - {sales_person_id: 2, year: 2024, quarter: 1, measure: revenue, amount: 0.00}
+      - {sales_person_id: 2, year: 2024, quarter: 1, measure: sales_quota, amount: 200.00}

@@ -1,0 +1,16 @@
+# description: marts.rpt_product_revenue_spread gives the median and percentiles of a product's line revenue
+# tags: marts
+cases:
+  - name: five lines, the median is the middle one, the 90th percentile lies between the top two, the 25th percentile is a value in the data
+    given:
+      marts.fct_sales_lines:
+        - {sales_order_id: 1, sales_order_detail_id: 1, date_key: 20240101, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 1, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 10.0, discount_usd: 0.0, revenue_usd: 10.0, cost_usd: 5.0, margin_usd: 5.0}
+        - {sales_order_id: 2, sales_order_detail_id: 2, date_key: 20240101, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 1, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 20.0, discount_usd: 0.0, revenue_usd: 20.0, cost_usd: 5.0, margin_usd: 15.0}
+        - {sales_order_id: 3, sales_order_detail_id: 3, date_key: 20240101, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 1, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 30.0, discount_usd: 0.0, revenue_usd: 30.0, cost_usd: 5.0, margin_usd: 25.0}
+        - {sales_order_id: 4, sales_order_detail_id: 4, date_key: 20240101, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 1, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 40.0, discount_usd: 0.0, revenue_usd: 40.0, cost_usd: 5.0, margin_usd: 35.0}
+        - {sales_order_id: 5, sales_order_detail_id: 5, date_key: 20240101, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 1, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 100.0, discount_usd: 0.0, revenue_usd: 100.0, cost_usd: 5.0, margin_usd: 95.0}
+        - {sales_order_id: 6, sales_order_detail_id: 6, date_key: 20240101, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 2, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 7.0, discount_usd: 0.0, revenue_usd: 7.0, cost_usd: 5.0, margin_usd: 2.0}
+        - {sales_order_id: 7, sales_order_detail_id: 7, date_key: 20240101, customer_id: 1, sales_person_id: null, territory_id: 1, product_id: 2, special_offer_id: 1, order_qty: 1, currency_code: USD, rate_to_usd: 1.0, gross_usd: 9.0, discount_usd: 0.0, revenue_usd: 9.0, cost_usd: 5.0, margin_usd: 4.0}
+    expect:
+      - {product_id: 1, lines: 5, median_revenue: 30.0000, p90_revenue: 76.0000, p25_revenue: 20.0000, min_revenue: 10.0000, max_revenue: 100.0000}
+      - {product_id: 2, lines: 2, median_revenue: 8.0000, p90_revenue: 8.8000, p25_revenue: 7.0000, min_revenue: 7.0000, max_revenue: 9.0000}

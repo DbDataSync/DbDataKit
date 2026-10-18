@@ -1,0 +1,23 @@
+name: marts.rpt_customer_rfm
+kind: full
+grain:
+  - customer_id
+columns:
+  - name: customer_id
+    type: INTEGER
+    nullable: false
+  - name: recency_days
+    type: BIGINT
+  - name: orders
+    type: BIGINT
+    nullable: false
+  - name: revenue
+    type: DECIMAL(19, 2)
+  - name: r_score
+    type: BIGINT
+  - name: f_score
+    type: BIGINT
+  - name: m_score
+    type: BIGINT
+  - name: segment
+    type: VARCHAR

@@ -1,0 +1,9 @@
+name: shop.order_lines
+kind: mapped
+grain: [order_id, line_no]
+columns:
+  - {name: order_id, type: INTEGER, nullable: false}
+  - {name: line_no, type: INTEGER, nullable: false}
+  - {name: product_id, type: INTEGER, nullable: false}
+  - {name: quantity, type: INTEGER, nullable: false}
+  - {name: unit_price, type: "DECIMAL(10, 2)", nullable: false}

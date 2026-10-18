@@ -1,0 +1,14 @@
+# description: marts.customers counts and totals per customer, and keeps customers who never ordered
+# tags: marts
+cases:
+  - name: a customer with orders and a customer without
+    given:
+      staging.customers:
+        - {customer_id: 1, first_name: Ava, last_name: Adams, email: a@example.com}
+        - {customer_id: 2, first_name: Ben, last_name: Baker, email: b@example.com}
+      marts.orders:
+        - {order_id: 10, customer_id: 1, order_date: 2024-03-01, status: completed, status_group: fulfilled, credit_card_amount: 10.00, bank_transfer_amount: 0, coupon_amount: 0, gift_card_amount: 0, amount: 10.00}
+        - {order_id: 11, customer_id: 1, order_date: 2024-05-09, status: shipped, status_group: fulfilled, credit_card_amount: 0, bank_transfer_amount: 5.25, coupon_amount: 0, gift_card_amount: 0, amount: 5.25}
+    expect:
+      - {customer_id: 1, first_name: Ava, last_name: Adams, number_of_orders: 2, first_order_date: 2024-03-01, most_recent_order_date: 2024-05-09, lifetime_value: 15.25}
+      - {customer_id: 2, first_name: Ben, last_name: Baker, number_of_orders: 0, first_order_date: null, most_recent_order_date: null, lifetime_value: 0}

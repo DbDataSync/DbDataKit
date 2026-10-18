@@ -1,0 +1,15 @@
+name: marts.dim_customer
+kind: full
+grain: [customer_id]
+columns:
+  - {name: customer_id, type: INTEGER, nullable: false}
+  - {name: first_name, type: "VARCHAR(80)"}
+  - {name: last_name, type: "VARCHAR(80)"}
+  - {name: email_domain, type: "VARCHAR(100)"}
+  - {name: country_code, type: "VARCHAR(2)", nullable: false}
+  - {name: region, type: "VARCHAR(20)", nullable: false}
+  - {name: signup_date, type: DATE, nullable: false}
+  - {name: signup_month, type: BIGINT, nullable: false}
+  - {name: marketing_opt_in, type: BOOLEAN, nullable: false}
+indexes:
+  - {name: ux_dim_customer_customer_id, columns: [customer_id], unique: true}

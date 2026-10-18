@@ -1,0 +1,16 @@
+name: marts.dim_product_attributes
+kind: full
+grain:
+  - product_id
+columns:
+  - name: product_id
+    type: INTEGER
+    nullable: false
+  - name: frame_material
+    type: VARCHAR
+  - name: gears
+    type: INTEGER
+  - name: first_tag
+    type: VARCHAR
+  - name: has_attributes
+    type: BOOLEAN

@@ -1,0 +1,17 @@
+# description: staging.orders groups the raw statuses
+# tags: staging
+cases:
+  - name: every raw status lands in one group
+    given:
+      raw.orders:
+        - {id: 1, user_id: 1, order_date: 2024-01-05, status: placed}
+        - {id: 2, user_id: 1, order_date: 2024-01-06, status: shipped}
+        - {id: 3, user_id: 2, order_date: 2024-01-07, status: completed}
+        - {id: 4, user_id: 2, order_date: 2024-01-08, status: returned}
+        - {id: 5, user_id: 3, order_date: 2024-01-09, status: return_pending}
+    expect:
+      - {order_id: 1, customer_id: 1, order_date: 2024-01-05, status: placed, status_group: open}
+      - {order_id: 2, customer_id: 1, order_date: 2024-01-06, status: shipped, status_group: fulfilled}
+      - {order_id: 3, customer_id: 2, order_date: 2024-01-07, status: completed, status_group: fulfilled}
+      - {order_id: 4, customer_id: 2, order_date: 2024-01-08, status: returned, status_group: returned}
+      - {order_id: 5, customer_id: 3, order_date: 2024-01-09, status: return_pending, status_group: returned}

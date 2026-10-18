@@ -1,0 +1,22 @@
+name: native
+# Rebuilds the polyglot library from source and publishes it as the native-<pin> release that scripts/fetch-native.sh downloads.
+# Run it by hand after changing PIN in scripts/build-polyglot.sh (and PolyglotNative.PinnedCommit).
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain for the Windows DLL
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q gcc-mingw-w64-x86-64
+          rustup target add x86_64-pc-windows-gnu
+      - run: scripts/build-polyglot.sh
+      - run: TARGET_RID=win-x64 scripts/build-polyglot.sh
+      - run: scripts/publish-native.sh
+        env:
+          GH_TOKEN: ${{ github.token }}

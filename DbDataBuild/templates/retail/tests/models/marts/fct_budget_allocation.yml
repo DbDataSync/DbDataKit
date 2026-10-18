@@ -1,0 +1,14 @@
+# description: marts.fct_budget_allocation allocates a regional budget to its shops by floor area
+# tags: marts, critical
+cases:
+  - name: the shops of a region add up to the budget, and shops without floor area get nothing
+    given:
+      staging.budgets:
+        - {budget_month: 202403, region: Europe, category_code: TOYS, budget_amount: 100.00}
+      marts.dim_store:
+        - {store_id: 1, store_name: A, country_code: DE, region: Europe, channel_code: STOR, channel_group: retail, floor_area_m2: 1000, size_band: small, opened_date: 2020-01-01}
+        - {store_id: 2, store_name: B, country_code: FR, region: Europe, channel_code: STOR, channel_group: retail, floor_area_m2: 2000, size_band: medium, opened_date: 2020-01-01}
+        - {store_id: 3, store_name: C, country_code: FR, region: Europe, channel_code: WEB, channel_group: online, floor_area_m2: null, size_band: none, opened_date: 2020-01-01}
+    expect:
+      - {budget_month: 202403, region: Europe, category_code: TOYS, store_id: 1, allocated_budget: 33.33}
+      - {budget_month: 202403, region: Europe, category_code: TOYS, store_id: 2, allocated_budget: 66.67}

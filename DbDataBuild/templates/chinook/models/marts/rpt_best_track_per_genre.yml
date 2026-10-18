@@ -1,0 +1,16 @@
+name: marts.rpt_best_track_per_genre
+kind: full
+grain:
+  - genre_name
+columns:
+  - name: genre_name
+    type: VARCHAR
+    nullable: false
+  - name: track_id
+    type: INTEGER
+    nullable: false
+  - name: track_name
+    type: VARCHAR(200)
+    nullable: false
+  - name: units
+    type: BIGINT

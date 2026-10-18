@@ -1,0 +1,13 @@
+81 cases compared
+  sqlserver  original MATCH  63   lowered MATCH  71
+      IMPROVED  date_trunc_month: MISMATCH -> MATCH
+      IMPROVED  date_add_interval: MISMATCH -> MATCH
+      IMPROVED  group_by_ordinal: EXEC_ERR -> MATCH
+      IMPROVED  group_by_all: SYNTAX_ERR -> MATCH
+      IMPROVED  avg_int: MISMATCH -> MATCH
+      IMPROVED  avg_decimal: MISMATCH -> MATCH
+      IMPROVED  left_join_using: SYNTAX_ERR -> MATCH
+      IMPROVED  natural_join: SYNTAX_ERR -> MATCH
+  postgres   original MATCH  74   lowered MATCH  76
+      IMPROVED  group_by_all: EXEC_ERR -> MATCH
+      IMPROVED  left_join_using: MISMATCH -> MATCH

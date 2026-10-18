@@ -1,0 +1,13 @@
+# description: marts.dim_employee walks the management chain from the top
+# tags: marts
+cases:
+  - name: every employee gets a level and the path of names above them
+    given:
+      staging.employees:
+        - {employee_id: 1, full_name: Ada Boss, title: General Manager, reports_to: null, hire_date: 2002-01-01, city: Calgary, country: Canada, email: a@x}
+        - {employee_id: 2, full_name: Ben Lead, title: Manager, reports_to: 1, hire_date: 2003-01-01, city: Calgary, country: Canada, email: b@x}
+        - {employee_id: 3, full_name: Cy Agent, title: Agent, reports_to: 2, hire_date: 2004-01-01, city: Calgary, country: Canada, email: c@x}
+    expect:
+      - {employee_id: 1, full_name: Ada Boss, title: General Manager, reports_to: null, level: 1, path: Ada Boss}
+      - {employee_id: 2, full_name: Ben Lead, title: Manager, reports_to: 1, level: 2, path: "Ada Boss > Ben Lead"}
+      - {employee_id: 3, full_name: Cy Agent, title: Agent, reports_to: 2, level: 3, path: "Ada Boss > Ben Lead > Cy Agent"}

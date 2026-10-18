@@ -1,0 +1,8 @@
+name: staging.customers
+kind: view
+grain: [customer_id]
+columns:
+  - {name: customer_id, type: INTEGER, nullable: false}
+  - {name: first_name, type: "VARCHAR(40)"}
+  - {name: last_name, type: "VARCHAR(40)"}
+  - {name: email, type: "VARCHAR(100)"}

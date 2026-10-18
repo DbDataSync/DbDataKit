@@ -1,0 +1,26 @@
+# description: marts.fct_sales_lines allocates an order's discount and shipping fee to its lines, to the cent
+# tags: marts, critical
+cases:
+  - name: the allocated amounts add up to the order's discount and shipping, and the last line takes the remainder
+    given:
+      staging.orders:
+        - {order_id: 1, customer_id: 1, store_id: 1, order_ts: "2024-03-05 10:30:00", order_date: 2024-03-05, order_month: 202403, status: open, discount_amount: 1.00, shipping_fee: 5.00, used_coupon: true}
+      staging.order_lines:
+        - {order_id: 1, line_no: 1, product_id: 10, quantity: 1, unit_price: 10.00, line_amount: 10.00}
+        - {order_id: 1, line_no: 2, product_id: 10, quantity: 1, unit_price: 10.00, line_amount: 10.00}
+        - {order_id: 1, line_no: 3, product_id: 10, quantity: 1, unit_price: 10.00, line_amount: 10.00}
+      staging.products:
+        - {product_id: 10, sku: A-1, product_name: Thing, category_code: TOYS, unit_price: 10.00, unit_cost: 4.00, weight_grams: 100, weight_kg: 0.100, active: true}
+    expect:
+      - {order_id: 1, line_no: 1, date_key: 20240305, customer_id: 1, product_id: 10, store_id: 1, quantity: 1, gross_amount: 10.00, allocated_discount: 0.33, allocated_shipping: 1.66, net_amount: 9.67, margin_amount: 5.67}
+      - {order_id: 1, line_no: 2, date_key: 20240305, customer_id: 1, product_id: 10, store_id: 1, quantity: 1, gross_amount: 10.00, allocated_discount: 0.33, allocated_shipping: 1.66, net_amount: 9.67, margin_amount: 5.67}
+      - {order_id: 1, line_no: 3, date_key: 20240305, customer_id: 1, product_id: 10, store_id: 1, quantity: 1, gross_amount: 10.00, allocated_discount: 0.34, allocated_shipping: 1.68, net_amount: 9.66, margin_amount: 5.66}
+  - name: cancelled orders have no sales
+    given:
+      staging.orders:
+        - {order_id: 2, customer_id: 1, store_id: 1, order_ts: "2024-03-05 10:30:00", order_date: 2024-03-05, order_month: 202403, status: cancelled, discount_amount: 0, shipping_fee: 0, used_coupon: false}
+      staging.order_lines:
+        - {order_id: 2, line_no: 1, product_id: 10, quantity: 1, unit_price: 10.00, line_amount: 10.00}
+      staging.products:
+        - {product_id: 10, sku: A-1, product_name: Thing, category_code: TOYS, unit_price: 10.00, unit_cost: 4.00, weight_grams: 100, weight_kg: 0.100, active: true}
+    expect: []

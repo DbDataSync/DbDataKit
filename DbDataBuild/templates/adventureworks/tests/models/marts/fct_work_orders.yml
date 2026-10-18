@@ -1,0 +1,13 @@
+# description: marts.fct_work_orders gives the scrap rate and says whether an order was on time, late or is still in progress (greatest() skips the NULL of an order with no end, so its days late are 0)
+# tags: marts
+cases:
+  - name: on time, late by two days, and still in progress
+    given:
+      staging.work_orders:
+        - {work_order_id: 1, product_id: 1, order_qty: 100, scrapped_qty: 5, start_date: 2024-01-01, end_date: 2024-01-10, due_date: 2024-01-12}
+        - {work_order_id: 2, product_id: 1, order_qty: 40, scrapped_qty: 0, start_date: 2024-01-01, end_date: 2024-01-14, due_date: 2024-01-12}
+        - {work_order_id: 3, product_id: 1, order_qty: 8, scrapped_qty: 1, start_date: 2024-02-01, end_date: null, due_date: 2024-02-20}
+    expect:
+      - {work_order_id: 1, product_id: 1, order_qty: 100, scrapped_qty: 5, scrap_rate: 0.0500, start_date: 2024-01-01, end_date: 2024-01-10, due_date: 2024-01-12, days_to_complete: 9, days_late: 0, delivery: on time}
+      - {work_order_id: 2, product_id: 1, order_qty: 40, scrapped_qty: 0, scrap_rate: 0.0000, start_date: 2024-01-01, end_date: 2024-01-14, due_date: 2024-01-12, days_to_complete: 13, days_late: 2, delivery: late}
+      - {work_order_id: 3, product_id: 1, order_qty: 8, scrapped_qty: 1, scrap_rate: 0.1250, start_date: 2024-02-01, end_date: null, due_date: 2024-02-20, days_to_complete: null, days_late: 0, delivery: in progress}

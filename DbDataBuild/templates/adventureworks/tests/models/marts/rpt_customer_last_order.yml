@@ -1,0 +1,13 @@
+# description: marts.rpt_customer_last_order keeps the latest order of every customer, the higher order number when two share a day
+# tags: marts
+cases:
+  - name: the latest order per customer
+    given:
+      staging.orders:
+        - {sales_order_id: 1, order_date: 2024-01-05, due_date: 2024-01-17, ship_date: 2024-01-08, status: 5, status_name: shipped, is_online: true, customer_id: 1, sales_person_id: null, territory_id: 1, currency_code: USD, sub_total: 10.0000, tax_amt: 0.0000, freight: 0.0000, total_due: 10.0000}
+        - {sales_order_id: 2, order_date: 2024-03-05, due_date: 2024-03-17, ship_date: 2024-03-08, status: 5, status_name: shipped, is_online: true, customer_id: 1, sales_person_id: null, territory_id: 1, currency_code: USD, sub_total: 20.0000, tax_amt: 0.0000, freight: 0.0000, total_due: 20.0000}
+        - {sales_order_id: 3, order_date: 2024-03-05, due_date: 2024-03-17, ship_date: null, status: 3, status_name: backordered, is_online: true, customer_id: 1, sales_person_id: null, territory_id: 1, currency_code: USD, sub_total: 30.0000, tax_amt: 0.0000, freight: 0.0000, total_due: 30.0000}
+        - {sales_order_id: 4, order_date: 2023-12-01, due_date: 2023-12-13, ship_date: 2023-12-04, status: 5, status_name: shipped, is_online: false, customer_id: 2, sales_person_id: 3, territory_id: 1, currency_code: USD, sub_total: 40.0000, tax_amt: 0.0000, freight: 0.0000, total_due: 40.0000}
+    expect:
+      - {customer_id: 1, sales_order_id: 3, order_date: 2024-03-05, status_name: backordered, total_due: 30.0000}
+      - {customer_id: 2, sales_order_id: 4, order_date: 2023-12-01, status_name: shipped, total_due: 40.0000}

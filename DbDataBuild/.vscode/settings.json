@@ -1,0 +1,7 @@
+{
+  "yaml.schemas": {
+    "schemas/model.schema.json": "models/**/*.yml",
+    "schemas/config.schema.json": "dbdatabuild.yml",
+    "schemas/answers.schema.json": ["answers.yml", "*-answers.yml", "plans/**/answers*.yml"]
+  }
+}

@@ -1,0 +1,15 @@
+name: staging.sales_quotas
+kind: view
+grain:
+  - sales_person_id
+  - quota_date
+columns:
+  - name: sales_person_id
+    type: INTEGER
+    nullable: false
+  - name: quota_date
+    type: DATE
+    nullable: false
+  - name: sales_quota
+    type: DECIMAL(19, 4)
+    nullable: false

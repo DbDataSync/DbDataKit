@@ -1,0 +1,15 @@
+name: marts.fct_daily
+kind:
+  incremental_by_time_range:
+    time_column: order_date
+    lookback: 3 days
+grain: [order_date, created_at]
+columns:
+  - name: order_date
+    type: DATE
+    nullable: false
+  - name: created_at
+    type: TIMESTAMP
+  - name: "n"
+    type: BIGINT
+    nullable: false

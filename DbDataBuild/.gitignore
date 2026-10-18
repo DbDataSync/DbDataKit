@@ -1,0 +1,10 @@
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+.build/
+native/
+.dbdatabuild/
+publish/
+__pycache__/

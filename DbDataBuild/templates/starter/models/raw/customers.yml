@@ -1,0 +1,8 @@
+name: raw.customers
+kind: mapped
+grain: [id]
+columns:
+  - {name: id, type: INTEGER, nullable: false}
+  - {name: first_name, type: "VARCHAR(40)"}
+  - {name: last_name, type: "VARCHAR(40)"}
+  - {name: email, type: "VARCHAR(100)"}

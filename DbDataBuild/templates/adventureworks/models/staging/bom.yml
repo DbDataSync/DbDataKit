@@ -1,0 +1,20 @@
+name: staging.bom
+kind: view
+grain:
+  - bill_of_materials_id
+columns:
+  - name: bill_of_materials_id
+    type: INTEGER
+    nullable: false
+  - name: product_assembly_id
+    type: INTEGER
+    nullable: false
+  - name: component_id
+    type: INTEGER
+    nullable: false
+  - name: per_assembly_qty
+    type: DECIMAL(8, 2)
+    nullable: false
+  - name: unit_measure_code
+    type: VARCHAR(3)
+    nullable: false

@@ -1,0 +1,22 @@
+name: marts.agg_genre_revenue
+kind: full
+grain:
+  - year
+  - genre_name
+columns:
+  - name: year
+    type: BIGINT
+    nullable: false
+  - name: genre_name
+    type: VARCHAR
+    nullable: false
+  - name: revenue
+    type: DECIMAL(18, 2)
+  - name: units
+    type: BIGINT
+  - name: share_of_year
+    type: DECIMAL(9, 4)
+  - name: revenue_rank
+    type: BIGINT
+  - name: revenue_to_date
+    type: DECIMAL(18, 2)

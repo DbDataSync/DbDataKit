@@ -1,0 +1,28 @@
+name: staging.purchase_orders
+kind: view
+grain:
+  - purchase_order_id
+columns:
+  - name: purchase_order_id
+    type: INTEGER
+    nullable: false
+  - name: vendor_id
+    type: INTEGER
+    nullable: false
+  - name: order_date
+    type: DATE
+    nullable: false
+  - name: ship_date
+    type: DATE
+  - name: status
+    type: SMALLINT
+    nullable: false
+  - name: sub_total
+    type: DECIMAL(19, 4)
+    nullable: false
+  - name: tax_amt
+    type: DECIMAL(19, 4)
+    nullable: false
+  - name: freight
+    type: DECIMAL(19, 4)
+    nullable: false

@@ -1,0 +1,21 @@
+name: marts.rpt_sales_by_manager
+kind: full
+grain:
+  - employee_id
+columns:
+  - name: employee_id
+    type: INTEGER
+    nullable: false
+  - name: full_name
+    type: VARCHAR
+  - name: title
+    type: VARCHAR
+    nullable: false
+  - name: level
+    type: INTEGER
+  - name: own_revenue
+    type: DECIMAL(18, 2)
+    nullable: false
+  - name: team_revenue
+    type: DECIMAL(18, 2)
+    nullable: false

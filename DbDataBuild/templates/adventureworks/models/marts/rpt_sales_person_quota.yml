@@ -1,0 +1,30 @@
+name: marts.rpt_sales_person_quota
+kind: full
+grain:
+  - sales_person_id
+  - year
+  - quarter
+columns:
+  - name: sales_person_id
+    type: INTEGER
+    nullable: false
+  - name: year
+    type: BIGINT
+    nullable: false
+  - name: quarter
+    type: BIGINT
+    nullable: false
+  - name: sales_quota
+    type: DECIMAL(19, 4)
+    nullable: false
+  - name: revenue
+    type: DECIMAL(19, 2)
+    nullable: false
+  - name: attainment
+    type: DECIMAL(9, 4)
+  - name: attainment_rank
+    type: BIGINT
+  - name: percentile
+    type: DECIMAL(9, 4)
+  - name: met_quota
+    type: BOOLEAN

@@ -1,0 +1,14 @@
+# description: staging.employees takes the user name out of the login (what is after the backslash) and writes the codes as words
+# tags: staging
+cases:
+  - name: domain and name, marital status and gender
+    given:
+      humanresources.employee:
+        - {employee_id: 1, login_id: 'adventure-works\alex1', job_title: Buyer, birth_date: 1980-02-03, marital_status: M, gender: F, hire_date: 2015-01-01, salaried_flag: true, vacation_hours: 10, sick_leave_hours: 5, current_flag: true}
+        - {employee_id: 2, login_id: 'adventure-works\blake2', job_title: Buyer, birth_date: 1980-02-03, marital_status: S, gender: M, hire_date: 2015-01-01, salaried_flag: false, vacation_hours: 10, sick_leave_hours: 5, current_flag: false}
+        - {employee_id: 3, login_id: 'adventure-works\casey3', job_title: Buyer, birth_date: 1980-02-03, marital_status: X, gender: X, hire_date: 2015-01-01, salaried_flag: false, vacation_hours: 10, sick_leave_hours: 5, current_flag: true}
+    assert: >
+      SELECT employee_id FROM result WHERE NOT (
+           (employee_id = 1 AND user_name = 'alex1' AND marital_status = 'married' AND gender = 'female')
+        OR (employee_id = 2 AND user_name = 'blake2' AND marital_status = 'single' AND gender = 'male')
+        OR (employee_id = 3 AND user_name = 'casey3' AND marital_status = 'unknown' AND gender = 'unknown'))

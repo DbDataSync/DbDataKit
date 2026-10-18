@@ -1,0 +1,11 @@
+name: marts.fct_budget_allocation
+kind: full
+grain: [budget_month, region, category_code, store_id]
+columns:
+  - {name: budget_month, type: INTEGER, nullable: false}
+  - {name: region, type: "VARCHAR(20)", nullable: false}
+  - {name: category_code, type: "VARCHAR(10)", nullable: false}
+  - {name: store_id, type: INTEGER, nullable: false}
+  - {name: allocated_budget, type: "DECIMAL(18, 2)"}
+indexes:
+  - {name: ux_fct_budget_allocation, columns: [budget_month, region, category_code, store_id], unique: true}

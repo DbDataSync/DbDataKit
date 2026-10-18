@@ -1,0 +1,12 @@
+# description: marts.rpt_genre_year_matrix pivots the years of the genre revenue into columns
+# tags: marts
+cases:
+  - name: a column per year, NULL for a year with no revenue
+    given:
+      marts.agg_genre_revenue:
+        - {year: 2021, genre_name: Rock, revenue: 10.00, units: 10, share_of_year: 1.0, revenue_rank: 1, revenue_to_date: 10.00}
+        - {year: 2022, genre_name: Rock, revenue: 15.50, units: 15, share_of_year: 0.5, revenue_rank: 1, revenue_to_date: 25.50}
+        - {year: 2022, genre_name: Jazz, revenue: 15.50, units: 15, share_of_year: 0.5, revenue_rank: 2, revenue_to_date: 15.50}
+    expect:
+      - {genre_name: Rock, revenue_2021: 10.00, revenue_2022: 15.50, revenue_2023: null, revenue_2024: null}
+      - {genre_name: Jazz, revenue_2021: null, revenue_2022: 15.50, revenue_2023: null, revenue_2024: null}

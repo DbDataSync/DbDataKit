@@ -1,0 +1,6 @@
+name: chinook.artist
+kind: mapped
+grain: [artist_id]
+columns:
+  - {name: artist_id, type: INTEGER, nullable: false}
+  - {name: name, type: "VARCHAR(120)", nullable: false}

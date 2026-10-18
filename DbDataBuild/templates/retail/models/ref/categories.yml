@@ -1,0 +1,7 @@
+name: ref.categories
+kind: mapped
+grain: [category_code]
+columns:
+  - {name: category_code, type: "VARCHAR(10)", nullable: false}
+  - {name: category_name, type: "VARCHAR(40)", nullable: false}
+  - {name: department, type: "VARCHAR(20)", nullable: false}

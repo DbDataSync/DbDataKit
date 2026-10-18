@@ -1,0 +1,16 @@
+# description: marts.rpt_best_track_per_genre keeps one track per genre, the lower track number when two sold the same
+# tags: marts
+cases:
+  - name: the best seller of each genre, ties to the lower track number
+    given:
+      marts.dim_track:
+        - {track_id: 1, track_name: A, album_title: X, artist_name: B, genre_name: Rock, media_type_name: MPEG, composer: null, length_seconds: 100, length_text: "01:40", length_band: short, size_mb: 1.0, unit_price: 0.99}
+        - {track_id: 2, track_name: B, album_title: X, artist_name: B, genre_name: Rock, media_type_name: MPEG, composer: null, length_seconds: 100, length_text: "01:40", length_band: short, size_mb: 1.0, unit_price: 0.99}
+        - {track_id: 3, track_name: C, album_title: X, artist_name: B, genre_name: Jazz, media_type_name: MPEG, composer: null, length_seconds: 100, length_text: "01:40", length_band: short, size_mb: 1.0, unit_price: 0.99}
+      marts.fct_invoice_lines:
+        - {invoice_line_id: 1, invoice_id: 1, date_key: 20240101, customer_id: 1, track_id: 2, quantity: 2, unit_price: 0.99, line_amount: 1.98}
+        - {invoice_line_id: 2, invoice_id: 1, date_key: 20240101, customer_id: 1, track_id: 1, quantity: 2, unit_price: 0.99, line_amount: 1.98}
+        - {invoice_line_id: 3, invoice_id: 2, date_key: 20240101, customer_id: 1, track_id: 3, quantity: 1, unit_price: 0.99, line_amount: 0.99}
+    expect:
+      - {genre_name: Rock, track_id: 1, track_name: A, units: 2}
+      - {genre_name: Jazz, track_id: 3, track_name: C, units: 1}

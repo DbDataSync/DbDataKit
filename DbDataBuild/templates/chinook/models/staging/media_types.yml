@@ -1,0 +1,11 @@
+name: staging.media_types
+kind: view
+grain:
+  - media_type_id
+columns:
+  - name: media_type_id
+    type: INTEGER
+    nullable: false
+  - name: media_type_name
+    type: VARCHAR(40)
+    nullable: false

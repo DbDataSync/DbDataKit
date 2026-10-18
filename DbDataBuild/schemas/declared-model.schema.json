@@ -1,0 +1,453 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "declared-model.schema.json",
+  "title": "DbDataBuild mapped or native model",
+  "description": "A mapped model: the declaration of a table that exists and that the tool does not build (models/<schema name>/<table>.yml with `kind: mapped` and no .sql). Models refer to it by plain table name, and `dbdatabuild project model update` builds empty DuckDB tables from it. `indexes` and `foreign_keys` are what the table has, as exported by `dbdatabuild project import`; the tool reads them (metadata, advice) and never creates them. In an editor this applies to a file that says `kind: mapped` itself (model.schema.json hands such files to this schema); a file that gets its kind from a folder's _dbdatabuild.yml is read as a model definition. A **native** model (`kind: {native: {access: select, query: ...}}`, or the text in a `.native.sql` file beside the definition) is a table the engine computes from its own query (a table function, an engine-native select); it is bound by queries from its declared columns and inlined into the queries that read it, on its one connection.",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^(connections|kind|tags|properties)[=+-]$": {
+      "description": "A suffix on a setting that inherits from the project files above: `key=` replaces what was inherited, `key-` removes the listed items, `key+` merges (the default)."
+    }
+  },
+  "required": [
+    "name",
+    "kind",
+    "columns"
+  ],
+  "properties": {
+    "name": {
+      "description": "Table name with its schema name (`staging.orders`). Must equal the path under models/ with '/' replaced by '.' (models/staging/orders.yml is staging.orders).",
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "description": "`mapped`: a table that exists (a plain value, since it has no settings). `{native: {access: select, query: ...}}`: a table the engine computes from its own text (`query` may be left out when a `.native.sql` file sits beside the definition; then `kind: native` alone is enough).",
+      "oneOf": [
+        {
+          "title": "mapped",
+          "const": "mapped"
+        },
+        {
+          "title": "mapped (with an empty mapping)",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mapped"
+          ],
+          "properties": {
+            "mapped": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {}
+            }
+          }
+        },
+        {
+          "title": "native (text in a .native.sql file)",
+          "const": "native"
+        },
+        {
+          "title": "native",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "native"
+          ],
+          "properties": {
+            "native": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "access": {
+                  "description": "`select`: a query can contain it (it is inlined). `command`: a procedure call that returns rows; it can only be run.",
+                  "enum": [
+                    "select",
+                    "command"
+                  ]
+                },
+                "query": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "connections": {
+      "description": "The connections the table exists on. Without it, the project's default connections. A list adds to what the project files above the model give; write `connections=` to replace it.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+      }
+    },
+    "grain": {
+      "description": "Columns that uniquely identify a row. Optional; used to propose grain candidates for models built on this table.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "columns": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "type"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "description": "A SQL type written as a plain string, for example `BIGINT` or `DECIMAL(14, 2)`.",
+            "type": "string",
+            "minLength": 1
+          },
+          "nullable": {
+            "description": "Defaults to true.",
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "enum": [
+                  "true",
+                  "false"
+                ]
+              }
+            ]
+          },
+          "collation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "trimmed": {
+            "description": "Declared: no value of this column ends in a space, so it compares the same on every engine. `check` counts the rows that break it.",
+            "type": "boolean"
+          },
+          "title": {
+            "description": "A short display name, one line, at most 200 characters. Never inherited.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[^\\n]*$"
+          },
+          "description": {
+            "description": "Free text, at most 4000 characters. Never inherited.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "tags": {
+            "description": "Labels: words of letters, digits, `_`, `-`, `.` and `:`, at most 128 characters each.",
+            "type": "array",
+            "uniqueItems": true,
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:\\-]*$"
+            }
+          },
+          "properties": {
+            "description": "Free key-value data. A value is text, a number or true or false (a number written as plain digits is a number, text in quotes is text); keys are at most 128 characters, values at most 4000.",
+            "type": "object",
+            "propertyNames": {
+              "maxLength": 128,
+              "pattern": "^[A-Za-z_]([A-Za-z0-9_.:\\-]*[A-Za-z0-9_.:])?$"
+            },
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "maxLength": 4000
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "indexes": {
+      "description": "The indexes the table has, as exported by `import`. The tool reads them and never creates them; the index that backs the primary key is the grain, not listed here.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "columns"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "columns": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "unique": {
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "enum": [
+                  "true",
+                  "false"
+                ]
+              }
+            ]
+          },
+          "include": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "title": {
+            "description": "A short display name, one line, at most 200 characters. Never inherited.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[^\\n]*$"
+          },
+          "description": {
+            "description": "Free text, at most 4000 characters. Never inherited.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "tags": {
+            "description": "Labels: words of letters, digits, `_`, `-`, `.` and `:`, at most 128 characters each.",
+            "type": "array",
+            "uniqueItems": true,
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:\\-]*$"
+            }
+          },
+          "properties": {
+            "description": "Free key-value data. A value is text, a number or true or false (a number written as plain digits is a number, text in quotes is text); keys are at most 128 characters, values at most 4000.",
+            "type": "object",
+            "propertyNames": {
+              "maxLength": 128,
+              "pattern": "^[A-Za-z_]([A-Za-z0-9_.:\\-]*[A-Za-z0-9_.:])?$"
+            },
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "maxLength": 4000
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "foreign_keys": {
+      "description": "The foreign keys of the table, as exported by `import`.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "columns",
+          "references"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "columns": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "references": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "table",
+              "columns"
+            ],
+            "properties": {
+              "table": {
+                "description": "schema_name.table_name",
+                "type": "string",
+                "minLength": 1
+              },
+              "columns": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "reads": {
+      "description": "Native models only: the tables the native text reads, so it takes part in the dependency graph.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "tags": {
+      "description": "Labels: words of letters, digits, `_`, `-`, `.` and `:`, at most 128 characters each. Lists append across the project files above (a folder's `defaults:`); `tags=` replaces and `tags-` removes. `tag:<name>` in a model selector selects by them.",
+      "type": "array",
+      "uniqueItems": true,
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:\\-]*$"
+      }
+    },
+    "track_definition": {
+      "description": "Native models only: the routines (`schema_name.object_name`; on PostgreSQL an overloaded function with its argument types, `public.fn(date)`) whose definitions the tool hashes at each apply and compares at each plan, so a change made in the database is reported even though no file changed.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_$]*(\\.[A-Za-z_][A-Za-z0-9_$]*){0,2}(\\([A-Za-z0-9_ ,\\[\\]]*\\))?$"
+      }
+    },
+    "parameters": {
+      "description": "Native models only: the model's own parameters, referenced as `${model.name}` in its text.",
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9_]*$": {
+          "$ref": "#/$defs/parameterValue"
+        }
+      }
+    },
+    "title": {
+      "description": "A short display name, one line, at most 200 characters. Never inherited.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[^\\n]*$"
+    },
+    "description": {
+      "description": "Free text, at most 4000 characters. Never inherited.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "properties": {
+      "description": "Free key-value data. A value is text, a number or true or false (a number written as plain digits is a number, text in quotes is text); keys are at most 128 characters, values at most 4000. Mappings merge by key across the project files above (a folder's `defaults:`), the nearest winning; `properties=` replaces and `properties-: [key]` removes keys. `property:key=value` in a model selector selects by them.",
+      "type": "object",
+      "propertyNames": {
+        "maxLength": 128,
+        "pattern": "^[A-Za-z_]([A-Za-z0-9_.:\\-]*[A-Za-z0-9_.:])?$"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "maxLength": 4000
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "parameterValue": {
+      "description": "A single value (text), or `{type, value}` for a typed one. The type matters where the value reaches a query.",
+      "oneOf": [
+        {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "VARCHAR",
+                "BIGINT",
+                "INTEGER",
+                "SMALLINT",
+                "DATE",
+                "TIMESTAMP",
+                "NAME"
+              ]
+            },
+            "value": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

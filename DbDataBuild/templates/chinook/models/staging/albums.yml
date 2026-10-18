@@ -1,0 +1,14 @@
+name: staging.albums
+kind: view
+grain:
+  - album_id
+columns:
+  - name: album_id
+    type: INTEGER
+    nullable: false
+  - name: album_title
+    type: VARCHAR(160)
+    nullable: false
+  - name: artist_id
+    type: INTEGER
+    nullable: false

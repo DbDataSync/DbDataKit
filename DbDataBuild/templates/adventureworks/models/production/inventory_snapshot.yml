@@ -1,0 +1,7 @@
+name: production.inventory_snapshot
+kind: mapped
+grain: [snapshot_date, product_id]
+columns:
+  - {name: snapshot_date, type: DATE, nullable: false}
+  - {name: product_id, type: INTEGER, nullable: false}
+  - {name: quantity, type: INTEGER, nullable: false}

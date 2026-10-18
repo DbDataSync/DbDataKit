@@ -1,0 +1,24 @@
+name: marts.dim_product_history
+kind: full
+grain:
+  - product_id
+  - valid_from
+columns:
+  - name: product_id
+    type: INTEGER
+    nullable: false
+  - name: valid_from
+    type: DATE
+    nullable: false
+  - name: valid_to
+    type: DATE
+  - name: standard_cost
+    type: DECIMAL(19, 4)
+    nullable: false
+  - name: list_price
+    type: DECIMAL(19, 4)
+    nullable: false
+  - name: margin
+    type: DECIMAL(19, 4)
+  - name: is_current
+    type: BOOLEAN

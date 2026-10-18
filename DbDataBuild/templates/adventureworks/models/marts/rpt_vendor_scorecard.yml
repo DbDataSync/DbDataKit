@@ -1,0 +1,30 @@
+name: marts.rpt_vendor_scorecard
+kind: full
+grain:
+  - vendor_id
+columns:
+  - name: vendor_id
+    type: INTEGER
+    nullable: false
+  - name: vendor_name
+    type: VARCHAR(60)
+    nullable: false
+  - name: credit_rating
+    type: SMALLINT
+    nullable: false
+  - name: is_preferred
+    type: BOOLEAN
+    nullable: false
+  - name: lines
+    type: BIGINT
+    nullable: false
+  - name: spend
+    type: DECIMAL(19, 2)
+  - name: on_time_percent
+    type: DECIMAL(5, 1)
+  - name: average_lead_days
+    type: DECIMAL(9, 1)
+  - name: rejected_units
+    type: DECIMAL(12, 2)
+  - name: spend_rank
+    type: BIGINT

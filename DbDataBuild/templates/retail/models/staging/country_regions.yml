@@ -1,0 +1,8 @@
+name: staging.country_regions
+kind: view
+grain: [country_code]
+columns:
+  - {name: country_code, type: "VARCHAR(2)", nullable: false}
+  - {name: country_name, type: "VARCHAR(40)", nullable: false}
+  - {name: region, type: "VARCHAR(20)", nullable: false}
+  - {name: currency, type: "VARCHAR(3)", nullable: false}
