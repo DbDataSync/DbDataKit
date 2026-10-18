@@ -416,3 +416,22 @@ a new mapping point in 90s across ~700 attempts. (Caveat: `enabled` counts all o
 `DiagnoseAsync` now also lists the other sessions in the test's database (`id:program:status`), so the next occurrence
 shows who, if anyone, is there. Re-enable only with CI evidence: for example a `workflow_dispatch` job that runs just this class
 repeatedly against CI's own SQL Server container (local runs have never predicted CI here).
+
+## 2026-10-18: resolved by not using CDC to test the writer — the tests are rewritten
+
+Both tests asserted `Scd2Writer`'s behaviour (a key changed more than once between reads becomes ordered versions, deletes included,
+no key collision), but they obtained their input by driving a real SQL Server CDC capture and waiting for it to map two commits to
+two distinct times. That capture machinery is what kept stalling (about eight fixes, each falsified, the last stall with the capture
+job already dropped and no scan error), and it has nothing to do with the writer: `Scd2Writer` consumes the ordering value and the
+change time, not CDC.
+
+`Scd2CdcGuaranteedDeliveryIntegrationTests` is now `Scd2OrderedChangesIntegrationTests` and feeds `BatchInsertStagingProvider` →
+`Scd2Writer` hand-built `ChangeRow`s with explicit ordering values and change times, against a plain SQL Server target. Same
+scenarios, but the assertions are now exact (each `ValidTo`/`ValidFrom` equals the change time given, the version keys equal
+`<ordering>|<key>`), a third test covers two changes to one key at the identical instant (ordered by the ordering value alone;
+legitimate, and what CDC could not be made to produce on demand), and the class runs in under a second with no Agent job, log scan
+or timing. Checked to be able to fail: giving the tie test its ordering values reversed makes it fail with the versions out of order.
+
+What still needs a real capture is the *reader* emitting correct ordering and change times (`MsSqlCdcReaderTests`,
+`MsSqlCdcLsnTimeTests`); they share `CdcCaptureJob`'s machinery and so its risk, and belong in the nightly lane rather than on the
+promotion gate. `CdcCaptureJob.ScanUntilPastAsync`, used only by the old tests, is removed.

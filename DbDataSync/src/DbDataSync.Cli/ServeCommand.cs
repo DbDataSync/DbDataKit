@@ -110,16 +110,25 @@ public static class ServeCommand
     /// own output) when one exists; null falls back to <paramref name="exception"/>'s own type and
     /// message, formatted identically on both paths.</param>
     internal static int Fail(Exception exception, string? message)
+        => Fail(exception, message, isWindowsService: null, writeToEventLog: null);
+
+    /// <param name="isWindowsService">Whether this process is a Windows service; null asks the host. A seam so the service
+    /// branch can be tested on any platform.</param>
+    /// <param name="writeToEventLog">Where a service's failure goes; null is the Windows Event Log.</param>
+    internal static int Fail(Exception exception, string? message, Func<bool>? isWindowsService, Action<Exception, string?>? writeToEventLog)
     {
-        if (OperatingSystem.IsWindows()
-            && Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService())
+        isWindowsService ??= static () => OperatingSystem.IsWindows()
+            && Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService();
+        writeToEventLog ??= static (ex, text) =>
         {
-            WindowsServiceEventLog.WriteError(exception, message);
-        }
+            if (OperatingSystem.IsWindows())
+                WindowsServiceEventLog.WriteError(ex, text);
+        };
+
+        if (isWindowsService())
+            writeToEventLog(exception, message);
         else
-        {
-            Console.Error.WriteLine(message ?? $"{exception.GetType().Name}: {exception.Message}");
-        }
+            Console.Error.WriteLine(ServiceEventLogWriter.FailureText(exception, message));
 
         return 1;
     }

@@ -37,6 +37,16 @@ services:
     profiles: [postgres]
     image: postgres:17
     container_name: dbkit-test-postgres
+    # TLS on with a throwaway self-signed certificate, like SQL Server's container, so the libraries' secure default
+    # (encrypt, with verification switched off for the self-signed cert) is what the live tests exercise.
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        openssl req -x509 -nodes -newkey rsa:2048 -days 3650 -subj /CN=localhost
+        -keyout /tmp/server.key -out /tmp/server.crt 2>/dev/null
+        && chown postgres:postgres /tmp/server.key /tmp/server.crt && chmod 600 /tmp/server.key
+        && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/tmp/server.crt -c ssl_key_file=/tmp/server.key
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: *password

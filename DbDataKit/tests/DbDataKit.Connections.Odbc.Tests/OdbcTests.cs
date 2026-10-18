@@ -104,7 +104,8 @@ public class OdbcTests
         var login = new ResolvedLogin(LoginRole.Read, AuthMode.Sql, "env") { ConnectionString = SecretValue.From(cs!) };
         var ctx = new ConnectionContext
         {
-            Definition = new ConnectionDefinition { Name = "o", Engine = "odbc", Access = AccessMode.Readonly },
+            // The test servers (testenv/) use throwaway self-signed certificates: encrypt, but do not verify.
+            Definition = new ConnectionDefinition { Name = "o", Engine = "odbc", Access = AccessMode.Readonly, Tls = { TrustServerCertificate = true } },
             Login = login, Role = LoginRole.Read,
         };
         var provider = new OdbcProvider();

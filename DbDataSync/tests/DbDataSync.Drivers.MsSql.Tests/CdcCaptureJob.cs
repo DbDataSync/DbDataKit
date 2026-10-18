@@ -38,9 +38,7 @@ internal static class CdcCaptureJob
     /// Forces a synchronous scan of the log: everything committed before this returns is captured and
     /// its LSN mapped in <c>cdc.lsn_time_mapping</c>. Stops the Agent capture job first (it is
     /// restarted by <c>sp_cdc_enable_table</c>, so this cannot be a one-time step). Returns the latest
-    /// <c>tran_end_time</c> the scan produced in <c>cdc.lsn_time_mapping</c> — see
-    /// <see cref="ScanUntilPastAsync"/>, which uses it to wait for a genuinely later mapping point
-    /// instead of guessing a delay.
+    /// <c>tran_end_time</c> the scan produced in <c>cdc.lsn_time_mapping</c>.
     /// <para>
     /// **Does not release the log reader.** Every caller in this test project holds one dedicated,
     /// unpooled connection for its own whole lifetime (see each test class's own comment on why), so
@@ -57,8 +55,7 @@ internal static class CdcCaptureJob
 
     /// <summary>
     /// The repeatable half of a scan: assumes the capture job is already stopped and the log reader
-    /// already checked out to this session (both <see cref="ScanAsync"/> and
-    /// <see cref="ScanUntilPastAsync"/> arrange that once, before calling this any number of times) —
+    /// already checked out to this session (<see cref="ScanAsync"/> arranges that) —
     /// <c>sp_cdc_scan</c> itself, then the latest mapped time it produced.
     /// </summary>
     private static async Task<DateTime> ScanOnceAsync(SqlConnection connection)
@@ -88,11 +85,7 @@ internal static class CdcCaptureJob
     /// it back; guarded because with nothing checked out it raises.
     /// <para>
     /// **Call this once, from a test class's own <c>DisposeAsync</c>, after every scan for that test is
-    /// done — never mid-test.** It used to be called once per <see cref="ScanAsync"/>/
-    /// <see cref="ScanUntilPastAsync"/> instead, on the theory that only its *frequency* (once per 100ms
-    /// poll) was the problem; that fix landed, and the identical stall still recurred with it down to
-    /// once per logical wait (see <see cref="ScanUntilPastAsync"/>'s own doc comment for the run that
-    /// falsified it). Every caller in this project holds one dedicated, unpooled connection for a
+    /// done — never mid-test.** Every caller in this project holds one dedicated, unpooled connection for a
     /// single test's whole lifetime — the only session that could ever be "released back to" is this
     /// same one, which was never actually blocked on itself, so releasing mid-test bought nothing and
     /// risked whatever this method's own uncertainty about CDC's internal bookkeeping under repeated,
@@ -116,72 +109,6 @@ internal static class CdcCaptureJob
     {
         var result = await ScalarAsync(connection, "SELECT MAX(tran_end_time) FROM cdc.lsn_time_mapping;");
         return result is DateTime time ? time : DateTime.MinValue;
-    }
-
-    private static readonly TimeSpan ScanUntilPastDeadline = TimeSpan.FromSeconds(90);
-
-    /// <summary>
-    /// Re-scans until <c>cdc.lsn_time_mapping</c> records a transaction strictly after
-    /// <paramref name="after"/> — proof the next tracked change will map to a genuinely later time,
-    /// rather than a fixed delay long enough on one runner and not on another. Replaces an earlier fix
-    /// that waited 30 ms on the theory that <c>datetime</c>'s 3.33 ms tick was the only granularity in
-    /// play; CI kept producing identical mapped times anyway even with that gap in place, so whatever
-    /// actually governs how often a mapping point advances is coarser or load-dependent, and worth
-    /// checking for rather than out-waiting (see
-    /// architecture/planning/todo/follow-up-phase-154-scd2-cdc-timestamp-mapping-race.md).
-    /// <para>
-    /// The deadline was originally 30s; run <c>35854242228</c> (2026-09-23) timed out at 30s with every
-    /// attempt in the window reporting the identical <c>latest</c> value, so it was widened to 90s on
-    /// the theory that CDC's log scan itself was occasionally lagging under I/O-contended CI. **That
-    /// theory was falsified by the very next recurrence** (run <c>35901453430</c>, 2026-09-23): 777
-    /// scan attempts across the full 90s, every one reporting the identical, unmoved <c>latest</c>. A
-    /// genuine catch-up lag would not survive 777 real attempts without ever budging once — that many
-    /// fast, cheap attempts finding nothing points at a real stall, not a slow-but-eventually one, and
-    /// widening the deadline further would only spend more CI time arriving at the same failure.
-    /// </para>
-    /// <para>
-    /// What changed after the 90s widen: this loop used to call the *whole* <see cref="ScanAsync"/> —
-    /// stop the capture job, scan, release the log reader — on every single 100ms retry, meaning a stuck
-    /// wait re-issued <c>sp_cdc_stop_job</c> and, more pointedly, <c>sp_repldone @reset = 1</c> hundreds
-    /// of times against the very capture mechanism it was waiting on. That was fixed to stop once and
-    /// release once per logical wait, not once per 100ms poll — and then **that fix's own theory was
-    /// falsified too**: run <c>35901453430</c> above happened *after* it landed, with the stop/release
-    /// already down to once per wait, ruling out "released too often within this one wait" as the
-    /// remaining cause.
-    /// </para>
-    /// <para>
-    /// **What's left, applied 2026-09-23**: this was still releasing the log reader once *per call* to
-    /// <see cref="ScanAsync"/>/<see cref="ScanUntilPastAsync"/> — and a single test method calls one or
-    /// both of those several times in sequence (this class's own
-    /// <c>APassWithDuplicateAndSingletonKeys_...</c> calls it four times). Every caller in this project
-    /// holds one dedicated, unpooled connection for its own whole lifetime (see <see cref="ReleaseLogReaderAsync"/>'s
-    /// own doc comment for why that makes releasing between calls pure risk with no upside), so this
-    /// method no longer releases at all — the log reader stays checked out to the one session using it,
-    /// for the whole test, and is released exactly once, in that test's own teardown.
-    /// </para>
-    /// </summary>
-    public static async Task<DateTime> ScanUntilPastAsync(SqlConnection connection, DateTime after)
-    {
-        await RemoveCaptureJobAsync(connection);
-        var deadline = DateTime.UtcNow + ScanUntilPastDeadline;
-        var attempts = 0;
-        while (true)
-        {
-            attempts++;
-            var latest = await ScanOnceAsync(connection);
-            if (latest > after)
-                return latest;
-
-            if (DateTime.UtcNow >= deadline)
-            {
-                throw new TimeoutException(
-                    $"cdc.lsn_time_mapping did not record a transaction after {after:O} within "
-                    + $"{ScanUntilPastDeadline.TotalSeconds:0}s ({attempts} scan attempts, latest seen: "
-                    + $"{latest:O}). {await DiagnoseAsync(connection)}");
-            }
-
-            await Task.Delay(TimeSpan.FromMilliseconds(100));
-        }
     }
 
     /// <summary>
