@@ -634,7 +634,7 @@ public sealed class ConfigRepository
         {
             try
             {
-                File.Move(temporary, path, overwrite: true);
+                SwapIn(temporary, path);
                 return;
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
@@ -650,6 +650,35 @@ public sealed class ConfigRepository
                 else
                     Thread.Sleep(1);
             }
+        }
+    }
+
+    /// <summary>
+    /// Puts <paramref name="temporary"/> at <paramref name="path"/> so that a reader sees the old file or the new one and never no file.
+    /// <para>
+    /// <see cref="File.Move(string, string, bool)"/> with <c>overwrite</c> does not do that on Windows: it deletes the destination and
+    /// then renames, and in between the path does not exist. A load landing there found <c>File.Exists</c> false and reported a task that
+    /// exists as "not found" (<c>ConcurrentConfigReadTests</c>, Windows CI, 2026-10-18; over the API that is a 404 for a task being saved).
+    /// <see cref="File.Replace(string, string, string?)"/> (<c>ReplaceFile</c>) swaps the contents in place, so the name is never
+    /// absent. It needs the destination to exist, so the first write of a file is a plain move, and a destination removed between the check
+    /// and the call falls back to one too.
+    /// </para>
+    /// </summary>
+    private static void SwapIn(string temporary, string path)
+    {
+        if (!File.Exists(path))
+        {
+            File.Move(temporary, path);
+            return;
+        }
+
+        try
+        {
+            File.Replace(temporary, path, destinationBackupFileName: null);
+        }
+        catch (FileNotFoundException) when (!File.Exists(path))
+        {
+            File.Move(temporary, path);
         }
     }
 
