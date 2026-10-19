@@ -85,9 +85,9 @@ public sealed class ShippedFilesTests
     private static string Shipped(string name) => Path.Combine(AppContext.BaseDirectory, name);
 
     [Fact]
-    public void Shipped_appsettings_json_validates_with_schema_2()
+    public void The_starter_settings_file_install_writes_validates_with_schema_2()
     {
-        var load = ConfigTestSupport.LoadFile(Shipped("appsettings.json"));
+        var load = ConfigTestSupport.LoadJson(ProxyConfigFile.Starter);
         Assert.True(load.Ok, ConfigTestSupport.Format(load));
         Assert.Equal(2, load.Value!.SchemaVersion);
         Assert.Empty(load.Diagnostics);
@@ -97,7 +97,7 @@ public sealed class ShippedFilesTests
     public void Shipped_example_validates_comments_trailing_commas_and_all()
     {
         // The example is written for the Windows service (C:\data\parquet, ...), and the shared absolute-path check rejects a
-        // Windows path elsewhere. Windows validates it; the shipped appsettings.json is validated on every platform above.
+        // Windows path elsewhere. Windows validates it; the starter settings file is validated on every platform above.
         Assert.SkipUnless(OperatingSystem.IsWindows(), "The shipped example uses Windows paths");
         var load = ConfigTestSupport.LoadFile(Shipped("appsettings.example.json"));
         Assert.True(load.Ok, ConfigTestSupport.Format(load));

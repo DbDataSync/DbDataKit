@@ -10,12 +10,9 @@
     }
   },
   "windowsScope": "machine",
-  "preserve": [
-    "appsettings.json"
-  ],
   "service": {
     "name": "DbDataProxy",
     "register": "install --name {name}"
   },
-  "notes": "Registering the Windows service needs an elevated prompt: DbDataProxy service install"
+  "notes": "Settings live in %ProgramData%\\DbDataProxy\\appsettings.json. Registering the Windows service needs an elevated prompt: DbDataProxy service install"
 }

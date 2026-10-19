@@ -22,7 +22,7 @@ public static class ProxyHost
     public const string ServiceName = "DbDataProxy";
 
     /// <summary>
-    /// The web application builder with the proxy's configuration sources (appsettings.json, DBPROXY_ environment variables, command line).
+    /// The web application builder with the proxy's configuration sources (appsettings.json beside the executable, then the data directory's, DBPROXY_ environment variables, command line).
     /// A configuration file that cannot be parsed surfaces as <see cref="ProxyConfigException"/>.
     /// </summary>
     public static WebApplicationBuilder CreateBuilder(string[] args)
@@ -36,12 +36,16 @@ public static class ProxyHost
                 // A Windows service starts in System32; settings and the worker are found relative to the executable.
                 ContentRootPath = AppContext.BaseDirectory,
             });
+            // The settings file lives in the data directory (Configuration/ProxyConfigFile.cs); one beside the executable is still read, below it.
+            ProxyConfigFile.AddDataDirectoryFile(builder.Configuration, ProxyConfigFile.ResolveDataDirectory(args), args);
         }
         catch (Exception ex) when (ex is InvalidDataException or FormatException)
         {
             throw new ProxyConfigException(DescribeLoadFailure(ex), []);
         }
-        builder.Configuration.AddEnvironmentVariables("DBPROXY_");
+        // Quieter defaults for the framework's chattiest categories, unless the settings say otherwise (they used to be shipped in appsettings.json).
+        foreach (var (category, level) in new[] { ("Microsoft.AspNetCore", LogLevel.Warning), ("Grpc", LogLevel.Warning) })
+            if (builder.Configuration[$"Logging:LogLevel:{category}"] is null) builder.Logging.AddFilter(category, level);
         return builder;
     }
 

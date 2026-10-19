@@ -20,8 +20,8 @@ Flight SQL client ──gRPC/TLS──▶ DbDataProxy (x64) ──▶ SQL Server
 ```powershell
 ./build/publish.ps1                 # -> artifacts/publish/win-x64 (DbDataProxy.exe + worker\)
 cd artifacts/publish/win-x64
-./DbDataProxy.exe hash-password     # prompts; paste the hash into appsettings.json
-# edit appsettings.json (see appsettings.example.json), then:
+./DbDataProxy.exe hash-password     # prompts; paste the hash into the settings file
+# edit %ProgramData%\DbDataProxy\appsettings.json (see appsettings.example.json), then:
 ./DbDataProxy.exe                   # run in a console
 ./DbDataProxy.exe service install   # or register the Windows service (elevated prompt), then: DbDataProxy service start
 ./DbDataProxy.exe query --insecure --user me --password ... --datasource erp --sql "SELECT 1"
@@ -115,16 +115,20 @@ repository's standard ones ([`dist/README.md`](../dist/README.md)) and these URL
 ```
 
 The script finds the newest stable DbDataProxy release, verifies the download against `SHA256SUMS`, installs to
-`%ProgramFiles%\DbDataProxy` (`-InstallDir`), keeps an existing `appsettings.json`, stops and restarts a running service
-around an upgrade, and registers the service only with `-InstallService`. Also `-Version`, `-IncludePrerelease`, `-DryRun` (needs no
+`%ProgramFiles%\DbDataProxy` (`-InstallDir`), stops and restarts a running service around an upgrade (the settings are in
+`%ProgramData%`, so replacing the program files never touches them), and registers the service only with `-InstallService`. Also `-Version`, `-IncludePrerelease`, `-DryRun` (needs no
 elevation) and `-Repo`; Scoop works too: `scoop install https://github.com/DbDataSync/DbDataKit/releases/download/dbdataproxy/dist/dbdataproxy.json`
 (registering the service is then `DbDataProxy service install` from an elevated prompt).
 
 ## Configuration
 
-`appsettings.json` beside the executable, environment variables (`DBPROXY_Proxy__Listen__Port=9000`) or command
-line (`--Proxy:Listen:Port=9000`). `appsettings.example.json` documents every option. Users, data sources,
-compression and auth settings reload without a restart; the listener and certificate need one.
+Settings are one JSON file, `appsettings.json` in the data directory: `%ProgramData%\DbDataProxy` by default (`Proxy:DataDirectory`,
+`--data-dir` on `service install`; on Linux `/var/lib/dbdataproxy`). `service install` creates it with only `"SchemaVersion": 2` if there is
+none. Defaults are in the code, not in a shipped file, and `appsettings.example.json` beside the executable documents every option. Layers,
+lowest first: an `appsettings.json` beside the executable (optional: for a portable run from a folder, or a container that mounts one), the
+data directory's file, `DBPROXY_` environment variables (`DBPROXY_Proxy__Listen__Port=9000`), the command line (`--Proxy:Listen:Port=9000`).
+`DataDirectory` itself comes from the command line, the environment or the default, never from a file, since the file lives in it. Users,
+data sources, compression and auth settings reload without a restart; the listener and certificate need one.
 
 ### Validation, schema version and the config commands
 
@@ -140,7 +144,7 @@ line overrides). It is read through the shared `DbDataKit.Config` strict binder,
   The process exits with **code 2** (the same code as a command line usage error); scripts and service managers can rely on it.
 * **Case-insensitive, unchanged keys.** Keys are matched ignoring case, exactly as before, so every existing file and
   override (`DBPROXY_Proxy__Listen__Port`, `Proxy__Tls__Mode`, `--Proxy:Listen:Port=9000`) keeps working, booleans may
-  still be written `True`. `appsettings.json` and `appsettings.example.json` are checked by the test suite.
+  still be written `True`. The example and the starter file are checked by the test suite.
 * **Reloads keep the last good configuration.** An edit of `appsettings.json` that is invalid (syntax error, unknown key,
   failed validation) is rejected with an error in the log naming the problems, and the running service keeps using the last
   good configuration; it never crashes on a bad edit. A later valid edit is picked up.
@@ -148,8 +152,8 @@ line overrides). It is read through the shared `DbDataKit.Config` strict binder,
   unknown keys into warnings, for example while rolling a file back to an older release. The default is strict.
 * **`SchemaVersion`** (optional, inside `Proxy`; absent means 1). Version 2 changes defaults only: a data source without
   its own `Classifier` is `strict` instead of `warn`. Files without `SchemaVersion` keep every old default, so upgrading
-  changes nothing; a startup warning lists the read-only sources that still rely on the old default. The shipped
-  `appsettings.json` and the example use `"SchemaVersion": 2` (new installs get the strict default). Moving v1 to v2 is a
+  changes nothing; a startup warning lists the read-only sources that still rely on the old default. The example and the
+  file `service install` writes use `"SchemaVersion": 2` (new installs get the strict default). Moving v1 to v2 is a
   documented no-op (`ProxyConfigMigrations`: no key changes) other than that default: set `Classifier` on each source, then
   add `"SchemaVersion": 2`. A file with a newer version than the release understands is refused with an upgrade message.
   Future renames ship as additional migrations in the shared migration framework (see `MigrationTests`); `config migrate`
@@ -160,8 +164,8 @@ DbDataProxy config check [--file path]        validate (exit 0 valid, 2 invalid)
 DbDataProxy config show [--origin] [--file p] effective values; --origin adds file:line, env:NAME, cli:args or "default"
 ```
 
-Without `--file` both commands read the same sources as the service (appsettings.json beside the executable,
-`DBPROXY_` environment variables, command line options); with `--file` only that file (plus `--Proxy:...` options) is read.
+Without `--file` both commands read the same sources as the service (the settings files, `DBPROXY_` environment variables, command
+line options); with `--file` only that file (plus `--Proxy:...` options) is read.
 `config show` masks secrets: a secret reference (`env:`, `file:`, `secret:`, `dpapi:`) is shown as the reference,
 a literal secret (`SigningKey`, `PasswordHash`, a literal `Password=` in a connection string, a literal certificate password)
 as `********` or `***`.

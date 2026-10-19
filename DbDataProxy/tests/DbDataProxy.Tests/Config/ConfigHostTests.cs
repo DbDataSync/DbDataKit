@@ -15,6 +15,8 @@ public sealed class ConfigStartupTests
     [Fact]
     public async Task Environment_overrides_keep_working_with_and_without_the_DBPROXY_prefix()
     {
+        Directory.CreateDirectory(DataDir);
+        File.WriteAllText(ProxyConfigFile.PathIn(DataDir), ProxyConfigFile.Starter);
         using var env = new EnvScope(
             ("DBPROXY_Proxy__Listen__Port", "0"),            // prefixed, as documented
             ("Proxy__Tls__Mode", "None"),                    // the stock unprefixed spelling
@@ -27,7 +29,91 @@ public sealed class ConfigStartupTests
         Assert.Equal("127.0.0.1", o.Listen.Address);
         Assert.Equal(TlsMode.None, o.Tls.Mode);
         Assert.False(o.Auth.AllowPassThrough);
-        Assert.Equal(2, o.SchemaVersion);   // from the shipped appsettings.json
+        Assert.Equal(2, o.SchemaVersion);   // from the settings file in the data directory
+    }
+
+    private static string NewDataDirectory(string? settings)
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "dbproxy-cfg-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        if (settings is not null) File.WriteAllText(ProxyConfigFile.PathIn(dir), settings);
+        return dir;
+    }
+
+    private const string FileSettings = """{ "Proxy": { "SchemaVersion": 2, "Listen": { "Address": "127.0.0.1", "Port": 1234 }, "Tls": { "Mode": "None" } } }""";
+
+    [Fact]
+    public async Task The_data_directory_file_supplies_settings_and_the_command_line_overrides_it()
+    {
+        string dir = NewDataDirectory(FileSettings);
+        await using var app = ProxyHost.Build([$"--Proxy:DataDirectory={dir}", "--Proxy:Listen:Port=0"]);
+        var o = app.Services.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue;
+        Assert.Equal(2, o.SchemaVersion);               // file
+        Assert.Equal("127.0.0.1", o.Listen.Address);    // file
+        Assert.Equal(0, o.Listen.Port);                 // command line beats the file
+        Assert.Equal(TlsMode.None, o.Tls.Mode);         // file
+    }
+
+    [Fact]
+    public async Task Environment_variables_override_the_data_directory_file_with_or_without_the_prefix()
+    {
+        string dir = NewDataDirectory(FileSettings);
+        using (new EnvScope(("DBPROXY_Proxy__DataDirectory", dir), ("Proxy__Listen__Port", "0")))
+        {
+            await using var app = ProxyHost.Build([]);
+            Assert.Equal(0, app.Services.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue.Listen.Port);
+        }
+
+        using (new EnvScope(("DBPROXY_Proxy__DataDirectory", dir), ("DBPROXY_Proxy__Listen__Port", "0")))
+        {
+            await using var app = ProxyHost.Build([]);
+            Assert.Equal(0, app.Services.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue.Listen.Port);
+        }
+    }
+
+    [Fact]
+    public async Task A_missing_or_empty_settings_file_leaves_the_code_defaults()
+    {
+        foreach (string? settings in new string?[] { null, "{}" })
+        {
+            string dir = NewDataDirectory(settings);
+            await using var app = ProxyHost.Build([$"--Proxy:DataDirectory={dir}", "--Proxy:Listen:Port=0", "--Proxy:Tls:Mode=None"]);
+            var o = app.Services.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue;
+            Assert.Equal(1, o.SchemaVersion);
+            Assert.Equal("0.0.0.0", o.Listen.Address);
+            Assert.Empty(o.Users);
+        }
+    }
+
+    [Fact]
+    public void A_settings_file_that_is_not_json_stops_startup()
+    {
+        string dir = NewDataDirectory("{ this is not json");
+        var ex = Assert.Throws<ProxyConfigException>(() => ProxyHost.Build([$"--Proxy:DataDirectory={dir}"]));
+        Assert.Contains("appsettings.json", ex.Message);
+    }
+
+    [Fact]
+    public void The_file_beside_the_executable_is_the_lowest_layer()
+    {
+        string beside = NewDataDirectory("""{ "Proxy": { "Listen": { "Address": "10.0.0.1", "Port": 1111 }, "Compression": { "Mode": "None" } } }""");
+        string data = NewDataDirectory("""{ "Proxy": { "Listen": { "Port": 2222 } } }""");
+        var o = ProxyConfiguration.LoadOptions(beside, data);
+        Assert.Equal(2222, o.Listen.Port);                 // the data directory's file overrides
+        Assert.Equal("10.0.0.1", o.Listen.Address);        // the other file still supplies what the first leaves alone
+        Assert.Equal(CompressionMode.None, o.Compression.Mode);
+    }
+
+    [Fact]
+    public void Install_writes_the_starter_once_and_keeps_an_edited_file()
+    {
+        string dir = NewDataDirectory(null);
+        Assert.True(ProxyConfigFile.EnsureStarter(dir));
+        Assert.Equal(ProxyConfigFile.Starter, File.ReadAllText(ProxyConfigFile.PathIn(dir)));
+
+        File.WriteAllText(ProxyConfigFile.PathIn(dir), "{ \"Proxy\": { \"Listen\": { \"Port\": 9 } } }");
+        Assert.False(ProxyConfigFile.EnsureStarter(dir));
+        Assert.Contains("\"Port\": 9", File.ReadAllText(ProxyConfigFile.PathIn(dir)));
     }
 
     [Fact]

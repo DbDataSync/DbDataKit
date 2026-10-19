@@ -122,7 +122,8 @@ public static class Cli
                                            Print the effective configuration, secrets masked; --origin adds where each value came from
           DbDataProxy help                 Show this help
 
-        Configuration is read from appsettings.json beside the executable, environment variables
-        prefixed DBPROXY_ (use __ for nesting) and command line options (--Proxy:Listen:Port=9000).
+        Configuration is read from appsettings.json in the data directory (%ProgramData%\DbDataProxy by default;
+        one beside the executable is read first), environment variables prefixed DBPROXY_ (use __ for nesting)
+        and command line options (--Proxy:Listen:Port=9000).
         """);
 }
