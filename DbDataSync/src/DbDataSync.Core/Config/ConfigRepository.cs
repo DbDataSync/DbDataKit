@@ -91,10 +91,10 @@ public sealed class ConfigRepository
     public ConnectionConfig LoadConnection(string name)
     {
         var path = ConfigPaths.ConnectionFile(_configRoot, name);
-        if (!File.Exists(path))
-            throw new FileNotFoundException($"Connection '{name}' was not found.", path);
+        var text = TryReadAllTextAllowingConcurrentReplace(path)
+            ?? throw new FileNotFoundException($"Connection '{name}' was not found.", path);
 
-        return YamlConfigSerializer.Deserialize<ConnectionConfig>(ReadAllTextAllowingConcurrentReplace(path));
+        return YamlConfigSerializer.Deserialize<ConnectionConfig>(text);
     }
 
     public IReadOnlyList<string> ListConnections() =>
@@ -156,7 +156,7 @@ public sealed class ConfigRepository
             Manifest = manifest,
             // A manifest with no code beside it is a broken script, not an empty one — but it fails at
             // compile/validate with a message about the code rather than here with one about the file.
-            Code = File.Exists(codePath) ? ReadAllTextAllowingConcurrentReplace(codePath) : "",
+            Code = TryReadAllTextAllowingConcurrentReplace(codePath) ?? "",
         };
     }
 
@@ -168,10 +168,10 @@ public sealed class ConfigRepository
     public ScriptConfig LoadScriptManifest(string name)
     {
         var manifestPath = ConfigPaths.ScriptManifestFile(_configRoot, name);
-        if (!File.Exists(manifestPath))
-            throw new FileNotFoundException($"Script '{name}' was not found.", manifestPath);
+        var text = TryReadAllTextAllowingConcurrentReplace(manifestPath)
+            ?? throw new FileNotFoundException($"Script '{name}' was not found.", manifestPath);
 
-        return YamlConfigSerializer.Deserialize<ScriptConfig>(ReadAllTextAllowingConcurrentReplace(manifestPath));
+        return YamlConfigSerializer.Deserialize<ScriptConfig>(text);
     }
 
     public IReadOnlyList<string> ListScripts() => ListFileNamesWithoutExtension(ConfigPaths.ScriptsDir(_configRoot));
@@ -214,10 +214,10 @@ public sealed class ConfigRepository
     public ReplicationTaskConfig LoadReplicationTask(string replicationName)
     {
         var path = ConfigPaths.TaskFile(_configRoot, replicationName);
-        if (!File.Exists(path))
-            throw new FileNotFoundException($"Replication task '{replicationName}' was not found.", path);
+        var text = TryReadAllTextAllowingConcurrentReplace(path)
+            ?? throw new FileNotFoundException($"Replication task '{replicationName}' was not found.", path);
 
-        return YamlConfigSerializer.Deserialize<ReplicationTaskConfig>(ReadAllTextAllowingConcurrentReplace(path));
+        return YamlConfigSerializer.Deserialize<ReplicationTaskConfig>(text);
     }
 
     public IReadOnlyList<string> ListReplications()
@@ -272,11 +272,11 @@ public sealed class ConfigRepository
     public TableMappingConfig LoadTableMapping(string replicationName, string mappingName)
     {
         var path = ConfigPaths.TableMappingFile(_configRoot, replicationName, mappingName);
-        if (!File.Exists(path))
-            throw new FileNotFoundException(
+        var text = TryReadAllTextAllowingConcurrentReplace(path)
+            ?? throw new FileNotFoundException(
                 $"Table mapping '{mappingName}' was not found on replication '{replicationName}'.", path);
 
-        return YamlConfigSerializer.Deserialize<TableMappingConfig>(ReadAllTextAllowingConcurrentReplace(path));
+        return YamlConfigSerializer.Deserialize<TableMappingConfig>(text);
     }
 
     public void DeleteTableMapping(string replicationName, string mappingName, GitAuthor author)
@@ -679,6 +679,38 @@ public sealed class ConfigRepository
         catch (FileNotFoundException) when (!File.Exists(path))
         {
             File.Move(temporary, path);
+        }
+    }
+
+    /// <summary>
+    /// How long a load waits for a file that is not there before it believes it. Windows has no replace that leaves the name in place: even
+    /// <see cref="File.Replace(string, string, string?)"/> (<c>ReplaceFile</c>) briefly leaves the path absent, so a load landing in that
+    /// instant used to report a task that exists as "not found" (<c>ConcurrentConfigReadTests</c>, Windows CI, which still failed after
+    /// <see cref="SwapIn"/>). The window is microseconds to milliseconds; this is generous because it only costs time for a file that really
+    /// is missing. Elsewhere <c>rename()</c> never leaves the name absent, so there is nothing to wait for.
+    /// </summary>
+    private static readonly TimeSpan MissingFileGrace = OperatingSystem.IsWindows() ? TimeSpan.FromMilliseconds(250) : TimeSpan.Zero;
+
+    /// <summary>
+    /// The file's text, or null if there is no such file. One attempt to open it, not a check followed by an open (the file can vanish
+    /// between the two), and a missing file is retried for <see cref="MissingFileGrace"/> in case it is only mid-replace.
+    /// </summary>
+    private static string? TryReadAllTextAllowingConcurrentReplace(string path)
+    {
+        var deadline = DateTime.UtcNow + MissingFileGrace;
+        while (true)
+        {
+            try
+            {
+                return ReadAllTextAllowingConcurrentReplace(path);
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                if (DateTime.UtcNow >= deadline)
+                    return null;
+
+                Thread.Sleep(1);
+            }
         }
     }
 
