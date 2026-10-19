@@ -24,7 +24,7 @@ public static class Cli
             case "service":
                 return await ServiceCli.RunAsync(rest, ServiceCliEnvironment.Real());
             case "install" or "uninstall":
-                // Kept for scripts/install.ps1: the same as "service install" / "service uninstall".
+                // Kept for dist/install.ps1 (DbDataProxy/dist.json "service.register"): the same as "service install" / "service uninstall".
                 return await ServiceCli.RunAsync([command, .. rest], ServiceCliEnvironment.Real());
             case "cert":
                 var proxyOptions = ProxyConfiguration.LoadOptions();

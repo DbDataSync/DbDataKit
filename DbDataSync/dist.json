@@ -1,0 +1,17 @@
+{
+  "product": "dbdatasync",
+  "displayName": "DbDataSync",
+  "description": "Cross-database replication: a git-tracked config repository, a scheduler, and a web console. Needs the .NET 10 runtime (and SDK, to install drivers from the console).",
+  "homepage": "https://github.com/DbDataSync/DbDataKit/tree/main/DbDataSync",
+  "license": "MIT",
+  "platforms": {
+    "win-x64": {
+      "exe": "dbdatasync.exe"
+    },
+    "linux-x64": {
+      "exe": "dbdatasync"
+    }
+  },
+  "windowsScope": "user",
+  "requiresDotnet": "10.0"
+}

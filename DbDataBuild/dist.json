@@ -1,0 +1,12 @@
+{
+  "product": "dbdatabuild",
+  "displayName": "DbDataBuild",
+  "description": "Builds analytics tables and views on SQL Server, PostgreSQL and Fabric from DuckDB-dialect SQL: plan, then apply.",
+  "homepage": "https://github.com/DbDataSync/DbDataKit/tree/main/DbDataBuild",
+  "license": "MIT",
+  "platforms": {
+    "win-x64": { "exe": "dbdatabuild.exe" },
+    "linux-x64": { "exe": "dbdatabuild" }
+  },
+  "windowsScope": "user"
+}

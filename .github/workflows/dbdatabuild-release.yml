@@ -12,10 +12,11 @@ name: DbDataBuild release
 #
 # The version is CalVer, YYYY.M.D.HHmm from the UTC clock, like every product (the old repo's v0.4.x tags are not carried forward).
 #
-# A stable release also publishes the Scoop manifest, filled in from DbDataBuild/bucket/dbdatabuild.json, as the asset of one fixed
-# release, `dbdatabuild/scoop`, replaced each time, so its URL never changes:
-#   scoop install https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabuild/scoop/dbdatabuild.json
-# Scoop re-reads that URL on `scoop update`. A prerelease leaves it alone.
+# The standard distribution files (dist/README.md) come with every release: install.ps1 and install.sh are attached to it, and a stable
+# release also replaces the fixed `dbdatabuild/dist` release, so these URLs never change:
+#   scoop install https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabuild/dist/dbdatabuild.json
+#   irm https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabuild/dist/install.ps1 | iex
+# A prerelease leaves the fixed release alone.
 
 on:
   workflow_dispatch:
@@ -98,8 +99,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,  rid: linux-x64, ext: tar.gz }
-          - { os: windows-latest, rid: win-x64,   ext: zip }
+          - { os: ubuntu-latest,  rid: linux-x64 }
+          - { os: windows-latest, rid: win-x64 }
     name: build (${{ matrix.rid }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
@@ -128,18 +129,19 @@ jobs:
           exe=out/dbdatabuild; [ -f out/dbdatabuild.exe ] && exe=out/dbdatabuild.exe
           "$exe" --help > /dev/null
           "$exe" help matrix --format json | grep -q '"ok": true'
+      # The standard package (dist/README.md): files at the zip root, named <product>-v<version>-<rid>.zip.
       - name: Package
         shell: bash
         run: |
-          name="dbdatabuild-v$VERSION-${{ matrix.rid }}"
-          mkdir "$name"
-          cp out/dbdatabuild* LICENSE THIRD-PARTY-NOTICES.md README.md "$name"/
-          if [ "${{ matrix.ext }}" = zip ]; then 7z a "$name.zip" "$name" > /dev/null; else tar czf "$name.tar.gz" "$name"; fi
-          ls -l "$name.${{ matrix.ext }}"
+          mkdir stage
+          cp out/dbdatabuild* LICENSE THIRD-PARTY-NOTICES.md README.md stage/
+          zip="$PWD/dbdatabuild-v$VERSION-${{ matrix.rid }}.zip"
+          if [ "${{ matrix.rid }}" = win-x64 ]; then (cd stage && 7z a "$zip" . > /dev/null); else (cd stage && zip -qr "$zip" .); fi
+          ls -l "$zip"
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.rid }}
-          path: DbDataBuild/dbdatabuild-v*.${{ matrix.ext }}
+          path: DbDataBuild/dbdatabuild-v*.zip
           if-no-files-found: error
 
   release:
@@ -158,11 +160,11 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          path: dist
+          path: assets
           merge-multiple: true
 
       - name: Checksums
-        working-directory: dist
+        working-directory: assets
         run: sha256sum * > SHA256SUMS && cat SHA256SUMS
 
       # After everything is built, not before: a tag is a claim that this version shipped, so a failed run leaves nothing to clean up.
@@ -184,32 +186,13 @@ jobs:
             --title "DbDataBuild $VERSION" \
             --notes "DbDataBuild $VERSION, built from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$SHA. The version is the UTC date and time this release was built." \
             "${prerelease_flag[@]}" \
-            dist/*
+            assets/*
 
-      - name: Publish the Scoop manifest (stable releases only)
-        if: ${{ env.PRERELEASE != 'true' }}
-        working-directory: .
-        run: |
-          mkdir scoop
-          python3 - <<'PY'
-          import json, os
-          version = os.environ["VERSION"]
-          name = f"dbdatabuild-v{version}-win-x64"
-          sums = {l.split()[1]: l.split()[0] for l in open("dist/SHA256SUMS") if l.strip()}
-          m = json.load(open("DbDataBuild/bucket/dbdatabuild.json"))
-          m.pop("##", None)
-          arch = m["architecture"]["64bit"]
-          m["version"] = version
-          arch["url"] = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/dbdatabuild/v{version}/{name}.zip"
-          arch["hash"] = sums[f"{name}.zip"]
-          arch["extract_dir"] = name
-          open("scoop/dbdatabuild.json", "w", newline="\n").write(json.dumps(m, indent=4) + "\n")
-          PY
-          cat scoop/dbdatabuild.json
-          # One fixed release whose asset is replaced, so the manifest URL is stable. A prerelease keeps it out of the way of the real ones.
-          if ! gh release view dbdatabuild/scoop > /dev/null 2>&1; then
-            gh release create dbdatabuild/scoop --target "$SHA" --prerelease --latest=false \
-              --title "DbDataBuild Scoop manifest" \
-              --notes "The Scoop manifest for the newest stable DbDataBuild release, replaced by each one. Install: scoop install $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/dbdatabuild/scoop/dbdatabuild.json"
-          fi
-          gh release upload dbdatabuild/scoop scoop/dbdatabuild.json --clobber
+      - uses: ./.github/actions/publish-dist
+        with:
+          product: dbdatabuild
+          meta: DbDataBuild/dist.json
+          version: ${{ env.VERSION }}
+          prerelease: ${{ env.PRERELEASE }}
+          sums: assets/SHA256SUMS
+          sha: ${{ env.SHA }}

@@ -7,7 +7,7 @@ name: DbDataProxy release
 #
 # It releases the newest commit on main, or `sha` (which must be on main), and only if that exact commit has a green "DbDataProxy CI" run.
 # It packages the Windows zip, tags the commit dbdataproxy/v<version> and publishes a GitHub Release in THIS repository (zip, SHA256SUMS,
-# install.ps1). No branch is pushed or merged: a release is a tag and its assets. Built-in GITHUB_TOKEN only.
+# and the standard install.ps1 / Scoop manifest, bound by .github/actions/publish-dist from DbDataProxy/dist.json). No branch is pushed or merged: a release is a tag and its assets. Built-in GITHUB_TOKEN only.
 #
 # The version is CalVer, YYYY.M.D.HHmm from the UTC clock, like every product.
 
@@ -129,4 +129,15 @@ jobs:
             --title "DbDataProxy $VERSION" \
             --notes "DbDataProxy $VERSION, packed from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$SHA. The version is the UTC date and time this release was built." \
             "${prerelease_flag[@]}" \
-            artifacts/release/* scripts/install.ps1
+            artifacts/release/*
+
+      - uses: ./.github/actions/publish-dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          product: dbdataproxy
+          meta: DbDataProxy/dist.json
+          version: ${{ steps.version.outputs.version }}
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          sums: DbDataProxy/artifacts/release/SHA256SUMS
+          sha: ${{ env.SHA }}

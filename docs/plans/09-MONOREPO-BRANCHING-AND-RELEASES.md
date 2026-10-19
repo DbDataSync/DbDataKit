@@ -88,9 +88,11 @@ Root files (`LICENSE`, `.gitattributes`, `docs/`) are ordinary pull requests.
   last day. It replaces the old weekly run and the soak that `test` was meant to give. (DbDataSync's and DbDataProxy's suites are run per push
   and have no separate nightly job yet.)
 - **A release is a tag, not a branch move.** The workflow pushes no branch, so there is nothing to merge back and no ancestor guard.
-- **DbDataBuild's Scoop manifest.** A stable release fills in `DbDataBuild/bucket/dbdatabuild.json` (a template) and replaces it as the asset
-  of one fixed release, `dbdatabuild/scoop`, so the install URL never changes and no commit is needed. It is a prerelease so it stays out of
-  the way of the real ones.
+- **One standard distribution for every product** (`dist/README.md`). Each release carries per-platform zips named
+  `<product>-v<version>-<rid>.zip` and `SHA256SUMS`, plus `install.ps1` and `install.sh`; a stable release also replaces the assets (those
+  two scripts and a Scoop manifest, `<product>.json`) of one fixed prerelease per product, `<product>/dist`, so the install URLs never
+  change and no commit is needed. The product-specific facts are in `<Product>/dist.json`; `.github/actions/publish-dist` binds the
+  templates to them. A product may add routes of its own (DbDataSync's .NET tool package).
 - **No ruleset, no GitHub App.** See "Branch protection".
 
 ## CI
@@ -118,7 +120,9 @@ All products use CalVer, `YYYY.M.D.HHmm`, computed from the UTC clock as DbDataS
 | older commit | `-f sha=<commit on main>` | `-f sha=<commit on main>` | `-f sha=<commit on main>` |
 | gate | a green `DbDataSync CI` run for that exact commit | a green `DbDataProxy CI` run for that exact commit | the full conformance suite, run on that commit |
 | tag in this repo | `dbdatasync/v<version>` | `dbdataproxy/v<version>` | `dbdatabuild/v<version>` |
-| assets | `.nupkg` + `.sha512` | zip + `SHA256SUMS` + `install.ps1` | linux-x64 `.tar.gz`, win-x64 `.zip`, `SHA256SUMS` |
+| assets | `.nupkg` + `.sha512`, plus the standard set | the standard set | the standard set |
+
+The standard set is the win-x64 (and, except Proxy, linux-x64) zip, `SHA256SUMS`, `install.ps1` and (except Proxy) `install.sh`. Sync's zips are framework-dependent and cannot `update` themselves.
 
 Common release steps: refuse unless dispatched against `main` and the commit (the tip, or `sha`) is on `main`; gate on that exact commit
 (DbDataSync and DbDataProxy look up the CI run rather than re-running it, DbDataBuild runs its full conformance suite because it has one); build,
@@ -216,10 +220,10 @@ Everything runs on the built-in `GITHUB_TOKEN`; no GitHub App, no rulesets.
 | `dbdatasync-release.yml` | dispatch against `main` (or `sha`); needs a green CI run for the commit; packs and checks the nupkg; tag `dbdatasync/v<version>`; GitHub Release in this repo with the package and its `.sha512`. |
 | `dbdatasync-publish-image.yml` | dispatch-only; not chained from the release. |
 | `dbdataproxy-ci.yml` | trunk: `changes`, the Windows suite (with the package smoke test and installer tests) and the Linux suite against the shared SQL Server. |
-| `dbdataproxy-release.yml` | dispatch against `main` (or `sha`); needs a green CI run for the commit; Windows zip; tag `dbdataproxy/v<version>`; GitHub Release with the zip, `SHA256SUMS` and `install.ps1`. |
+| `dbdataproxy-release.yml` | dispatch against `main` (or `sha`); needs a green CI run for the commit; Windows zip; tag `dbdataproxy/v<version>`; GitHub Release with the standard set. |
 | `dbdatabuild-ci.yml` | trunk: `changes`, the unit suite on Linux and Windows, the core conformance groups, and the slow engines after a merge or with `ci:full`. |
 | `dbdatabuild-conformance-full.yml` | every engine in one job: nightly on `main`, on request, and as the gate inside the release. |
-| `dbdatabuild-release.yml` | dispatch against `main` (or `sha`); full conformance on that commit; builds and smoke-tests linux-x64 and win-x64; tag `dbdatabuild/v<version>`; GitHub Release; a stable release also replaces the Scoop manifest asset of the fixed `dbdatabuild/scoop` release. |
+| `dbdatabuild-release.yml` | dispatch against `main` (or `sha`); full conformance on that commit; builds and smoke-tests linux-x64 and win-x64; tag `dbdatabuild/v<version>`; GitHub Release; a stable release also replaces the assets of the fixed `dbdatabuild/dist` release. |
 | `dbdatakit-ci.yml` / `_dbdatakit.yml` | the shared libraries' suite, once, on Linux and Windows with the shared engines. |
 
 **DbDataBuild, not moved:** the native library (`polyglot_sql_ffi`) keeps its old arrangement for now. `DbDataBuild/scripts/fetch-native.sh` and
