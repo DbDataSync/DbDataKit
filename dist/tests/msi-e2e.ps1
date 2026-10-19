@@ -116,3 +116,6 @@ Assert ((ArpEntries).Count -eq 0) "no Add/Remove Programs entry"
 if ($ServiceName) { Assert (-not (ServiceExists)) "the service is unregistered" }
 if ($OnPath) { Assert (-not (OnMachinePath)) "the folder is off the machine PATH" }
 Write-Host "All checks passed for $DisplayName."
+# sc.exe query exits 1060 for the service this run has just removed; that must not become the step's exit code.
+$global:LASTEXITCODE = 0
+exit 0
