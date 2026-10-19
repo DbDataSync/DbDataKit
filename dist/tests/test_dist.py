@@ -66,7 +66,7 @@ class FakeGitHub:
                     for kv in query.split("&"):
                         if kv.startswith("page="):
                             page = int(kv[5:])
-                    body = json.dumps(outer.releases if page == 1 else [], indent=2).encode()
+                    body = json.dumps(outer.releases if page == 1 else [], separators=(",", ":")).encode()   # the real API is compact
                 elif path in outer.blobs:
                     body = outer.blobs[path]
                 else:

@@ -86,8 +86,10 @@ TAG_PREFIX="$PRODUCT/v"
 WANTED="${VERSION#"$PRODUCT"/}"; WANTED="${WANTED#v}"
 LISTING=''
 for page in 1 2 3 4 5; do
-  json="$(fetch "$API_BASE/repos/$REPO/releases?per_page=100&page=$page")"
-  # One "R<TAB>tag<TAB>prerelease<TAB>draft" line per release, then "A<TAB>url" per asset (the API's JSON is pretty-printed, newest first).
+  # The API's JSON may or may not be pretty-printed, so start a line at every key (a quote inside a string is escaped, so `,"` and `{"` only
+  # occur between tokens).
+  json="$(fetch "$API_BASE/repos/$REPO/releases?per_page=100&page=$page" | sed 's/\([,{[]\)"/\1\n"/g')"
+  # One "R<TAB>tag<TAB>prerelease<TAB>draft" line per release, then "A<TAB>url" per asset (newest first).
   part="$(printf '%s\n' "$json" | awk '
     function flush() { if (tag != "" && !done) print "R\t" tag "\t" pre "\t" draft; done=1 }
     /^ *"tag_name":/ { flush(); done=0; tag=$0; sub(/^[^:]*: *"/, "", tag); sub(/".*$/, "", tag); pre="false"; draft="false"; next }
