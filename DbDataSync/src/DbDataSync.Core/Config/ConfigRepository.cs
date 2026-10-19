@@ -629,27 +629,36 @@ public sealed class ConfigRepository
     /// </summary>
     private static void ReplaceAllowingConcurrentReaders(string temporary, string path)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-        for (var attempt = 0; ; attempt++)
+        // Exclusive, so no read in this process overlaps the replace (see FileGate).
+        FileGate.EnterWriteLock();
+        try
         {
-            try
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            for (var attempt = 0; ; attempt++)
             {
-                SwapIn(temporary, path);
-                return;
-            }
-            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
-            {
-                if (DateTime.UtcNow >= deadline)
-                    throw;
+                try
+                {
+                    SwapIn(temporary, path);
+                    return;
+                }
+                catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+                {
+                    if (DateTime.UtcNow >= deadline)
+                        throw;
 
-                // Spin briefly before yielding: the common case is a reader that is already most of the
-                // way through a file of a few hundred bytes, and sleeping a whole millisecond for that
-                // would make a burst of saves far slower than it needs to be.
-                if (attempt < 20)
-                    Thread.SpinWait(50);
-                else
-                    Thread.Sleep(1);
+                    // Spin briefly before yielding: the common case is a reader that is already most of the
+                    // way through a file of a few hundred bytes, and sleeping a whole millisecond for that
+                    // would make a burst of saves far slower than it needs to be.
+                    if (attempt < 20)
+                        Thread.SpinWait(50);
+                    else
+                        Thread.Sleep(1);
+                }
             }
+        }
+        finally
+        {
+            FileGate.ExitWriteLock();
         }
     }
 
@@ -683,6 +692,16 @@ public sealed class ConfigRepository
     }
 
     /// <summary>
+    /// Every read of a config file shares this gate and every replace of one holds it exclusively, so within a process (the API serves reads
+    /// while other requests save) a read can never overlap a replace. Windows cannot make a replace that keeps the name present and
+    /// unlocked at every instant, even with <see cref="File.Replace(string, string, string?)"/>: a read in that instant finds the file missing
+    /// or fails with "being used by another process" (<c>ConcurrentConfigReadTests</c> failed both ways in Windows CI). The gate removes the
+    /// race for the readers that matter; <see cref="TryReadAllTextAllowingConcurrentReplace"/>'s wait covers a reader in another process
+    /// (the worker), which no lock here can reach.
+    /// </summary>
+    private static readonly ReaderWriterLockSlim FileGate = new();
+
+    /// <summary>
     /// How long a load waits for a file that is not there before it believes it. Windows has no replace that leaves the name in place: even
     /// <see cref="File.Replace(string, string, string?)"/> (<c>ReplaceFile</c>) briefly leaves the path absent, so a load landing in that
     /// instant used to report a task that exists as "not found" (<c>ConcurrentConfigReadTests</c>, Windows CI, which still failed after
@@ -693,8 +712,12 @@ public sealed class ConfigRepository
 
     /// <summary>
     /// The file's text, or null if there is no such file. One attempt to open it, not a check followed by an open (the file can vanish
-    /// between the two), and a missing file is retried for <see cref="MissingFileGrace"/> in case it is only mid-replace.
+    /// between the two). For a reader in another process, a file that is missing, or that is locked by the replace, is retried for
+    /// <see cref="MissingFileGrace"/> in case it is only mid-replace.
     /// </summary>
+    private static bool IsSharingViolation(Exception ex) =>
+        ex is IOException io && (io.HResult & 0xFFFF) is 32 or 33;   // ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION
+
     private static string? TryReadAllTextAllowingConcurrentReplace(string path)
     {
         var deadline = DateTime.UtcNow + MissingFileGrace;
@@ -708,6 +731,14 @@ public sealed class ConfigRepository
             {
                 if (DateTime.UtcNow >= deadline)
                     return null;
+
+                Thread.Sleep(1);
+            }
+            catch (Exception ex) when (OperatingSystem.IsWindows() && (ex is UnauthorizedAccessException || IsSharingViolation(ex)))
+            {
+                // The replace holds the file for an instant (a delete-pending name refuses access, an open handle refuses sharing).
+                if (DateTime.UtcNow >= deadline)
+                    throw;
 
                 Thread.Sleep(1);
             }
@@ -729,9 +760,18 @@ public sealed class ConfigRepository
     /// </summary>
     private static string ReadAllTextAllowingConcurrentReplace(string path)
     {
-        using var stream = new FileStream(
-            path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
+        // Shared with other reads, exclusive against a replace (see FileGate).
+        FileGate.EnterReadLock();
+        try
+        {
+            using var stream = new FileStream(
+                path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
+        }
+        finally
+        {
+            FileGate.ExitReadLock();
+        }
     }
 }
