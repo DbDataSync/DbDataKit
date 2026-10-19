@@ -154,6 +154,17 @@ class SourceTests(unittest.TestCase):
         plain, _ = self.source(payload=self.tmp / "payload")
         self.assertNotIn("CheckDotnetRuntime", plain)
 
+    def test_no_command_puts_a_bracket_inside_braces(self):
+        # Windows Installer treats {...} that contains a [...] as a conditional group and drops the braces, which breaks the PowerShell around it.
+        import re
+        for requires in (None, "10.0"):
+            meta = dict(META, requiresDotnet=requires) if requires else META
+            text, _ = self.source(meta, payload=self.tmp / "payload") if (self.tmp / "payload").exists() else self.source(meta)
+            for action in self.root(text).iter("{%s}CustomAction" % NS["w"]):
+                command = action.get("ExeCommand") or action.get("Value") or ""
+                for group in re.findall(r"\{[^{}]*\}", command):
+                    self.assertNotIn("[", group, f"{action.get('Id')}: {group}")
+
     def test_names_that_need_escaping_stay_well_formed(self):
         payload = make_payload(self.tmp / "odd", {"a&b.txt": "x"})
         text, _ = self.source(payload=payload)

@@ -65,6 +65,7 @@ def _ps_quote(text):
 
 
 def _msi_escape(text):
+    # Do not put a square bracket inside {braces} in a command: see _dotnet_check.
     """Square brackets start a property reference in an MSI command line; [\\[] and [\\]] are the literal ones."""
     return re.sub(r"[\[\]]", lambda m: "[\\[]" if m.group() == "[" else "[\\]]", text)
 
@@ -95,7 +96,8 @@ def _dotnet_check(major, message):
         "$roots = @((Join-Path $env:ProgramFiles 'dotnet'), $env:DOTNET_ROOT) | Where-Object { $_ }; "
         f"$found = $roots | Where-Object {{ Test-Path (Join-Path $_ 'shared\\Microsoft.NETCore.App') }} | "
         f"ForEach-Object {{ Get-ChildItem (Join-Path $_ 'shared\\Microsoft.NETCore.App') -Directory -Filter '{major}.*' }}; "
-        f"if (-not $found) {{ [Console]::Error.WriteLine({_ps_quote(message)}); exit 1 }}"
+        # No [brackets] in here: Windows Installer reads {...} that contains a [...] as a conditional group and drops the braces.
+        f"if (-not $found) {{ Write-Error {_ps_quote(message)}; exit 1 }}"
     )
 
 
