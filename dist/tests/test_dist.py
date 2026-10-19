@@ -237,7 +237,7 @@ class BashInstallerTests(DistTestCase):
 class PowerShellInstallerTests(DistTestCase):
     def run_ps(self, *args):
         # A PSModulePath left by a parent PowerShell 7 stops Windows PowerShell 5.1 from finding its own modules.
-        env = {k: v for k, v in os.environ.items() if k != "PSModulePath"}
+        env = {k: v for k, v in os.environ.items() if k.upper() != "PSMODULEPATH"}   # Windows upper-cases the names
         return subprocess.run([PWSH, "-NoProfile", "-File", str(self.tmp / "install.ps1"), "-ApiBase", self.gh.base, *args],
                               capture_output=True, text=True, env=env)
 
