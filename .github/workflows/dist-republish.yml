@@ -1,0 +1,63 @@
+name: Republish install files
+
+# Rebuilds the standard install files (dist/README.md) for a product's newest stable release and replaces the assets of its fixed
+# `<product>/dist` release: for when that release was deleted or lost its files. It changes nothing else; the versioned release's own
+# assets are untouched apart from re-attaching install.ps1 / install.sh to it. Run it by hand:
+#   gh workflow run dist-republish.yml --ref main -f product=dbdataproxy
+
+on:
+  workflow_dispatch:
+    inputs:
+      product:
+        description: The product whose install files to republish.
+        type: choice
+        options: [dbdatabuild, dbdatasync, dbdataproxy]
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  republish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PRODUCT: ${{ inputs.product }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Find the newest stable release
+        id: release
+        run: |
+          case "$PRODUCT" in
+            dbdatabuild) meta=DbDataBuild/dist.json ;;
+            dbdatasync)  meta=DbDataSync/dist.json ;;
+            dbdataproxy) meta=DbDataProxy/dist.json ;;
+          esac
+          tag=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq "[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith(\"$PRODUCT/v\")))][0].tag_name")
+          if [ -z "$tag" ] || [ "$tag" = null ]; then
+            echo "::error::No stable $PRODUCT release was found."
+            exit 1
+          fi
+          echo "republishing for $tag"
+          mkdir "$RUNNER_TEMP/sums"
+          gh release download "$tag" --pattern SHA256SUMS --dir "$RUNNER_TEMP/sums"
+          {
+            echo "meta=$meta"
+            echo "version=${tag#"$PRODUCT"/v}"
+            echo "sums=$RUNNER_TEMP/sums/SHA256SUMS"
+            echo "sha=$(git rev-list -n 1 "refs/tags/$tag")"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/publish-dist
+        with:
+          product: ${{ inputs.product }}
+          meta: ${{ steps.release.outputs.meta }}
+          version: ${{ steps.release.outputs.version }}
+          prerelease: 'false'
+          sums: ${{ steps.release.outputs.sums }}
+          sha: ${{ steps.release.outputs.sha }}
