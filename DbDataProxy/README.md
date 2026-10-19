@@ -96,12 +96,12 @@ this for you.
 
 ## Releases and installation
 
-DbDataProxy lives in the DbDataKit repository, with its own branches: work lands on `dbdataproxy/dev`, and a green
-CI run (`.github/workflows/dbdataproxy-ci.yml`: Windows and Linux suites, plus the package smoke test) promotes it to
-`dbdataproxy/test`. A release is cut by dispatching `.github/workflows/dbdataproxy-release.yml` against `dbdataproxy/test`.
-It builds with `build/package.ps1` and publishes a GitHub release in this repository containing
-`DbDataProxy-<version>-win-x64.zip`, `SHA256SUMS` and `install.ps1`, tagged `dbdataproxy/v<version>`. The version is the UTC
-build time, `YYYY.M.D.HHmm` (for example `2026.10.17.1530`); a `-beta` suffix marks a prerelease. See
+DbDataProxy lives in the DbDataKit repository. Work happens on short feature branches and reaches `main` by pull request (rebase
+merge); `.github/workflows/dbdataproxy-ci.yml` runs on the pull request and again on `main`: the Windows and Linux suites, plus the package
+smoke test. A release is cut by dispatching `.github/workflows/dbdataproxy-release.yml` against `main` (or `-f sha=<commit>` for an older
+commit on it), which needs a green CI run for that exact commit. It builds with `build/package.ps1` and publishes a GitHub release in this
+repository containing `DbDataProxy-<version>-win-x64.zip`, `SHA256SUMS` and `install.ps1`, tagged `dbdataproxy/v<version>`; it pushes no
+branch. The version is the UTC build time, `YYYY.M.D.HHmm` (for example `2026.10.17.1530`); a `-beta` suffix marks a prerelease. See
 `docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md` at the repository root.
 
 Releases of the other products are published in the same repository, so a DbDataProxy release is recognised by its

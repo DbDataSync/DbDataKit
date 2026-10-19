@@ -6,54 +6,30 @@ set -euo pipefail
 REPO="DbDataSync/DbDataKit"
 WORKFLOW_FILE="dbdatasync-release.yml"
 WORKFLOW_NAME="DbDataSync release"
-LANE_TEST="dbdatasync/test"
 BETA=false
+SHA=""
 
-for arg in "$@"; do
-  case "$arg" in
+usage() {
+  echo "Usage: $0 [--beta] [--sha <commit>]"
+  echo "  --beta         Publish as a SemVer 2 prerelease (hidden from a plain dotnet tool install)."
+  echo "  --sha <commit> Release an older commit on main instead of its tip (it needs a green DbDataSync CI run)."
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
     --beta) BETA=true ;;
-    -h|--help)
-      echo "Usage: $0 [--beta]"
-      echo "  --beta   Publish as a SemVer 2 prerelease (hidden from a plain dotnet tool install)."
-      exit 0
-      ;;
-    *)
-      echo "Unknown argument: $arg (usage: $0 [--beta])" >&2
-      exit 1
-      ;;
+    --sha) shift; SHA="${1:?--sha needs a commit}" ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown argument: $1" >&2; usage >&2; exit 1 ;;
   esac
+  shift
 done
 
-# dbdatasync-release.yml refuses outright unless dispatched against `dbdatasync/test` (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md
-# — a release is cut from the lane's own validated snapshot, and the workflow MERGES it into `main` as its last
-# step; there is no separate PR or push). This script checks against origin/dbdatasync/test, not origin/main, for the
-# same reason: a local edit that hasn't been committed, or a commit that hasn't reached test yet (dev -> test only
-# promotes after a green CI run), would silently be missing from the release with no error anywhere otherwise.
-if ! git rev-parse --show-toplevel >/dev/null 2>&1; then
-  echo "Not inside a git working tree. Run this from a clone of $REPO." >&2
-  exit 1
-fi
-
-if [ -n "$(git status --porcelain)" ]; then
-  echo "Working tree has uncommitted changes — commit or stash them before releasing:" >&2
-  git status --short >&2
-  exit 1
-fi
-
-git fetch origin "$LANE_TEST" --quiet
-local_sha=$(git rev-parse HEAD)
-remote_sha=$(git rev-parse "origin/$LANE_TEST")
-if [ "$local_sha" != "$remote_sha" ]; then
-  echo "Local HEAD ($local_sha) does not match origin/$LANE_TEST ($remote_sha)." >&2
-  echo "Push to dbdatasync/dev and wait for it to reach $LANE_TEST (it only promotes after a green CI run) before" >&2
-  echo "releasing — $WORKFLOW_FILE builds $LANE_TEST, not this checkout, and refuses anything dispatched against" >&2
-  echo "another ref." >&2
-  exit 1
-fi
-
-echo "Dispatching $WORKFLOW_FILE (beta=$BETA) against $REPO, ref $LANE_TEST..."
+# The workflow builds origin/main (or --sha) and refuses unless that exact commit has a green DbDataSync CI run, so nothing about this
+# checkout matters: not an uncommitted edit, not an unpushed commit. docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md, "Trunk model".
+echo "Dispatching $WORKFLOW_FILE (beta=$BETA${SHA:+, sha=$SHA}) against $REPO, ref main..."
 before=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-gh workflow run "$WORKFLOW_FILE" --repo "$REPO" --ref "$LANE_TEST" -f beta="$BETA"
+gh workflow run "$WORKFLOW_FILE" --repo "$REPO" --ref main -f beta="$BETA" ${SHA:+-f sha="$SHA"}
 
 # `gh workflow run` doesn't hand back a run id, so find the run it just created: the newest
 # workflow_dispatch-triggered release run created at or after the moment we dispatched. A short
@@ -85,6 +61,6 @@ fi
 
 sha=$(gh run view "$run_id" --repo "$REPO" --json headSha --jq .headSha)
 echo
-echo "Release run succeeded (commit ${sha:0:12})."
+echo "Release run succeeded (workflow started on ${sha:0:12})."
 echo "Recent releases:"
 gh release list --repo "$REPO" --limit 3
