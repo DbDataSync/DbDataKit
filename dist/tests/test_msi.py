@@ -85,7 +85,13 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(product.get("UpgradeCode"), "{11111111-2222-3333-4444-555555555555}")
         self.assertEqual(product.get("Version"), "26.10.27669")
         self.assertEqual(product.get("Name"), "Widget")
-        self.assertIsNotNone(product.find("w:MajorUpgrade", NS))
+        upgrade = product.find("w:Upgrade", NS)
+        self.assertEqual(upgrade.get("Id"), "{11111111-2222-3333-4444-555555555555}")
+        older, newer = upgrade.findall("w:UpgradeVersion", NS)
+        self.assertEqual((older.get("Property"), older.get("Maximum"), older.get("IncludeMaximum")), ("WIX_UPGRADE_DETECTED", "26.10.27669", "no"))
+        self.assertEqual((newer.get("Property"), newer.get("Minimum"), newer.get("OnlyDetect")), ("WIX_DOWNGRADE_DETECTED", "26.10.27669", "yes"))
+        self.assertIn("NOT WIX_DOWNGRADE_DETECTED", product.find("w:Condition", NS).text)   # a downgrade is refused
+        self.assertIsNone(product.find("w:MajorUpgrade", NS))   # wixl cannot schedule it after InstallFinalize
         self.assertEqual(product.find("w:Package", NS).get("InstallScope"), "perMachine")
 
     def test_service_actions_and_their_conditions(self):
@@ -102,8 +108,12 @@ class SourceTests(unittest.TestCase):
         self.assertIn('INSTALLSERVICE="1"', sequence["RegisterService"])
         self.assertIn("NOT UPGRADINGPRODUCTCODE", sequence["UnregisterService"])   # and removing the old version does not unregister it
         self.assertIn("WIX_UPGRADE_DETECTED", sequence["StartService"])
-        stop = next(product.iter("{%s}ServiceControl" % NS["w"]))
-        self.assertEqual((stop.get("Name"), stop.get("Stop")), ("WidgetSvc", "both"))
+        self.assertIn("Stop-Service -Name 'WidgetSvc'", actions["StopService"].get("ExeCommand"))
+        # stopped for an upgrade's file copy and for a plain removal, but not when the OLD product is removed after the upgrade
+        self.assertIn("WIX_UPGRADE_DETECTED", sequence["StopService"])
+        self.assertIn("NOT UPGRADINGPRODUCTCODE", sequence["StopService"])
+        self.assertNotIn("ServiceControl", text)   # it would stop the service the upgrade just started, when the old product goes
+        self.assertIn("RemoveExistingProducts", sequence)
         self.assertTrue(any(p.get("Id") == "INSTALLSERVICE" for p in product.findall("w:Property", NS)))
 
     def test_path_actions_escape_square_brackets_and_fail_the_install_when_the_edit_fails(self):
@@ -177,12 +187,15 @@ class BuildTests(unittest.TestCase):
         self.assertIn("{11111111-2222-3333-4444-555555555555}", upgrade)
         self.assertIn("WIX_UPGRADE_DETECTED", upgrade)
         self.assertIn("WIX_DOWNGRADE_DETECTED", upgrade)
+        self.assertIn("NOT WIX_DOWNGRADE_DETECTED", self.table("LaunchCondition"))
+        self.assertIn("WIX_UPGRADE_DETECTED;WIX_DOWNGRADE_DETECTED", self.table("Property"))   # passed to the elevated install
 
     def test_custom_actions_are_deferred_and_unimpersonated(self):
         rows = {line.split("\t")[0]: line.split("\t") for line in self.table("CustomAction").splitlines()[3:] if "\t" in line}
         self.assertEqual(rows["RegisterService"][1], "3090")    # exe from an installed file, in the script, no impersonation, checked
         self.assertEqual(rows["UnregisterService"][1], "3154")   # the same, failure ignored
         self.assertEqual(rows["AddToPath"][1], "3122")           # exe named by a property
+        self.assertEqual(rows["StopService"][1], "3186")   # the same, failure ignored
         self.assertEqual(rows["SetPowerShell"][1], "51")         # sets the property
 
     def test_the_sequence_stops_the_service_before_files_go_and_registers_after_they_arrive(self):
@@ -191,17 +204,17 @@ class BuildTests(unittest.TestCase):
             parts = line.split("\t")
             if len(parts) == 3 and parts[2].isdigit():
                 seq[parts[0]] = int(parts[2])
-        self.assertLess(seq["StopServices"], seq["RemoveFiles"])
+        self.assertLess(seq["StopService"], seq["RemoveFiles"])
         self.assertLess(seq["UnregisterService"], seq["RemoveFiles"])
         self.assertLess(seq["InstallFiles"], seq["RegisterService"])
         self.assertLess(seq["RegisterService"], seq["StartService"])
-        # An upgrade removes the old version before the new one's script starts, and the helper property is set before any deferred action is scheduled.
-        self.assertLess(seq["InstallValidate"], seq["RemoveExistingProducts"])
-        self.assertLess(seq["RemoveExistingProducts"], seq["InstallInitialize"])
-        self.assertLess(seq["SetPowerShell"], seq["StopServices"])
-        self.assertLess(seq["InstallInitialize"], seq["StopServices"])
-        self.assertLess(seq["StopServices"], seq["UnregisterService"])
-        self.assertLess(seq["UnregisterService"], seq["DeleteServices"])
+        # The old version is removed AFTER the new one is installed: removed first, Windows Installer skips files it still sees (identical ones)
+        # and the removal then deletes them. The helper property is set before any deferred action is scheduled.
+        self.assertGreater(seq["RemoveExistingProducts"], seq["InstallFinalize"])
+        self.assertLess(seq["SetPowerShell"], seq["StopService"])
+        self.assertLess(seq["InstallInitialize"], seq["StopService"])
+        self.assertLess(seq["StopService"], seq["UnregisterService"])
+        self.assertLess(seq["StopService"], seq["InstallFiles"])
         self.assertLess(seq["RemoveFromPath"], seq["RemoveFiles"])
         self.assertLess(seq["StartService"], seq["AddToPath"])
 
