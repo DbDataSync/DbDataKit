@@ -27,7 +27,8 @@ function Msi([string]$arguments) {
 }
 function Assert([bool]$condition, [string]$message) { if (-not $condition) { throw "FAILED: $message" } else { Write-Host "ok: $message" } }
 function MachinePath { [Environment]::GetEnvironmentVariable('Path', 'Machine') }
-function OnMachinePath { (MachinePath -split ';' | ForEach-Object { $_.TrimEnd('\') }) -contains $dir }
+function PathEntries { (MachinePath) -split ';' | ForEach-Object { $_.TrimEnd('\') } }
+function OnMachinePath { (PathEntries) -contains $dir }
 function ArpEntries { @(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq $DisplayName }) }
 function Svc { if ($ServiceName) { Get-Service -Name $ServiceName -ErrorAction SilentlyContinue } }
 function EventsAbout([int]$minutes = 10) {
@@ -82,7 +83,7 @@ Write-Host "=== upgrade over the running install"
 Msi "/i `"$Msi2`""
 Assert (Test-Path (Join-Path $dir 'UPGRADED.txt')) "the newer package's files are in place"
 Assert ((ArpEntries).Count -eq 1) "still one Add/Remove Programs entry"
-if ($OnPath) { Assert (OnMachinePath) "still on the machine PATH" ; Assert (((MachinePath -split ';') | Where-Object { $_.TrimEnd('\') -eq $dir }).Count -eq 1) "and only once" }
+if ($OnPath) { Assert (OnMachinePath) "still on the machine PATH" ; Assert (@(PathEntries | Where-Object { $_ -eq $dir }).Count -eq 1) "and only once" }
 if ($ServiceName) {
   Assert ($null -ne (Svc)) "the service is still registered"
   Assert ((ServicePath) -eq $pathBefore) "with the same command line (an upgrade keeps the registration)"
