@@ -12,6 +12,7 @@ name: DbDataBuild release
 #
 # The version is CalVer, YYYY.M.D.HHmm from the UTC clock, like every product (the old repo's v0.4.x tags are not carried forward).
 #
+# Each release has a Windows installer, dbdatabuild-v<version>-win-x64.msi (dist/msi.py), beside the zips.
 # The standard distribution files (dist/README.md) come with every release: install.ps1 and install.sh are attached to it, and a stable
 # release also replaces the fixed `dbdatabuild/dist` release, so these URLs never change:
 #   scoop install https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabuild/dist/dbdatabuild.json
@@ -163,6 +164,15 @@ jobs:
           path: assets
           merge-multiple: true
 
+      # The Windows installer, built from the win-x64 package just downloaded and checksummed with it.
+      - uses: ./.github/actions/build-msi
+        with:
+          product: dbdatabuild
+          meta: DbDataBuild/dist.json
+          version: ${{ env.VERSION }}
+          zip: assets/dbdatabuild-v${{ env.VERSION }}-win-x64.zip
+          out: assets
+
       - name: Checksums
         working-directory: assets
         run: sha256sum * > SHA256SUMS && cat SHA256SUMS
@@ -196,3 +206,4 @@ jobs:
           prerelease: ${{ env.PRERELEASE }}
           sums: assets/SHA256SUMS
           sha: ${{ env.SHA }}
+          msi: assets/dbdatabuild-v${{ env.VERSION }}-win-x64.msi

@@ -29,6 +29,10 @@ scoop install https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabu
 curl -fsSL https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabuild/dist/install.sh | bash
 ```
 
+On Windows there is also an installer to copy and double-click: `dbdatabuild-v<version>-win-x64.msi` on each release, the newest at
+<https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabuild/dist/dbdatabuild.msi> (installs to Program Files and puts it on the PATH;
+`dist/README.md` has the options).
+
 ## A first look
 
 ```

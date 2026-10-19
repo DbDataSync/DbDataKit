@@ -107,7 +107,14 @@ branch. The version is the UTC build time, `YYYY.M.D.HHmm` (for example `2026.10
 Releases of the other products are published in the same repository, so a DbDataProxy release is recognised by its
 `dbdataproxy/v` tag. GitHub's own "latest release" is not used (it is one marker for the whole repository).
 
-To install or upgrade from a release, run from an elevated PowerShell prompt (Windows PowerShell 5.1 or later). The install files are the
+**Installer.** Each release has `dbdataproxy-v<version>-win-x64.msi` (the newest at
+<https://github.com/DbDataSync/DbDataKit/releases/download/dbdataproxy/dist/dbdataproxy.msi>): copy it to the machine and double-click, or
+`msiexec /i dbdataproxy-v<version>-win-x64.msi /qn`. It installs to `%ProgramFiles%\DbDataProxy` and registers the `DbDataProxy` service, stopped
+(`INSTALLSERVICE=0` skips that). Install a newer one over it to upgrade: the service is stopped, the files replaced, the registration kept, the service
+started again. Add/Remove Programs removes it; settings and certificate in `%ProgramData%` stay. It is not signed yet, so Windows shows "Unknown publisher".
+Then configure and start it as below.
+
+To install or upgrade from a release with a script instead, run from an elevated PowerShell prompt (Windows PowerShell 5.1 or later). The install files are the
 repository's standard ones ([`dist/README.md`](../dist/README.md)) and these URLs never change:
 
 ```powershell
