@@ -6,8 +6,10 @@ name: DbDataProxy release
 #   gh workflow run dbdataproxy-release.yml --ref main -f sha=<an older commit on main>
 #
 # It releases the newest commit on main, or `sha` (which must be on main), and only if that exact commit has a green "DbDataProxy CI" run.
-# It packages the Windows zip, tags the commit dbdataproxy/v<version> and publishes a GitHub Release in THIS repository (zip, SHA256SUMS,
-# and the standard install.ps1 / Scoop manifest, bound by .github/actions/publish-dist from DbDataProxy/dist.json). No branch is pushed or merged: a release is a tag and its assets. Built-in GITHUB_TOKEN only.
+# It packages the Windows zip (a Windows job), builds the Windows installer from it (dbdataproxy-v<version>-win-x64.msi, dist/msi.py, on Ubuntu),
+# tags the commit dbdataproxy/v<version> and publishes a GitHub Release in THIS repository (zip, msi, SHA256SUMS, and the standard install.ps1 /
+# Scoop manifest, bound by .github/actions/publish-dist from DbDataProxy/dist.json). No branch is pushed or merged: a release is a tag and its
+# assets. Built-in GITHUB_TOKEN only.
 #
 # The version is CalVer, YYYY.M.D.HHmm from the UTC clock, like every product.
 
@@ -33,16 +35,21 @@ defaults:
     working-directory: DbDataProxy
 
 jobs:
-  release:
+  package:
     runs-on: windows-latest
     # Observed: 3 minutes. The ceiling fails a hung build fast instead of after GitHub's six-hour default.
     timeout-minutes: 20
+    outputs:
+      sha: ${{ steps.pick.outputs.sha }}
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Pick the commit, which must be on main
+        id: pick
         shell: bash
         working-directory: .
         env:
@@ -59,6 +66,7 @@ jobs:
             exit 1
           fi
           echo "releasing $sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "SHA=$sha" >> "$GITHUB_ENV"
           git checkout -q --detach "$sha"
 
@@ -103,22 +111,53 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: ./build/package.ps1 -Version $env:VERSION
 
-      # After the package is built, not before: a tag is a claim that this version shipped, so a failed run leaves nothing to clean up.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: package
+          path: DbDataProxy/artifacts/release/dbdataproxy-v*.zip
+          if-no-files-found: error
+
+  # Ubuntu, because the installer is built with wixl (apt) and the rest is shell. Nothing is tagged or published until the package and the
+  # installer both exist: a tag is a claim that this version shipped, so a failed run leaves nothing to clean up.
+  release:
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SHA: ${{ needs.package.outputs.sha }}
+      VERSION: ${{ needs.package.outputs.version }}
+      PRERELEASE: ${{ needs.package.outputs.prerelease }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.package.outputs.sha }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: package
+          path: assets
+
+      - uses: ./.github/actions/build-msi
+        with:
+          product: dbdataproxy
+          meta: DbDataProxy/dist.json
+          version: ${{ env.VERSION }}
+          zip: assets/dbdataproxy-v${{ env.VERSION }}-win-x64.zip
+          out: assets
+
+      - name: Checksums
+        working-directory: assets
+        run: sha256sum * > SHA256SUMS && cat SHA256SUMS
+
       - name: Tag this commit with the released version
-        shell: bash
         working-directory: .
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
           git tag "dbdataproxy/v$VERSION"
           git push origin "refs/tags/dbdataproxy/v$VERSION"
 
       - name: Publish the GitHub Release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.version.outputs.version }}
-          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        working-directory: .
         run: |
           prerelease_flag=()
           [ "$PRERELEASE" = "true" ] && prerelease_flag=(--prerelease)
@@ -129,15 +168,14 @@ jobs:
             --title "DbDataProxy $VERSION" \
             --notes "DbDataProxy $VERSION, packed from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$SHA. The version is the UTC date and time this release was built." \
             "${prerelease_flag[@]}" \
-            artifacts/release/*
+            assets/*
 
       - uses: ./.github/actions/publish-dist
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           product: dbdataproxy
           meta: DbDataProxy/dist.json
-          version: ${{ steps.version.outputs.version }}
-          prerelease: ${{ steps.version.outputs.prerelease }}
-          sums: DbDataProxy/artifacts/release/SHA256SUMS
+          version: ${{ env.VERSION }}
+          prerelease: ${{ env.PRERELEASE }}
+          sums: assets/SHA256SUMS
           sha: ${{ env.SHA }}
+          msi: assets/dbdataproxy-v${{ env.VERSION }}-win-x64.msi

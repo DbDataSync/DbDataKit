@@ -99,6 +99,15 @@ sudo dbdatasync tool uninstall
 sudo rm -r /opt/dbdatasync
 ```
 
+## Windows installer (MSI)
+
+Each release has `dbdatasync-v<version>-win-x64.msi` (the newest at
+<https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/dbdatasync.msi>): copy it to the machine and double-click, or
+`msiexec /i dbdatasync-v<version>-win-x64.msi /qn`. It installs to `C:\Program Files\DbDataSync`, puts that folder on the machine PATH and registers
+the `DbDataSync` service, stopped (`INSTALLSERVICE=0` skips that). It needs the .NET 10 runtime and says so before changing anything
+(`SKIPDOTNETCHECK=1` skips the check). Install a newer MSI over it to upgrade; Add/Remove Programs removes it, and your data stays. Like the zip, it
+cannot `dbdatasync update` itself or run the versioned slots; use the tool package for those. It is not signed yet, so Windows shows "Unknown publisher".
+
 ## Zip install (install script or Scoop)
 
 Every release also carries `dbdatasync-v<version>-<win-x64|linux-x64>.zip` and the repository's standard install scripts

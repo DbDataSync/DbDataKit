@@ -137,6 +137,23 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(ids, ["SetPowerShell"])
         self.assertNotIn("ServiceControl", text)
 
+    def test_a_product_that_needs_dotnet_checks_for_the_runtime_before_changing_anything(self):
+        text, _ = self.source(dict(META, requiresDotnet="10.0"))
+        product = self.root(text).find("w:Product", NS)
+        check = next(a for a in product.findall("w:CustomAction", NS) if a.get("Id") == "CheckDotnetRuntime")
+        self.assertEqual(check.get("Execute"), "immediate")           # before InstallInitialize: nothing has been changed when it fails
+        self.assertEqual(check.get("Return"), "check")
+        command = check.get("ExeCommand")
+        self.assertIn("needs the .NET 10 runtime", command)           # Windows Installer shows the failed command, so the sentence is in it
+        self.assertIn("-Filter '10.*'", command)
+        self.assertIn("$found", command)                              # the $ survived (it is doubled in the source)
+        row = next(c for c in product.find("w:InstallExecuteSequence", NS) if c.get("Action") == "CheckDotnetRuntime")
+        self.assertEqual(row.get("Sequence"), "1460")
+        self.assertIn("NOT SKIPDOTNETCHECK", row.text)
+        self.assertLess(1460, 1500)
+        plain, _ = self.source(payload=self.tmp / "payload")
+        self.assertNotIn("CheckDotnetRuntime", plain)
+
     def test_names_that_need_escaping_stay_well_formed(self):
         payload = make_payload(self.tmp / "odd", {"a&b.txt": "x"})
         text, _ = self.source(payload=payload)
@@ -217,6 +234,17 @@ class BuildTests(unittest.TestCase):
         self.assertLess(seq["StopService"], seq["InstallFiles"])
         self.assertLess(seq["RemoveFromPath"], seq["RemoveFiles"])
         self.assertLess(seq["StartService"], seq["AddToPath"])
+
+    def test_the_runtime_check_is_an_immediate_exe_action_before_the_script_starts(self):
+        meta = self.tmp / "dotnet.json"
+        meta.write_text(json.dumps(dict(META, requiresDotnet="10.0")))
+        out = self.tmp / "dotnet.msi"
+        subprocess.run([sys.executable, "-I", str(DIST / "msi.py"), "build", "--meta", str(meta), "--version", "2026.10.19.509",
+                        "--payload", str(self.tmp / "payload"), "--out", str(out)], check=True, capture_output=True)
+        actions = subprocess.run([MSIINFO, "export", str(out), "CustomAction"], check=True, capture_output=True, text=True).stdout
+        rows = {line.split("\t")[0]: line.split("\t") for line in actions.splitlines()[3:] if "\t" in line}
+        self.assertEqual(rows["CheckDotnetRuntime"][1], "50")      # exe named by a property, run in the immediate sequence, failure fatal
+        self.assertIn("$found", rows["CheckDotnetRuntime"][3])
 
     def test_dollar_signs_survive_in_commands_and_file_names(self):
         # wixl's preprocessor drops a lone $; the generator doubles it. A PowerShell command without its $ is a different, failing, command.

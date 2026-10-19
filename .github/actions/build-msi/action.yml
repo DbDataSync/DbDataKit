@@ -1,0 +1,49 @@
+name: Build the Windows installer (MSI)
+description: >
+  Builds <product>-v<version>-win-x64.msi from the product's win-x64 zip with dist/msi.py (wixl, not the WiX toolset). Runs on Ubuntu.
+  Needs a checkout that has dist/. See dist/msi.py for what the installer does.
+
+inputs:
+  product:
+    description: The product's lowercase name (dbdatabuild, dbdatasync, dbdataproxy).
+    required: true
+  meta:
+    description: Path to the product's dist.json.
+    required: true
+  version:
+    description: The release version, as in the tag <product>/v<version>.
+    required: true
+  zip:
+    description: The product's win-x64 zip.
+    required: true
+  out:
+    description: The directory the .msi is written to.
+    required: true
+
+outputs:
+  path:
+    description: The .msi that was written.
+    value: ${{ steps.build.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - id: build
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        PRODUCT: ${{ inputs.product }}
+        META: ${{ inputs.meta }}
+        VERSION: ${{ inputs.version }}
+        ZIP: ${{ inputs.zip }}
+        OUT: ${{ inputs.out }}
+      run: |
+        set -euo pipefail
+        sudo apt-get update -y -q
+        sudo apt-get install -y -q wixl
+        payload=$(mktemp -d)
+        unzip -q "$ZIP" -d "$payload"
+        mkdir -p "$OUT"
+        msi="$OUT/$PRODUCT-v$VERSION-win-x64.msi"
+        python3 -I dist/msi.py build --meta "$META" --version "$VERSION" --payload "$payload" --out "$msi"
+        echo "path=$msi" >> "$GITHUB_OUTPUT"

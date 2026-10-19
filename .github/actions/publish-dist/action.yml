@@ -23,6 +23,10 @@ inputs:
   sha:
     description: The released commit, used as the target when the fixed release is first created.
     required: true
+  msi:
+    description: The product's Windows installer, if the release has one. A stable release also publishes it as <product>.msi in the fixed release.
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -36,6 +40,7 @@ runs:
         PRERELEASE: ${{ inputs.prerelease }}
         SUMS: ${{ inputs.sums }}
         SHA: ${{ inputs.sha }}
+        MSI: ${{ inputs.msi }}
       run: |
         set -euo pipefail
         out="$RUNNER_TEMP/dist-$PRODUCT"
@@ -53,11 +58,12 @@ runs:
 
         if [ "$PRERELEASE" != "true" ]; then
           # One fixed release whose assets are replaced, so the URLs never change. It is a prerelease so it stays out of the way of the real ones:
-          #   https://github.com/$GITHUB_REPOSITORY/releases/download/$PRODUCT/dist/{install.ps1,install.sh,$PRODUCT.json}
+          #   https://github.com/$GITHUB_REPOSITORY/releases/download/$PRODUCT/dist/{install.ps1,install.sh,$PRODUCT.json,$PRODUCT.msi}
           if ! gh release view "$PRODUCT/dist" > /dev/null 2>&1; then
             gh release create "$PRODUCT/dist" --target "$SHA" --prerelease --latest=false \
               --title "$PRODUCT install files" \
               --notes "The install scripts and Scoop manifest for the newest stable $PRODUCT release, replaced by each one. See dist/README.md."
           fi
+          [ -z "$MSI" ] || cp "$MSI" "$out/$PRODUCT.msi"
           gh release upload "$PRODUCT/dist" "$out"/* --clobber
         fi

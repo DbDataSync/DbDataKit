@@ -6,7 +6,8 @@ own (DbDataSync is also a .NET tool package), but these always exist.
 | | |
 |---|---|
 | **Package** | `<product>-v<version>-<rid>.zip`, the program files at the zip root (no wrapping folder), one per platform (`win-x64`, `linux-x64`) |
-| **Checksums** | `SHA256SUMS` on the release, listing every zip |
+| **Checksums** | `SHA256SUMS` on the release, listing every zip and the installer |
+| **Installer** | `<product>-v<version>-win-x64.msi`: double-click to install (Windows) |
 | **Scoop** | `<product>.json`, a manifest pinned to one release (Windows) |
 | **PowerShell** | `install.ps1`: Windows PowerShell 5.1 and PowerShell 7 |
 | **bash** | `install.sh`: Linux and macOS |
@@ -72,6 +73,9 @@ Edit `<Product>/dist.json`:
 | `preserve` | files an upgrade never overwrites |
 | `service` | `{ "name", "register" }`: the Windows service, and the arguments that register it (`{name}` is substituted) |
 | `requiresDotnet` | warns after install when that runtime is missing |
+| `msi.upgradeCode` | the installer's fixed GUID, **never changed** (it is how a newer version finds the older one) |
+| `msi.addToPath` | the installer puts its folder on the machine PATH |
+| `service.unregister` | the command the installer runs on removal (with `register`, `{name}` is substituted) |
 | `requiresVcRuntime` | the Windows program needs the Visual C++ Redistributable: `install.ps1` warns when `vcruntime140.dll` is missing and the Scoop manifest suggests `extras/vcredist2022` |
 | `notes` | printed after install and shown by Scoop |
 
@@ -81,6 +85,26 @@ both installers against a local fake of the GitHub releases API (`dist-ci.yml`).
 
 If a `<product>/dist` release is deleted or loses its files, run the `dist-republish.yml` workflow for that product
 (`gh workflow run dist-republish.yml --ref main -f product=dbdataproxy`): it re-binds the files for the newest stable release and uploads them.
+
+## The Windows installer (MSI)
+
+A single file to copy to a machine and double-click (or `msiexec /i <file>.msi /qn` for a silent install). It copies the package to
+`%ProgramFiles%\<Name>`, and for a product with a Windows service it runs the product's own service install (the service is registered
+stopped, so it can be configured first). Stable releases also keep the newest one at
+`https://github.com/DbDataSync/DbDataKit/releases/download/<product>/dist/<product>.msi`.
+
+* **Upgrading** is installing a newer MSI over the old one: the service is stopped for the file copy, the registration is kept, and the service
+  is started again. Installing an older one over a newer one is refused. Settings and data (`%ProgramData%`) are never touched.
+* **Removing** is Add/Remove Programs (or `msiexec /x`): the program folder, the service registration and the PATH entry go; settings and data stay.
+* **Properties:** `INSTALLSERVICE=0` installs the files and registers no service. `SKIPDOTNETCHECK=1` skips DbDataSync's check for the .NET 10 runtime.
+* **PATH:** DbDataBuild and DbDataSync put their folder on the machine PATH (open a new terminal).
+* **Built with wixl** (msitools, LGPL; `apt install wixl`), not the WiX toolset, by `dist/msi.py` from `dist.json`. `dist-msi-ci.yml` installs, upgrades,
+  refuses a downgrade and removes each product's MSI on a Windows runner, so what is described here is what ran there.
+* **Unsigned** today, so Windows shows "Unknown publisher" and SmartScreen may warn. Signing needs a certificate.
+* **With the other routes:** all of them install to the same folder, so use one per machine. `install.ps1` leaves no Add/Remove Programs entry;
+  installing the MSI over it is fine.
+* **Version:** an MSI version has three fields, so CalVer is shown as `YY.M.(day*1440+minute)` (2026.10.19.509 is 26.10.27669). It sorts in release
+  order; the real version is in the entry's comments.
 
 ## Not covered
 

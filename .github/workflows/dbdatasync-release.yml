@@ -7,7 +7,7 @@ name: DbDataSync release
 #
 # It releases the newest commit on main, or `sha` (which must be on main), and only if that exact commit has a green "DbDataSync CI" run.
 # It packs and checks the package, tags the commit dbdatasync/v<version> and publishes a GitHub Release in THIS repository with the package
-# attached, plus the standard zip packages and install scripts (dist/README.md). No branch is pushed or merged: a release is a tag and its assets. Everything runs on the built-in GITHUB_TOKEN; there is no
+# attached, plus the standard zip packages, the Windows installer (.msi) and install scripts (dist/README.md). No branch is pushed or merged: a release is a tag and its assets. Everything runs on the built-in GITHUB_TOKEN; there is no
 # NuGet push (paused), no container image (dispatch dbdatasync-publish-image.yml by hand) and no GitHub App.
 
 on:
@@ -268,7 +268,18 @@ jobs:
             fi
             (cd "artifacts/publish/$rid" && zip -qr "$OLDPWD/artifacts/dist/dbdatasync-v$SHIPPED-$rid.zip" .)
           done
-          (cd artifacts/dist && sha256sum *.zip > SHA256SUMS && cat SHA256SUMS)
+
+      # The Windows installer (dist/msi.py), built from the win-x64 zip; the checksums cover it too.
+      - uses: ./.github/actions/build-msi
+        with:
+          product: dbdatasync
+          meta: DbDataSync/dist.json
+          version: ${{ steps.pack.outputs.shipped }}
+          zip: DbDataSync/artifacts/dist/dbdatasync-v${{ steps.pack.outputs.shipped }}-win-x64.zip
+          out: DbDataSync/artifacts/dist
+
+      - name: Checksums
+        run: (cd artifacts/dist && sha256sum *.zip *.msi > SHA256SUMS && cat SHA256SUMS)
 
       - name: Smoke test the linux-x64 zip
         env:
@@ -325,7 +336,7 @@ jobs:
             echo "dotnet tool install --global --add-source . DbDataSync --version $VERSION"
             echo '```'
             echo
-            echo "The zip packages (win-x64, linux-x64; they need the .NET 10 runtime) are installed with the install scripts attached to this release, or with Scoop on Windows. See \`dist/README.md\` in the repository."
+            echo "The zip packages (win-x64, linux-x64; they need the .NET 10 runtime) are installed with the install scripts attached to this release, or with Scoop on Windows; on Windows the .msi installs it (and registers the service) with a double-click. See \`dist/README.md\` in the repository."
           } > /tmp/release-notes.md
           # The checksum `dbdatasync update` verifies the download against: base64 of the package's SHA-512, no newline.
           openssl dgst -sha512 -binary "$NUPKG" | base64 -w0 > "$NUPKG.sha512"
@@ -349,3 +360,4 @@ jobs:
           prerelease: ${{ steps.version.outputs.prerelease }}
           sums: DbDataSync/artifacts/dist/SHA256SUMS
           sha: ${{ env.SHA }}
+          msi: DbDataSync/artifacts/dist/dbdatasync-v${{ steps.pack.outputs.shipped }}-win-x64.msi

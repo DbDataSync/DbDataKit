@@ -122,7 +122,7 @@ All products use CalVer, `YYYY.M.D.HHmm`, computed from the UTC clock as DbDataS
 | tag in this repo | `dbdatasync/v<version>` | `dbdataproxy/v<version>` | `dbdatabuild/v<version>` |
 | assets | `.nupkg` + `.sha512`, plus the standard set | the standard set | the standard set |
 
-The standard set is the win-x64 (and, except Proxy, linux-x64) zip, `SHA256SUMS`, `install.ps1` and (except Proxy) `install.sh`. Sync's zips are framework-dependent and cannot `update` themselves.
+The standard set is the win-x64 (and, except Proxy, linux-x64) zip, the win-x64 `.msi` (`dist/msi.py`), `SHA256SUMS`, `install.ps1` and (except Proxy) `install.sh`. Sync's zips are framework-dependent and cannot `update` themselves.
 
 Common release steps: refuse unless dispatched against `main` and the commit (the tip, or `sha`) is on `main`; gate on that exact commit
 (DbDataSync and DbDataProxy look up the CI run rather than re-running it, DbDataBuild runs its full conformance suite because it has one); build,
@@ -220,7 +220,7 @@ Everything runs on the built-in `GITHUB_TOKEN`; no GitHub App, no rulesets.
 | `dbdatasync-release.yml` | dispatch against `main` (or `sha`); needs a green CI run for the commit; packs and checks the nupkg; tag `dbdatasync/v<version>`; GitHub Release in this repo with the package and its `.sha512`. |
 | `dbdatasync-publish-image.yml` | dispatch-only; not chained from the release. |
 | `dbdataproxy-ci.yml` | trunk: `changes`, the Windows suite (with the package smoke test and installer tests) and the Linux suite against the shared SQL Server. |
-| `dbdataproxy-release.yml` | dispatch against `main` (or `sha`); needs a green CI run for the commit; Windows zip; tag `dbdataproxy/v<version>`; GitHub Release with the standard set. |
+| `dbdataproxy-release.yml` | dispatch against `main` (or `sha`); needs a green CI run for the commit; Windows zip (Windows job), then the `.msi` (Ubuntu job); tag `dbdataproxy/v<version>`; GitHub Release with the standard set. |
 | `dbdatabuild-ci.yml` | trunk: `changes`, the unit suite on Linux and Windows, the core conformance groups, and the slow engines after a merge or with `ci:full`. |
 | `dbdatabuild-conformance-full.yml` | every engine in one job: nightly on `main`, on request, and as the gate inside the release. |
 | `dbdatabuild-release.yml` | dispatch against `main` (or `sha`); full conformance on that commit; builds and smoke-tests linux-x64 and win-x64; tag `dbdatabuild/v<version>`; GitHub Release; a stable release also replaces the assets of the fixed `dbdatabuild/dist` release. |

@@ -89,6 +89,16 @@ def _path_edit(add):
     )
 
 
+def _dotnet_check(major, message):
+    """Fails (exit 1, with the message) unless a shared runtime of that major version is under Program Files\\dotnet or DOTNET_ROOT."""
+    return (
+        "$roots = @((Join-Path $env:ProgramFiles 'dotnet'), $env:DOTNET_ROOT) | Where-Object { $_ }; "
+        f"$found = $roots | Where-Object {{ Test-Path (Join-Path $_ 'shared\\Microsoft.NETCore.App') }} | "
+        f"ForEach-Object {{ Get-ChildItem (Join-Path $_ 'shared\\Microsoft.NETCore.App') -Directory -Filter '{major}.*' }}; "
+        f"if (-not $found) {{ [Console]::Error.WriteLine({_ps_quote(message)}); exit 1 }}"
+    )
+
+
 def powershell_sequence_remove(pair):
     action_id, condition = pair
     return f'<Custom Action="{action_id}" Sequence="3499">{condition}</Custom>'
@@ -147,10 +157,11 @@ def wxs(meta, version, payload):
     sequence = ['<Custom Action="SetPowerShell" Sequence="1450"/>', '<Custom Action="RemoveExistingProducts" Sequence="6601"/>']
     after_files = []   # run in order after the files are copied, each after the previous one
 
-    def powershell(action_id, script, condition, ignore=True):
+    def powershell(action_id, script, condition, ignore=True, immediate=False):
+        execute = 'Execute="immediate"' if immediate else 'Execute="deferred" Impersonate="no"'
         actions.append(
             f'<CustomAction Id="{action_id}" Property="POWERSHELLEXE" ExeCommand={quoteattr(_ps_command(script))} '
-            f'Execute="deferred" Impersonate="no" Return="{"ignore" if ignore else "check"}"/>')
+            f'{execute} Return="{"ignore" if ignore else "check"}"/>')
         return action_id, condition
 
     if service:
@@ -172,6 +183,13 @@ def wxs(meta, version, payload):
             '(REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE) OR WIX_UPGRADE_DETECTED')
         sequence.append(f'<Custom Action="{stop_id}" Sequence="1900">{stop_condition}</Custom>')
         sequence.append('<Custom Action="UnregisterService" Sequence="1901">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>')
+    if meta.get("requiresDotnet"):
+        # Before anything changes: a clear sentence in the error (Windows Installer shows the failed command), not a service that will not start later.
+        major = str(meta["requiresDotnet"]).split(".")[0]
+        message = f"{display} needs the .NET {major} runtime (x64): https://dotnet.microsoft.com/download (or install with SKIPDOTNETCHECK=1)."
+        check_id, check_condition = powershell("CheckDotnetRuntime", _dotnet_check(major, message), "NOT Installed AND NOT SKIPDOTNETCHECK",
+                                               ignore=False, immediate=True)
+        sequence.append(f'<Custom Action="{check_id}" Sequence="1460">{check_condition}</Custom>')
     if msi.get("addToPath"):
         after_files.append(powershell("AddToPath", _path_edit(True), "NOT Installed", ignore=False))
         sequence.append(
