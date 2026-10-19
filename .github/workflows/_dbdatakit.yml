@@ -1,8 +1,7 @@
 name: DbDataKit tests
 
-# The shared libraries' own suite, on Linux and Windows. DbDataKit/ is changed through the product branches, so every product's
-# CI calls this when DbDataKit/** changed, instead of each carrying its own copy of the job. It can also be dispatched by hand
-# on any branch, which is how to see the suite's state independent of a product change.
+# The shared libraries' own suite, on Linux and Windows. Called by dbdatakit-ci.yml when DbDataKit/ or testenv/ changes, so it runs once
+# rather than once per product, and runnable by hand on any branch, which is how to see the suite's state independent of a change.
 #
 # Linux needs unixODBC for DbDataKit.Odbc.Metadata's tests. The live database tests are gated on environment variables and skip
 # unless the shared engines are provided: with `engines` on, the Linux job starts SQL Server and PostgreSQL from testenv/

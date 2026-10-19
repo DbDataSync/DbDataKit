@@ -1,0 +1,43 @@
+name: DbDataKit CI
+
+# The shared libraries' own suite (DbDataKit/), run once on Linux and Windows against the shared engines from testenv/, on a pull request
+# into `main` and on every push to it that touches the shared code or the test environment. Each product's CI also runs when DbDataKit/
+# changes, so a shared change is proven against every product; this is the libraries' own tests, which used to run once per product.
+# The job itself is _dbdatakit.yml, which can also be dispatched on its own.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "DbDataKit/**"
+      - "testenv/**"
+      - ".github/workflows/dbdatakit-ci.yml"
+      - ".github/workflows/_dbdatakit.yml"
+  push:
+    branches: [main]
+    paths:
+      - "DbDataKit/**"
+      - "testenv/**"
+      - ".github/workflows/dbdatakit-ci.yml"
+      - ".github/workflows/_dbdatakit.yml"
+  workflow_dispatch:
+    inputs:
+      engines:
+        description: Start the shared SQL Server and PostgreSQL engines (testenv/) for the live tests.
+        type: boolean
+        default: true
+
+# A newer push to a PR supersedes the older run; runs on main always complete.
+concurrency:
+  group: dbdatakit-ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  dbdatakit:
+    uses: ./.github/workflows/_dbdatakit.yml
+    with:
+      # The live tests run against the shared engines every time (a dispatch can still switch them off).
+      engines: ${{ github.event_name != 'workflow_dispatch' || inputs.engines }}

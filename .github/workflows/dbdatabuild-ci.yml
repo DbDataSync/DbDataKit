@@ -60,7 +60,7 @@ jobs:
           if [ -n "$base" ] && git rev-parse --verify --quiet "$base^{commit}" >/dev/null; then
             changed=$(git diff --name-only "$range")
             echo "changed in $range:"; echo "$changed"
-            echo "$changed" | grep -qE '^(DbDataBuild/|testenv/|\.github/(workflows/(dbdatabuild-|_)|actions/))' || build=false
+            echo "$changed" | grep -qE '^(DbDataBuild/|testenv/|\.github/workflows/(dbdatabuild-|_))' || build=false
           else
             echo "::notice::no base to compare with ($EVENT), so everything is treated as changed."
           fi

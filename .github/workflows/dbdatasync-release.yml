@@ -1,18 +1,14 @@
 name: DbDataSync release
 
-# Simplified for now: everything runs on the built-in GITHUB_TOKEN. No GitHub App, no locked branches, no NuGet, no
-# container image. Those are deferred (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md); the full versions are in
-# this file's git history (commit b762d5b and earlier in PR #1).
+# Cut a release by dispatching this against main (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md, "Trunk model"):
 #
-# Cut a release by dispatching this against dbdatasync/test:
+#   gh workflow run dbdatasync-release.yml --ref main -f beta=false
+#   gh workflow run dbdatasync-release.yml --ref main -f sha=<an older commit on main>
 #
-#   gh workflow run dbdatasync-release.yml --ref dbdatasync/test -f beta=false
-#
-# It refuses unless dbdatasync/test has a green CI run and `main` is already an ancestor of it, then builds and checks
-# the package, tags the commit dbdatasync/v<version>, publishes a GitHub Release in THIS repository with the package
-# attached, merges dbdatasync/test into main (a merge commit, because other products release independently), and merges
-# main back into every <product>/dev branch. Pushes made with GITHUB_TOKEN start no workflows, so after a back-merge this
-# workflow dispatches that branch's CI by hand, which is what promotes it to <product>/test.
+# It releases the newest commit on main, or `sha` (which must be on main), and only if that exact commit has a green "DbDataSync CI" run.
+# It packs and checks the package, tags the commit dbdatasync/v<version> and publishes a GitHub Release in THIS repository with the package
+# attached. No branch is pushed or merged: a release is a tag and its assets. Everything runs on the built-in GITHUB_TOKEN; there is no
+# NuGet push (paused), no container image (dispatch dbdatasync-publish-image.yml by hand) and no GitHub App.
 
 on:
   workflow_dispatch:
@@ -21,13 +17,15 @@ on:
         description: Publish as a prerelease (-beta suffix on the version, prerelease flag on the GitHub Release).
         type: boolean
         default: false
+      sha:
+        description: The commit to release. Empty means the newest commit on main. It must be on main and have a green DbDataSync CI run.
+        type: string
+        default: ''
 
 permissions:
   contents: write
-  # Looks up the CI run for this commit rather than re-running the suite.
-  actions: write
-  # Opens an issue when a back-merge conflicts.
-  issues: write
+  # Reads the CI runs for the commit being released.
+  actions: read
 
 defaults:
   run:
@@ -40,58 +38,45 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # The fast-forward of `main` at the end has to prove `main` is an ancestor of this commit
-          # before it pushes; the default shallow clone cannot answer that question at all.
+          # The commit to release is picked below and must be shown to be an ancestor of main, which the default shallow clone cannot do.
           fetch-depth: 0
 
-      # A release is cut from `test` — the validated snapshot `promote-test.yml` only ever advances to
-      # a commit whose CI run passed — and ends by fast-forwarding `main` to whatever shipped, so
-      # `main` names the last released commit rather than a staging area. Dispatched against anything
-      # else, this would either release unvalidated work or move `main` somewhere that was never
-      # released, so it is refused outright rather than interpreted.
-      - name: Refuse to release from anything but dbdatasync/test
-        run: |
-          if [ "$GITHUB_REF_NAME" != "dbdatasync/test" ]; then
-            echo "::error::dbdatasync-release.yml must be dispatched against 'dbdatasync/test' (got '$GITHUB_REF_NAME'). See docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md."
-            exit 1
-          fi
-
-      # main moves by MERGE here, not fast-forward, so it is no longer an ancestor of every released commit by
-      # construction. Requiring it keeps the merge below conflict-free: every product's released state, and every
-      # shared-code change, must already be in this lane before it can release. The fix for a failure is to wait for
-      # the post-release back-merge to reach dbdatasync/dev and be promoted, not to force anything.
-      - name: Require main to be an ancestor of dbdatasync/test
+      - name: Pick the commit, which must be on main
+        id: pick
         working-directory: .
+        env:
+          WANTED: ${{ inputs.sha }}
         run: |
-          git fetch origin main
-          if ! git merge-base --is-ancestor origin/main "$GITHUB_SHA"; then
-            echo "::error::main has commits that dbdatasync/test does not. Another product has released since this lane last synced. Its back-merge into dbdatasync/dev, and that branch's promotion to dbdatasync/test, must land first."
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "::error::dbdatasync-release.yml must be dispatched against 'main' (got '$GITHUB_REF_NAME'); pass -f sha=<commit> to release an older commit."
             exit 1
           fi
+          git fetch origin main
+          sha=$(git rev-parse "${WANTED:-origin/main}^{commit}")
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::$sha is not on main. Only commits on main are released."
+            exit 1
+          fi
+          echo "releasing $sha"
+          echo "SHA=$sha" >> "$GITHUB_ENV"
+          git checkout -q --detach "$sha"
 
-      # Deliberately a lookup, not a re-run. This exact commit already has a CI result — that is the
-      # precondition `promote-test.yml` enforces before `test` can point at it — so re-running the
-      # suite here would spend ~15 minutes re-deriving the same answer, and would hand a known-flaky
-      # job (dotnet-windows' temp-dir cleanup, see
-      # architecture/planning/todo/follow-up-a-temp-dir-that-cannot-be-deleted-fails-a-job-whose-tests-all-passed.md)
-      # a veto over releasing at all. What a re-run would *not* establish any better is the thing
-      # actually worth asserting: that a green run for this SHA exists — which is false exactly when a
-      # commit reached `test` by some route other than the promotion, and that is the case this gate
-      # is for.
-      #
-      # Any successful CI run for the SHA counts, not merely the newest: the same commit legitimately
-      # gets more than one (the push to `dev`, then the promotion push to `test`), and a flake that was
-      # re-run to green is the same situation a human would have accepted by hand.
+      # A lookup, not a re-run: the run on main is the validation (a rebase merge makes new commits, so a pull request's own run is not
+      # theirs), and re-running ~15 minutes of suite would only re-derive the answer and give a known-flaky job a veto over releasing.
+      # What a re-run would not establish better is what is worth asserting: that a green run for this exact commit exists. That is false
+      # for a commit that reached main some other way (a bot push, a skipped run), which is the case this gate is for. Any successful run
+      # counts, not merely the newest: a flake that was re-run to green is what a human would have accepted by hand.
       - name: Require a green CI run for this exact commit
+        working-directory: .
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           green=$(gh api \
-            "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&status=success" \
+            "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$SHA&status=success" \
             --jq '[.workflow_runs[] | select(.name == "DbDataSync CI")] | length')
-          echo "successful CI runs for $GITHUB_SHA: $green"
+          echo "successful CI runs for $SHA: $green"
           if [ "$green" -lt 1 ]; then
-            echo "::error::No successful CI run for $GITHUB_SHA. Releasing a commit whose CI has not passed is exactly what this check exists to prevent."
+            echo "::error::No successful DbDataSync CI run for $SHA. Releasing a commit whose CI has not passed is exactly what this check exists to prevent. Dispatch 'DbDataSync CI' on main, or pick a commit that has a run."
             exit 1
           fi
 
@@ -236,7 +221,7 @@ jobs:
           done < <(tr -d '\r' < docs/images.txt)
 
           # Phase 162: the README that shipped is the rewritten copy — no relative link left, and every doc link pinned to the
-          # commit that was packed (HEAD of this checkout: GITHUB_SHA is not that on a workflow_run).
+          # commit that was packed (HEAD of this checkout, which is the released commit).
           unzip -p "$NUPKG" README.md > /tmp/packed-readme.md
           relative=$(grep -oE '\]\([^)]+\)' /tmp/packed-readme.md | grep -vE '^\]\((https?:|mailto:|#)' || true)
           if [ -n "$relative" ]; then
@@ -298,7 +283,7 @@ jobs:
           NUPKG: ${{ steps.pack.outputs.nupkg }}
         run: |
           {
-            echo "The \`dbdatasync\` .NET global tool, packed from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA."
+            echo "The \`dbdatasync\` .NET global tool, packed from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$SHA."
             echo
             echo "The version is the UTC date and time this release was built."
             [ "$PRERELEASE" = "true" ] && echo "**This is a prerelease.**"
@@ -320,86 +305,3 @@ jobs:
             --notes-file /tmp/release-notes.md \
             "${prerelease_flag[@]}" \
             "$NUPKG" "$NUPKG.sha512"
-
-      # `main` is the integration branch for every product, so it can't be fast-forwarded to this commit; the
-      # release merges dbdatasync/test into it with a merge commit (--no-ff, so the first-parent history of main is
-      # one commit per release). Products live in separate directories, and the ancestor check above means the only
-      # thing that can conflict is shared code that another product changed meanwhile, which fails loudly here.
-      #
-      # Last of the release proper, after the GitHub Release, so a failure leaves `main` lagging a release that
-      # genuinely happened rather than asserting one that did not.
-      - name: Merge dbdatasync/test into main
-        id: main
-        working-directory: .
-        env:
-          VERSION: ${{ steps.pack.outputs.shipped }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git switch --detach origin/main
-          # [skip ci]: the merge commit's tree equals a commit that already passed CI, and it is pushed to
-          # dbdatasync/dev below, where a fresh run would only re-run the suite for nothing.
-          git merge --no-ff -m "Release dbdatasync $VERSION [skip ci]" "$GITHUB_SHA"
-          git push origin "HEAD:refs/heads/main"
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      # Immediate back-merge. Bring main (now holding this release) into this product's own lane and into every other
-      # product's dev branch, so nothing waits for the next release to find out it has drifted. A push made with
-      # GITHUB_TOKEN starts no workflow, so each merged dev branch gets its CI dispatched by hand (below), and that run's
-      # promote job carries the merge on to <product>/test.
-      #
-      #   * Own lane, dev unchanged since the release: fast-forward dbdatasync/dev AND dbdatasync/test to the merge
-      #     commit. Its tree is a tested commit's tree, so no new run is needed, and it is what lets the next release's
-      #     ancestor check pass without waiting for one.
-      #   * Own lane, dev has moved on: merge main into dev, then dispatch its CI, which promotes it to test.
-      #   * Other products: merge main into <product>/dev. A conflict is never resolved by guessing: the job opens an
-      #     issue and fails after trying every branch, and the release itself has already succeeded.
-      - name: Merge main back into every dev branch
-        working-directory: .
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MAIN_SHA: ${{ steps.main.outputs.sha }}
-          VERSION: ${{ steps.pack.outputs.shipped }}
-        run: |
-          git fetch origin '+refs/heads/*:refs/remotes/origin/*'
-          failed=()
-
-          if [ "$(git rev-parse origin/dbdatasync/dev)" = "$GITHUB_SHA" ]; then
-            git push origin "$MAIN_SHA:refs/heads/dbdatasync/dev" "$MAIN_SHA:refs/heads/dbdatasync/test" \
-              || failed+=("dbdatasync/dev + dbdatasync/test (fast-forward)")
-          fi
-
-          for branch in $(git for-each-ref --format='%(refname:strip=3)' 'refs/remotes/origin/*/dev' | grep -E '^[a-z0-9]+/dev$'); do
-            if [ "$branch" = "dbdatasync/dev" ] && [ "$(git rev-parse origin/dbdatasync/dev)" = "$GITHUB_SHA" ]; then
-              continue
-            fi
-            git switch --detach "origin/$branch"
-            if git merge-base --is-ancestor "$MAIN_SHA" HEAD; then
-              continue
-            fi
-            if git merge --no-ff -m "Merge main into $branch after dbdatasync $VERSION" "$MAIN_SHA"; then
-              if git push origin "HEAD:refs/heads/$branch"; then
-                # A push made with GITHUB_TOKEN starts no workflow, so start the product's CI by hand; its promote job is what
-                # carries the merge to <product>/test. A product with no CI workflow yet has nothing to start.
-                product=${branch%%/*}
-                if git cat-file -e "$MAIN_SHA:.github/workflows/$product-ci.yml" 2>/dev/null; then
-                  gh workflow run "$product-ci.yml" --ref "$branch" || failed+=("$branch (CI dispatch)")
-                fi
-              else
-                failed+=("$branch (push)")
-              fi
-            else
-              git merge --abort
-              failed+=("$branch (conflict)")
-            fi
-          done
-
-          if [ "${#failed[@]}" -gt 0 ]; then
-            printf '%s\n' "${failed[@]}" > /tmp/failed-backmerges.txt
-            gh issue create \
-              --title "Back-merge after dbdatasync $VERSION needs attention" \
-              --body "The release of dbdatasync $VERSION merged into main ($MAIN_SHA), but main could not be merged back into: $(paste -sd, /tmp/failed-backmerges.txt). Merge main into each by hand and resolve the conflicts. Releases from those lanes are blocked until main is an ancestor of their <product>/test. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-            echo "::error::back-merge failed for: ${failed[*]}"
-            exit 1
-          fi

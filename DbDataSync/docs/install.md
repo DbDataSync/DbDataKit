@@ -131,7 +131,7 @@ to narrow it, `--json` for scripts, and `--to <version>` to skip the prompt.
 | --- | --- | --- |
 | `stable` | a release | a GitHub Release in the DbDataKit repository, tag `dbdatasync/v<version>` |
 | `beta` | a prerelease (`-beta`) | a GitHub prerelease, tag `dbdatasync/v<version>-beta` |
-| `snapshot` | the newest build that has passed CI, before any release is cut | a GitHub prerelease for every commit promoted to the `dbdatasync/test` branch, tag `dbdatasync/v<version>-snapshot.g<sha>`; the newest 20 are kept |
+| `snapshot` | the newest build that has passed CI, before any release is cut | a GitHub prerelease for every commit that passes CI on `main` (not published at present), tag `dbdatasync/v<version>-snapshot.g<sha>`; the newest 20 are kept |
 
 DbDataSync is built in a repository shared with other products, so a release is recognised as DbDataSync's by its
 tag prefix (`dbdatasync/`) and by carrying a `DbDataSync.<version>.nupkg` and its checksum; releases of other products in

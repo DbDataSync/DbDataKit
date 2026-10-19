@@ -1,12 +1,11 @@
 # Branching and releases
 
-> **Superseded in the monorepo.** DbDataSync now lives in `DbDataSync/DbDataKit`, with product-prefixed branches
-> (`dbdatasync/dev`, `dbdatasync/test`), `main` as the integration branch for all products, a merge (not a
-> fast-forward) into `main` at release, an immediate back-merge, promotion inside the CI run, and releases published to
-> the old repository. See `docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md` at the repository root. Everything below
-> describes the single-repo model and is kept as the record of why it was built that way; its workflow filenames
-> (`ci.yml`, `promote-test.yml`, `release.yml`, `publish-snapshot.yml`) are now `dbdatasync-*.yml` under the root
-> `.github/workflows/`.
+> **Superseded in the monorepo.** DbDataSync now lives in `DbDataSync/DbDataKit` on a trunk model: short feature branches,
+> pull requests into `main`, rebase merges, CI on the pull request and again on `main`, and a release that is a tag plus a
+> GitHub Release in that repository, with no `dev`/`test` branches and no merge or back-merge. See
+> `docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md` at the repository root. Everything below describes the single-repo
+> model and is kept as the record of why it was built that way; its workflow filenames (`ci.yml`, `promote-test.yml`,
+> `release.yml`, `publish-snapshot.yml`) are now `dbdatasync-*.yml` under the root `.github/workflows/`.
 
 Three long-lived branches, in order of how far a change has had to prove itself:
 

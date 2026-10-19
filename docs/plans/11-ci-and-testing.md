@@ -87,7 +87,6 @@ fallback, and the mapping files shrink and disappear.
   upload and a skipped/failed summary, taking inputs for the product folder, solution or project, OS list, engine list,
   test filter and extra system packages (unixODBC, MS ODBC driver). Each product's CI becomes a handful of calls with its
   own engine list and filters, plus its extras (DbDataSync's Playwright, the Proxy's package smoke test).
-- `.github/actions/merge-release` (added in Phase 0): the shared end of every release.
 
 All workflows use the same action versions and timeouts.
 
@@ -113,8 +112,8 @@ rather than skips when they are missing (the Proxy's `DBPROXY_REQUIRE_SQLSERVER`
 
 ### F. Cadence
 
-- **On every push and PR to a `<product>/dev`:** unit tests on Linux and Windows, and the integration tests against the
-  core engines (SQL Server, PostgreSQL), plus the product's own extras. This gates promotion to `<product>/test`.
+- **On every pull request into `main`, and every push to it:** unit tests on Linux and Windows, and the integration tests against the
+  core engines (SQL Server, PostgreSQL), plus the product's own extras (the slow engines run after a merge and nightly).
 - **Nightly, on each `<product>/test`:** the full engine matrix (MySQL, MariaDB, Oracle, SQL Server 2025, Spark,
   BigQuery, Flight), conformance, and the shared libraries' live tests against everything. Replaces DbDataBuild's weekly
   job and covers the other products.
@@ -124,8 +123,8 @@ rather than skips when they are missing (the Proxy's `DBPROXY_REQUIRE_SQLSERVER`
 
 ### G. Cost control
 
-Cancel superseded PR runs (not `dev` pushes); the existing `changes` job keeps unrelated lanes from running; image pulls
-and the NuGet cache are cached; the shared libraries' job runs once per lane push, not once per product.
+Cancel superseded PR runs (not runs on `main`); each product's `changes` job keeps unrelated changes from running its suites; image pulls
+and the NuGet cache are cached; the shared libraries' job runs once (`dbdatakit-ci.yml`), not once per product.
 
 ## Implemented: `testenv/` (phase 2, first slice)
 
@@ -138,8 +137,8 @@ and the NuGet cache are cached; the shared libraries' job runs once per lane pus
   Line forms: `TARGET <- SOURCE` and `TARGET = literal if SOURCE`. Present: `dbdataproxy`, `dbdatakit`.
 - `testenv/selftest.sh` checks the generation and mappings without Docker (17 checks).
 - Wired into: the Proxy Linux job (replaces its `services:` container) and `_dbdatakit.yml` (opt-in `engines` input).
-  A manual dispatch with `engines=true` was green on CI, so `repo-ci.yml` now runs the shared suite with the engines on for every
-  run of the repo-wide lane. The product lanes' own `dbdatakit` jobs keep them off for now.
+  A manual dispatch with `engines=true` was green on CI, so `dbdatakit-ci.yml` runs the shared suite with the engines on for every pull
+  request and push to `main` that touches `DbDataKit/` or `testenv/`.
 - Every workflow job now has a `timeout-minutes`.
 - Both containers speak TLS with throwaway self-signed certificates (the Postgres one generates its own at start), so the live
   tests run with the libraries' secure default (encrypt) and certificate verification switched off, as a developer's local
@@ -154,12 +153,12 @@ and the NuGet cache are cached; the shared libraries' job runs once per lane pus
 
 | phase | what | state |
 | --- | --- | --- |
-| 0 | Proxy lanes (`dbdataproxy/dev`, `/test`), Proxy CI and release workflows, the shared `merge-release` action, `_dbdatakit.yml`, Proxy test fixes | in the PR that adds this doc |
+| 0 | Proxy CI and release workflows, `_dbdatakit.yml`, Proxy test fixes (the lanes and the `merge-release` action built here were later retired for the trunk model in plan 09) | done |
 | 1 | Baseline of `_dbdatakit.yml` on Linux and Windows, and fix what it found (above); DbDataSync's CI calls the shared job instead of its own copy | done in the PR after this one |
 | 2 | `testenv/`: port DbDataSync's compose and DbDataBuild's engines, canonical variables and mapping files; wire the Proxy and the shared libraries first, since they have the least to migrate; the shared libraries' live tests start running | needs decisions 2, 3 |
 | 3 | `_dotnet-test.yml`; move each product's CI onto it; skipped-test summary; one action version | |
 | 4 | Nightly full matrix on each `*/test`; release gate on it | needs decision 4 |
-| 5 | DbDataBuild moves in with its `dbdatabuild/dev`/`/test` lane on the same pieces; its release workflow joins the pattern | when its work reaches a stopping point |
+| 5 | DbDataBuild moves in; its CI, nightly full conformance and release are on the trunk model (plan 09) | done; its engines are still started by `DbDataBuild/scripts/test-engines.sh`, not `testenv/` |
 
 ## Decisions needed
 

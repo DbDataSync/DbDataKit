@@ -1,44 +1,28 @@
 name: DbDataSync CI
 
-# DbDataSync's lane of the monorepo: dbdatasync/dev -> dbdatasync/test -> main (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md).
-# Ported from .github/workflows/ci.yml as of DbDataSync/DbDataSync@f1d76ee (kept in this repo's history) (and promote-test.yml, now a job of this
-# workflow), whose own comments explain most of the decisions here.
+# DbDataSync on the trunk model (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md, "Trunk model"): short feature branches, a pull request
+# into `main` that runs this, and a rebase merge. There is no dev/test lane and nothing here moves a branch. A rebase merge makes new
+# commits, so the run on `main` is the one that validates what landed, and it is what dbdatasync-release.yml looks for.
 #
-# What is different from the single-product repo:
-#   * Every step runs inside DbDataSync/ (defaults.run.working-directory, and explicit paths for actions).
-#   * The workflow runs on EVERY push to dbdatasync/dev, but a `changes` job decides whether the suite is needed.
-#     A push that only brings in other products' files (the post-release back-merge) must still be promoted, or
-#     `main` would never be an ancestor of dbdatasync/test and the next release would be blocked.
-#   * Promotion is the final job of this run, not a separate workflow_run workflow. GitHub reads workflow_run workflows
-#     from the DEFAULT branch, and in this repo that is `main`, which only moves at releases.
-#   * Simplified for now: it uses the built-in GITHUB_TOKEN (no GitHub App, no branch rulesets), and snapshot releases
-#     are not published. Both are deferred; see docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md.
+# Ported from .github/workflows/ci.yml as of DbDataSync/DbDataSync@f1d76ee (kept in this repo's history), whose own comments explain most
+# of the decisions here. Every step runs inside DbDataSync/ (defaults.run.working-directory, and explicit paths for actions).
+#
+# A `changes` job skips the suites when nothing of DbDataSync's, or of the shared DbDataKit/ code it builds against, changed; the run then
+# still reports success. The shared libraries' own suite is dbdatakit-ci.yml, run once, not per product.
 
 on:
-  push:
-    branches: [dbdatasync/dev]
-    # Only so the `package` job below can run on the tag dbdatasync-release.yml pushes. Every other job skips a tag
-    # push: that tag sits on a commit which already went through this suite on dbdatasync/dev.
-    tags:
-      - "dbdatasync/v*"
   pull_request:
-    # dbdatasync/dev is the only branch a pull request should target; main and */test are only moved by pipelines.
-    branches: [dbdatasync/dev]
-  # Started by hand, and by dbdatasync-release.yml after it merges main into dbdatasync/dev: a push made with GITHUB_TOKEN
-  # starts no workflow, so that merge would otherwise never be tested or promoted. Run it on dbdatasync/dev.
+    branches: [main]
+  push:
+    branches: [main]
+  # Everything, whatever changed.
   workflow_dispatch:
-  # Called by repo-ci.yml (the repo-wide dev -> test lane), which runs every suite whatever changed and runs the shared
-  # DbDataKit job itself once. `promote` is skipped there: github.ref is the caller's ref, not dbdatasync/dev.
   workflow_call:
-    inputs:
-      all:
-        description: Run every job whatever changed.
-        type: boolean
-        default: false
-      shared:
-        description: Run the shared DbDataKit tests (false when the caller runs them).
-        type: boolean
-        default: true
+
+# A newer push to a PR supersedes the older run; runs on main always complete.
+concurrency:
+  group: dbdatasync-ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -48,15 +32,11 @@ defaults:
     working-directory: DbDataSync
 
 jobs:
-  # Is there anything here that the suite has not already validated? Compared with dbdatasync/test, the last commit
-  # that was promoted, so a run covers everything unpromoted rather than only the latest push.
   changes:
-    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       build: ${{ steps.diff.outputs.build }}
-      shared: ${{ steps.diff.outputs.shared }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -66,43 +46,27 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
-          ALL: ${{ inputs.all }}
-          SHARED: ${{ inputs.shared }}
+          BEFORE: ${{ github.event.before }}
         run: |
-          if [ "$ALL" = "true" ]; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            if [ "$SHARED" = "false" ]; then echo "shared=false" >> "$GITHUB_OUTPUT"; else echo "shared=true" >> "$GITHUB_OUTPUT"; fi
-            exit 0
-          fi
-          if [ "$EVENT" = "pull_request" ]; then
-            base="origin/$BASE_REF"
-          else
-            base="origin/dbdatasync/test"
-          fi
           build=true
-          shared=true
-          if git rev-parse --verify --quiet "$base" >/dev/null; then
-            changed=$(git diff --name-only "$base"...HEAD)
-            echo "changed since $base:"; echo "$changed"
-            echo "$changed" | grep -qE '^(DbDataSync/|DbDataKit/|\.github/(workflows/(dbdatasync-|_)|actions/))' || build=false
-            echo "$changed" | grep -q '^DbDataKit/' || shared=false
+          case "$EVENT" in
+            pull_request) base="origin/$BASE_REF"; range="$base...HEAD" ;;
+            push)         base="$BEFORE"; range="$BEFORE..HEAD" ;;
+            *)            base="" ;;
+          esac
+          if [ -n "$base" ] && git rev-parse --verify --quiet "$base^{commit}" >/dev/null; then
+            changed=$(git diff --name-only "$range")
+            echo "changed in $range:"; echo "$changed"
+            echo "$changed" | grep -qE '^(DbDataSync/|DbDataKit/|\.github/workflows/(dbdatasync-|_))' || build=false
           else
-            echo "::notice::$base does not exist yet, so everything is treated as changed."
+            echo "::notice::no base to compare with ($EVENT), so everything is treated as changed."
           fi
           echo "build=$build" >> "$GITHUB_OUTPUT"
-          echo "shared=$shared" >> "$GITHUB_OUTPUT"
-
-  # DbDataKit/ is changed through the product branches, so a product's CI proves it. One shared job, called by every lane, on
-  # Linux and Windows (it installs unixODBC for the Linux ODBC tests); not a copy per product.
-  dbdatakit:
-    needs: changes
-    if: ${{ needs.changes.outputs.shared == 'true' && !startsWith(github.ref, 'refs/tags/') }}
-    uses: ./.github/workflows/_dbdatakit.yml
 
   # ---- ported jobs ----
   dotnet:
     needs: changes
-    if: ${{ needs.changes.outputs.build == 'true' && !startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -140,7 +104,7 @@ jobs:
   # to keep in sync.
   dotnet-windows:
     needs: changes
-    if: ${{ needs.changes.outputs.build == 'true' && !startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -184,7 +148,7 @@ jobs:
   # good rather than patching this one instance of it.
   dotnet-integration:
     needs: changes
-    if: ${{ needs.changes.outputs.build == 'true' && !startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -224,7 +188,7 @@ jobs:
 
   web:
     needs: changes
-    if: ${{ needs.changes.outputs.build == 'true' && !startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -255,7 +219,7 @@ jobs:
   # phase 94 until somebody happened to run it (architecture/planning/done/playwright-suite-in-ci.md).
   playwright:
     needs: changes
-    if: ${{ needs.changes.outputs.build == 'true' && !startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     # docker-compose.yml, the same file dotnet-integration above now uses too. This job specifically
@@ -347,195 +311,3 @@ jobs:
           name: playwright-report
           path: DbDataSync/tests/DbDataSync.Web.Tests/test-results/results.json
           retention-days: 7
-
-  # Only on the same release/v* tag push that triggers release.yml — restricted from every push (its
-  # original scope) by request, to stop this job's ~150MB nupkg upload from repeatedly hitting the
-  # account's artifact storage quota (see retention-days below, added first; this is the deliberate
-  # follow-up). The tradeoff accepted: the first time anyone finds out the Dockerfile or the tool
-  # package is broken is now the release itself, not an ordinary push beforehand.
-  package:
-    if: ${{ startsWith(github.ref, 'refs/tags/dbdatasync/v') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: "10.0.x"
-          # No packages.lock.json in this repo, so the cache key is a hash of every .csproj instead —
-          # any dependency change invalidates it. What's cached is the shared ~/.nuget/packages
-          # download, not a job's own build output, so this is safe to turn on in every job that
-          # restores: it only saves the network round-trip to nuget.org, already-restored packages are
-          # still resolved into each project's own bin/obj exactly as before.
-          cache: true
-          cache-dependency-path: "DbDataSync/**/*.csproj"
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "24"
-      # Phase 137: dotnet pack of DbDataSync.Cli.csproj never triggers DbDataSync.Api.csproj's own
-      # BuildSpa target (that only fires when Api.csproj is published directly) — build the SPA here,
-      # the same way the Dockerfile's own `web` stage does, and Cli.csproj's new CopyPrebuiltSpa target
-      # picks up the already-built dist/ at pack time.
-      - name: Build the SPA
-        working-directory: DbDataSync/src/DbDataSync.Web
-        run: |
-          npm ci
-          npm run build
-      - name: Pack the global tool
-        run: dotnet pack src/DbDataSync.Cli/DbDataSync.Cli.csproj -c Release -o artifacts
-      # Phase 137: the actual reason the missing-wwwroot bug shipped unnoticed — every check before this
-      # only proved the tool runs and answers --help, none of which would ever notice an empty wwwroot.
-      # A .nupkg is a zip; unpack it and fail loud if tools/<tfm>/any/wwwroot/ is missing or empty rather
-      # than silently passing on a `dist/` that built nothing.
-      - name: Assert the packed nupkg actually contains the web console
-        run: |
-          nupkg=$(ls artifacts/*.nupkg | head -n1)
-          rm -rf /tmp/nupkg-contents
-          mkdir -p /tmp/nupkg-contents
-          unzip -q "$nupkg" -d /tmp/nupkg-contents
-          wwwroot=$(find /tmp/nupkg-contents/tools -type d -name wwwroot | head -n1)
-          if [ -z "$wwwroot" ] || [ -z "$(find "$wwwroot" -type f -print -quit)" ]; then
-            echo "packed nupkg has no non-empty tools/<tfm>/any/wwwroot/ — the web console did not get packed"
-            exit 1
-          fi
-      # Phase 160: the docs ship in the package. Compared against docs/ itself rather than a hard-coded count, so
-      # adding a page does not need this edited — and a page that fails to pack does not pass unnoticed.
-      - name: Assert the packed nupkg contains every page of docs/
-        run: |
-          packed=$(find /tmp/nupkg-contents/tools -type d -path '*/wwwroot/docs' | head -n1)
-          if [ -z "$packed" ]; then
-            echo "packed nupkg has no wwwroot/docs/ — the docs did not get packed"
-            exit 1
-          fi
-          for page in docs/*.md; do
-            if [ ! -s "$packed/$(basename "$page")" ]; then
-              echo "packed nupkg is missing or has an empty $(basename "$page")"
-              exit 1
-            fi
-          done
-          while IFS= read -r image; do
-            [ -z "$image" ] && continue
-            if [ ! -s "$packed/../$image" ]; then
-              echo "packed nupkg is missing or has an empty $image, which the docs show"
-              exit 1
-            fi
-          done < <(tr -d '\r' < docs/images.txt)
-      - name: Install it into a clean tool root and run it
-        run: |
-          dotnet tool install --tool-path /tmp/dbdatasync-tool --add-source artifacts DbDataSync
-          /tmp/dbdatasync-tool/dbdatasync version
-          /tmp/dbdatasync-tool/dbdatasync --help
-      - name: Build the container image
-        run: docker build -t dbdatasync:ci .
-      - name: Start it and check it answers
-        run: |
-          docker run -d --name dbdatasync-ci -p 18080:8080 dbdatasync:ci
-          for i in $(seq 1 30); do
-            if docker exec dbdatasync-ci dotnet /app/DbDataSync.Cli.dll health --url http://127.0.0.1:8080; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "the container never became healthy"
-          docker logs dbdatasync-ci
-          exit 1
-      # Phase 137: the Dockerfile's own path was never actually proof this worked either — it sidesteps
-      # BuildSpa entirely (its `web` stage COPYs dist/ straight into wwwroot/), so this asserts the
-      # running container serves real SPA content, not MapFallback's "No web assets are published"
-      # fallback text.
-      - name: Assert the running container serves the web console, not the fallback
-        run: |
-          # Not `curl -sf … | grep -q` on its own: -f turns a 401 into empty output, so the grep found nothing and this
-          # passed — which is how a default deployment answering 401 to `/` went unnoticed (phase 160).
-          body=$(curl -sf http://127.0.0.1:18080/) || { echo "the default image's / did not answer 200 to someone who has not signed in"; exit 1; }
-          if echo "$body" | grep -q "No web assets are published"; then
-            echo "the default image's / answered with the no-web-assets fallback, not the SPA"
-            exit 1
-          fi
-      # Phase 160: same for the image — its docs come from a separate COPY line, not the csproj target.
-      - name: Assert the running container serves the docs
-        run: |
-          for page in docs/*.md; do
-            curl -sf "http://127.0.0.1:18080/docs/$(basename "$page")" -o /dev/null \
-              || { echo "the default image does not serve /docs/$(basename "$page")"; exit 1; }
-          done
-          while IFS= read -r image; do
-            [ -z "$image" ] && continue
-            curl -sf "http://127.0.0.1:18080/$image" -o /dev/null \
-              || { echo "the default image does not serve /$image, which the docs show"; exit 1; }
-          done < <(tr -d '\r' < docs/images.txt)
-      # Phase 121: the slim alternative to the default (SDK-based) image above. Built with the same
-      # single `docker build` this repo's own Dockerfile already defines — --target just picks a
-      # different one of its stages, so there is no second Dockerfile to keep in sync.
-      - name: Build the runtime-only image
-        run: docker build --target runtime -t dbdatasync:ci-runtime .
-      - name: The runtime-only image has no SDK
-        run: |
-          if docker run --rm --entrypoint dotnet dbdatasync:ci-runtime --list-sdks | grep -q .; then
-            echo "the runtime-only image still has an SDK installed"
-            exit 1
-          fi
-      - name: Start the runtime-only image and check it answers
-        run: |
-          docker run -d --name dbdatasync-ci-runtime -p 18082:8080 dbdatasync:ci-runtime
-          for i in $(seq 1 30); do
-            if docker exec dbdatasync-ci-runtime dotnet /app/DbDataSync.Cli.dll health --url http://127.0.0.1:8080; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "the runtime-only container never became healthy"
-          docker logs dbdatasync-ci-runtime
-          exit 1
-      - name: Assert the runtime-only container serves the web console, not the fallback
-        run: |
-          if curl -sf http://127.0.0.1:18082/ | grep -q "No web assets are published"; then
-            echo "the runtime-only image's / answered with the no-web-assets fallback, not the SPA"
-            exit 1
-          fi
-      - name: Upload the tool package
-        # ~150MB every time: it's a framework-dependent, RID-agnostic package (see the csproj comment)
-        # that bundles DuckDB/LibGit2Sharp/SQLite/SqlClient's native binaries for every platform in one
-        # nupkg, so one build serves any OS. This job already proves the package works by installing and
-        # running it a few steps up — the upload is only so a human can grab this exact build, not a
-        # required output — so it does not need the long default retention. Without retention-days this
-        # inherits the account's default (commonly 90 days), and this job runs on every push to main and
-        # every PR: that is what actually let 96 of these pile up into 14.7GB and hit the storage quota,
-        # not the individual size.
-        uses: actions/upload-artifact@v7
-        with:
-          name: dbdatasync-tool
-          path: DbDataSync/artifacts/*.nupkg
-          retention-days: 3
-
-  # dbdatasync/dev -> dbdatasync/test, on a green run. Nobody pushes to dbdatasync/test; this is the only thing that
-  # moves it. It fast-forwards to the exact commit this run validated (github.sha), not to whatever the branch tip is
-  # by now. Skipped suites count as passing: `changes` decided they were not needed.
-  promote:
-    needs: [changes, dbdatakit, dotnet, dotnet-windows, dotnet-integration, web, playwright]
-    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/dbdatasync/dev' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    concurrency:
-      group: dbdatasync-promote
-      cancel-in-progress: false
-    permissions:
-      contents: write
-    steps:
-      # GITHUB_TOKEN is enough while dbdatasync/test has no ruleset; checkout leaves it in git's config for the push below.
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-      - name: Fast-forward dbdatasync/test to this commit
-        working-directory: .
-        run: |
-          git fetch origin dbdatasync/test
-          if git merge-base --is-ancestor "$GITHUB_SHA" origin/dbdatasync/test; then
-            echo "::notice::dbdatasync/test already contains $GITHUB_SHA — nothing to promote."
-          elif git merge-base --is-ancestor origin/dbdatasync/test "$GITHUB_SHA"; then
-            git push origin "$GITHUB_SHA:refs/heads/dbdatasync/test"
-          else
-            echo "::error::dbdatasync/test has commits dbdatasync/dev doesn't — refusing to fast-forward over them. It may have been pushed to directly; investigate before retrying."
-            exit 1
-          fi
