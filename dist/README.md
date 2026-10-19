@@ -75,6 +75,9 @@ The release workflow builds the zips and `SHA256SUMS`, then calls `.github/actio
 `dist.json` into copies of the templates here (the installers refuse to run unbound) and uploads them. Tests are in `dist/tests`: they run
 both installers against a local fake of the GitHub releases API (`dist-ci.yml`).
 
+If a `<product>/dist` release is deleted or loses its files, run the `dist-republish.yml` workflow for that product
+(`gh workflow run dist-republish.yml --ref main -f product=dbdataproxy`): it re-binds the files for the newest stable release and uploads them.
+
 ## Not covered
 
 * Zip installs of DbDataSync cannot `dbdatasync update` in place (only the tool package can); re-run the installer to upgrade.
