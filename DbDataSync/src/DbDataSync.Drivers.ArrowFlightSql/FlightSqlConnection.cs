@@ -178,11 +178,36 @@ public sealed class FlightSqlConnection : DbConnection
             ? null
             : DateTime.UtcNow + _settings.ConnectTimeout;
 
+        using var call = flight.Handshake(metadata, deadline, cancellationToken);
+        var issued = await ExchangeHandshakeAsync(call, cancellationToken);
+        return issued ?? basic;
+    }
+
+    /// <summary>
+    /// The handshake call itself: send the (empty) request, then read the answer. Returns the authorization the server issued, or null if it
+    /// issued none.
+    /// <para>
+    /// The request write is allowed to fail. A server that rejects the credentials can answer, and end the call, before it has read the
+    /// request, and the client's write then fails with a transport "cancelled" (seen in CI, from <c>HttpContentClientStreamWriter</c>)
+    /// while the server's real answer, <c>Unauthenticated</c> for a wrong password, is waiting on the response side. So a failed write is
+    /// not the result: the response is read next, and throws the server's own status. Only the caller's own cancellation is left to
+    /// propagate. If the server was in fact content, the handshake simply carries on.
+    /// </para>
+    /// </summary>
+    internal static async Task<string?> ExchangeHandshakeAsync(
+        AsyncDuplexStreamingCall<FlightHandshakeRequest, FlightHandshakeResponse> call, CancellationToken cancellationToken)
+    {
         try
         {
-            using var call = flight.Handshake(metadata, deadline, cancellationToken);
-            await call.RequestStream.WriteAsync(new FlightHandshakeRequest(Google.Protobuf.ByteString.Empty, 0));
-            await call.RequestStream.CompleteAsync();
+            try
+            {
+                await call.RequestStream.WriteAsync(new FlightHandshakeRequest(Google.Protobuf.ByteString.Empty, 0));
+                await call.RequestStream.CompleteAsync();
+            }
+            catch (Exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                // See the summary: the answer, not this failure, says what happened.
+            }
 
             var headers = await call.ResponseHeadersAsync;
             while (await call.ResponseStream.MoveNext(cancellationToken))
@@ -190,8 +215,7 @@ public sealed class FlightSqlConnection : DbConnection
                 // Nothing in the payload is needed; draining the stream is what lets the trailers arrive.
             }
 
-            var issued = Authorization(headers) ?? Authorization(call.GetTrailers());
-            return issued ?? basic;
+            return Authorization(headers) ?? Authorization(call.GetTrailers());
         }
         catch (Exception ex) when (FlightSqlException.TryWrap(ex, out var wrapped))
         {
