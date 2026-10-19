@@ -1,0 +1,21 @@
+{
+  "product": "dbdataproxy",
+  "displayName": "DbDataProxy",
+  "description": "An Apache Arrow Flight SQL proxy for relational databases: clients speak Flight SQL, the proxy runs their queries through ODBC or an ADO.NET provider and streams the results back compressed. Runs as a Windows service.",
+  "homepage": "https://github.com/DbDataSync/DbDataKit/tree/main/DbDataProxy",
+  "license": "MIT",
+  "platforms": {
+    "win-x64": {
+      "exe": "DbDataProxy.exe"
+    }
+  },
+  "windowsScope": "machine",
+  "preserve": [
+    "appsettings.json"
+  ],
+  "service": {
+    "name": "DbDataProxy",
+    "register": "install --name {name}"
+  },
+  "notes": "Registering the Windows service needs an elevated prompt: DbDataProxy service install"
+}

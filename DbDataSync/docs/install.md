@@ -99,6 +99,24 @@ sudo dbdatasync tool uninstall
 sudo rm -r /opt/dbdatasync
 ```
 
+## Zip install (install script or Scoop)
+
+Every release also carries `dbdatasync-v<version>-<win-x64|linux-x64>.zip` and the repository's standard install scripts
+([`dist/README.md`](../../dist/README.md)). The zip is the program without a tool wrapper, so it needs the .NET 10 runtime on the machine
+(and the SDK, to install drivers from the console):
+
+```powershell
+irm https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.ps1 | iex
+scoop install https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/dbdatasync.json
+```
+
+```bash
+curl -fsSL https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.sh | bash
+```
+
+A zip install cannot `dbdatasync update` itself or run the versioned slots above (only the tool package can); upgrade by running the
+installer again. Use the tool package for a service.
+
 ## Updating
 
 `dbdatasync update` lists what can be installed and lets you choose. With `--apply` it installs the version you

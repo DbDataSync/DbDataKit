@@ -14,12 +14,19 @@ It is explicit, offline-first and plan-then-apply:
 
 ## Install
 
-Releases carry a single self-contained executable for **Windows** (x64) and **Linux** (x64, glibc 2.34+), with a `SHA256SUMS` file: <https://github.com/DbDataSync/DbDataKit/releases> (this repository holds several products; DbDataBuild's are tagged `dbdatabuild/v<version>`).
+Releases carry a single self-contained executable for **Windows** (x64) and **Linux** (x64, glibc 2.34+) as `dbdatabuild-v<version>-<rid>.zip`, with a `SHA256SUMS` file: <https://github.com/DbDataSync/DbDataKit/releases> (this repository holds several products; DbDataBuild's are tagged `dbdatabuild/v<version>`). The install files are the repository's standard ones ([`dist/README.md`](../dist/README.md)); the URLs below never change.
 
-Windows, with [Scoop](https://scoop.sh) (each stable release replaces the manifest at this fixed URL, which `scoop update` re-reads):
+```powershell
+# Windows (PowerShell 5.1 or 7)
+irm https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabuild/dist/install.ps1 | iex
 
+# Windows, with Scoop (`scoop update` re-reads the manifest)
+scoop install https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabuild/dist/dbdatabuild.json
 ```
-scoop install https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabuild/scoop/dbdatabuild.json
+
+```bash
+# Linux
+curl -fsSL https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabuild/dist/install.sh | bash
 ```
 
 ## A first look

@@ -1,0 +1,56 @@
+name: Distribution files CI
+
+# The standard install scripts and Scoop manifest generator (dist/README.md), tested against a local fake of the GitHub releases API.
+# install.ps1 promises to work in Windows PowerShell 5.1 and PowerShell 7, so Windows runs both.
+
+on:
+  pull_request:
+    paths:
+      - 'dist/**'
+      - '**/dist.json'
+      - '.github/actions/publish-dist/**'
+      - '.github/workflows/dist-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'dist/**'
+      - '**/dist.json'
+      - '.github/actions/publish-dist/**'
+      - '.github/workflows/dist-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dist-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 -I -m unittest discover -s dist/tests -v
+        env:
+          PWSH: pwsh
+      - name: Every product's dist.json binds
+        run: |
+          for meta in DbDataBuild DbDataSync DbDataProxy; do
+            python3 -I dist/dist.py bind --meta "$meta/dist.json" --out "$RUNNER_TEMP/$meta"
+          done
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+    name: windows (${{ matrix.shell }})
+    steps:
+      - uses: actions/checkout@v7
+      - run: python -I -m unittest discover -s dist/tests -v
+        env:
+          PWSH: ${{ matrix.shell }}

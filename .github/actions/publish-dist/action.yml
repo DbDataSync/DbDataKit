@@ -1,0 +1,63 @@
+name: Publish the standard distribution files
+description: >
+  Binds dist/install.ps1, dist/install.sh and the Scoop manifest to one product (dist/dist.py, from <Product>/dist.json), attaches the
+  installers to that release, and for a stable release replaces the fixed <product>/dist release that holds the stable URLs.
+  Run after the versioned release exists; needs GH_TOKEN and a checkout of the released commit.
+
+inputs:
+  product:
+    description: The product's lowercase name, the tag prefix (dbdatabuild, dbdatasync, dbdataproxy).
+    required: true
+  meta:
+    description: Path to the product's dist.json.
+    required: true
+  version:
+    description: The release version, as in the tag <product>/v<version>.
+    required: true
+  prerelease:
+    description: "'true' for a beta. A beta attaches installers to its own release and leaves the fixed one alone."
+    required: true
+  sums:
+    description: Path to the release's SHA256SUMS.
+    required: true
+  sha:
+    description: The released commit, used as the target when the fixed release is first created.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        PRODUCT: ${{ inputs.product }}
+        META: ${{ inputs.meta }}
+        VERSION: ${{ inputs.version }}
+        PRERELEASE: ${{ inputs.prerelease }}
+        SUMS: ${{ inputs.sums }}
+        SHA: ${{ inputs.sha }}
+      run: |
+        set -euo pipefail
+        out="$RUNNER_TEMP/dist-$PRODUCT"
+        rm -rf "$out"
+        args=(--meta "$META" --repo "$GITHUB_REPOSITORY" --out "$out")
+        # A manifest pins one release, so a beta (which is not what `scoop install` should get) has none.
+        [ "$PRERELEASE" = "true" ] || args+=(--version "$VERSION" --sums "$SUMS")
+        py=$(command -v python3 || command -v python)
+        "$py" -I dist/dist.py bind "${args[@]}"
+        ls -l "$out"
+
+        installers=()
+        for f in install.ps1 install.sh; do [ -f "$out/$f" ] && installers+=("$out/$f"); done
+        gh release upload "$PRODUCT/v$VERSION" "${installers[@]}" --clobber
+
+        if [ "$PRERELEASE" != "true" ]; then
+          # One fixed release whose assets are replaced, so the URLs never change. It is a prerelease so it stays out of the way of the real ones:
+          #   https://github.com/$GITHUB_REPOSITORY/releases/download/$PRODUCT/dist/{install.ps1,install.sh,$PRODUCT.json}
+          if ! gh release view "$PRODUCT/dist" > /dev/null 2>&1; then
+            gh release create "$PRODUCT/dist" --target "$SHA" --prerelease --latest=false \
+              --title "$PRODUCT install files" \
+              --notes "The install scripts and Scoop manifest for the newest stable $PRODUCT release, replaced by each one. See dist/README.md."
+          fi
+          gh release upload "$PRODUCT/dist" "$out"/* --clobber
+        fi

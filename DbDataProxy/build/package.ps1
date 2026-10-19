@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
-  Publishes the proxy and zips it as DbDataProxy-<version>-win-x64.zip with a SHA256SUMS file beside it.
+  Publishes the proxy and zips it as dbdataproxy-v<version>-win-x64.zip (the standard release package name, dist/README.md) with a SHA256SUMS file beside it.
 .EXAMPLE
-  ./build/package.ps1 -Version 1.2.3     # -> artifacts/release/DbDataProxy-1.2.3-win-x64.zip
+  ./build/package.ps1 -Version 1.2.3     # -> artifacts/release/dbdataproxy-v1.2.3-win-x64.zip
 #>
 param(
   [Parameter(Mandatory)][string]$Version,
@@ -22,9 +22,9 @@ Copy-Item (Join-Path $published '*') $stage -Recurse -Exclude '*.pdb', 'web.conf
 Copy-Item (Join-Path $root 'README.md'), (Join-Path $root 'LICENSE') $stage
 
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
-$zip = Join-Path $Output "DbDataProxy-$Version-win-x64.zip"
+$zip = Join-Path $Output "dbdataproxy-v$Version-win-x64.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
-# Zip the folder's contents (not the folder itself) so the installer can extract straight into the install directory.
+# Zip the folder's contents (not the folder itself) so the installers extract straight into the install directory.
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
 
 $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
