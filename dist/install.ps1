@@ -29,7 +29,7 @@ param(
   [switch]$Machine,
   # Leave the user's PATH alone.
   [switch]$NoPath,
-  # Register the product's Windows service, for a product that has one.
+  # Register the product's Windows service, for a product that has one. A service belongs in Program Files, so this implies -Machine.
   [switch]$InstallService,
   [string]$Repo,
   [string]$ApiBase = 'https://api.github.com'
@@ -90,7 +90,7 @@ if ($DryRun) {
 }
 
 # --- Where, and with what rights ---
-$machineWide = $Machine -or ($Bound.WindowsScope -eq 'machine')
+$machineWide = $Machine -or $InstallService -or ($Bound.WindowsScope -eq 'machine')
 if (-not $InstallDir) {
   $InstallDir = if ($machineWide) { Join-Path $env:ProgramFiles $display } else { Join-Path $env:LOCALAPPDATA "Programs\$display" }
 }
@@ -135,14 +135,24 @@ try {
   }
 
   # --- Copy files, keeping the administrator's configuration ---
-  New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
   $kept = @()
-  Get-ChildItem $extracted -Recurse -File | ForEach-Object {
-    $relative = $_.FullName.Substring($extracted.Length).TrimStart('\', '/')
-    $destination = Join-Path $InstallDir $relative
-    if (($Bound.Preserve -contains $relative) -and (Test-Path $destination)) { $kept += $relative; return }
-    New-Item -ItemType Directory -Force -Path (Split-Path $destination) | Out-Null
-    Copy-Item $_.FullName $destination -Force
+  try {
+    New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+    Get-ChildItem $extracted -Recurse -File | ForEach-Object {
+      $relative = $_.FullName.Substring($extracted.Length).TrimStart('\', '/')
+      $destination = Join-Path $InstallDir $relative
+      if (($Bound.Preserve -contains $relative) -and (Test-Path $destination)) { $kept += $relative; return }
+      New-Item -ItemType Directory -Force -Path (Split-Path $destination) | Out-Null
+      Copy-Item $_.FullName $destination -Force
+    }
+  }
+  catch {
+    # The service was stopped for this; do not leave it down because the copy failed.
+    if ($wasRunning) {
+      Write-Warning 'The install failed; starting the service again.'
+      try { Start-Service $Bound.ServiceName } catch { Write-Warning "Could not start the service: $($_.Exception.Message)" }
+    }
+    throw
   }
   foreach ($k in $kept) { Write-Host "Kept your existing $k." }
 
