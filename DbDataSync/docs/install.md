@@ -102,7 +102,7 @@ sudo rm -r /opt/dbdatasync
 ## Zip install (install script or Scoop)
 
 Every release also carries `dbdatasync-v<version>-<win-x64|linux-x64>.zip` and the repository's standard install scripts
-([`dist/README.md`](../../dist/README.md)). The zip is the program without a tool wrapper, so it needs the .NET 10 runtime on the machine
+([`dist/README.md`](https://github.com/DbDataSync/DbDataKit/blob/main/dist/README.md)). The zip is the program without a tool wrapper, so it needs the .NET 10 runtime on the machine
 (and the SDK, to install drivers from the console):
 
 ```powershell

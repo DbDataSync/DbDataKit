@@ -50,6 +50,7 @@ class FakeGitHub:
 
     def __init__(self):
         self.releases = []   # api dicts, newest first
+        self.clock = 0
         self.blobs = {}      # path -> bytes
         outer = self
 
@@ -99,8 +100,9 @@ class FakeGitHub:
             self._asset(assets, tag, name, data)
         self._asset(assets, tag, "SHA256SUMS", (("\r\n" if crlf else "\n").join(sums) + ("\r\n" if crlf else "\n")).encode())
         self._asset(assets, tag, "install.sh", b"#!/bin/sh\n")   # unrelated asset
+        self.clock += 1
         self.releases.insert(0, {"tag_name": tag, "name": tag, "draft": draft, "prerelease": prerelease,
-                                 "published_at": "2026-10-19T12:00:00Z", "body": 'text with "tag_name": inside',
+                                 "published_at": f"2026-10-19T12:{self.clock:02d}:00Z", "body": 'text with "tag_name": inside',
                                  "assets": assets})
 
     def _asset(self, assets, tag, name, data):
@@ -234,8 +236,10 @@ class BashInstallerTests(DistTestCase):
 @unittest.skipUnless(PWSH, "pwsh not available")
 class PowerShellInstallerTests(DistTestCase):
     def run_ps(self, *args):
+        # A PSModulePath left by a parent PowerShell 7 stops Windows PowerShell 5.1 from finding its own modules.
+        env = {k: v for k, v in os.environ.items() if k != "PSModulePath"}
         return subprocess.run([PWSH, "-NoProfile", "-File", str(self.tmp / "install.ps1"), "-ApiBase", self.gh.base, *args],
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, env=env)
 
     def test_latest_is_the_newest_stable_release_of_this_product(self):
         r = self.run_ps("-DryRun")
