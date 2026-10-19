@@ -68,6 +68,7 @@ Edit `<Product>/dist.json`:
 | `preserve` | files an upgrade never overwrites |
 | `service` | `{ "name", "register" }`: the Windows service, and the arguments that register it (`{name}` is substituted) |
 | `requiresDotnet` | warns after install when that runtime is missing |
+| `requiresVcRuntime` | the Windows program needs the Visual C++ Redistributable: `install.ps1` warns when `vcruntime140.dll` is missing and the Scoop manifest suggests `extras/vcredist2022` |
 | `notes` | printed after install and shown by Scoop |
 
 The release workflow builds the zips and `SHA256SUMS`, then calls `.github/actions/publish-dist`, which runs `dist/dist.py bind` to bake

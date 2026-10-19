@@ -57,14 +57,13 @@ dbdatabuild ui mcp                                 # the commands as tools for a
 Requires the .NET 10 SDK. The SQL parser is a native library built from source once:
 
 ```
-scripts/fetch-native.sh       # downloads the prebuilt SQL library for the pinned commit into native/<rid>/
-scripts/build-polyglot.sh     # or build it yourself (needs a Rust toolchain, about 12 minutes)
+scripts/fetch-native.sh       # downloads the published SQL library (polyglot-sql, pinned release) into native/<rid>/
 dotnet build
 dotnet test tests/DbDataBuild.Tests.Unit
 scripts/publish.sh linux-x64  # one self-contained executable
 ```
 
-The real-engine suite uses throwaway SQL Server and PostgreSQL containers (`scripts/test-engines.sh up`; see `CLAUDE.md`). linux-x64 is built and tested; win-x64 builds from Linux (`TARGET_RID=win-x64 scripts/build-polyglot.sh`) and has been run under Wine only.
+The real-engine suite uses throwaway SQL Server and PostgreSQL containers (`scripts/test-engines.sh up`; see `CLAUDE.md`). linux-x64 is built and tested; win-x64 builds from Linux and has been run under Wine only (the Windows unit job in CI loads the library on real Windows); the SQL library and why it is the published build: `docs/native-library.md`.
 
 ## Documentation
 

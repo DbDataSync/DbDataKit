@@ -5,7 +5,7 @@ dbdatabuild is a .NET 10 CLI that builds analytics tables and views on SQL Serve
 ## Build and test
 
 ```
-scripts/fetch-native.sh                        # once: the prebuilt polyglot library (or scripts/build-polyglot.sh to compile it)
+scripts/fetch-native.sh                        # once: the published polyglot library (docs/native-library.md)
 dotnet build                                   # warnings are errors
 dotnet test tests/DbDataBuild.Tests.Unit       # no database needed; about 15 seconds
 scripts/test-engines.sh up                     # SQL Server 2022 and PostgreSQL 17 in docker, loopback only (`up all` adds SQL Server 2025 (`mssql2025`: probes and one load, at database compatibility levels 170 and 160), and Oracle, Spark SQL and the BigQuery emulator, which are only probed for their dialect; `up flight` adds two Arrow Flight SQL servers, plain and TLS, as origins)
@@ -13,7 +13,7 @@ eval "$(scripts/test-engines.sh env)"
 dotnet test tests/DbDataBuild.Tests.Conformance   # real engines, about 6 minutes in all; skipped without the env vars; groups: --filter "Group=apply", "Group=templates", "Group!=apply&Group!=templates&Group!=release" (the quick one), "Group=release" (sample projects with the rewrites off), "DisplayName~oracle"
 scripts/test-engines.sh down
 UPDATE_GOLDEN=1 dotnet test tests/DbDataBuild.Tests.Unit   # rewrites golden files; review the diff
-scripts/publish.sh linux-x64                   # one self-contained executable (win-x64 too: TARGET_RID=win-x64 scripts/build-polyglot.sh first)
+scripts/publish.sh linux-x64                   # one self-contained executable (win-x64 too: scripts/fetch-native.sh win-x64 first)
 node scripts/mcp-app-host.mjs <project>       # a stand-in MCP Apps host: opens the app in a browser (node and a browser needed; --allow-apply, --inspectable)
 scripts/test-windows-wine.sh                  # the unit tests with Windows semantics under Wine (TEST_PROJECT=DbDataBuild.Tests.Conformance for the engines; PostgreSQL cannot log in under Wine)
 scripts/test-duckdb-preview.sh                 # the unit tests against DuckDB's preview library (2.0 alpha); see docs/research/duckdb-2.0
@@ -37,4 +37,4 @@ scripts/test-duckdb-preview.sh                 # the unit tests against DuckDB's
 - Prefer a table or a data file over a switch when the rules will grow (the decision table, the matrix, the hook events).
 - When behavior changes, update in the same commit: the test, `DESIGN.md` ("as built" section), a numbered entry in `docs/progress/state-and-apply.md`, and `OPEN-ITEMS.md` if something is left undone. Say plainly what was verified on a real engine and what was not; Fabric has never been run.
 - A rendered file must not change when only the tool does: no version, timestamp or machine name goes into anything under `rendered/` (the version is in plans, JSON documents and the tracking tables). A release bumps `<Version>` in `Directory.Build.props`; `scripts/publish.sh` stamps the executable.
-- `native/` (the polyglot library) is not committed: `scripts/fetch-native.sh` downloads it from the `native-<pin>` release. Changing the pin means building it (`scripts/build-polyglot.sh`, both rids), publishing it (`scripts/publish-native.sh` or the `native` workflow) and updating `PolyglotNative.PinnedCommit`.
+- `native/` (the polyglot library) is not committed: `scripts/fetch-native.sh` downloads the published release pinned in `scripts/polyglot.pin`, checked against hashes in that file. Changing the release: `docs/native-library.md`.

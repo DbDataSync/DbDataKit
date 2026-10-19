@@ -226,9 +226,7 @@ Everything runs on the built-in `GITHUB_TOKEN`; no GitHub App, no rulesets.
 | `dbdatabuild-release.yml` | dispatch against `main` (or `sha`); full conformance on that commit; builds and smoke-tests linux-x64 and win-x64; tag `dbdatabuild/v<version>`; GitHub Release; a stable release also replaces the assets of the fixed `dbdatabuild/dist` release. |
 | `dbdatakit-ci.yml` / `_dbdatakit.yml` | the shared libraries' suite, once, on Linux and Windows with the shared engines. |
 
-**DbDataBuild, not moved:** the native library (`polyglot_sql_ffi`) keeps its old arrangement for now. `DbDataBuild/scripts/fetch-native.sh` and
-`publish-native.sh` still use the old repository's `native-<pin>` release, and its manual workflow stays where it was, unported, in
-`DbDataBuild/.github/workflows/native.yml`. Whether to fetch the library straight from its own upstream release is open.
+**DbDataBuild's native library** (`polyglot_sql_ffi`) is the published build from the polyglot project's own releases, pinned and hash-checked in `DbDataBuild/scripts/polyglot.pin` and fetched by `DbDataBuild/scripts/fetch-native.sh`. We no longer build or publish it. `DbDataBuild/docs/native-library.md` says why.
 
 Consequences:
 - **No enforcement.** Anyone with write access can push to `main`; the model is followed by convention.
@@ -249,6 +247,4 @@ Consequences:
 ## Open questions
 
 1. **A ruleset on `main`** (pull request required, linear history), if more people commit. See "Branch protection".
-2. **DbDataBuild's native library:** keep fetching the prebuilt `native-<pin>` release from the old repository, move it here, or take it
-   straight from its upstream release.
-3. **A nightly job for DbDataSync and DbDataProxy**, if their per-push suites are not enough.
+2. **A nightly job for DbDataSync and DbDataProxy**, if their per-push suites are not enough.

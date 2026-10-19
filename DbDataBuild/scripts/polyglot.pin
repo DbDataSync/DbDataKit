@@ -1,0 +1,8 @@
+# The polyglot-sql FFI library DbDataBuild uses: a published release of https://github.com/tobilg/polyglot (see docs/native-library.md).
+# Read by scripts/fetch-native.sh and scripts/gen-ast-types.sh; a unit test ties COMMIT to PolyglotNative.PinnedCommit.
+# To move to a new release: set VERSION, COMMIT (`git rev-parse vVERSION^{commit}` in a polyglot checkout) and both hashes (the release's
+# checksums.sha256), run scripts/gen-ast-types.sh, update PolyglotNative.PinnedCommit, then the tests and conformance.
+VERSION=0.13.3
+COMMIT=bdccb4219bac2fda552352c7faafc2612dc473f9
+SHA256_linux_x86_64=16039f35855f8120be4dfd06e1017699798f2356f056d804309b57c4ad38f429
+SHA256_windows_x86_64=75d74220005a1aaebf86d16cc8f1b44f70d9fab8e02f33301b432cf94df2d26e

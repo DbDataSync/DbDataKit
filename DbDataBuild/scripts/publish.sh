@@ -2,7 +2,7 @@
 # One self-contained file for a platform: the .NET runtime, the tool, and the native libraries (polyglot, DuckDB), which the runtime
 # unpacks on first start into DOTNET_BUNDLE_EXTRACT_BASE_DIR (default ~/.net).
 #   scripts/publish.sh [rid] [outdir]      rid defaults to linux-x64, outdir to ./publish/<rid>
-# The polyglot library for the rid must exist in native/<rid>/ (scripts/fetch-native.sh, or scripts/build-polyglot.sh). VERSION=1.2.3 stamps the build.
+# The polyglot library for the rid must exist in native/<rid>/ (scripts/fetch-native.sh). VERSION=1.2.3 stamps the build.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 RID="${1:-linux-x64}"

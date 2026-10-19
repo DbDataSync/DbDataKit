@@ -18,7 +18,7 @@
     <EmbeddedResource Include="..\..\matrix\*.yml" LogicalName="matrix/%(Filename)%(Extension)" />
   </ItemGroup>
 
-  <!-- Native polyglot library: produced by scripts/build-polyglot.sh into native/<rid>/, copied beside the output. -->
+  <!-- Native polyglot library: fetched by scripts/fetch-native.sh into native/<rid>/, copied beside the output. -->
   <ItemGroup>
     <None Include="..\..\native\**\*" Link="runtimes\%(RecursiveDir)native\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\native')" />
   </ItemGroup>

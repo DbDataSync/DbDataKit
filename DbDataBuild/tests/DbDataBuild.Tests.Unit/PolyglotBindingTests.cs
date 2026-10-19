@@ -6,13 +6,13 @@ namespace DbDataBuild.Tests.Unit;
 public class PolyglotBindingTests
 {
     public PolyglotBindingTests() =>
-        Assert.True(Polyglot.IsAvailable(), "Native polyglot library not found. Run scripts/build-polyglot.sh (or set DBDATABUILD_POLYGLOT_PATH).");
+        Assert.True(Polyglot.IsAvailable(), "Native polyglot library not found. Run scripts/fetch-native.sh (or set DBDATABUILD_POLYGLOT_PATH).");
 
     [Fact]
-    public void Pinned_commit_matches_build_script()
+    public void Pinned_commit_matches_the_pin_file()
     {
-        var script = File.ReadAllText(Path.Combine(RepoRoot(), "scripts", "build-polyglot.sh"));
-        Assert.Contains($"PIN=\"{Polyglot.PinnedCommit}\"", script);
+        var pin = File.ReadAllText(Path.Combine(RepoRoot(), "scripts", "polyglot.pin"));
+        Assert.Contains($"COMMIT={Polyglot.PinnedCommit}\n", pin.Replace("\r\n", "\n"));
     }
 
     [Fact]
