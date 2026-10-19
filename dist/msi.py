@@ -23,10 +23,15 @@ import subprocess
 import sys
 import tempfile
 import uuid
-from xml.sax.saxutils import quoteattr
+from xml.sax.saxutils import quoteattr as _quoteattr
 
 NAMESPACE = "http://schemas.microsoft.com/wix/2006/wi"
 MANUFACTURER = "DbDataSync"
+
+
+def quoteattr(value):
+    """An XML attribute value, with `$` doubled: wixl runs its own preprocessor over attribute text and drops a lone `$`, and `$$` is its literal one."""
+    return _quoteattr(str(value).replace("$", "$$"))
 
 
 def msi_version(version):

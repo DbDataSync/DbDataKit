@@ -30,6 +30,24 @@ function MachinePath { [Environment]::GetEnvironmentVariable('Path', 'Machine') 
 function OnMachinePath { (MachinePath -split ';' | ForEach-Object { $_.TrimEnd('\') }) -contains $dir }
 function ArpEntries { @(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq $DisplayName }) }
 function Svc { if ($ServiceName) { Get-Service -Name $ServiceName -ErrorAction SilentlyContinue } }
+function EventsAbout([int]$minutes = 10) {
+  $since = (Get-Date).AddMinutes(-$minutes)
+  foreach ($log in 'System', 'Application') {
+    Get-WinEvent -FilterHashtable @{ LogName = $log; StartTime = $since } -ErrorAction SilentlyContinue |
+      Where-Object { $_.Message -like "*$ServiceName*" -or $_.ProviderName -like "*$ServiceName*" -or $_.ProviderName -in '.NET Runtime', 'Application Error' } |
+      Select-Object -First 15 | ForEach-Object { Write-Host ("[{0}] {1} {2} {3}" -f $log, $_.TimeCreated.ToString('HH:mm:ss'), $_.ProviderName, ($_.Message -replace '\s+', ' ')) }
+  }
+}
+# Waits for the service to be running; when it is not, says why (a manual start's error, and the events from the last minutes) before failing.
+function AssertRunning([string]$why) {
+  try { (Get-Service $ServiceName).WaitForStatus('Running', '00:00:30') } catch { }
+  if ((Get-Service $ServiceName).Status -ne 'Running') {
+    Write-Host "--- $why : not running, status $((Get-Service $ServiceName).Status). Starting it by hand:"
+    try { Start-Service $ServiceName; Write-Host 'started by hand' } catch { Write-Host "Start-Service failed: $($_.Exception.Message)" }
+    EventsAbout
+  }
+  Assert ((Get-Service $ServiceName).Status -eq 'Running') $why
+}
 function ServicePath { (Get-CimInstance Win32_Service -Filter "Name='$ServiceName'").PathName }
 
 Write-Host "=== INSTALLSERVICE=0 installs the files and no service"
@@ -55,8 +73,7 @@ if ($ServiceName) {
 if ($ServiceName -and $ServiceRuns) {
   Write-Host "=== the service starts with no configuration"
   Start-Service $ServiceName
-  (Get-Service $ServiceName).WaitForStatus('Running', '00:00:30')
-  Assert ((Get-Service $ServiceName).Status -eq 'Running') "it is running"
+  AssertRunning "it is running"
 }
 $wasRunning = $ServiceName -and ((Svc).Status -eq 'Running')
 $pathBefore = if ($ServiceName) { ServicePath } else { '' }
@@ -69,10 +86,7 @@ if ($OnPath) { Assert (OnMachinePath) "still on the machine PATH" ; Assert (((Ma
 if ($ServiceName) {
   Assert ($null -ne (Svc)) "the service is still registered"
   Assert ((ServicePath) -eq $pathBefore) "with the same command line (an upgrade keeps the registration)"
-  if ($wasRunning) {
-    (Get-Service $ServiceName).WaitForStatus('Running', '00:00:30')
-    Assert ((Get-Service $ServiceName).Status -eq 'Running') "it was running before, so it is running again"
-  }
+  if ($wasRunning) { AssertRunning "it was running before, so it is running again" }
 }
 
 Write-Host "=== a downgrade is refused"
