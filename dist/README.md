@@ -53,6 +53,10 @@ file the product lists as `preserve` (`appsettings.json` for the proxy). Install
 | register the Windows service | `-InstallService` | n/a |
 | a fork or mirror | `-Repo`, `-ApiBase` | `--repo`, `--api-base` |
 
+A product with a Windows service (`service` in `dist.json`: DbDataSync's `DbDataSync`, DbDataProxy's `DbDataProxy`) is handled for you: a running
+service is stopped before the files are replaced and started again afterwards, including when the copy fails, and `-InstallService` registers
+it (and implies `-Machine`, since a service belongs in Program Files). A service that was stopped stays stopped.
+
 Defaults: per-user (`%LOCALAPPDATA%\Programs\<Name>` + user PATH; `~/.local/share/<product>` + a symlink in `~/.local/bin`), unless the
 product's `windowsScope` is `machine` (`%ProgramFiles%`, elevated), as for a product that is a Windows service.
 

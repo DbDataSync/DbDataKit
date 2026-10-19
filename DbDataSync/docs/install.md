@@ -115,7 +115,9 @@ curl -fsSL https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/
 ```
 
 A zip install cannot `dbdatasync update` itself or run the versioned slots above (only the tool package can); upgrade by running the
-installer again. Use the tool package for a service.
+installer again. Run it from an elevated prompt with `-Machine` (Program Files) when DbDataSync runs as a service: it stops the `DbDataSync`
+service, replaces the files and starts it again, and `-InstallService` also registers the service (`dbdatasync service install`). The tool
+package is the better fit for a service that needs rollback.
 
 ## Updating
 

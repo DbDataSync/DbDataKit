@@ -13,5 +13,9 @@
     }
   },
   "windowsScope": "user",
+  "service": {
+    "name": "DbDataSync",
+    "register": "service install"
+  },
   "requiresDotnet": "10.0"
 }

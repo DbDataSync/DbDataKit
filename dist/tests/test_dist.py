@@ -34,6 +34,7 @@ META = {
     "preserve": ["settings.json"],
     "requiresDotnet": "10.0",
     "requiresVcRuntime": True,
+    "service": {"name": "WidgetSvc", "register": "service install"},
     "notes": "Read the manual; it's short.",
 }
 
@@ -274,6 +275,66 @@ class PowerShellInstallerTests(DistTestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("Checksum mismatch", r.stdout + r.stderr)
         self.assertFalse(target.exists())
+
+
+@unittest.skipUnless(PWSH, "pwsh not available")
+class ServiceTests(DistTestCase):
+    """install.ps1's Windows service handling, with Get/Stop/Start-Service replaced by functions that write a log, and IsWindows forced on."""
+
+    def run_install(self, status, *, install_dir=None, preseed=None):
+        work = self.fresh()
+        target = install_dir or work / "inst"
+        if preseed is not None:
+            target.mkdir(parents=True)
+            (target / "widget.exe").write_bytes(preseed)
+        log = work / "service.log"
+        wrapper = work / "wrapper.ps1"
+        wrapper.write_text(f"""$ErrorActionPreference = 'Stop'
+Set-Variable -Name IsWindows -Value $true -Force -Scope Global
+if (-not $env:SystemRoot) {{ $env:SystemRoot = '{work}' }}
+$log = '{log}'
+$exe = '{target / "widget.exe"}'
+function Content {{ if (Test-Path $exe) {{ (Get-Content $exe -Raw).Trim() }} else {{ 'none' }} }}
+function Get-Service {{
+  [CmdletBinding()] param([string]$Name)
+  if ('{status}' -eq 'none') {{ return }}
+  $o = [pscustomobject]@{{ Name = $Name; Status = '{status}' }}
+  $o | Add-Member -MemberType ScriptMethod -Name WaitForStatus -Value {{ param($s, $t) }}
+  $o
+}}
+function Stop-Service {{ [CmdletBinding()] param([Parameter(Position = 0)][string]$Name) "stop $Name $(Content)" | Add-Content $log }}
+function Start-Service {{ [CmdletBinding()] param([Parameter(Position = 0)][string]$Name) "start $Name $(Content)" | Add-Content $log }}
+& '{self.tmp / "install.ps1"}' -ApiBase '{self.gh.base}' -InstallDir '{target}' -NoPath -Version 2026.2.2.0200
+""", encoding="utf-8")
+        env = {k: v for k, v in os.environ.items() if k.upper() != "PSMODULEPATH"}
+        r = subprocess.run([PWSH, "-NoProfile", "-File", str(wrapper)], capture_output=True, text=True, env=env)
+        lines = log.read_text().splitlines() if log.exists() else []
+        return r, lines, target
+
+    def test_a_running_service_is_stopped_before_the_files_change_and_started_after(self):
+        r, lines, target = self.run_install("Running", preseed=b"old")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(lines, ["stop WidgetSvc old", "start WidgetSvc stable-new"])
+        self.assertEqual((target / "widget.exe").read_bytes(), b"stable-new")
+
+    def test_a_stopped_service_is_left_stopped(self):
+        r, lines, _ = self.run_install("Stopped", preseed=b"old")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(lines, [])
+
+    def test_no_service_means_nothing_to_stop_or_start(self):
+        r, lines, target = self.run_install("none")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(lines, [])
+        self.assertEqual((target / "widget.exe").read_bytes(), b"stable-new")
+
+    def test_a_failed_copy_starts_the_service_again(self):
+        blocker = self.fresh() / "blocker"
+        blocker.write_text("a file where a directory is needed")
+        r, lines, _ = self.run_install("Running", install_dir=blocker / "inst")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual([l.split()[0] for l in lines], ["stop", "start"])
+        self.assertIn("starting the service again", r.stdout + r.stderr)
 
 
 if __name__ == "__main__":
