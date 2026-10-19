@@ -6,8 +6,9 @@
 
 The MSI copies the package to %ProgramFiles%\\<DisplayName>. For a product with a Windows service (`service` in dist.json) it also runs the
 product's own `register` command after the files are copied (INSTALLSERVICE=0 skips it) and `unregister` on removal, so the service setup has
-one implementation. An upgrade (same UpgradeCode, higher version) replaces the files and keeps the registered service, restarting it if the
-installer stopped it. A product with `msi.addToPath` gets its folder on the machine PATH. Settings and data live outside the package and are
+one implementation. An upgrade (same UpgradeCode, higher version) installs the new files first and removes the old product after InstallFinalize:
+the other order lets Windows Installer skip files it still sees from the old version and then delete them. The registered service is kept,
+stopped for the file copy and started again. A product with `msi.addToPath` gets its folder on the machine PATH. Settings and data live outside the package and are
 never touched. Double-click installs with the standard Windows Installer prompts; `msiexec /i x.msi /qn` is silent.
 
 wixl is the msitools project's builder (LGPL, `apt install wixl`). It reads the WiX schema but is independent of the WiX toolset.
@@ -111,6 +112,7 @@ def wxs(meta, version, payload):
         rel = pathlib.PurePath(os.path.relpath(base, payload)).as_posix()
         tree["" if rel == "." else rel] = sorted(files)
     exe_file_id = _id("f_", exe_name)
+    product_version = msi_version(version)
 
     components = []
 
@@ -121,15 +123,10 @@ def wxs(meta, version, payload):
             path = f"{rel}/{name}" if rel else name
             comp = _id("c_", path)
             components.append(comp)
-            inner = ""
-            if path == exe_name:
-                if service:
-                    # Stops the service before the old files go (upgrade or removal). A service that does not exist is left alone.
-                    inner += f'\n{pad}    <ServiceControl Id="StopService" Name={quoteattr(service["name"])} Stop="both" Wait="yes"/>'
             lines.append(
                 f'{pad}<Component Id="{comp}" Guid="{str(uuid.uuid5(guid_namespace, path)).upper()}" Win64="yes">'
                 f'\n{pad}  <File Id="{_id("f_", path)}" Name={quoteattr(name)} Source={quoteattr(str(payload / path))} KeyPath="yes"/>'
-                f'{inner}\n{pad}</Component>')
+                f'\n{pad}</Component>')
         children = sorted(d for d in tree if d and d.rpartition("/")[0] == rel)
         for child in children:
             lines.append(f'{pad}<Directory Id="{_id("d_", child)}" Name={quoteattr(child.rpartition("/")[2])}>')
@@ -145,7 +142,9 @@ def wxs(meta, version, payload):
     # Explicit sequence numbers, not Before/After: wixl's relative placement misorders actions (it even moved RemoveExistingProducts after
     # InstallFiles). The standard actions sit at InstallValidate 1400, RemoveExistingProducts 1401, InstallInitialize 1500, StopServices 1900,
     # DeleteServices 2000, RemoveFiles 3500, InstallFiles 4000, StartServices 5900.
-    sequence = ['<Custom Action="SetPowerShell" Sequence="1450"/>']
+    # The old product is removed after the new one is installed (see the module docstring). Components keep their GUIDs between versions, so the
+    # files both versions have are reference-counted, not deleted. FindRelatedProducts (25) is added by wixl along with the Upgrade table.
+    sequence = ['<Custom Action="SetPowerShell" Sequence="1450"/>', '<Custom Action="RemoveExistingProducts" Sequence="6601"/>']
     after_files = []   # run in order after the files are copied, each after the previous one
 
     def powershell(action_id, script, condition, ignore=True):
@@ -166,7 +165,13 @@ def wxs(meta, version, payload):
         # The installer stopped the service to replace its files; an upgrade starts it again.
         after_files.append(powershell("StartService", f"Start-Service -Name {_ps_quote(service['name'])} -ErrorAction SilentlyContinue",
                                       'WIX_UPGRADE_DETECTED AND INSTALLSERVICE="1"'))
-        sequence.append(f'<Custom Action="UnregisterService" Sequence="1901">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>')
+        # Stopped for the file copy (an upgrade) and for a plain removal. The old product's own removal, after the upgrade, must not stop it again,
+        # so this is a condition of the new install and of a removal, not of an upgrade's removal of the old product.
+        stop_id, stop_condition = powershell(
+            "StopService", f"Stop-Service -Name {_ps_quote(service['name'])} -Force -ErrorAction SilentlyContinue",
+            '(REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE) OR WIX_UPGRADE_DETECTED')
+        sequence.append(f'<Custom Action="{stop_id}" Sequence="1900">{stop_condition}</Custom>')
+        sequence.append('<Custom Action="UnregisterService" Sequence="1901">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>')
     if msi.get("addToPath"):
         after_files.append(powershell("AddToPath", _path_edit(True), "NOT Installed", ignore=False))
         sequence.append(
@@ -184,9 +189,13 @@ def wxs(meta, version, payload):
     parts = [
         '<?xml version="1.0" encoding="utf-8"?>',
         f'<Wix xmlns="{NAMESPACE}">',
-        f'  <Product Id="*" Name={quoteattr(display)} Language="1033" Version="{msi_version(version)}" Manufacturer={quoteattr(MANUFACTURER)} UpgradeCode="{{{upgrade_code}}}">',
+        f'  <Product Id="*" Name={quoteattr(display)} Language="1033" Version="{product_version}" Manufacturer={quoteattr(MANUFACTURER)} UpgradeCode="{{{upgrade_code}}}">',
         f'{indent}<Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" Description={quoteattr(f"{display} {version}")}/>',
-        f'{indent}<MajorUpgrade DowngradeErrorMessage={quoteattr(f"A newer version of {display} is already installed.")}/>',
+        f'{indent}<Upgrade Id="{{{upgrade_code}}}">',
+        f'{indent}  <UpgradeVersion Minimum="0.0.0" Maximum="{product_version}" IncludeMinimum="yes" IncludeMaximum="no" Property="WIX_UPGRADE_DETECTED" OnlyDetect="no"/>',
+        f'{indent}  <UpgradeVersion Minimum="{product_version}" IncludeMinimum="no" OnlyDetect="yes" Property="WIX_DOWNGRADE_DETECTED"/>',
+        f'{indent}</Upgrade>',
+        f'{indent}<Condition Message={quoteattr(f"A newer version of {display} is already installed.")}>NOT WIX_DOWNGRADE_DETECTED</Condition>',
         f'{indent}<Media Id="1" Cabinet="payload.cab" EmbedCab="yes"/>',
         *[indent + p for p in properties],
         f'{indent}<Directory Id="TARGETDIR" Name="SourceDir">',

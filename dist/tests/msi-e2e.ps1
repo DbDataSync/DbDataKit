@@ -31,6 +31,17 @@ function PathEntries { (MachinePath) -split ';' | ForEach-Object { $_.TrimEnd('\
 function OnMachinePath { (PathEntries) -contains $dir }
 function ArpEntries { @(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq $DisplayName }) }
 function Svc { if ($ServiceName) { Get-Service -Name $ServiceName -ErrorAction SilentlyContinue } }
+# A service handle this process keeps open (every Get-Service result holds one) makes a deleted service linger as "marked for deletion"; ask a separate process.
+function ServiceExists {
+  [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+  for ($i = 0; $i -lt 20; $i++) {
+    & sc.exe query $ServiceName 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 1060) { return $false }
+    Start-Sleep -Seconds 1
+  }
+  return $true
+}
+function FileCount { @(Get-ChildItem $dir -Recurse -File -ErrorAction SilentlyContinue).Count }
 function EventsAbout([int]$minutes = 10) {
   $since = (Get-Date).AddMinutes(-$minutes)
   foreach ($log in 'System', 'Application') {
@@ -54,7 +65,7 @@ function ServicePath { (Get-CimInstance Win32_Service -Filter "Name='$ServiceNam
 Write-Host "=== INSTALLSERVICE=0 installs the files and no service"
 Msi "/i `"$Msi1`" INSTALLSERVICE=0"
 Assert (Test-Path (Join-Path $dir $Exe)) "$Exe is in $dir"
-if ($ServiceName) { Assert ($null -eq (Svc)) "no service was registered" }
+if ($ServiceName) { Assert (-not (ServiceExists)) "no service was registered" }
 Msi "/x `"$Msi1`""
 Assert (-not (Test-Path $dir)) "the folder is gone after removal"
 
@@ -78,10 +89,13 @@ if ($ServiceName -and $ServiceRuns) {
 }
 $wasRunning = $ServiceName -and ((Svc).Status -eq 'Running')
 $pathBefore = if ($ServiceName) { ServicePath } else { '' }
+$filesBefore = FileCount
 
 Write-Host "=== upgrade over the running install"
 Msi "/i `"$Msi2`""
 Assert (Test-Path (Join-Path $dir 'UPGRADED.txt')) "the newer package's files are in place"
+Assert (Test-Path (Join-Path $dir $Exe)) "$Exe is still there (the old version's removal must not take shared files with it)"
+Assert ((FileCount) -eq ($filesBefore + 1)) "every file of the package is there, plus the new one ($filesBefore -> $(FileCount))"
 Assert ((ArpEntries).Count -eq 1) "still one Add/Remove Programs entry"
 if ($OnPath) { Assert (OnMachinePath) "still on the machine PATH" ; Assert (@(PathEntries | Where-Object { $_ -eq $dir }).Count -eq 1) "and only once" }
 if ($ServiceName) {
@@ -99,6 +113,6 @@ Write-Host "=== removal"
 Msi "/x `"$Msi2`""
 Assert (-not (Test-Path $dir)) "the program folder is gone"
 Assert ((ArpEntries).Count -eq 0) "no Add/Remove Programs entry"
-if ($ServiceName) { Assert ($null -eq (Svc)) "the service is unregistered" }
+if ($ServiceName) { Assert (-not (ServiceExists)) "the service is unregistered" }
 if ($OnPath) { Assert (-not (OnMachinePath)) "the folder is off the machine PATH" }
 Write-Host "All checks passed for $DisplayName."
