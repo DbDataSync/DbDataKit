@@ -156,7 +156,7 @@ class BuildTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = pathlib.Path(tempfile.mkdtemp(prefix="msi-build-"))
-        payload = make_payload(cls.tmp / "payload")
+        payload = make_payload(cls.tmp / "payload", {"cost$.txt": "x"})
         meta = cls.tmp / "dist.json"
         meta.write_text(json.dumps(META))
         cls.out = cls.tmp / "widget.msi"
@@ -204,6 +204,15 @@ class BuildTests(unittest.TestCase):
         self.assertLess(seq["UnregisterService"], seq["DeleteServices"])
         self.assertLess(seq["RemoveFromPath"], seq["RemoveFiles"])
         self.assertLess(seq["StartService"], seq["AddToPath"])
+
+    def test_dollar_signs_survive_in_commands_and_file_names(self):
+        # wixl's preprocessor drops a lone $; the generator doubles it. A PowerShell command without its $ is a different, failing, command.
+        commands = {line.split("\t")[0]: line.split("\t")[3] for line in self.table("CustomAction").splitlines()[3:] if line.count("\t") >= 3}
+        self.assertIn("$ErrorActionPreference = 'Stop'", commands["AddToPath"])
+        self.assertIn("$k = Get-Item", commands["AddToPath"])
+        self.assertNotIn("$$", commands["AddToPath"])
+        names = self.table("File")
+        self.assertIn("cost$.txt", names)
 
     def test_no_table_the_windows_installer_would_have_to_guess_about(self):
         self.assertNotIn("Environment", subprocess.run([MSIINFO, "tables", str(self.out)], capture_output=True, text=True).stdout.split())
