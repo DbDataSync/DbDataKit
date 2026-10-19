@@ -176,4 +176,7 @@ if ($Bound.RequiresDotnet) {
     Write-Warning "$display needs the .NET $($Bound.RequiresDotnet) runtime, which was not found. Install it from https://dotnet.microsoft.com/download"
   }
 }
+if ($onWindows -and $Bound.RequiresVcRuntime -and -not (Test-Path (Join-Path $env:SystemRoot 'System32\vcruntime140.dll'))) {
+  Write-Warning "$display needs the Microsoft Visual C++ 2015-2022 Redistributable (x64), which was not found. Install it from https://aka.ms/vs/17/release/vc_redist.x64.exe"
+}
 if ($Bound.Notes) { Write-Host $Bound.Notes }

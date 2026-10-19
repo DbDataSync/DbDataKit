@@ -6,7 +6,7 @@ dbdatabuild is MIT licensed (see `LICENSE`). The executable it ships (`scripts/p
 
 | Component | License | Notes |
 |---|---|---|
-| [polyglot-sql](https://github.com/tobilg/polyglot) (`polyglot_sql_ffi`) | MIT | SQL parser, generator and transpiler, built from a pinned commit by `scripts/build-polyglot.sh`; the repository also carries license texts for the data it vendors |
+| [polyglot-sql](https://github.com/tobilg/polyglot) (`polyglot_sql_ffi`) | MIT | SQL parser, generator and transpiler, the published release pinned in `scripts/polyglot.pin`, unmodified; the repository also carries license texts for the data it vendors |
 | [DuckDB](https://duckdb.org) | MIT | through DuckDB.NET |
 | Microsoft SqlClient SNI | Microsoft software license terms (redistributable runtime) | through Microsoft.Data.SqlClient |
 

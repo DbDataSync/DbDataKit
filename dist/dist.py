@@ -71,6 +71,8 @@ def scoop_manifest(meta, version, repo, sums):
         manifest["persist"] = meta["preserve"]
     if meta.get("notes"):
         manifest["notes"] = meta["notes"]
+    if meta.get("requiresVcRuntime"):
+        manifest["suggest"] = {"Visual C++ Redistributable": ["extras/vcredist2022"]}
     return manifest
 
 
@@ -99,6 +101,7 @@ def bind_ps1(template, meta, repo):
         f"  ServiceName = {_ps(service.get('name', ''))}",
         f"  ServiceRegister = {_ps(service.get('register', ''))}",
         f"  RequiresDotnet = {_ps(meta.get('requiresDotnet', ''))}",
+        f"  RequiresVcRuntime = ${'true' if meta.get('requiresVcRuntime') else 'false'}",
         f"  Notes = {_ps(meta.get('notes', ''))}",
         "}",
     ])

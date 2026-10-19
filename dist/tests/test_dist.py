@@ -33,6 +33,7 @@ META = {
     "windowsScope": "user",
     "preserve": ["settings.json"],
     "requiresDotnet": "10.0",
+    "requiresVcRuntime": True,
     "notes": "Read the manual; it's short.",
 }
 
@@ -156,6 +157,7 @@ class BindTests(DistTestCase):
         self.assertEqual(m["architecture"]["64bit"]["hash"], "ab" * 32)
         self.assertEqual(m["bin"], "widget.exe")
         self.assertEqual(m["persist"], ["settings.json"])
+        self.assertEqual(m["suggest"], {"Visual C++ Redistributable": ["extras/vcredist2022"]})
 
     def test_scoop_manifest_needs_the_checksum(self):
         out = self.fresh()
@@ -170,6 +172,7 @@ class BindTests(DistTestCase):
         self.assertIn("PLATFORMS='linux-x64=widget'", sh)
         self.assertIn("it's short", sh.replace("'\\''", "'"))   # notes quoting survives
         self.assertIn("Product = 'widget'", (out / "install.ps1").read_text().replace('"', "'"))
+        self.assertIn("RequiresVcRuntime = $true", (out / "install.ps1").read_text())
 
     @unittest.skipIf(os.name == "nt", "install.sh is for Linux and macOS")
     def test_unbound_templates_refuse_to_run(self):

@@ -8,5 +8,6 @@
     "win-x64": { "exe": "dbdatabuild.exe" },
     "linux-x64": { "exe": "dbdatabuild" }
   },
-  "windowsScope": "user"
+  "windowsScope": "user",
+  "requiresVcRuntime": true
 }

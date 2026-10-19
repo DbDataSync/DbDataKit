@@ -10,7 +10,7 @@ namespace DbDataBuild.Tests.Unit;
 public class PolyglotKnownGapsTests
 {
     public PolyglotKnownGapsTests() =>
-        Assert.True(Polyglot.IsAvailable(), "Native polyglot library not found. Run scripts/build-polyglot.sh.");
+        Assert.True(Polyglot.IsAvailable(), "Native polyglot library not found. Run scripts/fetch-native.sh.");
 
     private static string To(string target, string sql, string options = "{}")
     {

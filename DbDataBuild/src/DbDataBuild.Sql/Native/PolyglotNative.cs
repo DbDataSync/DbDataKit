@@ -24,7 +24,7 @@ internal struct PolyglotValidationResultNative
 internal static class PolyglotNative
 {
     public const string Library = "polyglot_sql_ffi";
-    public const string PinnedCommit = "0a7a1a77da6e3d5169119e133d4d608d74a5c9e1";
+    public const string PinnedCommit = "bdccb4219bac2fda552352c7faafc2612dc473f9";
 
     static PolyglotNative() => NativeLibrary.SetDllImportResolver(typeof(PolyglotNative).Assembly, Resolve);
 
