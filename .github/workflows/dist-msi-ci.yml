@@ -1,0 +1,94 @@
+name: Installer (MSI) CI
+
+# Builds each product's MSI with wixl from its newest published package, on Ubuntu, then installs, upgrades and removes it on a real Windows
+# machine (dist/tests/msi-e2e.ps1). Two MSIs are built per product, the second newer and carrying an extra file, to test the upgrade.
+
+on:
+  pull_request:
+    paths:
+      - 'dist/msi.py'
+      - 'dist/tests/**'
+      - '**/dist.json'
+      - '.github/workflows/dist-msi-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dist-msi-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - run: sudo apt-get update -y && sudo apt-get install -y wixl msitools
+      - name: Build two MSIs per product from the newest published package
+        run: |
+          set -euo pipefail
+          declare -A META=( [dbdataproxy]=DbDataProxy [dbdatasync]=DbDataSync [dbdatabuild]=DbDataBuild )
+          for product in dbdataproxy dbdatasync dbdatabuild; do
+            tag=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq "[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith(\"$product/v\")))][0].tag_name")
+            version=${tag#"$product"/v}
+            echo "$product: $version"
+            work="work/$product"; mkdir -p "$work" "out/$product"
+            gh release download "$tag" --pattern "$product-v$version-win-x64.zip" --dir "$work"
+            unzip -q "$work/$product-v$version-win-x64.zip" -d "$work/payload"
+            python3 dist/msi.py build --meta "${META[$product]}/dist.json" --version 2026.1.1.0 --payload "$work/payload" --out "out/$product/v1.msi"
+            cp -r "$work/payload" "$work/payload2"
+            echo "upgraded" > "$work/payload2/UPGRADED.txt"
+            python3 dist/msi.py build --meta "${META[$product]}/dist.json" --version 2026.1.2.0 --payload "$work/payload2" --out "out/$product/v2.msi"
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: msi
+          path: out
+          if-no-files-found: error
+
+  windows:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { product: dbdataproxy, display: DbDataProxy, exe: DbDataProxy.exe, service: DbDataProxy, runs: true,  path: false }
+          - { product: dbdatasync,  display: DbDataSync,  exe: dbdatasync.exe,  service: DbDataSync,  runs: false, path: true }
+          - { product: dbdatabuild, display: DbDataBuild, exe: dbdatabuild.exe, service: '',          runs: false, path: true }
+    name: windows (${{ matrix.product }})
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        if: matrix.product == 'dbdatasync'
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/download-artifact@v8
+        with:
+          name: msi
+          path: msi
+      - name: Install, upgrade and remove ${{ matrix.display }}
+        shell: pwsh
+        run: |
+          $args = @{
+            Msi1 = "$PWD\msi\${{ matrix.product }}\v1.msi"
+            Msi2 = "$PWD\msi\${{ matrix.product }}\v2.msi"
+            DisplayName = '${{ matrix.display }}'
+            Exe = '${{ matrix.exe }}'
+            LogDir = $env:RUNNER_TEMP
+          }
+          if ('${{ matrix.service }}') { $args.ServiceName = '${{ matrix.service }}' }
+          if ('${{ matrix.runs }}' -eq 'true') { $args.ServiceRuns = $true }
+          if ('${{ matrix.path }}' -eq 'true') { $args.OnPath = $true }
+          ./dist/tests/msi-e2e.ps1 @args
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: msi-logs-${{ matrix.product }}
+          path: ${{ runner.temp }}/*.log

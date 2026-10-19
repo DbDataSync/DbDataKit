@@ -5,9 +5,17 @@
   "homepage": "https://github.com/DbDataSync/DbDataKit/tree/main/DbDataBuild",
   "license": "MIT",
   "platforms": {
-    "win-x64": { "exe": "dbdatabuild.exe" },
-    "linux-x64": { "exe": "dbdatabuild" }
+    "win-x64": {
+      "exe": "dbdatabuild.exe"
+    },
+    "linux-x64": {
+      "exe": "dbdatabuild"
+    }
   },
   "windowsScope": "user",
-  "requiresVcRuntime": true
+  "requiresVcRuntime": true,
+  "msi": {
+    "upgradeCode": "0E2D6C1A-5B7F-4D3A-9C41-7A8B2F6E1D30",
+    "addToPath": true
+  }
 }

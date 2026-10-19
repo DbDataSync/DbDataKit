@@ -15,7 +15,12 @@
   "windowsScope": "user",
   "service": {
     "name": "DbDataSync",
-    "register": "service install"
+    "register": "service install",
+    "unregister": "service uninstall"
   },
-  "requiresDotnet": "10.0"
+  "requiresDotnet": "10.0",
+  "msi": {
+    "upgradeCode": "3C9A4F18-6D2E-4B75-A0E3-5F1B8C7D2A94",
+    "addToPath": true
+  }
 }
