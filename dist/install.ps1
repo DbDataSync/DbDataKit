@@ -116,7 +116,10 @@ try {
   $line = ($sums -split "`r?`n") | Where-Object { $_ -match [regex]::Escape($zipAsset.name) } | Select-Object -First 1
   if (-not $line) { throw 'SHA256SUMS does not list the package.' }
   $expected = ($line -split '\s+')[0].ToLowerInvariant()
-  $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+  $sha = [Security.Cryptography.SHA256]::Create()
+  $stream = [IO.File]::OpenRead($zip)
+  try { $actual = ([BitConverter]::ToString($sha.ComputeHash($stream)) -replace '-', '').ToLowerInvariant() }
+  finally { $stream.Dispose(); $sha.Dispose() }
   if ($actual -ne $expected) { throw "Checksum mismatch for $($zipAsset.name): expected $expected, got $actual." }
 
   $extracted = Join-Path $work 'files'
