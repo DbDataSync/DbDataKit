@@ -19,8 +19,11 @@ public sealed class ServiceCliEnvironment
 
     public required string BinaryPath { get; init; }
 
-    /// <summary>Data directory when <c>--data-dir</c> is not given (from appsettings.json and DBPROXY_ variables).</summary>
+    /// <summary>Data directory when <c>--data-dir</c> is not given (from the settings files and DBPROXY_ variables).</summary>
     public required Func<string> DefaultDataDirectory { get; init; }
+
+    /// <summary>Writes the starter settings file into the data directory after an install when it has none; null does nothing (tests).</summary>
+    public Action<string>? EnsureSettingsFile { get; init; }
 
     public bool IsWindows { get; init; } = OperatingSystem.IsWindows();
 
@@ -40,6 +43,7 @@ public sealed class ServiceCliEnvironment
         Console = new SystemConsole(),
         BinaryPath = Environment.ProcessPath ?? "",
         DefaultDataDirectory = () => ProxyHost.ResolveDataDirectory(ProxyConfiguration.LoadOptions()),
+        EnsureSettingsFile = dataDirectory => ProxyConfigFile.EnsureStarter(dataDirectory),
         PromptPassword = System.Console.IsInputRedirected ? null : ConsolePrompt.ReadHidden,
     };
 }
@@ -152,7 +156,8 @@ public static class ServiceCli
 
         if (rc == 0 && verb == "install" && !forwarded.Contains("--dry-run"))
         {
-            console.Out.WriteLine($"Edit appsettings.json beside {env.BinaryPath}, then run: DbDataProxy service start --name {name}");
+            env.EnsureSettingsFile?.Invoke(dataDirectory);
+            console.Out.WriteLine($"Settings: {ProxyConfigFile.PathIn(dataDirectory)} (appsettings.example.json beside {env.BinaryPath} shows every option). Then run: DbDataProxy service start --name {name}");
             console.Out.WriteLine("Open the listening port in the Windows firewall if clients connect from other machines.");
         }
 
@@ -171,9 +176,9 @@ public static class ServiceCli
         var layout = DirectoryLayout.Create(name,
         [
             new LayoutEntry(LayoutRole.InstallRoot, installDirectory, new AclSpec(false, [admin, system, Svc(AccessRights.ReadExecute)]),
-                "Binaries and appsettings.json; the service can read and run them but not change them."),
+                "Binaries; the service can read and run them but not change them."),
             new LayoutEntry(LayoutRole.Data, dataDirectory, new AclSpec(true, [admin, system, Svc(AccessRights.Modify)]),
-                "Generated TLS certificate and its protected password; Users have no access."),
+                "Settings (appsettings.json), the generated TLS certificate and its protected password; Users have no access."),
         ]);
 
         return new ServiceCommandContext
@@ -338,11 +343,13 @@ public static class ServiceCli
 /// <summary>Reads the proxy's own settings the way the host does, for commands that run without starting it.</summary>
 public static class ProxyConfiguration
 {
-    public static ProxyOptions LoadOptions(string? baseDirectory = null)
+    public static ProxyOptions LoadOptions(string? baseDirectory = null, string? dataDirectory = null)
     {
+        // The same layers as the host: the file beside the executable, then the data directory's, then the environment.
         var configuration = new ConfigurationBuilder()
             .SetBasePath(baseDirectory ?? AppContext.BaseDirectory)
-            .AddJsonFile("appsettings.json", optional: true)
+            .AddJsonFile(ProxyConfigFile.FileName, optional: true)
+            .AddJsonFile(ProxyConfigFile.PathIn(dataDirectory ?? ProxyConfigFile.ResolveDataDirectory()), optional: true)
             .AddEnvironmentVariables("DBPROXY_")
             .Build();
         return configuration.GetSection(ProxyOptions.SectionName).Get<ProxyOptions>() ?? new ProxyOptions();

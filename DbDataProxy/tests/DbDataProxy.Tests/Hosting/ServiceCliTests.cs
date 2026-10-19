@@ -38,6 +38,7 @@ public sealed class ServiceCliTests
         public RecordingAcl Acl { get; } = new();
         public BufferConsole Console { get; } = new();
         public Dictionary<string, string> Env { get; } = [];
+        public List<string> SettingsFiles { get; } = [];
         public string? Prompted { get; private set; }
         public string PromptAnswer { get; set; } = "typed-secret";
         public bool Elevated { get; set; } = true;
@@ -52,6 +53,7 @@ public sealed class ServiceCliTests
             Console = Console,
             BinaryPath = Exe,
             DefaultDataDirectory = () => DataDir,
+            EnsureSettingsFile = SettingsFiles.Add,
             IsWindows = Windows,
             GetEnvironmentVariable = name => Env.GetValueOrDefault(name),
             PrincipalResolver = account => new WellKnownPrincipalResolver(account.Kind == ServiceAccountKind.VirtualAccount ? ServiceSid.FromName(account.Name[(account.Name.LastIndexOf((char)92) + 1)..]) : "S-1-5-21-1-2-3-1001"),
@@ -76,6 +78,19 @@ public sealed class ServiceCliTests
         Assert.Equal(ServiceCli.Description, cfg.Description);
         Assert.Equal($"\"{Exe}\"", cfg.BinaryPathName);
         Assert.False(rig.Scm.LastPasswordSupplied);
+    }
+
+    [Fact]
+    public void Install_asks_for_the_starter_settings_file_in_the_data_directory_and_says_where_it_is()
+    {
+        var rig = new Rig();
+        Assert.Equal(0, rig.Run("install"));
+        Assert.Equal([DataDir], rig.SettingsFiles);
+        Assert.Contains("appsettings.json", rig.Out);
+
+        var dry = new Rig();
+        Assert.Equal(0, dry.Run("install", "--dry-run"));
+        Assert.Empty(dry.SettingsFiles);
     }
 
     [Fact]

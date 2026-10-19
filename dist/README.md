@@ -40,7 +40,7 @@ A prerelease attaches its own `install.ps1` / `install.sh` to its release and le
 
 Both find the newest **stable** release whose tag starts with `<product>/v` (GitHub's own "latest" is one marker for the whole repository
 and is not used), download that platform's zip and `SHA256SUMS`, refuse to continue on a mismatch, replace the program files, and keep any
-file the product lists as `preserve` (`appsettings.json` for the proxy). Installing again is how you upgrade.
+file the product lists as `preserve` (none today: DbDataProxy keeps its settings in `%ProgramData%`, away from the program files). Installing again is how you upgrade.
 
 | | `install.ps1` | `install.sh` |
 |---|---|---|
