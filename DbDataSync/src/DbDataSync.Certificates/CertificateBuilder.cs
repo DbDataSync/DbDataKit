@@ -25,7 +25,7 @@ public static class CertificateBuilder
     /// A self-signed certificate over a throwaway in-memory key — for a file target (a managed PFX or
     /// PEM, where the key has to be exportable because the file is where it lives) and for tests. A
     /// certificate headed for the Windows store is built over a named key instead — see
-    /// <see cref="CertificateStore.InstallSelfSigned"/>.
+    /// <see cref="StoreSelfSignedCertificate.Install"/>.
     /// </summary>
     public static X509Certificate2 CreateSelfSigned(CertificateSpec spec)
     {

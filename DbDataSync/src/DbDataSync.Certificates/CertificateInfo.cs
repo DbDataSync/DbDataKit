@@ -1,3 +1,4 @@
+using DbDataKit.Hosting.Certificates.Windows;
 using System.Security.Cryptography.X509Certificates;
 
 namespace DbDataSync.Certificates;
@@ -21,7 +22,7 @@ public sealed record CertificateInfo(
     public static CertificateInfo From(X509Certificate2 certificate) => new(
         certificate.Thumbprint ?? "",
         certificate.GetNameInfo(X509NameType.SimpleName, forIssuer: false),
-        CertificateSanReader.GetDnsNames(certificate),
+        DbDataKit.Hosting.Certificates.SelfSignedCertificateGenerator.ReadDnsNames(certificate),
         certificate.NotBefore,
         certificate.NotAfter,
         string.IsNullOrEmpty(certificate.FriendlyName) ? null : certificate.FriendlyName);

@@ -17,7 +17,7 @@ public sealed class CertificateBuilderTests
         var spec = new CertificateSpec("dbdatasync.example.com", ["dbdatasync.example.com", "dbdatasync"], 365, null);
         using var certificate = CertificateBuilder.CreateSelfSigned(spec);
 
-        var sanNames = CertificateSanReader.GetDnsNames(certificate);
+        var sanNames = DbDataKit.Hosting.Certificates.SelfSignedCertificateGenerator.ReadDnsNames(certificate);
         Assert.Contains("dbdatasync.example.com", sanNames);
         Assert.Contains("dbdatasync", sanNames);
     }
@@ -28,7 +28,7 @@ public sealed class CertificateBuilderTests
         var spec = new CertificateSpec("dbdatasync.example.com", ["dbdatasync.example.com"], 365, null);
         using var certificate = CertificateBuilder.CreateSelfSigned(spec);
 
-        var sanNames = CertificateSanReader.GetDnsNames(certificate);
+        var sanNames = DbDataKit.Hosting.Certificates.SelfSignedCertificateGenerator.ReadDnsNames(certificate);
         Assert.Contains(Environment.MachineName, sanNames, StringComparer.OrdinalIgnoreCase);
     }
 

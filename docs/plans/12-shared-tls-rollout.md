@@ -40,3 +40,11 @@ Each slice is only done when its test column passes.
   is replaced rather than migrated; the certificate subject is the machine name (the console host is a SAN); renewal
   is 30 days before expiry instead of a third of the lifetime; a file that cannot be opened is replaced instead of
   failing the renewal check.
+- 4: new package `DbDataKit.Hosting.Certificates.Windows` holds `CertificateStore` (install/list/find), `PrivateKeyAccess` and
+  `InstalledServiceAccount`. Differences from the plan: (a) `CertificateSanReader` is deleted, not moved: it is plain ASN.1, not
+  Windows-specific, and the shared library gains `SelfSignedCertificateGenerator.ReadDnsNames`; (b) `InstallSelfSigned` stays in Sync
+  (`StoreSelfSignedCertificate`) because it needs `CertificateKeys`/`CertificateBuilder`/`CertificateSpec`, which move in slice 5
+  or stay with Sync; (c) the Sync Windows tests that build certificates with Sync's `CertificateBuilder`/`CertificateKeys`
+  (`CertificateStoreWindowsTests`, `InstalledKeyWindowsTests`) stay in Sync for the same reason; only `InstalledServiceAccountTests` moved;
+  (d) the shared provider's `Store` mode already existed (it reads `X509Store` directly, valid certificates only), so nothing was
+  rewired; Sync's lookups (find by subject/thumbprint, including expired ones) are the package's `CertificateStore`.

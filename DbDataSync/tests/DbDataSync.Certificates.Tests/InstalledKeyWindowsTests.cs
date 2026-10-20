@@ -1,3 +1,4 @@
+using DbDataKit.Hosting.Certificates.Windows;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -137,7 +138,7 @@ public sealed class InstalledKeyWindowsTests : IDisposable
     [WindowsOnlyFact]
     public void InstallSelfSigned_LeavesAnInstalledCertificateWithANonExportableKey()
     {
-        var installed = CertificateStore.InstallSelfSigned(Spec(), StoreLocation.CurrentUser);
+        var installed = StoreSelfSignedCertificate.Install(Spec(), StoreLocation.CurrentUser);
         _installed.Add(installed);
 
         using var key = installed.GetRSAPrivateKey()!;

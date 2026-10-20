@@ -1,3 +1,4 @@
+using DbDataKit.Hosting.Certificates.Windows;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -311,7 +312,7 @@ public static class CertCommand
             return 1;
         }
 
-        var installed = CertificateStore.InstallSelfSigned(spec, StoreLocation.LocalMachine);
+        var installed = StoreSelfSignedCertificate.Install(spec, StoreLocation.LocalMachine);
         GrantIfNeeded(args, installed);
 
         Console.WriteLine("Issued and installed a self-signed certificate:");
@@ -368,7 +369,7 @@ public static class CertCommand
             return 1;
         }
 
-        var dnsNames = CertificateSanReader.GetDnsNames(current);
+        var dnsNames = DbDataKit.Hosting.Certificates.SelfSignedCertificateGenerator.ReadDnsNames(current);
         if (dnsNames.Count == 0)
         {
             Console.Error.WriteLine("The bound certificate has no SAN entries recorded to renew from.");
@@ -393,7 +394,7 @@ public static class CertCommand
         // SANs, an extension beyond the doc's literal text rather than leaving renew unusable there.
         var days = int.TryParse(CliOptions.Read(args, "--days"), out var parsedDays) ? parsedDays : 397;
         var selfSignedSpec = new CertificateSpec(subjectCommonName, dnsNames, days, FriendlyName: "DbDataSync");
-        var installed = CertificateStore.InstallSelfSigned(selfSignedSpec, StoreLocation.LocalMachine);
+        var installed = StoreSelfSignedCertificate.Install(selfSignedSpec, StoreLocation.LocalMachine);
         GrantIfNeeded(args, installed);
 
         Console.WriteLine("Renewed (self-signed — no CA is configured):");

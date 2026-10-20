@@ -1,3 +1,4 @@
+using DbDataKit.Hosting.Certificates.Windows;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -48,7 +49,7 @@ public sealed class CertificateExpiryServiceWindowsTests : IDisposable
     private X509Certificate2 InstallSelfSigned(string commonName)
     {
         var spec = new CertificateSpec(commonName, [commonName], 365, "DbDataSync Test");
-        var certificate = CertificateStore.InstallSelfSigned(spec, StoreLocation.CurrentUser);
+        var certificate = StoreSelfSignedCertificate.Install(spec, StoreLocation.CurrentUser);
         _installed.Add(certificate);
         return certificate;
     }

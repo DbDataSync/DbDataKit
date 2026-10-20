@@ -20,7 +20,7 @@ public sealed class ManagedSelfSignedCertificateTests : IDisposable
     {
         using var certificate = ManagedSelfSignedCertificate.Generate("dbdatasync.example.com", validityDays: 90);
 
-        var dnsNames = CertificateSanReader.GetDnsNames(certificate);
+        var dnsNames = DbDataKit.Hosting.Certificates.SelfSignedCertificateGenerator.ReadDnsNames(certificate);
         Assert.Contains("dbdatasync.example.com", dnsNames);
         Assert.Contains("localhost", dnsNames);
 
@@ -33,7 +33,7 @@ public sealed class ManagedSelfSignedCertificateTests : IDisposable
     {
         using var certificate = ManagedSelfSignedCertificate.Generate("localhost", validityDays: 30);
 
-        var dnsNames = CertificateSanReader.GetDnsNames(certificate);
+        var dnsNames = DbDataKit.Hosting.Certificates.SelfSignedCertificateGenerator.ReadDnsNames(certificate);
         Assert.Single(dnsNames, name => string.Equals(name, "localhost", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -79,8 +79,8 @@ public sealed class ManagedSelfSignedCertificateTests : IDisposable
         using var certificate = ManagedSelfSignedCertificate.LoadOrRenew(_root, "dbdatasync.example.com", 90, out var renewed);
 
         Assert.True(renewed);
-        Assert.Contains("dbdatasync.example.com", CertificateSanReader.GetDnsNames(certificate));
-        Assert.Contains("localhost", CertificateSanReader.GetDnsNames(certificate));
+        Assert.Contains("dbdatasync.example.com", DbDataKit.Hosting.Certificates.SelfSignedCertificateGenerator.ReadDnsNames(certificate));
+        Assert.Contains("localhost", DbDataKit.Hosting.Certificates.SelfSignedCertificateGenerator.ReadDnsNames(certificate));
         Assert.Contains("tls/", File.ReadAllLines(Path.Combine(_root, ".gitignore")));
     }
 
