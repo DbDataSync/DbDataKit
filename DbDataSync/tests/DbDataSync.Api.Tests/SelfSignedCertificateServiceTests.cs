@@ -50,12 +50,12 @@ public sealed class SelfSignedCertificateServiceTests : IDisposable
 
     private void WriteManagedCertificate(string host, int validityDays)
     {
-        using var certificate = ManagedSelfSignedCertificate.Generate(host, validityDays);
-        ManagedSelfSignedCertificate.Write(_root, certificate);
+        // Through the same path the CLI uses, so the SANs cover everything the renewal check expects of them.
+        ManagedSelfSignedCertificate.Renew(_root, host, validityDays).Dispose();
     }
 
     /// <summary>
-    /// <see cref="ManagedSelfSignedCertificate.Generate"/> always anchors <c>NotBefore</c> a few
+    /// <see cref="ManagedSelfSignedCertificate.Renew"/> always anchors <c>NotBefore</c> a few
     /// minutes before "now" (absorbing clock skew — see <see cref="CertificateBuilder"/>), so a
     /// freshly-generated certificate is never actually near its own expiry regardless of how short its
     /// validity is. To exercise "inside the renewal window" for real, this builds a certificate with an
@@ -89,7 +89,7 @@ public sealed class SelfSignedCertificateServiceTests : IDisposable
     [Fact]
     public async Task CheckAsync_CertificateWellOutsideTheRenewalWindow_DoesNothing()
     {
-        WriteManagedCertificate("dbdatasync.example.com", validityDays: 397);
+        WriteManagedCertificate("localhost", validityDays: 397);
         var originalPath = ManagedSelfSignedCertificate.PfxPath(_root);
         var originalBytes = File.ReadAllBytes(originalPath);
 
@@ -104,7 +104,7 @@ public sealed class SelfSignedCertificateServiceTests : IDisposable
     public async Task CheckAsync_CertificateInsideTheRenewalWindow_RegeneratesAndRaisesExactlyOneNotification()
     {
         // A 90-day certificate, 89 days into its own lifetime — 1 day of its 90 remains, well inside
-        // the one-third-remaining (30-day) renewal threshold.
+        // the 30-day renewal threshold.
         var now = DateTimeOffset.UtcNow;
         WriteAgedManagedCertificate("dbdatasync.example.com", now.AddDays(-89), now.AddDays(1));
         var path = ManagedSelfSignedCertificate.PfxPath(_root);
@@ -122,19 +122,22 @@ public sealed class SelfSignedCertificateServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task CheckAsync_RegenerationFailure_LogsAndDoesNotThrow()
+    public async Task CheckAsync_UnreadableFile_IsReplacedAndRaisesOneNotification()
     {
         WriteManagedCertificate("dbdatasync.example.com", validityDays: 3);
         var path = ManagedSelfSignedCertificate.PfxPath(_root);
 
-        // Corrupt the file in place: it still exists (so the service reaches the load), but no longer
-        // loads as a certificate — CheckAsync must swallow this, not throw.
+        // A file that no longer opens with the stored password (corrupt, or the password file was lost) is
+        // replaced rather than left to break the next start; the check must not throw either way.
         File.WriteAllBytes(path, [0x00, 0x01, 0x02]);
 
         var (service, notifications) = BuildService();
         await service.CheckAsync();
 
-        Assert.Empty(notifications.List());
+        var notification = Assert.Single(notifications.List());
+        Assert.Contains("renewed", notification.Message);
+        using var replaced = X509CertificateLoader.LoadPkcs12FromFile(path, ManagedSelfSignedCertificate.PasswordFor(_root, path));
+        Assert.NotNull(replaced);
     }
 
     [Fact]

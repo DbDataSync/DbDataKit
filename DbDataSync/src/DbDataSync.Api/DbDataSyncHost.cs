@@ -325,6 +325,12 @@ public static class DbDataSyncHost
                 StringComparison.OrdinalIgnoreCase))
         {
             builder.Services.AddHostedService<SelfSignedCertificateService>();
+
+            // The managed PFX is encrypted; its password lives in a protected file beside it, never in the
+            // git-tracked configuration, so Kestrel is given it from memory. A file from before the password
+            // existed has no password file and still opens without one until the renewal check replaces it.
+            if (ManagedSelfSignedCertificate.PasswordFor(certificateRepoRoot, ManagedSelfSignedCertificate.PfxPath(certificateRepoRoot)) is { } pfxPassword)
+                builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["Kestrel:Certificates:Default:Password"] = pfxPassword });
         }
 
         // One scheme for every request — controllers and the hub alike — so there is one answer to

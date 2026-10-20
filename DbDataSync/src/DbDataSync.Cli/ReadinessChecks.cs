@@ -498,7 +498,7 @@ internal sealed class CertificateCheck : IReadinessCheck
         try
         {
             var keyPath = context.Configuration["Kestrel:Certificates:Default:KeyPath"];
-            certificate = CertCommand.LoadFileCertificate(path, keyPath);
+            certificate = CertCommand.LoadFileCertificate(context.Root, path, keyPath);
         }
         catch (Exception ex) when (ex is CryptographicException or IOException)
         {

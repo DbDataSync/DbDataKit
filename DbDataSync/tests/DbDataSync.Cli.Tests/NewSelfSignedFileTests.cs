@@ -56,7 +56,8 @@ public sealed class NewSelfSignedFileTests : IDisposable
         CertCommand.Run(["new-self-signed", "--repo", _root]);
 
         using var certificate = X509CertificateLoader.LoadPkcs12FromFile(
-            ManagedSelfSignedCertificate.PfxPath(_root), password: null);
+            ManagedSelfSignedCertificate.PfxPath(_root),
+            ManagedSelfSignedCertificate.PasswordFor(_root, ManagedSelfSignedCertificate.PfxPath(_root)));
         var dnsNames = CertificateSanReader.GetDnsNames(certificate);
 
         Assert.Contains("dbdatasync.example.com", dnsNames);
@@ -72,7 +73,8 @@ public sealed class NewSelfSignedFileTests : IDisposable
 
         Assert.Equal(0, exitCode);
         using var certificate = X509CertificateLoader.LoadPkcs12FromFile(
-            ManagedSelfSignedCertificate.PfxPath(_root), password: null);
+            ManagedSelfSignedCertificate.PfxPath(_root),
+            ManagedSelfSignedCertificate.PasswordFor(_root, ManagedSelfSignedCertificate.PfxPath(_root)));
         Assert.Contains("localhost", CertificateSanReader.GetDnsNames(certificate));
     }
 

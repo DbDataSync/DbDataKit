@@ -202,7 +202,7 @@ public static class CertCommand
         X509Certificate2 certificate;
         try
         {
-            certificate = LoadFileCertificate(path, keyPath);
+            certificate = LoadFileCertificate(root, path, keyPath);
         }
         catch (Exception ex) when (ex is CryptographicException or IOException)
         {
@@ -662,15 +662,13 @@ public static class CertCommand
         X509Certificate2 certificate;
         try
         {
-            certificate = ManagedSelfSignedCertificate.Generate(host, days);
+            certificate = ManagedSelfSignedCertificate.Renew(root, host, days);
         }
         catch (ArgumentException ex)
         {
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
-
-        ManagedSelfSignedCertificate.Write(root, certificate);
 
         ClearStoreBasedBinding(root);
         // A PFX carries its own private key — no separate KeyPath, same as UsePfx.
@@ -711,9 +709,9 @@ public static class CertCommand
     /// <c>status</c>'s file-reporting path and phase 113's readiness check
     /// (<see cref="ReadinessChecks"/>), so the two never disagree about how those keys resolve to a
     /// certificate.</summary>
-    internal static X509Certificate2 LoadFileCertificate(string path, string? keyPath) =>
+    internal static X509Certificate2 LoadFileCertificate(string root, string path, string? keyPath) =>
         string.IsNullOrEmpty(keyPath)
-            ? X509CertificateLoader.LoadPkcs12FromFile(path, password: null)
+            ? X509CertificateLoader.LoadPkcs12FromFile(path, ManagedSelfSignedCertificate.PasswordFor(root, path))
             : X509Certificate2.CreateFromPemFile(path, keyPath);
 
     private static void PrintCertificateSummary(X509Certificate2 certificate)

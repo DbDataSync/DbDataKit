@@ -67,13 +67,21 @@ public sealed class SelfSignedCertificateService(
         if (!File.Exists(path))
             return; // Nothing generated yet, or the file was removed out from under this service.
 
-        using var certificate = X509CertificateLoader.LoadPkcs12FromFile(path, password: null);
-        if (!ManagedSelfSignedCertificate.ShouldRenew(certificate.NotBefore, certificate.NotAfter, DateTimeOffset.UtcNow))
-            return;
+        // Keep the lifetime the operator chose (new-self-signed --days) when the current file can still be opened;
+        // a file from before the password existed or an unreadable one gets the default.
+        var validityDays = ManagedSelfSignedCertificate.DefaultValidityDays;
+        try
+        {
+            using var current = X509CertificateLoader.LoadPkcs12FromFile(path, ManagedSelfSignedCertificate.PasswordFor(apiOptions.RepoRoot, path));
+            validityDays = Math.Max(1, (int)Math.Round((current.NotAfter - current.NotBefore).TotalDays));
+        }
+        catch (System.Security.Cryptography.CryptographicException)
+        {
+        }
 
-        var validityDays = Math.Max(1, (int)Math.Round((certificate.NotAfter - certificate.NotBefore).TotalDays));
-        using var renewed = ManagedSelfSignedCertificate.Generate(ConsoleHost(), validityDays);
-        ManagedSelfSignedCertificate.Write(apiOptions.RepoRoot, renewed);
+        using var renewed = ManagedSelfSignedCertificate.LoadOrRenew(apiOptions.RepoRoot, ConsoleHost(), validityDays, out var wasRenewed);
+        if (!wasRenewed)
+            return;
 
         notifications.Raise(
             NotificationKinds.CertificateExpiring,

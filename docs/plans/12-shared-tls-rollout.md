@@ -34,3 +34,9 @@ Each slice is only done when its test column passes.
 - 0: merged (#45).
 - 1: merged (#46, moved the evaluator) then redone (this PR): Sync's evaluator is deleted and its service uses the shared `CertificateExpiry`.
 - 2: shared `ProtectedPasswordFile` + `MigrateUnprotectedPfx` in `Hosting.Certificates`; Proxy keeps a 4-line subclass that pins its existing on-disk format identifiers so installed password files still load.
+- 3: Sync's managed self-signed file uses the shared generator, `CertificateProvider` and `ProtectedPasswordFile`
+  (encrypted PFX, `tls/dbdatasync.pfx.pwd`, ACL-restricted, 30-day renewal). The host passes the password to Kestrel
+  in memory. Breaking changes, documented in `DbDataSync/docs/certificates-self-signed.md`: an older unencrypted file
+  is replaced rather than migrated; the certificate subject is the machine name (the console host is a SAN); renewal
+  is 30 days before expiry instead of a third of the lifetime; a file that cannot be opened is replaced instead of
+  failing the renewal check.

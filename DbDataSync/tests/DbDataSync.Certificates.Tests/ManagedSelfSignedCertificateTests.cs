@@ -1,11 +1,13 @@
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
 namespace DbDataSync.Certificates.Tests;
 
 /// <summary>
-/// Phase 130, tier 2 — <see cref="ManagedSelfSignedCertificate"/>'s three pure/file-system pieces:
-/// generation (SANs, validity), storage (path, permissions, git-ignore), and the renewal decision. No
-/// Windows dependency anywhere here — the whole point of this class.
+/// Phase 130, tier 2 — <see cref="ManagedSelfSignedCertificate"/>'s pieces: generation (SANs, validity),
+/// storage (path, encryption, permissions, git-ignore) and renewal through the shared provider. The renewal
+/// threshold itself is the shared <c>CertificateExpiry</c> rule, tested with the shared library. No Windows
+/// dependency anywhere here — the whole point of this class.
 /// </summary>
 public sealed class ManagedSelfSignedCertificateTests : IDisposable
 {
@@ -45,8 +47,96 @@ public sealed class ManagedSelfSignedCertificateTests : IDisposable
         var path = ManagedSelfSignedCertificate.PfxPath(_root);
         Assert.True(File.Exists(path));
 
-        using var reloaded = X509CertificateLoader.LoadPkcs12FromFile(path, password: null);
+        using var reloaded = X509CertificateLoader.LoadPkcs12FromFile(path, ManagedSelfSignedCertificate.PasswordFor(_root, path));
         Assert.Equal(certificate.Thumbprint, reloaded.Thumbprint);
+    }
+
+    [Fact]
+    public void Write_EncryptsThePfx_AndKeepsItsPasswordInAFileBesideIt()
+    {
+        using var certificate = ManagedSelfSignedCertificate.Generate("dbdatasync.example.com", validityDays: 30);
+        ManagedSelfSignedCertificate.Write(_root, certificate);
+
+        var path = ManagedSelfSignedCertificate.PfxPath(_root);
+        Assert.Equal(path + ".pwd", ManagedSelfSignedCertificate.PasswordPath(_root));
+        Assert.True(File.Exists(ManagedSelfSignedCertificate.PasswordPath(_root)));
+        Assert.ThrowsAny<CryptographicException>(() => X509CertificateLoader.LoadPkcs12FromFile(path, password: null));
+        Assert.NotNull(ManagedSelfSignedCertificate.PasswordFor(_root, path));
+    }
+
+    [Fact]
+    public void PasswordFor_AnyOtherPath_IsNull()
+    {
+        using var certificate = ManagedSelfSignedCertificate.Generate("dbdatasync.example.com", validityDays: 30);
+        ManagedSelfSignedCertificate.Write(_root, certificate);
+
+        Assert.Null(ManagedSelfSignedCertificate.PasswordFor(_root, Path.Combine(_root, "other.pfx")));
+    }
+
+    [Fact]
+    public void LoadOrRenew_NothingThere_CreatesAnEncryptedCertificate()
+    {
+        using var certificate = ManagedSelfSignedCertificate.LoadOrRenew(_root, "dbdatasync.example.com", 90, out var renewed);
+
+        Assert.True(renewed);
+        Assert.Contains("dbdatasync.example.com", CertificateSanReader.GetDnsNames(certificate));
+        Assert.Contains("localhost", CertificateSanReader.GetDnsNames(certificate));
+        Assert.Contains("tls/", File.ReadAllLines(Path.Combine(_root, ".gitignore")));
+    }
+
+    [Fact]
+    public void LoadOrRenew_CurrentCertificate_IsLeftAlone()
+    {
+        using var first = ManagedSelfSignedCertificate.LoadOrRenew(_root, "dbdatasync.example.com", 90, out _);
+        using var second = ManagedSelfSignedCertificate.LoadOrRenew(_root, "dbdatasync.example.com", 90, out var renewed);
+
+        Assert.False(renewed);
+        Assert.Equal(first.Thumbprint, second.Thumbprint);
+    }
+
+    [Fact]
+    public void LoadOrRenew_WithinThirtyDaysOfExpiry_ReplacesIt()
+    {
+        using var first = ManagedSelfSignedCertificate.LoadOrRenew(_root, "dbdatasync.example.com", 90, out _);
+
+        using var second = ManagedSelfSignedCertificate.LoadOrRenew(
+            _root, "dbdatasync.example.com", 90, out var renewed, new FixedTime(DateTimeOffset.UtcNow.AddDays(70)));
+
+        Assert.True(renewed);
+        Assert.NotEqual(first.Thumbprint, second.Thumbprint);
+    }
+
+    [Fact]
+    public void LoadOrRenew_AFileFromBeforeThePasswordExisted_IsReplaced()
+    {
+        // The unencrypted layout earlier versions wrote: no password file, empty-password PFX. Not migrated —
+        // replaced, with a new key, the first time the renewal check runs.
+        using var legacy = ManagedSelfSignedCertificate.Generate("dbdatasync.example.com", validityDays: 90);
+        Directory.CreateDirectory(Path.GetDirectoryName(ManagedSelfSignedCertificate.PfxPath(_root))!);
+        File.WriteAllBytes(ManagedSelfSignedCertificate.PfxPath(_root), legacy.Export(X509ContentType.Pfx));
+
+        using var replaced = ManagedSelfSignedCertificate.LoadOrRenew(_root, "dbdatasync.example.com", 90, out var renewed);
+
+        Assert.True(renewed);
+        Assert.NotEqual(legacy.Thumbprint, replaced.Thumbprint);
+        Assert.NotNull(ManagedSelfSignedCertificate.PasswordFor(_root, ManagedSelfSignedCertificate.PfxPath(_root)));
+    }
+
+    [Fact]
+    public void Renew_ReplacesTheCertificateNow()
+    {
+        using var first = ManagedSelfSignedCertificate.Renew(_root, "dbdatasync.example.com", 90);
+        using var second = ManagedSelfSignedCertificate.Renew(_root, "dbdatasync.example.com", 90);
+
+        Assert.NotEqual(first.Thumbprint, second.Thumbprint);
+        var path = ManagedSelfSignedCertificate.PfxPath(_root);
+        using var stored = X509CertificateLoader.LoadPkcs12FromFile(path, ManagedSelfSignedCertificate.PasswordFor(_root, path));
+        Assert.Equal(second.Thumbprint, stored.Thumbprint);
+    }
+
+    private sealed class FixedTime(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 
     [Fact]
@@ -95,28 +185,5 @@ public sealed class ManagedSelfSignedCertificateTests : IDisposable
 
         Assert.Equal(first, second);
         Assert.EndsWith(Path.Combine("tls", "dbdatasync.pfx"), first);
-    }
-
-    [Theory]
-    [InlineData(10, 30, true)] // exactly a third of a 30-day lifetime remaining — the boundary is inclusive
-    [InlineData(11, 30, false)]
-    [InlineData(1, 30, true)]
-    public void ShouldRenew_TriggersAtOneThirdOfLifetimeRemaining(int daysRemaining, int totalDays, bool expected)
-    {
-        var now = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
-        var notAfter = now.AddDays(daysRemaining);
-        var notBefore = notAfter.AddDays(-totalDays);
-
-        Assert.Equal(expected, ManagedSelfSignedCertificate.ShouldRenew(notBefore, notAfter, now));
-    }
-
-    [Fact]
-    public void ShouldRenew_WellOutsideTheThreshold_IsFalse()
-    {
-        var now = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
-        var notBefore = now.AddDays(-10);
-        var notAfter = now.AddDays(300); // ~310-day cert, 300 remaining — nowhere near a third
-
-        Assert.False(ManagedSelfSignedCertificate.ShouldRenew(notBefore, notAfter, now));
     }
 }
