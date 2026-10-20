@@ -72,6 +72,17 @@ public sealed class AdminConfigService(
             "semicolon-separated. Purely additive: App:Url's own origin is always trusted for passkeys " +
             "without needing to be listed here too.",
             SupportsWrite: true),
+        new("DbDataSync:App:TrustedProxies",
+            "Proxies (IP addresses or CIDR ranges, comma- or semicolon-separated) whose X-Forwarded-For and " +
+            "X-Forwarded-Proto headers are believed. Needed when a TLS-terminating proxy sits in front of a " +
+            "plain-HTTP bind: plain HTTP from a non-local client is refused unless a trusted proxy says it arrived " +
+            "over HTTPS. Takes effect on restart; see configuration.md.",
+            SupportsWrite: true),
+        new("DbDataSync:App:AllowInsecureHttp",
+            "Serve plain HTTP to every client (true/false). Credentials then cross the network in clear text. " +
+            "Deliberately not editable here: weakening this is done in the config file or the environment of " +
+            "the host itself, not through the console it protects.",
+            SupportsWrite: false),
         new("DbDataSync:App:TaskRunnerDllPath",
             "Where DbDataSync.TaskRunner.dll is. Resolved automatically for a normal install or container.",
             SupportsWrite: true),
@@ -394,6 +405,8 @@ public sealed class AdminConfigService(
         "DbDataSync:App:Url" => apiOptions.Url,
         "DbDataSync:App:Server" => Lower(apiOptions.Server),
         "DbDataSync:App:AlternateUrls" => string.Join(", ", apiOptions.AlternateUrls),
+        "DbDataSync:App:TrustedProxies" => string.Join(", ", apiOptions.TrustedProxies),
+        "DbDataSync:App:AllowInsecureHttp" => apiOptions.AllowInsecureHttp ? "true" : "false",
         "DbDataSync:App:TaskRunnerDllPath" => apiOptions.TaskRunnerDllPath,
         "DbDataSync:State:DbPath" => apiOptions.StateDbPath,
         "DbDataSync:State:Engine" => apiOptions.StateEngine,

@@ -73,3 +73,13 @@ Each slice is only done when its test column passes.
   one-line change, `Hardening = All`, but it needs testing on a real Linux install: the config repo's files become 0600/0700, a
   Kerberos ticket cache in `/tmp` becomes invisible to the service). The unit text changes only in form: `Environment="DOTNET_ROOT=..."`
   is quoted, sections are labelled, and `TimeoutStopSec=90` (systemd's own default) is stated.
+- 10: Sync refuses plain HTTP from a non-local client unless it arrived over HTTPS or through a trusted TLS-terminating proxy
+  (`PlainHttpGuard.RequestAllowed` in the shared library; `PlainHttpProtection` middleware in Sync, first in the pipeline). Proxies are
+  listed in `DbDataSync:App:TrustedProxies` (IPs or CIDR ranges): only their `X-Forwarded-For`/`X-Forwarded-Proto` are believed.
+  `DbDataSync:App:AllowInsecureHttp` turns the check off (not editable from the Admin screen). Loopback clients and `/api/health` are
+  always served. Startup logs a warning when a plain non-loopback address is configured with neither setting. Breaking: the container
+  image listens on `http://0.0.0.0:8080`, so a browser reaching it through Docker's port mapping is refused until
+  `AllowInsecureHttp` (the sample compose file sets it, for evaluation) or `TrustedProxies` is set; documented in `docs/install.md`
+  and `docs/configuration.md`.
+- 8: not done. See the pull request thread / hand-off notes: it rewrites Windows service installation, which cannot be exercised
+  without Windows, and the plan's own test for it is an end-to-end install on Windows CI.

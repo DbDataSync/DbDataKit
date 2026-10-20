@@ -398,6 +398,13 @@ public static class DbDataSyncHost
         if (app.Environment.IsDevelopment())
             app.MapOpenApi();
 
+        // First in the pipeline, ahead of authentication and everything else that could answer a request: plain HTTP
+        // from a non-local client is refused unless a trusted TLS-terminating proxy says it arrived over HTTPS.
+        var apiOptionsForHttp = app.Services.GetRequiredService<ApiOptions>();
+        PlainHttpProtection.Apply(app, apiOptionsForHttp);
+        if (PlainHttpProtection.StartupWarning(apiOptionsForHttp, ConfiguredUrls(app.Configuration, apiOptionsForHttp)) is { } plainHttpWarning)
+            app.Logger.LogWarning("{Warning}", plainHttpWarning);
+
         // Only when an HTTPS URL is actually bound. Unconditionally, this redirects to a port nothing is
         // listening on — which is every containerised and every plain-HTTP deployment, and produces a
         // browser that cannot reach a server that is running perfectly well.
@@ -482,6 +489,12 @@ public static class DbDataSyncHost
                 "its origin, so share the port by host name, not by path.");
         }
     }
+
+    /// <summary>
+    /// The addresses this process is configured to listen on: <c>urls</c>, <c>ASPNETCORE_URLS</c>, and the console URL.
+    /// </summary>
+    private static IEnumerable<string> ConfiguredUrls(IConfiguration configuration, ApiOptions options) =>
+        new[] { configuration["urls"], configuration["ASPNETCORE_URLS"], options.Url }.Where(u => !string.IsNullOrWhiteSpace(u))!;
 
     /// <summary>
     /// Wires <c>dbdatasync.config.yaml</c> in as an <see cref="IConfigurationSource"/> at the same

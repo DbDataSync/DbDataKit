@@ -32,6 +32,19 @@ public static class PlainHttpGuard
         }
     }
 
+    /// <summary>
+    /// The request-time half of the guard, for a server that may be bound to plain HTTP behind a TLS-terminating
+    /// proxy: a request is acceptable when it arrived over TLS, or from a loopback client (local tools, a proxy on the
+    /// same host). Call it after forwarded headers from trusted proxies have been applied, so <paramref name="isHttps"/>
+    /// reflects <c>X-Forwarded-Proto</c> and <paramref name="clientAddress"/> the forwarded client. A null address (a unix
+    /// socket, an in-memory test server) counts as local.
+    /// </summary>
+    public static bool RequestAllowed(bool isHttps, IPAddress? clientAddress)
+    {
+        if (isHttps || clientAddress is null) return true;
+        return IPAddress.IsLoopback(clientAddress.IsIPv4MappedToIPv6 ? clientAddress.MapToIPv4() : clientAddress);
+    }
+
     public static bool IsLoopbackHost(string host)
     {
         if (host.StartsWith("unix:", StringComparison.OrdinalIgnoreCase)) return true;

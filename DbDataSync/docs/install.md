@@ -249,6 +249,11 @@ Use this for a self-contained deployment with no `PATH` or service to manage.
 docker run -p 8080:8080 -v dbdatasync-data:/var/lib/dbdatasync ghcr.io/dbdatasync/dbdatasync:latest
 ```
 
+The image listens on plain HTTP, and plain HTTP is served only to the same machine or to a trusted TLS-terminating proxy (see
+[Plain HTTP and reverse proxies](configuration.md#plain-http-and-reverse-proxies)). A request from your browser through Docker's port
+mapping is neither, so for a first look add `-e DbDataSync__App__AllowInsecureHttp=true` (credentials then cross the network unencrypted).
+For real use, put a TLS-terminating proxy in front and set `DbDataSync__App__TrustedProxies` to its address.
+
 One volume, at `/var/lib/dbdatasync`, holds both the config repository and the state database. Images are published for
 **linux/amd64 and linux/arm64** (an Arm server, a Raspberry Pi 4 or 5, AWS Graviton); Docker picks the one that matches the
 machine.
