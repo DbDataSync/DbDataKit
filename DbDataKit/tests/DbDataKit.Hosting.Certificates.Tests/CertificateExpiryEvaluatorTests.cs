@@ -1,6 +1,6 @@
-namespace DbDataSync.Certificates.Tests;
+namespace DbDataKit.Hosting.Certificates.Tests;
 
-/// <summary>The doc's own four scenarios, verbatim: 31 days out raises nothing, 29 days raises once, a
+/// <summary>The four scenarios: 31 days out raises nothing, 29 days raises once, a
 /// second check the same day raises nothing further, past NotAfter raises Expired.</summary>
 public sealed class CertificateExpiryEvaluatorTests
 {
