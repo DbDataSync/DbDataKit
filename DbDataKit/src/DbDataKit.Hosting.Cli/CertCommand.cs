@@ -14,10 +14,19 @@ public sealed class CertCommand(
 
     public const string Usage = "Usage: cert <status|show|ensure|renew|check>\n  status  show the certificate in use (never creates or changes anything); 'show' is the same\n  ensure  create or rotate the managed certificate if needed\n  renew   replace the managed self-signed certificate now (clients must trust the new .cer)\n  check   exit 1 when rotation is due or the certificate is missing";
 
+    /// <summary>Verbs a product adds; they run before the built-ins, so a product can replace one by registering its name.</summary>
+    public CertVerbs Verbs { get; } = new();
+
+    /// <summary><see cref="Usage"/> followed by the registered verbs' usage.</summary>
+    public string UsageText => Verbs.All.Count == 0 ? Usage : Usage + "\n" + string.Join("\n", Verbs.UsageLines);
+
     public int Execute(string[] args, IConsole console) => ExecuteAsync(args, console).GetAwaiter().GetResult();
 
     public async Task<int> ExecuteAsync(string[] args, IConsole console)
     {
+        if (args.Length > 0 && Verbs.TryRun(args[0], args[1..], console, out var registeredExit))
+            return registeredExit;
+
         switch (args.FirstOrDefault()?.ToLowerInvariant())
         {
             case "status":
@@ -76,7 +85,7 @@ public sealed class CertCommand(
                 }
 
             default:
-                console.Error.WriteLine(Usage);
+                console.Error.WriteLine(UsageText);
                 return ExitCodes.Usage;
         }
     }
