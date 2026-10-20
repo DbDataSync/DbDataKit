@@ -33,3 +33,4 @@ Each slice is only done when its test column passes.
 
 - 0: merged (#45).
 - 1: merged (#46, moved the evaluator) then redone (this PR): Sync's evaluator is deleted and its service uses the shared `CertificateExpiry`.
+- 2: shared `ProtectedPasswordFile` + `MigrateUnprotectedPfx` in `Hosting.Certificates`; Proxy keeps a 4-line subclass that pins its existing on-disk format identifiers so installed password files still load.
