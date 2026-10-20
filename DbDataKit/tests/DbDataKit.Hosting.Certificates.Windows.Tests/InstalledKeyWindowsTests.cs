@@ -1,10 +1,9 @@
-using DbDataKit.Hosting.Certificates.Windows;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
 
-namespace DbDataSync.Certificates.Tests;
+namespace DbDataKit.Hosting.Certificates.Windows.Tests;
 
 /// <summary>
 /// Phase 204P: a certificate in the store never has its private key exported. The first test is the

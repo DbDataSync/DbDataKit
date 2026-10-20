@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace DbDataSync.Certificates.Tests;
+namespace DbDataKit.Hosting.Certificates.Windows.Tests;
 
 /// <summary>The doc's own bullet: "template listing returns empty and a reason for each failure path...
 /// and never throws." <see cref="CertificateTemplateCatalog.List"/>'s CaConfig-unset check and

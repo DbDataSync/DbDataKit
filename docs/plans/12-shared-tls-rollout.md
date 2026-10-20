@@ -48,3 +48,10 @@ Each slice is only done when its test column passes.
   (`CertificateStoreWindowsTests`, `InstalledKeyWindowsTests`) stay in Sync for the same reason; only `InstalledServiceAccountTests` moved;
   (d) the shared provider's `Store` mode already existed (it reads `X509Store` directly, valid certificates only), so nothing was
   rewired; Sync's lookups (find by subject/thumbprint, including expired ones) are the package's `CertificateStore`.
+- 5: AD CS enrollment moved into `DbDataKit.Hosting.Certificates.Windows`: `AdcsEnrollment`, `CaDiscovery`, `CertificateTemplateCatalog`,
+  `EnrollmentCompletion`, `PendingEnrollmentStore`, `CertificateKeys`, plus what they need (`CertificateSpec`, `CertificateBuilder`) and
+  slice 4's leftover `StoreSelfSignedCertificate`. New `AdcsCertificateEnroller : ICertificateEnroller` implements the shared Enroll mode
+  (throws `EnrollmentPendingException` when the CA queues the request). Every Sync test that exercises these types moved with them
+  (41 tests; 26 run on Linux). The enroller, like `AdcsEnrollment`, has never been run against a real CA from CI or this sandbox.
+  `DbDataSync.Certificates` now holds only Sync's own pieces: `CertificateBinding`, `CertificateInfo`, `ManagedSelfSignedCertificate`.
+  Leftover: the completion handler's recovery text still names `dbdatasync config cert retrieve`.

@@ -1,4 +1,4 @@
-namespace DbDataSync.Certificates;
+namespace DbDataKit.Hosting.Certificates.Windows;
 
 /// <summary>
 /// What to ask for, whether the certificate that comes back is self-signed or issued by an enterprise

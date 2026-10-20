@@ -3,7 +3,7 @@ using System.Runtime.Versioning;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
-namespace DbDataSync.Certificates;
+namespace DbDataKit.Hosting.Certificates.Windows;
 
 public enum EnrollmentOutcome
 {

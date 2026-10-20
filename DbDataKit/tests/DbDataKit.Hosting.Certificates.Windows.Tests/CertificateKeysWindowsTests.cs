@@ -1,6 +1,6 @@
 using System.Runtime.Versioning;
 
-namespace DbDataSync.Certificates.Tests;
+namespace DbDataKit.Hosting.Certificates.Windows.Tests;
 
 /// <summary>
 /// The key-persistence primitive behind AD CS enrollment's pending-request handling — see

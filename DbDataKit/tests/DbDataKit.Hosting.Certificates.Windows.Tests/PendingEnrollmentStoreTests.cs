@@ -1,4 +1,4 @@
-namespace DbDataSync.Certificates.Tests;
+namespace DbDataKit.Hosting.Certificates.Windows.Tests;
 
 public sealed class PendingEnrollmentStoreTests : IDisposable
 {

@@ -1,17 +1,17 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
-namespace DbDataSync.Certificates;
+namespace DbDataKit.Hosting.Certificates.Windows;
 
 /// <summary>
 /// Builds the request both issuance paths share — see the phase 82 doc's "Issuance — two paths, one
 /// shared spine." A self-signed certificate and a CSR differ only in what happens to the
-/// <see cref="CertificateRequest"/> after this returns it: <see cref="CreateSelfSigned"/> signs it with
+/// <see cref="System.Security.Cryptography.X509Certificates.CertificateRequest"/> after this returns it: <see cref="CreateSelfSigned(CertificateSpec)"/> signs it with
 /// its own key immediately, <see cref="CreateSigningRequest"/> exports it unsigned for an enterprise CA
 /// to sign instead.
 /// <para>
 /// **Not marked <c>[SupportedOSPlatform("windows")]</c>, unlike the rest of this project.**
-/// <see cref="System.Security.Cryptography.CertificateRequest"/>, <c>RSA.Create</c> and the extension
+/// <see cref="System.Security.Cryptography.X509Certificates.CertificateRequest"/>, <c>RSA.Create</c> and the extension
 /// types below are genuine cross-platform .NET cryptography (backed by OpenSSL off Windows) — nothing
 /// here touches the Windows certificate store, CNG key storage, or COM. That is exactly why the phase
 /// 82 doc's own unit-test list calls out "a self-signed certificate carries every requested DNS name,"
@@ -61,7 +61,7 @@ public static class CertificateBuilder
     /// keeps <paramref name="rsa"/> around to pair with whatever certificate the CA eventually returns,
     /// since the CSR itself carries only the public half.
     /// <para>
-    /// **Takes the key rather than creating one**, unlike <see cref="CreateSelfSigned"/> — a CSR that
+    /// **Takes the key rather than creating one**, unlike <see cref="CreateSelfSigned(CertificateSpec)"/> — a CSR that
     /// might come back <c>CR_DISP_UNDER_SUBMISSION</c> (pending) needs its key to still exist, unchanged,
     /// whenever <c>dbdatasync config cert retrieve</c> eventually collects it, which could be minutes or days and
     /// a different process invocation later. An ephemeral in-memory key (what this method used before)

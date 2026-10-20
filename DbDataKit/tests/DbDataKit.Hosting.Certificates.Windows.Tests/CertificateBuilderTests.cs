@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
-namespace DbDataSync.Certificates.Tests;
+namespace DbDataKit.Hosting.Certificates.Windows.Tests;
 
 /// <summary>Covers the doc's own unit-test bullets for issuance: "a self-signed certificate carries
 /// every requested DNS name as a SAN, the server-auth EKU, and the requested validity" and "the CSR

@@ -1,8 +1,7 @@
 using System.Runtime.Versioning;
 using System.Security.Cryptography.X509Certificates;
-using DbDataKit.Hosting.Certificates.Windows;
 
-namespace DbDataSync.Certificates;
+namespace DbDataKit.Hosting.Certificates.Windows;
 
 /// <summary>
 /// Issues a self-signed certificate over a fresh named key and installs it in the Windows store — the store-side

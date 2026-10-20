@@ -2,6 +2,7 @@
   <PropertyGroup>
     <PackageId>DbDataKit.Hosting.Certificates.Windows</PackageId>
     <Description>Windows certificate store, installed private-key ACL and installed-service-account helpers for DbDataKit.Hosting.Certificates.</Description>
+    <NoWarn>$(NoWarn);CS1573</NoWarn>
     <!--
       net10.0, not net10.0-windows: products that publish for Linux reference this package, so every member is marked
       [SupportedOSPlatform("windows")] instead and callers check OperatingSystem.IsWindows() first.
@@ -9,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\DbDataKit.Hosting.Certificates\DbDataKit.Hosting.Certificates.csproj" />
+    <PackageReference Include="System.DirectoryServices" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="DbDataKit.Hosting.Certificates.Windows.Tests" />
