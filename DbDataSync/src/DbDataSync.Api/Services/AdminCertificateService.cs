@@ -273,7 +273,7 @@ public sealed class AdminCertificateService(ApiOptions apiOptions, CertificateOp
         EvaluateKeyAccess(certificate, InstalledServiceAccount.Resolve(ServiceName));
 
     /// <summary>
-    /// The pure half of the key-access check — pulled out, like <see cref="CertificateExpiryEvaluator"/>
+    /// The pure half of the key-access check — pulled out, like <see cref="DbDataKit.Hosting.Certificates.CertificateExpiry"/>
     /// pulls the expiry decision out of <see cref="CertificateExpiryService"/>, so a test can drive every
     /// one of the three states (<c>Ok</c>, <c>Warning</c>, <c>Unknown</c>) directly rather than needing a
     /// real installed Windows service to produce an account name to test against. <c>internal</c> for
