@@ -59,3 +59,9 @@ Each slice is only done when its test column passes.
   through the shared provider's Store mode. The rotation service also picks up a renewed store certificate (same subject, later
   expiry) without a restart; `cert show|check` describe it; `cert ensure|renew` explain that the store owns renewal. Config validation,
   README and the example config updated. The new store tests use the `CurrentUser` store and pass on Linux as well as Windows.
+- 7: the shared `CertCommand` gets a verb table (`CertVerbs`; `cmd.Verbs.Add(name, usage, handler)`): registered verbs run before the
+  built-ins (so a product can replace one by name) and their usage is appended to the usage text. Sync's `config cert` dispatch is now a
+  `CertVerbs` registration list (`use-pem`, `use-pfx`, `status`, `new-self-signed`, `list`, `enroll`, `renew`, `retrieve`, `templates`,
+  `discover`, `bind`); its usage text and exit codes are unchanged and pinned by `CertCommandSnapshotTests`, which also lists the verbs.
+  Sync uses the table directly rather than instantiating the shared `CertCommand`, because the shared built-ins (`show`, `ensure`, `check`)
+  need a `CertificateOptions` that Sync only has once a repo root is resolved, and adding verbs to Sync's CLI was not part of this slice.

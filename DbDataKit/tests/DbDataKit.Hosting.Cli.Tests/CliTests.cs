@@ -322,4 +322,66 @@ public class CertCommandTests
     {
         public override DateTimeOffset GetUtcNow() => now;
     }
+
+    [Fact]
+    public void A_registered_verb_runs_with_the_remaining_arguments()
+    {
+        var (cmd, dir, _) = Make();
+        using var _d = new TempDirGuard(dir);
+        string[]? seen = null;
+        cmd.Verbs.Add("rotate-keys", "  rotate-keys <name>   product verb", (args, _) => { seen = args; return 7; });
+
+        var console = new BufferConsole();
+        var rc = cmd.Execute(["ROTATE-KEYS", "a", "b"], console);
+
+        Assert.Equal(7, rc);
+        Assert.Equal(["a", "b"], seen!);
+    }
+
+    [Fact]
+    public void A_registered_verb_replaces_a_built_in_of_the_same_name()
+    {
+        var (cmd, dir, _) = Make();
+        using var _d = new TempDirGuard(dir);
+        cmd.Verbs.Add("status", "  status   the product's own", (_, c) => { c.Out.WriteLine("product status"); return 0; });
+
+        var console = new BufferConsole();
+        var rc = cmd.Execute(["status"], console);
+
+        Assert.Equal(0, rc);
+        Assert.Equal("product status", console.OutWriter.ToString().Trim());
+    }
+
+    [Fact]
+    public void Unknown_verbs_print_the_usage_including_registered_verbs()
+    {
+        var (cmd, dir, _) = Make();
+        using var _d = new TempDirGuard(dir);
+        cmd.Verbs.Add("rotate-keys", "  rotate-keys <name>   product verb", (_, _) => 0);
+
+        var console = new BufferConsole();
+        var rc = cmd.Execute(["nonsense"], console);
+
+        Assert.Equal(ExitCodes.Usage, rc);
+        var error = console.ErrorWriter.ToString();
+        Assert.Contains("Usage: cert <status|show|ensure|renew|check>", error);
+        Assert.Contains("rotate-keys <name>   product verb", error);
+    }
+
+    [Fact]
+    public void Without_registered_verbs_the_usage_is_unchanged()
+    {
+        var (cmd, dir, _) = Make();
+        using var _d = new TempDirGuard(dir);
+
+        Assert.Equal(CertCommand.Usage, cmd.UsageText);
+    }
+
+    private sealed class TempDirGuard(string path) : IDisposable
+    {
+        public void Dispose()
+        {
+            try { Directory.Delete(path, true); } catch (IOException) { }
+        }
+    }
 }
