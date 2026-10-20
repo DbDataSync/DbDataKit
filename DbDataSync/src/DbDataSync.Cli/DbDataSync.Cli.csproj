@@ -91,6 +91,7 @@
   <ItemGroup>
     <!-- The shared `cert` command's verb table (docs/plans/12-shared-tls-rollout.md, slice 7). -->
     <DbDataKitReference Include="Hosting.Cli" />
+    <DbDataKitReference Include="Hosting.Systemd" />
   </ItemGroup>
 
   <ItemGroup>
