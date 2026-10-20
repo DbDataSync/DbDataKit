@@ -267,6 +267,8 @@ the old flat names is migrated automatically the first time `serve`/`setup` runs
 | `App:Url` | `DbDataSync__App__Url` | `http://localhost:5080` | `dbdatasync serve`/`dbdatasync health` read this themselves (see above) and translate it to `--urls`/Kestrel's bind address; also this deployment's own always-trusted passkey origin (see `Auth:Passkeys:*`, below) |
 | `App:Server` | `DbDataSync__App__Server` | `kestrel` | `kestrel` or `httpsys`. `httpsys` is Windows-only and exists so the port can be shared with other processes — see "Sharing a port with HTTP.sys," below. Anything else refuses to start. Takes effect on restart |
 | `App:AlternateUrls` | `DbDataSync__App__AlternateUrls` | none | every other origin this deployment is also reached at, beyond `App:Url` — comma- or semicolon-separated. Purely additive: `App:Url`'s own origin is always trusted for passkeys without needing to be listed here too |
+| `App:TrustedProxies` | `DbDataSync__App__TrustedProxies` | none | proxies (IP addresses or CIDR ranges such as `10.0.0.0/8`, comma- or semicolon-separated) whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are believed. Set it when a TLS-terminating reverse proxy sits in front of a plain-HTTP bind; see [Plain HTTP](#plain-http-and-reverse-proxies) |
+| `App:AllowInsecureHttp` | `DbDataSync__App__AllowInsecureHttp` | `false` | serve plain HTTP to every client. Credentials and data then cross the network in clear text; for evaluation only |
 | `App:TaskRunnerDllPath` | `DbDataSync__App__TaskRunnerDllPath` | resolved automatically | see below |
 | `App:CliDllPath` | `DbDataSync__App__CliDllPath` | resolved automatically | where `DbDataSync.Cli.dll` is, for the deep connection-scoped library-validation check to spawn itself in its own process |
 
@@ -274,6 +276,18 @@ the old flat names is migrated automatically the first time `serve`/`setup` runs
 for the tool, the container, and any plain `dotnet publish`; (2) a dev-repo-layout guess (swaps
 `DbDataSync.Api/bin` for `DbDataSync.TaskRunner/bin`/`DbDataSync.Cli/bin`) — true only for this
 repository's own working tree.
+
+#### Plain HTTP and reverse proxies
+
+A plain `http://` request is served only when it comes from the same machine (loopback), or when it arrived over HTTPS at a
+TLS-terminating proxy that this deployment trusts. Anything else gets `400` with a message saying how to fix it. `/api/health`
+is always answered, so a load balancer's probe works.
+
+To run behind a proxy that terminates TLS, bind plain HTTP (the container image does: `http://0.0.0.0:8080`), set
+`DbDataSync:App:TrustedProxies` to the proxy's address, and have the proxy send `X-Forwarded-Proto: https` (and `X-Forwarded-For`).
+Those headers are believed only from the addresses listed; from anywhere else they are ignored. A proxy on the same host that
+talks to a loopback bind needs nothing. With nothing trustworthy in front, bind HTTPS (see [certificates](certificates.md)).
+`App:AllowInsecureHttp: true` turns the check off.
 
 #### `DbDataSync:State:*`
 

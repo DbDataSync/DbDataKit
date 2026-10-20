@@ -50,6 +50,17 @@ public sealed class ApiOptions
     /// </summary>
     public string Url { get; init; } = DefaultUrl;
 
+    /// <summary>
+    /// Proxies (IP addresses or CIDR ranges, comma- or semicolon-separated) whose <c>X-Forwarded-For</c> and
+    /// <c>X-Forwarded-Proto</c> headers are believed. Needed when TLS is terminated in front of a plain-HTTP bind:
+    /// <see cref="DbDataKit.Hosting.Certificates.PlainHttpGuard"/> refuses a non-local request that did not arrive over
+    /// HTTPS, and a trusted proxy's <c>X-Forwarded-Proto: https</c> is what says it did. Empty: no forwarded header is believed.
+    /// </summary>
+    public IReadOnlyList<string> TrustedProxies { get; init; } = [];
+
+    /// <summary>Turns <see cref="DbDataKit.Hosting.Certificates.PlainHttpGuard"/> off: plain HTTP is served to any client. Credentials then cross the network in clear text.</summary>
+    public bool AllowInsecureHttp { get; init; }
+
     /// <summary>Which server hosts the console/API — <see cref="WebServerSelection"/>.</summary>
     public WebServer Server { get; init; } = WebServerSelection.Default;
 
@@ -211,6 +222,8 @@ public sealed class ApiOptions
             Url = string.IsNullOrWhiteSpace(app["Url"]) ? DefaultUrl : app["Url"]!,
             Server = WebServerSelection.Resolve(configuration),
             AlternateUrls = ReadList(app["AlternateUrls"]),
+            TrustedProxies = ReadList(app["TrustedProxies"]),
+            AllowInsecureHttp = bool.TryParse(app["AllowInsecureHttp"], out var allowInsecure) && allowInsecure,
             StateDbPath = stateDbPath,
             CliDllPath = cliDllPath,
             // Not validated here — phase 109f moved that to StateDialect.For, the one place that
