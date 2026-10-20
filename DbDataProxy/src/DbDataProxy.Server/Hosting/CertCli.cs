@@ -36,6 +36,9 @@ public static class CertCli
         if (tls.Mode == TlsMode.File)
             return FileMode(rest, tls, console, time);
 
+        if (tls.Mode == TlsMode.Store)
+            return StoreMode(rest, tls, console, time);
+
         var setup = CertificateProvider.CreateSetup(tls, dataDirectory, serviceName, time);
         var command = new CertCommand(setup.Options, setup.Secrets, setup.Provider, time);
 
@@ -100,6 +103,34 @@ public static class CertCli
         catch (Exception ex) when (ex is CryptographicException or IOException)
         {
             console.Out.WriteLine($"Cannot open {tls.CertificatePath}: {ex.Message}");
+            return ExitCodes.Failure;
+        }
+    }
+
+    private static int StoreMode(List<string> args, TlsOptions tls, IConsole console, TimeProvider? time)
+    {
+        string verb = args.FirstOrDefault()?.ToLowerInvariant() ?? "";
+        if (verb is "ensure" or "renew")
+        {
+            console.Error.WriteLine("The certificate is taken from the certificate store (Proxy:Tls:Mode is Store); renew it there and the running proxy picks it up within hours.");
+            return ExitCodes.Usage;
+        }
+
+        if (verb is not ("show" or "status" or "check"))
+        {
+            console.Error.WriteLine(CertCommand.Usage);
+            return ExitCodes.Usage;
+        }
+
+        try
+        {
+            using var cert = CertificateProvider.LoadFromStore(tls);
+            Describe(cert, console, time);
+            return verb == "check" && CertificateProvider.NeedsRotation(cert, time) ? ExitCodes.Failure : ExitCodes.Ok;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or CryptographicException)
+        {
+            console.Out.WriteLine($"Cannot load the certificate from the store: {ex.Message}");
             return ExitCodes.Failure;
         }
     }

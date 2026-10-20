@@ -82,6 +82,8 @@ public enum TlsMode
     SelfSigned,
     /// <summary>Use a PFX file.</summary>
     File,
+    /// <summary>Use a certificate from the certificate store (Windows: <c>LocalMachine\My</c> by default), found by thumbprint or subject.</summary>
+    Store,
     /// <summary>Plain HTTP/2 without TLS. Credentials travel in clear text; only for local testing.</summary>
     None,
 }
@@ -101,6 +103,21 @@ public sealed class TlsOptions
 
     [ConfigKey(Min = 1)]
     public int SelfSignedValidityDays { get; set; } = 825;
+
+    /// <summary>For <see cref="TlsMode.Store"/>: thumbprint of the certificate to use (takes precedence over <see cref="CertificateSubject"/>).</summary>
+    public string? CertificateThumbprint { get; set; }
+
+    /// <summary>For <see cref="TlsMode.Store"/>: subject name to look for; when several match, the one valid for longest wins, so a renewed certificate is picked up.</summary>
+    public string? CertificateSubject { get; set; }
+
+    /// <summary>For <see cref="TlsMode.Store"/>: which store location to read.</summary>
+    public StoreLocationOption StoreLocation { get; set; } = StoreLocationOption.LocalMachine;
+}
+
+public enum StoreLocationOption
+{
+    LocalMachine,
+    CurrentUser,
 }
 
 public enum CompressionMode

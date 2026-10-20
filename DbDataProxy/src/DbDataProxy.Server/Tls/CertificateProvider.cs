@@ -41,9 +41,26 @@ public static class CertificateProvider
                     throw new InvalidOperationException("Proxy:Tls:CertificatePath is required when Proxy:Tls:Mode is File.");
                 return LoadPfx(tls.CertificatePath, tls.CertificatePassword);
 
+            case TlsMode.Store:
+                return LoadFromStore(tls);
+
             default:
                 return LoadOrCreateSelfSigned(tls, dataDirectory, logger, time, serviceName ?? ProxyHost.ServiceName);
         }
+    }
+
+    /// <summary>The certificate named by <c>Proxy:Tls:CertificateThumbprint</c> or <c>CertificateSubject</c> in the certificate store (shared provider, Store mode).</summary>
+    public static X509Certificate2 LoadFromStore(TlsOptions tls)
+    {
+        var options = new CertificateOptions
+        {
+            Mode = DbDataKit.Hosting.Certificates.CertificateMode.Store,
+            Thumbprint = string.IsNullOrWhiteSpace(tls.CertificateThumbprint) ? null : tls.CertificateThumbprint,
+            SubjectName = string.IsNullOrWhiteSpace(tls.CertificateSubject) ? null : tls.CertificateSubject,
+            StoreLocation = tls.StoreLocation == StoreLocationOption.CurrentUser ? StoreLocation.CurrentUser : StoreLocation.LocalMachine,
+        };
+        var provider = new DbDataKit.Hosting.Certificates.CertificateProvider(new DelegateSecretSource((_, _) => ""));
+        return provider.LoadAsync(options).GetAwaiter().GetResult();
     }
 
     /// <summary>Everything the shared certificate provider and the <c>cert</c> command need for the self-signed mode.</summary>

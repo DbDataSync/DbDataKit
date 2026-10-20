@@ -31,7 +31,9 @@ On first start the proxy writes `dbdataproxy-selfsigned.pfx` and `.cer` to its d
 (`%ProgramData%\DbDataProxy` by default, `Proxy:DataDirectory` to change). Import the `.cer` into clients that
 should trust it. The certificate covers localhost, the machine name/FQDN and `Proxy:Tls:Hostnames`, and is
 regenerated automatically when those change or it nears expiry (a running proxy rotates it in the background, 30 days
-before it ends, and serves the new one without a restart; `/health` reports its state). Use `Tls:Mode = File` for your own PFX.
+before it ends, and serves the new one without a restart; `/health` reports its state). Use `Tls:Mode = File` for your own PFX, or `Tls:Mode = Store` to take a certificate from the certificate store (`Tls:CertificateThumbprint`,
+or `Tls:CertificateSubject` and the proxy uses the one that is valid for longest; `Tls:StoreLocation` is `LocalMachine` by default). The service account
+needs read access to the private key. A running proxy picks up a renewed store certificate within hours; `DbDataProxy cert show|check` describes it.
 
 The generated PFX is encrypted with a random password. The password is kept in `dbdataproxy-selfsigned.pfx.pwd`, protected
 with DPAPI (machine scope) on Windows and readable only by the owner (mode 0600) elsewhere; the PFX, that file and a
@@ -302,7 +304,7 @@ Everything arrives as a Flight call; the proxy denies any call without valid cre
    every call. Validated against the authority's keys (or a shared HMAC key); `Mappings` turn claims (`groups`,
    `roles`, `scp`, ...) into data-source access. Tokens matching no mapping are refused.
 
-Always run with TLS (`SelfSigned` or `File`) outside local testing: credentials are sent as Basic auth.
+Always run with TLS (`SelfSigned`, `File` or `Store`) outside local testing: credentials are sent as Basic auth.
 
 ### 32-bit ODBC
 

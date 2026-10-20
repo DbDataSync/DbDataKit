@@ -55,3 +55,7 @@ Each slice is only done when its test column passes.
   (41 tests; 26 run on Linux). The enroller, like `AdcsEnrollment`, has never been run against a real CA from CI or this sandbox.
   `DbDataSync.Certificates` now holds only Sync's own pieces: `CertificateBinding`, `CertificateInfo`, `ManagedSelfSignedCertificate`.
   Leftover: the completion handler's recovery text still names `dbdatasync config cert retrieve`.
+- 6: Proxy gains `Proxy:Tls:Mode=Store` (`CertificateThumbprint` or `CertificateSubject`, `StoreLocation` LocalMachine by default),
+  through the shared provider's Store mode. The rotation service also picks up a renewed store certificate (same subject, later
+  expiry) without a restart; `cert show|check` describe it; `cert ensure|renew` explain that the store owns renewal. Config validation,
+  README and the example config updated. The new store tests use the `CurrentUser` store and pass on Linux as well as Windows.
