@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using DbDataKit.Hosting.Systemd;
 using DbDataSync.Api.Auth;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Core.Config;
@@ -254,45 +255,29 @@ internal static class SystemdService
         // operator editing Url through the Admin screen would see it silently ignored on every
         // restart. An explicit --url given to `service install` is written into the file itself
         // instead — see Install, above.
-        var execStart = $"{QuoteForSystemd(executable)} serve --repo {QuoteForSystemd(root)}";
         var isManagedRoot = string.Equals(root, ManagedStateDirectoryRoot, StringComparison.Ordinal);
 
-        var serviceExtras = isManagedRoot
-            ? $"""
-               StateDirectory={UnitName}
-               NoNewPrivileges=yes
-               ProtectSystem=strict
-               ProtectHome=yes
-               ReadWritePaths={root}
-               """
-            : $"""
-               # --repo is outside {ManagedStateDirectoryRoot}, so the default hardening
-               # (ProtectSystem=strict, which would make this path read-only) is skipped rather than
-               # silently breaking access to an operator's own chosen location.
-               ReadWritePaths={root}
-               """;
-
-        var dotnetRootLine = dotnetRoot is null ? "" : $"Environment=DOTNET_ROOT={dotnetRoot}\n";
-        return $"""
-            [Unit]
-            Description=DbDataSync — cross-database replication
-            After=network-online.target
-            Wants=network-online.target
-
-            [Service]
-            Type=notify
-            {dotnetRootLine}ExecStart={execStart}
-            User={user}
-            Group={user}
-            WorkingDirectory={root}
-            Restart=on-failure
-            RestartSec=5
-            {serviceExtras}
-
-            [Install]
-            WantedBy=multi-user.target
-
-            """;
+        return SystemdUnitGenerator.Generate(new SystemdUnitOptions
+        {
+            Name = UnitName,
+            Description = "DbDataSync — cross-database replication",
+            ExecStart = $"{QuoteForSystemd(executable)} serve --repo {QuoteForSystemd(root)}",
+            WorkingDirectory = root,
+            DynamicUser = false,
+            User = user,
+            Group = user,
+            StateDirectories = isManagedRoot ? [UnitName] : [],
+            ReadWritePaths = [root],
+            Environment = dotnetRoot is null ? new Dictionary<string, string>() : new Dictionary<string, string> { ["DOTNET_ROOT"] = dotnetRoot },
+            // systemd's own default, stated: the shared generator would otherwise shorten it to 45 s.
+            TimeoutStopSec = TimeSpan.FromSeconds(90),
+            // Exactly what this unit has always asked for. The shared generator's fuller sandbox (PrivateTmp, UMask 0077,
+            // dropped capabilities, ...) is not applied: it would change what files the service creates and who can read them
+            // on existing installs. A --repo outside the managed directory has never been hardened at all: ReadWritePaths only.
+            Hardening = isManagedRoot
+                ? SystemdHardening.NoNewPrivileges | SystemdHardening.ProtectSystem | SystemdHardening.ProtectHome
+                : SystemdHardening.None,
+        });
     }
 
     private static string QuoteForSystemd(string value) => $"\"{value}\"";

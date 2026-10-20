@@ -50,6 +50,39 @@ public class GeneratorTests
         }));
 
     [Fact]
+    public void Hardening_can_be_narrowed_to_a_subset()
+    {
+        var text = SystemdUnitGenerator.Generate(new SystemdUnitOptions
+        {
+            Name = "x", ExecStart = "/opt/x", DynamicUser = false, User = "x", ReadWritePaths = ["/srv/x"],
+            Hardening = SystemdHardening.NoNewPrivileges | SystemdHardening.ProtectSystem,
+        });
+
+        Assert.Contains("NoNewPrivileges=yes\n", text);
+        Assert.Contains("ProtectSystem=strict\n", text);
+        Assert.Contains("ReadWritePaths=/srv/x\n", text);
+        foreach (var absent in new[] { "ProtectHome", "PrivateTmp", "PrivateDevices", "UMask", "CapabilityBoundingSet", "AmbientCapabilities", "ProtectKernel", "RestrictNamespaces" })
+            Assert.DoesNotContain(absent, text);
+    }
+
+    [Fact]
+    public void No_hardening_still_lists_read_write_paths_and_omits_the_section_without_them()
+    {
+        var withPaths = SystemdUnitGenerator.Generate(new SystemdUnitOptions { Name = "x", ExecStart = "/opt/x", DynamicUser = false, User = "x", ReadWritePaths = ["/srv/x"], Hardening = SystemdHardening.None });
+        var without = SystemdUnitGenerator.Generate(new SystemdUnitOptions { Name = "x", ExecStart = "/opt/x", DynamicUser = false, User = "x", Hardening = SystemdHardening.None });
+
+        Assert.Contains("# Hardening\nReadWritePaths=/srv/x\n", withPaths);
+        Assert.DoesNotContain("# Hardening", without);
+    }
+
+    [Fact]
+    public void A_quoted_absolute_executable_is_accepted_and_a_quoted_relative_one_is_not()
+    {
+        Assert.Contains("ExecStart=\"/opt/my app/x\" serve\n", SystemdUnitGenerator.Generate(new SystemdUnitOptions { Name = "x", ExecStart = "\"/opt/my app/x\" serve" }));
+        Assert.Throws<ArgumentException>(() => SystemdUnitGenerator.Generate(new SystemdUnitOptions { Name = "x", ExecStart = "\"opt/x\" serve" }));
+    }
+
+    [Fact]
     public void Unit_always_carries_the_hardening_baseline()
     {
         var text = SystemdUnitGenerator.Generate(Dynamic());
