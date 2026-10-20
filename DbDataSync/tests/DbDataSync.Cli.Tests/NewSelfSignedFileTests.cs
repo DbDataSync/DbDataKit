@@ -58,7 +58,7 @@ public sealed class NewSelfSignedFileTests : IDisposable
         using var certificate = X509CertificateLoader.LoadPkcs12FromFile(
             ManagedSelfSignedCertificate.PfxPath(_root),
             ManagedSelfSignedCertificate.PasswordFor(_root, ManagedSelfSignedCertificate.PfxPath(_root)));
-        var dnsNames = CertificateSanReader.GetDnsNames(certificate);
+        var dnsNames = DbDataKit.Hosting.Certificates.SelfSignedCertificateGenerator.ReadDnsNames(certificate);
 
         Assert.Contains("dbdatasync.example.com", dnsNames);
         Assert.Contains("localhost", dnsNames);
@@ -75,7 +75,7 @@ public sealed class NewSelfSignedFileTests : IDisposable
         using var certificate = X509CertificateLoader.LoadPkcs12FromFile(
             ManagedSelfSignedCertificate.PfxPath(_root),
             ManagedSelfSignedCertificate.PasswordFor(_root, ManagedSelfSignedCertificate.PfxPath(_root)));
-        Assert.Contains("localhost", CertificateSanReader.GetDnsNames(certificate));
+        Assert.Contains("localhost", DbDataKit.Hosting.Certificates.SelfSignedCertificateGenerator.ReadDnsNames(certificate));
     }
 
     [NonWindowsFact]

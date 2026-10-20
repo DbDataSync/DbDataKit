@@ -4,14 +4,12 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
 
-namespace DbDataSync.Certificates;
+namespace DbDataKit.Hosting.Certificates.Windows;
 
 /// <summary>
-/// The ACL grant the phase 82 doc calls "the part that the original ask did not mention and that will
-/// otherwise generate a support ticket per domain install": a certificate in <c>LocalMachine\My</c> has
-/// a private-key DACL granting SYSTEM and Administrators, and a service running as a domain account
-/// (which <c>dbdatasync service install --account</c> supports) cannot read it — the symptom is a TLS
-/// handshake failure at startup that names no permission problem at all.
+/// The ACL grant on an installed certificate's private key: a certificate in <c>LocalMachine\My</c> has a
+/// private-key DACL granting SYSTEM and Administrators, and a service running as a domain account cannot read it —
+/// the symptom is a TLS handshake failure at startup that names no permission problem at all.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public static class PrivateKeyAccess
@@ -24,7 +22,7 @@ public static class PrivateKeyAccess
     /// <see cref="CngKey"/> → the key container's on-disk file — because neither
     /// <see cref="X509Certificate2"/> nor <see cref="CngKey"/> exposes an ACL API of its own; the
     /// private key material for the Microsoft Software Key Storage Provider (what
-    /// <see cref="CertificateBuilder"/> and AD CS enrollment both use) is an ordinary file under
+    /// self-signed issuance and AD CS enrollment both use) is an ordinary file under
     /// <c>%ProgramData%\Microsoft\Crypto\Keys</c> for a machine-store key, or the user profile
     /// equivalent for <see cref="StoreLocation.CurrentUser"/>, and an ordinary NTFS DACL is what
     /// actually gates read access to it.
@@ -54,7 +52,7 @@ public static class PrivateKeyAccess
 
     /// <summary>
     /// Whether <paramref name="account"/> already has an explicit read (or broader) allow rule on the
-    /// private key — what <c>dbdatasync config cert status</c> and the daily expiry check both report, so a
+    /// private key — what a certificate status command and a daily expiry check can report, so a
     /// grant silently removed by a certificate re-issue or a group policy shows up before the next
     /// restart discovers it as a handshake failure instead.
     /// <para>

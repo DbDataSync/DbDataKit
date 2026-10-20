@@ -507,7 +507,7 @@ internal sealed class CertificateCheck : IReadinessCheck
 
         var url = context.Configuration["DbDataSync:App:Url"] ?? ApiOptions.DefaultUrl;
         var host = Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : null;
-        var dnsNames = CertificateSanReader.GetDnsNames(certificate);
+        var dnsNames = DbDataKit.Hosting.Certificates.SelfSignedCertificateGenerator.ReadDnsNames(certificate);
         var sanOk = host is null || dnsNames.Any(name =>
             string.Equals(name, host, StringComparison.OrdinalIgnoreCase)
             || (name.StartsWith("*.", StringComparison.Ordinal)

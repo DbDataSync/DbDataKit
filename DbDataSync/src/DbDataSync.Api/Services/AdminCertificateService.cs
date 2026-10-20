@@ -1,3 +1,4 @@
+using DbDataKit.Hosting.Certificates.Windows;
 using System.Runtime.Versioning;
 using System.Security.Cryptography.X509Certificates;
 using DbDataSync.Api.Configuration;
@@ -107,7 +108,7 @@ public sealed class AdminCertificateService(ApiOptions apiOptions, CertificateOp
             return CertificateActionResult.Failed(ex.Message);
         }
 
-        var installed = CertificateStore.InstallSelfSigned(spec, StoreLocation.LocalMachine);
+        var installed = StoreSelfSignedCertificate.Install(spec, StoreLocation.LocalMachine);
         GrantIfNeeded(installed);
 
         return CertificateActionResult.Ok(

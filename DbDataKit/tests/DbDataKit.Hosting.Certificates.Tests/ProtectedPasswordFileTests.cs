@@ -75,3 +75,26 @@ public sealed class ProtectedPasswordFileTests
         Assert.False(store.Exists);
     }
 }
+
+public sealed class DnsNameTests
+{
+    [Fact]
+    public void ReadDnsNames_returns_the_san_dns_names_in_order()
+    {
+        using var cert = SelfSignedCertificateGenerator.Create(new SelfSignedRequest(
+            "CN=b", ["b.example", "a.example", "localhost"], [System.Net.IPAddress.Loopback],
+            DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(30)));
+
+        Assert.Equal(["b.example", "a.example", "localhost"], SelfSignedCertificateGenerator.ReadDnsNames(cert));
+    }
+
+    [Fact]
+    public void ReadDnsNames_is_empty_without_a_san_extension()
+    {
+        using var rsa = RSA.Create(2048);
+        var req = new CertificateRequest("CN=none", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        using var cert = req.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(1));
+
+        Assert.Empty(SelfSignedCertificateGenerator.ReadDnsNames(cert));
+    }
+}
