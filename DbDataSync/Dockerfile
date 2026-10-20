@@ -67,6 +67,11 @@ RUN dotnet /app/DbDataSync.Cli.dll internal build-catalog-cache /app/library-cac
 # Build this one explicitly: `docker build -f DbDataSync/Dockerfile --target runtime -t dbdatasync:<v>-runtime .` (from the repository root)
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
+# The image listens on plain HTTP, and plain HTTP is otherwise served only to loopback or a trusted TLS-terminating proxy
+# (docs/configuration.md, "Plain HTTP and reverse proxies"). A browser reaching the container through Docker's port mapping is neither,
+# so the image allows it by default. For a deployment behind a proxy, set DbDataSync__App__AllowInsecureHttp=false and
+# DbDataSync__App__TrustedProxies to the proxy's address.
+ENV DbDataSync__App__AllowInsecureHttp=true
 ENV DbDataSync__App__RepoRoot=/var/lib/dbdatasync
 VOLUME ["/var/lib/dbdatasync"]
 
@@ -108,6 +113,11 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0
 # service points at its own machine-wide data directory with. This container happens to already
 # resolve /var/lib/dbdatasync as CliOptions.DefaultRoot's own Linux answer, but setting it explicitly
 # here means the image's behaviour doesn't depend on that coincidence continuing to hold.
+# The image listens on plain HTTP, and plain HTTP is otherwise served only to loopback or a trusted TLS-terminating proxy
+# (docs/configuration.md, "Plain HTTP and reverse proxies"). A browser reaching the container through Docker's port mapping is neither,
+# so the image allows it by default. For a deployment behind a proxy, set DbDataSync__App__AllowInsecureHttp=false and
+# DbDataSync__App__TrustedProxies to the proxy's address.
+ENV DbDataSync__App__AllowInsecureHttp=true
 ENV DbDataSync__App__RepoRoot=/var/lib/dbdatasync
 VOLUME ["/var/lib/dbdatasync"]
 

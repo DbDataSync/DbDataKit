@@ -16,11 +16,6 @@ services:
       context: ..
       dockerfile: DbDataSync/Dockerfile
     container_name: dbdatasync
-    environment:
-      # Evaluation only: plain HTTP is otherwise served just to the same machine or to a trusted TLS-terminating proxy, and a
-      # browser reaching this container through Docker's port mapping is neither. Behind a proxy, drop this and set
-      # DbDataSync__App__TrustedProxies to the proxy's address instead. See docs/configuration.md.
-      DbDataSync__App__AllowInsecureHttp: "true"
     ports:
       - "8080:8080"
     volumes:
