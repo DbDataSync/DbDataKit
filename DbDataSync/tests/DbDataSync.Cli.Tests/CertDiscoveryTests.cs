@@ -1,3 +1,4 @@
+using DbDataKit.Hosting.Certificates.Windows;
 using DbDataSync.Certificates;
 
 namespace DbDataSync.Cli.Tests;

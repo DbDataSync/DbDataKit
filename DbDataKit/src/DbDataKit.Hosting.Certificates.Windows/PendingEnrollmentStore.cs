@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace DbDataSync.Certificates;
+namespace DbDataKit.Hosting.Certificates.Windows;
 
 /// <param name="RequestId">The CA's own request id — what <c>dbdatasync config cert retrieve --request-id</c> is
 /// given.</param>
