@@ -12,7 +12,9 @@
 services:
   dbdatasync:
     build:
-      context: .
+      # The repository root: the image build needs the sibling DbDataKit/ folder as well as this one.
+      context: ..
+      dockerfile: DbDataSync/Dockerfile
     container_name: dbdatasync
     ports:
       - "8080:8080"

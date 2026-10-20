@@ -3,23 +3,27 @@
 # ── The SPA ────────────────────────────────────────────────────────────────────
 FROM node:22-bookworm-slim AS web
 WORKDIR /src/DbDataSync.Web
-COPY src/DbDataSync.Web/package*.json ./
+COPY DbDataSync/src/DbDataSync.Web/package*.json ./
 RUN npm ci
-COPY src/DbDataSync.Web/ ./
+COPY DbDataSync/src/DbDataSync.Web/ ./
 RUN npm run build
 
 # ── The .NET side ──────────────────────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# The shared libraries sit next to the product, as in the repository: DbDataSync's Directory.Build.props finds them at ../DbDataKit.
 WORKDIR /src
-COPY DbDataSync.slnx ./
-COPY src/ ./src/
-COPY tests/ ./tests/
-COPY tools/ ./tools/
+COPY DbDataKit/Directory.Build.props DbDataKit/Directory.Packages.props DbDataKit/global.json DbDataKit/
+COPY DbDataKit/src/ DbDataKit/src/
+WORKDIR /src/DbDataSync
+COPY DbDataSync/DbDataSync.slnx DbDataSync/Directory.Build.props DbDataSync/Directory.Build.targets DbDataSync/dbdatasync.runsettings ./
+COPY DbDataSync/src/ ./src/
+COPY DbDataSync/tests/ ./tests/
+COPY DbDataSync/tools/ ./tools/
 
 # The SPA is built in its own stage above, so this one needs no node. SkipWebBuild is what stops the
 # publish target shelling out to npm inside an image that does not have it.
 #
-# VERSION is the release this image is built for (phase 163). Left empty — a local `docker build .` — the csproj's own
+# VERSION is the release this image is built for (phase 163). Left empty — a local `docker build -f DbDataSync/Dockerfile .` from the repository root — the csproj's own
 # development default applies, which is what an image built by hand should say. Set, it is the version `dbdatasync version`
 # prints and the one `dbdatasync update` compares against, so a published image must always be given it: without it an image
 # reports a build timestamp with `-alpha` on it, whatever release it really is.
@@ -35,8 +39,8 @@ COPY --from=web /src/DbDataSync.Web/dist/ /app/wwwroot/
 # and tools are copied in), so the csproj's CopyDocs target had nothing to copy and this is what ships them.
 # Phase 162: and the pictures they show — only those listed in docs/images.txt, at the same repo-relative path, so the
 # docs' own `../screenshots/...` references resolve unchanged. (tr strips a CR: a Windows checkout may have CRLF endings.)
-COPY docs/ /src/docs/
-COPY screenshots/ /src/screenshots/
+COPY DbDataSync/docs/ /src/docs/
+COPY DbDataSync/screenshots/ /src/screenshots/
 RUN mkdir -p /app/wwwroot/docs \
     && cp /src/docs/*.md /app/wwwroot/docs/ \
     && tr -d '\r' < /src/docs/images.txt | while IFS= read -r image; do \
@@ -60,7 +64,7 @@ RUN dotnet /app/DbDataSync.Cli.dll internal build-catalog-cache /app/library-cac
 #
 # This stage is deliberately NOT the last one in this file (see the final stage below) — `docker
 # build .` with no --target must keep resolving to the SDK-based image, exactly as phase 120 decided.
-# Build this one explicitly: `docker build --target runtime -t dbdatasync:<v>-runtime .`
+# Build this one explicitly: `docker build -f DbDataSync/Dockerfile --target runtime -t dbdatasync:<v>-runtime .` (from the repository root)
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
 ENV DbDataSync__App__RepoRoot=/var/lib/dbdatasync
@@ -88,7 +92,7 @@ ENTRYPOINT ["dotnet", "/app/DbDataSync.Cli.dll", "serve", "--url", "http://0.0.0
 # (~250MB → ~750MB uncompressed base) — accepted; the `runtime` stage above is the alternative for a
 # shop that only ever installs catalog drivers and wants the smaller, SDK-less footprint back.
 #
-# This is the true last stage in the file on purpose: `docker build .` / `docker compose -f
+# This is the true last stage in the file on purpose: `docker build -f DbDataSync/Dockerfile .` / `docker compose -f
 # docker-compose.app.yml build` with no --target picks whichever stage is positionally last, and
 # phase 120 already decided the SDK image stays the default — moving it earlier and leaving `runtime`
 # last would silently flip that default the next time someone edits this file without noticing the

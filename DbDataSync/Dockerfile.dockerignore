@@ -1,0 +1,12 @@
+# The build context is the repository root (DbDataSync needs the sibling DbDataKit/ folder); BuildKit reads this file, named after the
+# Dockerfile, in preference to a .dockerignore at the root.
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+.git/
+DbDataProxy/
+DbDataBuild/
+dist/
+DbDataSync/tests/DbDataSync.Web.Tests/test-results/
+DbDataSync/tests/DbDataSync.Web.Tests/screenshots/
