@@ -15,7 +15,7 @@ namespace DbDataSync.Api.Tests;
 /// <c>Kestrel:Certificates:Default:*</c> off <see cref="IConfiguration"/>, find the certificate in the
 /// store, evaluate it, raise through <see cref="NotificationStore"/> — actually connects, on top of a
 /// real (CurrentUser-store, so no elevation needed) certificate. The individual pieces
-/// (<see cref="CertificateExpiryEvaluator"/>, <see cref="NotificationStore.Raise"/>,
+/// (<see cref="DbDataKit.Hosting.Certificates.CertificateExpiry"/>, <see cref="NotificationStore.Raise"/>,
 /// <see cref="CertificateStore"/>) each have their own focused tests; this is the one that would catch
 /// a wiring mistake between them (a wrong section name, a wrong DI registration) that none of those
 /// would.

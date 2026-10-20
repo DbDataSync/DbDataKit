@@ -63,7 +63,7 @@ public static class ManagedSelfSignedCertificate
 
     /// <summary>
     /// The renewal decision — pure, so it needs no certificate, no file, no clock beyond what is passed
-    /// in (the same shape <see cref="CertificateExpiryEvaluator"/> already established for the Windows
+    /// in (the same shape <see cref="DbDataKit.Hosting.Certificates.CertificateExpiry"/> already established for the Windows
     /// store path). Renews within a third of the certificate's own lifetime of expiring, matching tier
     /// 3's own planned threshold for consistency — see the phase 130 doc's "What this builds," #3.
     /// </summary>
