@@ -1,6 +1,8 @@
 using System.Runtime.Versioning;
 using System.Security.Cryptography.X509Certificates;
 using DbDataSync.Api.Configuration;
+using CertificateExpiryDecision = DbDataKit.Hosting.Certificates.CertificateExpiryDecision;
+using CertificateExpiryEvaluator = DbDataKit.Hosting.Certificates.CertificateExpiryEvaluator;
 using DbDataSync.Certificates;
 using DbDataSync.State;
 
