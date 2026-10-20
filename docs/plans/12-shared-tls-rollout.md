@@ -83,3 +83,5 @@ Each slice is only done when its test column passes.
   and `docs/configuration.md`.
 - 8: not done. See the pull request thread / hand-off notes: it rewrites Windows service installation, which cannot be exercised
   without Windows, and the plan's own test for it is an end-to-end install on Windows CI.
+- 11: the Docker images now default `DbDataSync__App__AllowInsecureHttp=true` (decided by the owner after slice 10), so `docker run -p 8080:8080` works from a browser;
+  a deployment behind a proxy sets it back to `false` and lists the proxy in `TrustedProxies`. The sample compose file no longer sets it.
