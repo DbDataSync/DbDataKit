@@ -264,7 +264,7 @@ machine.
 There is nothing to update in place: `dbdatasync update` inside a container says so. Pull a newer tag and start the container
 again — the volume keeps your data. The image reports the version it was built for: `docker run --rm --entrypoint dotnet <image> /app/DbDataSync.Cli.dll version`.
 
-To build it yourself from a checkout instead, `docker compose -f docker-compose.app.yml up` builds the same Dockerfile.
+To build it yourself from a checkout instead, `docker compose -f docker-compose.app.yml up` (run in `DbDataSync/`) builds the same Dockerfile. Building by hand, run `docker build -f DbDataSync/Dockerfile .` from the repository root: the image needs the sibling `DbDataKit/` folder, so the root is the build context.
 
 ## Next: Configuration
 

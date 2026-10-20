@@ -29,6 +29,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Shared server-certificate code (self-signed generation, expiry, plain-HTTP guard); see docs/plans/03-windows-service-hosting.md 3.4. -->
+    <DbDataKitReference Include="Hosting.Certificates" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="DbDataSync.Certificates.Tests" />
   </ItemGroup>
 
