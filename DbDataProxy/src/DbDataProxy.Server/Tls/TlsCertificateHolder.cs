@@ -14,7 +14,7 @@ public sealed class TlsCertificateHolder
     public void Set(X509Certificate2? certificate) => Volatile.Write(ref _current, certificate);
 }
 
-/// <summary>Replaces the self-signed certificate before it expires, without a restart.</summary>
+/// <summary>Replaces the self-signed certificate before it expires, and picks up a renewed store certificate, without a restart.</summary>
 public sealed class CertificateRotationService(
     TlsCertificateHolder holder,
     ProxyOptions options,
@@ -26,7 +26,7 @@ public sealed class CertificateRotationService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (options.Tls.Mode != TlsMode.SelfSigned) return;
+        if (options.Tls.Mode is not (TlsMode.SelfSigned or TlsMode.Store)) return;
         using var timer = new PeriodicTimer(Interval, time ?? TimeProvider.System);
         try
         {
@@ -40,11 +40,14 @@ public sealed class CertificateRotationService(
     {
         try
         {
-            if (holder.Current is not { } current || !CertificateProvider.NeedsRotation(current, time)) return false;
+            if (holder.Current is not { } current) return false;
+            // A store certificate is replaced by whoever renews it; pick the new one up (same subject, later expiry).
+            // A self-signed one is rotated by us once it is inside its renewal window.
+            if (options.Tls.Mode == TlsMode.SelfSigned && !CertificateProvider.NeedsRotation(current, time)) return false;
             var next = CertificateProvider.Load(options, dataDirectory, log, time);
             if (next is null || next.Thumbprint == current.Thumbprint) return false;
             holder.Set(next);
-            log.LogInformation("Rotated the TLS certificate: {Old} -> {New}, valid until {NotAfter:u}. Clients must trust the new .cer.",
+            log.LogInformation("Rotated the TLS certificate: {Old} -> {New}, valid until {NotAfter:u}. Clients must trust the new certificate.",
                 current.Thumbprint, next.Thumbprint, next.NotAfter.ToUniversalTime());
             return true;
         }
