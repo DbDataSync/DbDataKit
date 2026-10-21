@@ -206,6 +206,9 @@ jobs:
         # 15432; MySQL: 13306; MariaDB: 13307; Oracle: 15210) because it *is* docker-compose.yml now —
         # the tests' localhost-based defaults work unchanged in CI.
         run: dotnet test DbDataSync.slnf --no-build --configuration Release --filter "Category=Integration"
+        env:
+          # The DuckDB extension test downloads httpfs for the pinned engine from DuckDB's extension server (K06).
+          DBDATASYNC_TEST_NETWORK: "true"
 
   web:
     needs: changes
