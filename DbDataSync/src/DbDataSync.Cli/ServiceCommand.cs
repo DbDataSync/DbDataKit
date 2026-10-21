@@ -73,7 +73,7 @@ public static class ServiceCommand
                 "uninstall" => Uninstall(args),
                 "status" => Status(),
                 "start" or "stop" or "restart" => Control(args[0].ToLowerInvariant()),
-                "doctor" => Doctor(),
+                "doctor" => Doctor(args[1..]),
                 var other => Unknown(other),
             };
         }

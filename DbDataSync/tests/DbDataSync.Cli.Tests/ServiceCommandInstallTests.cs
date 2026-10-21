@@ -258,6 +258,19 @@ public sealed class ServiceCommandInstallTests : IDisposable
     }
 
     [Fact]
+    public void Run_Doctor_ChecksTheRepositoryNamedByDashDashRepo()
+    {
+        if (!OperatingSystem.IsWindows())
+            return; // Run dispatches to the Windows verbs only on Windows; the Windows CI job runs this one for real
+
+        var (exitCode, output) = Capture(() => ServiceCommand.Run(["doctor", "--repo", _root]));
+
+        Assert.Contains(_root, output);
+        Assert.DoesNotContain("C:\\ProgramData\\DbDataSync does not exist", output);
+        _ = exitCode;
+    }
+
+    [Fact]
     public void Doctor_NotInstalled_Fails()
     {
         var (exitCode, output) = Capture(() => ServiceCommand.Doctor(["--repo", _root], Environment));
