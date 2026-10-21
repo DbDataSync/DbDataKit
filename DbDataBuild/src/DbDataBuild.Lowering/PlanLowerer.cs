@@ -267,6 +267,15 @@ public sealed class PlanLowerer
                 var days = IntegerValue(x);
                 if (days < -719162 || days > 2932896) throw new LoweringException($"a DATE literal outside the years 0001 to 9999 ({days} days from 1970-01-01)");
                 return $"DATE '{DateOnly.FromDayNumber(719162 + (int)days).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}'";
+            case "TIMESTAMP":
+            {
+                // DuckDB 2.0 folds TIMESTAMP '...' + INTERVAL ... into a constant: microseconds since 1970-01-01 (or the text form)
+                if (x.ValueKind == JsonValueKind.String) return $"TIMESTAMP '{x.GetString()}'";
+                var epochMicros = (long)IntegerValue(x);
+                var instant = DateTime.UnixEpoch.AddTicks(epochMicros * 10);
+                var text = instant.ToString("yyyy-MM-dd HH:mm:ss.ffffff", System.Globalization.CultureInfo.InvariantCulture).TrimEnd('0').TrimEnd('.');
+                return $"TIMESTAMP '{text}'";
+            }
             case "DOUBLE" or "FLOAT":
             {
                 var d = double.Parse(x.GetRawText(), System.Globalization.CultureInfo.InvariantCulture).ToString("R", System.Globalization.CultureInfo.InvariantCulture);

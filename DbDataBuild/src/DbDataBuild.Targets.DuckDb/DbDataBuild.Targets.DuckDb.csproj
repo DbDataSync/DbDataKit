@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DuckDB.NET.Data.Full" />
+    <PackageReference Include="DuckDB.NET.Data" />
   </ItemGroup>
 
   <ItemGroup>
@@ -19,4 +19,5 @@
     <ProjectReference Include="..\DbDataBuild.Core\DbDataBuild.Core.csproj" />
   </ItemGroup>
 
+  <Import Project="$(DbDataKitRoot)build/DuckDb.Native.targets" />
 </Project>
