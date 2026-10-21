@@ -96,6 +96,31 @@ public sealed class LibraryLoadTests : IAsyncLifetime
         Assert.True(Directory.EnumerateFiles(libDir, "*.deps.json").Any());
     }
 
+    /// <summary>
+    /// Plan 13 (K05): the `duckdb` catalog entry is the bare DuckDB.NET.Data package; the engine (DuckDB 2.0.0) is added from
+    /// the repository's pin, downloaded and hash-checked. Needs network access to NuGet and to the DuckDB release.
+    /// </summary>
+    [Fact]
+    public async Task GetFactory_OpensDuckDb_FromTheInstalledPackageAndThePinnedEngine()
+    {
+        var entry = KnownLibraries.TryGetById("duckdb")!;
+        await LibraryInstaller.InstallAsync(
+            _repoRoot, entry.Id, [new PackageRef(entry.PackageId, entry.PinnedVersion)], entry.FactoryType);
+
+        var libDir = LibraryPaths.LibDir(LibraryPaths.LibraryDir(_repoRoot, "duckdb"));
+        Assert.Contains(Directory.EnumerateFiles(libDir).Select(Path.GetFileName), n => n is "libduckdb.so" or "libduckdb.dylib" or "duckdb.dll");
+
+        var registry = new LibraryRegistry(_repoRoot).LoadAll();
+        var factory = registry.GetFactory("duckdb");
+        await using DbConnection connection = factory.CreateConnection()!;
+        connection.ConnectionString = "Data Source=:memory:";
+        await connection.OpenAsync();
+
+        var command = connection.CreateCommand();
+        command.CommandText = "SELECT version();";
+        Assert.Equal("v" + DuckDbEngine.PinnedVersion, (string?)await command.ExecuteScalarAsync());
+    }
+
     [Fact]
     public async Task GetFactory_OpensARealConnectionToMySql_WithNoCompileTimeReference()
     {

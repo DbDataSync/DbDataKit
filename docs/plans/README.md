@@ -1,6 +1,6 @@
 # Implementation Plans: Shared Modules
 
-Plans for extracting shared code into `DbDataKit/DbDataKit/`, derived from the code review (`docs/security-review.md` and each product's `docs/review.md`). Each plan lists the
+Plans for extracting shared code into `DbDataKit/DbDataKit/`, derived from the code review (`docs/security-review.md` and the products' reviews: `DbDataSync/architecture/review.md`, `DbDataProxy/docs/review.md`, `DbDataBuild/docs/review.md`). Each plan lists the
 current state per product (with file references from the review), design, package layout, phases with exit
 criteria, risks and acceptance. Plans are proposals; review the "decisions" in each before starting.
 

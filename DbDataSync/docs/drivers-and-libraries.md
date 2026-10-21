@@ -5,7 +5,7 @@
 Two separate concepts, easy to conflate because they usually show up together:
 
 - **A library** is the ADO.NET provider a connection actually opens through — `Microsoft.Data.SqlClient`,
-  `Npgsql`, `MySqlConnector`, `DuckDB.NET.Data.Full`, and so on. DbDataSync doesn't ship any of these
+  `Npgsql`, `MySqlConnector`, `DuckDB.NET.Data`, and so on. DbDataSync doesn't ship any of these
   inside the tool itself (DuckDB is the one exception — see below); each is restored once, on the
   machine that needs it, the first time something asks for it.
 - **A driver** is what actually runs a replication against one engine — the readers, staging providers,
@@ -43,12 +43,19 @@ saves typing out a package id and factory type by hand.
 | `oracle-managed-data-access` | `Oracle.ManagedDataAccess.Core` | Oracle |
 | `system-data-odbc` | `System.Data.Odbc` | anything reachable through an installed ODBC driver |
 | `firebird-client` | `FirebirdSql.Data.FirebirdClient` | Firebird |
-| `duckdb` | `DuckDB.NET.Data.Full` | embedded, not a server |
+| `duckdb` | `DuckDB.NET.Data` (plus the DuckDB 2.0.0 engine) | embedded, not a server |
 
 `duckdb` is the one exception to "nothing ships inside the tool": DbDataSync's own verification and
 DuckDB-kind custom segmenting strategies run on it regardless of which replication engines a deployment
 ever configures, so it installs itself automatically on every `serve` start rather than waiting to be
 asked for. Nothing else on this list installs itself.
+
+The package carries only the managed bindings. The engine itself (DuckDB 2.0.0, the version this release is built for) is downloaded
+from DuckDB's release page for the machine's platform at the same time, and checked against checksums recorded in the release: a
+file that does not match is refused. It is available for Linux (glibc) on x64 and arm64, Windows x64 and macOS on x64 and arm64.
+On a machine without internet access, download `duckdb-shared-libs-<os>-<arch>.tar.gz` for the platform from the DuckDB 2.0.0 release
+elsewhere, put it in a directory, and set `DBDATASYNC_DUCKDB_ENGINE_SOURCE` to that directory before the first `serve`; the docker
+images already contain it.
 
 ### `dbdatasync config library install`
 

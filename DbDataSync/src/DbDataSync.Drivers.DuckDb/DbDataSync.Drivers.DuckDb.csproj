@@ -11,33 +11,17 @@
 
   <ItemGroup>
     <!--
-      The `.Full` package, not the bare `DuckDB.NET.Data`, which ships managed bindings only and
-      expects a libduckdb the host already has. DbDataSync is deployed as a self-contained service on
-      machines nobody installs database engines onto by hand, and CI is a Linux container with no
-      DuckDB at all — so the native library travels with the package or the driver does not work
-      anywhere but a developer's laptop. `.Full` carries the runtime-identifier assets for linux-x64,
-      win-x64 and osx, and needs no RuntimeIdentifier set here to resolve the right one.
-    -->
-    <!--
-      Phase 109i: ExcludeAssets="runtime", the identical treatment 109h gave Microsoft.Data.SqlClient/
-      Npgsql. The reference assembly still compiles every DuckDBConnection/DuckDBConnectionStringBuilder
-      call site in DuckDbDriver.cs unchanged; the managed DLL is neither copied here nor into
-      DbDataSync.Api/.Cli's own output. At first touch, the assembly loads through LibraryRegistry's
-      AssemblyLoadContext.Default.Resolving hook instead, once ServeCommand's unconditional install has
-      put it under <repo>/libraries/duckdb/lib/ — see ServeCommand.EnsureDuckDbInstalledAsync.
+      Compile reference only: ExcludeAssets="runtime;native" keeps the managed DLL out of this project's and DbDataSync.Api/.Cli's
+      output (phase 109i, the treatment Microsoft.Data.SqlClient and Npgsql get). At first touch the assembly loads through
+      LibraryRegistry's AssemblyLoadContext.Default.Resolving hook, once ServeCommand's unconditional install has put it under
+      <repo>/libraries/duckdb/lib/ — see ServeCommand.EnsureDuckDbInstalledAsync.
 
-      Phase 146 added ";native": 109i's own "What's explicitly out of scope" left the runtimes/<rid>/
-      native/ assets shipping unconditionally — NuGet treats "native" as a distinct asset bucket from
-      "runtime", so excluding one never touched the other, and all five platforms' libduckdb copies
-      (~150MB uncompressed) rode along in every install regardless of which one a machine could ever
-      use. Nothing new to build: LibraryInstaller.RestorePackagesAsync already resolves against
-      RuntimeInformation.RuntimeIdentifier (the "SqlClient's SNI shim, DuckDB's libs" case its own
-      comment names), so the same install 109i already made unconditional at every `serve` start already
-      picks up the one native binary this machine needs — confirmed for real, not assumed: a fresh
-      install followed by an actual DuckDBConnection query through the freshly-loaded assembly. No .cs
-      file in this project changed either phase.
+      Plan 13 (K05): the package is DuckDB.NET.Data, managed bindings only, not `.Full` with its bundled 1.x engine. The engine
+      (DuckDB 2.0.0) comes from the repository's duckdb.pin: DbDataSync.Libraries.DuckDbEngine downloads it next to the installed
+      assemblies, checking the archive's and the library's SHA-256 against the pin (DBDATASYNC_DUCKDB_ENGINE_SOURCE names a directory
+      to take the archive from on a machine without internet access), and the Docker image carries it in its library cache.
     -->
-    <PackageReference Include="DuckDB.NET.Data.Full" ExcludeAssets="runtime;native" />
+    <PackageReference Include="DuckDB.NET.Data" ExcludeAssets="runtime;native" />
   </ItemGroup>
 
   <PropertyGroup>

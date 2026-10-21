@@ -16,7 +16,7 @@
          DbDataSync.Drivers.DuckDb.csproj's comment for the mechanism, identical here. No .cs file in
          this project changed either phase; VerificationResultQuery.cs still `new
          DuckDBConnection(...)` directly. -->
-    <PackageReference Include="DuckDB.NET.Data.Full" ExcludeAssets="runtime;native" />
+    <PackageReference Include="DuckDB.NET.Data" ExcludeAssets="runtime;native" />
   </ItemGroup>
 
   <PropertyGroup>

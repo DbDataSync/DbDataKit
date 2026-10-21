@@ -344,8 +344,10 @@ public sealed class ScriptTestService(
                     c.ColumnName, c.DataTypeName ?? "unknown", c.AllowDBNull ?? true, c.IsKey ?? false, c.IsIdentity ?? false))
                 .ToList();
         }
-        catch (NotSupportedException)
+        catch (Exception ex) when (ex is NotSupportedException or ArgumentException)
         {
+            // ArgumentException: DuckDB 2.0 types a column that is only an untyped NULL (SELECT NULL) as SQLNULL, which DuckDB.NET
+            // cannot describe. The rows still read; only the typed metadata is missing.
             return null;
         }
     }

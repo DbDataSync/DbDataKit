@@ -67,14 +67,16 @@ public static class KnownLibraries
         // backs verification's result paging and every DuckDB-kind segmenting strategy regardless of
         // which replication engines a deployment ever configures, so ServeCommand installs it
         // unconditionally on every `serve` start instead. Factory type confirmed by reflecting the
-        // real 1.5.5 assembly rather than guessed: DuckDB.NET.Data.Full's own DbProviderFactory
-        // subclass is DuckDBClientFactory (with a public static Instance field DbProviderFactories'
+        // real assembly rather than guessed: DuckDB.NET.Data's own DbProviderFactory subclass is
+        // DuckDBClientFactory (with a public static Instance field DbProviderFactories'
         // string-registration path doesn't need but that's how the package itself exposes it).
+        // Plan 13 (K05): the package with managed bindings only, not `.Full`; the engine itself (DuckDB 2.0.0)
+        // is added next to it from the repository's duckdb.pin by DuckDbEngine, hash-checked.
         new(
-            "duckdb", "DuckDB.NET.Data.Full", "DuckDB.NET.Data.DuckDBClientFactory, DuckDB.NET.Data",
+            "duckdb", "DuckDB.NET.Data", "DuckDB.NET.Data.DuckDBClientFactory, DuckDB.NET.Data",
             "DuckDB (embedded)", "The embedded analytical engine DbDataSync's own verification and custom " +
                 "segmenting strategies run on.",
-            PinnedVersion: "1.5.5"),
+            PinnedVersion: "1.5.6"),
         // Phase 165V: genuinely not a DbProviderFactory-bearing package — IKVM is the Java-on-.NET
         // runtime DbDataSync.Drivers.Jdbc uses to run a JDBC driver inside .NET, not an ADO.NET client
         // library. FactoryType here names a real, public type in the assembly DbDataSync.Drivers.Jdbc's

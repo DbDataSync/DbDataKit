@@ -78,6 +78,10 @@ public static class LibraryInstaller
                 Directory.Delete(targetLibDir, recursive: true);
             Directory.CreateDirectory(targetLibDir);
             CopyAll(outDir, targetLibDir);
+
+            // DuckDB.NET.Data has managed bindings only; the engine comes from the repository's pin (duckdb.pin), hash-checked.
+            if (DuckDbEngine.Needs(packages))
+                await DuckDbEngine.EnsureAsync(targetLibDir, cancellationToken);
         }
         finally
         {

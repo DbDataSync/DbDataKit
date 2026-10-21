@@ -47,7 +47,7 @@ fs.mkdirSync(scratchRepoRoot, { recursive: true })
 execFileSync(
   'dotnet',
   ['exec', path.join(repoRoot, 'src/DbDataSync.Cli/bin/Debug/net10.0/DbDataSync.Cli.dll'),
-    'config', 'library', 'install', 'duckdb', '--version', '1.5.5', '--repo', scratchRepoRoot],
+    'config', 'library', 'install', 'duckdb', '--version', '1.5.6', '--repo', scratchRepoRoot],
   { stdio: 'inherit' },
 )
 
