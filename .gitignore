@@ -6,3 +6,5 @@ TestResults/
 .claude/worktrees/
 
 __pycache__/
+
+.duckdb/
