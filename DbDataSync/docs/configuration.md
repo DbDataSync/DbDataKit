@@ -120,7 +120,7 @@ become `--DbDataSync:App:RepoRoot`, `--DbDataSync:State:DbPath` and `--urls`, so
 configuration surface as running the API directly (see below) — just with CLI-flavored names and
 defaults.
 
-### `dbdatasync service install|uninstall|status`
+### `dbdatasync service install|uninstall|status|start|stop|restart|doctor`
 
 Windows or Linux (systemd); `install` needs an elevated prompt (Windows) or root (Linux,
 `sudo`). macOS keeps bailing with a pointer to `dbdatasync serve` / the container.
@@ -129,11 +129,16 @@ Windows or Linux (systemd); `install` needs an elevated prompt (Windows) or root
 | --- | --- | --- |
 | `--repo <path>` | `install` | `CliOptions.DefaultRoot` — **not** the walk-up resolver; see above |
 | `--url <url>` | `install` | `http://localhost:5080` |
-| `--account <account>` (Windows) | `install` | `LocalSystem` |
+| `--account <account>` (Windows) | `install` | `LocalSystem`; also `NT SERVICE\DbDataSync`, `DOMAIN\gmsa$`, or `DOMAIN\user` |
+| `--password-stdin` (Windows) | `install` | none; the password of a named user account is read from standard input, never from the command line |
 | `--user <user>` (Linux) | `install` | `dbdatasync` — created as a system user if it doesn't exist |
 
-Windows: registers the tool's own installed executable via `sc.exe create`, with `serve --repo ...
---url ...` baked into `binPath`. Linux: writes `/etc/systemd/system/dbdatasync.service`
+Windows: registers the tool's own installed executable with the Service Control Manager (the shared
+`DbDataKit.Hosting.WindowsService` provisioner), with `serve --repo ...` as its command line; running `install`
+again updates the registration instead of failing. `start`, `stop` and `restart` wait until the service reaches the state
+(so a script or the installer can run `dbdatasync service start`), `status` shows state, account, start mode and command
+line, and `doctor` checks the registration (account, command line, start mode, recovery actions) and the data directory.
+The service starts automatically at boot (not delayed) and, as before, has no restart-on-failure actions; `doctor` says so. Linux: writes `/etc/systemd/system/dbdatasync.service`
 (`ExecStart=` carries the same resolved values), `systemctl daemon-reload`s, and `enable`s it —
 `install` does not start it; run `sudo systemctl start dbdatasync` for that, so the first start's own
 output is visible rather than scrolling by during `install`. Either way, **a connection using

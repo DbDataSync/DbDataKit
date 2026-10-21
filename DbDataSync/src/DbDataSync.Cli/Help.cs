@@ -15,8 +15,10 @@ public static class Help
                   Starts the API, the scheduler and the web console in one process.
                   Defaults: --repo {CliOptions.DefaultRoot}, --url http://localhost:5080
 
-              dbdatasync service install|uninstall|status [--repo <path>] [--url <url>] [--account <account>]
-                  On Windows: registers this tool as a Windows service. Needs an elevated prompt.
+              dbdatasync service install|uninstall|status|start|stop|restart|doctor [--repo <path>] [--url <url>] [--account <account>] [--password-stdin]
+                  On Windows: registers this tool as a Windows service (install again to update it), and starts,
+                  stops or restarts it, waiting until it gets there; doctor checks the registration. A named user
+                  account's password is read from standard input with --password-stdin. Needs an elevated prompt.
               dbdatasync service install|uninstall|status [--repo <path>] [--url <url>] [--user <user>]
                   On Linux: registers a systemd unit (default user: dbdatasync). Needs root
                   (`sudo`); enables but does not start it — run `systemctl start dbdatasync` next.

@@ -54,7 +54,15 @@ public static class DbDataSyncHost
         // unaffected — UseWindowsService changes lifetime and logging, and doing that to an
         // interactive run would make Ctrl+C and console output behave unlike every other command.
         if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService())
+        {
             builder.Host.UseWindowsService(options => options.ServiceName = "DbDataSync");
+
+            // UseWindowsService logs to the Event Log under the application's name ("DbDataSync.Cli") unless told otherwise, and
+            // a source nobody registered is created by its first write, which fails ("Cannot open log for source ... You may not
+            // have write access") and takes the host's startup down with it: the first start after every fresh install ended in
+            // service error 1067. `service install` registers the source "DbDataSync" while elevated, so log under that one.
+            builder.Services.Configure<Microsoft.Extensions.Logging.EventLog.EventLogSettings>(settings => settings.SourceName = "DbDataSync");
+        }
         // Phase 111's Linux analog — UseSystemd() switches the lifetime to one that sends
         // sd_notify(READY=1) once the host has actually started (which is what lets the unit be
         // Type=notify: systemctl start blocks until the host is really serving, not until the process

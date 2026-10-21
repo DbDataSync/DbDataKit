@@ -85,3 +85,12 @@ Each slice is only done when its test column passes.
   without Windows, and the plan's own test for it is an end-to-end install on Windows CI.
 - 11: the Docker images now default `DbDataSync__App__AllowInsecureHttp=true` (decided by the owner after slice 10), so `docker run -p 8080:8080` works from a browser;
   a deployment behind a proxy sets it back to `false` and lists the proxy in `TrustedProxies`. The sample compose file no longer sets it.
+- 8: Sync's Windows `service install|uninstall|status` run on the shared `ServiceProvisioner` (Service Control Manager P/Invoke instead of
+  `sc.exe`), and Sync gains `start`, `stop`, `restart` (each waits for the state) and `doctor` (the shared `ServiceDoctor` plus a data-directory
+  check). Kept as before: `LocalSystem` by default (no `--allow-localsystem` needed), start mode automatic (not delayed), no failure-recovery
+  actions, no service SID, Sync's own elevation messages and exit code 1, the `icacls` ownership/grant step, the Event Log source, the
+  launcher conversion and the registration record. Changes: `install` is idempotent (updates an existing registration instead of failing
+  with 1073), `status` prints the shared format instead of `sc query`'s, `--password-stdin` allows a named user account, the command line is
+  quoted by the shared rules (an unquoted `--repo` when the path has no spaces; equivalent to the SCM). Tests: the whole flow runs on any OS
+  against `InMemoryServiceControlManager` (`ServiceCommandInstallTests`), and `DbDataSync/tools/service-e2e.ps1`, run by the Windows job in
+  `dbdatasync-ci.yml`, drives the real manager end to end.
