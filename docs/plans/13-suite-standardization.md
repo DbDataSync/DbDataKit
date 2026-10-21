@@ -1,6 +1,8 @@
 # Plan 13: One suite — standardizing DbDataSync, DbDataProxy and DbDataBuild
 
-Status: **proposed** (2026-10-21). Scope: everything needed to turn three products that share a repository into one suite with one
+Status: **proposed** (2026-10-21), **revised the same day after the owner's review**: the updater is shelved (W9); a single YAML
+format for every product is agreed (D2); the one-CLI idea is open for review (W4); DbDataBuild will get a built-in scheduler and
+monitoring, so scheduling and monitoring become shared (W10) and Build becomes a service the console talks to (section 3). Scope: everything needed to turn three products that share a repository into one suite with one
 management console, one set of definitions and one release, while removing as much duplicated code as possible. Breaking changes are
 allowed. Two pieces of work are folded in: **finishing DuckDB 2.0** and **moving DbDataSync's libraries, drivers and scripts to
 dotnet-script**.
@@ -16,8 +18,8 @@ Inputs: plans 01-12, `docs/plans/STATUS.md`, `docs/review/OVERLAP-AND-CONSOLIDAT
   and modelling and lowering (Build).
 - **One console.** One web UI manages all three products. Proxy and Build get management and configuration screens for the first time,
   built from the same shell, components and back-end as Sync's.
-- **One suite release** with all three products, from one commit, with one installer and one update path. Individual releases stay possible
-  for a while (section 8).
+- **One suite release** with all three products, from one commit, shipped the way products ship today (Docker images and the MSI installer, plus
+  the zips and install scripts). Individual releases stay possible for a while (section 8). Update work waits until the products have settled.
 
 ## 2. Where things stand
 
@@ -43,7 +45,8 @@ Two facts stand out:
   Proxy is the only full consumer.
 - **About 6,900 lines of shared code have no consumer at all:** `Transfer.*` (3,200), `Update.*` (2,000), `Connections.Libraries`,
   `Connections.Descriptor`, `Connections.Postgres`, `Dialect.Arrow`, `Dialect.Conformance`, `Secrets.Cli`, `Secrets.Keyring`. They were
-  written from Sync's and Build's code but never adopted. This plan either adopts each one or deletes it (section 4, W3 and W9).
+  written from Sync's and Build's code but never adopted. This plan either adopts each one or deletes it (section 4, W3), except
+  `Update.*`, which stays shelved with the updater (W9).
 
 ### 2.2 Build setup
 
@@ -103,23 +106,27 @@ Descriptor drivers (`driver.yaml`) are data, not code, and are not affected. JDB
                          │  shell, sign-in, users, certificates, updates, config history, connections, secrets │
                          │  ┌── Sync module ──┐   ┌── Proxy module ──┐   ┌── Build module ──┐                  │
                          └──┴────────┬────────┴───┴─────────┬────────┴───┴─────────┬────────┴──────────────────┘
-                                     │ in-process           │ management API       │ child process per command
-                                     ▼                      ▼ (HTTPS, admin token) ▼ (JSON documents)
- console host (from DbDataSync.Api) ─ Sync engine      DbDataProxy service ×N     dbdatabuild (same binary)
-   state DB (users, sessions, audit, │  TaskRunner      Flight SQL data plane      projects are their own repos
-   schedules, runs)                  │  scheduler ──────────────────────────────────► scheduled `connection refresh`
+                                     │ in-process           │ management API       │ management API
+                                     ▼                      ▼ (HTTPS, admin token) ▼ (HTTPS, admin token; JSON documents)
+ console host (from DbDataSync.Api) ─ Sync engine      DbDataProxy service ×N     DbDataBuild service ×N
+   state DB (users, sessions, audit) │  TaskRunner      Flight SQL data plane      built-in scheduler and monitoring
+                                     │  scheduler                                  projects are their own repos
                                      ▼
                      DbDataKit/: Config · Secrets · Dialect · Connections (+ FlightSql) · Metadata · Transfer
-                                 Hosting · Update · Scripting (dotnet-script) · Cli (command surface, MCP) · Web · State
+                                 Hosting · Scheduling · Monitoring · Scripting (dotnet-script) · Cli (command surface, MCP) · Web · State
 ```
 
 - **One console host.** DbDataSync's API already has users, sessions, passkeys, a state database, a scheduler, a git-tracked config
   repository, certificate and update pages, and service install. It becomes the console host, with the Sync engine as one module.
 - **Proxy stays a separate data-plane process.** It has its own uptime, its x86 worker and its hot path. It gains a **management API** on a
   separate listener that the console calls. One console can manage several proxies.
-- **Build runs as a child process per command** under `Hosting.Children`, driven through the JSON command surface it already has. The TUI,
-  MCP and `ui web` are already clients of that surface, so the console adds no second code path to a database. A child process also keeps a
-  crash in the native polyglot library out of the console.
+- **Build becomes a long-running service as well as a CLI**, because its built-in scheduler and monitoring need something that is always
+  running. The service runs scheduled refreshes, keeps the monitoring view, and exposes the JSON command surface Build already has through a
+  management API, in the same shape as Proxy's. The TUI, MCP and `ui web` are already clients of that surface, so the console adds no second
+  code path to a database. The CLI keeps working without the service, as it does today. Each command still runs in a child process inside
+  the service, which keeps a crash in the native polyglot library out of it (D12).
+- **Every product has the same shape:** a service with a management API, managed by the console. Sync is the exception for now, because
+  its engine already lives in the console host; it can be split out later the same way if that is ever needed.
 - **Shared definitions.** One `connection/1` catalog, one secret reference syntax and store, one user list with roles, one git-tracked
   config repository.
 
@@ -222,24 +229,54 @@ Plan 10's rules apply: adapter first, delete second, one concern per PR, existin
 (the driver keeps only its readers) and Build's `FlightSqlRowSource`. CI tests it against **DbDataProxy itself**: the suite's own server
 becomes an end-to-end test of the suite's own client.
 
-**Unused shared packages:** each is adopted by the end of this workstream or deleted: `Transfer.*` (adopted above), `Update.*` (W9),
+**Unused shared packages:** each is adopted by the end of this workstream or deleted: `Transfer.*` (adopted above), `Update.*` (shelved, not deleted: W9),
 `Connections.Libraries` (folded into W2), `Connections.Descriptor` (Sync's descriptor reader moves onto it or it goes),
 `Connections.Postgres` (Sync and Build use it), `Dialect.Arrow` (Proxy's C7 benchmark decides), `Secrets.Keyring` (D10), `Secrets.Cli` (W4).
 
 Exit: no product has its own dialect, connection composer, catalog reader, secret resolver, or YAML loader; no shared package is unused.
 
-### W4. One command surface and CLI (M)
+### W4. One command surface; the executables and their names under review (M)
 
-1. **Generalize Build's command contract into `DbDataKit.Cli`** (alongside `Hosting.Cli`): each command has a spec with an effect class
-   (reads, writes files, writes a database), a `--format json` document with a closed schema, and generated help. TUI catalog entries and
-   MCP tools come from the specs. Sync and Proxy commands adopt it. The result is one MCP server for the suite, JSON output everywhere, and
-   the same exit codes across products.
-2. **One executable, `dbdata`** (D3), with `sync`, `proxy` and `build` groups and shared `service`, `cert`, `config`, `secret`, `update`
-   and `doctor` verbs. `dbdatasync`, `DbDataProxy` and `dbdatabuild` stay as aliases for one release and are then removed. Proxy's
-   x86 worker stays a separate small executable.
-3. System.CommandLine everywhere (Build already uses it).
+Two separate questions. The first is agreed in substance; the second is **open for the owner's review** (D3).
 
-Exit: every command in the suite has a JSON form and a schema; one MCP server covers all three products.
+**4a. The command contract (not dependent on naming).** Generalize Build's command contract into `DbDataKit.Cli` (alongside
+`Hosting.Cli`): each command has a spec with an effect class (reads, writes files, writes a database), a `--format json` document with a
+closed schema, and generated help. TUI catalog entries, MCP tools and the management APIs of W6, W7 and W10 come from the same specs.
+Sync and Proxy commands adopt it; System.CommandLine everywhere (Build already uses it). The result is JSON output everywhere, the same
+exit codes across products, and one MCP surface. This is worth doing whatever 4b decides.
+
+**4b. Executables and names (for review).** Today:
+
+| | Executable | Command shape | Examples |
+| --- | --- | --- | --- |
+| Sync | `dbdatasync` (also the dotnet tool name) | mixed: verbs and `config <noun> <verb>` | `setup`, `serve`, `update`, `service install`, `config library install`, `config cert enroll` |
+| Proxy | `DbDataProxy` (PascalCase, unlike the other two) plus `DbDataProxy.Worker` | flat verbs | `hash-password`, `protect-secret`, `query`, `config check`, `service install`, `cert show`, `run` |
+| Build | `dbdatabuild` | `<noun> <verb>`, nouns by what they touch | `project compile`, `connection deploy`, `connection refresh`, `ui web` |
+
+The options:
+
+| Option | What it is | For | Against |
+| --- | --- | --- | --- |
+| **A. One executable** | `dbdata sync ...`, `dbdata proxy ...`, `dbdata build ...`, plus shared `dbdata service`, `cert`, `config`, `secret`, `doctor` | one thing to install and put on the PATH; shared verbs exist once; fits a suite release | every product's commands get longer; one binary carries everything (Build's native library, DuckDB, Arrow) even for someone who wants only Proxy; the three names people know go away |
+| **B. Three executables, one grammar** | keep three product executables, all lower case (`dbdataproxy` too), all `<noun> <verb>`, the shared verbs (`service`, `cert`, `config`, `secret`, `doctor`) identical in each because they come from `DbDataKit.Cli` | least churn; each product stays installable on its own; names people know stay | shared verbs repeated in three places (the code is shared, the surface is triplicated); nothing that speaks for the suite |
+| **C. Three executables plus a thin suite dispatcher** | B, plus `dbdata`, which owns only suite-level verbs (`dbdata status`, `dbdata doctor`, `dbdata console`) and forwards `dbdata sync ...` to `dbdatasync ...` (the way `git foo` runs `git-foo`) | B's independence with one entry point for the suite; nothing is forced on someone who uses one product | two ways to run the same command; one more small executable |
+
+Questions for the review:
+
+1. Is one-product-only installation something to keep? It decides between A and B/C more than anything else.
+2. The suite name: `dbdata` (short, generic), `dbdatakit` (already the repository and the shared library prefix, so users would see the
+   library name), or another name. Whatever is chosen also names the console, the MSI and the Docker images.
+3. Proxy's executable casing: `DbDataProxy` to `dbdataproxy` is a breaking change worth making in any option (service registrations and
+   `install.ps1` refer to it).
+4. Grammar: Build's `<noun> <verb>` with nouns grouped by what a command touches (`project` is files only, `connection` is a database) is
+   the most deliberate of the three. Adopting it means renaming Sync's top-level verbs (`setup`, `serve`) and Proxy's flat ones
+   (`hash-password` becomes `secret hash`, for example).
+5. Build's service (section 3, W10) needs a verb: `dbdatabuild serve` (Sync's word), `run` (Proxy's word, but Build's `run` already means
+   something), or `service run`.
+
+Until D3 is decided, the plan assumes nothing beyond 4a and the casing fix in question 3.
+
+Exit: every command in the suite has a JSON form and a schema; one MCP surface covers all three products; D3 decided and its renames done.
 
 ### W5. Shared web platform (L)
 
@@ -263,6 +300,9 @@ Extract first, extend second: Sync's UI must look and work the same after the ex
 | `@dbdata/proxy` | W6 |
 | `@dbdata/build` | W7 |
 | `@dbdata/console` | the app that composes the modules; one Vite build; vitest and Playwright set up once |
+
+The `@dbdata/` scope is a placeholder until the suite name is chosen (D3). Sync's update page moves into `@dbdata/admin` as it is
+(the updater is shelved, D5): Sync-only, unchanged.
 
 Exit: Sync's UI is built from the workspace with no visible change (Playwright suite and screenshots unchanged); `@dbdata/shell` and
 `@dbdata/admin` import nothing from `@dbdata/sync`.
@@ -289,18 +329,24 @@ user needs no restart; the upgrade from the last JSON release is tested in CI.
 
 ### W7. DbDataBuild management (M-L)
 
-Today Build has a CLI, a TUI, an MCP server and app, and `ui web`. All are clients of the JSON command surface.
+Today Build has a CLI, a TUI, an MCP server and app, and `ui web`. All are clients of the JSON command surface. Refresh plans already
+carry `expected_every`, `on_busy`, `on_failure`, `parallel` and `max_runtime`, and `connection status` / `connection monitor` read the
+run history from the tracking tables; what is missing is something that starts runs on time and watches them (W10).
 
-1. **Console module `@dbdata/build`**, another client of the same surface, through the child-process runner (D12): a project registry
-   (paths or git remotes); compile and diagnostics (with `help code` text); graph and lineage (Mermaid already exists); connection status and
-   drift; **plans: review, approve, apply**, with the approver's identity and time recorded in the plan's events (something the CLI cannot
-   give); refresh schedules on Sync's scheduler (Cronos plus the work queue) instead of an external cron; monitor and history; compare; sample.
-2. **Logins from the shared secret store.** The console maps catalog secrets into the child process's environment
+1. **A Build service** (`Hosting.WindowsService` / `Hosting.Systemd`, installed like Sync's and Proxy's): it runs the built-in scheduler
+   (W10) for the projects registered with it, keeps the monitoring view current, and serves a management API that exposes the JSON command
+   surface (W4a) for those projects. Commands run in a child process per command inside the service (D12). The CLI works without the service
+   exactly as today; a person running `connection refresh` by hand and the scheduler share the per-load lock and `on_busy` that already exist.
+2. **Console module `@dbdata/build`**, a client of that management API: a project registry (paths or git remotes); compile and diagnostics
+   (with `help code` text); graph and lineage (Mermaid already exists); connection status and drift; **plans: review, approve, apply**, with
+   the approver's identity and time recorded in the plan's events (something the CLI cannot give); schedules and monitoring (W10); compare; sample.
+3. **Logins from the shared secret store.** The service maps secret references into each command's environment
    (`DBDATA_<APP>_<CONN>_<READ|WRITE>`), so Build's "no fallback from read to write" rule holds unchanged.
-3. **Retire `ui web`** (`Web/WebServer.cs`, `WebBackend.cs`, `WebActions.cs`, `index.html`) once the module covers it. The TUI stays; the MCP
-   server moves to the shared one (W4).
+4. **Retire `ui web`** (`Web/WebServer.cs`, `WebBackend.cs`, `WebActions.cs`, `index.html`) once the module covers it. The TUI stays; the MCP
+   server moves to the shared surface (W4a).
 
-Exit: a person can take a project from compile to an approved, applied plan and a scheduled refresh without leaving the console.
+Exit: a person can take a project from compile to an approved, applied plan and a scheduled, monitored refresh without leaving the console,
+and the same schedule runs with the console switched off.
 
 ### W8. Shared definitions: connections, secrets, identity, config repository (M-L)
 
@@ -322,41 +368,84 @@ Exit: a person can take a project from compile to an approved, applied plan and 
 
 Exit: one Connections page, one secret store, one user list.
 
-### W9. Distribution, updates and releases (M)
+### W9. Distribution and releases (M)
 
-1. **One suite release** (D4): `dbdatakit/v<calver>` from one workflow, gated on green product CI and `dbdatakit-ci.yml` for that exact
-   commit. Artifacts: a suite zip per RID; one MSI with features (Console and Sync, Proxy service, Build CLI); a console image and a proxy
-   image; `install.ps1` and `install.sh` with `--components`; `SHA256SUMS`. The same workflow also produces today's per-product zips and
-   tags from the same commit for a transition period (`dist.json` already templates them, so this costs little).
-2. **One updater** (D5). Keep one of `DbDataKit.Update` (signed manifest, ed25519, side-by-side, rollback; no consumer) and Sync's
-   `Updates` and `Launcher` (in use, two install slots). The recommendation is `DbDataKit.Update`, taking over Sync's slot and launcher
-   lessons (phase 196L), with `dbdatasync update` becoming `dbdata update`. Signing needs a decision on key custody.
-3. **NuGet** stays paused (plan 09). When it comes back, decide whether the suite ships as a dotnet tool (`dbdata`).
+1. **One suite release** (D4) from one workflow, gated on green product CI and `dbdatakit-ci.yml` for that exact commit, shipped through
+   the channels that already exist: **Docker images** (console, proxy, and a Build service image once W7 exists) and **the MSI** (`dist/msi.py`),
+   which becomes one MSI with features (Console and Sync, Proxy service, Build), plus the zips, `install.ps1`/`install.sh` and `SHA256SUMS`.
+   The same workflow also produces today's per-product zips and tags from the same commit for a transition period (`dist.json` already
+   templates them, so this costs little). The tag prefix and artifact names follow D3's suite name.
+2. **The updater is shelved** (owner decision, D5). No update work until the products have settled and unified. Sync's `update` command,
+   `Updates` and `Launcher` keep working as they are; `DbDataKit.Update.*` stays in the repository unused and is neither adopted nor deleted
+   by this plan. When the topic is reopened, the choice between the two is still the one to make.
+3. **NuGet** stays paused (plan 09). When it comes back, decide whether the suite ships as a dotnet tool.
 
-Exit: one release workflow, one installer, one update path. Each product's release workflow is deleted or reduced to a call into the suite's.
+Exit: one release workflow producing the Docker images and one MSI. Each product's release workflow is deleted or reduced to a call into the suite's.
+
+### W10. Shared scheduling and monitoring (M-L)
+
+Build is getting a built-in scheduler and monitoring, and Sync already has both. Writing Build's from scratch would make a third copy of
+the hardest part of each product, so the reusable core moves to `DbDataKit/` first and Build is its second consumer.
+
+What exists:
+
+| | DbDataSync | DbDataBuild |
+| --- | --- | --- |
+| When to run | `SchedulerService`, `SchedulingEvaluator`, `TaskScheduling` (Cronos), per replication | nothing time-based: something outside (cron, Task Scheduler) runs `connection refresh <plan>` |
+| Queue and locks | `WorkQueueStore` (lease, collision), `RunLockStore`, the TaskRunner's worker lanes | per-load lock, `on_busy` (skip, wait), `parallel`, `max_parallel` per connection, inside one run |
+| Run records | `TaskRunStore`, `RunMetricsStore`, run history paging, `RunPruningService` | the tracking tables on a connection (events, rows and duration per load), read by `status` and `monitor` |
+| Health rules | lag monitoring (`ReaderLagService`), run monitor | `expected_every` gives `OVERDUE` and `SLOW`; `max_runtime`; outcomes `completed_with_failures`, `stopped` |
+| Telling a person | `NotificationStore`, the notification bell | none (exit codes and the views) |
+| Retention | `RunPruningService` | none: plan files and statement logs pile up (OPEN-ITEMS D0) |
+
+Design:
+
+1. **`DbDataKit.Scheduling`**: schedule definitions (cron with time zone, interval, calendar windows, paused, misfire policy: run once,
+   skip), the evaluator (next due time, what was missed while the service was down), the work queue with leases and the run lock, and
+   overlap policies that map onto Build's `on_busy` and Sync's existing behaviour. It holds no product logic: a job is "run this command
+   with these inputs", and the product decides what that means. Taken from Sync's code, with its tests.
+2. **`DbDataKit.Monitoring`**: a neutral run model (job, run, outcome, start, duration, rows, the item that failed, a classified failure
+   from `Connections`), health rules over it (overdue and slow from an expected interval, failed, lag), notifications with
+   channels (in the console's bell first; email or webhook later), and retention. Each product supplies its run history through an
+   interface: Sync from its state database, Build from its tracking tables, which stay where they are (Build's run history travels with
+   the data by design and is not copied into the console's state database).
+3. **Schedules are data in Build projects.** In keeping with Build's rule that everything is a file a person can inspect and commit, a
+   refresh plan declares its schedule next to `expected_every` (for example `schedule: "15 * * * *"`, `time_zone:`). The service reads them
+   from the registered projects; `project show refresh` shows them; the console shows and can pause them, and a change is a commit to the
+   project. A schedule the operator adds only at the service (not in the project) is the open question in D13.
+4. **Sync moves onto the shared packages** behind its current behaviour (its tests unchanged), which proves them before Build depends on them.
+5. **One monitoring view in the console** for both products: runs, outcomes, overdue and slow, lag, failures, notifications; the Build and
+   Sync pages are filters of it. Proxy can feed the same model later (failed logins, refused statements, limits reached).
+6. **Build's open items it closes:** time-based scheduling; the warnings in `status` and `monitor` are evaluated continuously instead of when
+   someone looks; retention of plan files and statement logs from scheduled runs (OPEN-ITEMS D0) becomes a retention policy.
+
+Exit: a Build refresh plan runs on its declared schedule from the Build service, its overdue and failed runs reach a person, and Sync's
+scheduler and run monitor run on the same packages with no behaviour change.
 
 ## 5. Phases
 
 ```
 P0 foundations ─► P1 engines and loaders ─► P2 platform ─► P3 new consoles ─► P4 suite release ─► P5 retire
   W0                W1 (2.0 default)          W5 back-end    W6 Proxy           W9                  per-product releases,
-  W1.1-2 probes     W2 (dotnet-script)        W8 catalog     W7 Build                               aliases, ui web,
-  W2.1 spike        W3 Config/Secrets/        W4 commands    W3 Metadata/                           dead shared packages
-  decisions D1-D12  Dialect in Sync, Build    W3 Connections Transfer
-                    W5 front-end extraction
+  W1.1-2 probes     W2 (dotnet-script)        W8 catalog     W7 Build service   (images, MSI)       old CLI names, ui web,
+  W2.1 spike        W3 Config/Secrets/        W4a commands   W10 Build schedule                     dead shared packages
+  D3 review         Dialect in Sync, Build    W10 extract    W3 Metadata/
+  decisions         W5 front-end extraction   from Sync      Transfer
+                                              W3 Connections
 ```
 
 | Phase | Contents | Exit |
 | --- | --- | --- |
-| **P0** (now) | W0; W1 steps 1-2 on 2.0.0 final; W2 spike; the decisions in section 7 | one build setup and one version per package; a written 2.0 result for all three products; a spike report |
+| **P0** (now) | W0; W1 steps 1-2 on 2.0.0 final; W2 spike; the review of D3 (W4b); the other decisions in section 7 | one build setup and one version per package; a written 2.0 result for all three products; a spike report |
 | **P1** | W1 to the end (when DuckDB.NET 2.0 lands, or the interim per D6); W2; W3 Config, Secrets, Dialect in Sync and Dialect, Connections in Build; W5 front-end extraction | 2.0 is the default; one code loader; Sync's UI built from the workspace |
-| **P2** | W5 back-end; W8; W4; W3 Connections in Sync and Metadata in both; `Connections.FlightSql` | the console host serves the shared admin pages; one catalog, secret store and user list |
-| **P3** | W6; W7; W3 Transfer | Proxy and Build are managed from the console |
-| **P4** | W9; the first suite release | one release with all three products, one installer, one updater |
+| **P2** | W5 back-end; W8; W4a (and W4b's renames once D3 is decided); W10 steps 1, 2 and 4 (extract from Sync, Sync on the shared packages); W3 Connections in Sync and Metadata in both; `Connections.FlightSql` | the console host serves the shared admin pages; one catalog, secret store and user list; Sync's scheduler runs on `DbDataKit.Scheduling` |
+| **P3** | W6; W7 (the Build service and console module); W10 steps 3, 5 and 6 (Build schedules, one monitoring view); W3 Transfer | Proxy and Build are managed from the console; Build refreshes run on schedule and are monitored |
+| **P4** | W9; the first suite release | one release with all three products: Docker images and one MSI |
 | **P5** | after two suite releases: remove the per-product tags and workflows (if D4 says so), the old CLI names, `ui web`, and any shared package still unused | nothing duplicated remains |
 
 The workstreams run in parallel where they touch different code: W1 and W2 are independent of each other; W5's front-end extraction does not
-wait for W3; W6 and W7 need W5 and W8 but not each other.
+wait for W3; W6 and W7 need W5 and W8 but not each other; W10's extraction from Sync can start as soon as W0 is done, and must be
+finished before Build's scheduler is built, so that Build's scheduler is the second user of the shared code rather than a third copy.
 
 ## 6. Code to remove
 
@@ -367,38 +456,41 @@ These are rough line counts of today's code that this plan replaces. They show w
 | Sync `Core/Sql` (dialects, quoting) | ~2,000 | `Dialect.*` | W3 |
 | Sync `Core/Config` YAML handling (part of ~4,900) | part | `Config.*` | W3 |
 | Sync `Libraries` + plugin loading in `Drivers.Descriptor` + `ScriptCompiler` path + `Connections.Libraries` installer | ~2,000 | `DbDataKit.Scripting` | W2 |
-| Sync `Updates` + `Launcher`, or `DbDataKit.Update.*` | ~1,900 or ~2,000 | whichever D5 keeps | W9 |
 | Sync `Drivers.ArrowFlightSql` connection code + Build `FlightSqlLogin`/`FlightSqlRowSource` | part of ~2,300 | `Connections.FlightSql` | W3 |
 | Build `Execution` logins, failures, catalog readers, gate, statement log, transfer (of ~4,400) | most | `Connections`, `Metadata`, `Transfer` | W3 |
 | Build `ui web` (server + 783-line page) | ~1,270 | console module | W7 |
 | Proxy `Auth` (~590) and Sync `Api/Auth` (~710), user and session stores | part | `DbDataKit.Web`, `DbDataKit.State` | W5, W8 |
 | Three CLI parsers and help/JSON conventions | part | `DbDataKit.Cli` | W4 |
 | Three release workflows and their dist steps | most | one suite workflow | W9 |
-| Unused shared packages not adopted by P5 | up to ~6,900 | deleted | W3, W9 |
+| Sync's scheduler, work queue, run lock, run metrics, notifications and pruning (`Api/Services`, `State`; ~2,000 in the stores alone) | moved, not removed | `DbDataKit.Scheduling`, `DbDataKit.Monitoring` | W10 |
+| Build's future scheduler and monitoring | never written | the same packages | W10 |
+| Unused shared packages not adopted by P5 | up to ~4,900 (the ~2,000 of `Update.*` stay, shelved) | deleted | W3 |
 
-## 7. Decisions needed
+## 7. Decisions
 
 | # | Decision | Recommendation |
 | --- | --- | --- |
-| D1 | Console topology: one console host (from `DbDataSync.Api`) that manages remote proxies and runs Build, vs each product serving its own copy of the shared console | **one console host**; the shared packages still let a product serve its own pages if ever needed. Console-to-proxy auth: a console-issued token first, mTLS later |
-| D2 | Proxy config: stay on JSON vs move to YAML in a git-tracked directory with `connection/1` data sources | **YAML** (reverses plan 10 D2), with a migration from `appsettings.json` |
-| D3 | One `dbdata` executable vs three | **one**, old names as aliases for one release |
+| D1 | Console topology: one console host (from `DbDataSync.Api`) that manages Proxy and Build services, vs each product serving its own copy of the shared console | **agreed: one console host** (the management console). Console-to-service auth: a console-issued token first, mTLS later |
+| D2 | Config format | **agreed: one YAML format for every product** (Proxy moves off JSON, reversing plan 10 D2, with a migration from `appsettings.json`) |
+| D3 | Executables and names | **open, for the owner's review**: options A, B and C and the questions in W4b |
 | D4 | Release model | **one suite release**, plus per-product artifacts from the same workflow for two suite releases, then drop them |
-| D5 | Updater: `DbDataKit.Update` vs Sync's `Updates` | **`DbDataKit.Update`**, absorbing Sync's slot and launcher design; delete the other. Needs key custody settled |
+| D5 | Updater | **agreed: shelved** until the products have settled and unified; Docker images and the MSI are the distribution. Nothing is deleted |
 | D6 | DuckDB.NET 2.0 lag | wait up to **two weeks** from today; after that, the interim build (DuckDB.NET 1.5.6 managed with the pinned 2.0.0 native library) |
 | D7 | Keep DuckDB 1.x after 2.0 is the default | **no** (breaking changes are allowed): 2.0 only, and delete 1.x-shape code that 2.0 no longer needs |
 | D8 | Build's open 2.0 semantics: ANY/ALL, `%`/`//` by zero, decimal quantiles, functions that still fold | owner's call, item by item; the default is refusal with a named diagnostic, which is Build's rule for anything it cannot reproduce exactly |
 | D9 | dotnet-script embedded (`Dotnet.Script.Core`) vs the `dotnet script` CLI as a subprocess | **embedded**, if the W2 spike passes |
 | D10 | Secret store backend: wrap `ClrKernel.Core.Secrets` vs implement `Secrets.Keyring` | decide in P0; it blocks Sync's Secrets adoption |
 | D11 | Suite binaries self-contained vs framework-dependent | **self-contained**, with the .NET SDK required only for library, driver and script features (as today) |
-| D12 | Build in the console: child process per command vs in-process | **child process** (isolation from the native library; Build's JSON documents are already the interface) |
+| D12 | How the Build service runs a command: child process per command vs in-process | **child process** (isolation from the native library; Build's JSON documents are already the interface) |
+| D13 | Where a Build schedule lives: only in the project (committed with the refresh plan), or also added by an operator at the service | **project first** (fits Build's "everything is a file" rule and its review of plans); an operator can pause or run now from the console, but adding a schedule is a commit. Revisit if operators need schedules a project author should not own |
 
 ## 8. Individual releases
 
 Keeping them costs little while they come from the same workflow and commit as the suite (W9 step 1). Dropping them later simplifies
-three things: one version number to talk about, one place for installers and update manifests, and no per-product release workflows.
+three things: one version number to talk about, one place for images and installers, and no per-product release workflows.
 Breaking changes are expected anyway, so the first suite release is a natural cut-over point. The recommendation (D4) is to publish both
-for two suite releases and then publish only the suite. A user who wants one product installs the suite with `--components`.
+for two suite releases and then publish only the suite. A user who wants one product installs the suite with `--components` (or picks
+the MSI feature or the image). Whether one product can still be installed on its own also feeds the CLI review (W4b, question 1).
 
 ## 9. Risks
 
@@ -412,11 +504,14 @@ for two suite releases and then publish only the suite. A user who wants one pro
 | A management API weakens Proxy's security | separate listener, loopback by default, TLS, admin token, no shared code on the query path, the same failure classification and redaction |
 | Config migrations break installs (Sync scripts, Proxy JSON to YAML) | `Config` migrations write `.bak`; golden migration pairs (`Config.Testing`); an upgrade test from the last release of each product in CI |
 | Windows-only paths (service, ACLs, AD CS, the x86 worker) cannot be tested on Linux | the Windows CI jobs and `service-e2e.ps1` stay required for any PR that touches them |
+| A schedule runs twice (CLI by hand and the service, or two services registered for one project) | the per-load lock and `on_busy` already cover a manual run; the work queue's lease and run lock (W10) cover two services; a project is registered with one service at a time |
+| Monitoring depends on the console being up | each service evaluates its own health rules and keeps its notifications; the console only shows them |
 | One maintainer, many parallel streams | the phases cap work in flight; each phase has an exit to check before the next |
 
 ## 10. Relation to earlier plans
 
 - Plans 01-08 designed the shared packages; this plan finishes their **adoption** (W3) and decides the unused ones.
+- Plan 08 (update system) stays shelved (D5).
 - Plan 09 (trunk, CalVer, per-product releases) stays; W9 adds the suite release on top of it.
 - Plan 10 (Proxy adoption) is done in its C-steps; its D2 (JSON config) is reversed by D2 here.
 - Plan 11 (CI and testing) provides W0 step 5.
