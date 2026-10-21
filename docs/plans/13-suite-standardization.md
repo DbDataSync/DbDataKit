@@ -15,7 +15,7 @@ Status: **proposed** (2026-10-21), **revised twice the same day after the owner'
   be paired with several consoles** (W12);
 - **DuckDB 2.0.0 now**, using the released engine binary with the DuckDB.NET packages that do not bundle an engine, instead of waiting for
   a DuckDB.NET 2.0 (W1, D6);
-- **Proxy drops DuckDB** as a data source: it was only a test backend for early development (W6);
+- **Proxy's DuckDB data source gets no 2.0 work of its own**: it was only a test backend for early development, and it moves to 2.0 with the shared package (W1, W6);
 - **secrets: finish the shared code and drop ClrKernel**: encrypted values in a YAML file, the key protected by DPAPI on Windows and by a
   permission-restricted file elsewhere (W13, D10);
 - every other recommendation in section 7 is accepted.
@@ -104,7 +104,7 @@ same commit, a skew like this becomes a runtime conflict as soon as Sync adopts 
   folds into constants are kept as calls). Still open (OPEN-ITEMS H): ANY/ALL in 2.0's CASE form is refused rather than translated;
   `%` and `//` by zero raise on 2.0 where the lowering writes NULL; decimal `median`/`quantile_cont` differ in the last digit;
   `current_schemas`, `current_setting`, `getvariable` and `getenv` still fold; Windows and macOS were not run; the preview CI job is on hold.
-- Sync has not been tested on 2.0. (Proxy's DuckDB data source is being removed, W6.) The shared DuckDB sandbox (`Connections.DuckDb`: read-only, no external access, locked
+- Sync has not been tested on 2.0. (Proxy's DuckDB data source, a test backend, needs no work of its own: W6.) The shared DuckDB sandbox (`Connections.DuckDb`: read-only, no external access, locked
   configuration, allowed directories) depends on setting names and behaviour that 2.0 may have changed.
 
 ### 2.5 DbDataSync's libraries, drivers and scripts
@@ -191,8 +191,8 @@ show DuckDB.NET 1.5.6 runs unchanged on the 2.0 library, because 2.0 keeps the o
    hash-checked; an offline install points it at a local copy. Docker images and MSIs carry the engine.
 3. **Switch, product by product.** The shared packages first (`Connections.DuckDb`, `Metadata`, `Transfer.Conformance`, with the sandbox
    recipe: no external access, locked configuration, allowed directories, read-only), then Sync, then Build. Each switch runs that
-   product's whole suite on 2.0.0, with any setting names 2.0 changed fixed in the same slice. **Proxy does not switch: its DuckDB data
-   source is removed** (W6), so Proxy carries no DuckDB engine at all.
+   product's whole suite on 2.0.0, with any setting names 2.0 changed fixed in the same slice. **Proxy rides along** with the shared
+   packages: no work of its own, its existing tests run on 2.0.0 in the same slice (W6).
 4. **Storage format.** 2.0 writes a format that 1.x cannot read. Before the first switch: a test that opens a 1.x file read-only and checks
    that its bytes are unchanged, and an audit of every read-write open in the products, so no user file is converted silently.
    Extensions (Sync's S3 and httpfs sources) install for the engine's version; a test covers one.
@@ -255,7 +255,7 @@ Plan 10's rules apply: adapter first, delete second, one concern per PR, existin
    keychain (the one place ClrKernel is still read), then ClrKernel is removed.
 3. `Dialect.*` replaces `Core/Sql` (quoting, lexer, type map). Sync's `IDriver` stays: it is the replication contract, not the connection.
 4. `Connections.*` composes every driver's connection string. Failures go through the shared classifier. Sync's DuckDB source driver
-   opens through `Connections.DuckDb`, which gives it the read-only sandbox (and gives that package its consumer after Proxy drops DuckDB).
+   opens through `Connections.DuckDb`, which gives it the read-only sandbox.
 5. `Metadata.*` for catalog reads (the readers exist for SQL Server, Postgres, DuckDB, ODBC; MySQL and Oracle readers are added to the shared package).
 6. `Transfer.SqlServer` / `Transfer.Postgres` bulk writers and the strategy builders replace the hand-written staging paths, measured with the benchmark stub first.
 
@@ -377,13 +377,9 @@ Two steps, each with its own exit:
 
 Today Proxy is configured by editing `appsettings.json` and running CLI verbs. It has no runtime admin interface.
 
-0. **Drop the DuckDB data source** (owner decision: it was a test backend for early development, not a product feature). Breaking:
-   `Provider: duckdb` is refused at startup with a message saying it was removed. Proxy's tests used DuckDB as an in-process database
-   for the Flight protocol tests (auth, JWT, parameters, failure model, metadata goldens), so they move first: protocol tests that do
-   not care about the engine to a test-only ADO.NET provider in the test project, and type mapping, metadata goldens and the failure
-   model to SQL Server from `testenv/` (re-recorded goldens). The DuckDB sandbox tests are deleted from Proxy; the sandbox itself stays
-   in `Connections.DuckDb`, tested there, for Sync's DuckDB sources (W3).
-
+0. **DuckDB stays as it is**, with no work of its own for 2.0 (owner decision: it was a test backend for early development, not a
+   product feature). Proxy opens DuckDB through `Connections.DuckDb`, so it moves to the 2.0.0 engine when that package does (W1);
+   its existing tests run on 2.0 as part of that switch. Removing it later is optional and not scheduled.
 1. **Management API** on a separate listener, never the Flight port, secured as every product's is (W12): HTTPS, console tokens, the
    local CLI over a local channel. Never on the hot path. Endpoints: health, version and drain (plan 03's seams); effective config,
    redacted, with origins; validation; data sources (CRUD and test connection); Proxy's client identities (Flight users, Windows accounts, JWT mappings, pass-through);

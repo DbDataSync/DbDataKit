@@ -29,7 +29,7 @@ Each milestone is a point where something can be shown working. They follow plan
 
 | Milestone | Slices | What can be shown |
 | --- | --- | --- |
-| **M0 Foundations** | F01-F14, K01-K12, P11-P12, V01-V07, S01 | one build setup and one version per package; every product on DuckDB 2.0.0; the encrypted secret store on every platform; the dotnet-script spike report |
+| **M0 Foundations** | F01-F14, K01-K12, V01-V07, S01 | one build setup and one version per package; every product on DuckDB 2.0.0; the encrypted secret store on every platform; the dotnet-script spike report |
 | **M1 Engines and loaders** | S02-S10, A01-A07, B01-B03, U01-U03 | Sync loads libraries, drivers and scripts through dotnet-script; Sync's secrets in the shared store and no ClrKernel; Sync's UI builds from the shared workspace |
 | **M2 Console with Sync** | T01-T09, U04-U12, C01-C07, E01, E04, M01-M06, A08-A10, A17-A18 | Sync is managed from the dbdatakit console on another machine; the new command names; Sync's scheduler on the shared packages |
 | **M3 Proxy and Build managed** | P01-P10, R01-R09, M07-M11, E02-E03, E05, A11-A16, A19, A20, B04-B08, C08 | Proxy and Build are configured and operated from the console; Build refreshes run on schedule and are monitored |
@@ -60,14 +60,14 @@ Inside a milestone the slices of different workstreams run in parallel; the **Ne
 ## K. DuckDB 2.0.0 now (W1)
 
 The released 2.0.0 engine, pinned, with `DuckDB.NET.Data` / `DuckDB.NET.Bindings` (no bundled engine) in place of `DuckDB.NET.Data.Full`
-(D6, D7). Proxy does not switch: its DuckDB data source is removed (P11, P12), so it carries no engine.
+(D6, D7). Proxy's DuckDB data source (a test backend) gets no work of its own: it moves with the shared packages in K04.
 
 | # | Slice | Needs | Size | Done when |
 | --- | --- | --- | --- | --- |
 | K01 | `duckdb.pin` (2.0.0: URL and sha256 per platform: linux-x64, linux-arm64, win-x64, osx-arm64, osx-x64) and `scripts/fetch-duckdb.sh`/`.ps1` | | S | the scripts download and verify every platform in CI; a changed byte fails the check (test) |
 | K02 | `DbDataKit/build/DuckDb.Native.targets`: the engine at `runtimes/<rid>/native/` in build, test and publish output; a clear build error naming the fetch command when it is missing | K01 | S | a test project loads the engine and `SELECT version()` returns `v2.0.0` on Linux and Windows runners |
 | K03 | Storage format: a test that opens a 1.x database file read-only with 2.0.0 and checks its bytes are unchanged; an audit of every read-write DuckDB open in the products | K02 | S | the test passes; the audit is a table in `DbDataBuild/docs/research/duckdb-2.0/README.md`; any read-write open of a user file becomes read-only or is in the release notes |
-| K04 | Shared packages on 2.0.0: `Connections.DuckDb`, `Metadata`, `Transfer.Conformance` to `DuckDB.NET.Data`; sandbox setting names fixed if 2.0 changed any | K02, K03, P12 | M | the shared suite green on 2.0.0, including every sandbox test (no external access, locked configuration, allowed directories, read-only) |
+| K04 | Shared packages on 2.0.0: `Connections.DuckDb`, `Metadata`, `Transfer.Conformance` to `DuckDB.NET.Data`, and Proxy with them (no Proxy-specific work); sandbox setting names fixed if 2.0 changed any | K02, K03 | M | the shared suite and Proxy's existing suite green on 2.0.0, including every sandbox test (no external access, locked configuration, allowed directories, read-only); Proxy's zip and MSI contain the engine (dist test) |
 | K05 | Sync on 2.0.0: the `duckdb` library installs `DuckDB.NET.Data` from NuGet and the engine for the running platform from the pin, hash-checked (an offline source can be configured); compile references to `DuckDB.NET.Data` | K02, K03 | M | Sync's DuckDb driver, verification, scripting and segmenting tests green on 2.0.0; a fresh `server run` installs the library and opens DuckDB; the Docker image contains the engine |
 | K06 | Sync: a DuckDB extension source (httpfs) on 2.0.0 | K05 | S | an integration test installs the extension for 2.0.0 and reads a file through it (gated on network access in CI) |
 | K07 | Build on 2.0.0: `DbDataBuild.Execution`, `Targets.DuckDb` and the spike to `DuckDB.NET.Data`; publish bundles the engine | K02, K03 | M | Build's unit suite on 2.0.0 with the known 2.0 failures marked by the slices below (no other failure); the publish smoke test loads the engine |
@@ -75,7 +75,7 @@ The released 2.0.0 engine, pinned, with `DuckDB.NET.Data` / `DuckDB.NET.Bindings
 | K09 | Build: `%` and `//` by zero follow 2.0 and the targets (they raise): the `NULLIF` is no longer written (D8) | K07 | S | unit text, differential and real-engine tests: all raise on division by zero |
 | K10 | Build: decimal `median`/`quantile_cont` matched to 2.0, or refused over DECIMAL; `current_schemas`, `current_setting`, `getvariable`, `getenv` refused with a named diagnostic (D8) | K07 | S | the quantile test passes on 2.0; each function has a diagnostic fixture |
 | K11 | Build: regenerate the lowered artifacts and template goldens on 2.0.0; Build conformance suite on 2.0.0 | K08-K10 | M | the `UPDATE_GOLDEN=1` diff reviewed and committed; conformance (quick, apply, templates, release groups) green |
-| K12 | 2.0 only: delete code that exists only for 1.x plans; retire `scripts/test-duckdb-preview.sh`; one DuckDB engine in the repository (a CI check) | K04, K05, K11, P12 | S | all suites green on Linux and Windows; the check fails if any project references `DuckDB.NET.Data.Full` |
+| K12 | 2.0 only: delete code that exists only for 1.x plans; retire `scripts/test-duckdb-preview.sh`; one DuckDB engine in the repository (a CI check) | K04, K05, K11 | S | all suites green on Linux and Windows; the check fails if any project references `DuckDB.NET.Data.Full` |
 
 ## V. The shared secret store (W13)
 
@@ -128,7 +128,7 @@ no ClrKernel (D10).
 | A15 | Sync Postgres COPY staging through `Transfer.Postgres` | A13, A08 | M | same as A14 |
 | A16 | Sync merge and delete-insert strategies from the shared strategy builders | A14, A15 | M | replication integration tests unchanged |
 | A17 | `DbDataKit.Connections.FlightSql` from Sync's Flight SQL connection code; Sync's driver keeps only its readers | A08 | M | Sync's Flight SQL tests pass against the shared client |
-| A18 | CI: the Flight SQL client against a real `dbdataproxy server` | A17 | S | an end-to-end job runs queries through Proxy to SQL Server and through ODBC |
+| A18 | CI: the Flight SQL client against a real `dbdataproxy server` | A17 | S | an end-to-end job runs queries through Proxy to SQL Server and DuckDB |
 | A19 | Build's `FlightSqlRowSource` and `FlightSqlLogin` on `Connections.FlightSql` | A17, B02 | S | Build's Flight conformance group (`up flight`) green |
 | A20 | Unused shared packages: adopt or delete `Connections.Descriptor`, `Dialect.Arrow` (Proxy benchmark, plan 10 C7), `Secrets.Cli` | | S each | each either has a consumer with tests or is removed from the solution |
 
@@ -213,8 +213,6 @@ no ClrKernel (D10).
 | P08 | Console module: overview and data sources | U08, P04 | M | Playwright against a paired Proxy |
 | P09 | Console module: client identities, TLS, activity, config history | P05-P07, P08 | M | Playwright against a paired Proxy |
 | P10 | Proxy feeds failed logins, refused statements and limits reached into `Monitoring` | M04, P03 | S | events appear in the console's monitoring view (test) |
-| P11 | Proxy's tests off DuckDB: protocol tests (auth, JWT, throttle, parameters, failure model) on a test-only ADO.NET provider; type mapping and metadata goldens on SQL Server from `testenv/`, goldens re-recorded | | M | the same tests pass with no DuckDB in the test project; the Windows job reaches a SQL Server (testenv container or LocalDB) |
-| P12 | Remove Proxy's DuckDB data source: provider, dialect, Arrow mapping cases, config validation (`Provider: duckdb` refused with a "removed" message), example config, README, interop script; the sandbox tests deleted from Proxy | P11 | S | Proxy builds with no DuckDB reference; a config test for the refusal; release note |
 
 ## R. DbDataBuild server and management (W7)
 
@@ -285,8 +283,8 @@ no ClrKernel (D10).
 
 Nothing waits on a decision. The first pull requests, in parallel:
 
-1. **K01** (the DuckDB pin and fetch scripts), then **K02** and **K03**, then **K05** (Sync) and **K07** (Build) side by side; **P11**
-   then **P12** (Proxy off DuckDB) in parallel with them, then **K04** (the shared packages).
+1. **K01** (the DuckDB pin and fetch scripts), then **K02** and **K03**, then **K04** (shared packages, Proxy along), **K05** (Sync)
+   and **K07** (Build) side by side.
 2. **V01**, then **V02**: the secret store, which Sync's secrets (A04), Proxy (V06) and the Build server (R04) wait on.
 3. **F01** (root build setup) and **F14** (Sync without `dotnet exec`).
 4. **S01**, the dotnet-script spike (a report, not merged).
