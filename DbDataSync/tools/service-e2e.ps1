@@ -69,3 +69,8 @@ finally {
     & sc.exe delete $ServiceName | Out-Null
   }
 }
+
+# The last command run was `service status` on a removed service, which correctly exits 1; PowerShell hands the last native
+# command's exit code to the caller, so say explicitly that the script as a whole succeeded.
+$global:LASTEXITCODE = 0
+exit 0
