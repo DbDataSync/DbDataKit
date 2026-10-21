@@ -1,0 +1,40 @@
+<Project>
+  <!--
+    The DuckDB engine (libduckdb), put where DuckDB.NET finds it: next to the application, in build, test and publish output.
+    (Not under runtimes/<rid>/native/: DuckDB.NET.Bindings has no resolver of its own, and the host only probes that folder for files
+    listed in deps.json, which these are not. The application folder is always probed, also for a single-file publish.)
+    The packages DuckDB.NET.Data and DuckDB.NET.Bindings carry no engine; the engine comes from the pin (duckdb.pin at the repository root)
+    through scripts/fetch-duckdb.sh or .ps1, which download it to .duckdb/<rid>/. A project opts in by importing this file:
+
+      <Import Project="$(DbDataKitRoot)build/DuckDb.Native.targets" />        (a product)
+      <Import Project="..\..\build\DuckDb.Native.targets" />                  (a project under DbDataKit/)
+
+    The runtime identifier is the project's RuntimeIdentifier when it has one (a publish for another platform), otherwise the machine's.
+    DuckDbNativeDir replaces .duckdb/<rid>/ as the place the library is taken from. When the library is missing the build stops with the
+    command that fetches it.
+  -->
+  <PropertyGroup>
+    <DuckDbRepositoryRoot Condition="'$(DuckDbRepositoryRoot)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', '..'))</DuckDbRepositoryRoot>
+    <DuckDbNativeRid Condition="'$(DuckDbNativeRid)' == ''">$(RuntimeIdentifier)</DuckDbNativeRid>
+    <DuckDbNativeRid Condition="'$(DuckDbNativeRid)' == ''">$(NETCoreSdkPortableRuntimeIdentifier)</DuckDbNativeRid>
+    <!-- exactly the platforms duckdb.pin covers (the glibc Linux builds; a musl Linux is not pinned) -->
+    <DuckDbNativeLibrary Condition="'$(DuckDbNativeLibrary)' == '' and '$(DuckDbNativeRid)' == 'win-x64'">duckdb.dll</DuckDbNativeLibrary>
+    <DuckDbNativeLibrary Condition="'$(DuckDbNativeLibrary)' == '' and ('$(DuckDbNativeRid)' == 'osx-arm64' or '$(DuckDbNativeRid)' == 'osx-x64')">libduckdb.dylib</DuckDbNativeLibrary>
+    <DuckDbNativeLibrary Condition="'$(DuckDbNativeLibrary)' == '' and ('$(DuckDbNativeRid)' == 'linux-x64' or '$(DuckDbNativeRid)' == 'linux-arm64')">libduckdb.so</DuckDbNativeLibrary>
+    <DuckDbNativeDir Condition="'$(DuckDbNativeDir)' == ''">$(DuckDbRepositoryRoot).duckdb/$(DuckDbNativeRid)/</DuckDbNativeDir>
+    <DuckDbNativeDir>$([MSBuild]::EnsureTrailingSlash('$(DuckDbNativeDir)'))</DuckDbNativeDir>
+    <DuckDbNativeFile>$(DuckDbNativeDir)$(DuckDbNativeLibrary)</DuckDbNativeFile>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(DuckDbNativeLibrary)' != '' and Exists('$(DuckDbNativeFile)')">
+    <None Include="$(DuckDbNativeFile)" Link="$(DuckDbNativeLibrary)" Visible="false"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="CheckDuckDbNative" BeforeTargets="BeforeBuild;BeforeCompile">
+    <Error Condition="'$(DuckDbNativeLibrary)' == ''"
+           Text="No DuckDB engine is pinned for the runtime identifier '$(DuckDbNativeRid)' (duckdb.pin covers linux-x64, linux-arm64, win-x64, osx-arm64 and osx-x64)." />
+    <Error Condition="'$(DuckDbNativeLibrary)' != '' and !Exists('$(DuckDbNativeFile)')"
+           Text="The DuckDB engine '$(DuckDbNativeFile)' is missing. Run scripts/fetch-duckdb.sh $(DuckDbNativeRid) (scripts\fetch-duckdb.ps1 on Windows) from the repository root." />
+  </Target>
+</Project>

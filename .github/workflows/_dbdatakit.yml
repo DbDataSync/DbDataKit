@@ -66,6 +66,16 @@ jobs:
         working-directory: .
         run: testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
 
+      - name: Fetch the pinned DuckDB engine
+        if: runner.os != 'Windows'
+        working-directory: .
+        run: scripts/fetch-duckdb.sh
+      - name: Fetch the pinned DuckDB engine (Windows)
+        if: runner.os == 'Windows'
+        working-directory: .
+        shell: pwsh
+        run: ./scripts/fetch-duckdb.ps1
+
       - name: Restore
         run: dotnet restore DbDataKit.Shared.slnx
       - name: Build

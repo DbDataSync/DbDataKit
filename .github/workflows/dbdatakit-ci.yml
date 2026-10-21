@@ -11,6 +11,8 @@ on:
     paths:
       - "DbDataKit/**"
       - "testenv/**"
+      - "duckdb.pin"
+      - "scripts/fetch-duckdb.*"
       - "Directory.Build.props"
       - "Directory.Packages.props"
       - "global.json"
@@ -21,6 +23,8 @@ on:
     paths:
       - "DbDataKit/**"
       - "testenv/**"
+      - "duckdb.pin"
+      - "scripts/fetch-duckdb.*"
       - "Directory.Build.props"
       - "Directory.Packages.props"
       - "global.json"
