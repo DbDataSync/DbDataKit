@@ -124,6 +124,16 @@ jobs:
         # first version of this step shipped that way and its artifact held one project's 207 results out
         # of the suite's ~1,500. The default name is per-project and timestamped, so they coexist.
         run: dotnet test --no-build --configuration Release --filter "Category!=Integration" --logger trx --results-directory TestResults
+      # The Windows service through the real Service Control Manager: install (twice), status, doctor, start, health, restart, stop,
+      # uninstall, all via `dbdatasync service ...` (DbDataSync/tools/service-e2e.ps1). The unit tests cover the same flow against an
+      # in-memory manager; this is the only place the real one is exercised.
+      - name: Service end-to-end (install, start, restart, stop, uninstall)
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem src/DbDataSync.Cli/bin/Release/net10.0 -Filter '*.exe' |
+            Where-Object { $_.BaseName -in 'dbdatasync', 'DbDataSync.Cli' } | Select-Object -First 1
+          if (-not $exe) { Get-ChildItem src/DbDataSync.Cli/bin/Release/net10.0 | Select-Object -First 40; throw 'No dbdatasync executable in the build output.' }
+          ./tools/service-e2e.ps1 -Exe $exe.FullName
       # The Windows-only tests — real Event Log write/read-back, the real icacls ownership transfer —
       # report what they actually observed now rather than asserting a bare boolean. But `dotnet test`'s
       # console reporter prints a *passing* test's captured output nowhere, which is precisely why this
