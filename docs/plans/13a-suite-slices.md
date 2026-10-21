@@ -14,12 +14,27 @@ Status: **proposed** (2026-10-21). This breaks [plan 13](13-suite-standardizatio
 - **Adapter first, delete second** (plan 10): a slice that replaces code keeps the old tests passing unchanged; deleting the old code is its
   own slice, or the last step of the same one when the tests already pass.
 - **Behaviour changes are named** in the pull request and in the product's release notes (breaking changes are allowed, but never silent).
+- **Clean break** (plan 13 section 3): no slice writes a migration, import or compatibility reader for an existing install. A slice that
+  changes a file format makes the old format fail with a message naming the file, and tests that.
 - **Docs in the same pull request**: the product's docs, `DESIGN.md`/progress entries where a product's own rules ask for them (Build's
   `CLAUDE.md`), and the "Status" line of the slice's row here.
 - **Branch names** `suite/<id>-<short-name>` (for example `suite/f01-root-props`).
 - **Decisions.** Every decision in plan 13 section 7 is made, so no slice waits on one; where a slice follows a decision, its row names it.
 
 Sizes: **S** a day or two, **M** three days. Anything larger is split.
+
+## For the agent implementing these
+
+- **Read first:** plan 13 section 3 (the target shape and the clean-break rule), the workstream section of the slice, and the product's
+  own `CLAUDE.md` (DbDataBuild's lists rules its tests enforce).
+- **What the environment needs:** network access to GitHub releases (the DuckDB engine for K01, the polyglot library for Build), NuGet,
+  Docker for the `testenv/` engines (SQL Server, PostgreSQL) and the images, and a Windows machine or the Windows CI jobs for anything
+  marked Windows (DPAPI, services, ACLs, the MSI). The sandbox this plan was written in had none of the first three.
+- **Per slice:** branch `suite/<id>-<short-name>` from `main`, one pull request, the "Done when" test in CI, then set the slice's status
+  in this file (add `done (#<pr>)` to its row) in the same pull request.
+- **When a slice is bigger than its size,** split it and add the parts here as `<id>a`, `<id>b`, rather than growing the pull request.
+- **When something in the plan turns out wrong,** change plan 13 or this file in the pull request that finds it, and say so in the
+  pull request description; do not work around the plan silently.
 
 ## Milestones
 
@@ -89,7 +104,7 @@ no ClrKernel (D10).
 | V03 | Rotation: `rotate-key` re-encrypts every value and removes the old key; an interrupted rotation resumes | V02 | S | tests, including a rotation killed half way and resumed |
 | V04 | Export and import under a passphrase (PBKDF2-SHA256, 600,000 iterations) | V02 | S | tests: export on one store, import on another with a different key; a wrong passphrase fails |
 | V05 | The shared `secret` verbs in `DbDataKit.Secrets.Cli`: `set` (prompt or stdin only), `list`, `delete`, `check`, `rotate-key`, `export`, `import`, `protect`; no verb prints a value | V02-V04 | M | CLI tests per verb; a test fails if any verb writes a value to stdout or stderr |
-| V06 | Proxy resolves `secret:` through the store (inline `dpapi:` still works); `secret protect` and `secret set` write to it | V05 | S | Proxy's secret tests; a data source password set with `secret set` connects |
+| V06 | Proxy resolves `secret:` through the store (and inline `dpapi:` from `secret protect`); `secret set` writes to it; `LegacyEnvProvider` deleted | V05 | S | Proxy's secret tests; a data source password set with `secret set` connects |
 | V07 | Delete the `Secrets.Keyring` stub; the Secrets READMEs describe the store, the key, backup and moving a server | V02 | S | the package is gone from the solution; docs reviewed |
 
 ## S. Libraries, drivers and scripts on dotnet-script (W2)
@@ -100,10 +115,10 @@ no ClrKernel (D10).
 | S02 | `DbDataKit.Scripting`: the resolver (package references to a closure on disk, cached by hash), with `Connections.Libraries.Validation` moved in | S01 | M | unit tests against a local feed fixture; the H1 hostile-input corpus passes |
 | S03 | The loader: a collectible load context per library, driver or script, with native assets | S02 | S | tests load Npgsql and DuckDB from a resolved closure, run a query, and unload |
 | S04 | The compiler: `.csx` to a cached assembly, the allow-list and `ScriptSyntaxGuard` ported | S02 | M | Sync's `ScriptCompiler` tests, ported, pass against it |
-| S05 | Sync libraries through the resolver and loader (`library.csx`; `library.json` still read) | S03, A03 | M | Sync's library tests and the Libraries page Playwright test pass unchanged |
-| S06 | Sync compiled drivers as `driver.csx` | S03, S04 | S | the plugin-driver tests pass with a `.csx` driver and with the old `driver.json` |
+| S05 | Sync libraries through the resolver and loader (`library.csx`) | S03 | M | Sync's library tests and the Libraries page Playwright test pass unchanged |
+| S06 | Sync compiled drivers as `driver.csx` | S03, S04 | S | the plugin-driver tests pass with a `.csx` driver |
 | S07 | Sync scripts as `.csx` | S04 | S | Sync's scripting tests pass on `.csx` scripts |
-| S08 | The migration: `.cs` to `.csx`, `library.json` to `library.csx`, `driver.json` to a shim `driver.csx` | S05-S07, A03 | S | golden migration pairs (`Config.Testing`); a `.bak` is written; a migrated fixture repository starts and runs |
+| S08 | Old-format files refused: a `.cs` script, `library.json` or `driver.json` in a config repository stops the load with a message naming it (clean break) | S05-S07 | S | a test per file kind |
 | S09 | `dbdatasync script test <name>` and the editor stub for `.csx` | S07, C06 | S | CLI test runs a fixture script; the stub resolves in a C# language-server test |
 | S10 | Delete the old paths (`DbDataSync.Libraries`, plugin loading in `Drivers.Descriptor`, `ScriptCompiler`'s compilation, `Connections.Libraries`' installer) | S08 | S | tests green; a source scan finds no reference to the removed types |
 
@@ -113,9 +128,9 @@ no ClrKernel (D10).
 | --- | --- | --- | --- | --- |
 | A01 | Sync connection files read through `Config.Yaml`'s strict reader | F04 | S | Sync's config tests pass; unknown keys are errors with a path (new tests); fuzz test over the connection files |
 | A02 | The remaining Sync entity files (replications, mappings, scripts' manifests, drivers) through the strict reader | A01 | M | same as A01 for each type |
-| A03 | `schemaVersion` and the `Config` migration framework in Sync; `dbdatasync config migrate` | A02 | S | golden migration pairs; `--apply` writes `.bak` |
-| A04 | Sync secret references through `DbDataKit.Secrets` and the encrypted store (`dbdatasync:connection:<n>` names mapped to `dbdata:sync:...`) | V05, A01 | M | Sync's secret tests pass; a sentinel-password test finds no secret in any log line |
-| A05 | One-time import of Sync's existing secrets from the OS keychain (`dbdatasync secret import --from-keychain`), then remove `ClrKernel.Core.Secrets` | A04 | S | an import test against a fake keychain; no ClrKernel reference left; the release note says to run the import before upgrading further |
+| A03 | A required `schemaVersion` in every Sync file; a file without it, or older, refused with a message (clean break) | A02 | S | a test per file kind |
+| A04 | Sync secret references through `DbDataKit.Secrets` and the encrypted store, under `dbdata:sync:...` names (the old `dbdatasync:...` names are not read) | V05, A01 | M | Sync's secret tests pass; a sentinel-password test finds no secret in any log line |
+| A05 | Remove `ClrKernel.Core.Secrets`; nothing imported (clean break) | A04 | S | no ClrKernel reference left; tests green; the release note says secrets are set again |
 | A06 | Sync quoting and lexer from `Dialect` | F04 | M | Sync's dialect tests pass; the shared hostile-SQL corpus runs against Sync's dialects |
 | A07 | Sync type maps from `Dialect` (`CanonicalType` from the shared package); delete `Core/Sql`'s copies | A06 | M | type round-trip tests per engine; `Core/Sql` keeps only what is Sync's |
 | A08 | Sync SQL Server and Postgres connection strings through the `Connections` composers | A07 | M | connection tests per driver; the hostile-credential corpus; TLS verify-by-default named in release notes |
@@ -137,7 +152,7 @@ no ClrKernel (D10).
 | # | Slice | Needs | Size | Done when |
 | --- | --- | --- | --- | --- |
 | B01 | Build quoting and lexer from `Dialect`, behind `DialectProfile` | F08 | M | Build unit suite unchanged; Build's quoting fixtures added to the shared conformance cases |
-| B02 | Build logins (`Logins`, `OdbcLogin`, `FlightSqlLogin`) through `Connections` | F08 | M | login tests; `DBDATABUILD_<TARGET>_<READ|WRITE>` still works; no read-to-write fallback (test) |
+| B02 | Build logins (`Logins`, `OdbcLogin`, `FlightSqlLogin`) through `Connections`; `DBDATA_BUILD_<CONN>_<READ|WRITE>` only, the old `DBDATABUILD_*` names dropped here and in the shared resolver | F08 | M | login tests; an old name is not read (test); no read-to-write fallback (test) |
 | B03 | Build failures through the shared classifier; `DriverFailure` removed | B02 | S | the real-engine scrub test passes; "driver messages are never echoed" is a shared-classifier test |
 | B04 | Build catalog reads (`CatalogReader`, `SourceCatalogReader`, `OdbcCatalogClient`) through `Metadata` | B02 | M | Build's import and status tests unchanged; conformance quick group green |
 | B05 | `ServerFacts`: Build uses the shared record | B04 | S | facts golden tests unchanged |
@@ -185,7 +200,7 @@ no ClrKernel (D10).
 | U07 | Console host skeleton: `dbdatakit server run` serving the workspace build, sign-in, users, invites (`dbdatakit user ...`) | U03, U05, C02 | M | Playwright: first-run invite, passkey sign-in, user list against the console |
 | U08 | Console relay (D16): the console back-end forwards a module's calls to a paired server with a token | U07, T04, T05 | M | Sync's Playwright suite passes through the console against a paired `dbdatasync server` |
 | U09 | Live updates through the relay (Sync's SignalR run hub) | U08 | S | the run-progress Playwright tests pass through the console |
-| U10 | Users, passkeys and invites migrate from Sync's state database to the console's | U07 | S | a migration test on a fixture database; existing passkeys sign in on the console |
+| U10 | Console first run: users start fresh (first-run invite); nothing is read from Sync's state database (clean break) | U07 | S | Playwright: a new console's first-run invite, then sign-in |
 | U11 | Sync's server stops serving the SPA | U08-U10 | S | Sync's API tests green; `/` on the Sync server returns the console's address; release note |
 | U12 | Console: instances page (pair, list, health, version, unpair) | T04, T09 | S | Playwright: pair, see health, unpair |
 
@@ -193,17 +208,17 @@ no ClrKernel (D10).
 
 | # | Slice | Needs | Size | Done when |
 | --- | --- | --- | --- | --- |
-| E01 | Sync connections as `connection/1` (read both forms, write the new one; migration) | A03, A08 | M | golden migration pairs; the Connections page works unchanged |
-| E02 | Proxy data sources as `connection/1` with `extensions.proxy` | P01 | S | Proxy's config tests; golden migration from today's data sources |
-| E03 | Build connection files as `connection/1` (a project schema change, migrated by `project update`) | B02 | M | every template migrates; schema test and fuzz tests; `--check` reports old files |
-| E04 | Sync host settings from `appsettings.json` to `server.yaml` | A03 | S | migration test; `server run` reads only `server.yaml`; release note |
+| E01 | Sync connections as `connection/1`; the old form refused | A03, A08 | M | connection tests on the new format; a test for the refusal; the Connections page works |
+| E02 | Proxy data sources as `connection/1` with `extensions.proxy` | P01 | S | Proxy's config tests on the new format |
+| E03 | Build connection files as `connection/1` (a project schema change; the templates rewritten, an old file refused with a diagnostic) | B02 | M | every template compiles on the new format; schema and fuzz tests; a diagnostic fixture for an old files |
+| E04 | Sync host settings in `server.yaml`; an `appsettings.json` refused with a message | A03 | S | `server run` reads only `server.yaml`; a test for the refusal; release note |
 | E05 | Console: the Connections view across servers, with copy to another server | E01, E02, U08 | M | Playwright: list connections of a Sync and a Proxy server; copy one; the target validates it |
 
 ## P. DbDataProxy management (W6)
 
 | # | Slice | Needs | Size | Done when |
 | --- | --- | --- | --- | --- |
-| P01 | Proxy config to YAML (`server.yaml`, `proxy/`, `connections/`) in a git-tracked directory; migration from `appsettings.json` | C04, U06 | M | golden migration of the shipped example; an upgrade test from the last JSON release in CI; strict validation unchanged |
+| P01 | Proxy config to YAML (`server.yaml`, `proxy/`, `connections/`) in a git-tracked directory; an `appsettings.json` refused with a message; Proxy's JSON config migrations deleted | C04, U06 | M | config tests on the new format, including the shipped example; a test for the refusal; strict validation unchanged |
 | P02 | Proxy state store (SQLite through `DbDataKit.State`, D18) | U04 | S | store tests; created on first start |
 | P03 | Management listener: health, version, effective config (redacted, with origins), validation | T05, P01 | M | API tests through a console token and through the local channel; no secret in any response (sentinel test) |
 | P04 | Data sources: create, change, delete, test connection; hot reload | P03, E02 | M | API tests; a change applies without a restart (test runs a query before and after) |

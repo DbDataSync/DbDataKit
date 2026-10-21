@@ -18,6 +18,8 @@ Status: **proposed** (2026-10-21), **revised twice the same day after the owner'
 - **Proxy's DuckDB data source gets no 2.0 work of its own**: it was only a test backend for early development, and it moves to 2.0 with the shared package (W1, W6);
 - **secrets: finish the shared code and drop ClrKernel**: encrypted values in a YAML file, the key protected by DPAPI on Windows and by a
   permission-restricted file elsewhere (W13, D10);
+- **a clean break everywhere**: nothing from an existing install is migrated or imported (configs, scripts, libraries, secrets, users,
+  state). Old-format files are refused with a message, never converted (section 3, "Clean break");
 - every other recommendation in section 7 is accepted.
 
 Scope: everything needed to turn three products that share a repository into one suite with one
@@ -156,6 +158,14 @@ Descriptor drivers (`driver.yaml`) are data, not code, and are not affected. JDB
 - **Shared definitions.** One `connection/1` format, one secret reference syntax, one user and role model, one git-tracked config layout
   (W8): the same format and code in every product, so the console can show and edit them side by side.
 
+**Clean break** (owner decision, applies to every workstream): the new releases start from nothing. No migration, import, upgrade path or
+compatibility reader is written for existing configs, scripts, libraries, drivers, secrets, users, sessions or state databases, and no
+legacy names are kept (old CLI forms, old environment variable names such as `DBDATABUILD_*` and `DBDATASYNC_SECRET_*`). Instead, a server
+or CLI that finds a file in an old format (no `schemaVersion`, an older one, `appsettings.json` where `server.yaml` belongs, a `.cs`
+script, a `library.json`) **refuses to start or to load it, with a message naming the file and pointing to the documentation**. Release
+notes say plainly that an existing install is set up again. Users' own data (their databases and DuckDB files) is not ours to break and
+is outside this rule.
+
 ## 4. Workstreams
 
 Sizes: S is days, M is one to three weeks, L is longer. The phases in section 5 decide the order.
@@ -234,15 +244,14 @@ Steps:
 3. **Port Sync** onto it in three PRs (libraries, drivers, scripts), adapter first. The web pages (Libraries, Drivers, script editor with
    Monaco) keep working. Add `dbdatasync script test <name>` and editor support: generate a stub so VS Code's C# tooling resolves
    `#r` to the scripting abstractions.
-4. **Migration (breaking).** A config migration (W3, `Config` migrations with `.bak`) converts `scripts/*.cs` to `.csx`, `library.json` to
-   `library.csx`, and a compiled plugin's `driver.json` to a shim `driver.csx` that `#r`s the same package and returns the same type.
-   Libraries are restored again on first start.
+4. **Clean break.** No conversion: a `.cs` script, a `library.json` or a `driver.json` found in a config repository is refused with a
+   message naming it (section 3, "Clean break").
 5. **Delete** `DbDataSync.Libraries`, the plugin loading in `Drivers.Descriptor`, `ScriptCompiler`'s compilation path, and
    `DbDataKit.Connections.Libraries`' installer (its `Validation` moves into `DbDataKit.Scripting`).
 6. **Reuse elsewhere.** Proxy can offer "any ADO.NET provider" data sources through the same library catalog and the generic composer
    in `Connections`. Build hooks could accept `.csx` later. Both are optional.
 
-Exit: one way to restore and load code at runtime; existing configs migrate with one command; the web pages work as before.
+Exit: one way to restore and load code at runtime; old-format files are refused with a message; the web pages work as before.
 
 ### W3. Shared libraries in Sync and Build (L, ongoing)
 
@@ -250,9 +259,10 @@ Plan 10's rules apply: adapter first, delete second, one concern per PR, existin
 
 **DbDataSync** (order: what the console and W2 need first):
 
-1. `Config.*` replaces `Core/Config`'s YAML handling: strict parsing, `schemaVersion`, migrations. W2 and W8 need it for their breaking-change migrations.
-2. `Secrets.*` replaces `ClrKernel.Core.Secrets`, on the encrypted store of W13. Existing secrets are imported once from the OS
-   keychain (the one place ClrKernel is still read), then ClrKernel is removed.
+1. `Config.*` replaces `Core/Config`'s YAML handling: strict parsing and a required `schemaVersion`; a file without one, or with an older
+   one, is refused (clean break). The migration framework stays available in `Config` for later versions, but none is written now.
+2. `Secrets.*` replaces `ClrKernel.Core.Secrets`, on the encrypted store of W13. Nothing is imported from the OS keychain (clean break);
+   ClrKernel is removed.
 3. `Dialect.*` replaces `Core/Sql` (quoting, lexer, type map). Sync's `IDriver` stays: it is the replication contract, not the connection.
 4. `Connections.*` composes every driver's connection string. Failures go through the shared classifier. Sync's DuckDB source driver
    opens through `Connections.DuckDb`, which gives it the read-only sandbox.
@@ -262,8 +272,8 @@ Plan 10's rules apply: adapter first, delete second, one concern per PR, existin
 **DbDataBuild** (nothing adopted yet):
 
 1. `Dialect.*` behind `DialectProfile` (keep Build's matrix and rules; the shared package gets Build's fixtures as conformance cases).
-2. `Connections.*` replaces `Logins`, `OdbcLogin`, `FlightSqlLogin`, `DriverFailure` (the login convention `DBDATA_<APP>_<CONN>_<READ|WRITE>`
-   already accepts `DBDATABUILD_*`). Build's rule "driver messages are never echoed" becomes a shared-classifier test.
+2. `Connections.*` replaces `Logins`, `OdbcLogin`, `FlightSqlLogin`, `DriverFailure`. Logins come from `DBDATA_BUILD_<CONN>_<READ|WRITE>`;
+   the old `DBDATABUILD_*` names are dropped, here and in the shared resolver (clean break). Build's rule "driver messages are never echoed" becomes a shared-classifier test.
 3. `Metadata.*` replaces `CatalogReader`, `SourceCatalogReader`, `OdbcCatalogClient`. `ServerFacts` becomes the shared record (plan 04's open question).
 4. `Transfer.*` replaces `Transfer.cs`, `MutationGate` and `StatementLog`. The shared `WriteGate` was modelled on Build's gate, so
    `GateInvariantTests` moves to the shared package and runs against both.
@@ -301,7 +311,7 @@ System.CommandLine everywhere (Build already uses it). The result is JSON output
 | `server` | `run`, `pair`, `unpair`, `consoles` (plus product verbs) | the long-running process in the foreground (what the OS service runs), and its pairings with consoles (W12) |
 | `service` | `install`, `uninstall`, `status`, `start`, `stop`, `restart`, `doctor` | registration of `server run` with Windows or systemd |
 | `cert` | `show`, `ensure`, `check`, `renew` (plus product verbs) | the server's TLS certificate |
-| `config` | `check`, `show`, `get`, `set`, `migrate`, `schema` | the server's own configuration |
+| `config` | `check`, `show`, `get`, `set`, `schema` | the server's own configuration (no `migrate`: clean break) |
 | `secret` | `protect`, `hash`, `check` | secret references and protected values |
 | `user` | `invite`, `list`, `role` | people who sign in: **`dbdatakit` only**, since users live in the console (W8) |
 | `health` | `check` | is a running server answering (what container health checks run) |
@@ -370,8 +380,8 @@ Two steps, each with its own exit:
 1. **Extraction.** Sync's UI is built from the workspace and still served by Sync's server, with no visible change (Playwright suite and
    screenshots unchanged); `@dbdatakit/shell` and `@dbdatakit/admin` import nothing from `@dbdatakit/sync`.
 2. **The console host.** `dbdatakit server run` serves the workspace build; Sync's pages work through the console against a registered
-   `dbdatasync server`, which then stops serving the SPA. Sync's users, passkeys and invites move from Sync's state database to the
-   console's (a migration). The same Playwright suite passes against the console.
+   `dbdatasync server`, which then stops serving the SPA. Users start fresh in the console (first-run invite); nothing is copied from
+   Sync's state database (clean break). The same Playwright suite passes against the console.
 
 ### W6. DbDataProxy management (M-L)
 
@@ -388,13 +398,13 @@ Today Proxy is configured by editing `appsettings.json` and running CLI verbs. I
 2. **Config moves to YAML in a git-tracked directory** (D2, which reverses plan 10's D2). Each data source becomes a `connection/1`
    definition with a `proxy:` extension (classifier mode, limits, bitness, pass-through); users are a separate file; secrets are references.
    Writes go through `Config.Yaml`'s comment-preserving editor and are applied by hot reload (Proxy already reads options through
-   `IOptionsMonitor`). A config migration converts an existing `appsettings.json`.
+   `IOptionsMonitor`). An existing `appsettings.json` is refused with a message (clean break), and Proxy's JSON config migrations are deleted.
 3. **Proxy module `@dbdatakit/proxy`** in the console (which can manage several proxies): Overview (health, version, sessions, throughput); Data sources
    (catalog-backed editor, classifier mode, limits, test); Users and auth; TLS (the shared certificate page); Activity (queries and
    failures); Config (diff and history); Service (doctor).
 
 Exit: everything in today's `appsettings.example.json` can be edited from the console with validation; adding or changing a data source or
-user needs no restart; the upgrade from the last JSON release is tested in CI.
+user needs no restart; a server that finds an old `appsettings.json` refuses to start and says why (test).
 
 ### W7. DbDataBuild server and management (M-L)
 
@@ -449,7 +459,7 @@ Each product server keeps its own definitions (it must run without the console a
   console/     (dbdatakit)      instances.yaml: the registered servers; users are in the console's state database
 ```
 
-Sync's host settings move from `appsettings.json` to `server.yaml` with the rest (a migration, D2).
+Sync's host settings move from `appsettings.json` to `server.yaml` with the rest (D2); an old `appsettings.json` is refused (clean break).
 
 Exit: the same connection, secret and config code in every product and the console; one user list, in the console; the console shows the
 connections of all registered servers.
@@ -625,8 +635,7 @@ lower ceiling and is refused above it; unpairing one console leaves the other wo
 
 ### W13. The shared secret store (M)
 
-Decided (D10): finish the shared secrets code and **do not use ClrKernel** (it is read once, to import Sync's existing secrets, then
-removed). Secrets are stored **encrypted in a YAML file**; the encryption key is protected by **DPAPI on Windows** and by a
+Decided (D10): finish the shared secrets code and **do not use ClrKernel** at all; nothing is imported from it (clean break). Secrets are stored **encrypted in a YAML file**; the encryption key is protected by **DPAPI on Windows** and by a
 **permission-restricted file** on Linux and macOS. It works the same for a service, a CLI and a container, and needs no OS keychain (which
 is per user and does not suit services).
 
@@ -646,7 +655,7 @@ that works on every platform, key management, and the commands.
 | Key at rest, Linux and macOS | the raw key in a 0600 file owned by the service user, in a 0700 directory; **the server refuses to start if the key file or directory is readable by anyone else** (as ssh does with keys) |
 | Key from outside | `secrets.keyFile` in `server.yaml` (or `DBDATA_SECRETS_KEY_FILE`) points at a key provided by the platform: a Docker or Kubernetes secret, a systemd `LoadCredentialEncrypted` credential. Images never contain a key; a container without one generates it on first start only into a mounted volume, and says so |
 | Writes | atomic (write a temporary file, then rename), the file restricted before content is written (`AclHelper.WriteAllBytesRestricted`) |
-| Reading | `EncryptedFileSecretStore : ISecretStore, ISecretProvider` answers `secret:` references in the resolver chain, ahead of `env:`/`file:`; inline `dpapi:` values (Proxy's today) still resolve |
+| Reading | `EncryptedFileSecretStore : ISecretStore, ISecretProvider` answers `secret:` references in the resolver chain, ahead of `env:`/`file:`; inline `dpapi:` values (`secret protect`, Windows) resolve too. `LegacyEnvProvider` (the old `DBDATABUILD_*` and `DBDATASYNC_SECRET_*` names) is deleted |
 | Rotation | `secret rotate-key`: a new key, every value re-encrypted, the old key deleted after the last value is rewritten; interrupted rotation resumes |
 | Moving a server | `secret export --to <file>` / `secret import <file>`: values re-encrypted under a passphrase (PBKDF2-SHA256, 600,000 iterations, the existing hasher's primitive). The key file itself is never copied by a command |
 | Commands | the shared `secret` noun (W4): `set <name>` (value from a prompt or stdin, never an argument), `list` (names and dates, never values), `delete`, `check` (every reference in the config resolves), `rotate-key`, `export`, `import`, `protect` (an inline value for a single field, where a store is not wanted). There is no command that prints a value |
@@ -654,7 +663,7 @@ that works on every platform, key management, and the commands.
 | Backup | the documentation says plainly: back up the key file (or the platform's key) separately from `secrets.yaml`; either one alone is useless |
 
 Exit: the store works on Windows, Linux and macOS (tests on each CI runner), all three products and the console resolve `secret:` through
-it, Sync's existing secrets are imported, and `ClrKernel.Core.Secrets` and the `Secrets.Keyring` stub are gone.
+it, and `ClrKernel.Core.Secrets`, `LegacyEnvProvider` and the `Secrets.Keyring` stub are gone.
 
 ## 5. Phases
 
@@ -709,7 +718,7 @@ decision any more.
 | # | Decision | Recommendation |
 | --- | --- | --- |
 | D1 | Console topology | **decided: the console and the products are separate.** Each product is its own services (a server with a management API and no UI); the dbdatakit console is the one shared UI and manages registered servers through their management APIs. A standalone install is a product plus the console |
-| D2 | Config format | **agreed: one YAML format for every product** (Proxy moves off JSON, reversing plan 10 D2, with a migration from `appsettings.json`) |
+| D2 | Config format | **agreed: one YAML format for every product** (Proxy moves off JSON, reversing plan 10 D2; no migration from `appsettings.json`, clean break) |
 | D3 | Executables and names | **decided:** each product keeps its own CLI; `dbdatakit` is the console's CLI only; lower-case executables; Build's `<noun> <verb>` everywhere, old forms removed; Build's long-running process is the `server` noun (W4b) |
 | D4 | Release model | **decided: each product stays a standalone install option**; the dbdatakit suite release (console image, suite MSI) comes from the same workflow and commit |
 | D5 | Updater | **agreed: shelved** until the products have settled and unified; Docker images and the MSI are the distribution. Nothing is deleted |
@@ -717,7 +726,7 @@ decision any more.
 | D7 | Keep DuckDB 1.x after 2.0 is the default | **decided: no.** 2.0 only; code that exists only for 1.x plans is deleted |
 | D8 | Build's open 2.0 semantics | **decided:** refusal with a named diagnostic for anything not reproduced exactly (ANY/ALL, decimal quantiles if the targets cannot match, the functions that still fold); `%` and `//` by zero follow 2.0 and the targets (they raise), so the `NULLIF` goes (W1 step 5) |
 | D9 | dotnet-script embedded (`Dotnet.Script.Core`) vs the `dotnet script` CLI as a subprocess | **embedded**, if the W2 spike passes (the spike decides) |
-| D10 | Secret store | **decided:** finish the shared code, no ClrKernel (read once to import Sync's secrets); encrypted values in a YAML file, the key protected by DPAPI on Windows and a permission-restricted file elsewhere (W13) |
+| D10 | Secret store | **decided:** finish the shared code, no ClrKernel and nothing imported from it; encrypted values in a YAML file, the key protected by DPAPI on Windows and a permission-restricted file elsewhere (W13) |
 | D11 | Suite binaries self-contained vs framework-dependent | **decided: self-contained**, with the .NET SDK required only for library, driver and script features (as today). Sync needs one change first: `ProcessSupervisor` starts its workers with `dotnet exec`, which needs the shared runtime; it must start them as their own executables |
 | D12 | How the Build server runs commands | **decided (accepted):** **child processes**: one per command for runs and deploys, and one long-lived child per authoring workspace (W11) so feedback is fast; isolation from the native library either way |
 | D13 | Where a Build schedule lives: only in the project (committed with the refresh plan), or also added by an operator at the server | **decided (accepted):** **project first** (fits Build's "everything is a file" rule and its review of plans); an operator can pause or run now from the console, but adding a schedule is a commit. Revisit if operators need schedules a project author should not own |
@@ -748,7 +757,7 @@ artifacts can be reconsidered once the console is in use.
 | Sync is large (about 68,000 lines of product code) and adoption touches its core | strangler pattern from plan 10: adapter first, existing tests unchanged, one concern per PR |
 | The console work turns into a UI rewrite | W5 is extraction only, with Sync's Playwright suite and screenshots as the gate; new screens come after it |
 | A management API weakens Proxy's security | separate listener, HTTPS with a pinned certificate, signed console tokens checked on every call, roles enforced on the server (W12), no shared code on the query path, the same failure classification and redaction |
-| Config migrations break installs (Sync scripts, Proxy JSON to YAML) | `Config` migrations write `.bak`; golden migration pairs (`Config.Testing`); an upgrade test from the last release of each product in CI |
+| The clean break strands existing installs | release notes say an install is set up again; every server and CLI refuses old-format files with a message naming them (tested per file kind), so nothing half-works |
 | Windows-only paths (service, ACLs, AD CS, the x86 worker) cannot be tested on Linux | the Windows CI jobs and `service-e2e.ps1` stay required for any PR that touches them |
 | A schedule runs twice (CLI by hand and the server, or two servers hosting one project) | the per-load lock and `on_busy` already cover a manual run; the work queue's lease and run lock (W10) cover two servers; a project is hosted by one server at a time |
 | A standalone install now runs two processes (the product's server and the console) | the MSI installs and registers both as one feature set; the compose file pairs the images; the product keeps working when the console is stopped |
