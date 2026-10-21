@@ -57,7 +57,7 @@ Inside a milestone the slices of different workstreams run in parallel; the **Ne
 
 | # | Slice | Needs | Size | Done when |
 | --- | --- | --- | --- | --- |
-| F01 | Root `global.json` and a root `Directory.Build.props` (net10.0, nullable, LangVersion) that each product's props imports | | S | every product and `DbDataKit/` build and test exactly as before; CI green |
+| F01 | Root `global.json` and a root `Directory.Build.props` (net10.0, nullable, LangVersion) that each product's props imports | | S | every product and `DbDataKit/` build and test exactly as before; CI green. **Status: done** (branch `claude/monorepo-standardization-plan-2sq3l0`). The root `global.json` pins the SDK only: the SDK reads just the nearest `global.json`, and Sync and Build still test on VSTest (xunit v2), so `DbDataKit/` and `DbDataProxy/` keep their own copy that adds the Microsoft Testing Platform runner. Build's own `global.json` is gone. The two files merge when Sync and Build move to xunit v3 (F10/F11 decide) |
 | F02 | Root `Directory.Packages.props`; `DbDataKit/` and Proxy pins move into it (union) | F01 | S | `dotnet list package` shows the same versions as before for both; CI green |
 | F03 | Build onto central package management through the root file | F02 | S | Build CI green; no `Version=` left in Build `.csproj` files |
 | F04 | Sync onto central package management, same versions as today | F02 | S | Sync CI green; no `Version=` left in Sync `.csproj` files |

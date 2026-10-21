@@ -12,6 +12,7 @@ RUN npm run build
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 # The shared libraries sit next to the product, as in the repository: DbDataSync's Directory.Build.props finds them at ../DbDataKit.
 WORKDIR /src
+COPY Directory.Build.props global.json ./
 COPY DbDataKit/Directory.Build.props DbDataKit/Directory.Packages.props DbDataKit/global.json DbDataKit/
 COPY DbDataKit/src/ DbDataKit/src/
 WORKDIR /src/DbDataSync

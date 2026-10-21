@@ -5,6 +5,7 @@
 # Windows-only, so "Bitness": "x86" data sources are not available in containers.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
+COPY Directory.Build.props global.json ./
 COPY DbDataKit DbDataKit
 COPY DbDataProxy DbDataProxy
 WORKDIR /src/DbDataProxy

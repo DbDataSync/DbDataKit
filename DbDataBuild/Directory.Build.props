@@ -1,9 +1,9 @@
 <Project>
+  <!-- the settings shared by every product -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <!-- a single-file publish is a deliverable: code that breaks inside one (Assembly.Location, for example) fails the build -->
     <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
