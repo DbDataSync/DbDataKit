@@ -11,5 +11,9 @@
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- a database written by the DuckDB 1.5.6 engine (see fixtures/README.md) -->
+    <None Include="fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
   <Import Project="..\..\build\DuckDb.Native.targets" />
 </Project>

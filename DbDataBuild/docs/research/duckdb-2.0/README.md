@@ -172,3 +172,36 @@ The calls are made through DuckDB.NET.Bindings (`NativeMethods.ScalarFunction`, 
 **How to see it.** `scripts/test-duckdb-preview.sh`, then `dotnet test tests/DbDataBuild.Tests.Unit --filter ClockOverridesTests`: `Without_the_replacements_a_folding_DuckDB_freezes_the_day_and_with_them_it_does_not` shows the constant. Against the engines: `DBDATABUILD_DUCKDB_CLOCK_OVERRIDES=never` on the preview makes `ClockConformanceTests` fail with `CAST('2026-10-15' AS DATE)` in the rendered text; with the override it passes on SQL Server 2022 and PostgreSQL 17.
 
 **Verified** (see entry 174 for the numbers): unit and conformance on 1.5.6 (nothing changed there but the new tests); unit, quick and apply on `v2.0.0-alpha48256`. **Not verified**: Windows and macOS library names (the bindings resolve them, untested), Fabric (never run), DuckDB.NET on 2.0 (no build).
+
+## Storage format and the places a product opens DuckDB (K03, 2026-10-21)
+
+Plan 13 asked, before the first product moves to 2.0.0, what 2.0 does to a database file that 1.x wrote, and which products open DuckDB
+files read-write. The tests are `DbDataKit/tests/DbDataKit.DuckDb.Native.Tests/StorageFormatTests.cs`, on a file the 1.5.6 engine wrote
+(`fixtures/duckdb-1.5.6.duckdb`: a table with a primary key, decimal, date and list columns, and a view).
+
+What the 2.0.0 engine does:
+
+| Case | Result |
+| --- | --- |
+| Open a 1.5.6 file with `access_mode=READ_ONLY`, read tables, a view and a list column | works; the file's bytes and modification time are unchanged and no `.wal` appears |
+| Open it read-write and only read | works; bytes unchanged |
+| Open it read-write and write (a new table, an insert) | works; the header still says storage version 64 and `v1.5.6`, and 1.5.6 still opens the file and reads its rows (checked by hand with 1.5.6 read-only) |
+| Create a **new** database | storage version 69, header `v2.0.0`; 1.5.6 refuses it: `Trying to read a database file with version number 69, but we can only read versions between 64 and 68` |
+
+So 2.0 does not convert an existing file by opening it or by writing to it. A file is in the 2.0 format only if 2.0 created it (or if a user asks
+for it explicitly, which no product does; not tested: `ATTACH ... (STORAGE_VERSION ...)` and `EXPORT`/`IMPORT DATABASE`).
+
+Every place the products open DuckDB:
+
+| Product | Where | Opens | Writes a user's file? | Consequence |
+| --- | --- | --- | --- | --- |
+| DbDataKit | `Connections.DuckDb` `DuckDbProvider` (the sandbox recipe) | `access_mode=READ_ONLY` plus a locked configuration whenever the context is read-only; a read-write source opens its file as given | only for a source configured read-write (Proxy `AllowWrites`) | an existing file keeps its version; a file the proxy creates is 2.0 and unreadable by 1.x. Release note for Proxy |
+| DbDataKit | `Connections` `OdbcComposer`, DuckDB ODBC profile | `access_mode=READ_ONLY` | no | none |
+| DbDataKit | `Transfer.Conformance` | in-memory | no | none |
+| DbDataSync | `Drivers.DuckDb` `DuckDbDriver` | the configured address; read-write unless the connection string sets `access_mode` | yes: a DuckDB target is written by design | an existing target keeps its version; a target Sync creates is 2.0. Release note for Sync: DuckDB targets created from now on need a 2.0 reader |
+| DbDataSync | `Verification`, `Scripting` (segmenting) | in-memory | no | none |
+| DbDataBuild | `Execution` `Logins` (DuckDB origin) | `access_mode=READ_ONLY` | no | none |
+| DbDataBuild | `Sample` `SeedRun.WriteFile` | creates a fresh file at a path the command is given, deleting what was there | a generated file, not a user's | none (it was always a new file) |
+| DbDataBuild | `Targets.DuckDb`, `Sample`, `Models` | in-memory | no | none |
+
+No read-write open of an existing user file converts it. The two release notes above are the whole consequence.
