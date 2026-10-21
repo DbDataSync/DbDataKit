@@ -72,7 +72,12 @@ public sealed class ObjectSchema : TypeSchema
 
 public static class SchemaModel
 {
+    // Only finished schemas are in Cache, so the lock-free read below can never see one that is still being filled in.
     private static readonly ConcurrentDictionary<Type, TypeSchema> Cache = new();
+
+    // Schemas under construction, found again by a type that refers back to itself. Guarded by lock (Cache).
+    private static readonly Dictionary<Type, TypeSchema> Building = [];
+    private static int _depth;
 
     public static ObjectSchema ForObject(Type type) => (ObjectSchema)For(type);
     public static ObjectSchema ForObject<T>() => ForObject(typeof(T));
@@ -83,28 +88,51 @@ public static class SchemaModel
         lock (Cache)
         {
             if (Cache.TryGetValue(type, out hit)) return hit;
-            return Build(type);
+            if (Building.TryGetValue(type, out hit)) return hit;
+            _depth++;
+            try
+            {
+                var built = Build(type);
+                // Publish only when the outermost type, and so everything it refers to, is complete.
+                if (_depth == 1) Publish();
+                return built;
+            }
+            catch
+            {
+                if (_depth == 1) Building.Clear();
+                throw;
+            }
+            finally
+            {
+                _depth--;
+            }
         }
+    }
+
+    private static void Publish()
+    {
+        foreach (var (type, schema) in Building) Cache[type] = schema;
+        Building.Clear();
     }
 
     private static TypeSchema Build(Type type)
     {
         var under = Nullable.GetUnderlyingType(type);
         if (IsScalar(under ?? type))
-            return Cache[type] = new ScalarSchema { ClrType = type, Underlying = under ?? type, IsNullable = under != null || !(under ?? type).IsValueType };
+            return Building[type] = new ScalarSchema { ClrType = type, Underlying = under ?? type, IsNullable = under != null || !(under ?? type).IsValueType };
 
         if (TryDictionary(type, out var valueType))
-            return Cache[type] = new MapSchema { ClrType = type, Value = For(valueType) };
+            return Building[type] = new MapSchema { ClrType = type, Value = For(valueType) };
 
         if (TryList(type, out var itemType))
-            return Cache[type] = new ListSchema { ClrType = type, Item = For(itemType) };
+            return Building[type] = new ListSchema { ClrType = type, Item = For(itemType) };
 
         var union = type.GetCustomAttribute<ConfigUnionAttribute>(inherit: false);
         if (union != null)
         {
             var cases = new Dictionary<string, ObjectSchema>(StringComparer.Ordinal);
             var schema = new UnionSchema { ClrType = type, Discriminator = union.Discriminator, Cases = cases };
-            Cache[type] = schema;
+            Building[type] = schema;
             foreach (var c in type.GetCustomAttributes<ConfigUnionCaseAttribute>(inherit: false))
                 cases[c.Name] = (ObjectSchema)For(c.Type);
             return schema;
@@ -126,7 +154,7 @@ public static class SchemaModel
             VersionKey = attr?.VersionKey ?? "schemaVersion", UnknownKeys = attr?.UnknownKeys ?? UnknownKeyPolicy.Strict,
             Description = attr?.Description, Extra = extra,
         };
-        Cache[type] = obj;
+        Building[type] = obj;
         foreach (var p in props)
         {
             if (p == extra || !p.CanWrite || p.SetMethod is null || !p.SetMethod.IsPublic) continue;
