@@ -12,7 +12,13 @@ Status: **proposed** (2026-10-21), **revised twice the same day after the owner'
   console with only that product registered;
 - Build gets a `server` noun for a multi-project server (W7), and **project authoring in the web interface** (W11);
 - console and servers may run on different machines; **the console always calls the server, never the reverse**, and **each server can
-  be paired with several consoles** (W12).
+  be paired with several consoles** (W12);
+- **DuckDB 2.0.0 now**, using the released engine binary with the DuckDB.NET packages that do not bundle an engine, instead of waiting for
+  a DuckDB.NET 2.0 (W1, D6);
+- **Proxy drops DuckDB** as a data source: it was only a test backend for early development (W6);
+- **secrets: finish the shared code and drop ClrKernel**: encrypted values in a YAML file, the key protected by DPAPI on Windows and by a
+  permission-restricted file elsewhere (W13, D10);
+- every other recommendation in section 7 is accepted.
 
 Scope: everything needed to turn three products that share a repository into one suite with one
 management console, one set of definitions and one release, while removing as much duplicated code as possible. Breaking changes are
@@ -92,13 +98,13 @@ same commit, a skew like this becomes a runtime conflict as soon as Sync adopts 
 
 - DuckDB **2.0.0 LTS was released today** (2026-10-21; supported until at least October 2027). It brings a **new storage format that
   DuckDB before 2.0 cannot read**.
-- **DuckDB.NET has no 2.0 release yet** (latest `DuckDB.NET.Data.Full` is 1.5.6). Build's experiments show DuckDB.NET 1.5.6 runs unchanged
+- **DuckDB.NET has no 2.0 release yet** (latest `DuckDB.NET.Data.Full` is 1.5.6.1). Build's experiments show DuckDB.NET 1.5.6 runs unchanged
   against the 2.0 native library, because the old C API is still there.
 - Build has done the hard part against the alphas (entries 173 and 174: the lowerer reads 2.0's own plans; the clock functions that 2.0
   folds into constants are kept as calls). Still open (OPEN-ITEMS H): ANY/ALL in 2.0's CASE form is refused rather than translated;
   `%` and `//` by zero raise on 2.0 where the lowering writes NULL; decimal `median`/`quantile_cont` differ in the last digit;
   `current_schemas`, `current_setting`, `getvariable` and `getenv` still fold; Windows and macOS were not run; the preview CI job is on hold.
-- Sync and Proxy have not been tested on 2.0. Proxy's DuckDB sandbox (`Connections.DuckDb`: read-only, no external access, locked
+- Sync has not been tested on 2.0. (Proxy's DuckDB data source is being removed, W6.) The shared DuckDB sandbox (`Connections.DuckDb`: read-only, no external access, locked
   configuration, allowed directories) depends on setting names and behaviour that 2.0 may have changed.
 
 ### 2.5 DbDataSync's libraries, drivers and scripts
@@ -169,24 +175,39 @@ Sizes: S is days, M is one to three weeks, L is longer. The phases in section 5 
 
 Exit: `dotnet build DbDataKit.slnx` with warnings as errors; one version per package across the repository; all CI green.
 
-### W1. Finish DuckDB 2.0 (M)
+### W1. DuckDB 2.0.0 now (M)
 
-1. **Run the suites against 2.0.0 final now**, using the native-library swap. Generalize `DbDataBuild/scripts/test-duckdb-preview.sh` into
-   a repository-level `scripts/duckdb-native-swap.sh` that runs any test project against a pinned, hash-checked `libduckdb`. Run Build
-   unit and conformance tests, `DbDataKit.Connections.DuckDb.Tests` (the sandbox recipe), Proxy's DuckDB tests, and Sync's
-   `Drivers.DuckDb`, `Verification` and `Scripting` tests. Record the results in the research README.
-2. **Check the storage format.** List every place a product creates or opens a DuckDB file. Proxy and Sync open user files read-only:
-   confirm that 2.0 opens a 1.x file read-only without upgrading it, and that a read-write open (Sync's scripting and verification, any
-   scratch files) does not silently convert a user's file. Document that files written by the suite are 2.0-only.
-3. **Close Build's open 2.0 items** (decision D8): ANY/ALL (translate or keep the refusal), `%`/`//` by zero (match 2.0's error or keep
-   writing NULL), decimal quantiles (tolerance or refusal), and the functions that still fold (refuse them with a named diagnostic).
-4. **Package.** When DuckDB.NET ships a 2.0 build, bump the one central pin (W0). If it has not shipped by the cut-off in D6, ship
-   DuckDB.NET 1.5.6 managed with the 2.0.0 native library, fetched pinned and hash-checked the way `polyglot.pin` works. This is an
-   interim step only.
-5. **Make 2.0 the default.** Regenerate Build's committed lowered artifacts and template goldens (their headers carry the DuckDB version),
-   turn the preview job into the normal DuckDB job, run Windows (the Wine script and the Windows CI jobs). Drop the 1.x path per D7.
+Decided (D6, D7): move to **DuckDB 2.0.0 now**, with the **released engine binary** and the DuckDB.NET packages that carry no engine
+(`DuckDB.NET.Data` and `DuckDB.NET.Bindings`, 1.5.6.x), instead of `DuckDB.NET.Data.Full`, which bundles a 1.5 engine. Build's experiments
+show DuckDB.NET 1.5.6 runs unchanged on the 2.0 library, because 2.0 keeps the old C API. 1.x is not kept.
 
-Exit: one DuckDB pin in the repository, every suite green on 2.0 on Linux and Windows, and no 1.x-only code left (except what D7 keeps).
+1. **One pinned engine.** `duckdb.pin` at the repository root names the 2.0.0 release, the download URL of `libduckdb` for each platform
+   (linux-x64, linux-arm64, win-x64, osx-arm64, osx-x64), and the sha256 of each archive and of the library inside it. `scripts/fetch-duckdb.sh`
+   and `.ps1` download and check them, the way `DbDataBuild/scripts/polyglot.pin` works. Changing the engine is a one-file change.
+2. **Packaging.** A shared MSBuild file (`DbDataKit/build/DuckDb.Native.targets`) puts the library at `runtimes/<rid>/native/` in build,
+   test and publish output, so DuckDB.NET's loader finds it, and fails the build with the fetch command when it is missing. Build and Proxy
+   publish per platform and bundle it. **Sync** never bundled DuckDB: it installs the `duckdb` library from NuGet the first time its server
+   starts (`KnownLibraries`). That install now takes `DuckDB.NET.Data` from NuGet and the engine for the running platform from the pin,
+   hash-checked; an offline install points it at a local copy. Docker images and MSIs carry the engine.
+3. **Switch, product by product.** The shared packages first (`Connections.DuckDb`, `Metadata`, `Transfer.Conformance`, with the sandbox
+   recipe: no external access, locked configuration, allowed directories, read-only), then Sync, then Build. Each switch runs that
+   product's whole suite on 2.0.0, with any setting names 2.0 changed fixed in the same slice. **Proxy does not switch: its DuckDB data
+   source is removed** (W6), so Proxy carries no DuckDB engine at all.
+4. **Storage format.** 2.0 writes a format that 1.x cannot read. Before the first switch: a test that opens a 1.x file read-only and checks
+   that its bytes are unchanged, and an audit of every read-write open in the products, so no user file is converted silently.
+   Extensions (Sync's S3 and httpfs sources) install for the engine's version; a test covers one.
+5. **Build's open 2.0 items, with the accepted defaults (D8):**
+   - ANY/ALL in 2.0's CASE form: refused with a named diagnostic (as today).
+   - `%` and `//` by zero: 2.0 raises, and so do SQL Server and PostgreSQL, so the lowering writes the plain operator and drops the
+     `NULLIF` it wrote to copy 1.x's NULL. Exact, and simpler.
+   - decimal `median`/`quantile_cont`: match 2.0's interpolation if the targets can, otherwise refuse over DECIMAL with a named diagnostic.
+   - `current_schemas`, `current_setting`, `getvariable`, `getenv` (still folded by 2.0): refused with a named diagnostic.
+6. **2.0 only.** Regenerate Build's committed lowered artifacts and template goldens (their headers carry the DuckDB version), make the
+   2.0 runs the normal CI jobs on Linux and Windows, retire `scripts/test-duckdb-preview.sh`, and delete code that existed only for 1.x plans.
+7. **When DuckDB.NET 2.x ships:** move to its packages and decide then whether to keep the pin (control over the engine version) or take
+   the engine its `.Full` package bundles.
+
+Exit: one DuckDB engine (2.0.0) in every product, from one pin; every suite green on it on Linux and Windows; no 1.x-only code left.
 
 ### W2. Libraries, drivers and scripts on dotnet-script (L)
 
@@ -230,9 +251,11 @@ Plan 10's rules apply: adapter first, delete second, one concern per PR, existin
 **DbDataSync** (order: what the console and W2 need first):
 
 1. `Config.*` replaces `Core/Config`'s YAML handling: strict parsing, `schemaVersion`, migrations. W2 and W8 need it for their breaking-change migrations.
-2. `Secrets.*` replaces `ClrKernel.Core.Secrets`. This needs D10 (a real keyring backend or a wrapper behind `ISecretResolver`).
+2. `Secrets.*` replaces `ClrKernel.Core.Secrets`, on the encrypted store of W13. Existing secrets are imported once from the OS
+   keychain (the one place ClrKernel is still read), then ClrKernel is removed.
 3. `Dialect.*` replaces `Core/Sql` (quoting, lexer, type map). Sync's `IDriver` stays: it is the replication contract, not the connection.
-4. `Connections.*` composes every driver's connection string. Failures go through the shared classifier.
+4. `Connections.*` composes every driver's connection string. Failures go through the shared classifier. Sync's DuckDB source driver
+   opens through `Connections.DuckDb`, which gives it the read-only sandbox (and gives that package its consumer after Proxy drops DuckDB).
 5. `Metadata.*` for catalog reads (the readers exist for SQL Server, Postgres, DuckDB, ODBC; MySQL and Oracle readers are added to the shared package).
 6. `Transfer.SqlServer` / `Transfer.Postgres` bulk writers and the strategy builders replace the hand-written staging paths, measured with the benchmark stub first.
 
@@ -251,7 +274,7 @@ becomes an end-to-end test of the suite's own client.
 
 **Unused shared packages:** each is adopted by the end of this workstream or deleted: `Transfer.*` (adopted above), `Update.*` (shelved, not deleted: W9),
 `Connections.Libraries` (folded into W2), `Connections.Descriptor` (Sync's descriptor reader moves onto it or it goes),
-`Connections.Postgres` (Sync and Build use it), `Dialect.Arrow` (Proxy's C7 benchmark decides), `Secrets.Keyring` (D10), `Secrets.Cli` (W4).
+`Connections.Postgres` (Sync and Build use it), `Dialect.Arrow` (Proxy's C7 benchmark decides), `Secrets.Keyring` (deleted: W13), `Secrets.Cli` (W4, W13).
 
 Exit: no product has its own dialect, connection composer, catalog reader, secret resolver, or YAML loader; no shared package is unused.
 
@@ -353,6 +376,13 @@ Two steps, each with its own exit:
 ### W6. DbDataProxy management (M-L)
 
 Today Proxy is configured by editing `appsettings.json` and running CLI verbs. It has no runtime admin interface.
+
+0. **Drop the DuckDB data source** (owner decision: it was a test backend for early development, not a product feature). Breaking:
+   `Provider: duckdb` is refused at startup with a message saying it was removed. Proxy's tests used DuckDB as an in-process database
+   for the Flight protocol tests (auth, JWT, parameters, failure model, metadata goldens), so they move first: protocol tests that do
+   not care about the engine to a test-only ADO.NET provider in the test project, and type mapping, metadata goldens and the failure
+   model to SQL Server from `testenv/` (re-recorded goldens). The DuckDB sandbox tests are deleted from Proxy; the sandbox itself stays
+   in `Connections.DuckDb`, tested there, for Sync's DuckDB sources (W3).
 
 1. **Management API** on a separate listener, never the Flight port, secured as every product's is (W12): HTTPS, console tokens, the
    local CLI over a local channel. Never on the hot path. Endpoints: health, version and drain (plan 03's seams); effective config,
@@ -597,22 +627,55 @@ each server) and `DbDataKit.Hosting` (the local channel, pairing codes), so the 
 Exit: a console on another machine pairs with a server of each product and manages it; a second console pairs with the same server with a
 lower ceiling and is refused above it; unpairing one console leaves the other working; every change on the server names its user and console.
 
+### W13. The shared secret store (M)
+
+Decided (D10): finish the shared secrets code and **do not use ClrKernel** (it is read once, to import Sync's existing secrets, then
+removed). Secrets are stored **encrypted in a YAML file**; the encryption key is protected by **DPAPI on Windows** and by a
+**permission-restricted file** on Linux and macOS. It works the same for a service, a CLI and a container, and needs no OS keychain (which
+is per user and does not suit services).
+
+What exists in `DbDataKit/`: reference parsing (`secret:`, `env:`, `file:`, `dpapi:`), the resolver chain, `env:` and `file:` providers
+(including systemd's `$CREDENTIALS_DIRECTORY` and Docker's `/run/secrets`), the redactor, `SecretValue` (zeroed on dispose), the DPAPI
+protector and store (one file per secret, Windows only), `AclHelper` (Windows ACLs, Unix 0600/0700), the PBKDF2 hasher. Missing: a store
+that works on every platform, key management, and the commands.
+
+**Design**
+
+| | |
+| --- | --- |
+| Store | `<data>/secrets/secrets.yaml`: `name -> { v: 1, key: <key id>, value: <base64 nonce + ciphertext + tag> }`. Outside the git-tracked config directory, so no secret, even encrypted, is in the history. Config files hold only references (`secret:dbdata:proxy:datasource:erp:password`) |
+| Cipher | AES-256-GCM (.NET's `AesGcm`), a random 96-bit nonce per write, the secret's **name as associated data**, so a value copied to another name fails to decrypt |
+| Key | a random 256-bit data key with an id, in a key ring (`<data>/secrets/keys/<id>.key`) so rotation can keep the old key until every value is re-encrypted |
+| Key at rest, Windows | DPAPI, LocalMachine scope with per-product entropy, file ACL to the service account, SYSTEM and Administrators (`DpapiProtector`, `AclHelper`) |
+| Key at rest, Linux and macOS | the raw key in a 0600 file owned by the service user, in a 0700 directory; **the server refuses to start if the key file or directory is readable by anyone else** (as ssh does with keys) |
+| Key from outside | `secrets.keyFile` in `server.yaml` (or `DBDATA_SECRETS_KEY_FILE`) points at a key provided by the platform: a Docker or Kubernetes secret, a systemd `LoadCredentialEncrypted` credential. Images never contain a key; a container without one generates it on first start only into a mounted volume, and says so |
+| Writes | atomic (write a temporary file, then rename), the file restricted before content is written (`AclHelper.WriteAllBytesRestricted`) |
+| Reading | `EncryptedFileSecretStore : ISecretStore, ISecretProvider` answers `secret:` references in the resolver chain, ahead of `env:`/`file:`; inline `dpapi:` values (Proxy's today) still resolve |
+| Rotation | `secret rotate-key`: a new key, every value re-encrypted, the old key deleted after the last value is rewritten; interrupted rotation resumes |
+| Moving a server | `secret export --to <file>` / `secret import <file>`: values re-encrypted under a passphrase (PBKDF2-SHA256, 600,000 iterations, the existing hasher's primitive). The key file itself is never copied by a command |
+| Commands | the shared `secret` noun (W4): `set <name>` (value from a prompt or stdin, never an argument), `list` (names and dates, never values), `delete`, `check` (every reference in the config resolves), `rotate-key`, `export`, `import`, `protect` (an inline value for a single field, where a store is not wanted). There is no command that prints a value |
+| Console | a secret typed in the console is sent once to the server's management API, which stores it; the console keeps only the reference (W12) |
+| Backup | the documentation says plainly: back up the key file (or the platform's key) separately from `secrets.yaml`; either one alone is useless |
+
+Exit: the store works on Windows, Linux and macOS (tests on each CI runner), all three products and the console resolve `secret:` through
+it, Sync's existing secrets are imported, and `ClrKernel.Core.Secrets` and the `Secrets.Keyring` stub are gone.
+
 ## 5. Phases
 
 ```
 P0 foundations ─► P1 engines and loaders ─► P2 console ─────► P3 Proxy and Build ─► P4 authoring, release ─► P5 retire
-  W0                W1 (2.0 default)          W5 back-end      W6 Proxy API/module    W11 authoring            ui web,
-  W1.1-2 probes     W2 (dotnet-script)        W5 console host  W7 Build server/module W9 suite release         dead shared
-  W2.1 spike        W3 Config/Secrets/        (Sync's UI moves W10 Build schedules                             packages
-  decisions         Dialect in Sync, Build    into it)         W3 Metadata/Transfer
-                    W5 front-end extraction   W8, W4, W10 extract
+  W0                W2 (dotnet-script)        W5 back-end      W6 Proxy API/module    W11 authoring            ui web,
+  W1 (DuckDB 2.0.0) W3 Config/Secrets/        W5 console host  W7 Build server/module W9 suite release         dead shared
+  W13 secret store  Dialect in Sync, Build    (Sync's UI moves W10 Build schedules                             packages
+  W2.1 spike        W5 front-end extraction   into it)         W3 Metadata/Transfer
+                                              W8, W4, W10 extract
                                               W3 Connections
 ```
 
 | Phase | Contents | Exit |
 | --- | --- | --- |
-| **P0** (now) | W0; W1 steps 1-2 on 2.0.0 final; W2 spike; the open decisions in section 7 | one build setup and one version per package; a written 2.0 result for all three products; a spike report |
-| **P1** | W1 to the end (when DuckDB.NET 2.0 lands, or the interim per D6); W2; W3 Config, Secrets, Dialect in Sync and Dialect, Connections in Build; W5 front-end extraction | 2.0 is the default; one code loader; Sync's UI built from the workspace |
+| **P0** (now) | W0; **W1 (DuckDB 2.0.0, all of it)**; **W13 (the secret store)**; W2 spike | one build setup and one version per package; every product on DuckDB 2.0.0; the encrypted secret store on every platform; a spike report |
+| **P1** | W2; W3 Config, Secrets (Sync onto W13, ClrKernel removed), Dialect in Sync and Dialect, Connections in Build; W5 front-end extraction | one code loader; Sync's UI built from the workspace; no ClrKernel |
 | **P2** | W5 back-end and step 2 (the dbdatakit console host and `dbdatakit` CLI; Sync's UI and users move into it); W12 (pairing, tokens, roles, the local channel; needed before Sync's UI can leave its server); W8; W4 (contract and the renames of 4b); W10 steps 1, 2 and 4 (extract from Sync, Sync on the shared packages); W3 Connections in Sync and Metadata in both; `Connections.FlightSql` | Sync is managed through the console and its server serves no UI; one connection, secret, user and config implementation; the new command names; Sync's scheduler runs on `DbDataKit.Scheduling` |
 | **P3** | W6 (Proxy management API and console module); W7 (the Build server and console module); W10 steps 3, 5 and 6 (Build schedules, monitoring); W3 Transfer | all three products are managed from the console; Build refreshes run on schedule and are monitored |
 | **P4** | W11; W9 | Build projects are authored in the console; the first suite release, and product MSIs and images that include or pair with the console |
@@ -643,9 +706,9 @@ These are rough line counts of today's code that this plan replaces. They show w
 
 ## 7. Decisions
 
-Decided by the owner: D1, D2, D3, D4, D5, D14. Decided by a spike: D9 (W2 step 1). **Open, waiting on the owner:** D6 (the date), D7, D8
-(four semantics items), D10 (blocks Sync's secrets), D11, D12, D13, D15, D16, D17, D18, D19. The slices in
-[13a-suite-slices.md](13a-suite-slices.md) name the decision each one waits on; everything else can start.
+**All decisions are made** (2026-10-21): the owner accepted every recommendation below, chose to move to DuckDB 2.0.0 now (D6) and
+chose the secret store design (D10). D9 is settled by the W2 spike. Nothing in [13a-suite-slices.md](13a-suite-slices.md) waits on a
+decision any more.
 
 | # | Decision | Recommendation |
 | --- | --- | --- |
@@ -654,20 +717,20 @@ Decided by the owner: D1, D2, D3, D4, D5, D14. Decided by a spike: D9 (W2 step 1
 | D3 | Executables and names | **decided:** each product keeps its own CLI; `dbdatakit` is the console's CLI only; lower-case executables; Build's `<noun> <verb>` everywhere, old forms removed; Build's long-running process is the `server` noun (W4b) |
 | D4 | Release model | **decided: each product stays a standalone install option**; the dbdatakit suite release (console image, suite MSI) comes from the same workflow and commit |
 | D5 | Updater | **agreed: shelved** until the products have settled and unified; Docker images and the MSI are the distribution. Nothing is deleted |
-| D6 | DuckDB.NET 2.0 lag | wait until **2026-11-04** (two weeks from 2.0.0); after that, the interim build (DuckDB.NET 1.5.6 managed with the pinned 2.0.0 native library) |
-| D7 | Keep DuckDB 1.x after 2.0 is the default | **no** (breaking changes are allowed): 2.0 only, and delete 1.x-shape code that 2.0 no longer needs |
-| D8 | Build's open 2.0 semantics: ANY/ALL, `%`/`//` by zero, decimal quantiles, functions that still fold | owner's call, item by item; the default is refusal with a named diagnostic, which is Build's rule for anything it cannot reproduce exactly |
-| D9 | dotnet-script embedded (`Dotnet.Script.Core`) vs the `dotnet script` CLI as a subprocess | **embedded**, if the W2 spike passes |
-| D10 | Secret store backend: wrap `ClrKernel.Core.Secrets` vs implement `Secrets.Keyring` | decide in P0; it blocks Sync's Secrets adoption |
-| D11 | Suite binaries self-contained vs framework-dependent | **self-contained**, with the .NET SDK required only for library, driver and script features (as today) |
-| D12 | How the Build server runs commands | **child processes**: one per command for runs and deploys, and one long-lived child per authoring workspace (W11) so feedback is fast; isolation from the native library either way |
-| D13 | Where a Build schedule lives: only in the project (committed with the refresh plan), or also added by an operator at the server | **project first** (fits Build's "everything is a file" rule and its review of plans); an operator can pause or run now from the console, but adding a schedule is a commit. Revisit if operators need schedules a project author should not own |
+| D6 | DuckDB.NET 2.0 lag | **decided: do not wait.** DuckDB 2.0.0 now: the released engine, pinned, with DuckDB.NET's packages that carry no engine (W1) |
+| D7 | Keep DuckDB 1.x after 2.0 is the default | **decided: no.** 2.0 only; code that exists only for 1.x plans is deleted |
+| D8 | Build's open 2.0 semantics | **decided:** refusal with a named diagnostic for anything not reproduced exactly (ANY/ALL, decimal quantiles if the targets cannot match, the functions that still fold); `%` and `//` by zero follow 2.0 and the targets (they raise), so the `NULLIF` goes (W1 step 5) |
+| D9 | dotnet-script embedded (`Dotnet.Script.Core`) vs the `dotnet script` CLI as a subprocess | **embedded**, if the W2 spike passes (the spike decides) |
+| D10 | Secret store | **decided:** finish the shared code, no ClrKernel (read once to import Sync's secrets); encrypted values in a YAML file, the key protected by DPAPI on Windows and a permission-restricted file elsewhere (W13) |
+| D11 | Suite binaries self-contained vs framework-dependent | **decided: self-contained**, with the .NET SDK required only for library, driver and script features (as today). Sync needs one change first: `ProcessSupervisor` starts its workers with `dotnet exec`, which needs the shared runtime; it must start them as their own executables |
+| D12 | How the Build server runs commands | **decided (accepted):** **child processes**: one per command for runs and deploys, and one long-lived child per authoring workspace (W11) so feedback is fast; isolation from the native library either way |
+| D13 | Where a Build schedule lives: only in the project (committed with the refresh plan), or also added by an operator at the server | **decided (accepted):** **project first** (fits Build's "everything is a file" rule and its review of plans); an operator can pause or run now from the console, but adding a schedule is a commit. Revisit if operators need schedules a project author should not own |
 | D14 | How product servers trust consoles | **decided:** the console calls the server, never the reverse; a server can be paired with several consoles, each with its own key and role ceiling; short-lived signed tokens per call; the server enforces roles; the local CLI over a named pipe or Unix socket (W12) |
-| D15 | Where authoring merges | push to the project's git remote and open a pull request when a remote is configured; otherwise merge into the deploy branch inside the Build server, recorded with the author's identity |
-| D16 | How the browser reaches product servers | **the console's back-end relays every call** (the browser talks only to the console): servers stay off the browser's network, pinned self-signed certificates work, no CORS, and live updates (Sync's SignalR run hub) are relayed by the console. The other option, browsers calling servers directly with tokens, is rejected |
-| D17 | Version compatibility between a console and its servers | products release on their own (D4), so a console and a server can differ in version. The management API carries its own integer version, reported at pairing and on every call; a console supports its own API version and the one before, and shows a clear "upgrade this server / this console" message otherwise |
-| D18 | A state store for Proxy | Proxy has none today; it needs one for its audit log, notifications and per-console read state. **SQLite through `DbDataKit.State`**, as Build's server |
-| D19 | Where a Build server's projects come from | **both**: a local path (as the CLI works today) or a git remote and branch that the server clones into its data directory and pulls before each scheduled run |
+| D15 | Where authoring merges | **decided (accepted):** push to the project's git remote and open a pull request when a remote is configured; otherwise merge into the deploy branch inside the Build server, recorded with the author's identity |
+| D16 | How the browser reaches product servers | **decided (accepted):** **the console's back-end relays every call** (the browser talks only to the console): servers stay off the browser's network, pinned self-signed certificates work, no CORS, and live updates (Sync's SignalR run hub) are relayed by the console. The other option, browsers calling servers directly with tokens, is rejected |
+| D17 | Version compatibility between a console and its servers | **decided (accepted):** products release on their own (D4), so a console and a server can differ in version. The management API carries its own integer version, reported at pairing and on every call; a console supports its own API version and the one before, and shows a clear "upgrade this server / this console" message otherwise |
+| D18 | A state store for Proxy | **decided (accepted):** Proxy has none today; it needs one for its audit log, notifications and per-console read state. **SQLite through `DbDataKit.State`**, as Build's server |
+| D19 | Where a Build server's projects come from | **decided (accepted):** **both**: a local path (as the CLI works today) or a git remote and branch that the server clones into its data directory and pulls before each scheduled run |
 
 ## 8. Individual releases
 
@@ -681,7 +744,10 @@ artifacts can be reconsidered once the console is in use.
 | Risk | Mitigation |
 | --- | --- |
 | dotnet-script is a small open-source project (maintenance, .NET release lag) | everything goes through `DbDataKit.Scripting`'s own interfaces, so the engine behind them can be swapped (back to plain Roslyn, or .NET 10's file-based apps with `#:package`) without changing configs |
-| DuckDB.NET lags DuckDB 2.0 | D6 interim build; the old C API is proven to work against 2.0 |
+| DuckDB.NET 1.5.6 against the 2.0 engine: a C API call 2.0 removed or changed fails only when it is called | every product's whole suite runs on 2.0.0 before its switch merges; Build's runs on the 2.0 alphas already cover its calls, including scalar-function registration |
+| The engine is a native file per platform that DuckDB.NET no longer brings | one pin with hashes; the build fails when the file is missing; a test per published artifact (zip, image, MSI) loads the engine |
+| The secrets key is lost (disk, rebuild) | the documentation and `server setup` say to back it up separately; `secret export` moves values between machines; the store is useless without it, by design |
+| The secrets key is readable by another local user | refuse to start on loose permissions; DPAPI plus ACL on Windows; keys from the platform's secret mechanism in containers |
 | DuckDB 2.0's storage format is one-way | W1 step 2 audit before 2.0 is the default; read-only opens for user files; release note |
 | Sync is large (about 68,000 lines of product code) and adoption touches its core | strangler pattern from plan 10: adapter first, existing tests unchanged, one concern per PR |
 | The console work turns into a UI rewrite | W5 is extraction only, with Sync's Playwright suite and screenshots as the gate; new screens come after it |
