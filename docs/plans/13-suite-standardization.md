@@ -27,7 +27,7 @@ management console, one set of definitions and one release, while removing as mu
 allowed. Two pieces of work are folded in: **finishing DuckDB 2.0** and **moving DbDataSync's libraries, drivers and scripts to
 dotnet-script**.
 
-Inputs: plans 01-12, `docs/plans/STATUS.md`, `docs/review/OVERLAP-AND-CONSOLIDATION.md`, `DbDataBuild/docs/research/duckdb-2.0/README.md`,
+Inputs: plans 01-12, `docs/plans/STATUS.md`, the overlap review (`docs/review/OVERLAP-AND-CONSOLIDATION.md`, removed in F13; in git history), `DbDataBuild/docs/research/duckdb-2.0/README.md`,
 `DbDataBuild/docs/progress/OPEN-ITEMS.md` (section H), `DbDataSync/docs/drivers-and-libraries.md`,
 `DbDataSync/architecture/planning/done/csharp-scripting-host.md`, and the code at `90cdbc5`.
 

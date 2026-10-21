@@ -1,6 +1,6 @@
 # DbDataKit.Connections.Libraries
 
-The validation and planning layer of Sync's NuGet library installer, hardened for finding H1 (`docs/review/SECURITY.md`). Nothing here reaches the network unless an executor is run; the restore sits behind `ILibraryRestoreExecutor`.
+The validation and planning layer of Sync's NuGet library installer, hardened for finding H1 (`docs/security-review.md`). Nothing here reaches the network unless an executor is run; the restore sits behind `ILibraryRestoreExecutor`.
 
 - `LibraryValidation`: package id (NuGet grammar, 100 characters), version (exact SemVer 2.0, optional fourth part; no ranges, wildcards, `$(...)`, whitespace or trailing newline), library/driver ids and file names (lower case, no path parts, no `..`, no Windows device names), factory type names, runtime identifiers. Regexes use `[0-9]` and `\z` so Unicode digits and a trailing newline do not slip through.
 - `NuGetSourcePolicy`: https only, no credentials, exact match against the configured feeds, nothing that looks like an option. Default feed is the first configured one.
