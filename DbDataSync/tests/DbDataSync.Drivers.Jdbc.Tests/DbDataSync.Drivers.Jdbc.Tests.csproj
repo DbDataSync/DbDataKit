@@ -14,7 +14,7 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <!-- The "known-good" side of every parity test in this project — see phase 109h's identical
          un-excluded reference in DbDataSync.Drivers.Postgres.Tests.csproj. -->
-    <PackageReference Include="Npgsql" VersionOverride="9.0.3" />
+    <PackageReference Include="Npgsql" />
     <!-- DbDataSync.Drivers.Jdbc now excludes IKVM's runtime/build/native assets (resolved instead from
          libraries/ikvm/lib/ via LibraryRegistry in a real deployment — see that project's own csproj
          comment) — the same reason DbDataSync.Drivers.Postgres.Tests keeps its own un-excluded Npgsql

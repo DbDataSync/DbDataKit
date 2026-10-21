@@ -35,7 +35,7 @@
          LibrarySurfaceExtractor reads metadata without loading at all. That test deliberately does not
          handle it — a sweep that silently covered fewer readers than it appeared to is the exact
          failure mode the file exists to prevent. -->
-    <PackageReference Include="Npgsql" VersionOverride="9.0.3" />
+    <PackageReference Include="Npgsql" />
     <!-- JdbcTestQueryTests' own real-host-startup case: DbDataSync.Drivers.Jdbc excludes IKVM's
          runtime/build/native assets (resolved from libraries/ikvm/lib/ via LibraryRegistry in a real
          deployment) — a standalone `dotnet test` here needs the real IKVM assets locally too, the same

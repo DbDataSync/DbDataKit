@@ -15,7 +15,7 @@
     <!-- GenericDriverTests proves GenericDriver against a real, non-trivial engine (Postgres) without
          referencing DbDataSync.Drivers.Postgres itself — the point is that nothing but the ADO.NET
          provider and DbDataSync.Core.Sql's PostgresDialect is needed to stand one up. -->
-    <PackageReference Include="Npgsql" VersionOverride="9.0.3" />
+    <PackageReference Include="Npgsql" />
   </ItemGroup>
 
   <ItemGroup>

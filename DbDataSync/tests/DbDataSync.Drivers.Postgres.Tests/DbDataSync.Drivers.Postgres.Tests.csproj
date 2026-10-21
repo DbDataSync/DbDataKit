@@ -19,7 +19,7 @@
          CrossEngineReplicationTests.cs), the one place the phase doc's "one package per test project"
          framing undersold: a standalone `dotnet test` run here needs both real local copies. -->
     <PackageReference Include="Microsoft.Data.SqlClient" VersionOverride="7.0.2" />
-    <PackageReference Include="Npgsql" VersionOverride="9.0.3" />
+    <PackageReference Include="Npgsql" />
   </ItemGroup>
 
   <ItemGroup>

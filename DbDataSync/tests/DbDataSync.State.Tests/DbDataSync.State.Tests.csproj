@@ -18,7 +18,7 @@
          NpgsqlConnection.ClearAllPools() at compile time for its own scratch-database scaffolding,
          which is a test concern independent of how the product resolves a connection at runtime. -->
     <PackageReference Include="Microsoft.Data.SqlClient" VersionOverride="7.0.2" />
-    <PackageReference Include="Npgsql" VersionOverride="9.0.3" />
+    <PackageReference Include="Npgsql" />
   </ItemGroup>
 
   <ItemGroup>
