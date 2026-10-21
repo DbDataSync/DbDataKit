@@ -198,7 +198,7 @@ public class MatrixLinterTests
     [Fact]
     public void Verified_constructs_are_not_reported_as_uncovered()
     {
-        Assert.Empty(Lint("SELECT CAST(a AS INTEGER) AS i, ABS(a) AS b, ROUND(CAST(a AS DECIMAL(10, 2)), 1) AS r FROM t WHERE a IN (1, 2) AND b BETWEEN 1 AND 3").Where(d => d.Code == "DDB-305"));
+        Assert.DoesNotContain(Lint("SELECT CAST(a AS INTEGER) AS i, ABS(a) AS b, ROUND(CAST(a AS DECIMAL(10, 2)), 1) AS r FROM t WHERE a IN (1, 2) AND b BETWEEN 1 AND 3"), d => d.Code == "DDB-305");
     }
 
     [Fact]

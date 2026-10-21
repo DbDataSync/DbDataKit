@@ -54,7 +54,7 @@ public class PlannerTests
 
     private static ResolvedAnswer Ans(string id, string choice, string? value = null) => new(id, choice, value, null, AnswerSource.File);
 
-    private static PlanStep Single(PlanResult r, Func<PlanStep, bool> where) => Assert.Single(r.Steps.Where(where));
+    private static PlanStep Single(PlanResult r, Func<PlanStep, bool> where) => Assert.Single(r.Steps, step => where(step));
     private static string[] Rows(PlanResult r) => r.Steps.Select(s => s.Reasons[0]).ToArray();
 
     // ----- object-level rows -----------------------------------------------------------------------------------------------------------
@@ -231,7 +231,7 @@ public class PlannerTests
         var undeclared = Table("marts.fct", ModelKinds.Full, [.. Basic, Col("customer_name", "VARCHAR(20)")]);
         var (_, input2) = Evolve(before, undeclared);
         var asked = Planner.Plan(input2, []);
-        var q = Assert.Single(asked.Questions.Where(x => x.Id.StartsWith("Q-rename")));
+        var q = Assert.Single(asked.Questions, x => x.Id.StartsWith("Q-rename"));
         Assert.Equal("Q-rename-marts.fct.cust_nm", q.Id);
         Assert.Equal("rename_to", q.Proposal!.OptionKey);
         Assert.Equal("customer_name", q.Proposal.Value);
@@ -485,7 +485,7 @@ public class PlannerTests
         var input = WithLoad(Existing(m), "marts.fct", Load("r", [Start, End]));
         var bad = Planner.Plan(input, [Ans("Q-param-marts.fct-r-start", "provide", "yesterday"), Ans("Q-param-marts.fct-r-end", "provide", "2024-01-05 00:00:00")]);
         Assert.Equal("DDB-412", Assert.Single(bad.Blocks).Code);
-        Assert.Empty(bad.Steps.Where(s => s.Type == StepType.Load));
+        Assert.DoesNotContain(bad.Steps, s => s.Type == StepType.Load);
 
         var tooLong = Planner.Plan(input, [Ans("Q-param-marts.fct-r-start", "provide", "2024-01-01 00:00:00"), Ans("Q-param-marts.fct-r-end", "provide", "2024-02-01 00:00:00")]);
         var block = Assert.Single(tooLong.Blocks);
@@ -506,7 +506,7 @@ public class PlannerTests
             var block = Assert.Single(r.Blocks);
             Assert.Equal("DDB-412", block.Code);
             Assert.Contains("empty or backwards", block.Found);
-            Assert.Empty(r.Steps.Where(s => s.Type == StepType.Load));
+            Assert.DoesNotContain(r.Steps, s => s.Type == StepType.Load);
         }
     }
 

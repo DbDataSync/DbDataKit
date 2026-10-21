@@ -66,7 +66,7 @@ public class CopyModelTests
         var script = File.ReadAllText(Path.Combine(dir, "rendered/wh/warehouse.customers/load.default.sql"));
         Assert.Contains("FROM dbdatabuild.stg_warehouse__customers", script);                          // reads the staging table, in the destination's dialect
         Assert.Contains("-- model:           warehouse.customers", script);
-        Assert.Empty(Directory.GetDirectories(Path.Combine(dir, "rendered")).Where(d => !d.EndsWith("wh") && !d.EndsWith("lowered")));
+        Assert.DoesNotContain(Directory.GetDirectories(Path.Combine(dir, "rendered")), d => !d.EndsWith("wh") && !d.EndsWith("lowered"));
         Assert.Equal(0, CliApp.Run(["project", "compile", "--check", "--project", dir], new StringWriter(), new StringWriter(), environment: _ => null));
     }
 
