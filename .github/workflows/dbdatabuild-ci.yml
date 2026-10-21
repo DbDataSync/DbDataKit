@@ -93,7 +93,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/fetch-native.sh
-      - run: dotnet build -c Release
+      - run: dotnet build DbDataBuild.slnf -c Release
       - run: dotnet test tests/DbDataBuild.Tests.Unit -c Release --no-build
 
   # The conformance suite against real engines, in groups that run side by side (each starts only the engines it needs): `quick` is
@@ -121,7 +121,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/fetch-native.sh
-      - run: dotnet build -c Release
+      - run: dotnet build DbDataBuild.slnf -c Release
       - name: Start the engines
         run: scripts/test-engines.sh up ${{ matrix.engines }}
       - name: Conformance tests
@@ -158,7 +158,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/fetch-native.sh
-      - run: dotnet build -c Release
+      - run: dotnet build DbDataBuild.slnf -c Release
       - name: Start the engines
         run: scripts/test-engines.sh up ${{ matrix.engines }}
       - name: Conformance tests
