@@ -7,8 +7,9 @@ Status: **proposed** (2026-10-21), **revised twice the same day after the owner'
 - each product stays a **standalone install option**; the suite is called **dbdatakit** (D3, D4);
 - each product keeps its own CLI, with lower-case executables and Build's `<noun> <verb>` grammar everywhere; `dbdatakit` is a CLI only
   for managing and configuring the shared console (W4);
-- because of those two, the console becomes **its own host** (`dbdatakit`) instead of growing out of Sync's server, and every product,
-  Sync included, is a server with a management API (section 3, D1);
+- the console and the products are **separate**: each product is a set of services (a server with a management API, no web UI of its
+  own), and the **dbdatakit console is the one shared UI** for all of them (section 3, D1). A standalone install is a product plus the
+  console with only that product registered;
 - Build gets a `server` noun for a multi-project server (W7), and **project authoring in the web interface** (W11).
 
 Scope: everything needed to turn three products that share a repository into one suite with one
@@ -27,8 +28,8 @@ Inputs: plans 01-12, `docs/plans/STATUS.md`, `docs/review/OVERLAP-AND-CONSOLIDAT
   and modelling and lowering (Build).
 - **One console.** One web UI, the dbdatakit console, manages all three products. Proxy and Build get management and configuration
   screens for the first time, built from the same shell, components and back-end as Sync's, and Build gets project authoring in it.
-- **Each product still stands alone.** A product installed on its own serves the same screens for itself, has its own CLI, and needs
-  neither the console nor the other products.
+- **Each product still stands alone.** A product needs none of the other products. Installed on its own it is the product's services
+  plus the console (which then shows only that product), and its CLI works with or without the console.
 - **A dbdatakit suite release** with all three products and the console, from one commit, shipped the way products ship today (Docker
   images and the MSI installer, plus the zips and install scripts), alongside each product's own release (section 8). Update work waits
   until the products have settled.
@@ -123,7 +124,6 @@ Descriptor drivers (`driver.yaml`) are data, not code, and are not affected. JDB
                  dbdatasync server ×N        dbdataproxy server ×N           dbdatabuild server ×N
                  replication engine,         Flight SQL data plane,          many projects per server,
                  TaskRunner, scheduler       x86 worker                      scheduler, monitoring, authoring
-                 own UI (Sync module)        own UI (Proxy module)           own UI (Build module)
                           │                         │                                │
                           └─────────────────────────┴────────────────────────────────┘
                                                     ▼
@@ -131,17 +131,19 @@ Descriptor drivers (`driver.yaml`) are data, not code, and are not affected. JDB
                             Scheduling · Monitoring · Scripting (dotnet-script) · Cli (command surface, MCP) · Web · State
 ```
 
-- **Every product has the same shape:** a server process with its own config directory, its own state store, its own users, a management
-  API, and its own copy of the web UI showing only its module. That is what a standalone install is. `dbdatasync server` is today's
-  `dbdatasync serve` (DbDataSync.Api), unchanged in function.
-- **The dbdatakit console is a separate host** built from the same shared web packages (W5). It holds the console's own users, a list of
-  registered product servers ("instances"), and the views that span products (connections, monitoring, notifications). It reaches each
-  server only through that server's management API, so a product never depends on the console being up. One console can manage several
-  servers of each product.
+- **The console and the products are separate.** Each product is its own services: a server process (registered as an OS service) with
+  its own config directory, its own state store and a management API, and **no web UI of its own**. `dbdatasync server` is today's
+  `dbdatasync serve` (DbDataSync.Api) without the SPA it serves now: its UI moves into the console.
+- **The dbdatakit console is the one UI**, a separate host built from the shared web packages (W5). It holds the users, a list of
+  registered product servers ("instances"), each product's screens, and the views that span products (connections, monitoring,
+  notifications). It reaches each server only through that server's management API, so a product keeps running (schedules, replication,
+  queries) while the console is down; only the screens are unavailable. One console can manage several servers of each product.
+- **A standalone install** is one product's services plus the console with that product registered. The product's MSI includes the console
+  as a feature (on by default), and its Docker image is paired with the console image in a compose file (W9).
 - **Proxy stays a data-plane process.** The management API is on a separate listener, never on the Flight port or the hot path.
 - **Build becomes a server as well as a CLI** (`dbdatabuild server ...`), because its scheduler, monitoring and authoring need something that
   is always running, and one server can host several projects. The server exposes the JSON command surface Build already has through its
-  management API; the TUI, MCP and `ui web` are already clients of that surface, so the web UI adds no second code path to a database. The
+  management API; the TUI, MCP and `ui web` are already clients of that surface, so the console adds no second code path to a database. The
   CLI keeps working without the server. Commands run in child processes, which keeps a crash in the native polyglot library out of the server (D12).
 - **Shared definitions.** One `connection/1` format, one secret reference syntax, one user and role model, one git-tracked config layout
   (W8): the same format and code in every product, so the console can show and edit them side by side.
@@ -267,7 +269,7 @@ System.CommandLine everywhere (Build already uses it). The result is JSON output
   are updated by `service install`, which is already idempotent).
 - **Build's `<noun> <verb>` grammar everywhere.** Nouns are grouped by what a command touches, as in Build. Breaking changes are fine,
   so old forms are removed, not aliased; release notes carry the table below.
-- **Shared nouns, identical in every CLI** (they come from `DbDataKit.Cli`, so the code exists once):
+- **Shared nouns, identical in every CLI where they apply** (they come from `DbDataKit.Cli`, so the code exists once):
 
 | Noun | Verbs | Meaning |
 | --- | --- | --- |
@@ -276,7 +278,7 @@ System.CommandLine everywhere (Build already uses it). The result is JSON output
 | `cert` | `show`, `ensure`, `check`, `renew` (plus product verbs) | the server's TLS certificate |
 | `config` | `check`, `show`, `get`, `set`, `migrate`, `schema` | the server's own configuration |
 | `secret` | `protect`, `hash`, `check` | secret references and protected values |
-| `user` | `invite`, `list`, `role` | the server's (or console's) users |
+| `user` | `invite`, `list`, `role` | people who sign in: **`dbdatakit` only**, since users live in the console (W8) |
 | `health` | `check` | is a running server answering (what container health checks run) |
 | `ui` | `terminal`, `mcp` | the local interfaces |
 | `help` | `code`, ... | explanations |
@@ -293,16 +295,16 @@ What changes in each CLI:
 | `dbdatasync config cert ...` | `dbdatasync cert ...` | Sync's registered verbs (`use-pem`, `enroll`, `bind`, ...) stay on `cert` |
 | `dbdatasync config secret ...` | `dbdatasync secret ...` | |
 | `dbdatasync config library ...`, `config driver ...` | `dbdatasync library ...`, `dbdatasync driver ...` | `script` joins them (W2: `script test`) |
-| `dbdatasync invite` | `dbdatasync user invite` | |
+| `dbdatasync invite` | `dbdatakit user invite` | users move to the console (W8) |
 | `dbdatasync health` | `dbdatasync health check` | |
 | `dbdatasync update ...`, `launcher repair`, `tool install` | unchanged for now | the updater is shelved (D5); renamed when it is reopened |
 | `DbDataProxy` (no verb runs the server), `DbDataProxy run` | `dbdataproxy server run` | no default command any more; the service's command line and `dist.json` change with it |
 | `DbDataProxy install`, `uninstall` | removed | `service install` / `service uninstall` (kept today only for `install.ps1`) |
 | `DbDataProxy hash-password`, `protect-secret` | `dbdataproxy secret hash`, `secret protect` | |
 | `DbDataProxy query` | `dbdataproxy query run` | |
-| `dbdatabuild ui web` | `dbdatabuild server run` | the server serves the web UI; `--project .` and loopback by default make it the old local use |
+| `dbdatabuild ui web` | removed | the console replaces it; `dbdatabuild server run --project .` (loopback by default) with a local console is the old local use |
 | (new) | `dbdatabuild server project add`, `remove`, `list` | projects hosted by one server |
-| (new) | `dbdatakit server run`, `server setup`, `instance add`, `remove`, `list`, `user ...`, `cert ...`, `config ...`, `service ...` | the console only: `instance` registers a product server with it |
+| (new) | `dbdatakit server run`, `server setup`, `instance add`, `remove`, `list`, `user ...`, `cert ...`, `config ...`, `service ...` | the console only: `instance add` pairs a product server with it (D14) |
 
 Build's own nouns (`project`, `connection`) are unchanged. Sync gains nouns for what its CLI cannot do yet (`connection`, `replication`, `run`)
 when its CLI and API parity work (`DbDataSync/architecture/planning/todo/cli-setup-and-api-parity.md`) is done, in the same grammar.
@@ -311,10 +313,12 @@ Exit: every command in the suite has a JSON form and a schema; the four CLIs sha
 
 ### W5. Shared web platform (L)
 
-Extract first, extend second: Sync's UI must look and work the same after the extraction. The shared packages are then used by four
-hosts: the three product servers (each serving only its own module) and the dbdatakit console (serving all of them).
+Extract first, extend second: Sync's UI must look and work the same after the extraction. The front-end has one host, the dbdatakit
+console. The back-end packages are used by the console (users, sign-in, pages) and, for their management APIs, by the product servers.
 
-**Back-end: `DbDataKit.Web` and `DbDataKit.State`**, taken out of `DbDataSync.Api` and `DbDataSync.State`:
+**Back-end: `DbDataKit.Web` and `DbDataKit.State`**, taken out of `DbDataSync.Api` and `DbDataSync.State`. The user-facing parts
+(sign-in, users, sessions, invites, notifications) end up in the console; the parts every server needs (management API hosting, token
+validation, `PlainHttpProtection`, health, certificates) are used by each product server:
 
 - auth: the session handler, passkeys (Fido2), Windows Negotiate sign-in, bootstrap invite, policies and roles;
 - stores: users, sessions, invites, notifications, audit, on the state database's existing SQLite / SQL Server / PostgreSQL dialects;
@@ -333,18 +337,22 @@ hosts: the three product servers (each serving only its own module) and the dbda
 | `@dbdatakit/build` | W7 and W11 |
 | `@dbdatakit/console` | the console app: instances, cross-product views, and the modules talking to remote servers |
 
-One Vite configuration builds four bundles: one per product server (shell, admin, its own module) and the console (all of them). Each module
-is written against a server's management API and does not care whether it runs inside that server or inside the console. vitest and
-Playwright are set up once. Sync's update page moves into `@dbdatakit/admin` as it is (the updater is shelved, D5): Sync-only, unchanged.
+One Vite build, served only by the console. Each module is written against its product's management API and shows the servers of that
+product registered with the console. vitest and Playwright are set up once. Sync's update page moves into `@dbdatakit/admin` as it is (the updater is shelved, D5): Sync-only, unchanged.
 
-Exit: Sync's UI is built from the workspace with no visible change (Playwright suite and screenshots unchanged); `@dbdatakit/shell` and
-`@dbdatakit/admin` import nothing from `@dbdatakit/sync`.
+Two steps, each with its own exit:
+
+1. **Extraction.** Sync's UI is built from the workspace and still served by Sync's server, with no visible change (Playwright suite and
+   screenshots unchanged); `@dbdatakit/shell` and `@dbdatakit/admin` import nothing from `@dbdatakit/sync`.
+2. **The console host.** `dbdatakit server run` serves the workspace build; Sync's pages work through the console against a registered
+   `dbdatasync server`, which then stops serving the SPA. Sync's users, passkeys and invites move from Sync's state database to the
+   console's (a migration). The same Playwright suite passes against the console.
 
 ### W6. DbDataProxy management (M-L)
 
 Today Proxy is configured by editing `appsettings.json` and running CLI verbs. It has no runtime admin interface.
 
-1. **Management API** on a separate listener: loopback by default, TLS, authenticated by the server's own users or by a console-issued token (D14).
+1. **Management API** on a separate listener: loopback by default, TLS, authenticated by a console-issued token (D14); the local CLI on the same machine also works without the console.
    It is never on the Flight port and never on the hot path. Endpoints: health, version and drain (plan 03's seams); effective config,
    redacted, with origins; validation; data sources (CRUD and test connection); users, Windows accounts, JWT mappings and pass-through;
    live sessions and running queries (with cancel); concurrency gates and limits; login throttle state; certificate status and renewal;
@@ -353,11 +361,11 @@ Today Proxy is configured by editing `appsettings.json` and running CLI verbs. I
    definition with a `proxy:` extension (classifier mode, limits, bitness, pass-through); users are a separate file; secrets are references.
    Writes go through `Config.Yaml`'s comment-preserving editor and are applied by hot reload (Proxy already reads options through
    `IOptionsMonitor`). A config migration converts an existing `appsettings.json`.
-3. **Proxy module `@dbdatakit/proxy`**, served by `dbdataproxy server` itself and by the console (which can manage several proxies): Overview (health, version, sessions, throughput); Data sources
+3. **Proxy module `@dbdatakit/proxy`** in the console (which can manage several proxies): Overview (health, version, sessions, throughput); Data sources
    (catalog-backed editor, classifier mode, limits, test); Users and auth; TLS (the shared certificate page); Activity (queries and
    failures); Config (diff and history); Service (doctor).
 
-Exit: everything in today's `appsettings.example.json` can be edited from the web UI (Proxy's own, or the console) with validation; adding or changing a data source or
+Exit: everything in today's `appsettings.example.json` can be edited from the console with validation; adding or changing a data source or
 user needs no restart; the upgrade from the last JSON release is tested in CI.
 
 ### W7. DbDataBuild server and management (M-L)
@@ -368,26 +376,27 @@ run history from the tracking tables; what is missing is something that starts r
 
 1. **`dbdatabuild server`**: a long-running server hosting **several projects** (`server project add|remove|list`), registered as an OS
    service with the shared `service` noun. It runs the built-in scheduler (W10) for its projects, keeps the monitoring view current, hosts
-   authoring workspaces (W11), and serves a management API that exposes the JSON command surface (W4a) per project, plus its own web UI.
-   Its own users and roles come from `DbDataKit.Web`/`State` (a SQLite state store by default). Commands run in child processes (D12).
+   authoring workspaces (W11), and serves a management API that exposes the JSON command surface (W4a) per project. It has no web UI of
+   its own; its state (schedules' last runs, workspaces, approvals) is in a SQLite state store by default. Commands run in child processes (D12).
    The CLI works without the server exactly as today; a person running `connection refresh` by hand and the scheduler share the per-load
    lock and `on_busy` that already exist.
-2. **Build module `@dbdatakit/build`**, a client of that management API, served by the Build server and by the console: projects; compile
+2. **Build module `@dbdatakit/build`** in the console, a client of that management API: projects; compile
    and diagnostics (with `help code` text); graph and lineage (Mermaid already exists); connection status and drift; **plans: review,
    approve, apply**, with the approver's identity and time recorded in the plan's events (something the CLI cannot give); schedules and
    monitoring (W10); compare; sample; authoring (W11).
 3. **Logins from secret references.** The server maps secret references into each command's environment
    (`DBDATA_<APP>_<CONN>_<READ|WRITE>`), so Build's "no fallback from read to write" rule holds unchanged.
-4. **Retire `ui web`** (`Web/WebServer.cs`, `WebBackend.cs`, `WebActions.cs`, `index.html`): `server run` replaces it. The TUI stays; the MCP
+4. **Retire `ui web`** (`Web/WebServer.cs`, `WebBackend.cs`, `WebActions.cs`, `index.html`): the console replaces it (for the old local
+   use: `dbdatabuild server run --project .` and a console on the same machine). The TUI stays; the MCP
    server moves to the shared surface (W4a).
 
-Exit: a person can take a project from compile to an approved, applied plan and a scheduled, monitored refresh in the web UI, on a Build
-server installed on its own or through the console, and the schedule runs with the console switched off.
+Exit: a person can take a project from compile to an approved, applied plan and a scheduled, monitored refresh in the console, and the
+schedule runs with the console switched off.
 
 ### W8. Shared definitions: connections, secrets, identity, config layout (M-L)
 
-Because each product stands alone, each server keeps its own definitions; what is shared is the **format and the code**, so the console
-can show and edit them side by side.
+Each product server keeps its own definitions (it must run without the console and without the other products); what is shared is the
+**format and the code**, so the console can show and edit them side by side.
 
 1. **One connection format.** `connection/1` (`DbDataKit.Connections`) is the on-disk format for Sync connections, Proxy data sources and
    Build connections. Product-specific fields live under `extensions.<product>`. The console's Connections view lists the connections of
@@ -395,8 +404,9 @@ can show and edit them side by side.
    projects keep their own connection files (they are committed by the author).
 2. **One secret syntax and resolver** (`env:`, `file:`, `secret:`, `dpapi:`) in every product.
 3. **One identity model and implementation.** Users (passkeys, Windows) with roles: Admin, Operator, Viewer, Author (W11) and Approver
-   (Build plans). Each server has its own users when it runs alone. A server registered with the console also accepts the console's token
-   for its management API, so a console user does not need an account on every server (D14). Proxy's client identities (its Flight users,
+   (Build plans). **Users live in the console**, the only place people sign in. Product servers have no user accounts: they accept the
+   console's token for their management API, which names the user and their roles, so each server still enforces roles and records who
+   did what (D14). Proxy's client identities (its Flight users,
    Windows accounts, JWT mappings) stay Proxy's data-plane auth. One PBKDF2 hasher (plan 10 C3).
 4. **One config layout**, git-tracked with auto-commit and the history UI (Sync's `GitCommitService` becomes `DbDataKit.Config.Git`), the
    same in every product's data directory:
@@ -404,21 +414,23 @@ can show and edit them side by side.
 ```
 <data>/config/
   connections/*.yaml            this server's connections (connection/1)
-  server.yaml                   the server's own settings (listen, TLS, auth, state store, console registration)
+  server.yaml                   the server's own settings (listen, TLS, state store, the console it trusts)
   sync/        (Sync)           replications, scripts (*.csx), drivers, libraries
   proxy/       (Proxy)          data source policy, client users, JWT mappings
   build/       (Build)          projects.yaml: the hosted projects (the projects themselves stay in their own repositories)
-  console/     (dbdatakit)      instances.yaml: the registered servers
+  console/     (dbdatakit)      instances.yaml: the registered servers; users are in the console's state database
 ```
 
-Exit: the same connection, secret, user and config code in all four hosts; the console shows the connections of all registered servers.
+Exit: the same connection, secret and config code in every product and the console; one user list, in the console; the console shows the
+connections of all registered servers.
 
 ### W9. Distribution and releases (M)
 
 1. **One suite release** (D4) from one workflow, gated on green product CI and `dbdatakit-ci.yml` for that exact commit, shipped through
    the channels that already exist: **Docker images** and **the MSI** (`dist/msi.py`), plus the zips, `install.ps1`/`install.sh` and
-   `SHA256SUMS`. Every product stays a **standalone install** (D4): its own image (`dbdatasync`, `dbdataproxy`, `dbdatabuild`), its own MSI
-   and zip. The suite adds a `dbdatakit` image (the console) and a `dbdatakit` MSI with one feature per product plus the console. All of it
+   `SHA256SUMS`. Every product stays a **standalone install** (D4): its own image (`dbdatasync`, `dbdataproxy`, `dbdatabuild`), MSI and zip.
+   A product's MSI includes the console as a feature (on by default) and registers the product with it; each product image ships with a
+   compose file that pairs it with the `dbdatakit` console image. The suite adds a `dbdatakit` MSI with one feature per product plus the console. All of it
    comes from the same workflow and the same commit (`dist.json` already templates the per-product parts, so this costs little); the suite
    tag is `dbdatakit/v<calver>`, and the product tags stay as they are.
 2. **The updater is shelved** (owner decision, D5). No update work until the products have settled and unified. Sync's `update` command,
@@ -452,15 +464,15 @@ Design:
    with these inputs", and the product decides what that means. Taken from Sync's code, with its tests.
 2. **`DbDataKit.Monitoring`**: a neutral run model (job, run, outcome, start, duration, rows, the item that failed, a classified failure
    from `Connections`), health rules over it (overdue and slow from an expected interval, failed, lag), notifications with
-   channels (the notification bell in each server's UI and in the console first; email or webhook later), and retention. Each product supplies its run history through an
+   channels (the console's notification bell first; email or webhook later; each server keeps its notifications until the console reads them), and retention. Each product supplies its run history through an
    interface: Sync from its state database, Build from its tracking tables, which stay where they are (Build's run history travels with
    the data by design and is not copied into the console's state database).
 3. **Schedules are data in Build projects.** In keeping with Build's rule that everything is a file a person can inspect and commit, a
    refresh plan declares its schedule next to `expected_every` (for example `schedule: "15 * * * *"`, `time_zone:`). The Build server reads them
-   from the registered projects; `project show refresh` shows them; the web UI (the server's or the console) shows and can pause them, and a change is a commit to the
+   from the registered projects; `project show refresh` shows them; the console shows and can pause them, and a change is a commit to the
    project. A schedule the operator adds only at the server (not in the project) is the open question in D13.
 4. **Sync moves onto the shared packages** behind its current behaviour (its tests unchanged), which proves them before Build depends on them.
-5. **One monitoring view**, in each server's UI for that server and in the console across servers, for both products: runs, outcomes, overdue and slow, lag, failures, notifications; the Build and
+5. **One monitoring view in the console**, across servers, for both products: runs, outcomes, overdue and slow, lag, failures, notifications; the Build and
    Sync pages are filters of it. Proxy can feed the same model later (failed logins, refused statements, limits reached).
 6. **Build's open items it closes:** time-based scheduling; the warnings in `status` and `monitor` are evaluated continuously instead of when
    someone looks; retention of plan files and statement logs from scheduled runs (OPEN-ITEMS D0) becomes a retention policy.
@@ -470,7 +482,7 @@ scheduler and run monitor run on the same packages with no behaviour change.
 
 ### W11. Authoring DbDataBuild projects in the web interface (L)
 
-Goal: a person can create and change a Build project in the web UI (on a Build server alone or through the console) with the same checks
+Goal: a person can create and change a Build project in the console with the same checks
 the CLI gives, and take it through commit, plan, approval and apply.
 
 What it builds on: every authoring step already exists as a command with a JSON document: `project create` (templates),
@@ -483,7 +495,7 @@ What it builds on: every authoring step already exists as a command with a JSON 
    cannot change what runs. Workspaces have an owner, are listed, and are cleaned up when merged or abandoned.
 2. **File commands in the JSON surface.** To keep Build's rule that every interface is a client of the command surface, add
    `project file list|read|write|move|delete`, confined to the project tree, with a content hash for optimistic concurrency (a write against
-   a stale hash is refused). The web UI never writes files any other way, and agents (MCP, `project agent-kit`) get the same commands.
+   a stale hash is refused). The console never writes files any other way, and agents (MCP, `project agent-kit`) get the same commands.
    Anything these commands parse falls under the existing seeded mutation tests (`FuzzTests`).
 3. **Editors.** Model SQL in Monaco (the shared `CodeEditor`) with DuckDB highlighting and diagnostics as markers; model, folder,
    connection, refresh plan, test and seed files as forms generated from `schemas/*.json`, with a YAML tab (comment-preserving, through
@@ -500,17 +512,17 @@ What it builds on: every authoring step already exists as a command with a JSON 
    role can edit and commit; it cannot approve or apply.
 
 Exit: a new project can be created from a template, a model added and checked against every target, committed, planned, approved and
-applied, all from the web UI, and the same files and checks result as from the CLI.
+applied, all from the console, and the same files and checks result as from the CLI.
 
 ## 5. Phases
 
 ```
-P0 foundations ─► P1 engines and loaders ─► P2 platform ─► P3 product servers ─► P4 console, authoring ─► P5 retire
-  W0                W1 (2.0 default)          W5 back-end    W6 Proxy server/UI     dbdatakit console host    ui web,
-  W1.1-2 probes     W2 (dotnet-script)        W8 formats     W7 Build server/UI     W11 authoring             dead shared
-  W2.1 spike        W3 Config/Secrets/        W4 commands    W10 Build schedules    W9 suite release          packages
-  decisions         Dialect in Sync, Build    and renames    W3 Metadata/Transfer
-                    W5 front-end extraction   W10 extract
+P0 foundations ─► P1 engines and loaders ─► P2 console ─────► P3 Proxy and Build ─► P4 authoring, release ─► P5 retire
+  W0                W1 (2.0 default)          W5 back-end      W6 Proxy API/module    W11 authoring            ui web,
+  W1.1-2 probes     W2 (dotnet-script)        W5 console host  W7 Build server/module W9 suite release         dead shared
+  W2.1 spike        W3 Config/Secrets/        (Sync's UI moves W10 Build schedules                             packages
+  decisions         Dialect in Sync, Build    into it)         W3 Metadata/Transfer
+                    W5 front-end extraction   W8, W4, W10 extract
                                               W3 Connections
 ```
 
@@ -518,9 +530,9 @@ P0 foundations ─► P1 engines and loaders ─► P2 platform ─► P3 produc
 | --- | --- | --- |
 | **P0** (now) | W0; W1 steps 1-2 on 2.0.0 final; W2 spike; the open decisions in section 7 | one build setup and one version per package; a written 2.0 result for all three products; a spike report |
 | **P1** | W1 to the end (when DuckDB.NET 2.0 lands, or the interim per D6); W2; W3 Config, Secrets, Dialect in Sync and Dialect, Connections in Build; W5 front-end extraction | 2.0 is the default; one code loader; Sync's UI built from the workspace |
-| **P2** | W5 back-end; W8; W4 (contract and the renames of 4b); W10 steps 1, 2 and 4 (extract from Sync, Sync on the shared packages); W3 Connections in Sync and Metadata in both; `Connections.FlightSql` | Sync's server is built on `DbDataKit.Web`/`State`; one connection, secret, user and config implementation; the new command names; Sync's scheduler runs on `DbDataKit.Scheduling` |
-| **P3** | W6 (Proxy management API and UI); W7 (the Build server and UI); W10 steps 3, 5 and 6 (Build schedules, monitoring); W3 Transfer | each product, installed alone, is managed from its own web UI; Build refreshes run on schedule and are monitored |
-| **P4** | the dbdatakit console host and `dbdatakit` CLI (instances, cross-product views, console tokens, D14); W11; W9 | one console manages all three; Build projects are authored in the web UI; the first suite release (images and MSIs) |
+| **P2** | W5 back-end and step 2 (the dbdatakit console host and `dbdatakit` CLI: instances, console tokens, D14; Sync's UI and users move into it); W8; W4 (contract and the renames of 4b); W10 steps 1, 2 and 4 (extract from Sync, Sync on the shared packages); W3 Connections in Sync and Metadata in both; `Connections.FlightSql` | Sync is managed through the console and its server serves no UI; one connection, secret, user and config implementation; the new command names; Sync's scheduler runs on `DbDataKit.Scheduling` |
+| **P3** | W6 (Proxy management API and console module); W7 (the Build server and console module); W10 steps 3, 5 and 6 (Build schedules, monitoring); W3 Transfer | all three products are managed from the console; Build refreshes run on schedule and are monitored |
+| **P4** | W11; W9 | Build projects are authored in the console; the first suite release, and product MSIs and images that include or pair with the console |
 | **P5** | `ui web`, and any shared package still unused (except `Update.*`, shelved) | nothing duplicated remains |
 
 The workstreams run in parallel where they touch different code: W1 and W2 are independent of each other; W5's front-end extraction does not
@@ -550,7 +562,7 @@ These are rough line counts of today's code that this plan replaces. They show w
 
 | # | Decision | Recommendation |
 | --- | --- | --- |
-| D1 | Console topology | **decided: a separate dbdatakit console host** that manages registered product servers through their management APIs; each product server also serves its own UI when installed alone. (Revised from "the console grows out of Sync's server", which standalone installs rule out.) |
+| D1 | Console topology | **decided: the console and the products are separate.** Each product is its own services (a server with a management API and no UI); the dbdatakit console is the one shared UI and manages registered servers through their management APIs. A standalone install is a product plus the console |
 | D2 | Config format | **agreed: one YAML format for every product** (Proxy moves off JSON, reversing plan 10 D2, with a migration from `appsettings.json`) |
 | D3 | Executables and names | **decided:** each product keeps its own CLI; `dbdatakit` is the console's CLI only; lower-case executables; Build's `<noun> <verb>` everywhere, old forms removed; Build's long-running process is the `server` noun (W4b) |
 | D4 | Release model | **decided: each product stays a standalone install option**; the dbdatakit suite release (console image, suite MSI) comes from the same workflow and commit |
@@ -563,14 +575,14 @@ These are rough line counts of today's code that this plan replaces. They show w
 | D11 | Suite binaries self-contained vs framework-dependent | **self-contained**, with the .NET SDK required only for library, driver and script features (as today) |
 | D12 | How the Build server runs commands | **child processes**: one per command for runs and deploys, and one long-lived child per authoring workspace (W11) so feedback is fast; isolation from the native library either way |
 | D13 | Where a Build schedule lives: only in the project (committed with the refresh plan), or also added by an operator at the server | **project first** (fits Build's "everything is a file" rule and its review of plans); an operator can pause or run now from the console, but adding a schedule is a commit. Revisit if operators need schedules a project author should not own |
-| D14 | Console sign-in to product servers | a server registered with the console accepts a console-issued token (scoped to that server, short-lived) for its management API, and keeps its own users for direct sign-in; mTLS between console and servers later. Single sign-on across servers without the console is out of scope |
+| D14 | How product servers trust the console | people sign in only to the console. A server is registered with a console (a one-time pairing that exchanges keys) and accepts the console's short-lived tokens, scoped to that server and carrying the user and roles, so the server enforces roles and audits by name; mTLS between console and servers later. The product's CLI on the server's own machine keeps working without the console (local administrator) |
 | D15 | Where authoring merges | push to the project's git remote and open a pull request when a remote is configured; otherwise merge into the deploy branch inside the Build server, recorded with the author's identity |
 
 ## 8. Individual releases
 
-Decided (D4): **each product stays a standalone install option** for now: its own image, MSI and zip, its own CLI, its own web UI, and no
-dependency on the console or the other products. The dbdatakit suite is an addition, not a replacement: the console, plus a suite MSI with
-one feature per product. Producing everything from one workflow and one commit keeps the cost of having both low. Dropping the per-product
+Decided (D4): **each product stays a standalone install option** for now: its own image, MSI and zip, its own CLI, and no dependency on
+the other products. Its UI is the shared console, which its MSI includes (on by default) and its image is paired with. The dbdatakit suite
+is an addition, not a replacement: the console, plus a suite MSI with one feature per product. Producing everything from one workflow and one commit keeps the cost of having both low. Dropping the per-product
 artifacts can be reconsidered once the console is in use.
 
 ## 9. Risks
@@ -586,7 +598,8 @@ artifacts can be reconsidered once the console is in use.
 | Config migrations break installs (Sync scripts, Proxy JSON to YAML) | `Config` migrations write `.bak`; golden migration pairs (`Config.Testing`); an upgrade test from the last release of each product in CI |
 | Windows-only paths (service, ACLs, AD CS, the x86 worker) cannot be tested on Linux | the Windows CI jobs and `service-e2e.ps1` stay required for any PR that touches them |
 | A schedule runs twice (CLI by hand and the server, or two servers hosting one project) | the per-load lock and `on_busy` already cover a manual run; the work queue's lease and run lock (W10) cover two servers; a project is hosted by one server at a time |
-| Four hosts (three servers and the console) multiply the web and auth surface | all four are built from the same `DbDataKit.Web` code and the same front-end packages; the console reaches servers only through their management APIs |
+| A standalone install now runs two processes (the product's server and the console) | the MSI installs and registers both as one feature set; the compose file pairs the images; the product keeps working when the console is stopped |
+| The console holds every product's credentials to manage it | per-server pairing keys, short-lived scoped tokens, no database secrets in the console (each server resolves its own secret references) |
 | Authoring on a server lets a web user write files that a scheduled run then executes | drafts live in per-user worktrees; schedules run from a pinned ref; merging needs a role; every write goes through the confined `project file` commands |
 | Monitoring depends on the console being up | each server evaluates its own health rules and keeps its notifications; the console only shows them |
 | One maintainer, many parallel streams | the phases cap work in flight; each phase has an exit to check before the next |
