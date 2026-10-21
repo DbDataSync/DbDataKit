@@ -128,6 +128,7 @@ jobs:
       # uninstall, all via `dbdatasync service ...` (DbDataSync/tools/service-e2e.ps1). The unit tests cover the same flow against an
       # in-memory manager; this is the only place the real one is exercised.
       - name: Service end-to-end (install, start, restart, stop, uninstall)
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: |
           $exe = Get-ChildItem src/DbDataSync.Cli/bin/Release/net10.0 -Filter '*.exe' |
