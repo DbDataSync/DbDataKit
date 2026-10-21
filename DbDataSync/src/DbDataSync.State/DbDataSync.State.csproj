@@ -15,7 +15,7 @@
          on StateEngine MsSql/Postgres runs `dbdatasync config library install
          microsoft-data-sqlclient`/`npgsql` once instead (see StateDatabase.FromOptions and this
          project's retrospective phase doc). -->
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
   </ItemGroup>
 
   <PropertyGroup>

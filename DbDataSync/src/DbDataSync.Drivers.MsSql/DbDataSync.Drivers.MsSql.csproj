@@ -13,7 +13,7 @@
          project's (DbDataSync.Api/DbDataSync.Cli) .deps.json. LibraryRegistry's AssemblyLoadContext
          .Resolving handler (already armed for the descriptor/state-store paths) serves the real assembly
          from <repo>/libraries/microsoft-data-sqlclient/lib/ at first touch instead. -->
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" ExcludeAssets="runtime" />
+    <PackageReference Include="Microsoft.Data.SqlClient" VersionOverride="7.0.2" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <ItemGroup>

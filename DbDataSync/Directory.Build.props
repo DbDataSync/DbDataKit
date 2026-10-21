@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <!-- Monorepo layout: DbDataSync/ and DbDataKit/ (the shared libraries) are sibling folders at the repository root. -->
     <DbDataKitRoot Condition="'$(DbDataKitRoot)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', 'DbDataKit'))</DbDataKitRoot>
     <DbDataKitRoot>$([MSBuild]::EnsureTrailingSlash('$(DbDataKitRoot)'))</DbDataKitRoot>

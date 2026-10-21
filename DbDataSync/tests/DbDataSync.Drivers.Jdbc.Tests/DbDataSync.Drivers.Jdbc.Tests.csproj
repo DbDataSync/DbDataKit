@@ -8,19 +8,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" Version="6.0.4" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
-    <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
     <!-- The "known-good" side of every parity test in this project — see phase 109h's identical
          un-excluded reference in DbDataSync.Drivers.Postgres.Tests.csproj. -->
-    <PackageReference Include="Npgsql" Version="9.0.3" />
+    <PackageReference Include="Npgsql" VersionOverride="9.0.3" />
     <!-- DbDataSync.Drivers.Jdbc now excludes IKVM's runtime/build/native assets (resolved instead from
          libraries/ikvm/lib/ via LibraryRegistry in a real deployment — see that project's own csproj
          comment) — the same reason DbDataSync.Drivers.Postgres.Tests keeps its own un-excluded Npgsql
          reference. A standalone `dotnet test` here needs the real IKVM assets locally too, with nothing
          installed under libraries/. -->
-    <PackageReference Include="IKVM" Version="8.16.1" />
+    <PackageReference Include="IKVM" />
   </ItemGroup>
 
   <ItemGroup>

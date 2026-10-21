@@ -16,7 +16,7 @@ COPY Directory.Build.props Directory.Packages.props global.json ./
 COPY DbDataKit/Directory.Build.props DbDataKit/global.json DbDataKit/
 COPY DbDataKit/src/ DbDataKit/src/
 WORKDIR /src/DbDataSync
-COPY DbDataSync/DbDataSync.slnx DbDataSync/Directory.Build.props DbDataSync/Directory.Build.targets DbDataSync/dbdatasync.runsettings ./
+COPY DbDataSync/DbDataSync.slnx DbDataSync/Directory.Build.props DbDataSync/Directory.Build.targets DbDataSync/Directory.Packages.props DbDataSync/dbdatasync.runsettings ./
 COPY DbDataSync/src/ ./src/
 COPY DbDataSync/tests/ ./tests/
 COPY DbDataSync/tools/ ./tools/

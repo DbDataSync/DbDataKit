@@ -35,7 +35,7 @@
          entirely from a separate libraries/ikvm/lib/ directory, not this project's own output).
          Phase 170V: bumped 8.11.2 -> 8.16.1 (the exclusion list above was re-verified against 8.16.1's
          package layout, still sufficient — no new asset group appeared). -->
-    <PackageReference Include="IKVM" Version="8.16.1" ExcludeAssets="runtime;build;buildTransitive;native" />
+    <PackageReference Include="IKVM" ExcludeAssets="runtime;build;buildTransitive;native" />
   </ItemGroup>
 
   <ItemGroup>
