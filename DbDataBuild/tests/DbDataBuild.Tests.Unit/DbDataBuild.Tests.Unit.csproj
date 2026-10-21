@@ -10,6 +10,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- a shared DbDataKit library, through the mechanism in Directory.Build.targets (plan 13, F08) -->
+    <DbDataKitReference Include="Dialect.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="JsonSchema.Net" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />

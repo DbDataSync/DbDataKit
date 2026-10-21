@@ -54,7 +54,7 @@ jobs:
           if [ -n "$base" ] && git rev-parse --verify --quiet "$base^{commit}" >/dev/null; then
             changed=$(git diff --name-only "$range")
             echo "changed in $range:"; echo "$changed"
-            echo "$changed" | grep -qE '^(DbDataProxy/|DbDataKit/|testenv/|\.github/workflows/(dbdataproxy-|_))' || build=false
+            echo "$changed" | grep -qE '^(DbDataProxy/|DbDataKit/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/workflows/(dbdataproxy-|_))' || build=false
           else
             echo "::notice::no base to compare with ($EVENT), so everything is treated as changed."
           fi
