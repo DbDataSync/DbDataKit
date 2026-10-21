@@ -10,7 +10,9 @@ Status: **proposed** (2026-10-21), **revised twice the same day after the owner'
 - the console and the products are **separate**: each product is a set of services (a server with a management API, no web UI of its
   own), and the **dbdatakit console is the one shared UI** for all of them (section 3, D1). A standalone install is a product plus the
   console with only that product registered;
-- Build gets a `server` noun for a multi-project server (W7), and **project authoring in the web interface** (W11).
+- Build gets a `server` noun for a multi-project server (W7), and **project authoring in the web interface** (W11);
+- console and servers may run on different machines; **the console always calls the server, never the reverse**, and **each server can
+  be paired with several consoles** (W12).
 
 Scope: everything needed to turn three products that share a repository into one suite with one
 management console, one set of definitions and one release, while removing as much duplicated code as possible. Breaking changes are
@@ -273,7 +275,7 @@ System.CommandLine everywhere (Build already uses it). The result is JSON output
 
 | Noun | Verbs | Meaning |
 | --- | --- | --- |
-| `server` | `run` (plus product verbs) | the long-running process in the foreground; what the OS service runs |
+| `server` | `run`, `pair`, `unpair`, `consoles` (plus product verbs) | the long-running process in the foreground (what the OS service runs), and its pairings with consoles (W12) |
 | `service` | `install`, `uninstall`, `status`, `start`, `stop`, `restart`, `doctor` | registration of `server run` with Windows or systemd |
 | `cert` | `show`, `ensure`, `check`, `renew` (plus product verbs) | the server's TLS certificate |
 | `config` | `check`, `show`, `get`, `set`, `migrate`, `schema` | the server's own configuration |
@@ -304,7 +306,7 @@ What changes in each CLI:
 | `DbDataProxy query` | `dbdataproxy query run` | |
 | `dbdatabuild ui web` | removed | the console replaces it; `dbdatabuild server run --project .` (loopback by default) with a local console is the old local use |
 | (new) | `dbdatabuild server project add`, `remove`, `list` | projects hosted by one server |
-| (new) | `dbdatakit server run`, `server setup`, `instance add`, `remove`, `list`, `user ...`, `cert ...`, `config ...`, `service ...` | the console only: `instance add` pairs a product server with it (D14) |
+| (new) | `dbdatakit server run`, `server setup`, `instance add`, `remove`, `list`, `user ...`, `cert ...`, `config ...`, `service ...` | the console only: `instance add` pairs a product server with it (W12) |
 
 Build's own nouns (`project`, `connection`) are unchanged. Sync gains nouns for what its CLI cannot do yet (`connection`, `replication`, `run`)
 when its CLI and API parity work (`DbDataSync/architecture/planning/todo/cli-setup-and-api-parity.md`) is done, in the same grammar.
@@ -352,7 +354,8 @@ Two steps, each with its own exit:
 
 Today Proxy is configured by editing `appsettings.json` and running CLI verbs. It has no runtime admin interface.
 
-1. **Management API** on a separate listener: loopback by default, TLS, authenticated by a console-issued token (D14); the local CLI on the same machine also works without the console.
+1. **Management API** on a separate listener, never the Flight port, secured as every product's is (W12): HTTPS, console tokens, the
+   local CLI over a local channel.
    It is never on the Flight port and never on the hot path. Endpoints: health, version and drain (plan 03's seams); effective config,
    redacted, with origins; validation; data sources (CRUD and test connection); users, Windows accounts, JWT mappings and pass-through;
    live sessions and running queries (with cancel); concurrency gates and limits; login throttle state; certificate status and renewal;
@@ -404,9 +407,9 @@ Each product server keeps its own definitions (it must run without the console a
    projects keep their own connection files (they are committed by the author).
 2. **One secret syntax and resolver** (`env:`, `file:`, `secret:`, `dpapi:`) in every product.
 3. **One identity model and implementation.** Users (passkeys, Windows) with roles: Admin, Operator, Viewer, Author (W11) and Approver
-   (Build plans). **Users live in the console**, the only place people sign in. Product servers have no user accounts: they accept the
-   console's token for their management API, which names the user and their roles, so each server still enforces roles and records who
-   did what (D14). Proxy's client identities (its Flight users,
+   (Build plans). **Users live in the consoles**, the only place people sign in. Product servers have no user accounts: they accept a
+   paired console's token for their management API, which names the user and their roles, so each server still enforces roles and records
+   who did what (W12). Proxy's client identities (its Flight users,
    Windows accounts, JWT mappings) stay Proxy's data-plane auth. One PBKDF2 hasher (plan 10 C3).
 4. **One config layout**, git-tracked with auto-commit and the history UI (Sync's `GitCommitService` becomes `DbDataKit.Config.Git`), the
    same in every product's data directory:
@@ -514,6 +517,85 @@ What it builds on: every authoring step already exists as a command with a JSON 
 Exit: a new project can be created from a template, a model added and checked against every target, committed, planned, approved and
 applied, all from the console, and the same files and checks result as from the CLI.
 
+### W12. Console and server: trust, authentication and authorization (M)
+
+The console and the servers may run on the same machine (a standalone install) or on different ones (one console managing many servers,
+or containers on a shared network). Nothing in this design depends on which.
+
+**Rules**
+
+1. **The console calls the server; the server never calls the console.** A server needs no credentials for any console, keeps running
+   when every console is gone, and monitoring, notifications and run history are pulled by the console. A server that a console cannot
+   reach inbound (behind a firewall) is out of scope; a later option is the server dialling out to the console.
+2. **A server can be paired with several consoles** (for example a team console and an operations console, or a standby). Each pairing
+   is independent: its own key, its own role ceiling, revoked on its own.
+3. **The server is the security boundary.** A console hides what a user may not do, but the server checks every call itself and never
+   trusts the UI.
+
+**Transport.** The management API is always HTTPS on its own listener (on Proxy, never the Flight port). With the console installed on
+the same machine it binds to loopback; for remote consoles the bind address is set at install or with `config set`, and a startup warning
+names an address that is not loopback and not covered by TLS. The certificate comes from the shared certificate code (W3, plan 12);
+self-signed is fine because the console pins its fingerprint at pairing.
+
+**Pairing** (the same verbs in every product):
+
+1. On the server's machine an administrator runs `<product> server pair [--max-role <role>] [--name <label>]`. It prints a single-use
+   code that expires after a few minutes; needing local administrator rights is the proof of ownership. For a container the code can come
+   from an environment variable at first start.
+2. In a console an administrator runs `dbdatakit instance add <url> --code <code>` (or uses the console's screen).
+3. The exchange gives the console the server's certificate fingerprint and instance id, and gives the server the console's id, its name
+   and its public token-signing key (ed25519). The server adds an entry to the list of paired consoles in `server.yaml`; pairing again
+   with another console adds another entry.
+4. `--max-role` caps what any user of that console can do on this server (a read-only operations console, for example). A token claiming
+   more is refused.
+5. `<product> server consoles` lists the pairings (name, id, key fingerprint, ceiling, when last used); `server unpair <console>` removes
+   one, effective at once. A console rotates its signing key by sending the new key signed with the old one, so its servers need no re-pairing.
+
+**Authentication on every call.** The console signs a short-lived token (about 5 minutes) with: issuer (console id), audience (the
+server's instance id), subject (the user's id and name, or the console itself for background polling), the user's roles on that server
+(and, for Build, per project), a unique id and an expiry. The server checks the signature against the key of the console named as issuer,
+the audience, the expiry, the ceiling, and that the id has not been used before. Tokens are headers, not cookies, so they work through
+reverse proxies. mTLS is optional extra hardening later, not a requirement.
+
+**Authorization.** Roles are assigned in each console, per user and per server (and per Build project). The role a call needs follows
+from the command's effect class (W4a):
+
+| Call | Role |
+| --- | --- |
+| reads (status, config, runs, catalog) | Viewer |
+| operations (run now, pause a schedule, cancel a query, restart) | Operator |
+| configuration changes (connections, data sources, replications, schedules, certificates) | Admin |
+| project file writes and commits (W11) | Author |
+| approving and applying a Build plan | Approver |
+
+The effective role is the lower of the user's role in the token and the console's ceiling. A long operation (applying a deploy) is
+authorized when it starts and runs to the end under that user.
+
+**Several consoles at once.**
+
+- **Concurrent edits.** Every write carries the version it was based on (the config file's hash, the `project file` content hash of W11);
+  a write against a stale version is refused with the current one, never merged silently.
+- **Audit.** The server records the console id and the user for every change: in its audit log, and as the author of the git commit in
+  its config directory (`user name <console name>`). A Build plan approval records the approver and the console.
+- **Users are per console.** Consoles do not share users or role assignments with each other; the same person can have different roles
+  in two consoles, bounded on each server by that console's ceiling. Single sign-on across consoles is out of scope.
+- **Notifications** are kept on the server; each console tracks what it has read.
+
+**Secrets.** No console holds database credentials. Each server resolves its own secret references and redacts its responses; a secret
+typed into a console is sent once to the server, which stores it in its own secret store, and the console keeps only the reference.
+
+**The local CLI.** On the server's own machine the product CLI talks to the running server over a named pipe (Windows) or Unix socket,
+restricted by the OS to administrators, root or the service's group. Work on the machine never needs a console, and nothing of it is on
+the network. `server pair` and `server unpair` work this way.
+
+**Consoles' own sign-in** is Sync's today, moved into the console: passkeys, Windows sign-in, invites, sessions, HTTPS, `PlainHttpProtection`.
+
+**Shared code.** All of it is in `DbDataKit.Web` (token issuing in the console; validation, ceilings, replay check and the role check in
+each server) and `DbDataKit.Hosting` (the local channel, pairing codes), so the four hosts behave the same.
+
+Exit: a console on another machine pairs with a server of each product and manages it; a second console pairs with the same server with a
+lower ceiling and is refused above it; unpairing one console leaves the other working; every change on the server names its user and console.
+
 ## 5. Phases
 
 ```
@@ -530,7 +612,7 @@ P0 foundations ─► P1 engines and loaders ─► P2 console ─────�
 | --- | --- | --- |
 | **P0** (now) | W0; W1 steps 1-2 on 2.0.0 final; W2 spike; the open decisions in section 7 | one build setup and one version per package; a written 2.0 result for all three products; a spike report |
 | **P1** | W1 to the end (when DuckDB.NET 2.0 lands, or the interim per D6); W2; W3 Config, Secrets, Dialect in Sync and Dialect, Connections in Build; W5 front-end extraction | 2.0 is the default; one code loader; Sync's UI built from the workspace |
-| **P2** | W5 back-end and step 2 (the dbdatakit console host and `dbdatakit` CLI: instances, console tokens, D14; Sync's UI and users move into it); W8; W4 (contract and the renames of 4b); W10 steps 1, 2 and 4 (extract from Sync, Sync on the shared packages); W3 Connections in Sync and Metadata in both; `Connections.FlightSql` | Sync is managed through the console and its server serves no UI; one connection, secret, user and config implementation; the new command names; Sync's scheduler runs on `DbDataKit.Scheduling` |
+| **P2** | W5 back-end and step 2 (the dbdatakit console host and `dbdatakit` CLI; Sync's UI and users move into it); W12 (pairing, tokens, roles, the local channel; needed before Sync's UI can leave its server); W8; W4 (contract and the renames of 4b); W10 steps 1, 2 and 4 (extract from Sync, Sync on the shared packages); W3 Connections in Sync and Metadata in both; `Connections.FlightSql` | Sync is managed through the console and its server serves no UI; one connection, secret, user and config implementation; the new command names; Sync's scheduler runs on `DbDataKit.Scheduling` |
 | **P3** | W6 (Proxy management API and console module); W7 (the Build server and console module); W10 steps 3, 5 and 6 (Build schedules, monitoring); W3 Transfer | all three products are managed from the console; Build refreshes run on schedule and are monitored |
 | **P4** | W11; W9 | Build projects are authored in the console; the first suite release, and product MSIs and images that include or pair with the console |
 | **P5** | `ui web`, and any shared package still unused (except `Update.*`, shelved) | nothing duplicated remains |
@@ -575,7 +657,7 @@ These are rough line counts of today's code that this plan replaces. They show w
 | D11 | Suite binaries self-contained vs framework-dependent | **self-contained**, with the .NET SDK required only for library, driver and script features (as today) |
 | D12 | How the Build server runs commands | **child processes**: one per command for runs and deploys, and one long-lived child per authoring workspace (W11) so feedback is fast; isolation from the native library either way |
 | D13 | Where a Build schedule lives: only in the project (committed with the refresh plan), or also added by an operator at the server | **project first** (fits Build's "everything is a file" rule and its review of plans); an operator can pause or run now from the console, but adding a schedule is a commit. Revisit if operators need schedules a project author should not own |
-| D14 | How product servers trust the console | people sign in only to the console. A server is registered with a console (a one-time pairing that exchanges keys) and accepts the console's short-lived tokens, scoped to that server and carrying the user and roles, so the server enforces roles and audits by name; mTLS between console and servers later. The product's CLI on the server's own machine keeps working without the console (local administrator) |
+| D14 | How product servers trust consoles | **decided:** the console calls the server, never the reverse; a server can be paired with several consoles, each with its own key and role ceiling; short-lived signed tokens per call; the server enforces roles; the local CLI over a named pipe or Unix socket (W12) |
 | D15 | Where authoring merges | push to the project's git remote and open a pull request when a remote is configured; otherwise merge into the deploy branch inside the Build server, recorded with the author's identity |
 
 ## 8. Individual releases
@@ -594,12 +676,14 @@ artifacts can be reconsidered once the console is in use.
 | DuckDB 2.0's storage format is one-way | W1 step 2 audit before 2.0 is the default; read-only opens for user files; release note |
 | Sync is large (about 68,000 lines of product code) and adoption touches its core | strangler pattern from plan 10: adapter first, existing tests unchanged, one concern per PR |
 | The console work turns into a UI rewrite | W5 is extraction only, with Sync's Playwright suite and screenshots as the gate; new screens come after it |
-| A management API weakens Proxy's security | separate listener, loopback by default, TLS, admin token, no shared code on the query path, the same failure classification and redaction |
+| A management API weakens Proxy's security | separate listener, HTTPS with a pinned certificate, signed console tokens checked on every call, roles enforced on the server (W12), no shared code on the query path, the same failure classification and redaction |
 | Config migrations break installs (Sync scripts, Proxy JSON to YAML) | `Config` migrations write `.bak`; golden migration pairs (`Config.Testing`); an upgrade test from the last release of each product in CI |
 | Windows-only paths (service, ACLs, AD CS, the x86 worker) cannot be tested on Linux | the Windows CI jobs and `service-e2e.ps1` stay required for any PR that touches them |
 | A schedule runs twice (CLI by hand and the server, or two servers hosting one project) | the per-load lock and `on_busy` already cover a manual run; the work queue's lease and run lock (W10) cover two servers; a project is hosted by one server at a time |
 | A standalone install now runs two processes (the product's server and the console) | the MSI installs and registers both as one feature set; the compose file pairs the images; the product keeps working when the console is stopped |
-| The console holds every product's credentials to manage it | per-server pairing keys, short-lived scoped tokens, no database secrets in the console (each server resolves its own secret references) |
+| The console holds every product's credentials to manage it | per-server pairing, short-lived tokens scoped to one server, role ceilings per console, no database secrets in any console (each server resolves its own secret references) |
+| A stolen console signing key acts on every server paired with that console | the key never leaves the console's protected store (`Secrets`, `Security.Acl`); ceilings limit the damage; `server unpair` on each server, or a signed key rotation, cuts it off |
+| Two consoles change the same thing | every write is checked against the version it was based on; refused when stale |
 | Authoring on a server lets a web user write files that a scheduled run then executes | drafts live in per-user worktrees; schedules run from a pinned ref; merging needs a role; every write goes through the confined `project file` commands |
 | Monitoring depends on the console being up | each server evaluates its own health rules and keeps its notifications; the console only shows them |
 | One maintainer, many parallel streams | the phases cap work in flight; each phase has an exit to check before the next |
