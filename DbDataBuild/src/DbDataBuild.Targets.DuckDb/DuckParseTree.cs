@@ -108,6 +108,46 @@ public static class DuckParseTree
         }
     }
 
+    /// <summary>
+    /// The names (lower case) of the functions a query calls, according to DuckDB's own parser. Empty when the query cannot be parsed. The query is parsed, never bound or run.
+    /// </summary>
+    public static IReadOnlySet<string> FunctionNames(string sql)
+    {
+        try
+        {
+            using var connection = new DuckDBConnection("DataSource=:memory:");
+            connection.Open();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = "SELECT json_serialize_sql(CAST($sql AS VARCHAR))";
+            var p = cmd.CreateParameter();
+            p.ParameterName = "sql";
+            p.Value = sql;
+            cmd.Parameters.Add(p);
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            if (cmd.ExecuteScalar() is not string json) return names;
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.True) return names;
+            WalkFunctions(doc.RootElement, names);
+            return names;
+        }
+        catch (DuckDBException) { return new HashSet<string>(StringComparer.Ordinal); }
+    }
+
+    private static void WalkFunctions(JsonElement e, HashSet<string> names)
+    {
+        switch (e.ValueKind)
+        {
+            case JsonValueKind.Object:
+                if (e.TryGetProperty("class", out var cls) && cls.ValueKind == JsonValueKind.String && cls.GetString() == "FUNCTION" && e.TryGetProperty("function_name", out var fn) && fn.ValueKind == JsonValueKind.String)
+                    names.Add(fn.GetString()!.ToLowerInvariant());
+                foreach (var property in e.EnumerateObject()) WalkFunctions(property.Value, names);
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in e.EnumerateArray()) WalkFunctions(item, names);
+                break;
+        }
+    }
+
     private static void Walk(JsonElement e, HashSet<string> ctes, List<Table> tables)
     {
         switch (e.ValueKind)

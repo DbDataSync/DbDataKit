@@ -707,24 +707,17 @@ public sealed class PlanLowerer
         }
         var returns = e.GetProperty("return_type");
         var kind = returns.GetProperty("id").GetString();
-        if (kind is not ("DOUBLE" or "DECIMAL")) throw new LoweringException($"{name} over {kind} values");
-        // DuckDB interpolates a DECIMAL on its stored whole numbers (the value times 10^scale) in double arithmetic and cuts the result to a whole number (1228.40888 is 1228.4088, not 1228.4089);
-        // the same is done here, so the values agree to the last digit
-        var scale = kind == "DECIMAL" && returns.TryGetProperty("type_info", out var info) && info.TryGetProperty("scale", out var s) ? s.GetInt32() : 0;
-        var ten = $"1{new string('0', scale)}";                                  // 10^scale
-        var power = scale == 0 ? "" : $" * {ten}";
-        string Value() => kind == "DECIMAL" ? $"CAST(CAST({x}{power} AS BIGINT) AS DOUBLE)" : $"CAST({x} AS DOUBLE)";
+        if (kind == "DECIMAL")
+            throw new LoweringException($"{name} over a DECIMAL: DuckDB 2.0 interpolates the stored whole numbers in an arithmetic that a lowered query cannot reproduce to the last digit (and the engines' PERCENTILE_CONT is another). Cast the column to DOUBLE first, for example {name}(CAST(x AS DOUBLE), q), and cast the result back if a DECIMAL is needed");
+        if (kind != "DOUBLE") throw new LoweringException($"{name} over {kind} values");
         var at = $"(({n} - 1) * {q})";
+        string Value() => $"CAST({x} AS DOUBLE)";
         var lower = $"max(CASE WHEN {rank} = CAST(floor{at} AS BIGINT) + 1 THEN {Value()} END)";
         var upper = $"max(CASE WHEN {rank} = CAST(ceil{at} AS BIGINT) + 1 THEN {Value()} END)";
         var groupSize = $"CAST(max({outs[countAt]}) AS DOUBLE)";                 // outside an aggregate the group's row count has to be an aggregate itself
         var fraction = $"(({groupSize} - 1) * {q})";
         var weight = $"({fraction} - floor{fraction})";
-        var interpolated = $"({lower} * (1.0 - {weight}) + {upper} * {weight})";      // DuckDB's own form: lo * (1 - d) + hi * d, which is not lo + (hi - lo) * d in the last bit
-        if (kind == "DOUBLE") return interpolated;
-        rules.Add("double-to-decimal");
-        rules.Add("round-double");                                                // the explicit DOUBLE cast marks the round for the target step, as in the cast rule
-        return $"CAST(round(CAST(CAST(trunc({interpolated}) AS DOUBLE) / {ten}.0 AS DOUBLE), {scale}) AS {TypeName(returns)})";
+        return $"({lower} * (1.0 - {weight}) + {upper} * {weight})";           // DuckDB's own form: lo * (1 - d) + hi * d, which is not lo + (hi - lo) * d in the last bit
     }
 
     /// <summary>The fraction of a quantile as the plan holds it (a decimal constant stored as a whole number and a scale), written as a decimal literal.</summary>
