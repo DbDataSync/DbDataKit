@@ -407,6 +407,14 @@ public sealed class PlanLowerer
 
     private static readonly HashSet<string> Volatile = new(StringComparer.OrdinalIgnoreCase) { "random", "uuid", "gen_random_uuid", "nextval", "currval", "setseed" };
 
+    /// <summary>True when the plan expression calls a volatile function anywhere inside it.</summary>
+    private static bool HasVolatileCall(JsonElement e) => e.ValueKind switch
+    {
+        JsonValueKind.Object => (Str(e, "type") == "BOUND_FUNCTION" && Volatile.Contains(Str(e, "name") ?? "")) || e.EnumerateObject().Any(p => HasVolatileCall(p.Value)),
+        JsonValueKind.Array => e.EnumerateArray().Any(HasVolatileCall),
+        _ => false,
+    };
+
     /// <summary>True when the value of the expression depends on no column: only literals, functions of those that are not volatile, and the items of the child that are themselves like that.</summary>
     private static bool IsColumnFree(JsonElement e, IReadOnlyList<Item> childItems)
     {
@@ -564,8 +572,14 @@ public sealed class PlanLowerer
         if (DatePartAliases.TryGetValue(name, out var partName) && a.Count == 1) return $"date_part('{partName}', {a[0]})";
         if (name is "date_part" or "datepart" && a.Count == 2 && StringConstant(children[0]) is { } writtenPart) return $"date_part('{DatePartAliases.GetValueOrDefault(writtenPart.ToLowerInvariant(), writtenPart.ToLowerInvariant())}', {a[1]})";
         // RULE int-div: `//` on integers truncates toward zero. polyglot cannot read it, and the engines' own integer division is spelled `/`, which in DuckDB's dialect is float division
+        // K09 (D8): by zero it raises in DuckDB 2.0, SQL Server and PostgreSQL alike. `(a - a % b) / b` is the exact truncated quotient, and the `%` raises first on every engine, whatever the `/` is turned into for a
+        // target (a float division guarded against zero, which would give NULL). The left operand is written twice, so one that is not deterministic is refused.
         if (name == "//" && a.Count == 2)
-            return returns is "INTEGER" or "SMALLINT" or "TINYINT" ? $"CAST(trunc(CAST({a[0]} AS DOUBLE) / CAST(NULLIF({a[1]}, 0) AS DOUBLE)) AS {returns})" : throw new LoweringException($"integer division `//` over {returns}");
+        {
+            if (returns is not ("INTEGER" or "SMALLINT" or "TINYINT")) throw new LoweringException($"integer division `//` over {returns}");
+            if (HasVolatileCall(children[0])) throw new LoweringException("integer division `//` of an expression that is not deterministic (random(), uuid(), ...): the left operand is written twice");
+            return $"CAST(({a[0]} - ({a[0]} % {a[1]})) / {a[1]} AS {returns})";
+        }
         // RULE date-plus-days: `date + 3` and `date - i` add and take away days in DuckDB and PostgreSQL; SQL Server does not take a whole number as an interval. The explicit casts mark the expression for the
         // target step (a date and a whole number side by side), which writes it as an interval of that many days on SQL Server.
         var argTypes = Arr(e, "arguments").Select(x => x.TryGetProperty("id", out var xid) ? xid.GetString() ?? "" : "").ToList();   // a constant has no return type of its own, but the function lists its argument types
@@ -580,9 +594,9 @@ public sealed class PlanLowerer
             return $"(CAST({a[0]} AS {leadingDays}) + CAST({a[1]} AS DATE))";
         }
         // the days between two dates is `a - b` in DuckDB; SQL Server has no subtraction of dates
-        if (name == "-" && a.Count == 2 && TypeId(children[0]) == "DATE" && TypeId(children[1]) == "DATE") return $"date_diff('day', {a[1]}, {a[0]})";
-        // DuckDB gives NULL for x % 0 where both engines raise an error
-        if (name == "%" && a.Count == 2 && !(children[1].GetProperty("type").GetString() == "VALUE_CONSTANT" && !IsZeroConstant(children[1].GetProperty("value")))) a[1] = $"NULLIF({a[1]}, 0)";
+        // (a constant has no return type of its own in the plan, so the function's argument types say it: `col - DATE '2024-01-01'`)
+        if (name == "-" && a.Count == 2 && argTypes is ["DATE", "DATE"]) return $"date_diff('day', {a[1]}, {a[0]})";
+        // x % 0 and x // 0 raise in DuckDB 2.0 (1.x gave NULL), in SQL Server and in PostgreSQL: both are written as they are, with no guard (the `//` form divides as DOUBLE, whose zero divisor gives inf or NaN and then fails the cast back to the integer type)
         // RULE round-double: DuckDB rounds the scaled double half away from zero; the engines do something else. The explicit DOUBLE cast marks it for the target step.
         // A FLOAT (32 bits) is rounded as its exact value in double arithmetic (DuckDB: round(CAST(1.005 AS FLOAT), 2) is 1, not 1.01) and the result is a FLOAT again: written with the casts, in a form the rule handles.
         var roundsFloat = false;
@@ -645,9 +659,6 @@ public sealed class PlanLowerer
     {
         "version", "txid_current", "current_schema", "current_schemas", "current_database", "current_connection_id", "current_query", "current_query_id", "current_transaction_id", "current_setting", "getenv",
     };
-
-    private static bool IsZeroConstant(JsonElement value) =>
-        value.TryGetProperty("is_null", out var n) && n.ValueKind == JsonValueKind.True || !value.TryGetProperty("value", out var x) || x.ValueKind == JsonValueKind.Number && x.GetRawText().Trim('0', '.', '-') == "";
 
     /// <summary>Aggregates whose value over no rows is NULL (a count is 0, and so is not on this list).</summary>
     private static readonly HashSet<string> NullOnEmpty = new(StringComparer.OrdinalIgnoreCase)

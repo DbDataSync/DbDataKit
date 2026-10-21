@@ -15,12 +15,6 @@ public class PlanLowererTests
     {
         var c = PlanningConnection.Open(lockDown: false);          // the connection that plans is the one that answers too: on DuckDB 2.0 it keeps the clock calls in the plan, and its replacements return the real time
         Exec(c, File.ReadAllText(Path.Combine(RepoRoot(), "spike", "seed.duckdb.sql")));
-        // DuckDB 2.0 raises for `%` and `//` by zero where 1.x gave NULL, and the lowering writes the 1.x answer (NULLIF); the oracle answers like 1.x so the rows can be compared (owner decision pending)
-        using (var probe = c.CreateCommand())
-        {
-            probe.CommandText = "SELECT count(*) FROM duckdb_settings() WHERE name = 'error_on_division_by_zero'";
-            if (Convert.ToInt64(probe.ExecuteScalar()) > 0) Exec(c, "SET error_on_division_by_zero = false");
-        }
         return c;
     }
 
@@ -655,9 +649,9 @@ public class PlanLowererTests
         { "SELECT id, round(a * 0.5) AS v FROM t", "round(" },
         { "SELECT id, year(d) AS y, month(d) AS m, day(d) AS dd, quarter(d) AS q, hour(ts) AS h, minute(ts) AS mi, second(ts) AS s2 FROM t", "date_part('year', d)" },
         { "SELECT id, dayofweek(d) AS w, dayofyear(d) AS y, isodow(d) AS i FROM t", "date_part('dow', d)" },
-        { "SELECT id, a % b AS v FROM t", "NULLIF(b, 0)" },
+        { "SELECT id, a % b AS v FROM t WHERE b <> 0", "(a % b)" },
         { "SELECT id, a % 3 AS v FROM t", "(a % 3)" },
-        { "SELECT id, a // b AS v FROM t", "trunc(" },
+        { "SELECT id, a // b AS v FROM t WHERE b <> 0", "(a % b)" },
         { "SELECT id, CAST(a * 0.5 AS INTEGER) AS v FROM t", "decimal-to-int" },
         { "SELECT id, CAST(CAST(a AS DECIMAL(10, 2)) AS SMALLINT) AS v FROM t", "round(" },
         { "SELECT id, CAST(a / 2 AS INTEGER) AS v FROM t", "double-to-int" },
@@ -671,6 +665,55 @@ public class PlanLowererTests
         { "SELECT id, d1 - id AS v FROM t", "date-plus-days" },
         { "SELECT id, id + d1 AS v FROM t", "date-plus-days" },
     };
+
+    /// <summary>
+    /// `%` and `//` by zero raise in DuckDB 2.0 (1.x gave NULL), in SQL Server and in PostgreSQL, so the lowering writes them as they are (K09, D8): the lowered query raises
+    /// wherever the original does, and a NULL divisor is still NULL.
+    /// </summary>
+    [Theory]
+    [InlineData("SELECT id, a % b AS v FROM t")]
+    [InlineData("SELECT id, a // b AS v FROM t")]
+    [InlineData("SELECT id, a % 0 AS v FROM t")]
+    [InlineData("SELECT id, a // 0 AS v FROM t")]
+    public void A_division_by_zero_raises_in_the_lowered_query_as_in_the_original(string source)
+    {
+        using var c = Open();
+        var lowered = Lower(c, source);
+        Assert.DoesNotContain("NULLIF", lowered);
+        Assert.ThrowsAny<Exception>(() => Rows(c, source, false));
+        Assert.ThrowsAny<Exception>(() => Rows(c, lowered, false));
+    }
+
+    [Fact]
+    public void Integer_division_is_the_exact_truncated_quotient_written_with_a_modulo_that_raises_first()
+    {
+        using var c = Open();
+        var lowered = Lower(c, "SELECT id, a // b AS v FROM t WHERE b <> 0");
+        Assert.Contains("% b", lowered);
+        Assert.DoesNotContain("trunc", lowered);
+        // negative operands truncate toward zero, as DuckDB's own // does
+        foreach (var (x, y) in new[] { (7, 2), (-7, 2), (7, -2), (-7, -2), (0, 5), (6, 3), (-6, 3), (1, 7), (-1, 7) })
+        {
+            var source = $"SELECT CAST({x} AS INTEGER) // CAST({y} AS INTEGER) AS v";
+            Assert.Equal(Rows(c, source, false), Rows(c, Lower(c, source), false));
+        }
+    }
+
+    [Fact]
+    public void Integer_division_of_an_expression_that_is_not_deterministic_is_refused()
+    {
+        using var c = Open();
+        var ex = Assert.Throws<LoweringException>(() => Lower(c, "SELECT CAST(random() * 100 AS INTEGER) // CAST(id AS INTEGER) AS v FROM t"));
+        Assert.Contains("not deterministic", ex.Message);
+    }
+
+    [Fact]
+    public void A_NULL_divisor_is_still_NULL_and_a_non_zero_one_divides_alike()
+    {
+        using var c = Open();
+        foreach (var source in new[] { "SELECT a % NULL AS v FROM t", "SELECT a // NULL AS v FROM t", "SELECT id, a % 3 AS v, a // 3 AS w FROM t" })
+            Assert.Equal(Rows(c, source, false), Rows(c, Lower(c, source), false));
+    }
 
     [Theory, MemberData(nameof(Probed))]
     public void Constructs_the_engine_probes_found_wrong_lower_to_queries_with_DuckDBs_own_rows(string source, string expectedInLowered)
