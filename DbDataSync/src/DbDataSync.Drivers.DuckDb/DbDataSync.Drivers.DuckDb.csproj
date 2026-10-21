@@ -37,7 +37,7 @@
       install followed by an actual DuckDBConnection query through the freshly-loaded assembly. No .cs
       file in this project changed either phase.
     -->
-    <PackageReference Include="DuckDB.NET.Data.Full" VersionOverride="1.5.5" ExcludeAssets="runtime;native" />
+    <PackageReference Include="DuckDB.NET.Data.Full" ExcludeAssets="runtime;native" />
   </ItemGroup>
 
   <PropertyGroup>

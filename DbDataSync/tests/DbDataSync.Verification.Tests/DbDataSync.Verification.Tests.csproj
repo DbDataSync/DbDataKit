@@ -17,7 +17,7 @@
          `new DuckDBConnection(...)`s *inside DbDataSync.Verification* to page the parquet a check
          produced. Confirmed by running the suite after DbDataSync.Verification.csproj's own
          ExcludeAssets landed. -->
-    <PackageReference Include="DuckDB.NET.Data.Full" VersionOverride="1.5.5" />
+    <PackageReference Include="DuckDB.NET.Data.Full" />
   </ItemGroup>
 
   <ItemGroup>

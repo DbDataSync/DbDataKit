@@ -17,7 +17,7 @@
          comment), so this test project — which touches Microsoft.Data.SqlClient types directly and
          needs a real standalone `dotnet test` run to work with no LibraryRegistry-installed library
          present — needs its own, un-excluded, direct reference to the identical package + version. -->
-    <PackageReference Include="Microsoft.Data.SqlClient" VersionOverride="7.0.2" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
   </ItemGroup>
 
   <ItemGroup>

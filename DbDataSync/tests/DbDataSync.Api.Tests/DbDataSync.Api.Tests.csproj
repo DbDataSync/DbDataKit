@@ -19,12 +19,12 @@
          transitively through DbDataSync.Drivers.MsSql's own PackageReference, which now excludes runtime
          assets. A real gap beyond the phase doc's own "two driver test projects" framing, found by
          running the full suite. -->
-    <PackageReference Include="Microsoft.Data.SqlClient" VersionOverride="7.0.2" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
     <!-- Phase 109i: the identical gap, for DuckDB — DuckDbQueryPreviewTests.cs and
          PositionCapturingContractTests.cs `new DuckDBConnection(...)` directly in their own scaffolding,
          previously supplied transitively through DbDataSync.Drivers.DuckDb (or DbDataSync.Verification/
          .Scripting via DbDataSync.Api) before 109i's ExcludeAssets. -->
-    <PackageReference Include="DuckDB.NET.Data.Full" VersionOverride="1.5.5" />
+    <PackageReference Include="DuckDB.NET.Data.Full" />
     <!-- Phase 38: the same gap again, for Npgsql, but reached a different way — nothing in this project
          uses Npgsql directly. ChangeReaderFirstPassContractTests reflects over every driver assembly
          with GetTypes(), and PgCopyStagingProvider's async methods put NpgsqlConnection and

@@ -16,7 +16,7 @@
          directly, previously supplied transitively through DbDataSync.Drivers.DuckDb's own
          PackageReference, which now excludes runtime assets. The same fix 109h made for the MsSql/
          Postgres driver test projects. -->
-    <PackageReference Include="DuckDB.NET.Data.Full" VersionOverride="1.5.5" />
+    <PackageReference Include="DuckDB.NET.Data.Full" />
   </ItemGroup>
 
   <ItemGroup>

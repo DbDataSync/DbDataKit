@@ -18,7 +18,7 @@
          (now ExcludeAssets="runtime") PackageReference — a real gap the phase doc's own "two driver
          test projects" framing did not anticipate, found by actually running the full suite rather than
          assumed. -->
-    <PackageReference Include="Microsoft.Data.SqlClient" VersionOverride="7.0.2" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
   </ItemGroup>
 
   <ItemGroup>

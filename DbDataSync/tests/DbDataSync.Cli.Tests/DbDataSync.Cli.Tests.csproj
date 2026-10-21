@@ -17,7 +17,7 @@
          previously supplied transitively through DbDataSync.Drivers.MsSql's own PackageReference, which
          now excludes runtime assets. A real gap beyond the phase doc's own "two driver test projects"
          framing, found by running the full suite. -->
-    <PackageReference Include="Microsoft.Data.SqlClient" VersionOverride="7.0.2" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
   </ItemGroup>
 
   <ItemGroup>

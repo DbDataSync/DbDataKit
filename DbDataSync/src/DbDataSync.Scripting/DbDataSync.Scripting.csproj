@@ -11,7 +11,7 @@
          DbDataSync.Drivers.DuckDb.csproj's comment for the mechanism, identical here. No .cs file in
          this project changed either phase; SegmentingStrategyRunner.cs still `new
          DuckDBConnection(...)` directly for a DuckDb-kind strategy. -->
-    <PackageReference Include="DuckDB.NET.Data.Full" VersionOverride="1.5.5" ExcludeAssets="runtime;native" />
+    <PackageReference Include="DuckDB.NET.Data.Full" ExcludeAssets="runtime;native" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
   </ItemGroup>
 
