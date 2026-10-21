@@ -7,7 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
-    <PackageReference Include="DuckDB.NET.Data.Full" />
+    <PackageReference Include="DuckDB.NET.Data" />
     <ProjectReference Include="..\DbDataKit.Connections\DbDataKit.Connections.csproj" />
   </ItemGroup>
 </Project>

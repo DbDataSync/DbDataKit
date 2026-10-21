@@ -41,17 +41,23 @@ internal sealed class ArrowColumnWriter
     private const int FallbackPrecision = 38;
     private const int FallbackScale = 9;
 
-    public static ArrowColumnWriter Create(DbDataReader reader, int ordinal, ColumnMeta meta)
+    public static ArrowColumnWriter Create(DbDataReader reader, int ordinal, ColumnMeta meta) => Create(reader, ordinal, meta, nullOnly: false);
+
+    private static ArrowColumnWriter Create(DbDataReader reader, int ordinal, ColumnMeta meta, bool nullOnly)
     {
         string name = reader.GetName(ordinal);
-        string typeName = SafeTypeName(reader, ordinal);
+        string typeName = nullOnly ? string.Empty : SafeTypeName(reader, ordinal);
         Type clr;
         try
         {
-            clr = reader.GetFieldType(ordinal);
+            clr = nullOnly ? typeof(string) : reader.GetFieldType(ordinal);
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or InvalidOperationException)
         {
+            // DuckDB 2.0 types a column that is only an untyped NULL (SELECT NULL, a null parameter) as SQLNULL, which DuckDB.NET cannot
+            // map. Every value in it is NULL, so it travels as a string column of nulls.
+            if (ex.Message.Contains("SqlNull", StringComparison.OrdinalIgnoreCase))
+                return Create(reader, ordinal, meta, nullOnly: true);
             // Driver-specific types (e.g. ODBC SQL_SS_TIMESTAMPOFFSET) that System.Data.Odbc cannot read at all.
             throw new UnsupportedValueException(
                 $"Column '{name}' has a data type the ODBC provider cannot read ({ex.Message.TrimEnd('.')}). " +
