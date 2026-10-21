@@ -308,7 +308,7 @@ public static class DiagnosticCatalog
     public static readonly DiagnosticDescriptor QueryNotLowerable = E("324", "Model query cannot be lowered",
         "A query whose bound plan the lowerer knows: tables and views, joins, filters, aggregates, windows, set operations, CTEs, and the expressions in docs/research/duckdb-plan-lowering.",
         "Rewrite the construct the message names, or turn lowering off with `lowering: { enabled: false }` in dbdatabuild.yml.",
-        "Every model query is bound by DuckDB and lowered to one explicit query (star, USING, GROUP BY ALL, macros and implicit casts expanded) before it is checked against the support matrix and transpiled. A construct with no lowering yet (correlated subqueries, UNNEST, sampling, DISTINCT ON, nested types) is an error, not a silent fallback.");
+        "Every model query is bound by DuckDB and lowered to one explicit query (star, USING, GROUP BY ALL, macros and implicit casts expanded) before it is checked against the support matrix and transpiled. A construct with no lowering yet (UNNEST, sampling, DISTINCT ON, nested types, and `x op ANY/ALL (subquery)` in the CASE form DuckDB 2.0 plans it in, whose NULL result SQL Server and PostgreSQL cannot reproduce) is an error, not a silent fallback.");
 
     public static readonly DiagnosticDescriptor MacroDefaultIsClock = E("325", "Macro parameter defaults to a clock or session function",
         "A macro parameter whose default is a constant: a literal, or an expression of literals. The clock (`current_date`, `now()`, `today()`, `current_timestamp`, `localtimestamp`) and the session functions (`version()`, `current_schema()`) are not constants.",

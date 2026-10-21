@@ -205,3 +205,10 @@ Every place the products open DuckDB:
 | DbDataBuild | `Targets.DuckDb`, `Sample`, `Models` | in-memory | no | none |
 
 No read-write open of an existing user file converts it. The two release notes above are the whole consequence.
+
+## ANY / ALL on the released 2.0.0 (K08, 2026-10-21)
+
+Decision D8 stands: `x op ANY/ALL (subquery)` in the CASE form that 2.0 plans it in is **refused, never approximated** (DDB-324, "a subquery
+comparison (ANY or ALL) in the form DuckDB 2.0 plans it ..."). On 2.0.0 the six unit cases (`PlanLowererTests`, through
+`LowerExceptTheKnown2AnyAllGap`) accept the refusal, and `LoweringIntegrationTests` adds three project-level fixtures: a filter `> ANY (...)`, a filter `>= ALL (...)`,
+and `> ANY (...)` used as a value each fail `project compile` with DDB-324 naming "ANY or ALL" and write nothing. `<> ALL` is a plain `NOT IN` and lowers.
