@@ -5,15 +5,18 @@ namespace DbDataKit.Hosting.Certificates.Tests;
 
 public sealed class ProtectedPasswordFileTests
 {
+    // Windows restricts files to a named set of identities and refuses an empty one; elsewhere the list is ignored.
+    private static readonly string[] Identities = ["CurrentUser", "SYSTEM", "Administrators"];
+
     [Fact]
     public void GetOrCreate_generates_once_and_reads_back()
     {
         using var dir = new TempDir();
-        var store = new ProtectedPasswordFile(dir.File("x.pwd"), []);
+        var store = new ProtectedPasswordFile(dir.File("x.pwd"), Identities);
         var calls = 0;
 
         var first = store.GetOrCreatePassword("pfx", () => { calls++; return "secret-1"; });
-        var second = new ProtectedPasswordFile(dir.File("x.pwd"), []).GetOrCreatePassword("pfx", () => { calls++; return "other"; });
+        var second = new ProtectedPasswordFile(dir.File("x.pwd"), Identities).GetOrCreatePassword("pfx", () => { calls++; return "other"; });
 
         Assert.Equal("secret-1", first);
         Assert.Equal("secret-1", second);
@@ -24,10 +27,10 @@ public sealed class ProtectedPasswordFileTests
     public void File_written_under_other_format_identifiers_counts_as_missing()
     {
         using var dir = new TempDir();
-        new ProtectedPasswordFile(dir.File("x.pwd"), [], "product-a-v1", "A").Write("secret");
+        new ProtectedPasswordFile(dir.File("x.pwd"), Identities, "product-a-v1", "A").Write("secret");
 
-        Assert.False(new ProtectedPasswordFile(dir.File("x.pwd"), [], "product-b-v1", "B").TryRead(out _));
-        Assert.True(new ProtectedPasswordFile(dir.File("x.pwd"), [], "product-a-v1", "A").TryRead(out var back));
+        Assert.False(new ProtectedPasswordFile(dir.File("x.pwd"), Identities, "product-b-v1", "B").TryRead(out _));
+        Assert.True(new ProtectedPasswordFile(dir.File("x.pwd"), Identities, "product-a-v1", "A").TryRead(out var back));
         Assert.Equal("secret", back);
     }
 
@@ -36,7 +39,7 @@ public sealed class ProtectedPasswordFileTests
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "DPAPI is Windows-only; elsewhere the file is plain text with mode 0600.");
         using var dir = new TempDir();
-        new ProtectedPasswordFile(dir.File("x.pwd"), []).Write("secret-value");
+        new ProtectedPasswordFile(dir.File("x.pwd"), Identities).Write("secret-value");
         Assert.DoesNotContain("secret-value", File.ReadAllText(dir.File("x.pwd")));
     }
 
@@ -52,26 +55,26 @@ public sealed class ProtectedPasswordFileTests
             File.WriteAllBytes(pfx, cert.Export(X509ContentType.Pfx, ""));
         }
 
-        var store = new ProtectedPasswordFile(dir.File("c.pfx.pwd"), []);
-        Assert.True(ProtectedPasswordFile.MigrateUnprotectedPfx(pfx, store, []));
+        var store = new ProtectedPasswordFile(dir.File("c.pfx.pwd"), Identities);
+        Assert.True(ProtectedPasswordFile.MigrateUnprotectedPfx(pfx, store, Identities));
 
         Assert.ThrowsAny<CryptographicException>(() => X509CertificateLoader.LoadPkcs12FromFile(pfx, ""));
         Assert.True(store.TryRead(out var password));
         using var reopened = X509CertificateLoader.LoadPkcs12FromFile(pfx, password);
         Assert.Equal(thumbprint, reopened.Thumbprint);
 
-        Assert.False(ProtectedPasswordFile.MigrateUnprotectedPfx(pfx, store, []), "second call is a no-op");
+        Assert.False(ProtectedPasswordFile.MigrateUnprotectedPfx(pfx, store, Identities), "second call is a no-op");
     }
 
     [Fact]
     public void Migrate_ignores_a_missing_or_unreadable_pfx()
     {
         using var dir = new TempDir();
-        var store = new ProtectedPasswordFile(dir.File("c.pfx.pwd"), []);
-        Assert.False(ProtectedPasswordFile.MigrateUnprotectedPfx(dir.File("missing.pfx"), store, []));
+        var store = new ProtectedPasswordFile(dir.File("c.pfx.pwd"), Identities);
+        Assert.False(ProtectedPasswordFile.MigrateUnprotectedPfx(dir.File("missing.pfx"), store, Identities));
 
         File.WriteAllText(dir.File("bad.pfx"), "not a pfx");
-        Assert.False(ProtectedPasswordFile.MigrateUnprotectedPfx(dir.File("bad.pfx"), store, []));
+        Assert.False(ProtectedPasswordFile.MigrateUnprotectedPfx(dir.File("bad.pfx"), store, Identities));
         Assert.False(store.Exists);
     }
 }

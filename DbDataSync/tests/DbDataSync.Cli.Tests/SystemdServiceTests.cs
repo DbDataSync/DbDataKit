@@ -217,7 +217,8 @@ public sealed class SystemdServiceTests : IDisposable
         Assert.Empty(env.CreatedUsers);
     }
 
-    [Fact]
+    // Renders a real unit, and the shared generator requires the "/"-rooted paths of the Linux machine it is written for.
+    [NonWindowsFact]
     public void Install_ExecutableUnderHomeWithANonHardenedRoot_WarnsButStillRegisters()
     {
         var env = new FakeSystemdEnvironment();
@@ -232,7 +233,8 @@ public sealed class SystemdServiceTests : IDisposable
         Assert.NotNull(env.WrittenUnit);
     }
 
-    [Fact]
+    // Renders a real unit, and the shared generator requires the "/"-rooted paths of the Linux machine it is written for.
+    [NonWindowsFact]
     public void Install_UserDoesNotExist_CreatesItThenWritesEnablesAndReloads()
     {
         var env = new FakeSystemdEnvironment();
@@ -253,7 +255,8 @@ public sealed class SystemdServiceTests : IDisposable
 
     /// <summary>Phase 196L: an old script's `--self-update` still installs — with the ordinary unit, and a sentence
     /// saying the flag does nothing now.</summary>
-    [Fact]
+    // Renders a real unit, and the shared generator requires the "/"-rooted paths of the Linux machine it is written for.
+    [NonWindowsFact]
     public void Install_WithTheRetiredSelfUpdateFlag_WritesTheOrdinaryUnit_AndSaysSo()
     {
         var env = new FakeSystemdEnvironment();
@@ -276,7 +279,8 @@ public sealed class SystemdServiceTests : IDisposable
         Assert.Contains("--self-update is no longer needed", output.ToString());
     }
 
-    [Fact]
+    // Renders a real unit, and the shared generator requires the "/"-rooted paths of the Linux machine it is written for.
+    [NonWindowsFact]
     public void Install_UserAlreadyExists_DoesNotTryToCreateItAgain()
     {
         var env = new FakeSystemdEnvironment();
@@ -315,7 +319,8 @@ public sealed class SystemdServiceTests : IDisposable
         Assert.Contains(env.SystemctlCalls, call => call is ["daemon-reload"]);
     }
 
-    [Fact]
+    // Renders a real unit, and the shared generator requires the "/"-rooted paths of the Linux machine it is written for.
+    [NonWindowsFact]
     public void Install_ThenUninstall_WritesThenClearsTheServiceRegistrationMarker()
     {
         var env = new FakeSystemdEnvironment();
