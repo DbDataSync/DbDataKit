@@ -355,9 +355,8 @@ Two steps, each with its own exit:
 Today Proxy is configured by editing `appsettings.json` and running CLI verbs. It has no runtime admin interface.
 
 1. **Management API** on a separate listener, never the Flight port, secured as every product's is (W12): HTTPS, console tokens, the
-   local CLI over a local channel.
-   It is never on the Flight port and never on the hot path. Endpoints: health, version and drain (plan 03's seams); effective config,
-   redacted, with origins; validation; data sources (CRUD and test connection); users, Windows accounts, JWT mappings and pass-through;
+   local CLI over a local channel. Never on the hot path. Endpoints: health, version and drain (plan 03's seams); effective config,
+   redacted, with origins; validation; data sources (CRUD and test connection); Proxy's client identities (Flight users, Windows accounts, JWT mappings, pass-through);
    live sessions and running queries (with cancel); concurrency gates and limits; login throttle state; certificate status and renewal;
    recent classified failures.
 2. **Config moves to YAML in a git-tracked directory** (D2, which reverses plan 10's D2). Each data source becomes a `connection/1`
@@ -417,12 +416,14 @@ Each product server keeps its own definitions (it must run without the console a
 ```
 <data>/config/
   connections/*.yaml            this server's connections (connection/1)
-  server.yaml                   the server's own settings (listen, TLS, state store, the console it trusts)
+  server.yaml                   the server's own settings (listen, TLS, state store, the consoles it is paired with)
   sync/        (Sync)           replications, scripts (*.csx), drivers, libraries
   proxy/       (Proxy)          data source policy, client users, JWT mappings
   build/       (Build)          projects.yaml: the hosted projects (the projects themselves stay in their own repositories)
   console/     (dbdatakit)      instances.yaml: the registered servers; users are in the console's state database
 ```
+
+Sync's host settings move from `appsettings.json` to `server.yaml` with the rest (a migration, D2).
 
 Exit: the same connection, secret and config code in every product and the console; one user list, in the console; the console shows the
 connections of all registered servers.
@@ -432,7 +433,7 @@ connections of all registered servers.
 1. **One suite release** (D4) from one workflow, gated on green product CI and `dbdatakit-ci.yml` for that exact commit, shipped through
    the channels that already exist: **Docker images** and **the MSI** (`dist/msi.py`), plus the zips, `install.ps1`/`install.sh` and
    `SHA256SUMS`. Every product stays a **standalone install** (D4): its own image (`dbdatasync`, `dbdataproxy`, `dbdatabuild`), MSI and zip.
-   A product's MSI includes the console as a feature (on by default) and registers the product with it; each product image ships with a
+   A product's MSI includes the console as a feature (on by default) and pairs the product with it (W12); each product image ships with a
    compose file that pairs it with the `dbdatakit` console image. The suite adds a `dbdatakit` MSI with one feature per product plus the console. All of it
    comes from the same workflow and the same commit (`dist.json` already templates the per-product parts, so this costs little); the suite
    tag is `dbdatakit/v<calver>`, and the product tags stay as they are.
@@ -441,7 +442,7 @@ connections of all registered servers.
    by this plan. When the topic is reopened, the choice between the two is still the one to make.
 3. **NuGet** stays paused (plan 09). When it comes back, decide whether the suite ships as a dotnet tool.
 
-Exit: one release workflow producing the Docker images and one MSI. Each product's release workflow is deleted or reduced to a call into the suite's.
+Exit: one release workflow producing every image and MSI (per product and suite). Each product's release workflow is deleted or reduced to a call into the suite's.
 
 ### W10. Shared scheduling and monitoring (M-L)
 
@@ -642,6 +643,10 @@ These are rough line counts of today's code that this plan replaces. They show w
 
 ## 7. Decisions
 
+Decided by the owner: D1, D2, D3, D4, D5, D14. Decided by a spike: D9 (W2 step 1). **Open, waiting on the owner:** D6 (the date), D7, D8
+(four semantics items), D10 (blocks Sync's secrets), D11, D12, D13, D15, D16, D17, D18, D19. The slices in
+[13a-suite-slices.md](13a-suite-slices.md) name the decision each one waits on; everything else can start.
+
 | # | Decision | Recommendation |
 | --- | --- | --- |
 | D1 | Console topology | **decided: the console and the products are separate.** Each product is its own services (a server with a management API and no UI); the dbdatakit console is the one shared UI and manages registered servers through their management APIs. A standalone install is a product plus the console |
@@ -649,7 +654,7 @@ These are rough line counts of today's code that this plan replaces. They show w
 | D3 | Executables and names | **decided:** each product keeps its own CLI; `dbdatakit` is the console's CLI only; lower-case executables; Build's `<noun> <verb>` everywhere, old forms removed; Build's long-running process is the `server` noun (W4b) |
 | D4 | Release model | **decided: each product stays a standalone install option**; the dbdatakit suite release (console image, suite MSI) comes from the same workflow and commit |
 | D5 | Updater | **agreed: shelved** until the products have settled and unified; Docker images and the MSI are the distribution. Nothing is deleted |
-| D6 | DuckDB.NET 2.0 lag | wait up to **two weeks** from today; after that, the interim build (DuckDB.NET 1.5.6 managed with the pinned 2.0.0 native library) |
+| D6 | DuckDB.NET 2.0 lag | wait until **2026-11-04** (two weeks from 2.0.0); after that, the interim build (DuckDB.NET 1.5.6 managed with the pinned 2.0.0 native library) |
 | D7 | Keep DuckDB 1.x after 2.0 is the default | **no** (breaking changes are allowed): 2.0 only, and delete 1.x-shape code that 2.0 no longer needs |
 | D8 | Build's open 2.0 semantics: ANY/ALL, `%`/`//` by zero, decimal quantiles, functions that still fold | owner's call, item by item; the default is refusal with a named diagnostic, which is Build's rule for anything it cannot reproduce exactly |
 | D9 | dotnet-script embedded (`Dotnet.Script.Core`) vs the `dotnet script` CLI as a subprocess | **embedded**, if the W2 spike passes |
@@ -659,6 +664,10 @@ These are rough line counts of today's code that this plan replaces. They show w
 | D13 | Where a Build schedule lives: only in the project (committed with the refresh plan), or also added by an operator at the server | **project first** (fits Build's "everything is a file" rule and its review of plans); an operator can pause or run now from the console, but adding a schedule is a commit. Revisit if operators need schedules a project author should not own |
 | D14 | How product servers trust consoles | **decided:** the console calls the server, never the reverse; a server can be paired with several consoles, each with its own key and role ceiling; short-lived signed tokens per call; the server enforces roles; the local CLI over a named pipe or Unix socket (W12) |
 | D15 | Where authoring merges | push to the project's git remote and open a pull request when a remote is configured; otherwise merge into the deploy branch inside the Build server, recorded with the author's identity |
+| D16 | How the browser reaches product servers | **the console's back-end relays every call** (the browser talks only to the console): servers stay off the browser's network, pinned self-signed certificates work, no CORS, and live updates (Sync's SignalR run hub) are relayed by the console. The other option, browsers calling servers directly with tokens, is rejected |
+| D17 | Version compatibility between a console and its servers | products release on their own (D4), so a console and a server can differ in version. The management API carries its own integer version, reported at pairing and on every call; a console supports its own API version and the one before, and shows a clear "upgrade this server / this console" message otherwise |
+| D18 | A state store for Proxy | Proxy has none today; it needs one for its audit log, notifications and per-console read state. **SQLite through `DbDataKit.State`**, as Build's server |
+| D19 | Where a Build server's projects come from | **both**: a local path (as the CLI works today) or a git remote and branch that the server clones into its data directory and pulls before each scheduled run |
 
 ## 8. Individual releases
 

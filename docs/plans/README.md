@@ -20,6 +20,7 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 11 | [CI and testing](11-ci-and-testing.md) | Three products plus the shared libraries, their test setups | One engine catalogue, shared workflows, Linux and Windows split, nightly full matrix |
 | 12 | [Shared TLS rollout](12-shared-tls-rollout.md) | Sync and Proxy certificates, services, systemd | One certificate, service and unit implementation |
 | 13 | [Suite standardization](13-suite-standardization.md) | Adoption state of plans 01-12, DuckDB 2.0, Sync scripting | dbdatakit console, product servers with no UI of their own, console-to-server trust, one grammar, shared scheduling, Build authoring; DuckDB 2.0; dotnet-script |
+| 13a | [Suite slices](13a-suite-slices.md) | Plan 13 | About 150 small pull requests with a test each, grouped into milestones, each naming the decision it waits on |
 
 ## Dependency graph
 
