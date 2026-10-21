@@ -1,7 +1,7 @@
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 
-namespace DbDataSync.Certificates;
+namespace DbDataKit.Hosting.Certificates.Windows;
 
 /// <summary>
 /// Named, persisted, non-exportable CNG keys — the private key behind every certificate this codebase

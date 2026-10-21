@@ -1,4 +1,7 @@
+using DbDataKit.Hosting.Certificates.Windows;
 using System.Security.Cryptography.X509Certificates;
+using DbDataKit.Hosting.Certificates;
+using DbDataKit.Security.Acl;
 
 namespace DbDataSync.Certificates;
 
@@ -12,11 +15,25 @@ namespace DbDataSync.Certificates;
 /// file every caller reads, writes, or compares <c>Kestrel:Certificates:Default:Path</c> against — so
 /// there is exactly one place "is this the managed certificate" can ever disagree with itself.
 /// </para>
+/// <para>
+/// Generation, rotation, and the password are the shared <c>DbDataKit.Hosting.Certificates</c> ones: the PFX is
+/// encrypted with a random password kept beside it in <see cref="PasswordPath"/> (DPAPI on Windows, mode 0600
+/// elsewhere), and both files are restricted to the service identities. The password never enters configuration
+/// files, which are committed to git; the host adds it to Kestrel's configuration in memory at start.
+/// </para>
 /// </summary>
 public static class ManagedSelfSignedCertificate
 {
     private const string RelativeDirectory = "tls";
     private const string FileName = "dbdatasync.pfx";
+
+    /// <summary>Renew when fewer than this many days remain (the shared default).</summary>
+    public const int RenewBeforeDays = 30;
+
+    /// <summary>Lifetime of a certificate when there is no earlier one to copy it from.</summary>
+    public const int DefaultValidityDays = 397;
+
+    public const string ServiceName = "DbDataSync";
 
     /// <summary>Full, normalized path to the managed certificate for a given repo root. Every caller
     /// passes whatever repo root it already resolved (a CLI's <c>--repo</c>, the API's
@@ -26,11 +43,82 @@ public static class ManagedSelfSignedCertificate
     public static string PfxPath(string repoRoot) =>
         Path.GetFullPath(Path.Combine(repoRoot, RelativeDirectory, FileName));
 
+    /// <summary>Where the PFX's random password is kept — next to the PFX, inside the git-ignored directory.</summary>
+    public static string PasswordPath(string repoRoot) => PfxPath(repoRoot) + ".pwd";
+
+    /// <summary>The identities allowed to read the key files: the person and tools administering the machine, plus
+    /// the account the installed service runs as when that is something else.</summary>
+    public static IReadOnlyList<string> KeyFileIdentities()
+    {
+        var identities = new List<string> { "CurrentUser", "SYSTEM", "Administrators" };
+        if (OperatingSystem.IsWindows())
+        {
+            var account = InstalledServiceAccount.Resolve(ServiceName);
+            if (!string.IsNullOrWhiteSpace(account) && !identities.Contains(account, StringComparer.OrdinalIgnoreCase))
+                identities.Add(account);
+        }
+
+        return identities;
+    }
+
+    private static ProtectedPasswordFile PasswordStore(string repoRoot) =>
+        new(PasswordPath(repoRoot), KeyFileIdentities());
+
+    /// <summary>The PFX password for <paramref name="path"/> when it is the managed certificate and its password
+    /// file exists; otherwise null (any other path, or a file from before the password was introduced).</summary>
+    public static string? PasswordFor(string repoRoot, string path) =>
+        string.Equals(Path.GetFullPath(path), PfxPath(repoRoot), StringComparison.OrdinalIgnoreCase)
+        && PasswordStore(repoRoot).TryRead(out var password)
+            ? password
+            : null;
+
+    private static CertificateProvider Provider(string repoRoot, TimeProvider? time)
+    {
+        var identities = KeyFileIdentities();
+        return new CertificateProvider(PasswordStore(repoRoot), time: time, restrictFileAccess: file => AclHelper.Restrict(file, identities));
+    }
+
+    private static CertificateOptions Options(string repoRoot, string host, int validityDays)
+    {
+        var options = new CertificateOptions
+        {
+            Mode = CertificateMode.SelfSigned,
+            Path = PfxPath(repoRoot),
+            ValidityDays = validityDays,
+            RenewBeforeDays = RenewBeforeDays,
+        };
+        options.AdditionalHostNames.Add(host);
+        return options;
+    }
+
+    /// <summary>Replaces the managed certificate now, whatever its remaining validity. SANs are the machine's
+    /// names, <c>localhost</c>, loopback and <paramref name="host"/> (the console URL's host).</summary>
+    public static X509Certificate2 Renew(string repoRoot, string host, int validityDays, TimeProvider? time = null)
+    {
+        EnsureDirectory(repoRoot);
+        var certificate = Provider(repoRoot, time).RenewSelfSigned(Options(repoRoot, host, validityDays));
+        EnsureGitignored(repoRoot);
+        return certificate;
+    }
+
+    /// <summary>The managed certificate, replaced first when it is within <see cref="RenewBeforeDays"/> of
+    /// expiring, no longer covers <paramref name="host"/>, or cannot be opened with the stored password (for
+    /// example a file written before that password existed).</summary>
+    public static X509Certificate2 LoadOrRenew(string repoRoot, string host, int validityDays, out bool renewed, TimeProvider? time = null)
+    {
+        var path = PfxPath(repoRoot);
+        var before = File.Exists(path) ? File.GetLastWriteTimeUtc(path) : (DateTime?)null;
+        EnsureDirectory(repoRoot);
+        var certificate = Provider(repoRoot, time).LoadAsync(Options(repoRoot, host, validityDays)).GetAwaiter().GetResult();
+        renewed = before is null || File.GetLastWriteTimeUtc(path) != before;
+        if (renewed)
+            EnsureGitignored(repoRoot);
+        return certificate;
+    }
+
     /// <summary>
-    /// Builds the certificate — the identical keypair/SAN shape <see cref="CertificateBuilder.CreateSelfSigned"/>
-    /// already produces for the Windows store path, just handed to <see cref="Write"/> instead of
-    /// <c>CertificateStore.Install</c>. <paramref name="host"/> is deduplicated against <c>localhost</c>,
-    /// not appended blindly — the phase 130 doc's "the console URL's host, plus localhost."
+    /// A certificate with the managed shape that is not stored anywhere: SANs are <paramref name="host"/> plus
+    /// <c>localhost</c>, made by the shared generator.
     /// </summary>
     public static X509Certificate2 Generate(string host, int validityDays)
     {
@@ -38,37 +126,27 @@ public static class ManagedSelfSignedCertificate
         if (!dnsNames.Contains("localhost", StringComparer.OrdinalIgnoreCase))
             dnsNames.Add("localhost");
 
-        var spec = new CertificateSpec(host, dnsNames, validityDays, FriendlyName: null);
-        return CertificateBuilder.CreateSelfSigned(spec);
+        var now = DateTimeOffset.UtcNow;
+        return SelfSignedCertificateGenerator.Create(new SelfSignedRequest(
+            $"CN={host}", dnsNames, [], now.AddMinutes(-5), now.AddDays(validityDays)));
     }
 
     /// <summary>
-    /// Writes <paramref name="certificate"/> to <see cref="PfxPath"/>, unencrypted (matching phase 113's
-    /// own supported case — nothing in this codebase splices a PFX password), <c>0600</c> on any
-    /// non-Windows OS, and ensures the containing directory is git-ignored the first time it's used —
-    /// the same lazy, first-use pattern <see cref="PendingEnrollmentStore"/> already established for a
-    /// file this codebase deliberately never commits.
+    /// Stores <paramref name="certificate"/> as the managed certificate: encrypted with the random password
+    /// (created on first use), restricted to the service identities, and the containing directory git-ignored the
+    /// first time it's used — the same lazy, first-use pattern <see cref="PendingEnrollmentStore"/> already
+    /// established for a file this codebase deliberately never commits.
     /// </summary>
     public static void Write(string repoRoot, X509Certificate2 certificate)
     {
-        var path = PfxPath(repoRoot);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllBytes(path, certificate.Export(X509ContentType.Pfx));
-
-        if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-
+        EnsureDirectory(repoRoot);
+        var password = PasswordStore(repoRoot).GetOrCreatePassword("pfx", PfxPassword.Generate);
+        AclHelper.WriteAllBytesRestricted(PfxPath(repoRoot), certificate.Export(X509ContentType.Pfx, password), KeyFileIdentities());
         EnsureGitignored(repoRoot);
     }
 
-    /// <summary>
-    /// The renewal decision — pure, so it needs no certificate, no file, no clock beyond what is passed
-    /// in (the same shape <see cref="CertificateExpiryEvaluator"/> already established for the Windows
-    /// store path). Renews within a third of the certificate's own lifetime of expiring, matching tier
-    /// 3's own planned threshold for consistency — see the phase 130 doc's "What this builds," #3.
-    /// </summary>
-    public static bool ShouldRenew(DateTimeOffset notBefore, DateTimeOffset notAfter, DateTimeOffset now) =>
-        notAfter - now <= (notAfter - notBefore) / 3;
+    private static void EnsureDirectory(string repoRoot) =>
+        AclHelper.EnsureRestrictedDirectory(Path.GetDirectoryName(PfxPath(repoRoot))!, KeyFileIdentities());
 
     /// <summary>
     /// The repo root is a git repository (<c>ServeCommand.Prepare</c>), and this directory is

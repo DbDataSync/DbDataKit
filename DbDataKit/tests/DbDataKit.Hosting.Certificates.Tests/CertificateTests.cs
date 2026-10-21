@@ -290,4 +290,18 @@ public class PlainHttpGuardTests
 
         PlainHttpGuard.Enforce([urls], allowInsecureOverride: true);
     }
+
+    [Theory]
+    [InlineData(true, "203.0.113.9", true)]
+    [InlineData(false, "203.0.113.9", false)]
+    [InlineData(false, "127.0.0.1", true)]
+    [InlineData(false, "::1", true)]
+    [InlineData(false, "::ffff:127.0.0.1", true)]
+    [InlineData(false, null, true)]
+    public void RequestAllowed_needs_tls_or_a_local_client(bool isHttps, string? client, bool expected)
+    {
+        var address = client is null ? null : System.Net.IPAddress.Parse(client);
+
+        Assert.Equal(expected, PlainHttpGuard.RequestAllowed(isHttps, address));
+    }
 }

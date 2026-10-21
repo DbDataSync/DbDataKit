@@ -52,9 +52,13 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
                 if (string.IsNullOrWhiteSpace(o.Tls.CertificatePath))
                     cx.Error("Tls.CertificatePath", "`CertificatePath` is required when `Tls.Mode` is File.", "Set the path of the PFX file, or use SelfSigned.");
                 break;
+            case TlsMode.Store:
+                if (string.IsNullOrWhiteSpace(o.Tls.CertificateThumbprint) && string.IsNullOrWhiteSpace(o.Tls.CertificateSubject))
+                    cx.Error("Tls.CertificateThumbprint", "`CertificateThumbprint` or `CertificateSubject` is required when `Tls.Mode` is Store.", "Set the thumbprint (or a subject name) of the certificate in the store, or use SelfSigned.");
+                break;
             case TlsMode.None:
                 if (address is not null && !IPAddress.IsLoopback(address))
-                    cx.Warning("Tls.Mode", "TLS is off and the proxy listens on a non-loopback address: credentials and data travel in clear text.", "Use SelfSigned or File outside local testing.");
+                    cx.Warning("Tls.Mode", "TLS is off and the proxy listens on a non-loopback address: credentials and data travel in clear text.", "Use SelfSigned, File or Store outside local testing.");
                 if (!string.IsNullOrWhiteSpace(o.Tls.CertificatePath) || !string.IsNullOrWhiteSpace(o.Tls.CertificatePassword))
                     cx.Warning("Tls.CertificatePath", "A certificate is configured but `Tls.Mode` is None, so it is not used.");
                 break;

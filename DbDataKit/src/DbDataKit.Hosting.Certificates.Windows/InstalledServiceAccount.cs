@@ -1,20 +1,12 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
 
-namespace DbDataSync.Certificates;
+namespace DbDataKit.Hosting.Certificates.Windows;
 
 /// <summary>
-/// Reads back which account the installed DbDataSync Windows service runs as — the second rung of the
-/// phase 82 doc's "which account" resolution order for the issuing commands: an explicit
-/// <c>--account</c> wins outright, otherwise this, otherwise <c>LocalSystem</c> (which needs no grant).
-/// <para>
-/// **The doc's own text says this reads the account "the same way <c>dbdatasync service status</c>
-/// already parses it."** That turned out not to be true: <c>ServiceCommand.Run</c>'s <c>status</c> case
-/// is a bare passthrough of <c>sc.exe query</c>'s output to the console (<c>Sc("query", ServiceName)</c>
-/// in <c>src/DbDataSync.Cli/ServiceCommand.cs</c>) — it never parses anything. There was no existing
-/// parser to reuse, so this is a fresh one, over <c>sc.exe qc</c> (query config, which is what actually
-/// reports <c>SERVICE_START_NAME</c> — <c>sc.exe query</c> reports run-time status, not configuration).
-/// </para>
+/// Reads back which account an installed Windows service runs as, for callers that grant that account access
+/// (a certificate's private key, a key file): the account named by <c>sc.exe qc</c> (query config, which reports
+/// <c>SERVICE_START_NAME</c>; <c>sc.exe query</c> reports run-time status, not configuration).
 /// </summary>
 public static class InstalledServiceAccount
 {

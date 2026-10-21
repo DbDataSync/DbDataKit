@@ -1,7 +1,7 @@
 using System.DirectoryServices;
 using System.Runtime.Versioning;
 
-namespace DbDataSync.Certificates;
+namespace DbDataKit.Hosting.Certificates.Windows;
 
 /// <param name="CaConfig">What <c>--ca</c> and <c>DbDataSync:Certificates:CaConfig</c> take: <c>CASERVER\CA Name</c>.</param>
 /// <param name="Templates">The template names this CA publishes — names, not display names.</param>

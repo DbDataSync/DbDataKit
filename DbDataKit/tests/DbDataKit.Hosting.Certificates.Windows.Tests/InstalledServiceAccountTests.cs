@@ -1,6 +1,6 @@
 using System.Runtime.Versioning;
 
-namespace DbDataSync.Certificates.Tests;
+namespace DbDataKit.Hosting.Certificates.Windows.Tests;
 
 /// <summary>
 /// <see cref="InstalledServiceAccount.ParseServiceStartName"/> against a literal, hand-captured sample

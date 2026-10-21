@@ -1,3 +1,4 @@
+using DbDataKit.Hosting.Certificates.Windows;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -135,36 +136,46 @@ public static class CertCommand
                     "administrator). Nothing has been changed.");
                 return 1;
             }
-
-            return sub switch
-            {
-                "status" => Status(rest),
-                "list" => List(rest),
-                "new-self-signed" => selfSignedTarget == SelfSignedTarget.File
-                    ? NewSelfSignedFile(rest)
-                    : NewSelfSigned(rest),
-                "enroll" => Enroll(rest),
-                "renew" => Renew(rest),
-                "retrieve" => Retrieve(rest),
-                "templates" => Templates(rest),
-                "discover" => Discover(rest),
-                "bind" => Bind(rest),
-                "use-pem" => UsePem(rest),
-                "use-pfx" => UsePfx(rest),
-                var other => Unknown(other),
-            };
         }
 
-        return sub switch
-        {
-            "status" => Status(rest),
-            "use-pem" => UsePem(rest),
-            "use-pfx" => UsePfx(rest),
-            "new-self-signed" => NewSelfSignedFile(rest),
-            "list" or "enroll" or "renew" or "retrieve" or "templates" or "discover" or "bind" => WindowsOnlyRefusal(),
-            var other => Unknown(other),
-        };
+        return Verbs.TryRun(sub, rest, new DbDataKit.Hosting.Cli.SystemConsole(), out var exitCode)
+            ? exitCode
+            : Unknown(sub);
     }
+
+    /// <summary>
+    /// Every verb of <c>config cert</c>, registered on the shared command's verb table
+    /// (<see cref="DbDataKit.Hosting.Cli.CertVerbs"/>) in the order the usage text lists them. A verb with two forms
+    /// (<c>new-self-signed</c>) has one registration per form; the first one carries the handler. Verbs that need the
+    /// Windows certificate store refuse on other platforms inside their handler, so the same list serves every OS.
+    /// </summary>
+    private static DbDataKit.Hosting.Cli.CertVerbs BuildVerbs()
+    {
+        var verbs = new DbDataKit.Hosting.Cli.CertVerbs();
+        verbs.Add("use-pem", "dbdatasync config cert use-pem --cert <path> --key <path> [--repo <path>]     (any OS)", (rest, _) => UsePem(rest));
+        verbs.Add("use-pfx", "dbdatasync config cert use-pfx --pfx <path> [--repo <path>]                    (any OS)", (rest, _) => UsePfx(rest));
+        verbs.Add("status", "dbdatasync config cert status [--account <account>]                            (any OS; --account is Windows-only)", (rest, _) => Status(rest));
+        verbs.Add("new-self-signed", "dbdatasync config cert new-self-signed [--file] [--days <n>] [--repo <path>]       (any OS; writes <repo>/tls/dbdatasync.pfx and points Kestrel at it — the default off Windows, --file asks for it on Windows too)", (rest, _) => NewSelfSignedVerb(rest));
+        verbs.Add("new-self-signed", "dbdatasync config cert new-self-signed [--store] --dns <names> [--days <n>] [--account <account>]  (Windows only; installs into the certificate store — the default there, and needs an elevated prompt)", (_, _) => 0);
+        verbs.Add("list", "dbdatasync config cert list [--location LocalMachine|CurrentUser]               (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? List(rest) : WindowsOnlyRefusal());
+        verbs.Add("enroll", "dbdatasync config cert enroll --dns <names> [--ca <config>] [--template <name>] [--account <account>]  (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? Enroll(rest) : WindowsOnlyRefusal());
+        verbs.Add("renew", "dbdatasync config cert renew [--ca <config>] [--template <name>] [--account <account>] [--days <n>]    (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? Renew(rest) : WindowsOnlyRefusal());
+        verbs.Add("retrieve", "dbdatasync config cert retrieve --request-id <id> [--account <account>]        (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? Retrieve(rest) : WindowsOnlyRefusal());
+        verbs.Add("templates", "dbdatasync config cert templates [--ca <config>]                                (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? Templates(rest) : WindowsOnlyRefusal());
+        verbs.Add("discover", "dbdatasync config cert discover [--repo <path>]                                 (Windows only; finds the CA and template, saves them when there is only one)", (rest, _) => OperatingSystem.IsWindows() ? Discover(rest) : WindowsOnlyRefusal());
+        verbs.Add("bind", "dbdatasync config cert bind --thumbprint <thumbprint> [--location LocalMachine|CurrentUser] [--allow-invalid|--no-allow-invalid]  (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? Bind(rest) : WindowsOnlyRefusal());
+        return verbs;
+    }
+
+    private static readonly DbDataKit.Hosting.Cli.CertVerbs Verbs = BuildVerbs();
+
+    /// <summary>The verb names <c>config cert</c> accepts, for the compatibility test.</summary>
+    internal static IReadOnlyList<string> VerbNames => [.. Verbs.Names];
+
+    private static int NewSelfSignedVerb(string[] rest) =>
+        OperatingSystem.IsWindows() && ResolveSelfSignedTarget(rest) == SelfSignedTarget.Store
+            ? NewSelfSigned(rest)
+            : NewSelfSignedFile(rest);
 
     private static int WindowsOnlyRefusal()
     {
@@ -202,7 +213,7 @@ public static class CertCommand
         X509Certificate2 certificate;
         try
         {
-            certificate = LoadFileCertificate(path, keyPath);
+            certificate = LoadFileCertificate(root, path, keyPath);
         }
         catch (Exception ex) when (ex is CryptographicException or IOException)
         {
@@ -311,7 +322,7 @@ public static class CertCommand
             return 1;
         }
 
-        var installed = CertificateStore.InstallSelfSigned(spec, StoreLocation.LocalMachine);
+        var installed = StoreSelfSignedCertificate.Install(spec, StoreLocation.LocalMachine);
         GrantIfNeeded(args, installed);
 
         Console.WriteLine("Issued and installed a self-signed certificate:");
@@ -368,7 +379,7 @@ public static class CertCommand
             return 1;
         }
 
-        var dnsNames = CertificateSanReader.GetDnsNames(current);
+        var dnsNames = DbDataKit.Hosting.Certificates.SelfSignedCertificateGenerator.ReadDnsNames(current);
         if (dnsNames.Count == 0)
         {
             Console.Error.WriteLine("The bound certificate has no SAN entries recorded to renew from.");
@@ -393,7 +404,7 @@ public static class CertCommand
         // SANs, an extension beyond the doc's literal text rather than leaving renew unusable there.
         var days = int.TryParse(CliOptions.Read(args, "--days"), out var parsedDays) ? parsedDays : 397;
         var selfSignedSpec = new CertificateSpec(subjectCommonName, dnsNames, days, FriendlyName: "DbDataSync");
-        var installed = CertificateStore.InstallSelfSigned(selfSignedSpec, StoreLocation.LocalMachine);
+        var installed = StoreSelfSignedCertificate.Install(selfSignedSpec, StoreLocation.LocalMachine);
         GrantIfNeeded(args, installed);
 
         Console.WriteLine("Renewed (self-signed — no CA is configured):");
@@ -662,15 +673,13 @@ public static class CertCommand
         X509Certificate2 certificate;
         try
         {
-            certificate = ManagedSelfSignedCertificate.Generate(host, days);
+            certificate = ManagedSelfSignedCertificate.Renew(root, host, days);
         }
         catch (ArgumentException ex)
         {
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
-
-        ManagedSelfSignedCertificate.Write(root, certificate);
 
         ClearStoreBasedBinding(root);
         // A PFX carries its own private key — no separate KeyPath, same as UsePfx.
@@ -711,9 +720,9 @@ public static class CertCommand
     /// <c>status</c>'s file-reporting path and phase 113's readiness check
     /// (<see cref="ReadinessChecks"/>), so the two never disagree about how those keys resolve to a
     /// certificate.</summary>
-    internal static X509Certificate2 LoadFileCertificate(string path, string? keyPath) =>
+    internal static X509Certificate2 LoadFileCertificate(string root, string path, string? keyPath) =>
         string.IsNullOrEmpty(keyPath)
-            ? X509CertificateLoader.LoadPkcs12FromFile(path, password: null)
+            ? X509CertificateLoader.LoadPkcs12FromFile(path, ManagedSelfSignedCertificate.PasswordFor(root, path))
             : X509Certificate2.CreateFromPemFile(path, keyPath);
 
     private static void PrintCertificateSummary(X509Certificate2 certificate)
@@ -927,19 +936,5 @@ public static class CertCommand
     }
 
     private static void PrintUsage() =>
-        Console.Error.WriteLine(
-            """
-            Usage: dbdatasync config cert use-pem --cert <path> --key <path> [--repo <path>]     (any OS)
-                   dbdatasync config cert use-pfx --pfx <path> [--repo <path>]                    (any OS)
-                   dbdatasync config cert status [--account <account>]                            (any OS; --account is Windows-only)
-                   dbdatasync config cert new-self-signed [--file] [--days <n>] [--repo <path>]       (any OS; writes <repo>/tls/dbdatasync.pfx and points Kestrel at it — the default off Windows, --file asks for it on Windows too)
-                   dbdatasync config cert new-self-signed [--store] --dns <names> [--days <n>] [--account <account>]  (Windows only; installs into the certificate store — the default there, and needs an elevated prompt)
-                   dbdatasync config cert list [--location LocalMachine|CurrentUser]               (Windows only)
-                   dbdatasync config cert enroll --dns <names> [--ca <config>] [--template <name>] [--account <account>]  (Windows only)
-                   dbdatasync config cert renew [--ca <config>] [--template <name>] [--account <account>] [--days <n>]    (Windows only)
-                   dbdatasync config cert retrieve --request-id <id> [--account <account>]        (Windows only)
-                   dbdatasync config cert templates [--ca <config>]                                (Windows only)
-                   dbdatasync config cert discover [--repo <path>]                                 (Windows only; finds the CA and template, saves them when there is only one)
-                   dbdatasync config cert bind --thumbprint <thumbprint> [--location LocalMachine|CurrentUser] [--allow-invalid|--no-allow-invalid]  (Windows only)
-            """);
+        Console.Error.WriteLine("Usage: " + string.Join("\n       ", Verbs.UsageLines));
 }

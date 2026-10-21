@@ -1,3 +1,4 @@
+using DbDataKit.Hosting.Certificates.Windows;
 using System.Runtime.Versioning;
 using System.Security.Cryptography.X509Certificates;
 using DbDataSync.Api.Configuration;
@@ -107,7 +108,7 @@ public sealed class AdminCertificateService(ApiOptions apiOptions, CertificateOp
             return CertificateActionResult.Failed(ex.Message);
         }
 
-        var installed = CertificateStore.InstallSelfSigned(spec, StoreLocation.LocalMachine);
+        var installed = StoreSelfSignedCertificate.Install(spec, StoreLocation.LocalMachine);
         GrantIfNeeded(installed);
 
         return CertificateActionResult.Ok(
@@ -273,7 +274,7 @@ public sealed class AdminCertificateService(ApiOptions apiOptions, CertificateOp
         EvaluateKeyAccess(certificate, InstalledServiceAccount.Resolve(ServiceName));
 
     /// <summary>
-    /// The pure half of the key-access check — pulled out, like <see cref="CertificateExpiryEvaluator"/>
+    /// The pure half of the key-access check — pulled out, like <see cref="DbDataKit.Hosting.Certificates.CertificateExpiry"/>
     /// pulls the expiry decision out of <see cref="CertificateExpiryService"/>, so a test can drive every
     /// one of the three states (<c>Ok</c>, <c>Warning</c>, <c>Unknown</c>) directly rather than needing a
     /// real installed Windows service to produce an account name to test against. <c>internal</c> for

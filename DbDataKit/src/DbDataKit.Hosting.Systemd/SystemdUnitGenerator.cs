@@ -2,6 +2,27 @@ using System.Text;
 
 namespace DbDataKit.Hosting.Systemd;
 
+/// <summary>The sandboxing directives a generated unit can carry. <see cref="All"/> is the default.</summary>
+[Flags]
+public enum SystemdHardening
+{
+    None = 0,
+    NoNewPrivileges = 1,
+    ProtectSystem = 1 << 1,
+    ProtectHome = 1 << 2,
+    PrivateTmp = 1 << 3,
+    PrivateDevices = 1 << 4,
+    ProtectKernel = 1 << 5,
+    ProtectControlGroups = 1 << 6,
+    RestrictSuidSgid = 1 << 7,
+    RestrictNamespaces = 1 << 8,
+    LockPersonality = 1 << 9,
+    SystemCallArchitectures = 1 << 10,
+    UMask = 1 << 11,
+    DropCapabilities = 1 << 12,
+    All = (1 << 13) - 1,
+}
+
 public sealed class SystemdUnitOptions
 {
     /// <summary>Unit/service name without ".service"; also the default state/config directory name.</summary>
@@ -58,6 +79,9 @@ public sealed class SystemdUnitOptions
     public IReadOnlyList<string> Wants { get; init; } = ["network-online.target"];
 
     public string WantedBy { get; init; } = "multi-user.target";
+
+    /// <summary>Which sandboxing directives to emit; everything by default. A product with a reason (an existing deployment whose files must stay readable to other users, say) asks for less.</summary>
+    public SystemdHardening Hardening { get; init; } = SystemdHardening.All;
 }
 
 /// <summary>
@@ -119,24 +143,37 @@ public static class SystemdUnitGenerator
         }
 
         Line("");
-        Line("# Hardening");
-        Kv("NoNewPrivileges", "yes");
-        Kv("ProtectSystem", "strict");
-        Kv("ProtectHome", "yes");
-        Kv("PrivateTmp", "yes");
-        Kv("PrivateDevices", "yes");
-        Kv("ProtectKernelTunables", "yes");
-        Kv("ProtectKernelModules", "yes");
-        Kv("ProtectControlGroups", "yes");
-        Kv("RestrictSUIDSGID", "yes");
-        Kv("RestrictNamespaces", "yes");
-        Kv("LockPersonality", "yes");
-        Kv("SystemCallArchitectures", "native");
-        Kv("UMask", "0077");
-        Kv("CapabilityBoundingSet", string.Join(' ', o.Capabilities));
-        Kv("AmbientCapabilities", string.Join(' ', o.Capabilities));
-        Opt("ReadWritePaths", o.ReadWritePaths);
-        Line("");
+        var h = o.Hardening;
+        if (h != SystemdHardening.None || o.ReadWritePaths.Count > 0)
+        {
+            Line("# Hardening");
+            void Flag(SystemdHardening flag, string key, string value)
+            {
+                if (h.HasFlag(flag)) Kv(key, value);
+            }
+
+            Flag(SystemdHardening.NoNewPrivileges, "NoNewPrivileges", "yes");
+            Flag(SystemdHardening.ProtectSystem, "ProtectSystem", "strict");
+            Flag(SystemdHardening.ProtectHome, "ProtectHome", "yes");
+            Flag(SystemdHardening.PrivateTmp, "PrivateTmp", "yes");
+            Flag(SystemdHardening.PrivateDevices, "PrivateDevices", "yes");
+            Flag(SystemdHardening.ProtectKernel, "ProtectKernelTunables", "yes");
+            Flag(SystemdHardening.ProtectKernel, "ProtectKernelModules", "yes");
+            Flag(SystemdHardening.ProtectControlGroups, "ProtectControlGroups", "yes");
+            Flag(SystemdHardening.RestrictSuidSgid, "RestrictSUIDSGID", "yes");
+            Flag(SystemdHardening.RestrictNamespaces, "RestrictNamespaces", "yes");
+            Flag(SystemdHardening.LockPersonality, "LockPersonality", "yes");
+            Flag(SystemdHardening.SystemCallArchitectures, "SystemCallArchitectures", "native");
+            Flag(SystemdHardening.UMask, "UMask", "0077");
+            if (h.HasFlag(SystemdHardening.DropCapabilities))
+            {
+                Kv("CapabilityBoundingSet", string.Join(' ', o.Capabilities));
+                Kv("AmbientCapabilities", string.Join(' ', o.Capabilities));
+            }
+
+            Opt("ReadWritePaths", o.ReadWritePaths);
+            Line("");
+        }
 
         Line("[Install]");
         Kv("WantedBy", o.WantedBy);
@@ -150,7 +187,8 @@ public static class SystemdUnitGenerator
         Check(o.Name, nameof(o.Name));
         Check(o.Description, nameof(o.Description));
         Check(o.ExecStart, nameof(o.ExecStart));
-        if (!o.ExecStart.StartsWith('/')) throw new ArgumentException("ExecStart must start with an absolute path.");
+        // The executable may be quoted (a path with spaces); the path itself must be absolute.
+        if (!o.ExecStart.TrimStart('"').StartsWith('/')) throw new ArgumentException("ExecStart must start with an absolute path.");
         if (!o.DynamicUser && string.IsNullOrWhiteSpace(o.User)) throw new ArgumentException("A dedicated user is required when DynamicUser is false.");
         if (o.User is not null) Check(o.User, nameof(o.User));
         foreach (var p in o.ReadWritePaths.Concat(o.LoadCredentials.Values))

@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
 
-namespace DbDataSync.Certificates.Tests;
+namespace DbDataKit.Hosting.Certificates.Windows.Tests;
 
 /// <summary>
 /// Phase 204P: a certificate in the store never has its private key exported. The first test is the
@@ -137,7 +137,7 @@ public sealed class InstalledKeyWindowsTests : IDisposable
     [WindowsOnlyFact]
     public void InstallSelfSigned_LeavesAnInstalledCertificateWithANonExportableKey()
     {
-        var installed = CertificateStore.InstallSelfSigned(Spec(), StoreLocation.CurrentUser);
+        var installed = StoreSelfSignedCertificate.Install(Spec(), StoreLocation.CurrentUser);
         _installed.Add(installed);
 
         using var key = installed.GetRSAPrivateKey()!;

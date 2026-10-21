@@ -54,7 +54,15 @@ public static class DbDataSyncHost
         // unaffected — UseWindowsService changes lifetime and logging, and doing that to an
         // interactive run would make Ctrl+C and console output behave unlike every other command.
         if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService())
+        {
             builder.Host.UseWindowsService(options => options.ServiceName = "DbDataSync");
+
+            // UseWindowsService logs to the Event Log under the application's name ("DbDataSync.Cli") unless told otherwise, and
+            // a source nobody registered is created by its first write, which fails ("Cannot open log for source ... You may not
+            // have write access") and takes the host's startup down with it: the first start after every fresh install ended in
+            // service error 1067. `service install` registers the source "DbDataSync" while elevated, so log under that one.
+            builder.Services.Configure<Microsoft.Extensions.Logging.EventLog.EventLogSettings>(settings => settings.SourceName = "DbDataSync");
+        }
         // Phase 111's Linux analog — UseSystemd() switches the lifetime to one that sends
         // sd_notify(READY=1) once the host has actually started (which is what lets the unit be
         // Type=notify: systemctl start blocks until the host is really serving, not until the process
@@ -325,6 +333,12 @@ public static class DbDataSyncHost
                 StringComparison.OrdinalIgnoreCase))
         {
             builder.Services.AddHostedService<SelfSignedCertificateService>();
+
+            // The managed PFX is encrypted; its password lives in a protected file beside it, never in the
+            // git-tracked configuration, so Kestrel is given it from memory. A file from before the password
+            // existed has no password file and still opens without one until the renewal check replaces it.
+            if (ManagedSelfSignedCertificate.PasswordFor(certificateRepoRoot, ManagedSelfSignedCertificate.PfxPath(certificateRepoRoot)) is { } pfxPassword)
+                builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["Kestrel:Certificates:Default:Password"] = pfxPassword });
         }
 
         // One scheme for every request — controllers and the hub alike — so there is one answer to
@@ -391,6 +405,13 @@ public static class DbDataSyncHost
 
         if (app.Environment.IsDevelopment())
             app.MapOpenApi();
+
+        // First in the pipeline, ahead of authentication and everything else that could answer a request: plain HTTP
+        // from a non-local client is refused unless a trusted TLS-terminating proxy says it arrived over HTTPS.
+        var apiOptionsForHttp = app.Services.GetRequiredService<ApiOptions>();
+        PlainHttpProtection.Apply(app, apiOptionsForHttp);
+        if (PlainHttpProtection.StartupWarning(apiOptionsForHttp, ConfiguredUrls(app.Configuration, apiOptionsForHttp)) is { } plainHttpWarning)
+            app.Logger.LogWarning("{Warning}", plainHttpWarning);
 
         // Only when an HTTPS URL is actually bound. Unconditionally, this redirects to a port nothing is
         // listening on — which is every containerised and every plain-HTTP deployment, and produces a
@@ -476,6 +497,12 @@ public static class DbDataSyncHost
                 "its origin, so share the port by host name, not by path.");
         }
     }
+
+    /// <summary>
+    /// The addresses this process is configured to listen on: <c>urls</c>, <c>ASPNETCORE_URLS</c>, and the console URL.
+    /// </summary>
+    private static IEnumerable<string> ConfiguredUrls(IConfiguration configuration, ApiOptions options) =>
+        new[] { configuration["urls"], configuration["ASPNETCORE_URLS"], options.Url }.Where(u => !string.IsNullOrWhiteSpace(u))!;
 
     /// <summary>
     /// Wires <c>dbdatasync.config.yaml</c> in as an <see cref="IConfigurationSource"/> at the same

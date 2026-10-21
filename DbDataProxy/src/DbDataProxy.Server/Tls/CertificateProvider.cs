@@ -41,9 +41,26 @@ public static class CertificateProvider
                     throw new InvalidOperationException("Proxy:Tls:CertificatePath is required when Proxy:Tls:Mode is File.");
                 return LoadPfx(tls.CertificatePath, tls.CertificatePassword);
 
+            case TlsMode.Store:
+                return LoadFromStore(tls);
+
             default:
                 return LoadOrCreateSelfSigned(tls, dataDirectory, logger, time, serviceName ?? ProxyHost.ServiceName);
         }
+    }
+
+    /// <summary>The certificate named by <c>Proxy:Tls:CertificateThumbprint</c> or <c>CertificateSubject</c> in the certificate store (shared provider, Store mode).</summary>
+    public static X509Certificate2 LoadFromStore(TlsOptions tls)
+    {
+        var options = new CertificateOptions
+        {
+            Mode = DbDataKit.Hosting.Certificates.CertificateMode.Store,
+            Thumbprint = string.IsNullOrWhiteSpace(tls.CertificateThumbprint) ? null : tls.CertificateThumbprint,
+            SubjectName = string.IsNullOrWhiteSpace(tls.CertificateSubject) ? null : tls.CertificateSubject,
+            StoreLocation = tls.StoreLocation == StoreLocationOption.CurrentUser ? StoreLocation.CurrentUser : StoreLocation.LocalMachine,
+        };
+        var provider = new DbDataKit.Hosting.Certificates.CertificateProvider(new DelegateSecretSource((_, _) => ""));
+        return provider.LoadAsync(options).GetAwaiter().GetResult();
     }
 
     /// <summary>Everything the shared certificate provider and the <c>cert</c> command need for the self-signed mode.</summary>
@@ -101,43 +118,13 @@ public static class CertificateProvider
         return certificate;
     }
 
-    /// <summary>
-    /// Earlier versions wrote the PFX with an empty password. Re-encrypt such a file with a random protected password
-    /// (same key and thumbprint, so clients that trust the .cer are unaffected) the first time it is seen.
-    /// </summary>
+    /// <summary>Re-encrypts a PFX written with an empty password (see the shared <c>MigrateUnprotectedPfx</c>) the first time it is seen.</summary>
     public static bool MigrateUnprotectedPfx(SelfSignedSetup setup, ILogger logger, IReadOnlyList<string> identities)
     {
-        if (setup.PasswordConfigured || !File.Exists(setup.PfxPath) || setup.Secrets is not ProtectedPasswordFile store || store.Exists) return false;
-
-        X509Certificate2 legacy;
-        try
-        {
-            legacy = X509CertificateLoader.LoadPkcs12FromFile(setup.PfxPath, null, X509KeyStorageFlags.Exportable | X509KeyStorageFlags.EphemeralKeySet);
-        }
-        catch (CryptographicException)
-        {
-            return false; // unreadable: the provider replaces it
-        }
-
-        using (legacy)
-        {
-            string password = PfxPassword.Generate();
-            string temp = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(setup.PfxPath))!, $".{Guid.NewGuid():N}.tmp");
-            try
-            {
-                File.WriteAllBytes(temp, legacy.Export(X509ContentType.Pfx, password));
-                AclHelper.Restrict(temp, identities);
-                store.Write(password);
-                File.Move(temp, setup.PfxPath, overwrite: true);
-            }
-            finally
-            {
-                if (File.Exists(temp)) File.Delete(temp);
-            }
-
-            logger.LogInformation("Re-encrypted {Path} with a random password kept in a protected file (it had an empty password).", setup.PfxPath);
-            return true;
-        }
+        if (setup.PasswordConfigured || setup.Secrets is not ProtectedPasswordFile store) return false;
+        if (!DbDataKit.Hosting.Certificates.ProtectedPasswordFile.MigrateUnprotectedPfx(setup.PfxPath, store, identities)) return false;
+        logger.LogInformation("Re-encrypted {Path} with a random password kept in a protected file (it had an empty password).", setup.PfxPath);
+        return true;
     }
 
     /// <summary>When the self-signed certificate in use needs replacing at <paramref name="now"/>.</summary>

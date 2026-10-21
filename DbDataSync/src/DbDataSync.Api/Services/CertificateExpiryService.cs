@@ -1,6 +1,9 @@
+using DbDataKit.Hosting.Certificates.Windows;
 using System.Runtime.Versioning;
 using System.Security.Cryptography.X509Certificates;
 using DbDataSync.Api.Configuration;
+using CertificateExpiry = DbDataKit.Hosting.Certificates.CertificateExpiry;
+using CertificateState = DbDataKit.Hosting.Certificates.CertificateState;
 using DbDataSync.Certificates;
 using DbDataSync.State;
 
@@ -38,7 +41,7 @@ public sealed class CertificateExpiryService(
     private static readonly TimeSpan CheckInterval = TimeSpan.FromDays(1);
 
     // In-memory, not persisted — a restart mid-day can produce one extra notification, which
-    // CertificateExpiryEvaluator's own doc comment accepts as the same courtesy-cap tradeoff every
+    // the dedup comment in EvaluateExpiry accepts as the same courtesy-cap tradeoff every
     // other NotificationStore producer already makes rather than a guarantee worth a database cursor.
     private DateOnly? _lastRaisedExpiringUtc;
     private DateOnly? _lastRaisedExpiredUtc;
@@ -113,32 +116,28 @@ public sealed class CertificateExpiryService(
     private void EvaluateExpiry(X509Certificate2 certificate)
     {
         var now = DateTimeOffset.UtcNow;
-        var decision = CertificateExpiryEvaluator.Evaluate(
-            certificate.NotAfter, options.ExpiryWarningDays, now, _lastRaisedExpiringUtc, _lastRaisedExpiredUtc);
-
         var today = DateOnly.FromDateTime(now.UtcDateTime);
-        switch (decision)
+        var status = CertificateExpiry.Evaluate(certificate, now, options.ExpiryWarningDays);
+
+        // At most one notification of each kind per UTC day, held in memory (a restart mid-day can raise one extra).
+        switch (status.State)
         {
-            case CertificateExpiryDecision.Expiring:
-                var daysRemaining = (int)Math.Floor((certificate.NotAfter - now).TotalDays);
+            case CertificateState.ExpiringSoon when _lastRaisedExpiringUtc != today:
                 notifications.Raise(
                     NotificationKinds.CertificateExpiring,
                     $"The bound TLS certificate ('{certificate.Subject}', thumbprint {certificate.Thumbprint}) " +
-                    $"expires in {daysRemaining} day(s), on {certificate.NotAfter:yyyy-MM-dd}. Renew it with " +
+                    $"expires in {status.DaysRemaining} day(s), on {certificate.NotAfter:yyyy-MM-dd}. Renew it with " +
                     "'dbdatasync config cert renew'.");
                 _lastRaisedExpiringUtc = today;
                 break;
 
-            case CertificateExpiryDecision.Expired:
+            case CertificateState.Expired when _lastRaisedExpiredUtc != today:
                 notifications.Raise(
                     NotificationKinds.CertificateExpired,
                     $"The bound TLS certificate ('{certificate.Subject}', thumbprint {certificate.Thumbprint}) " +
                     $"expired on {certificate.NotAfter:yyyy-MM-dd}. Every browser will now refuse it. Renew it " +
                     "with 'dbdatasync config cert renew'.");
                 _lastRaisedExpiredUtc = today;
-                break;
-
-            case CertificateExpiryDecision.None:
                 break;
         }
     }

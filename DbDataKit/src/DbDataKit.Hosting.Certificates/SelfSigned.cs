@@ -75,6 +75,10 @@ public static class SelfSignedCertificateGenerator
         return (dns, ips);
     }
 
+    /// <summary>The DNS names of a certificate's SAN extension, in the order they appear (empty when it has none).</summary>
+    public static IReadOnlyList<string> ReadDnsNames(X509Certificate2 cert) =>
+        cert.Extensions["2.5.29.17"] is X509SubjectAlternativeNameExtension san ? [.. san.EnumerateDnsNames()] : [];
+
     private static string? DefaultFqdn(string host)
     {
         try

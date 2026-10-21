@@ -1,3 +1,4 @@
+using DbDataKit.Hosting.Certificates.Windows;
 using DbDataSync.Core.Config;
 using DbDataSync.Core.Git;
 using LibGit2Sharp;

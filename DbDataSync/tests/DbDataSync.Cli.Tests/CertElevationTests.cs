@@ -1,3 +1,4 @@
+using DbDataKit.Hosting.Certificates.Windows;
 using System.Runtime.Versioning;
 using DbDataSync.Certificates;
 using DbDataSync.Core.Config;

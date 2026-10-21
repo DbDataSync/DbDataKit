@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using DbDataProxy.Client;
 using DbDataProxy.Server.Auth;
@@ -129,5 +130,94 @@ public sealed class TlsTests : IDisposable
 
         using var client = new ProxyFlightClient(address);
         await Assert.ThrowsAnyAsync<Exception>(() => client.AuthenticateAsync("alice", "pw", TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>A certificate with a private key in <c>CurrentUser\My</c>, removed again on dispose.</summary>
+    private sealed class StoredCertificate : IDisposable
+    {
+        public X509Certificate2 Certificate { get; }
+
+        public StoredCertificate(string commonName, int validDays)
+        {
+            using var rsa = RSA.Create(2048);
+            var request = new CertificateRequest($"CN={commonName}", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            using var created = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(validDays));
+            Certificate = X509CertificateLoader.LoadPkcs12(created.Export(X509ContentType.Pfx, "x"), "x", X509KeyStorageFlags.PersistKeySet);
+            using var store = new X509Store(StoreName.My, StoreLocation.CurrentUser);
+            store.Open(OpenFlags.ReadWrite);
+            store.Add(Certificate);
+        }
+
+        public void Dispose()
+        {
+            using var store = new X509Store(StoreName.My, StoreLocation.CurrentUser);
+            store.Open(OpenFlags.ReadWrite);
+            store.Remove(Certificate);
+            Certificate.Dispose();
+        }
+    }
+
+    private ProxyOptions StoreOptions(string? thumbprint = null, string? subject = null) => new()
+    {
+        DataDirectory = _dir,
+        Tls = { Mode = TlsMode.Store, CertificateThumbprint = thumbprint, CertificateSubject = subject, StoreLocation = StoreLocationOption.CurrentUser },
+    };
+
+    [Fact]
+    public void Store_mode_loads_a_certificate_by_thumbprint_and_by_subject()
+    {
+        var name = "dbproxy-store-" + Guid.NewGuid().ToString("N");
+        using var stored = new StoredCertificate(name, 30);
+
+        using var byThumbprint = CertificateProvider.Load(StoreOptions(thumbprint: stored.Certificate.Thumbprint.ToLowerInvariant()), _dir, NullLogger.Instance)!;
+        using var bySubject = CertificateProvider.Load(StoreOptions(subject: name), _dir, NullLogger.Instance)!;
+
+        Assert.Equal(stored.Certificate.Thumbprint, byThumbprint.Thumbprint);
+        Assert.Equal(stored.Certificate.Thumbprint, bySubject.Thumbprint);
+        Assert.True(byThumbprint.HasPrivateKey);
+    }
+
+    [Fact]
+    public void Store_mode_prefers_the_longest_lived_certificate_for_a_subject()
+    {
+        var name = "dbproxy-store-" + Guid.NewGuid().ToString("N");
+        using var older = new StoredCertificate(name, 10);
+        using var renewed = new StoredCertificate(name, 90);
+
+        using var loaded = CertificateProvider.Load(StoreOptions(subject: name), _dir, NullLogger.Instance)!;
+
+        Assert.Equal(renewed.Certificate.Thumbprint, loaded.Thumbprint);
+    }
+
+    [Fact]
+    public void Store_mode_without_a_matching_certificate_fails_with_a_clear_message()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            CertificateProvider.Load(StoreOptions(subject: "dbproxy-no-such-" + Guid.NewGuid().ToString("N")), _dir, NullLogger.Instance));
+
+        Assert.Contains("store", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Store_mode_without_a_selector_fails_before_touching_the_store()
+    {
+        Assert.Throws<InvalidOperationException>(() => CertificateProvider.Load(StoreOptions(), _dir, NullLogger.Instance));
+    }
+
+    [Fact]
+    public void Rotation_service_picks_up_a_renewed_store_certificate()
+    {
+        var name = "dbproxy-store-" + Guid.NewGuid().ToString("N");
+        var options = StoreOptions(subject: name);
+        var holder = new TlsCertificateHolder();
+        using var first = new StoredCertificate(name, 10);
+        holder.Set(CertificateProvider.Load(options, _dir, NullLogger.Instance));
+        var service = new CertificateRotationService(holder, options, _dir, NullLogger<CertificateRotationService>.Instance);
+
+        Assert.False(service.Check());
+
+        using var renewed = new StoredCertificate(name, 90);
+        Assert.True(service.Check());
+        Assert.Equal(renewed.Certificate.Thumbprint, holder.Current!.Thumbprint);
     }
 }

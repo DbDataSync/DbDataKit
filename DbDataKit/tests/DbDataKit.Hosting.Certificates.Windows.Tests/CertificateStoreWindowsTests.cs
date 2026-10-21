@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
 
-namespace DbDataSync.Certificates.Tests;
+namespace DbDataKit.Hosting.Certificates.Windows.Tests;
 
 /// <summary>
 /// The doc's own Windows-only test bullet: install into <c>CurrentUser\My</c> (so the test needs no
@@ -39,7 +39,7 @@ public sealed class CertificateStoreWindowsTests : IDisposable
     private X509Certificate2 InstallSelfSigned(string commonName)
     {
         var spec = new CertificateSpec(commonName, [commonName], 365, "DbDataSync Test");
-        var installed = CertificateStore.InstallSelfSigned(spec, StoreLocation.CurrentUser);
+        var installed = StoreSelfSignedCertificate.Install(spec, StoreLocation.CurrentUser);
         _installed.Add(installed);
         return installed;
     }

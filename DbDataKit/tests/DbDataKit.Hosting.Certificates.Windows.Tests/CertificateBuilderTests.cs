@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
-namespace DbDataSync.Certificates.Tests;
+namespace DbDataKit.Hosting.Certificates.Windows.Tests;
 
 /// <summary>Covers the doc's own unit-test bullets for issuance: "a self-signed certificate carries
 /// every requested DNS name as a SAN, the server-auth EKU, and the requested validity" and "the CSR
@@ -17,7 +17,7 @@ public sealed class CertificateBuilderTests
         var spec = new CertificateSpec("dbdatasync.example.com", ["dbdatasync.example.com", "dbdatasync"], 365, null);
         using var certificate = CertificateBuilder.CreateSelfSigned(spec);
 
-        var sanNames = CertificateSanReader.GetDnsNames(certificate);
+        var sanNames = DbDataKit.Hosting.Certificates.SelfSignedCertificateGenerator.ReadDnsNames(certificate);
         Assert.Contains("dbdatasync.example.com", sanNames);
         Assert.Contains("dbdatasync", sanNames);
     }
@@ -28,7 +28,7 @@ public sealed class CertificateBuilderTests
         var spec = new CertificateSpec("dbdatasync.example.com", ["dbdatasync.example.com"], 365, null);
         using var certificate = CertificateBuilder.CreateSelfSigned(spec);
 
-        var sanNames = CertificateSanReader.GetDnsNames(certificate);
+        var sanNames = DbDataKit.Hosting.Certificates.SelfSignedCertificateGenerator.ReadDnsNames(certificate);
         Assert.Contains(Environment.MachineName, sanNames, StringComparer.OrdinalIgnoreCase);
     }
 

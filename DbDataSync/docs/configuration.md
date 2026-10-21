@@ -120,7 +120,7 @@ become `--DbDataSync:App:RepoRoot`, `--DbDataSync:State:DbPath` and `--urls`, so
 configuration surface as running the API directly (see below) — just with CLI-flavored names and
 defaults.
 
-### `dbdatasync service install|uninstall|status`
+### `dbdatasync service install|uninstall|status|start|stop|restart|doctor`
 
 Windows or Linux (systemd); `install` needs an elevated prompt (Windows) or root (Linux,
 `sudo`). macOS keeps bailing with a pointer to `dbdatasync serve` / the container.
@@ -129,11 +129,16 @@ Windows or Linux (systemd); `install` needs an elevated prompt (Windows) or root
 | --- | --- | --- |
 | `--repo <path>` | `install` | `CliOptions.DefaultRoot` — **not** the walk-up resolver; see above |
 | `--url <url>` | `install` | `http://localhost:5080` |
-| `--account <account>` (Windows) | `install` | `LocalSystem` |
+| `--account <account>` (Windows) | `install` | `LocalSystem`; also `NT SERVICE\DbDataSync`, `DOMAIN\gmsa$`, or `DOMAIN\user` |
+| `--password-stdin` (Windows) | `install` | none; the password of a named user account is read from standard input, never from the command line |
 | `--user <user>` (Linux) | `install` | `dbdatasync` — created as a system user if it doesn't exist |
 
-Windows: registers the tool's own installed executable via `sc.exe create`, with `serve --repo ...
---url ...` baked into `binPath`. Linux: writes `/etc/systemd/system/dbdatasync.service`
+Windows: registers the tool's own installed executable with the Service Control Manager (the shared
+`DbDataKit.Hosting.WindowsService` provisioner), with `serve --repo ...` as its command line; running `install`
+again updates the registration instead of failing. `start`, `stop` and `restart` wait until the service reaches the state
+(so a script or the installer can run `dbdatasync service start`), `status` shows state, account, start mode and command
+line, and `doctor` checks the registration (account, command line, start mode, recovery actions) and the data directory.
+The service starts automatically at boot (not delayed) and, as before, has no restart-on-failure actions; `doctor` says so. Linux: writes `/etc/systemd/system/dbdatasync.service`
 (`ExecStart=` carries the same resolved values), `systemctl daemon-reload`s, and `enable`s it —
 `install` does not start it; run `sudo systemctl start dbdatasync` for that, so the first start's own
 output is visible rather than scrolling by during `install`. Either way, **a connection using
@@ -267,6 +272,8 @@ the old flat names is migrated automatically the first time `serve`/`setup` runs
 | `App:Url` | `DbDataSync__App__Url` | `http://localhost:5080` | `dbdatasync serve`/`dbdatasync health` read this themselves (see above) and translate it to `--urls`/Kestrel's bind address; also this deployment's own always-trusted passkey origin (see `Auth:Passkeys:*`, below) |
 | `App:Server` | `DbDataSync__App__Server` | `kestrel` | `kestrel` or `httpsys`. `httpsys` is Windows-only and exists so the port can be shared with other processes — see "Sharing a port with HTTP.sys," below. Anything else refuses to start. Takes effect on restart |
 | `App:AlternateUrls` | `DbDataSync__App__AlternateUrls` | none | every other origin this deployment is also reached at, beyond `App:Url` — comma- or semicolon-separated. Purely additive: `App:Url`'s own origin is always trusted for passkeys without needing to be listed here too |
+| `App:TrustedProxies` | `DbDataSync__App__TrustedProxies` | none | proxies (IP addresses or CIDR ranges such as `10.0.0.0/8`, comma- or semicolon-separated) whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are believed. Set it when a TLS-terminating reverse proxy sits in front of a plain-HTTP bind; see [Plain HTTP](#plain-http-and-reverse-proxies) |
+| `App:AllowInsecureHttp` | `DbDataSync__App__AllowInsecureHttp` | `false` (`true` in the container image) | serve plain HTTP to every client. Credentials and data then cross the network in clear text |
 | `App:TaskRunnerDllPath` | `DbDataSync__App__TaskRunnerDllPath` | resolved automatically | see below |
 | `App:CliDllPath` | `DbDataSync__App__CliDllPath` | resolved automatically | where `DbDataSync.Cli.dll` is, for the deep connection-scoped library-validation check to spawn itself in its own process |
 
@@ -274,6 +281,18 @@ the old flat names is migrated automatically the first time `serve`/`setup` runs
 for the tool, the container, and any plain `dotnet publish`; (2) a dev-repo-layout guess (swaps
 `DbDataSync.Api/bin` for `DbDataSync.TaskRunner/bin`/`DbDataSync.Cli/bin`) — true only for this
 repository's own working tree.
+
+#### Plain HTTP and reverse proxies
+
+A plain `http://` request is served only when it comes from the same machine (loopback), or when it arrived over HTTPS at a
+TLS-terminating proxy that this deployment trusts. Anything else gets `400` with a message saying how to fix it. `/api/health`
+is always answered, so a load balancer's probe works.
+
+To run behind a proxy that terminates TLS, bind plain HTTP (the container image does: `http://0.0.0.0:8080`), set
+`DbDataSync:App:TrustedProxies` to the proxy's address, and have the proxy send `X-Forwarded-Proto: https` (and `X-Forwarded-For`).
+Those headers are believed only from the addresses listed; from anywhere else they are ignored. A proxy on the same host that
+talks to a loopback bind needs nothing. With nothing trustworthy in front, bind HTTPS (see [certificates](certificates.md)).
+`App:AllowInsecureHttp: true` turns the check off; the container image sets it, so set it back to `false` there when a proxy fronts the container.
 
 #### `DbDataSync:State:*`
 

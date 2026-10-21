@@ -249,6 +249,12 @@ Use this for a self-contained deployment with no `PATH` or service to manage.
 docker run -p 8080:8080 -v dbdatasync-data:/var/lib/dbdatasync ghcr.io/dbdatasync/dbdatasync:latest
 ```
 
+The image listens on plain HTTP and serves it to any client (it sets `DbDataSync__App__AllowInsecureHttp=true`), so a browser reaching
+it through Docker's port mapping works. That is fine for a first look; credentials cross the network unencrypted. For real use, put
+a TLS-terminating proxy in front and run the container with `-e DbDataSync__App__AllowInsecureHttp=false -e DbDataSync__App__TrustedProxies=<proxy address>`
+(see [Plain HTTP and reverse proxies](configuration.md#plain-http-and-reverse-proxies)); plain HTTP is then served only to the proxy's
+`X-Forwarded-Proto: https` requests and to the container itself.
+
 One volume, at `/var/lib/dbdatasync`, holds both the config repository and the state database. Images are published for
 **linux/amd64 and linux/arm64** (an Arm server, a Raspberry Pi 4 or 5, AWS Graviton); Docker picks the one that matches the
 machine.
@@ -264,7 +270,7 @@ machine.
 There is nothing to update in place: `dbdatasync update` inside a container says so. Pull a newer tag and start the container
 again — the volume keeps your data. The image reports the version it was built for: `docker run --rm --entrypoint dotnet <image> /app/DbDataSync.Cli.dll version`.
 
-To build it yourself from a checkout instead, `docker compose -f docker-compose.app.yml up` builds the same Dockerfile.
+To build it yourself from a checkout instead, `docker compose -f docker-compose.app.yml up` (run in `DbDataSync/`) builds the same Dockerfile. Building by hand, run `docker build -f DbDataSync/Dockerfile .` from the repository root: the image needs the sibling `DbDataKit/` folder, so the root is the build context.
 
 ## Next: Configuration
 

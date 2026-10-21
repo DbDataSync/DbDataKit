@@ -1,3 +1,4 @@
+using DbDataKit.Hosting.Certificates.Windows;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -15,7 +16,7 @@ namespace DbDataSync.Api.Tests;
 /// <c>Kestrel:Certificates:Default:*</c> off <see cref="IConfiguration"/>, find the certificate in the
 /// store, evaluate it, raise through <see cref="NotificationStore"/> — actually connects, on top of a
 /// real (CurrentUser-store, so no elevation needed) certificate. The individual pieces
-/// (<see cref="CertificateExpiryEvaluator"/>, <see cref="NotificationStore.Raise"/>,
+/// (<see cref="DbDataKit.Hosting.Certificates.CertificateExpiry"/>, <see cref="NotificationStore.Raise"/>,
 /// <see cref="CertificateStore"/>) each have their own focused tests; this is the one that would catch
 /// a wiring mistake between them (a wrong section name, a wrong DI registration) that none of those
 /// would.
@@ -48,7 +49,7 @@ public sealed class CertificateExpiryServiceWindowsTests : IDisposable
     private X509Certificate2 InstallSelfSigned(string commonName)
     {
         var spec = new CertificateSpec(commonName, [commonName], 365, "DbDataSync Test");
-        var certificate = CertificateStore.InstallSelfSigned(spec, StoreLocation.CurrentUser);
+        var certificate = StoreSelfSignedCertificate.Install(spec, StoreLocation.CurrentUser);
         _installed.Add(certificate);
         return certificate;
     }

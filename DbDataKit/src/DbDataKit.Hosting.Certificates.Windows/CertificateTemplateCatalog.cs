@@ -3,7 +3,7 @@ using System.DirectoryServices.ActiveDirectory;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
-namespace DbDataSync.Certificates;
+namespace DbDataKit.Hosting.Certificates.Windows;
 
 /// <summary>Why <see cref="CertificateTemplateCatalog.List"/> came back empty — <see
 /// cref="Available"/> is the one case it didn't.</summary>
@@ -50,7 +50,7 @@ public sealed record TemplateListResult(
 /// rather than verified against a real enterprise CA and a real access-denied scenario (this sandbox
 /// has neither) — see the phase 82 retrospective's "what is not tested" for the same honesty this
 /// project already applies to AD CS enrollment itself. Getting a reason *wrong* still returns
-/// <paramref name="TemplateListResult.Detail"/> containing the real exception message, so an operator
+/// <c>TemplateListResult.Detail</c> containing the real exception message, so an operator
 /// is never left with only a mislabeled bucket and nothing else.
 /// </para>
 /// </summary>

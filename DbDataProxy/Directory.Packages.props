@@ -43,6 +43,7 @@
     <PackageVersion Include="DbDataKit.Hosting.WindowsService" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting.Systemd" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting.Certificates" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Hosting.Certificates.Windows" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting.Children" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting.Cli" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Security.Acl" Version="$(DbDataKitVersion)" />

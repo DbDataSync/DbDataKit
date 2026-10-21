@@ -1,3 +1,4 @@
+using DbDataKit.Hosting.Certificates.Windows;
 using System.Security.Cryptography.X509Certificates;
 using DbDataSync.Certificates;
 using DbDataSync.Core.Config;
@@ -56,8 +57,9 @@ public sealed class NewSelfSignedFileTests : IDisposable
         CertCommand.Run(["new-self-signed", "--repo", _root]);
 
         using var certificate = X509CertificateLoader.LoadPkcs12FromFile(
-            ManagedSelfSignedCertificate.PfxPath(_root), password: null);
-        var dnsNames = CertificateSanReader.GetDnsNames(certificate);
+            ManagedSelfSignedCertificate.PfxPath(_root),
+            ManagedSelfSignedCertificate.PasswordFor(_root, ManagedSelfSignedCertificate.PfxPath(_root)));
+        var dnsNames = DbDataKit.Hosting.Certificates.SelfSignedCertificateGenerator.ReadDnsNames(certificate);
 
         Assert.Contains("dbdatasync.example.com", dnsNames);
         Assert.Contains("localhost", dnsNames);
@@ -72,8 +74,9 @@ public sealed class NewSelfSignedFileTests : IDisposable
 
         Assert.Equal(0, exitCode);
         using var certificate = X509CertificateLoader.LoadPkcs12FromFile(
-            ManagedSelfSignedCertificate.PfxPath(_root), password: null);
-        Assert.Contains("localhost", CertificateSanReader.GetDnsNames(certificate));
+            ManagedSelfSignedCertificate.PfxPath(_root),
+            ManagedSelfSignedCertificate.PasswordFor(_root, ManagedSelfSignedCertificate.PfxPath(_root)));
+        Assert.Contains("localhost", DbDataKit.Hosting.Certificates.SelfSignedCertificateGenerator.ReadDnsNames(certificate));
     }
 
     [NonWindowsFact]

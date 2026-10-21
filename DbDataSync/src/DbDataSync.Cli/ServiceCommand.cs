@@ -1,11 +1,40 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using System.Security;
+using DbDataKit.Hosting.Cli;
+using DbDataKit.Hosting.WindowsService;
+using DbDataKit.Security.Acl;
 using DbDataSync.Api.Auth;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Core.Config;
 using DbDataSync.Core.Git;
 
 namespace DbDataSync.Cli;
+
+/// <summary>What <see cref="ServiceCommand"/>'s Windows verbs touch outside the process — the Service Control Manager, the data
+/// directory's permissions and the Event Log source — so a test can run them on any OS against an in-memory SCM.</summary>
+internal sealed class ServiceEnvironment
+{
+    public required IServiceControlManager Scm { get; init; }
+
+    /// <summary>Takes ownership of the data directory for the service account and grants it access (<c>icacls</c>).</summary>
+    public required Action<string, string?> GrantDataDirectoryAccess { get; init; }
+
+    /// <summary>Registers the Event Log source the service writes startup failures to.</summary>
+    public required Action EnsureEventSource { get; init; }
+
+    public static ServiceEnvironment Real() => new()
+    {
+        Scm = OperatingSystem.IsWindows() ? new WindowsServiceControlManager() : new InMemoryServiceControlManager(),
+        GrantDataDirectoryAccess = (root, account) => ServiceCommand.GrantDataDirectoryAccess(root, account),
+        EnsureEventSource = () =>
+        {
+            if (OperatingSystem.IsWindows())
+                WindowsServiceEventLog.EnsureSourceRegistered();
+        },
+    };
+}
 
 /// <summary>
 /// Registers this tool as a Windows service or (phase 111) a Linux systemd service, and says what it
@@ -26,13 +55,15 @@ public static class ServiceCommand
 {
     public const string ServiceName = "DbDataSync";
 
+    private const string WindowsUsage = "Usage: dbdatasync service install|uninstall|status|start|stop|restart|doctor";
+
     public static int Run(string[] args)
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             if (args.Length == 0)
             {
-                Console.Error.WriteLine("Usage: dbdatasync service install|uninstall|status");
+                Console.Error.WriteLine(WindowsUsage);
                 return 1;
             }
 
@@ -40,7 +71,9 @@ public static class ServiceCommand
             {
                 "install" => Install(args),
                 "uninstall" => Uninstall(args),
-                "status" => Sc("query", ServiceName),
+                "status" => Status(),
+                "start" or "stop" or "restart" => Control(args[0].ToLowerInvariant()),
+                "doctor" => Doctor(args[1..]),
                 var other => Unknown(other),
             };
         }
@@ -72,9 +105,12 @@ public static class ServiceCommand
     /// hatch <see cref="SystemdService.Install"/>'s own <c>executableOverride</c> is, and for the same
     /// reason: CI's <c>windows-latest</c> runners are elevated, so the refusal branch below is
     /// unreachable there without one.</param>
-    internal static int Install(string[] args, bool? elevatedOverride = null)
+    /// <param name="environment">Only for tests: the Service Control Manager and the other machine-level effects.</param>
+    /// <param name="executableOverride">Only for tests: skips resolving this process's path and the launcher conversion.</param>
+    internal static int Install(
+        string[] args, bool? elevatedOverride = null, ServiceEnvironment? environment = null, string? executableOverride = null)
     {
-        var executable = Environment.ProcessPath;
+        var executable = executableOverride ?? Environment.ProcessPath;
         if (executable is null)
         {
             Console.Error.WriteLine("Could not determine this tool's own executable path.");
@@ -82,20 +118,11 @@ public static class ServiceCommand
         }
 
         // Before anything that touches the machine, because every step below needs elevation and two
-        // of them fail badly without it. Phase 136's follow-up doc
-        // (planning/todo/follow-up-phase-136-140-...) listed "whether a non-elevated first
-        // `service install` can register the Event Log source" as unverified; run on a real
-        // non-elevated Windows shell it does not merely fail, it crashes: GrantDataDirectoryAccess
-        // first rewrites part of the data directory's ACLs, then EventLog.SourceExists throws
-        // SecurityException ("some or all event logs could not be searched") straight out of
-        // EnsureSourceRegistered, and the CLI has no top-level handler — so the operator gets an
-        // unhandled-exception stack trace, exit code 127, and a half-modified directory, with nothing
-        // anywhere saying "run this elevated". Refusing up front is what ToolCommand's Unix path
-        // already does ("Needs root. Run: sudo ...").
-        // The OperatingSystem.IsWindows() half is for the analyzer, not the logic: this method is only
-        // ever reached from Run's own Windows branch, but that branch tests RuntimeInformation.IsOSPlatform,
-        // which CA1416 does not read as a guard. The plain check is the one it recognises — the same
-        // convention phase 136 settled on, and the same ternary shape ToolCommand.IsElevated already uses.
+        // of them fail badly without it: a non-elevated run used to rewrite part of the data directory's
+        // ACLs, then crash on the Event Log source (SecurityException, exit 127) and leave a
+        // half-modified directory with nothing saying "run this elevated". Refusing up front is what
+        // ToolCommand's Unix path already does ("Needs root. Run: sudo ...").
+        // The OperatingSystem.IsWindows() half is for the analyzer, not the logic.
         var elevated = elevatedOverride ?? (!OperatingSystem.IsWindows() || WindowsElevation.IsAdministrator());
 
         if (!elevated)
@@ -109,6 +136,7 @@ public static class ServiceCommand
             return 1;
         }
 
+        var env = environment ?? ServiceEnvironment.Real();
         var root = Path.GetFullPath(CliOptions.Read(args, "--repo") ?? CliOptions.DefaultRoot);
         // Explicit vs. defaulted matters: an explicit --url is written into dbdatasync.config.yaml
         // (below) so it survives every future restart; a defaulted one is never written, or a bare
@@ -123,7 +151,8 @@ public static class ServiceCommand
         // Phase 196L: registered against the launcher, once — an update then never touches what the service names.
         // From a pre-196L --tool-path install this converts it first (saying so); the launcher replaces the tool's
         // shim at the same path, so the path registered is the one it always was.
-        executable = LauncherSetup.EnsureAsync(root, Console.Out, Console.Error, CancellationToken.None).GetAwaiter().GetResult() ?? executable;
+        if (executableOverride is null)
+            executable = LauncherSetup.EnsureAsync(root, Console.Out, Console.Error, CancellationToken.None).GetAwaiter().GetResult() ?? executable;
 
         // A warning, not a refusal — sc.exe has no equivalent of systemd's ProtectHome, so a
         // user-profile executable does not fail the service the way it can on Linux (SystemdService's
@@ -140,30 +169,19 @@ public static class ServiceCommand
             Console.WriteLine();
         }
 
-        // No --url baked in: serve already resolves DbDataSync:App:Url from dbdatasync.config.yaml
-        // (flag > env var > file), so baking one in here would win over that file forever — an
-        // operator editing Url through the Admin screen would see it silently ignored on every
-        // restart. An explicit --url given here is written into the file itself, below, instead.
-        var binPath = BinPath(executable, root);
-
-        // sc.exe's parser wants each `key=` and its value as two SEPARATE argv tokens — exactly what
-        // typing them at a cmd.exe prompt produces, since the unescaped space between "start=" and
-        // "auto" is what cmd splits on. ArgumentList doesn't do that splitting: a single entry like
-        // $"start= {value}" survives as one atomic argument and gets wrapped in quotes because it
-        // contains a space, so sc.exe never sees a token that's exactly "start=" — its lookahead for
-        // the enum value grabs the *next* real argument instead and fails validation on it, which is
-        // exactly the "Invalid start= field" sc.exe reports. binPath is the one field that tolerated
-        // this: it's free-form, not an enum sc.exe checks, so the extra text just became part of its
-        // value. Every key and its value now gets its own list entry, matching cmd's own tokenization.
-        var arguments = new List<string>
+        // A password for a named user account arrives on standard input, never on a command line (--password-stdin).
+        // LocalSystem, a virtual account and a gMSA take none.
+        SecureString? password = null;
+        if (CliOptions.Has(args, "--password-stdin"))
         {
-            "create", ServiceName, "binPath=", binPath, "start=", "auto", "DisplayName=", "DbDataSync",
-        };
+            var line = Console.In.ReadLine();
+            if (string.IsNullOrEmpty(line))
+            {
+                Console.Error.WriteLine("--password-stdin was given but standard input was empty. Nothing has been changed.");
+                return 1;
+            }
 
-        if (account is not null)
-        {
-            arguments.Add("obj=");
-            arguments.Add(account);
+            password = SecureStrings.From(line);
         }
 
         // Only when explicitly given, and only when there is already a git-tracked config to write it
@@ -190,35 +208,94 @@ public static class ServiceCommand
         Console.WriteLine(
             "  Connections using integrated authentication will connect as this account.");
 
-        GrantDataDirectoryAccess(root, account);
-
-        // Phase 136: registered here, elevated, rather than lazily at the moment a startup failure
-        // first needs to write to it — see WindowsServiceEventLog.EnsureSourceRegistered's own doc
-        // comment. A registration failure is visible in this command's own output, not silently
-        // deferred to the first real failure under the service.
-        if (OperatingSystem.IsWindows())
-            WindowsServiceEventLog.EnsureSourceRegistered();
-
-        var exitCode = Sc([.. arguments]);
-        if (exitCode == 0)
+        using (password)
         {
+            ServiceInstallSpec spec;
+            try
+            {
+                spec = Spec(executable, root, account);
+            }
+            catch (ArgumentException ex)
+            {
+                Console.Error.WriteLine($"{ex.Message} Nothing has been changed.");
+                return 1;
+            }
+
+            var provisioner = new ServiceProvisioner(env.Scm);
+
+            // Validated before the machine is touched (the directory's ownership, the Event Log source), so a refusal
+            // — a user account with no password, say — changes nothing.
+            try
+            {
+                provisioner.Plan(spec, password);
+            }
+            catch (ServiceInstallException ex)
+            {
+                Console.Error.WriteLine($"{ex.Message} Nothing has been changed.");
+                return 1;
+            }
+
+            env.GrantDataDirectoryAccess(root, account);
+
+            // Phase 136: registered here, elevated, rather than lazily at the moment a startup failure
+            // first needs to write to it — see WindowsServiceEventLog.EnsureSourceRegistered's own doc
+            // comment. A registration failure is visible in this command's own output, not silently
+            // deferred to the first real failure under the service.
+            env.EnsureEventSource();
+
+            InstallResult result;
+            try
+            {
+                result = provisioner.Install(spec, password);
+            }
+            catch (ServiceControlException ex)
+            {
+                return Failed(ex);
+            }
+            catch (ServiceInstallException ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return 1;
+            }
+
+            Console.WriteLine(result.Outcome switch
+            {
+                InstallOutcome.Created => $"Service '{ServiceName}' installed.",
+                InstallOutcome.Reconfigured => $"Service '{ServiceName}' updated.",
+                _ => $"Service '{ServiceName}' already up to date.",
+            });
             ServiceRegistration.Write(root, account ?? "LocalSystem", "windows");
             Console.WriteLine("Next: `dbdatasync config check`.");
+            return 0;
         }
-
-        return exitCode;
     }
+
+    /// <summary>What Windows is told to run, and as whom. Kept as it has always been: <c>LocalSystem</c> unless <c>--account</c>
+    /// says otherwise (so LocalSystem is allowed without a flag), start mode automatic, no failure-recovery actions and no service SID.</summary>
+    internal static ServiceInstallSpec Spec(string executable, string root, string? account) => new()
+    {
+        Name = ServiceName,
+        DisplayName = ServiceName,
+        BinaryPath = executable,
+        Arguments = ["serve", "--repo", root],
+        Account = ServiceAccount.Parse(account ?? "LocalSystem", ServiceName),
+        AllowLocalSystem = true,
+        StartMode = ServiceStartMode.Automatic,
+        Failure = new FailurePolicy([], TimeSpan.Zero),
+        SidType = ServiceSidType.None,
+    };
 
     /// <param name="elevatedOverride">Only for <c>ServiceCommandTests</c> — see <see cref="Install"/>'s
     /// own parameter of the same name.</param>
-    internal static int Uninstall(string[] args, bool? elevatedOverride = null)
+    /// <param name="environment">Only for tests: see <see cref="Install"/>.</param>
+    internal static int Uninstall(string[] args, bool? elevatedOverride = null, ServiceEnvironment? environment = null)
     {
         var root = Path.GetFullPath(CliOptions.Read(args, "--repo") ?? CliOptions.DefaultRoot);
 
-        // Same guard as Install, for the quieter half of the same bug. `sc delete` needs elevation, and
-        // without this the command answered with sc.exe's own "Access is denied" *after* having already
-        // deleted the local registration record below — a failed uninstall that left the service
-        // installed and running while telling the rest of the tool it was gone.
+        // Same guard as Install, for the quieter half of the same bug. Removing the service needs elevation, and
+        // without this the command answered with "Access is denied" *after* having already deleted the local
+        // registration record below — a failed uninstall that left the service installed and running while
+        // telling the rest of the tool it was gone.
         var elevated = elevatedOverride ?? (!OperatingSystem.IsWindows() || WindowsElevation.IsAdministrator());
 
         if (!elevated)
@@ -230,17 +307,167 @@ public static class ServiceCommand
             return 1;
         }
 
-        var exitCode = Sc("delete", ServiceName);
+        var env = environment ?? ServiceEnvironment.Real();
+        bool removed;
+        try
+        {
+            // Stops it first (waiting for it), then deletes.
+            removed = new ServiceProvisioner(env.Scm).UninstallAsync(ServiceName, StopTimeout).GetAwaiter().GetResult();
+        }
+        catch (ServiceControlException ex)
+        {
+            return Failed(ex);
+        }
+        catch (TimeoutException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
 
-        // After sc.exe, and only on success. The record is what ReadinessChecks (`config check`) and
+        if (!removed)
+        {
+            Console.WriteLine($"The '{ServiceName}' service is not installed.");
+            return 1;
+        }
+
+        // After the service is gone, and only on success. The record is what ReadinessChecks (`config check`) and
         // ServeCommand's own startup-failure message read to report which account a registered service
         // runs as — the diagnostic context phases 135 and 136 added precisely so an Error 1053 names
         // something. Clearing it while the service is still installed does not just lose a file, it
         // makes both of those quietly report a machine that does not exist.
-        if (exitCode == 0)
-            ServiceRegistration.Clear(root);
+        ServiceRegistration.Clear(root);
+        Console.WriteLine($"Removed the '{ServiceName}' service. Its repository and state are untouched.");
+        return 0;
+    }
 
-        return exitCode;
+    private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>The service's state, account, start mode and command line.</summary>
+    internal static int Status(ServiceEnvironment? environment = null)
+    {
+        var scm = (environment ?? ServiceEnvironment.Real()).Scm;
+        try
+        {
+            var config = scm.GetConfig(ServiceName);
+            if (config is null)
+            {
+                Console.WriteLine($"{ServiceName}: not installed");
+                return 1;
+            }
+
+            var status = scm.QueryStatus(ServiceName);
+            Console.WriteLine($"{ServiceName}: {status.State}{(status.ProcessId > 0 ? $" (pid {status.ProcessId})" : "")}");
+            Console.WriteLine($"  account: {config.AccountName ?? "LocalSystem"}");
+            Console.WriteLine($"  start:   {config.StartMode}");
+            Console.WriteLine($"  command: {config.BinaryPathName}");
+            return 0;
+        }
+        catch (ServiceControlException ex)
+        {
+            return Failed(ex);
+        }
+    }
+
+    /// <summary><c>start</c>, <c>stop</c> and <c>restart</c>, each waiting until the service gets there — what the MSI can
+    /// call instead of PowerShell.</summary>
+    internal static int Control(string verb, bool? elevatedOverride = null, ServiceEnvironment? environment = null)
+    {
+        var elevated = elevatedOverride ?? (!OperatingSystem.IsWindows() || WindowsElevation.IsAdministrator());
+        if (!elevated)
+        {
+            Console.Error.WriteLine($"Needs Administrator. Running '{verb}' on a Windows service requires elevation. Nothing has been changed.");
+            return 1;
+        }
+
+        var provisioner = new ServiceProvisioner((environment ?? ServiceEnvironment.Real()).Scm);
+        try
+        {
+            switch (verb)
+            {
+                case "start":
+                    provisioner.StartAsync(ServiceName, StartTimeout).GetAwaiter().GetResult();
+                    break;
+                case "stop":
+                    provisioner.StopAsync(ServiceName, StopTimeout).GetAwaiter().GetResult();
+                    break;
+                default:
+                    provisioner.StopAsync(ServiceName, StopTimeout).GetAwaiter().GetResult();
+                    provisioner.StartAsync(ServiceName, StartTimeout).GetAwaiter().GetResult();
+                    break;
+            }
+        }
+        catch (ServiceControlException ex)
+        {
+            return Failed(ex);
+        }
+        catch (TimeoutException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+
+        Console.WriteLine(verb switch { "start" => "Service started.", "stop" => "Service stopped.", _ => "Service restarted." });
+        return 0;
+    }
+
+    private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(60);
+
+    /// <summary>The shared service doctor's checks of the registration (account, command line, start mode, recovery), plus the data directory.</summary>
+    internal static int Doctor(string[]? args = null, ServiceEnvironment? environment = null)
+    {
+        var env = environment ?? ServiceEnvironment.Real();
+        var root = Path.GetFullPath(CliOptions.Read(args ?? [], "--repo") ?? CliOptions.DefaultRoot);
+        try
+        {
+            var executable = env.Scm.GetConfig(ServiceName)?.BinaryPathName is { Length: > 0 } installed
+                ? ExecutableOf(installed)
+                : Environment.ProcessPath ?? "";
+            var checks = new List<DoctorCheck>
+            {
+                Directory.Exists(root)
+                    ? new("data.directory", DoctorSeverity.Pass, $"{root} exists.")
+                    : new("data.directory", DoctorSeverity.Fail, $"{root} does not exist."),
+            };
+            var report = new ServiceDoctor(env.Scm, new FileSystemAclService(), new WellKnownPrincipalResolver("S-1-5-18"))
+                .Run(Spec(executable, root, account: env.Scm.GetConfig(ServiceName)?.AccountName), DirectoryLayout.Create(ServiceName, []), checks);
+
+            foreach (var check in report.Checks)
+            {
+                var tag = check.Severity switch { DoctorSeverity.Pass => "ok  ", DoctorSeverity.Warn => "warn", _ => "FAIL" };
+                Console.WriteLine($"[{tag}] {check.Id}: {check.Message}");
+            }
+
+            Console.WriteLine(report.Ok ? $"Doctor: OK ({report.Warnings} warning(s))." : $"Doctor: {report.Failures} failure(s).");
+            return report.Ok ? 0 : 1;
+        }
+        catch (ServiceControlException ex)
+        {
+            return Failed(ex);
+        }
+    }
+
+    /// <summary>The executable inside a service command line such as <c>"C:\x\dbdatasync.exe" serve --repo ...</c>.</summary>
+    internal static string ExecutableOf(string commandLine)
+    {
+        var trimmed = commandLine.Trim();
+        if (trimmed.StartsWith('"'))
+        {
+            var end = trimmed.IndexOf('"', 1);
+            return end > 0 ? trimmed[1..end] : trimmed[1..];
+        }
+
+        var space = trimmed.IndexOf(' ');
+        return space > 0 ? trimmed[..space] : trimmed;
+    }
+
+    private static int Failed(ServiceControlException ex)
+    {
+        // An operator who gets an access-denied code back deserves the sentence rather than the number.
+        Console.Error.WriteLine(ex.Error == ServiceControlError.AccessDenied
+            ? "Access denied. Registering, controlling or removing a Windows service needs an elevated prompt — " +
+              "run this from a command prompt started with 'Run as administrator'."
+            : ex.Message);
+        return 1;
     }
 
     /// <summary>
@@ -299,12 +526,14 @@ public static class ServiceCommand
 
     private static int Unknown(string command)
     {
-        Console.Error.WriteLine($"Unknown service command '{command}'. Use install, uninstall or status.");
+        Console.Error.WriteLine(OperatingSystem.IsWindows()
+            ? $"Unknown service command '{command}'. Use install, uninstall, status, start, stop, restart or doctor."
+            : $"Unknown service command '{command}'. Use install, uninstall or status.");
         return 1;
     }
 
     /// <summary>What the service runs: the executable, <c>serve</c>, and the resolved data directory.</summary>
-    internal static string BinPath(string executable, string root) => $"\"{executable}\" serve --repo \"{root}\"";
+    internal static string BinPath(string executable, string root) => CommandLineQuoting.Build(executable, ["serve", "--repo", root]);
 
     internal static int Sc(params string[] arguments)
     {
