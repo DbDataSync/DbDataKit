@@ -52,6 +52,8 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+      - name: Fetch the pinned DuckDB engine (the projects that use it stop the build without it)
+        run: scripts/fetch-duckdb.sh
       - run: dotnet build DbDataKit.slnx -c Release
 
   # The DuckDB pin (duckdb.pin): every platform's archive and library download and match their recorded hashes, and the PowerShell
