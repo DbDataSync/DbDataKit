@@ -7,5 +7,6 @@
     <PackageVersion Include="DbDataKit.Hosting.Certificates.Windows" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting.Cli" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting.Systemd" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Scheduling" Version="$(DbDataKitVersion)" />
   </ItemGroup>
 </Project>
