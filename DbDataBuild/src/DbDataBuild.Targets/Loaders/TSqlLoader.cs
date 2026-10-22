@@ -5,7 +5,7 @@ namespace DbDataBuild.Targets.Loaders;
 /// <summary>T-SQL statement assembly, shared by SQL Server and Fabric (Fabric entries are unverified; see matrix/strategies.yml).</summary>
 public class TSqlLoader : LoaderBase
 {
-    protected override string Quote(string identifier) => "[" + identifier.Replace("]", "]]") + "]";
+    protected override string Quote(string identifier) => SharedQuoting.Quote("sqlserver", identifier);
     protected override string Stage => "#ddb_stage";
     protected override IReadOnlyList<string> Prelude => ["SET XACT_ABORT ON;", "DROP TABLE IF EXISTS #ddb_stage;"];
     protected override IReadOnlyList<string> OpenTransaction => ["BEGIN TRANSACTION;"];

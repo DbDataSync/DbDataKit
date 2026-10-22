@@ -115,7 +115,7 @@ public abstract partial class DdlGenerator(string target, ProjectConfig config)
 public sealed partial class TSqlDdl(string target, ProjectConfig config) : DdlGenerator(target, config)
 {
     private readonly bool fabric = target == "fabric";
-    protected override string Quote(string id) => "[" + id.Replace("]", "]]") + "]";
+    protected override string Quote(string id) => SharedQuoting.Quote("sqlserver", id);
     protected override string CollateClause(string collation) => "COLLATE " + collation;
 
     [GeneratedRegex(@"^VARCHAR\((\d+)\)$")] private static partial Regex Varchar();
@@ -171,7 +171,7 @@ public sealed partial class TSqlDdl(string target, ProjectConfig config) : DdlGe
 
 public sealed partial class PostgresDdl(ProjectConfig config) : DdlGenerator("postgres", config)
 {
-    protected override string Quote(string id) => "\"" + id.Replace("\"", "\"\"") + "\"";
+    protected override string Quote(string id) => SharedQuoting.Quote("postgres", id);
     protected override string CollateClause(string collation) => "COLLATE " + Quote(collation);
 
     [GeneratedRegex(@"^VARCHAR\((\d+)\)$")] private static partial Regex Varchar();

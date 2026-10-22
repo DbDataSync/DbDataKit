@@ -48,7 +48,7 @@ internal sealed class TSqlTrackingDdl(string target, bool unverified) : ITrackin
 {
     public string Target => target;
     public bool Unverified => unverified;
-    public string Quote(string id) => "[" + id.Replace("]", "]]") + "]";
+    public string Quote(string id) => DbDataBuild.Models.SharedQuoting.Quote("sqlserver", id);
 
     // Fabric has no NVARCHAR, and its keys must be declared NONCLUSTERED ... NOT ENFORCED (Microsoft's T-SQL surface area page, 2026-09-30).
     private string Native(TrackingType t) => t switch
@@ -158,7 +158,7 @@ internal sealed class PostgresTrackingDdl : ITrackingDdl
 {
     public string Target => "postgres";
     public bool Unverified => false;
-    public string Quote(string id) => "\"" + id.Replace("\"", "\"\"") + "\"";
+    public string Quote(string id) => DbDataBuild.Models.SharedQuoting.Quote("postgres", id);
 
     private static string Native(TrackingType t) => t switch
     {
