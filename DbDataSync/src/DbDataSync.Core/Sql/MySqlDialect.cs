@@ -32,6 +32,11 @@ public sealed class MySqlDialect : SqlDialect
 
     private static readonly ISqlDialect Shared = DialectCatalog.Builtin.Get("mysql");
 
+    // Backticks, so SplitQualifiedName unwraps `a.b` the way QuoteIdentifier wraps it (the base class assumed double quotes here).
+    protected override char IdentifierQuoteOpen => '`';
+
+    protected override char IdentifierQuoteClose => '`';
+
     public override string QuoteIdentifier(string identifier) => Shared.Quote(identifier);
 
     public override string ParameterReference(string name) => $"@{name}";
