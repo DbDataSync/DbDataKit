@@ -4,5 +4,6 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="BouncyCastle.Cryptography" />
+    <ProjectReference Include="..\DbDataKit.Cli\DbDataKit.Cli.csproj" />
   </ItemGroup>
 </Project>
