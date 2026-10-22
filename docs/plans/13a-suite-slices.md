@@ -164,7 +164,7 @@ no ClrKernel (D10).
 
 | # | Slice | Needs | Size | Done when |
 | --- | --- | --- | --- | --- |
-| C01 | `DbDataKit.Cli`: the command spec model (effect class, JSON document schema, help) taken from Build's `CommandSpecs`; Build uses it | F08 | M | Build's command tests, `docs/commands.md` generation and the output-schema test unchanged |
+| C01 | `DbDataKit.Cli`: the command spec model (effect class, JSON document schema, help) taken from Build's `CommandSpecs`; Build uses it | F08 | M | Build's command tests, `docs/commands.md` generation and the output-schema test unchanged | **Status: done** (branch `suite/c01-cli-command-spec`; the contract part). `DbDataKit.Cli` holds `CommandSpec`, `EffectClass` and `EffectClasses`, taken unchanged from Build, which references it (`<DbDataKitReference Include="Cli" />`) and keeps its own `CommandSpecs.All` and `CommandGroups`. Build's command, JSON-output, command-reference and TUI-model tests pass unchanged. The JSON document schema and generated help stay in Build until C02 and C03 need them in a second product |
 | C02 | The shared nouns in `DbDataKit.Cli`/`Hosting.Cli`: `server run`, `service`, `cert`, `config`, `secret`, `health check` | C01 | M | unit tests per verb against fakes; help snapshot tests |
 | C03 | Proxy: lower-case executables (`dbdataproxy`, `dbdataproxy-worker`), service registration, `dist.json`, `install.ps1`, MSI | F10 | S | dist tests, the MSI end-to-end test and the service tests pass with the new names |
 | C04 | Proxy grammar: `server run` (no default command), `secret hash`, `secret protect`, `query run`; `install`/`uninstall` removed | C02, C03 | S | CLI snapshot tests of help and exit codes; release note |
