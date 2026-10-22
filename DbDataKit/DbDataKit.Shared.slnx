@@ -25,6 +25,7 @@
     <Project Path="src/DbDataKit.Hosting.Certificates.Windows/DbDataKit.Hosting.Certificates.Windows.csproj" />
     <Project Path="src/DbDataKit.Hosting.Children/DbDataKit.Hosting.Children.csproj" />
     <Project Path="src/DbDataKit.Hosting.Cli/DbDataKit.Hosting.Cli.csproj" />
+    <Project Path="src/DbDataKit.Cli/DbDataKit.Cli.csproj" />
     <Project Path="src/DbDataKit.Hosting.Local/DbDataKit.Hosting.Local.csproj" />
     <Project Path="src/DbDataKit.Hosting.Systemd/DbDataKit.Hosting.Systemd.csproj" />
     <Project Path="src/DbDataKit.Hosting.WindowsService/DbDataKit.Hosting.WindowsService.csproj" />
@@ -78,6 +79,7 @@
     <Project Path="tests/DbDataKit.Hosting.Children.TestChild/DbDataKit.Hosting.Children.TestChild.csproj" />
     <Project Path="tests/DbDataKit.Hosting.Children.Tests/DbDataKit.Hosting.Children.Tests.csproj" />
     <Project Path="tests/DbDataKit.Hosting.Cli.Tests/DbDataKit.Hosting.Cli.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Cli.Tests/DbDataKit.Cli.Tests.csproj" />
     <Project Path="tests/DbDataKit.Hosting.Local.Tests/DbDataKit.Hosting.Local.Tests.csproj" />
     <Project Path="tests/DbDataKit.Hosting.Systemd.Tests/DbDataKit.Hosting.Systemd.Tests.csproj" />
     <Project Path="tests/DbDataKit.Hosting.Tests/DbDataKit.Hosting.Tests.csproj" />

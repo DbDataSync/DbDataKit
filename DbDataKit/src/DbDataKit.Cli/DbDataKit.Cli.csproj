@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>The command contract every DbDataKit command line shares: a command's name, what it may touch (its effect class), where it sits in the life of a deployment, and the one-code description of what it reads and writes.</Description>
+  </PropertyGroup>
+</Project>

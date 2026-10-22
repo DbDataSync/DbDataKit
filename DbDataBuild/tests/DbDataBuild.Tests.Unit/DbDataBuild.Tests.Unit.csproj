@@ -44,4 +44,9 @@
     <ProjectReference Include="..\..\src\DbDataBuild.Lowering\DbDataBuild.Lowering.csproj" />
   </ItemGroup>
 
+
+  <ItemGroup>
+    <Using Include="DbDataKit.Cli" />
+  </ItemGroup>
+
 </Project>

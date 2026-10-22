@@ -48,4 +48,9 @@
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Import Project="$(DbDataKitRoot)build/DuckDb.Native.targets" />
+
+  <ItemGroup>
+    <Using Include="DbDataKit.Cli" />
+  </ItemGroup>
+
 </Project>
