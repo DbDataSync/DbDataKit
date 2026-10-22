@@ -141,6 +141,7 @@ public sealed class CachedColumnsYamlRoundTripTests : IDisposable
         var path = Path.Combine(_root, "config", "replications", "r", "table-mappings", "old.yaml");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, """
+            schemaVersion: 1
             name: old
             sources:
             - connectionName: s

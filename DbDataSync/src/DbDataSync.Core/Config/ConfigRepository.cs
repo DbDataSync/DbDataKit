@@ -94,7 +94,7 @@ public sealed class ConfigRepository
         var text = TryReadAllTextAllowingConcurrentReplace(path)
             ?? throw new FileNotFoundException($"Connection '{name}' was not found.", path);
 
-        return YamlConfigSerializer.Deserialize<ConnectionConfig>(text);
+        return StrictConfigFile.Load(text, path, YamlConfigSerializer.Deserialize<ConnectionConfig>);
     }
 
     public IReadOnlyList<string> ListConnections() =>
@@ -171,7 +171,7 @@ public sealed class ConfigRepository
         var text = TryReadAllTextAllowingConcurrentReplace(manifestPath)
             ?? throw new FileNotFoundException($"Script '{name}' was not found.", manifestPath);
 
-        return YamlConfigSerializer.Deserialize<ScriptConfig>(text);
+        return StrictConfigFile.Load(text, manifestPath, YamlConfigSerializer.Deserialize<ScriptConfig>);
     }
 
     public IReadOnlyList<string> ListScripts() => ListFileNamesWithoutExtension(ConfigPaths.ScriptsDir(_configRoot));
@@ -217,7 +217,7 @@ public sealed class ConfigRepository
         var text = TryReadAllTextAllowingConcurrentReplace(path)
             ?? throw new FileNotFoundException($"Replication task '{replicationName}' was not found.", path);
 
-        return YamlConfigSerializer.Deserialize<ReplicationTaskConfig>(text);
+        return StrictConfigFile.Load(text, path, YamlConfigSerializer.Deserialize<ReplicationTaskConfig>);
     }
 
     public IReadOnlyList<string> ListReplications()
@@ -276,7 +276,7 @@ public sealed class ConfigRepository
             ?? throw new FileNotFoundException(
                 $"Table mapping '{mappingName}' was not found on replication '{replicationName}'.", path);
 
-        return YamlConfigSerializer.Deserialize<TableMappingConfig>(text);
+        return StrictConfigFile.Load(text, path, YamlConfigSerializer.Deserialize<TableMappingConfig>);
     }
 
     public void DeleteTableMapping(string replicationName, string mappingName, GitAuthor author)
