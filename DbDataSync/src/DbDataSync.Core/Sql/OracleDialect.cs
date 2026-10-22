@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 namespace DbDataSync.Core.Sql;
 
 /// <summary>
@@ -33,7 +34,9 @@ public sealed class OracleDialect : SqlDialect
 
     private OracleDialect() { }
 
-    public override string QuoteIdentifier(string identifier) => $"\"{identifier.Replace("\"", "\"\"")}\"";
+    protected override ISqlDialect? SharedDialect { get; } = DialectCatalog.Builtin.Get("oracle");
+
+    public override string QuoteIdentifier(string identifier) => SharedDialect!.Quote(identifier);
 
     public override string ParameterReference(string name) => $":{name}";
 
