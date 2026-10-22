@@ -61,7 +61,6 @@ if_fn
 ifnull
 ilike
 in_empty
-int_floor_div
 json_array_item
 json_arrow
 json_bool
@@ -94,8 +93,6 @@ min_int_null
 min_str
 min_str_cmp
 minute
-mod
-mod_by_zero
 mod_neg
 mod_neg2
 month
