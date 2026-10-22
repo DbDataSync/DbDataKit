@@ -1,6 +1,6 @@
 using LibGit2Sharp;
 
-namespace DbDataSync.Core.Git;
+namespace DbDataKit.Config.Git;
 
 /// <summary>
 /// Auto-commit-on-save for the config repo (architecture/detailed-design.md §3.6). Every config
@@ -183,7 +183,7 @@ public sealed class GitCommitService
     }
 
     /// <summary>
-    /// A full or abbreviated sha, or a refusal naming it. <see cref="Repository.Lookup{T}(string)"/>
+    /// A full or abbreviated sha, or a refusal naming it. <c>Repository.Lookup</c>
     /// returns null for anything it cannot resolve — including a sha that is real but belongs to
     /// another object kind — so this is where "no such commit" becomes something a caller can turn into
     /// a 404 rather than a null reference further down.
@@ -306,6 +306,9 @@ public sealed class GitCommitService
         if (path is null)
             return false;
 
+        if (normalizedPrefix.Length == 0)
+            return true;                    // no prefix: the whole repository
+
         var normalized = path.Replace('\\', '/');
         return normalized.Equals(normalizedPrefix, StringComparison.Ordinal)
             || normalized.StartsWith(normalizedPrefix + "/", StringComparison.Ordinal);
@@ -320,9 +323,17 @@ public sealed class GitCommitNotFoundException(string sha)
     public string Sha { get; } = sha;
 }
 
+/// <summary>One commit of the history of a path.</summary>
+/// <param name="Sha">The commit's id.</param>
+/// <param name="Message">Its message.</param>
+/// <param name="AuthorName">Who it is attributed to.</param>
+/// <param name="AuthorEmail">Their address (a console name for a change made through a console).</param>
+/// <param name="WhenUtc">When it was made.</param>
 public sealed record CommitInfo(string Sha, string Message, string AuthorName, string AuthorEmail, DateTimeOffset WhenUtc);
 
 /// <summary>What changed, and both sides of each changed file — what a diff editor renders from.</summary>
+/// <param name="Sha">The commit the diff is of.</param>
+/// <param name="Message">Its first line.</param>
 /// <param name="Changes">Always complete, even when <paramref name="Truncated"/> is true: the answer
 /// to "what changed" is not something to elide. Empty is a real answer rather than an error — a commit
 /// can be in a replication's history for one file and change nothing in another.</param>
@@ -335,15 +346,23 @@ public sealed record ConfigDiff(
     IReadOnlyList<ConfigFileChange> Changes,
     bool Truncated);
 
+/// <summary>One file's change.</summary>
+/// <param name="Path">Its path relative to the repository root, with forward slashes.</param>
+/// <param name="Kind">Added, modified, deleted or renamed.</param>
 /// <param name="Before">The file as it was, or null when there was no before — an added file.</param>
 /// <param name="After">The file as it became, or null when there is no after — a deleted one. Both
 /// are null for a file whose content did not fit the diff's budget; the change is still listed.</param>
 public sealed record ConfigFileChange(string Path, ConfigChangeKind Kind, string? Before, string? After);
 
+/// <summary>What happened to a file in a commit.</summary>
 public enum ConfigChangeKind
 {
+    /// <summary>The file is new.</summary>
     Added,
+    /// <summary>Its content changed.</summary>
     Modified,
+    /// <summary>It is gone.</summary>
     Deleted,
+    /// <summary>It moved to another path.</summary>
     Renamed,
 }

@@ -26,7 +26,7 @@ public sealed class ScriptHostTests : IDisposable
         LibGit2Sharp.Repository.Init(_repoRoot);
         _configRepository = new ConfigRepository(
             Path.Combine(_repoRoot, "config"),
-            new Core.Git.GitCommitService(_repoRoot),
+            new DbDataKit.Config.Git.GitCommitService(_repoRoot),
             new ClrKernel.Core.Secrets.SecretStore(true));
         _host = new ScriptHost(
             _configRepository, new ScriptCompiler(new ScriptCacheDirectory(Path.Combine(_repoRoot, "cache"))));
@@ -49,7 +49,7 @@ public sealed class ScriptHostTests : IDisposable
             Manifest = new ScriptConfig { Name = name, Kind = ScriptSlots.SqlColumnExpression, EntryType = "Expr", Enabled = enabled },
             Code = code,
         },
-        new Core.Git.GitAuthor("t", "t@t"));
+        new DbDataKit.Config.Git.GitAuthor("t", "t@t"));
 
     private string Render(string name) => _host.Resolve<ISqlColumnExpression>(name).RenderSql(
         new SqlColumnExpressionContext("Region", "Region", null, "[Region]", new FakeDialect(), ScriptParameters.Empty))!;

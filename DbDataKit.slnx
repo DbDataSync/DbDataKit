@@ -26,6 +26,7 @@
     <Project Path="DbDataKit/benchmarks/DbDataKit.Transfer.Benchmarks/DbDataKit.Transfer.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/DbDataKit/src/">
+    <Project Path="DbDataKit/src/DbDataKit.Config.Git/DbDataKit.Config.Git.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Config.Hosting/DbDataKit.Config.Hosting.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Config.Testing/DbDataKit.Config.Testing.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Config.Yaml/DbDataKit.Config.Yaml.csproj" />
@@ -75,6 +76,7 @@
     <Project Path="DbDataKit/src/DbDataKit.Web/DbDataKit.Web.csproj" />
   </Folder>
   <Folder Name="/DbDataKit/tests/">
+    <Project Path="DbDataKit/tests/DbDataKit.Config.Git.Tests/DbDataKit.Config.Git.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Config.Hosting.Tests/DbDataKit.Config.Hosting.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Config.Testing.Tests/DbDataKit.Config.Testing.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Config.Tests/DbDataKit.Config.Tests.csproj" />

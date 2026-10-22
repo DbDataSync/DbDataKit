@@ -6,7 +6,7 @@ using DbDataSync.Api.Services;
 using DbDataSync.Api.State;
 using DbDataSync.State.Remote;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.MsSql;
 using DbDataSync.Scripting;

@@ -8,5 +8,6 @@
     <PackageVersion Include="DbDataKit.Hosting.Cli" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting.Systemd" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Scheduling" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Config.Git" Version="$(DbDataKitVersion)" />
   </ItemGroup>
 </Project>

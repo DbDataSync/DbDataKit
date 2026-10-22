@@ -1,6 +1,6 @@
 using ClrKernel.Core.Secrets;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using LibGit2Sharp;
 
 namespace DbDataSync.Core.Tests;

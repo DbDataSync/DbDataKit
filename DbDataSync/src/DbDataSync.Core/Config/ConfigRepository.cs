@@ -1,5 +1,5 @@
 using ClrKernel.Core.Secrets;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Core.Secrets;
 
 namespace DbDataSync.Core.Config;

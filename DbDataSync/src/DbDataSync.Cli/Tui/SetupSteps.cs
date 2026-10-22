@@ -1,7 +1,7 @@
 using ClrKernel.Core.Secrets;
 using DbDataSync.Api.Auth;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Core.Secrets;
 using DbDataSync.Drivers.Descriptor;
 using DbDataSync.Libraries;

@@ -3,7 +3,7 @@ using DbDataSync.Api.Auth;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Api.Services;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 

@@ -1,4 +1,4 @@
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 
 namespace DbDataSync.Core.Config;
 
