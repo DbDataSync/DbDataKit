@@ -81,6 +81,9 @@ jobs:
           # still resolved into each project's own bin/obj exactly as before.
           cache: true
           cache-dependency-path: "DbDataSync/**/*.csproj"
+      - name: Fetch the pinned DuckDB engine
+        working-directory: .
+        run: scripts/fetch-duckdb.sh
       - name: Restore
         run: dotnet restore DbDataSync.slnf
       - name: Build
@@ -114,6 +117,10 @@ jobs:
           dotnet-version: "10.0.x"
           cache: true
           cache-dependency-path: "DbDataSync/**/*.csproj"
+      - name: Fetch the pinned DuckDB engine
+        working-directory: .
+        shell: pwsh
+        run: ./scripts/fetch-duckdb.ps1
       - name: Restore
         run: dotnet restore DbDataSync.slnf
       - name: Build
@@ -187,6 +194,9 @@ jobs:
         # exist on disk the moment the container looks for them. The image's own entrypoint runs them
         # itself; no separate docker exec/sqlplus step needed any more.
         run: docker compose up -d --wait
+      - name: Fetch the pinned DuckDB engine
+        working-directory: .
+        run: scripts/fetch-duckdb.sh
       - name: Restore
         run: dotnet restore DbDataSync.slnf
       - name: Build
@@ -196,6 +206,9 @@ jobs:
         # 15432; MySQL: 13306; MariaDB: 13307; Oracle: 15210) because it *is* docker-compose.yml now —
         # the tests' localhost-based defaults work unchanged in CI.
         run: dotnet test DbDataSync.slnf --no-build --configuration Release --filter "Category=Integration"
+        env:
+          # The DuckDB extension test downloads httpfs for the pinned engine from DuckDB's extension server (K06).
+          DBDATASYNC_TEST_NETWORK: "true"
 
   web:
     needs: changes

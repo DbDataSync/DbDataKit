@@ -88,6 +88,7 @@
     <Project Path="DbDataKit/tests/DbDataKit.Dialect.Arrow.Tests/DbDataKit.Dialect.Arrow.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Dialect.Conformance.Tests/DbDataKit.Dialect.Conformance.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Dialect.Tests/DbDataKit.Dialect.Tests.csproj" />
+    <Project Path="DbDataKit/tests/DbDataKit.DuckDb.Native.Tests/DbDataKit.DuckDb.Native.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Hosting.Abstractions.Tests/DbDataKit.Hosting.Abstractions.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Hosting.Certificates.Tests/DbDataKit.Hosting.Certificates.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Hosting.Certificates.Windows.Tests/DbDataKit.Hosting.Certificates.Windows.Tests.csproj" />

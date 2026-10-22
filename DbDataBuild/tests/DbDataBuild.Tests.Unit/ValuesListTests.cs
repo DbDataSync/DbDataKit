@@ -65,7 +65,7 @@ public class ValuesListTests
         "SELECT col0 AS d, col1 AS ts, col2 AS b\nFROM (VALUES\n  (DATE '2024-01-01', TIMESTAMP '2024-01-01 10:00:00.5', CAST(TRUE AS BOOLEAN)),\n  (CAST(NULL AS DATE), CAST(NULL AS TIMESTAMP), CAST(NULL AS BOOLEAN))\n) AS vals(col0, col1, col2)")]
     [InlineData("SELECT * FROM (VALUES (1, 2147483648)) AS v(a, b)", "SELECT col0 AS a, col1 AS b\nFROM (VALUES\n  (1, CAST(2147483648 AS BIGINT))\n) AS vals(col0, col1)")]
     [InlineData("SELECT * FROM (VALUES (1), (2147483648)) AS v(a)", "SELECT col0 AS a\nFROM (VALUES\n  (CAST(1 AS BIGINT)),\n  (CAST(2147483648 AS BIGINT))\n) AS vals(col0)")]
-    [InlineData("SELECT * FROM (VALUES (1 + 2, upper('a') || 'b')) AS v(a, b)", "SELECT col0 AS a, col1 AS b\nFROM (VALUES\n  ((1 + 2), (upper('a') || 'b'))\n) AS vals(col0, col1)")]
+    [InlineData("SELECT * FROM (VALUES (1 + 2, upper('a') || 'b')) AS v(a, b)", "SELECT col0 AS a, col1 AS b\nFROM (VALUES\n  ((1 + 2), ('A' || 'b'))\n) AS vals(col0, col1)")]   // DuckDB 2.0 folds upper('a') to 'A' before the plan
     public void A_VALUES_list_lowers_to_a_table_value_constructor_with_DuckDBs_column_types_and_names(string source, string expected)
     {
         using var c = Open();
@@ -310,7 +310,7 @@ public class ValuesListTests
         Assert.Equal("SELECT col0 AS a, col1 AS b FROM (VALUES (1, 'x'), (2, CAST(NULL AS VARCHAR))) AS vals(col0, col1)", Render(Lower(c, "SELECT * FROM (VALUES (1, 'x'), (2, NULL)) AS v(a, b)"), "postgres"));
         var many = Lower(c, "SELECT * FROM (VALUES " + string.Join(", ", Enumerable.Range(1, 50).Select(i => $"({i}, upper('a') || 'b')")) + ") AS v(a, b)");
         var text = Render(many, "sqlserver");
-        Assert.Equal(50, Regex.Count(text, Regex.Escape("UPPER('a') + 'b'")));
+        Assert.Equal(50, Regex.Count(text, Regex.Escape("'A' + 'b'")));      // (DuckDB 2.0 folds upper('a') to 'A' before the plan)
     }
 
     [Fact]

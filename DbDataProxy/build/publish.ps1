@@ -17,6 +17,10 @@ $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 $target = Join-Path $Output $Runtime
 $versionArgs = @(if ($Version) { "-p:Version=$Version" })
 
+# The DuckDB engine of the pin (duckdb.pin), which the publish copies next to DbDataProxy.exe.
+& (Join-Path $root '..\scripts\fetch-duckdb.ps1') $Runtime
+if ($LASTEXITCODE) { throw 'Fetching the DuckDB engine failed.' }
+
 dotnet publish (Join-Path $root 'src\DbDataProxy.Server') -c $Configuration -r $Runtime --self-contained `
   -p:PublishSingleFile=true @versionArgs -o $target
 if ($LASTEXITCODE) { throw 'Publishing the proxy failed.' }

@@ -19,6 +19,17 @@ public class TypeMappingTests
     }
 
     [Fact]
+    public async Task A_column_that_is_only_an_untyped_NULL_travels_as_a_string_column_of_nulls()
+    {
+        // DuckDB 2.0 types SELECT NULL as SQLNULL, which DuckDB.NET cannot map; 1.x typed it INTEGER.
+        var (schema, batches) = await RunAsync("SELECT NULL AS n, 7 AS after_it UNION ALL SELECT NULL, 8");
+        var batch = Assert.Single(batches);
+        Assert.IsType<StringType>(schema.GetFieldByName("n").DataType);
+        Assert.Equal(2, batch.Column("n").NullCount);
+        Assert.Equal(8, ((Int32Array)batch.Column("after_it")).GetValue(1));
+    }
+
+    [Fact]
     public async Task Maps_common_scalar_types()
     {
         var (schema, batches) = await RunAsync(@"

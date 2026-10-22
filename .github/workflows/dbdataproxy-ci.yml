@@ -73,6 +73,10 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: DbDataProxy/global.json
+      - name: Fetch the pinned DuckDB engine
+        working-directory: .
+        shell: pwsh
+        run: ./scripts/fetch-duckdb.ps1
       - run: dotnet build DbDataProxy.slnf -c Release
       - run: dotnet test --project tests/DbDataProxy.Tests -c Release --no-build --minimum-expected-tests 100
       - name: Package (smoke test)
@@ -92,6 +96,9 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: DbDataProxy/global.json
+      - name: Fetch the pinned DuckDB engine
+        working-directory: .
+        run: scripts/fetch-duckdb.sh
       - name: Test the test-environment scripts
         working-directory: .
         run: testenv/selftest.sh

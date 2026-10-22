@@ -89,6 +89,24 @@ public class FunctionRuleProbes
         V("starts_op", "s ^@ 'a'"), V("starts_op_col", "s ^@ s"), V("starts_op_empty", "s ^@ ''"),
     ];
 
+    /// <summary>
+    /// Cases where DuckDB 2.0 returns a value and the engines raise (documented, K11): the logarithm of zero is -Infinity and of a negative number NaN in 2.0.0, where 1.x raised an error, as SQL Server and PostgreSQL still do.
+    /// </summary>
+    private static readonly Dictionary<string, string> DuckDb2Returns = new()
+    {
+        ["log_zero_errors"] = "fn.log: DuckDB 2.0 gives -Infinity for log(0); the engines raise",
+        ["log_negative_errors"] = "fn.log: DuckDB 2.0 gives NaN for the logarithm of a negative number; the engines raise",
+    };
+
+    /// <summary>
+    /// The outlier probes pair every row with every other, an outlier of 1e10 among them: independent columns, so the exact covariance is 0 (what the exact sums give). DuckDB 2.0 leaves rounding noise relative to the
+    /// size of the products (1e20), about -78 for covar_pop; it is within 1e-12 of that size.
+    /// </summary>
+    private static bool NoiseOfTheOutlier(string duck, string engine) =>
+        double.TryParse(duck, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var a)
+        && double.TryParse(engine, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var b)
+        && Math.Abs(a - b) <= 1e-12 * 1e20;
+
     [SkippableTheory]
     [InlineData("sqlserver")]
     [InlineData("postgres")]
@@ -116,7 +134,11 @@ public class FunctionRuleProbes
             {
                 if (actual.Error == null) problems.Add($"{c.Id}: DuckDB raises ({expected.Error}) and the engine returns [{actual.Rows}]  {rendered.Replace("\n", " ")}");
             }
-            else if (actual.Error != null) problems.Add($"{c.Id}: engine error {actual.Error}  {rendered.Replace("\n", " ")}");
+            else if (actual.Error != null)
+            {
+                if (!DuckDb2Returns.ContainsKey(c.Id)) problems.Add($"{c.Id}: engine error {actual.Error}  {rendered.Replace("\n", " ")}");
+            }
+            else if (c.Id.EndsWith("_outlier", StringComparison.Ordinal) && NoiseOfTheOutlier(expected.Rows, actual.Rows)) { }
             else if (!SameRows(expected.Rows, actual.Rows)) problems.Add($"{c.Id}: duckdb [{expected.Rows}] engine [{actual.Rows}]  {rendered.Replace("\n", " ")}");
         }
         Assert.True(problems.Count == 0, name + ":\n" + string.Join("\n", problems));

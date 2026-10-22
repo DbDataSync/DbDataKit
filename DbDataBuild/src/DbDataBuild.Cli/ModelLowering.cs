@@ -205,6 +205,20 @@ internal sealed class ModelLowering(IReadOnlyList<ModelDefinition> models, IRead
         return all.Where(t => wanted.Contains((t.SchemaName.ToLowerInvariant(), t.Name.ToLowerInvariant()))).ToList();
     }
 
+    /// <summary>The functions that answer about the DuckDB session; 2.0 folds the answer into a constant at bind time, which the lowered text would then freeze.</summary>
+    private static readonly string[] SessionReaders = ["getvariable", "current_setting", "current_schemas", "getenv"];
+
+    /// <summary>The first session-reading function the query calls (by DuckDB's parser), or that a macro it reaches calls (by name in its text); null when there is none.</summary>
+    private static string? SessionReads(string authorSql, DuckPrelude prelude)
+    {
+        var called = DuckParseTree.FunctionNames(authorSql);
+        var macroText = string.Join('\n', prelude.Macros);
+        foreach (var reader in SessionReaders)
+            if (called.Contains(reader) || System.Text.RegularExpressions.Regex.IsMatch(macroText, $@"\b{reader}\s*\(", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                return reader;
+        return null;
+    }
+
     private (LoweredModel?, Diagnostic?) Compute(BuiltModel built, string authorSql, IReadOnlyList<QueryParameter> parameters, string? variant, bool restrict) =>
         Compute(built.Definition.Name, built.QueryFile, built.Definition, authorSql, parameters, variant, restrict);
 
@@ -232,6 +246,8 @@ internal sealed class ModelLowering(IReadOnlyList<ModelDefinition> models, IRead
 
         var policy = RewriteCatalog.For(config, definition);
         var prelude = (macros ?? MacroLibrary.Empty).PreludeFor([authorSql]);
+        if (SessionReads(authorSql, prelude) is { } session)
+            return (null, Fail($"{session}() reads the DuckDB session (a variable, a setting, the search path or the environment), and DuckDB 2.0 folds the answer into a constant when it plans the query, so the lowered query would carry the answer of the day it was lowered. Write the value into the query or pass it as a parameter"));
         var (json, error) = QueryDescriber.SerializePlan(upstream, authorSql, prelude);
         if (json == null && error != null && error.StartsWith(QueryDescriber.ClockDefaultCode + ": ", StringComparison.Ordinal))
             return (null, new Diagnostic(DiagnosticCatalog.MacroDefaultIsClock, new(queryFile, 0, 0), $"{name}: {error[(QueryDescriber.ClockDefaultCode.Length + 2)..]}."));

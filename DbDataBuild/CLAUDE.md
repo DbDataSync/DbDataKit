@@ -16,7 +16,6 @@ UPDATE_GOLDEN=1 dotnet test tests/DbDataBuild.Tests.Unit   # rewrites golden fil
 scripts/publish.sh linux-x64                   # one self-contained executable (win-x64 too: scripts/fetch-native.sh win-x64 first)
 node scripts/mcp-app-host.mjs <project>       # a stand-in MCP Apps host: opens the app in a browser (node and a browser needed; --allow-apply, --inspectable)
 scripts/test-windows-wine.sh                  # the unit tests with Windows semantics under Wine (TEST_PROJECT=DbDataBuild.Tests.Conformance for the engines; PostgreSQL cannot log in under Wine)
-scripts/test-duckdb-preview.sh                 # the unit tests against DuckDB's preview library (2.0 alpha); see docs/research/duckdb-2.0
 ```
 
 ## Rules the tests enforce (read before you add code)

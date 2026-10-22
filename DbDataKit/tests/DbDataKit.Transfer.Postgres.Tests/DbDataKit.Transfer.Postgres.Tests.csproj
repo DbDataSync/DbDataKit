@@ -12,4 +12,5 @@
     <ProjectReference Include="..\..\src\DbDataKit.Transfer.Postgres\DbDataKit.Transfer.Postgres.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.Transfer.Conformance\DbDataKit.Transfer.Conformance.csproj" />
   </ItemGroup>
+  <Import Project="..\..\build\DuckDb.Native.targets" />
 </Project>

@@ -61,6 +61,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/fetch-native.sh
+      - name: Pinned DuckDB engine
+        shell: bash
+        working-directory: .
+        run: scripts/fetch-duckdb.sh
       - run: dotnet build -c Release
       - name: Start every engine
         run: scripts/test-engines.sh up all

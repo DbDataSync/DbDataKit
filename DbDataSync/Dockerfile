@@ -13,6 +13,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 # The shared libraries sit next to the product, as in the repository: DbDataSync's Directory.Build.props finds them at ../DbDataKit.
 WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props global.json ./
+COPY duckdb.pin ./
 COPY DbDataKit/Directory.Build.props DbDataKit/global.json DbDataKit/
 COPY DbDataKit/src/ DbDataKit/src/
 WORKDIR /src/DbDataSync
@@ -50,10 +51,9 @@ RUN mkdir -p /app/wwwroot/docs \
 
 # Phase 121: every KnownLibraries entry, restored once at its pinned version, while this stage still
 # has both the SDK and the just-published CLI (the "internal" command exists only for this — see
-# InternalCommand.cs). Shipped into *both* final images below: it's a few megabytes for all seven
-# entries (measured, not guessed — Oracle's the largest at ~6MB), so there's no real cost to giving
-# the default (SDK) image the same no-network fast path for a catalog install that the runtime-only
-# image needs to have at all.
+# InternalCommand.cs). Shipped into *both* final images below: a few megabytes per entry (Oracle ~6MB) except
+# DuckDB, which carries its engine (about 100MB: DuckDbEngine downloads it from duckdb.pin, hash-checked, here at build time), so the
+# runtime-only image needs no network for it and the default (SDK) image gets the same no-network fast path.
 RUN dotnet /app/DbDataSync.Cli.dll internal build-catalog-cache /app/library-cache
 
 # ── The runtime-only image (phase 121) ─────────────────────────────────────────

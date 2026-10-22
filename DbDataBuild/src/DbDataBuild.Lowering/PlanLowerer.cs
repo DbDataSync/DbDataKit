@@ -135,7 +135,7 @@ public sealed class PlanLowerer
     /// <summary>Throws the <see cref="LoweringException"/> for a plan document that is DuckDB's own error (a parse or bind failure), so callers can classify it before doing anything else.</summary>
     public static void ThrowIfError(string planJson)
     {
-        using var doc = JsonDocument.Parse(planJson);
+        using var doc = JsonDocument.Parse(ReadablePlan(planJson));
         var root = doc.RootElement;
         if (root.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.True)
             throw new LoweringException(root.TryGetProperty("error_message", out var m) ? m.GetString()! : "unknown error", root.TryGetProperty("error_type", out var et) ? et.GetString()! : "binder");
@@ -157,7 +157,7 @@ public sealed class PlanLowerer
     /// </param>
     public static LoweredQuery Lower(string planJson, IReadOnlyList<string>? outputNames = null, Func<string, IReadOnlyList<string>>? grainOf = null, RewritePolicy? rewrites = null, bool ignoreTrailingSpaces = false, IReadOnlyList<(string? SchemaName, string Table, string? Alias)>? authorAliases = null)
     {
-        using var doc = JsonDocument.Parse(PlanNormalizer.Normalize(planJson));
+        using var doc = JsonDocument.Parse(PlanNormalizer.Normalize(ReadablePlan(planJson)));
         var root = doc.RootElement;
         if (root.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.True)
             throw new LoweringException(root.TryGetProperty("error_message", out var m) ? m.GetString()! : "unknown error", root.TryGetProperty("error_type", out var et) ? et.GetString()! : "binder");
@@ -202,6 +202,14 @@ public sealed class PlanLowerer
 
     // ---------------------------------------------------------------------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// DuckDB 2.0 writes a NaN or infinite constant as a bare token (`NAN`, `Infinity`, `-Infinity`), which is not JSON. It is made a string, so the plan reads and the literal can be refused by name.
+    /// </summary>
+    private static string ReadablePlan(string planJson) =>
+        planJson.Contains(":NAN", StringComparison.Ordinal) || planJson.Contains(":Infinity", StringComparison.Ordinal) || planJson.Contains(":-Infinity", StringComparison.Ordinal)
+            ? Regex.Replace(planJson, "(\"value\":)(NAN|-?Infinity)(?![A-Za-z0-9_\"])", m => m.Groups[1].Value + "\"" + (m.Groups[2].Value == "NAN" ? "NaN" : m.Groups[2].Value) + "\"")
+            : planJson;
+
     private static string Ident(string n) => Regex.IsMatch(n, "^[a-z_][a-z0-9_]*$") && !Reserved.Contains(n) ? n : "\"" + n.Replace("\"", "\"\"") + "\"";
 
     private static string TypeName(JsonElement t)
@@ -219,7 +227,11 @@ public sealed class PlanLowerer
 
     private static string? Str(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
     private static IEnumerable<JsonElement> Arr(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Array ? v.EnumerateArray() : [];
-    private static string? TypeId(JsonElement e) => e.TryGetProperty("return_type", out var t) ? t.GetProperty("id").GetString() : null;
+    /// <summary>The type of a plan expression. A constant has no <c>return_type</c> of its own (its type is in its value), and DuckDB 2.0 folds more into constants than 1.x did, so it is read from there.</summary>
+    private static string? TypeId(JsonElement e) =>
+        e.TryGetProperty("return_type", out var t) ? t.GetProperty("id").GetString()
+        : Str(e, "type") == "VALUE_CONSTANT" && e.TryGetProperty("value", out var v) && v.TryGetProperty("type", out var vt) && vt.TryGetProperty("id", out var vid) ? vid.GetString()
+        : null;
 
     /// <summary>The column name behind a marker (`\0alias\u0001name\0`), or null when the text is not just a column.</summary>
     private static string? ColumnNameOf(string sql) => Regex.Match(sql, "^\0([^\u0001\0]*)\u0001([^\0]*)\0$") is { Success: true } m ? m.Groups[2].Value : null;
@@ -234,6 +246,9 @@ public sealed class PlanLowerer
         // the plan is serialized with skip_empty, which drops the value of an empty string: '' is a VARCHAR constant with no `value`
         if (!v.TryGetProperty("value", out var x))
             return type == "VARCHAR" ? "''" : throw new LoweringException($"a literal of type {type} without a value");
+        // NaN and the infinities (the plan gives them as the strings NaN, Infinity and -Infinity): the cast of their text, as 1.x kept the call. PostgreSQL reads it; SQL Server has no such value and says so when it runs
+        if (type is "DOUBLE" or "FLOAT" && x.ValueKind == JsonValueKind.String)
+            return $"CAST('{x.GetString()}' AS {type})";
         switch (type)
         {
             case "DECIMAL":
@@ -267,7 +282,23 @@ public sealed class PlanLowerer
                 var days = IntegerValue(x);
                 if (days < -719162 || days > 2932896) throw new LoweringException($"a DATE literal outside the years 0001 to 9999 ({days} days from 1970-01-01)");
                 return $"DATE '{DateOnly.FromDayNumber(719162 + (int)days).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}'";
-            case "DOUBLE" or "FLOAT":
+            case "TIMESTAMP":
+            {
+                // DuckDB 2.0 folds TIMESTAMP '...' + INTERVAL ... into a constant: microseconds since 1970-01-01 (or the text form)
+                if (x.ValueKind == JsonValueKind.String) return $"TIMESTAMP '{x.GetString()}'";
+                var epochMicros = (long)IntegerValue(x);
+                var instant = DateTime.UnixEpoch.AddTicks(epochMicros * 10);
+                var text = instant.ToString("yyyy-MM-dd HH:mm:ss.ffffff", System.Globalization.CultureInfo.InvariantCulture).TrimEnd('0').TrimEnd('.');
+                return $"TIMESTAMP '{text}'";
+            }
+            case "FLOAT":
+            {
+                // a 32-bit constant (DuckDB 2.0 folds CAST(0.1 AS FLOAT) into one) stays a FLOAT: the shortest text that reads back as the same 32 bits, cast, as the explicit FLOAT casts are written everywhere else
+                var f = (float)double.Parse(x.GetRawText(), System.Globalization.CultureInfo.InvariantCulture);
+                var text = f.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+                return $"CAST({(text.Contains('.') || text.Contains('E') ? text : text + ".0")} AS FLOAT)";
+            }
+            case "DOUBLE":
             {
                 var d = double.Parse(x.GetRawText(), System.Globalization.CultureInfo.InvariantCulture).ToString("R", System.Globalization.CultureInfo.InvariantCulture);
                 return d.Contains('.') || d.Contains('E') ? d : d + ".0";
@@ -397,6 +428,14 @@ public sealed class PlanLowerer
     }
 
     private static readonly HashSet<string> Volatile = new(StringComparer.OrdinalIgnoreCase) { "random", "uuid", "gen_random_uuid", "nextval", "currval", "setseed" };
+
+    /// <summary>True when the plan expression calls a volatile function anywhere inside it.</summary>
+    private static bool HasVolatileCall(JsonElement e) => e.ValueKind switch
+    {
+        JsonValueKind.Object => (Str(e, "type") == "BOUND_FUNCTION" && Volatile.Contains(Str(e, "name") ?? "")) || e.EnumerateObject().Any(p => HasVolatileCall(p.Value)),
+        JsonValueKind.Array => e.EnumerateArray().Any(HasVolatileCall),
+        _ => false,
+    };
 
     /// <summary>True when the value of the expression depends on no column: only literals, functions of those that are not volatile, and the items of the child that are themselves like that.</summary>
     private static bool IsColumnFree(JsonElement e, IReadOnlyList<Item> childItems)
@@ -555,8 +594,14 @@ public sealed class PlanLowerer
         if (DatePartAliases.TryGetValue(name, out var partName) && a.Count == 1) return $"date_part('{partName}', {a[0]})";
         if (name is "date_part" or "datepart" && a.Count == 2 && StringConstant(children[0]) is { } writtenPart) return $"date_part('{DatePartAliases.GetValueOrDefault(writtenPart.ToLowerInvariant(), writtenPart.ToLowerInvariant())}', {a[1]})";
         // RULE int-div: `//` on integers truncates toward zero. polyglot cannot read it, and the engines' own integer division is spelled `/`, which in DuckDB's dialect is float division
+        // K09 (D8): by zero it raises in DuckDB 2.0, SQL Server and PostgreSQL alike. `(a - a % b) / b` is the exact truncated quotient, and the `%` raises first on every engine, whatever the `/` is turned into for a
+        // target (a float division guarded against zero, which would give NULL). The left operand is written twice, so one that is not deterministic is refused.
         if (name == "//" && a.Count == 2)
-            return returns is "INTEGER" or "SMALLINT" or "TINYINT" ? $"CAST(trunc(CAST({a[0]} AS DOUBLE) / CAST(NULLIF({a[1]}, 0) AS DOUBLE)) AS {returns})" : throw new LoweringException($"integer division `//` over {returns}");
+        {
+            if (returns is not ("INTEGER" or "SMALLINT" or "TINYINT")) throw new LoweringException($"integer division `//` over {returns}");
+            if (HasVolatileCall(children[0])) throw new LoweringException("integer division `//` of an expression that is not deterministic (random(), uuid(), ...): the left operand is written twice");
+            return $"CAST(({a[0]} - ({a[0]} % {a[1]})) / {a[1]} AS {returns})";
+        }
         // RULE date-plus-days: `date + 3` and `date - i` add and take away days in DuckDB and PostgreSQL; SQL Server does not take a whole number as an interval. The explicit casts mark the expression for the
         // target step (a date and a whole number side by side), which writes it as an interval of that many days on SQL Server.
         var argTypes = Arr(e, "arguments").Select(x => x.TryGetProperty("id", out var xid) ? xid.GetString() ?? "" : "").ToList();   // a constant has no return type of its own, but the function lists its argument types
@@ -571,9 +616,9 @@ public sealed class PlanLowerer
             return $"(CAST({a[0]} AS {leadingDays}) + CAST({a[1]} AS DATE))";
         }
         // the days between two dates is `a - b` in DuckDB; SQL Server has no subtraction of dates
-        if (name == "-" && a.Count == 2 && TypeId(children[0]) == "DATE" && TypeId(children[1]) == "DATE") return $"date_diff('day', {a[1]}, {a[0]})";
-        // DuckDB gives NULL for x % 0 where both engines raise an error
-        if (name == "%" && a.Count == 2 && !(children[1].GetProperty("type").GetString() == "VALUE_CONSTANT" && !IsZeroConstant(children[1].GetProperty("value")))) a[1] = $"NULLIF({a[1]}, 0)";
+        // (a constant has no return type of its own in the plan, so the function's argument types say it: `col - DATE '2024-01-01'`)
+        if (name == "-" && a.Count == 2 && argTypes is ["DATE", "DATE"]) return $"date_diff('day', {a[1]}, {a[0]})";
+        // x % 0 and x // 0 raise in DuckDB 2.0 (1.x gave NULL), in SQL Server and in PostgreSQL: both are written as they are, with no guard (the `//` form divides as DOUBLE, whose zero divisor gives inf or NaN and then fails the cast back to the integer type)
         // RULE round-double: DuckDB rounds the scaled double half away from zero; the engines do something else. The explicit DOUBLE cast marks it for the target step.
         // A FLOAT (32 bits) is rounded as its exact value in double arithmetic (DuckDB: round(CAST(1.005 AS FLOAT), 2) is 1, not 1.01) and the result is a FLOAT again: written with the casts, in a form the rule handles.
         var roundsFloat = false;
@@ -637,9 +682,6 @@ public sealed class PlanLowerer
         "version", "txid_current", "current_schema", "current_schemas", "current_database", "current_connection_id", "current_query", "current_query_id", "current_transaction_id", "current_setting", "getenv",
     };
 
-    private static bool IsZeroConstant(JsonElement value) =>
-        value.TryGetProperty("is_null", out var n) && n.ValueKind == JsonValueKind.True || !value.TryGetProperty("value", out var x) || x.ValueKind == JsonValueKind.Number && x.GetRawText().Trim('0', '.', '-') == "";
-
     /// <summary>Aggregates whose value over no rows is NULL (a count is 0, and so is not on this list).</summary>
     private static readonly HashSet<string> NullOnEmpty = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -687,24 +729,17 @@ public sealed class PlanLowerer
         }
         var returns = e.GetProperty("return_type");
         var kind = returns.GetProperty("id").GetString();
-        if (kind is not ("DOUBLE" or "DECIMAL")) throw new LoweringException($"{name} over {kind} values");
-        // DuckDB interpolates a DECIMAL on its stored whole numbers (the value times 10^scale) in double arithmetic and cuts the result to a whole number (1228.40888 is 1228.4088, not 1228.4089);
-        // the same is done here, so the values agree to the last digit
-        var scale = kind == "DECIMAL" && returns.TryGetProperty("type_info", out var info) && info.TryGetProperty("scale", out var s) ? s.GetInt32() : 0;
-        var ten = $"1{new string('0', scale)}";                                  // 10^scale
-        var power = scale == 0 ? "" : $" * {ten}";
-        string Value() => kind == "DECIMAL" ? $"CAST(CAST({x}{power} AS BIGINT) AS DOUBLE)" : $"CAST({x} AS DOUBLE)";
+        if (kind == "DECIMAL")
+            throw new LoweringException($"{name} over a DECIMAL: DuckDB 2.0 interpolates the stored whole numbers in an arithmetic that a lowered query cannot reproduce to the last digit (and the engines' PERCENTILE_CONT is another). Cast the column to DOUBLE first, for example {name}(CAST(x AS DOUBLE), q), and cast the result back if a DECIMAL is needed");
+        if (kind != "DOUBLE") throw new LoweringException($"{name} over {kind} values");
         var at = $"(({n} - 1) * {q})";
+        string Value() => $"CAST({x} AS DOUBLE)";
         var lower = $"max(CASE WHEN {rank} = CAST(floor{at} AS BIGINT) + 1 THEN {Value()} END)";
         var upper = $"max(CASE WHEN {rank} = CAST(ceil{at} AS BIGINT) + 1 THEN {Value()} END)";
         var groupSize = $"CAST(max({outs[countAt]}) AS DOUBLE)";                 // outside an aggregate the group's row count has to be an aggregate itself
         var fraction = $"(({groupSize} - 1) * {q})";
         var weight = $"({fraction} - floor{fraction})";
-        var interpolated = $"({lower} * (1.0 - {weight}) + {upper} * {weight})";      // DuckDB's own form: lo * (1 - d) + hi * d, which is not lo + (hi - lo) * d in the last bit
-        if (kind == "DOUBLE") return interpolated;
-        rules.Add("double-to-decimal");
-        rules.Add("round-double");                                                // the explicit DOUBLE cast marks the round for the target step, as in the cast rule
-        return $"CAST(round(CAST(CAST(trunc({interpolated}) AS DOUBLE) / {ten}.0 AS DOUBLE), {scale}) AS {TypeName(returns)})";
+        return $"({lower} * (1.0 - {weight}) + {upper} * {weight})";           // DuckDB's own form: lo * (1 - d) + hi * d, which is not lo + (hi - lo) * d in the last bit
     }
 
     /// <summary>The fraction of a quantile as the plan holds it (a decimal constant stored as a whole number and a scale), written as a decimal literal.</summary>

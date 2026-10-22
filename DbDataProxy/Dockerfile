@@ -8,6 +8,9 @@ WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props global.json ./
 COPY DbDataKit DbDataKit
 COPY DbDataProxy DbDataProxy
+COPY duckdb.pin ./
+COPY scripts/fetch-duckdb.sh scripts/fetch-duckdb.sh
+RUN scripts/fetch-duckdb.sh
 WORKDIR /src/DbDataProxy
 RUN dotnet publish src/DbDataProxy.Server -c Release -o /app --no-self-contained
 

@@ -4,7 +4,7 @@
     <Description>Strategy conformance suite: runs the strategy SQL on an engine and compares with expected result sets; DuckDB reference runner.</Description>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="DuckDB.NET.Data.Full" />
+    <PackageReference Include="DuckDB.NET.Data" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\DbDataKit.Transfer\DbDataKit.Transfer.csproj" />

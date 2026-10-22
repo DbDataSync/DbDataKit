@@ -10,7 +10,7 @@ namespace DbDataBuild.Tests.Unit;
 
 /// <summary>
 /// The clock functions DuckDB 2.0 folds into constants while it binds (docs/research/duckdb-2.0/README.md, section 2026-10-15) and the planning connections' volatile replacements. The expectations
-/// are written once, as the DuckDB 1.5.6 text, and have to hold on every DuckDB: `scripts/test-duckdb-preview.sh` runs this class against 2.0.
+/// are written once, as the DuckDB 1.5.6 text, and have to hold on the engine the tool runs on (DuckDB 2.0.0, the only one: plan 13, K12).
 /// </summary>
 public class ClockOverridesTests
 {

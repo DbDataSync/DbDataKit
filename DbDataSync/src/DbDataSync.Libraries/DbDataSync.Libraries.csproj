@@ -23,6 +23,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The DuckDB engine pin (the repository's duckdb.pin), which DuckDbEngine reads. -->
+    <EmbeddedResource Include="..\..\..\duckdb.pin" LogicalName="duckdb.pin" Link="duckdb.pin" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Phase 109j: DriverLibraryCompatibility.Check takes an IDriver directly (RequiredLibraryId,
          and the driver's own compiled assembly to extract IL from) — no circular reference, since
          DbDataSync.Drivers.Abstractions depends only on DbDataSync.Core. -->

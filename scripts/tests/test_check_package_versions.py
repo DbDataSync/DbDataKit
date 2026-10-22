@@ -66,6 +66,12 @@ class CheckPackageVersions(unittest.TestCase):
         })
         self.assertEqual([], check.check(root))
 
+    def test_a_forbidden_package_fails(self):
+        root = tree({"A/A.csproj": '<Project><ItemGroup><PackageReference Include="DuckDB.NET.Data.Full" /></ItemGroup></Project>'})
+        problems = check.check(root)
+        self.assertEqual(1, len(problems))
+        self.assertIn("duckdb.pin", problems[0])
+
     def test_the_repository_passes(self):
         here = os.path.dirname(os.path.abspath(__file__))
         self.assertEqual([], check.check(os.path.abspath(os.path.join(here, "..", ".."))))

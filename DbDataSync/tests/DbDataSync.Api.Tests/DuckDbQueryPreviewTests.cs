@@ -238,6 +238,7 @@ public sealed class DuckDbQueryPreviewTests(TestApiFactory factory) : IClassFixt
 
         var result = await PreviewAsync(connection, "SELECT NULL AS Missing, '' AS Empty");
 
+        Assert.True(result.Rows.Count > 0, "Error: " + result.Error);
         Assert.Null(result.Rows[0][0]);
         Assert.Equal("", result.Rows[0][1]);
     }

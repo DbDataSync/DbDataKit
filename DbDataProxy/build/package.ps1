@@ -21,6 +21,9 @@ New-Item -ItemType Directory -Path $stage | Out-Null
 Copy-Item (Join-Path $published '*') $stage -Recurse -Exclude '*.pdb', 'web.config'
 Copy-Item (Join-Path $root 'README.md'), (Join-Path $root 'LICENSE') $stage
 
+# The DuckDB engine is part of the package (the MSI is built from this zip): a data source of type DuckDB fails without it.
+if (-not (Test-Path (Join-Path $stage 'duckdb.dll'))) { throw 'duckdb.dll is not in the published folder: the DuckDB engine would be missing from the package.' }
+
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
 $zip = Join-Path $Output "dbdataproxy-v$Version-win-x64.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
