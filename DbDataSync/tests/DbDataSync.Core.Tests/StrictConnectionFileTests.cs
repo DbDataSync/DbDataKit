@@ -106,12 +106,32 @@ public sealed class StrictConnectionFileTests : IDisposable
         var mapping = Path.Combine(config, "replications", "r1", "table-mappings", "m1.yaml");
         var script = Path.Combine(config, "scripts", "s1.yaml");
         foreach (var file in new[] { task, mapping, script }) Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-        File.WriteAllText(task, "name: r1\nscedule: x\n");
-        File.WriteAllText(mapping, "name: m1\nsurprise: 1\n");
-        File.WriteAllText(script, "name: s1\nsurprise: 1\n");
+        File.WriteAllText(task, "schemaVersion: 1\nname: r1\nscedule: x\n");
+        File.WriteAllText(mapping, "schemaVersion: 1\nname: m1\nsurprise: 1\n");
+        File.WriteAllText(script, "schemaVersion: 1\nname: s1\nsurprise: 1\n");
 
         Assert.Equal("scedule", Assert.Single(Assert.Throws<ConfigFileException>(() => _repository.LoadReplicationTask("r1")).Diagnostics).KeyPath);
         Assert.Equal("surprise", Assert.Single(Assert.Throws<ConfigFileException>(() => _repository.LoadTableMapping("r1", "m1")).Diagnostics).KeyPath);
         Assert.Equal("surprise", Assert.Single(Assert.Throws<ConfigFileException>(() => _repository.LoadScriptManifest("s1")).Diagnostics).KeyPath);
+    }
+
+    [Fact]
+    public void A_saved_file_carries_its_schema_version()
+    {
+        Assert.Contains("schemaVersion: 1", File.ReadAllText(_path));
+    }
+
+    [Theory]
+    [InlineData("", "DBD-111", "no `schemaVersion`")]
+    [InlineData("schemaVersion: 0\n", "DBD-111", "positive whole number")]
+    [InlineData("schemaVersion: soon\n", "DBD-111", "positive whole number")]
+    [InlineData("schemaVersion: 2\n", "DBD-110", "reads format 1")]
+    public void A_file_without_a_usable_current_schema_version_is_refused_with_a_message_that_says_why(string line, string code, string text)
+    {
+        var yaml = System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(_path), @"^schemaVersion:.*\r?\n", "", System.Text.RegularExpressions.RegexOptions.Multiline);
+        var ex = Refused(line + yaml);
+        var d = Assert.Single(ex.Diagnostics);
+        Assert.Equal(code, d.Code);
+        Assert.Contains(text, d.Message);
     }
 }

@@ -25,8 +25,31 @@ internal static class StrictConfigFile
     {
         var diagnostics = new List<ConfigDiagnostic>();
         var root = StrictYamlReader.Read(text, file, diagnostics);
-        if (root is not null && diagnostics.Count == 0) Walk(root, typeof(T), "", file, diagnostics);
+        if (root is not null && diagnostics.Count == 0)
+        {
+            CheckSchemaVersion(root, file, diagnostics);
+            Walk(root, typeof(T), "", file, diagnostics);
+        }
         if (diagnostics.Count > 0) throw new ConfigFileException(file, diagnostics);
+    }
+
+    private static void CheckSchemaVersion(YamlNode root, string file, List<ConfigDiagnostic> diagnostics)
+    {
+        var catalog = DefaultDiagnosticCatalog.Instance;
+        if (root is not YamlMapping map) return;
+        if (map.GetEntry("schemaVersion") is not { } entry)
+        {
+            diagnostics.Add(catalog.Create(SharedCodes.SchemaVersionInvalid, file, 1, 1,
+                $"The file has no `schemaVersion`. Files written before format versions existed are not read; add `schemaVersion: {ConfigSchema.Current}` once the file matches the current format.", keyPath: "schemaVersion"));
+            return;
+        }
+        var text = (entry.Value as YamlScalar)?.Value;
+        if (!int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var version) || version < 1)
+            diagnostics.Add(catalog.Create(SharedCodes.SchemaVersionInvalid, file, entry.Key.Line, entry.Key.Column, "`schemaVersion` must be a positive whole number.", keyPath: "schemaVersion"));
+        else if (version > ConfigSchema.Current)
+            diagnostics.Add(catalog.Create(SharedCodes.SchemaVersionNewer, file, entry.Key.Line, entry.Key.Column, $"The file is format {version}; this version of Sync reads format {ConfigSchema.Current}.", keyPath: "schemaVersion"));
+        else if (version < ConfigSchema.Current)
+            diagnostics.Add(catalog.Create(SharedCodes.SchemaVersionInvalid, file, entry.Key.Line, entry.Key.Column, $"The file is format {version}, which this version of Sync no longer reads (current: {ConfigSchema.Current}).", keyPath: "schemaVersion"));
     }
 
     /// <summary>Checks the file, then binds it; a value of the wrong shape (a word where a number goes) is reported the same way, with its position.</summary>
