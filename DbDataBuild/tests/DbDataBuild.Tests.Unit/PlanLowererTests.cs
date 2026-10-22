@@ -729,6 +729,23 @@ public class PlanLowererTests
         Assert.Contains("not deterministic", ex.Message);
     }
 
+    /// <summary>DuckDB 2.0 folds more into constants and writes some of them in ways 1.x did not (K11): a NaN as a bare JSON token, a 32-bit constant as a plain number, a date operand without a type of its own.</summary>
+    [Theory]
+    [InlineData("SELECT isnan(CAST('NaN' AS DOUBLE)) AS v", "CAST('NaN' AS DOUBLE)")]
+    [InlineData("SELECT isinf(CAST('Infinity' AS DOUBLE)) AS v", "CAST('Infinity' AS DOUBLE)")]
+    [InlineData("SELECT isinf(CAST('-Infinity' AS DOUBLE)) AS v", "CAST('-Infinity' AS DOUBLE)")]
+    [InlineData("SELECT CAST(0.1 AS FLOAT) AS v", "CAST(0.1 AS FLOAT)")]
+    [InlineData("SELECT CAST(d AS REAL) + CAST(0.1 AS REAL) AS v FROM (SELECT 1.5 AS d)", "CAST(0.1 AS FLOAT)")]
+    [InlineData("SELECT dt - DATE '2024-01-01' AS v FROM (SELECT DATE '2024-03-01' AS dt)", "date_diff('day'")]
+    [InlineData("SELECT strftime(DATE '2024-02-29', '%Y') AS v", "2024")]
+    public void A_constant_the_plan_folds_keeps_its_type_and_reads(string source, string expected)
+    {
+        using var c = Open();
+        var lowered = Lower(c, source);
+        Assert.Contains(expected, lowered);
+        Assert.Equal(Rows(c, source, false), Rows(c, lowered, false));
+    }
+
     [Fact]
     public void A_NULL_divisor_is_still_NULL_and_a_non_zero_one_divides_alike()
     {

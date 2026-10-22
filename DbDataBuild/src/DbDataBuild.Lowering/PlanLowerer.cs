@@ -135,7 +135,7 @@ public sealed class PlanLowerer
     /// <summary>Throws the <see cref="LoweringException"/> for a plan document that is DuckDB's own error (a parse or bind failure), so callers can classify it before doing anything else.</summary>
     public static void ThrowIfError(string planJson)
     {
-        using var doc = JsonDocument.Parse(planJson);
+        using var doc = JsonDocument.Parse(ReadablePlan(planJson));
         var root = doc.RootElement;
         if (root.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.True)
             throw new LoweringException(root.TryGetProperty("error_message", out var m) ? m.GetString()! : "unknown error", root.TryGetProperty("error_type", out var et) ? et.GetString()! : "binder");
@@ -157,7 +157,7 @@ public sealed class PlanLowerer
     /// </param>
     public static LoweredQuery Lower(string planJson, IReadOnlyList<string>? outputNames = null, Func<string, IReadOnlyList<string>>? grainOf = null, RewritePolicy? rewrites = null, bool ignoreTrailingSpaces = false, IReadOnlyList<(string? SchemaName, string Table, string? Alias)>? authorAliases = null)
     {
-        using var doc = JsonDocument.Parse(PlanNormalizer.Normalize(planJson));
+        using var doc = JsonDocument.Parse(PlanNormalizer.Normalize(ReadablePlan(planJson)));
         var root = doc.RootElement;
         if (root.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.True)
             throw new LoweringException(root.TryGetProperty("error_message", out var m) ? m.GetString()! : "unknown error", root.TryGetProperty("error_type", out var et) ? et.GetString()! : "binder");
@@ -202,6 +202,14 @@ public sealed class PlanLowerer
 
     // ---------------------------------------------------------------------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// DuckDB 2.0 writes a NaN or infinite constant as a bare token (`NAN`, `Infinity`, `-Infinity`), which is not JSON. It is made a string, so the plan reads and the literal can be refused by name.
+    /// </summary>
+    private static string ReadablePlan(string planJson) =>
+        planJson.Contains(":NAN", StringComparison.Ordinal) || planJson.Contains(":Infinity", StringComparison.Ordinal) || planJson.Contains(":-Infinity", StringComparison.Ordinal)
+            ? Regex.Replace(planJson, "(\"value\":)(NAN|-?Infinity)(?![A-Za-z0-9_\"])", m => m.Groups[1].Value + "\"" + (m.Groups[2].Value == "NAN" ? "NaN" : m.Groups[2].Value) + "\"")
+            : planJson;
+
     private static string Ident(string n) => Regex.IsMatch(n, "^[a-z_][a-z0-9_]*$") && !Reserved.Contains(n) ? n : "\"" + n.Replace("\"", "\"\"") + "\"";
 
     private static string TypeName(JsonElement t)
@@ -219,7 +227,11 @@ public sealed class PlanLowerer
 
     private static string? Str(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
     private static IEnumerable<JsonElement> Arr(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Array ? v.EnumerateArray() : [];
-    private static string? TypeId(JsonElement e) => e.TryGetProperty("return_type", out var t) ? t.GetProperty("id").GetString() : null;
+    /// <summary>The type of a plan expression. A constant has no <c>return_type</c> of its own (its type is in its value), and DuckDB 2.0 folds more into constants than 1.x did, so it is read from there.</summary>
+    private static string? TypeId(JsonElement e) =>
+        e.TryGetProperty("return_type", out var t) ? t.GetProperty("id").GetString()
+        : Str(e, "type") == "VALUE_CONSTANT" && e.TryGetProperty("value", out var v) && v.TryGetProperty("type", out var vt) && vt.TryGetProperty("id", out var vid) ? vid.GetString()
+        : null;
 
     /// <summary>The column name behind a marker (`\0alias\u0001name\0`), or null when the text is not just a column.</summary>
     private static string? ColumnNameOf(string sql) => Regex.Match(sql, "^\0([^\u0001\0]*)\u0001([^\0]*)\0$") is { Success: true } m ? m.Groups[2].Value : null;
@@ -234,6 +246,9 @@ public sealed class PlanLowerer
         // the plan is serialized with skip_empty, which drops the value of an empty string: '' is a VARCHAR constant with no `value`
         if (!v.TryGetProperty("value", out var x))
             return type == "VARCHAR" ? "''" : throw new LoweringException($"a literal of type {type} without a value");
+        // NaN and the infinities (the plan gives them as the strings NaN, Infinity and -Infinity): the cast of their text, as 1.x kept the call. PostgreSQL reads it; SQL Server has no such value and says so when it runs
+        if (type is "DOUBLE" or "FLOAT" && x.ValueKind == JsonValueKind.String)
+            return $"CAST('{x.GetString()}' AS {type})";
         switch (type)
         {
             case "DECIMAL":
@@ -276,7 +291,14 @@ public sealed class PlanLowerer
                 var text = instant.ToString("yyyy-MM-dd HH:mm:ss.ffffff", System.Globalization.CultureInfo.InvariantCulture).TrimEnd('0').TrimEnd('.');
                 return $"TIMESTAMP '{text}'";
             }
-            case "DOUBLE" or "FLOAT":
+            case "FLOAT":
+            {
+                // a 32-bit constant (DuckDB 2.0 folds CAST(0.1 AS FLOAT) into one) stays a FLOAT: the shortest text that reads back as the same 32 bits, cast, as the explicit FLOAT casts are written everywhere else
+                var f = (float)double.Parse(x.GetRawText(), System.Globalization.CultureInfo.InvariantCulture);
+                var text = f.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+                return $"CAST({(text.Contains('.') || text.Contains('E') ? text : text + ".0")} AS FLOAT)";
+            }
+            case "DOUBLE":
             {
                 var d = double.Parse(x.GetRawText(), System.Globalization.CultureInfo.InvariantCulture).ToString("R", System.Globalization.CultureInfo.InvariantCulture);
                 return d.Contains('.') || d.Contains('E') ? d : d + ".0";

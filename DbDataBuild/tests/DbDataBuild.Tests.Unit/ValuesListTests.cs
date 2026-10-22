@@ -65,8 +65,7 @@ public class ValuesListTests
         "SELECT col0 AS d, col1 AS ts, col2 AS b\nFROM (VALUES\n  (DATE '2024-01-01', TIMESTAMP '2024-01-01 10:00:00.5', CAST(TRUE AS BOOLEAN)),\n  (CAST(NULL AS DATE), CAST(NULL AS TIMESTAMP), CAST(NULL AS BOOLEAN))\n) AS vals(col0, col1, col2)")]
     [InlineData("SELECT * FROM (VALUES (1, 2147483648)) AS v(a, b)", "SELECT col0 AS a, col1 AS b\nFROM (VALUES\n  (1, CAST(2147483648 AS BIGINT))\n) AS vals(col0, col1)")]
     [InlineData("SELECT * FROM (VALUES (1), (2147483648)) AS v(a)", "SELECT col0 AS a\nFROM (VALUES\n  (CAST(1 AS BIGINT)),\n  (CAST(2147483648 AS BIGINT))\n) AS vals(col0)")]
-    [InlineData("SELECT * FROM (VALUES (1 + 2, upper('a') || 'b')) AS v(a, b)", "SELECT col0 AS a, col1 AS b\nFROM (VALUES\n  ((1 + 2), (upper('a') || 'b'))\n) AS vals(col0, col1)",
-        Skip = "DuckDB 2.0.0 folds a call of constants (upper('a'), a date difference) into its value before the plan, so there is no call left to lower; decide in K11")]
+    [InlineData("SELECT * FROM (VALUES (1 + 2, upper('a') || 'b')) AS v(a, b)", "SELECT col0 AS a, col1 AS b\nFROM (VALUES\n  ((1 + 2), ('A' || 'b'))\n) AS vals(col0, col1)")]   // DuckDB 2.0 folds upper('a') to 'A' before the plan
     public void A_VALUES_list_lowers_to_a_table_value_constructor_with_DuckDBs_column_types_and_names(string source, string expected)
     {
         using var c = Open();
@@ -293,7 +292,7 @@ public class ValuesListTests
     [InlineData("last_day(DATE '2024-01-15')", "sqlserver", "EOMONTH(")]
     [InlineData("CAST(1.5 AS VARCHAR)", "sqlserver", "VARCHAR(MAX)")]
     [InlineData("regexp_matches('abc', 'b')", "postgres", "'abc' ~ 'b'")]
-    [InlineData("DATE '2024-01-01' - DATE '2023-01-01'", "postgres", "EXTRACT(epoch FROM", Skip = "DuckDB 2.0.0 folds a call of constants (upper('a'), a date difference) into its value before the plan, so there is no call left to lower; decide in K11")]
+    [InlineData("DATE '2024-01-01' - DATE '2023-01-01'", "postgres", "EXTRACT(epoch FROM")]
     [InlineData("length('a ')", "sqlserver", "LEN('a ' + 'x') - 1")]
     public void A_cell_that_is_an_expression_is_translated_as_it_is_in_a_select_list(string cell, string target, string expected)
     {
@@ -304,14 +303,14 @@ public class ValuesListTests
         Assert.DoesNotContain("ddb_cell", text);
     }
 
-    [Fact(Skip = "DuckDB 2.0.0 folds a call of constants (upper('a'), a date difference) into its value before the plan, so there is no call left to lower; decide in K11")]
+    [Fact]
     public void A_list_of_constants_is_transpiled_as_before_and_equal_cells_are_transpiled_once()
     {
         using var c = Open();
         Assert.Equal("SELECT col0 AS a, col1 AS b FROM (VALUES (1, 'x'), (2, CAST(NULL AS VARCHAR))) AS vals(col0, col1)", Render(Lower(c, "SELECT * FROM (VALUES (1, 'x'), (2, NULL)) AS v(a, b)"), "postgres"));
         var many = Lower(c, "SELECT * FROM (VALUES " + string.Join(", ", Enumerable.Range(1, 50).Select(i => $"({i}, upper('a') || 'b')")) + ") AS v(a, b)");
         var text = Render(many, "sqlserver");
-        Assert.Equal(50, Regex.Count(text, Regex.Escape("UPPER('a') + 'b'")));
+        Assert.Equal(50, Regex.Count(text, Regex.Escape("'A' + 'b'")));      // (DuckDB 2.0 folds upper('a') to 'A' before the plan)
     }
 
     [Fact]
