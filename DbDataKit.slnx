@@ -56,6 +56,7 @@
     <Project Path="DbDataKit/src/DbDataKit.Secrets.Abstractions/DbDataKit.Secrets.Abstractions.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Secrets.Cli/DbDataKit.Secrets.Cli.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Secrets.Keyring/DbDataKit.Secrets.Keyring.csproj" />
+    <Project Path="DbDataKit/src/DbDataKit.Secrets.Store/DbDataKit.Secrets.Store.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Secrets.Windows/DbDataKit.Secrets.Windows.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Secrets/DbDataKit.Secrets.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Security.Acl/DbDataKit.Security.Acl.csproj" />
@@ -104,6 +105,7 @@
     <Project Path="DbDataKit/tests/DbDataKit.Secrets.Abstractions.Tests/DbDataKit.Secrets.Abstractions.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Secrets.Cli.Tests/DbDataKit.Secrets.Cli.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Secrets.Keyring.Tests/DbDataKit.Secrets.Keyring.Tests.csproj" />
+    <Project Path="DbDataKit/tests/DbDataKit.Secrets.Store.Tests/DbDataKit.Secrets.Store.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Secrets.Tests/DbDataKit.Secrets.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Secrets.Windows.Tests/DbDataKit.Secrets.Windows.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Security.Acl.Tests/DbDataKit.Security.Acl.Tests.csproj" />
