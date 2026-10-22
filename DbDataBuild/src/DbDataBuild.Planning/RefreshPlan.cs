@@ -139,10 +139,10 @@ public sealed record RefreshPlanFile(string Connection, string Name, ObjectInfo 
 }
 
 /// <summary>The settings of a plan as the plan file keeps them (text, as declared).</summary>
-public sealed record RefreshPlanSettingsText(string? OnFailure, string? OnBusy, string? ExpectedEvery, int? Parallel, string? Check, string? OnFail, string? MaxWait = null, string? MaxRuntime = null)
+public sealed record RefreshPlanSettingsText(string? OnFailure, string? OnBusy, string? ExpectedEvery, int? Parallel, string? Check, string? OnFail, string? MaxWait = null, string? MaxRuntime = null, string? Schedule = null, string? TimeZone = null)
 {
     public static RefreshPlanSettingsText From(RefreshPlanSettings? s) => s == null ? new(null, null, null, null, null, null)
-        : new(s.OnFailure, s.OnBusy, s.ExpectedEvery?.Text, s.Parallel, s.Check is { } c ? LifecycleSettings.Name(c) : null, s.OnFail is { } f ? LifecycleSettings.Name(f) : null, s.MaxWait?.Text, s.MaxRuntime?.Text);
+        : new(s.OnFailure, s.OnBusy, s.ExpectedEvery?.Text, s.Parallel, s.Check is { } c ? LifecycleSettings.Name(c) : null, s.OnFail is { } f ? LifecycleSettings.Name(f) : null, s.MaxWait?.Text, s.MaxRuntime?.Text, s.Schedule, s.TimeZone);
 }
 
 /// <summary>Reading and writing helpers the compiled files share: quoting, and a reader that turns every problem into a diagnostic at the node.</summary>
@@ -543,6 +543,8 @@ public static class RefreshPlanDocument
         if (s.MaxWait != null) sb.Append("  max_wait: ").AppendLineLf(Q(s.MaxWait));
         if (s.MaxRuntime != null) sb.Append("  max_runtime: ").AppendLineLf(Q(s.MaxRuntime));
         if (s.ExpectedEvery != null) sb.Append("  expected_every: ").AppendLineLf(Q(s.ExpectedEvery));
+        if (s.Schedule != null) sb.Append("  schedule: ").AppendLineLf(Q(s.Schedule));
+        if (s.TimeZone != null) sb.Append("  time_zone: ").AppendLineLf(Q(s.TimeZone));
         if (s.Parallel != null) sb.Append("  parallel: ").AppendLineLf(s.Parallel.Value.ToString(CultureInfo.InvariantCulture));
         if (s.Check != null) sb.Append("  check: ").AppendLineLf(Q(s.Check));
         if (s.OnFail != null) sb.Append("  on_fail: ").AppendLineLf(Q(s.OnFail));
@@ -572,7 +574,7 @@ public static class RefreshPlanDocument
     }
 
     private static readonly string[] TopKeys = ["refresh_plan", "members", "excluded"];
-    private static readonly string[] HeaderKeys = ["hash", "connection", "plan", "title", "description", "tags", "properties", "on_failure", "on_busy", "max_wait", "max_runtime", "expected_every", "parallel", "check", "on_fail", "members"];
+    private static readonly string[] HeaderKeys = ["hash", "connection", "plan", "title", "description", "tags", "properties", "on_failure", "on_busy", "max_wait", "max_runtime", "expected_every", "schedule", "time_zone", "parallel", "check", "on_fail", "members"];
     private static readonly string[] MemberKeys = ["member", "model", "load", "load_plan", "on_failure", "inputs"];
 
     /// <summary>Reads a refresh plan's file. Returns null with diagnostics when it is malformed, has unknown keys, or does not match its own hash.</summary>
@@ -604,7 +606,7 @@ public static class RefreshPlanDocument
         var excluded = new List<RefreshPlanExclusion>();
         foreach (var m in r.Maps(top, "excluded", "exclusion")) { r.Keys(m, ["model", "member", "reason"], "an exclusion"); excluded.Add(new(r.Req(m, "model"), r.Req(m, "member"), r.Req(m, "reason"))); }
 
-        var settings = new RefreshPlanSettingsText(r.S(header, "on_failure"), r.S(header, "on_busy"), r.S(header, "expected_every"), r.Int(header, "parallel"), r.S(header, "check"), r.S(header, "on_fail"), r.S(header, "max_wait"), r.S(header, "max_runtime"));
+        var settings = new RefreshPlanSettingsText(r.S(header, "on_failure"), r.S(header, "on_busy"), r.S(header, "expected_every"), r.Int(header, "parallel"), r.S(header, "check"), r.S(header, "on_fail"), r.S(header, "max_wait"), r.S(header, "max_runtime"), r.S(header, "schedule"), r.S(header, "time_zone"));
         var plan = new RefreshPlanFile(r.Req(header, "connection"), r.Req(header, "plan"), info, settings, members, excluded);
         if (diags.Count > before) return null;
         var stored = r.S(header, "hash");

@@ -1,7 +1,7 @@
 using DbDataSync.Api.Auth;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Core.Secrets;
 using ClrKernel.Core.Secrets;
 using Microsoft.Extensions.Configuration.CommandLine;

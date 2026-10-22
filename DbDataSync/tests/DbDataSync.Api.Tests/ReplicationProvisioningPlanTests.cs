@@ -4,7 +4,7 @@ using ClrKernel.Core.Secrets;
 using DbDataSync.Api.Auth;
 using DbDataSync.Api.Services;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Core.Sql;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;

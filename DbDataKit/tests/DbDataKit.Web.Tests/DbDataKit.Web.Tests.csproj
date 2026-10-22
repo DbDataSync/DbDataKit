@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DbDataKit.Web\DbDataKit.Web.csproj" />
+  </ItemGroup>
+</Project>

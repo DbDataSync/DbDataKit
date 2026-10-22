@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DbDataKit.Monitoring\DbDataKit.Monitoring.csproj" />
+  </ItemGroup>
+</Project>

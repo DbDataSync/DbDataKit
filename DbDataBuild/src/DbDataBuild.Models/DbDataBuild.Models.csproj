@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="YamlDotNet" />
+    <DbDataKitReference Include="Scheduling" />   <!-- the cron and time zone check for a plan's schedule; plan 13, M07 -->
   </ItemGroup>
 
   <PropertyGroup>

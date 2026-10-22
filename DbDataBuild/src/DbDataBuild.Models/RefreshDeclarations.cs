@@ -45,8 +45,10 @@ public sealed record EveryDuration(string Text, long Seconds)
 /// <param name="Check">Overrides the connection's and the project's `refresh.check` for this plan.</param>
 /// <param name="OnFail">Overrides `refresh.on_fail` for this plan.</param>
 /// <param name="MaxWait">With `on_busy: wait`, how long to wait for a busy load (none: until it is free). Past it the load fails.</param>
+/// <param name="Schedule">A five- or six-field cron expression: when the Build server runs the plan. Absent means the plan runs only when asked.</param>
+/// <param name="TimeZone">The time zone the cron expression is read in (an IANA or Windows id); UTC when absent. Only with a schedule.</param>
 /// <param name="MaxRuntime">Opt-in: how long one load of the plan may run before its statement is cancelled and the load fails (a load's own `max_runtime` wins).</param>
-public sealed record RefreshPlanSettings(string Name, ObjectInfo Info, string? OnFailure, string? OnBusy, EveryDuration? ExpectedEvery, int? Parallel, RefreshCheck? Check, OnFail? OnFail, int Line = 0, EveryDuration? MaxWait = null, EveryDuration? MaxRuntime = null)
+public sealed record RefreshPlanSettings(string Name, ObjectInfo Info, string? OnFailure, string? OnBusy, EveryDuration? ExpectedEvery, int? Parallel, RefreshCheck? Check, OnFail? OnFail, int Line = 0, EveryDuration? MaxWait = null, EveryDuration? MaxRuntime = null, string? Schedule = null, string? TimeZone = null)
 {
     /// <summary>The plan every model with a default load and no `refresh:` is in. It exists whether or not the project declares it.</summary>
     public const string DefaultName = "default";

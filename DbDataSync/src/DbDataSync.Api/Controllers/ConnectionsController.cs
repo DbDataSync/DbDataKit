@@ -5,7 +5,7 @@ using System.Net.Sockets;
 using ClrKernel.Core.Secrets;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Api.Services;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Core.Secrets;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Api.Auth;

@@ -8,7 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="ClrKernel.Core.Secrets" />
-    <PackageReference Include="LibGit2Sharp" />
+    <DbDataKitReference Include="Config.Git" />   <!-- the config repository's git service (brings LibGit2Sharp); plan 13, U06 -->
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 

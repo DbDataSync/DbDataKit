@@ -6,7 +6,7 @@ using DbDataSync.Api.Auth;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Certificates;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Core.Secrets;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Descriptor;

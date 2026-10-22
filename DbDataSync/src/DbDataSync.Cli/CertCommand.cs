@@ -5,7 +5,7 @@ using System.Security.Cryptography.X509Certificates;
 using DbDataSync.Api.Auth;
 using DbDataSync.Certificates;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 
 namespace DbDataSync.Cli;
 

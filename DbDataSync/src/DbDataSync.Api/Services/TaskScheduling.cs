@@ -1,3 +1,5 @@
+using DbDataKit.Scheduling;
+
 namespace DbDataSync.Api.Services;
 
 /// <summary>
@@ -7,12 +9,12 @@ namespace DbDataSync.Api.Services;
 /// already three places that ask — the scheduler's tick, the status the SPA renders, and the SPA
 /// itself — and every one of them re-deriving it is three chances to add a third gate later and miss
 /// one. The SPA in particular gets the answer rather than the inputs, so a rule change is a change
-/// here and not in TypeScript as well.
+/// in <see cref="RunGate"/> (DbDataKit.Scheduling, plan 13 M01) and not in TypeScript as well.
 /// </para>
 /// </summary>
 public static class TaskScheduling
 {
     /// <param name="enabled">Config's durable intent (<c>ReplicationTaskConfig.Enabled</c>, git-tracked).</param>
     /// <param name="paused">State's temporary hold (<c>Tasks.Paused</c>, never committed).</param>
-    public static bool ShouldRun(bool enabled, bool paused) => enabled && !paused;
+    public static bool ShouldRun(bool enabled, bool paused) => RunGate.ShouldRun(enabled, paused);
 }

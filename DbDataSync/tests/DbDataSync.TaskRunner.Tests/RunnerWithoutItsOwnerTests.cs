@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using ClrKernel.Core.Secrets;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.State.Remote;
 using LibGit2Sharp;
 

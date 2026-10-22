@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Trust between a console and the servers it manages: signed short-lived tokens (Ed25519), their validation with the console's ceiling and a replay check, and the roles they carry.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" />
+  </ItemGroup>
+</Project>

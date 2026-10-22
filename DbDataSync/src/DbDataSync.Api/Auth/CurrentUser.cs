@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.State;
 
 namespace DbDataSync.Api.Auth;

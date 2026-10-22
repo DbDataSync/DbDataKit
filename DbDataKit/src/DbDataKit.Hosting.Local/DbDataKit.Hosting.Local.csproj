@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>The channel between a product's command line and its running server on the same machine: a named pipe on Windows, a Unix socket elsewhere, restricted by the operating system. No network, no ASP.NET.</Description>
+  </PropertyGroup>
+</Project>

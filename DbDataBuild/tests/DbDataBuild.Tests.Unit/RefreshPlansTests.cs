@@ -193,12 +193,13 @@ public class RefreshPlansTests
     [Fact]
     public void The_settings_of_a_plan_and_its_words_are_kept_in_its_file_and_a_declared_plan_with_no_member_still_has_one()
     {
-        var dir = Project("refresh: { hourly: incremental }\n", "refresh:\n  plans:\n    hourly: { title: Events, description: \"Every hour\", tags: [a], properties: {tier: 1}, on_failure: stop, on_busy: skip, expected_every: 1h, parallel: 2, check: live, on_fail: warn }\n    quiet: {}\n");
+        var dir = Project("refresh: { hourly: incremental }\n", "refresh:\n  plans:\n    hourly: { title: Events, description: \"Every hour\", tags: [a], properties: {tier: 1}, on_failure: stop, on_busy: skip, expected_every: 1h, schedule: \"15 * * * *\", time_zone: Europe/Berlin, parallel: 2, check: live, on_fail: warn }\n    quiet: {}\n");
         Assert.Equal(0, Compile(dir).Exit);
         var hourly = Read(dir, "hourly").Plan;
         Assert.Equal(("Events", "Every hour"), (hourly.Info.Title, hourly.Info.Description));
         Assert.Equal(["a"], hourly.Info.Tags);
         Assert.Equal(("stop", "skip", "1h", 2, "live", "warn"), (hourly.Settings.OnFailure, hourly.Settings.OnBusy, hourly.Settings.ExpectedEvery, hourly.Settings.Parallel, hourly.Settings.Check, hourly.Settings.OnFail));
+        Assert.Equal(("15 * * * *", "Europe/Berlin"), (hourly.Settings.Schedule, hourly.Settings.TimeZone));
         Assert.Empty(Read(dir, "quiet").Plan.Members);
         Assert.Equal(0, RenderFiles("--check", "--project", dir).Exit);                                             // and the check covers them
         File.AppendAllText(Path.Combine(dir, "rendered/sqlserver/refresh/hourly.yml"), "# edited\n");

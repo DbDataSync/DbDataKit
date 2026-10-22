@@ -4,7 +4,7 @@ using DbDataSync.Api.Configuration;
 using DbDataSync.Api.Services;
 using Microsoft.Extensions.DependencyInjection;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Libraries;
 using LibGit2Sharp;
 

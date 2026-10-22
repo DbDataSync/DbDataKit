@@ -2,7 +2,7 @@ using System.Data.Common;
 using System.Diagnostics;
 using DbDataSync.Api.Auth;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
 using DbDataSync.Core.Sql;

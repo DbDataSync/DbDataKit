@@ -251,7 +251,7 @@ public static class ProjectConfigLoader
                     Add(DiagnosticCatalog.InvalidValue, e.Value, $"`refresh.plans.{name}` must be a mapping of settings (`{{}}` for none).");
                     continue;
                 }
-                CheckKeys(m, [.. YamlFieldReader.InfoKeys, "on_failure", "on_busy", "expected_every", "parallel", "check", "on_fail", "max_wait", "max_runtime"], $"`refresh.plans.{name}`");
+                CheckKeys(m, [.. YamlFieldReader.InfoKeys, "on_failure", "on_busy", "expected_every", "parallel", "check", "on_fail", "max_wait", "max_runtime", "schedule", "time_zone"], $"`refresh.plans.{name}`");
                 var where = $"refresh.plans.{name}";
                 string? Word(string key, IReadOnlyList<string> allowed)
                 {
@@ -275,6 +275,21 @@ public static class ProjectConfigLoader
                     if (span == null) Add(DiagnosticCatalog.InvalidValue, sn, $"`{where}.{key}` is not a span.", "A whole number and a unit, for example `30s`, `15m`, `1h` or `1d`.");
                     return span;
                 }
+                string? Text(string key)
+                {
+                    if (m.Get(key) is not { } tn) return null;
+                    if (tn is YamlScalar { Value: var tv } && !string.IsNullOrWhiteSpace(tv)) return tv.Trim();
+                    Add(DiagnosticCatalog.InvalidValue, tn, $"`{where}.{key}` must be a non-empty string.");
+                    return null;
+                }
+                var schedule = Text("schedule");
+                var timeZone = Text("time_zone");
+                if (schedule != null)
+                {
+                    var problem = DbDataKit.Scheduling.Schedule.OnCron(schedule, timeZone ?? "UTC").Validate();
+                    if (problem != null) Add(DiagnosticCatalog.InvalidValue, m.Get("schedule")!, $"`{where}.schedule`: {problem}", "Standard cron fields, for example `15 * * * *` (minute 15 of every hour) or `0 2 * * 1-5`; `time_zone` names the zone it is read in.");
+                }
+                else if (timeZone != null) Add(DiagnosticCatalog.InvalidValue, m.Get("time_zone")!, $"`{where}.time_zone` has no `schedule` to apply to.");
                 var maxWait = Span("max_wait");
                 var maxRuntime = Span("max_runtime");
                 int? parallel = null;
@@ -285,7 +300,7 @@ public static class ProjectConfigLoader
                 }
                 var check = ReadChoice<RefreshCheck>(m, "check", where);
                 var onFail = ReadChoice<OnFail>(m, "on_fail", where);
-                result[name] = new RefreshPlanSettings(name, ReadInfo(m) ?? ObjectInfo.Empty, onFailure, onBusy, every, parallel, check, onFail, e.Key.Line, maxWait, maxRuntime);
+                result[name] = new RefreshPlanSettings(name, ReadInfo(m) ?? ObjectInfo.Empty, onFailure, onBusy, every, parallel, check, onFail, e.Key.Line, maxWait, maxRuntime, schedule, timeZone);
             }
             return result;
         }

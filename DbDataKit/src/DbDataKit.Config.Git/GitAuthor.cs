@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Git;
+namespace DbDataKit.Config.Git;
 
 /// <summary>
 /// Identity a config-write commit is attributed to. Supplied by the caller on every write rather

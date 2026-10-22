@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using DbDataSync.Api.State;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.State.Remote;
 using Microsoft.Extensions.DependencyInjection;
 

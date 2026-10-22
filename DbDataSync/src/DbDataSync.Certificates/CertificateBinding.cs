@@ -1,7 +1,7 @@
 using DbDataKit.Hosting.Certificates.Windows;
 using System.Security.Cryptography.X509Certificates;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 
 namespace DbDataSync.Certificates;
 

@@ -1,7 +1,7 @@
 using DbDataSync.Api.Auth;
 using DbDataSync.Api.Services;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 
 namespace DbDataSync.Cli;
 

@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>A neutral model of runs (job, run, outcome, timing, failure) and the health rules over it: overdue, slow, failed, running too long, lagging.</Description>
+  </PropertyGroup>
+</Project>
