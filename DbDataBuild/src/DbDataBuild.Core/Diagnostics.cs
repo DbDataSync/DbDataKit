@@ -533,6 +533,22 @@ public static class DiagnosticCatalog
         "n/a", "Report this with the command line used.",
         "An unhandled exception occurred. This is a bug in the tool, not in your configuration.");
 
+    // 470..472: the project file commands (`project file ...`)
+    public static readonly DiagnosticDescriptor ProjectFilePathRefused = E("470", "A path is outside what the project file commands may touch",
+        "a relative path inside the project, written with `/` or `\\`, that does not climb out with `..`, is not absolute, goes through no symbolic link, and is not under `.git/`",
+        "Name the file relative to the project root (`models/marts/fct_orders.sql`).",
+        "`project file` is how a console or an agent edits a project, so it is confined to the project tree: a path that escapes it, an absolute path, a path through a link that leaves the tree, and the repository's own `.git` folder are refused before anything is read or written.");
+
+    public static readonly DiagnosticDescriptor ProjectFileHashStale = E("471", "The file is not the version the change was based on",
+        "a write, move or delete that carries the hash of the file's current content (`--expect-hash`), or `--create` for a file that must not exist yet",
+        "Read the file again (`project file read`), apply the change to what is there, and send the new hash.",
+        "Every change names the version it was made from, so a second editor's work is never overwritten silently. The hash is the SHA-256 of the file's text with line endings read as LF, as `project file list` and `read` report it.");
+
+    public static readonly DiagnosticDescriptor ProjectFileUnusable = E("472", "The file cannot be used as asked",
+        "an existing text file (UTF-8, at most 1 MiB) to read, move or delete; a destination that does not exist yet for a move or `--create`",
+        "Check the path with `project file list`; binary or large files are not edited through these commands.",
+        "The file is missing, is a directory, is not UTF-8 text, is larger than the limit, or the destination of a move already exists.");
+
     public static readonly IReadOnlyList<DiagnosticDescriptor> All =
     [
         YamlSyntax, DuplicateKey, UnsupportedYamlFeature, UnknownKey, MissingKey, InvalidValue, NameMismatch, OrphanFile, ConfigNotFound, CopyOriginDiffers, ModelReadsAnotherConnection, NativeReadsNotDeclared, StringsCompareDifferently, TrimmedColumnHasTrailingSpaces, QueryHeadInvalid, LoadSliceSourceNotIndexed, ReadsInconsistentHistory, NameTooLongForEngine, DatabaseErrorUnhandled, InfoOutOfBounds, NativeDefinitionChanged, NativeDefinitionNotChecked, TrackingNotConfigured,
@@ -544,7 +560,7 @@ public static class DiagnosticCatalog
         DefinitionOutOfSync, RenderedFileOutOfDate, ObjectChangedOutsideTool, LoadDefinitionChanged, AdoptionDeclined, UpstreamBlocked, ModelUnplannable, PlanFileInvalid, StepNeedsAllowance, PlanIsStale, PlanAlreadyStarted, ApplyLockHeld, StepFailed, RefreshPlanMissing, RefreshCheckFailed, RefreshFileChanged, RefreshPlanUndeclared, RefreshMembershipDuplicate, RefreshMembershipInvalid, KindWrittenOldWay, KindShapeInvalid, RefreshInputMissing, RefreshPlanUnknown, ReadOnlyConnectionNotWritable, DialectProfileInvalid, DialectLockInvalid, DialectLockMissing, DialectLockStale, OriginDialectChanged, ProjectUpdateDiffers, InputResolverInvalid, InputsDependOnEachOther, InputNotResolved, InputsMoved, StepResultDiffers, DirtyWorkingTree, HistoryInconsistent, DefinitionFileChanged, DefinitionNotEditable,
         TestFailed, TestCouldNotRun, TestNotASelect,
         LoginNotConfigured, GateRefused, StatementLogUnavailable, ReadStatementRefused, TrackingNotInitialized,
-        InternalError,
+        InternalError, ProjectFilePathRefused, ProjectFileHashStale, ProjectFileUnusable,
     ];
 
     public static DiagnosticDescriptor? Find(string code) =>

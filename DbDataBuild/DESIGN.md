@@ -876,6 +876,8 @@ Every command declares an **effect class** and a **reads-and-writes code** (`P` 
 | `project import` | `C→P` | Target read-only (files with `--write`) | Export tables and views as mapped models (section 6.5.1); `--check` for CI |
 | `project update` | `C→P` | Target read-only (files unless `--check`) | `project model update` for every model, plus the dialect each Flight SQL server reports, committed in `dialects.lock.yml` (9.4.3); `--offline`, `--check` |
 | `project show loads\|graph\|metadata\|plan` | `P→` | Offline only | The model x connection x operation table / the dependency graph (section 9.9) / everything the tool knows / a plan file |
+| `project file list` / `read` | `P→` | Offline only | The files of the project and one text file, each with a content hash (plan 13, W01) |
+| `project file write` / `move` / `delete` | `P⇒P` | Repo files only | Change one text file of the project; confined to the project tree (DDB-470); the hash of the version the change is based on is required and a different current content is refused (DDB-471); a missing, binary or large (over 1 MiB) file, or an existing destination, is DDB-472. Files are written as LF text without a BOM. They parse nothing: what is written is checked by the commands that load the project |
 | `project agent-kit` | `P⇒P` | Repo files only | Install the skill and schemas (section 9.7) |
 | `connection inspect` | `C→` | Target read-only | Can the tool use the connection: logins, what they may do, tracking, schema names |
 | `connection init` | `P⇒T` | Tracking tables only | Create the tracking tables (prints the script; `--apply` runs it; `--upgrade` brings an older layout to this one) |
