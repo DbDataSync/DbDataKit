@@ -154,24 +154,34 @@ public class MutationGateTests
     [Fact]
     public void Logins_are_read_from_the_named_variable_with_no_fallback_between_them()
     {
-        var env = new Dictionary<string, string?> { ["DBDATABUILD_SQLSERVER_WRITE"] = "Server=x;User Id=writer;Password=hunter2" };
+        var env = new Dictionary<string, string?> { ["DBDATA_BUILD_SQLSERVER_WRITE"] = "Server=x;User Id=writer;Password=hunter2" };
         var (write, _) = LoginSettings.FromEnvironment("sqlserver", Login.Write, env.GetValueOrDefault);
         Assert.NotNull(write);
         var (read, error) = LoginSettings.FromEnvironment("sqlserver", Login.Read, env.GetValueOrDefault);
         Assert.Null(read);
         Assert.Equal("DDB-501", error!.Code);
-        Assert.Contains("DBDATABUILD_SQLSERVER_READ", error.Found);
+        Assert.Contains("DBDATA_BUILD_SQLSERVER_READ", error.Found);
         Assert.DoesNotContain("hunter2", error.Found);
+    }
+
+    [Fact]
+    public void The_old_DBDATABUILD_names_are_not_read()
+    {
+        var env = new Dictionary<string, string?> { ["DBDATABUILD_SQLSERVER_READ"] = "Server=x;User Id=reader;Password=hunter2" };
+        var (read, error) = LoginSettings.FromEnvironment("sqlserver", Login.Read, env.GetValueOrDefault);
+        Assert.Null(read);
+        Assert.Equal("DDB-501", error!.Code);
+        Assert.Contains("DBDATA_BUILD_SQLSERVER_READ", error.Found);
     }
 
     [Fact]
     public void The_login_description_names_the_variable_and_user_and_never_the_password()
     {
-        var env = new Dictionary<string, string?> { ["DBDATABUILD_POSTGRES_READ"] = "Host=h;Username=reader;Password=hunter2" };
+        var env = new Dictionary<string, string?> { ["DBDATA_BUILD_POSTGRES_READ"] = "Host=h;Username=reader;Password=hunter2" };
         var (settings, _) = LoginSettings.FromEnvironment("postgres", Login.Read, env.GetValueOrDefault);
-        Assert.Equal("reader (DBDATABUILD_POSTGRES_READ)", settings!.Describe());
-        var (integrated, _) = LoginSettings.FromEnvironment("sqlserver", Login.Read, new Dictionary<string, string?> { ["DBDATABUILD_SQLSERVER_READ"] = "Server=x;Integrated Security=true" }.GetValueOrDefault);
-        Assert.Equal("integrated/default (DBDATABUILD_SQLSERVER_READ)", integrated!.Describe());
+        Assert.Equal("reader (DBDATA_BUILD_POSTGRES_READ)", settings!.Describe());
+        var (integrated, _) = LoginSettings.FromEnvironment("sqlserver", Login.Read, new Dictionary<string, string?> { ["DBDATA_BUILD_SQLSERVER_READ"] = "Server=x;Integrated Security=true" }.GetValueOrDefault);
+        Assert.Equal("integrated/default (DBDATA_BUILD_SQLSERVER_READ)", integrated!.Describe());
     }
 
     /// <summary>A reader must allow the writer's open handle (FileShare.ReadWrite); File.ReadAllLines does not, and on Windows that is a sharing violation.</summary>

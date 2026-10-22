@@ -118,7 +118,7 @@ internal static class McpConfig
         ["env"] = new JsonObject((connections ?? TargetNames.All).Select(t => new KeyValuePair<string, JsonNode?>(LoginName(t), "${" + LoginName(t) + ":-}"))),
     };
 
-    private static string LoginName(string target) => $"DBDATABUILD_{target.ToUpperInvariant()}_READ";
+    private static string LoginName(string target) => $"DBDATA_BUILD_{target.ToUpperInvariant()}_READ";
 
     /// <summary>The text of the file now (null when there is none), the text it should have, and a reason when the file cannot be merged (it is not a JSON object, or `mcpServers` is not an object).</summary>
     public static (string? Current, string Desired, string? Problem) Plan(string projectRoot)

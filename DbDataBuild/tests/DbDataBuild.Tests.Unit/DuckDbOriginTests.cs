@@ -66,7 +66,7 @@ public class DuckDbOriginTests : IDisposable
         Assert.Equal(ParameterStyle.Positional, cfg.DialectOf("analytics").Parameters);
         Assert.False(c.Kind.IsBuildTarget);
         var (settings, _) = LoginSettings.FromEnvironment(c, Login.Read, _ => "/data/x.duckdb");
-        Assert.Equal("DuckDB file, read-only (DBDATABUILD_ANALYTICS_READ)", settings!.Describe());       // the path is not printed
+        Assert.Equal("DuckDB file, read-only (DBDATA_BUILD_ANALYTICS_READ)", settings!.Describe());       // the path is not printed
         Assert.Null(settings.User);
         Assert.Equal("DDB-455", LoginSettings.FromEnvironment(c, Login.Write, _ => "/data/x.duckdb").Error!.Code);
     }

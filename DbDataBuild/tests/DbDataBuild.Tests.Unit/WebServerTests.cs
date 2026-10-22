@@ -19,7 +19,7 @@ public sealed class WebServerTests : IDisposable
         Assert.Equal(0, CliApp.Run(["project", "create", "starter", dir, "--format", "json"], new StringWriter(), new StringWriter()));
         Directory.CreateDirectory(Path.Combine(dir, "plans"));
         File.WriteAllText(Path.Combine(dir, "plans", "p.plan.yml"), "secret: statements\n");
-        File.WriteAllText(Path.Combine(dir, ".env"), "DBDATABUILD_SQLSERVER_WRITE=secret\n");
+        File.WriteAllText(Path.Combine(dir, ".env"), "DBDATA_BUILD_SQLSERVER_WRITE=secret\n");
         server = new WebServer(dir, new TuiCommand.CliHost(_ => null));
         server.StartAsync();
     }

@@ -40,7 +40,7 @@ public class ProjectUpdateConformanceTests
             (int, string, string) Cli(params string[] args)
             {
                 var o = new StringWriter(); var e = new StringWriter();
-                var exit = CliApp.Run([.. args, "--project", dir, "--format", "json"], o, e, environment: v => v == "DBDATABUILD_ANALYTICS_READ" ? db : null);
+                var exit = CliApp.Run([.. args, "--project", dir, "--format", "json"], o, e, environment: v => v == "DBDATA_BUILD_ANALYTICS_READ" ? db : null);
                 return (exit, o.ToString(), e.ToString());
             }
             var before = File.ReadAllText(Path.Combine(dir, "models", "src", "child.yml"));
@@ -69,7 +69,7 @@ public class ProjectUpdateConformanceTests
         await using var _ = from;
         var b = new NpgsqlConnectionStringBuilder(from.ConnectionString);
         var login = $"Driver={{{driver}}};Server={b.Host};Port={b.Port};Database={b.Database};Uid={b.Username};Pwd={b.Password};";
-        try { await using var probe = await ReadSession.OpenAsync(LoginSettings.FromEnvironment("legacy", "odbc", Login.Read, v => v == "DBDATABUILD_LEGACY_READ" ? login : null).Settings!); }
+        try { await using var probe = await ReadSession.OpenAsync(LoginSettings.FromEnvironment("legacy", "odbc", Login.Read, v => v == "DBDATA_BUILD_LEGACY_READ" ? login : null).Settings!); }
         catch (Exception ex) when (DriverFailure.Prerequisite(ex) is { } why) { Skip.If(true, $"The ODBC driver manager or psqlodbc cannot be used on this machine: {why}"); }
         var dir = Path.Combine(Path.GetTempPath(), "ddb-update-odbc-" + Guid.NewGuid().ToString("N")[..10]);
         Directory.CreateDirectory(Path.Combine(dir, "models", "upd"));
@@ -81,7 +81,7 @@ public class ProjectUpdateConformanceTests
             (int Exit, string Out, string Err) Cli(params string[] args)
             {
                 var o = new StringWriter(); var e = new StringWriter();
-                var exit = CliApp.Run([.. args, "--project", dir, "--format", "json"], o, e, environment: v => v == "DBDATABUILD_LEGACY_READ" ? login : null);
+                var exit = CliApp.Run([.. args, "--project", dir, "--format", "json"], o, e, environment: v => v == "DBDATA_BUILD_LEGACY_READ" ? login : null);
                 return (exit, o.ToString(), e.ToString());
             }
             Assert.Equal(1, Cli("project", "update", "--check").Exit);
@@ -154,7 +154,7 @@ public class ProjectUpdateConformanceTests
         var skipped = run.Cli("project", "update", "--format", "json");
         Ok(skipped, "update without the origin's login");
         Assert.Equal("skipped", (string)Json(skipped)["data"]!["dialects"]!.AsArray().Single()!["status"]!);
-        Assert.Contains("DBDATABUILD_PROXY_READ", skipped.Out);
+        Assert.Contains("DBDATA_BUILD_PROXY_READ", skipped.Out);
     }
 
     [SkippableFact]

@@ -51,7 +51,7 @@
       }
     },
     "connections": {
-      "description": "Named database endpoints. A connection named after an engine (sqlserver, fabric, postgres) exists without being declared; declaring it sets its version. Any other name needs an `engine`. The name is part of the login's environment variable: DBDATABUILD_<NAME>_READ and _WRITE.",
+      "description": "Named database endpoints. A connection named after an engine (sqlserver, fabric, postgres) exists without being declared; declaring it sets its version. Any other name needs an `engine`. The name is part of the login's environment variable: DBDATA_BUILD_<NAME>_READ and _WRITE.",
       "type": "object",
       "properties": {
         "sqlserver": {

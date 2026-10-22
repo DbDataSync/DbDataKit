@@ -28,8 +28,8 @@ public class InspectAndListTests
         var r = Run(null, "connection", "inspect", "--project", dir);
         Assert.Equal(CliApp.ExitFindings, r.Exit);
         Assert.Contains("reads/writes: C→  |  lane: inspect", r.Out);
-        Assert.Contains("read login    DBDATABUILD_SQLSERVER_READ: not set", r.Out);
-        Assert.Contains("write login   DBDATABUILD_SQLSERVER_WRITE: not set", r.Out);
+        Assert.Contains("read login    DBDATA_BUILD_SQLSERVER_READ: not set", r.Out);
+        Assert.Contains("write login   DBDATA_BUILD_SQLSERVER_WRITE: not set", r.Out);
         Assert.Contains("thing(s) in the way", r.Out);
     }
 
@@ -37,7 +37,7 @@ public class InspectAndListTests
     public void Inspect_reports_a_login_that_does_not_connect_by_type_and_number_only_and_has_a_document()
     {
         var dir = Starter();
-        var env = (string v) => v == "DBDATABUILD_SQLSERVER_READ" ? "Server=127.0.0.1,1;User Id=reader;Password=hunter2;Connect Timeout=1" : null;
+        var env = (string v) => v == "DBDATA_BUILD_SQLSERVER_READ" ? "Server=127.0.0.1,1;User Id=reader;Password=hunter2;Connect Timeout=1" : null;
         var r = Run(env, "connection", "inspect", "--project", dir, "--format", "json");
         Assert.Equal(CliApp.ExitFindings, r.Exit);
         Assert.DoesNotContain("hunter2", r.Out + r.Err);                                        // the password is never shown

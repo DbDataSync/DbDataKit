@@ -284,7 +284,7 @@ public class RefreshPlansTests
     private static (int Exit, string Out, string Err) Cli(string dir, params string[] args)
     {
         var o = new StringWriter(); var e = new StringWriter();
-        var exit = CliApp.Run([.. args, "--project", dir], o, e, environment: v => v is "DBDATABUILD_SQLSERVER_READ" or "DBDATABUILD_SQLSERVER_WRITE" ? "Server=127.0.0.1,1;User Id=r;Password=x;Connect Timeout=1" : null);
+        var exit = CliApp.Run([.. args, "--project", dir], o, e, environment: v => v is "DBDATA_BUILD_SQLSERVER_READ" or "DBDATA_BUILD_SQLSERVER_WRITE" ? "Server=127.0.0.1,1;User Id=r;Password=x;Connect Timeout=1" : null);
         return (exit, o.ToString(), e.ToString());
     }
 

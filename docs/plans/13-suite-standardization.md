@@ -160,7 +160,7 @@ Descriptor drivers (`driver.yaml`) are data, not code, and are not affected. JDB
 
 **Clean break** (owner decision, applies to every workstream): the new releases start from nothing. No migration, import, upgrade path or
 compatibility reader is written for existing configs, scripts, libraries, drivers, secrets, users, sessions or state databases, and no
-legacy names are kept (old CLI forms, old environment variable names such as `DBDATABUILD_*` and `DBDATASYNC_SECRET_*`). Instead, a server
+legacy names are kept (old CLI forms, old environment variable names such as `DBDATA_BUILD_*` and `DBDATASYNC_SECRET_*`). Instead, a server
 or CLI that finds a file in an old format (no `schemaVersion`, an older one, `appsettings.json` where `server.yaml` belongs, a `.cs`
 script, a `library.json`) **refuses to start or to load it, with a message naming the file and pointing to the documentation**. Release
 notes say plainly that an existing install is set up again. Users' own data (their databases and DuckDB files) is not ours to break and
@@ -273,7 +273,7 @@ Plan 10's rules apply: adapter first, delete second, one concern per PR, existin
 
 1. `Dialect.*` behind `DialectProfile` (keep Build's matrix and rules; the shared package gets Build's fixtures as conformance cases).
 2. `Connections.*` replaces `Logins`, `OdbcLogin`, `FlightSqlLogin`, `DriverFailure`. Logins come from `DBDATA_BUILD_<CONN>_<READ|WRITE>`;
-   the old `DBDATABUILD_*` names are dropped, here and in the shared resolver (clean break). Build's rule "driver messages are never echoed" becomes a shared-classifier test.
+   the old `DBDATA_BUILD_*` names are dropped, here and in the shared resolver (clean break). Build's rule "driver messages are never echoed" becomes a shared-classifier test.
 3. `Metadata.*` replaces `CatalogReader`, `SourceCatalogReader`, `OdbcCatalogClient`. `ServerFacts` becomes the shared record (plan 04's open question).
 4. `Transfer.*` replaces `Transfer.cs`, `MutationGate` and `StatementLog`. The shared `WriteGate` was modelled on Build's gate, so
    `GateInvariantTests` moves to the shared package and runs against both.
@@ -655,7 +655,7 @@ that works on every platform, key management, and the commands.
 | Key at rest, Linux and macOS | the raw key in a 0600 file owned by the service user, in a 0700 directory; **the server refuses to start if the key file or directory is readable by anyone else** (as ssh does with keys) |
 | Key from outside | `secrets.keyFile` in `server.yaml` (or `DBDATA_SECRETS_KEY_FILE`) points at a key provided by the platform: a Docker or Kubernetes secret, a systemd `LoadCredentialEncrypted` credential. Images never contain a key; a container without one generates it on first start only into a mounted volume, and says so |
 | Writes | atomic (write a temporary file, then rename), the file restricted before content is written (`AclHelper.WriteAllBytesRestricted`) |
-| Reading | `EncryptedFileSecretStore : ISecretStore, ISecretProvider` answers `secret:` references in the resolver chain, ahead of `env:`/`file:`; inline `dpapi:` values (`secret protect`, Windows) resolve too. `LegacyEnvProvider` (the old `DBDATABUILD_*` and `DBDATASYNC_SECRET_*` names) is deleted |
+| Reading | `EncryptedFileSecretStore : ISecretStore, ISecretProvider` answers `secret:` references in the resolver chain, ahead of `env:`/`file:`; inline `dpapi:` values (`secret protect`, Windows) resolve too. `LegacyEnvProvider` (the old `DBDATA_BUILD_*` and `DBDATASYNC_SECRET_*` names) is deleted |
 | Rotation | `secret rotate-key`: a new key, every value re-encrypted, the old key deleted after the last value is rewritten; interrupted rotation resumes |
 | Moving a server | `secret export --to <file>` / `secret import <file>`: values re-encrypted under a passphrase (PBKDF2-SHA256, 600,000 iterations, the existing hasher's primitive). The key file itself is never copied by a command |
 | Commands | the shared `secret` noun (W4): `set <name>` (value from a prompt or stdin, never an argument), `list` (names and dates, never values), `delete`, `check` (every reference in the config resolves), `rotate-key`, `export`, `import`, `protect` (an inline value for a single field, where a store is not wanted). There is no command that prints a value |

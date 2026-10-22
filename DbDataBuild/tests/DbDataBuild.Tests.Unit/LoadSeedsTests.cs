@@ -94,9 +94,9 @@ public class LoadSeedsTests
         var dir = NewStarter();
         try
         {
-            var (exit, _, err) = Run(v => v == "DBDATABUILD_SQLSERVER_READ" ? "Server=x" : null, "connection", "seed", "--project", dir, "--apply");
+            var (exit, _, err) = Run(v => v == "DBDATA_BUILD_SQLSERVER_READ" ? "Server=x" : null, "connection", "seed", "--project", dir, "--apply");
             Assert.NotEqual(0, exit);
-            Assert.Contains("DBDATABUILD_SQLSERVER_WRITE", err);
+            Assert.Contains("DBDATA_BUILD_SQLSERVER_WRITE", err);
         }
         finally { Directory.Delete(dir, recursive: true); }
     }

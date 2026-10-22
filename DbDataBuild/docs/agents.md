@@ -45,7 +45,7 @@ For Claude Code, allow what changes nothing and make a person approve the rest. 
 }
 ```
 
-Give the agent's shell the **read** login only (`DBDATABUILD_<TARGET>_READ`). With no write login in its environment the commands that change a database cannot succeed from the agent's session, whatever it is asked to do; a person applies a plan from a shell that has it (or from `dbdatabuild ui terminal`).
+Give the agent's shell the **read** login only (`DBDATA_BUILD_<TARGET>_READ`). With no write login in its environment the commands that change a database cannot succeed from the agent's session, whatever it is asked to do; a person applies a plan from a shell that has it (or from `dbdatabuild ui terminal`).
 
 ## What an agent is good for here
 

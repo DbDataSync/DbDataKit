@@ -11,7 +11,7 @@ namespace DbDataBuild.Execution;
 public sealed class FlightSqlLoginException(string message) : Exception(message);
 
 /// <summary>
-/// The value of a Flight SQL connection's login, `DBDATABUILD_&lt;NAME&gt;_READ`: a URI and options separated by `;`, written like an ODBC connection string (a value in braces may hold `;` and `=`, and `}}` is a `}`).
+/// The value of a Flight SQL connection's login, `DBDATA_BUILD_&lt;NAME&gt;_READ`: a URI and options separated by `;`, written like an ODBC connection string (a value in braces may hold `;` and `=`, and `}}` is a `}`).
 /// <code>grpc+tls://proxy.example.com:31337;token=eyJ...
 /// grpc://127.0.0.1:31337;user=reader;password={p;w}
 /// grpc+tls://proxy.example.com:31337;token_command={az account get-access-token --resource api://proxy --query accessToken -o tsv}</code>

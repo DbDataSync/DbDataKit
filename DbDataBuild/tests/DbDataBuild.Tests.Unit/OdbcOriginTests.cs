@@ -46,14 +46,14 @@ public class OdbcOriginTests
     public void The_login_is_described_by_its_variable_and_user_and_never_by_its_value()
     {
         var cfg = ProjectConfigLoader.Load("connections:\n  legacy: { engine: readonly odbc }\n", "dbdatabuild.yml", [])!;
-        var (login, _) = LoginSettings.FromEnvironment(cfg.Connections["legacy"], Login.Read, v => v == "DBDATABUILD_LEGACY_READ" ? "Driver={PostgreSQL Unicode};Server=db.internal;UID=reader;PWD=hunter2" : null);
+        var (login, _) = LoginSettings.FromEnvironment(cfg.Connections["legacy"], Login.Read, v => v == "DBDATA_BUILD_LEGACY_READ" ? "Driver={PostgreSQL Unicode};Server=db.internal;UID=reader;PWD=hunter2" : null);
         Assert.Equal("odbc", login!.Engine);
         Assert.Equal("reader", login.User);
-        Assert.Equal("ODBC, reader (DBDATABUILD_LEGACY_READ)", login.Describe());
+        Assert.Equal("ODBC, reader (DBDATA_BUILD_LEGACY_READ)", login.Describe());
         Assert.DoesNotContain("hunter2", login.Describe());
         Assert.DoesNotContain("db.internal", login.Describe());
         var (dsn, _) = LoginSettings.FromEnvironment(cfg.Connections["legacy"], Login.Read, _ => "DSN=erp");
-        Assert.Equal("ODBC, the driver's own credentials (DBDATABUILD_LEGACY_READ)", dsn!.Describe());
+        Assert.Equal("ODBC, the driver's own credentials (DBDATA_BUILD_LEGACY_READ)", dsn!.Describe());
         // no write login exists for it, whichever way it is asked for
         Assert.Equal("DDB-455", LoginSettings.FromEnvironment(cfg.Connections["legacy"], Login.Write, _ => "x").Error!.Code);
     }
@@ -193,7 +193,7 @@ public class OdbcOriginTests
         Assert.Equal(0, Cli(["project", "create", "starter", dir]).Exit);
         var config = Path.Combine(dir, "dbdatabuild.yml");
         File.WriteAllText(config, "dialects:\n  blind: { extends: ansi, catalog: none }\n" + File.ReadAllText(config).Replace("connections:\n  sqlserver:", "connections:\n  legacy: { engine: readonly odbc blind }\n  sqlserver:"));
-        var r = Cli(["project", "import", "legacy", "src.*", "--project", dir], v => v == "DBDATABUILD_LEGACY_READ" ? "Driver={No Such ODBC Driver};PWD=secretpw" : null);
+        var r = Cli(["project", "import", "legacy", "src.*", "--project", dir], v => v == "DBDATA_BUILD_LEGACY_READ" ? "Driver={No Such ODBC Driver};PWD=secretpw" : null);
         Assert.Equal(1, r.Exit);
         Assert.Contains("`catalog: none`", r.Err);
         Assert.Contains("not guessed", r.Err);
@@ -292,7 +292,7 @@ public class OdbcOriginTests
         Assert.Equal(0, Cli(["project", "create", "starter", dir]).Exit);
         var config = Path.Combine(dir, "dbdatabuild.yml");
         File.WriteAllText(config, File.ReadAllText(config).Replace("connections:\n  sqlserver:", "connections:\n  legacy: { engine: readonly odbc }\n  sqlserver:"));
-        string? Env(string v) => v == "DBDATABUILD_LEGACY_READ" ? "Driver={Vendor Driver 9000};Server=db.internal;UID=reader;PWD=hunter2" : null;
+        string? Env(string v) => v == "DBDATA_BUILD_LEGACY_READ" ? "Driver={Vendor Driver 9000};Server=db.internal;UID=reader;PWD=hunter2" : null;
         var inspect = Cli(["connection", "inspect", "legacy", "--project", dir], Env);
         Assert.NotEqual(0, inspect.Exit);
         Assert.Contains("ODBC", inspect.Out);

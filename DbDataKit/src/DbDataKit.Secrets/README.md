@@ -15,7 +15,7 @@ Runtime for Plan 02. Depends on `DbDataKit.Secrets.Abstractions`.
   Optional `SecretsDirectory` makes `secret:<name>` resolve to `<dir>/<name with ':' -> '_'>` (systemd
   `$CREDENTIALS_DIRECTORY`, Docker `/run/secrets`); traversal is refused.
 - The encrypted store that answers `secret:<name>` first is in `DbDataKit.Secrets.Store` (`EncryptedFileSecretStore`); the `secret` commands are in `DbDataKit.Secrets.Cli`.
-  (`LegacyEnvProvider`, which mapped Build's `DBDATABUILD_*` and Sync's `DBDATASYNC_SECRET_*` variables, is gone: plan 13, a clean break.)
+  (`LegacyEnvProvider`, which mapped Build's `DBDATA_BUILD_*` and Sync's `DBDATASYNC_SECRET_*` variables, is gone: plan 13, a clean break.)
 - `Redactor`: exact value + URL-encoded (both `EscapeDataString` and `UrlEncode`), base64 (UTF-8), JSON-escaped variants,
   longest first; always scrubs `Password=...`-style fragments and URL user-info. Values shorter than `MinLength` (3) are ignored.
 - `DelegateSecretAudit`, `PasswordHasher` (`PBKDF2-SHA256$iter$salt$hash`, fixed-time compare, `NeedsRehash`).

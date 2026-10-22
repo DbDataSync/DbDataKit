@@ -92,7 +92,7 @@ public partial class CopyConformanceTests
             Assert.Equal("failed", (string)failed["outcome"]!);
             var byModel = failed["results"]!.AsArray().ToDictionary(r => (string)r!["model"]!, r => r!);
             Assert.Equal("failed: origin", (string)byModel["dst.events"]["status"]!);
-            Assert.Contains($"DBDATABUILD_{origin.ToUpperInvariant()}_READ", (string)byModel["dst.events"]["detail"]!);
+            Assert.Contains($"DBDATA_BUILD_{origin.ToUpperInvariant()}_READ", (string)byModel["dst.events"]["detail"]!);
             Assert.Equal("skipped: upstream failed", (string)byModel["dst.summary"]["status"]!);
             Assert.Equal(["1:a", "2:b", "3:c2", "4:d"], await rows());
 

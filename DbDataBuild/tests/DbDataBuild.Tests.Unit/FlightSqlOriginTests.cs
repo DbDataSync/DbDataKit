@@ -77,13 +77,13 @@ public class FlightSqlOriginTests
     {
         var cfg = ProjectConfigLoader.Load("connections:\n  proxy: { engine: readonly flightsql }\n", "dbdatabuild.yml", [])!;
         Assert.Equal("ansi", cfg.Connections["proxy"].Kind.Dialect);
-        var (login, _) = LoginSettings.FromEnvironment(cfg.Connections["proxy"], Login.Read, v => v == "DBDATABUILD_PROXY_READ" ? "grpc+tls://proxy.internal:31337;user=reader;password=hunter2" : null);
+        var (login, _) = LoginSettings.FromEnvironment(cfg.Connections["proxy"], Login.Read, v => v == "DBDATA_BUILD_PROXY_READ" ? "grpc+tls://proxy.internal:31337;user=reader;password=hunter2" : null);
         Assert.Equal("flightsql", login!.Engine);
         Assert.Equal("reader", login.User);
-        Assert.Equal("Flight SQL proxy.internal:31337, user reader (DBDATABUILD_PROXY_READ)", login.Describe());
+        Assert.Equal("Flight SQL proxy.internal:31337, user reader (DBDATA_BUILD_PROXY_READ)", login.Describe());
         Assert.DoesNotContain("hunter2", login.Describe());
         var (token, _) = LoginSettings.FromEnvironment(cfg.Connections["proxy"], Login.Read, _ => "grpc://10.0.0.5:31337;token=eyJhbGciOiJIUzI1NiJ9.secret");
-        Assert.Equal("Flight SQL 10.0.0.5:31337, bearer token (DBDATABUILD_PROXY_READ)", token!.Describe());
+        Assert.Equal("Flight SQL 10.0.0.5:31337, bearer token (DBDATA_BUILD_PROXY_READ)", token!.Describe());
         Assert.Null(token.User);
         var (broken, _) = LoginSettings.FromEnvironment(cfg.Connections["proxy"], Login.Read, _ => "nonsense;password=hunter2");
         Assert.DoesNotContain("hunter2", broken!.Describe());
@@ -182,7 +182,7 @@ public class FlightSqlOriginTests
         Assert.Equal(0, Cli(["project", "create", "starter", dir]).Exit);
         var config = Path.Combine(dir, "dbdatabuild.yml");
         File.WriteAllText(config, File.ReadAllText(config).Replace("connections:\n  sqlserver:", "connections:\n  proxy: { engine: readonly flightsql }\n  sqlserver:"));
-        string? Env(string v) => v == "DBDATABUILD_PROXY_READ" ? "grpc://127.0.0.1:1;token=secrettoken123" : null;
+        string? Env(string v) => v == "DBDATA_BUILD_PROXY_READ" ? "grpc://127.0.0.1:1;token=secrettoken123" : null;
         var inspect = Cli(["connection", "inspect", "proxy", "--project", dir], Env);
         Assert.NotEqual(0, inspect.Exit);
         Assert.Contains("Flight SQL", inspect.Out);
@@ -191,7 +191,7 @@ public class FlightSqlOriginTests
         Assert.DoesNotContain("secrettoken123", inspect.Out + inspect.Err);
         var json = Cli(["connection", "inspect", "proxy", "--project", dir, "--format", "json"], Env);
         Assert.DoesNotContain("secrettoken123", json.Out);
-        var bad = Cli(["connection", "inspect", "proxy", "--project", dir], v => v == "DBDATABUILD_PROXY_READ" ? "grpc://127.0.0.1:1;token=secrettoken123;wrong=1" : null);
+        var bad = Cli(["connection", "inspect", "proxy", "--project", dir], v => v == "DBDATA_BUILD_PROXY_READ" ? "grpc://127.0.0.1:1;token=secrettoken123;wrong=1" : null);
         Assert.Contains("does not connect (The Flight SQL login", bad.Out);
         Assert.DoesNotContain("secrettoken123", bad.Out + bad.Err);
     }

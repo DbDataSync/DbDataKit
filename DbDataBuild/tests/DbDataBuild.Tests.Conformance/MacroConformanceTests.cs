@@ -93,7 +93,7 @@ public class MacroConformanceTests
         var snapDb = "ddb_snap_" + Guid.NewGuid().ToString("N")[..8];
         var snapConnection = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(server.ConnectionString) { InitialCatalog = snapDb }.ConnectionString;
         var dir = Path.Combine(Path.GetTempPath(), "ddb-macro-names-" + Guid.NewGuid().ToString("N"));
-        string? Env(string v) => v is "DBDATABUILD_LIVE_READ" or "DBDATABUILD_LIVE_WRITE" ? server.ConnectionString : v is "DBDATABUILD_SNAP_READ" or "DBDATABUILD_SNAP_WRITE" ? snapConnection : null;
+        string? Env(string v) => v is "DBDATA_BUILD_LIVE_READ" or "DBDATA_BUILD_LIVE_WRITE" ? server.ConnectionString : v is "DBDATA_BUILD_SNAP_READ" or "DBDATA_BUILD_SNAP_WRITE" ? snapConnection : null;
         (int Exit, string Out, string Err) Cli(params string[] args)
         {
             var o = new StringWriter(); var e = new StringWriter();
