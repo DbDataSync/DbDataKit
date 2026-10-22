@@ -20,7 +20,7 @@ public sealed class PostgresDialect : SqlDialect
 
     private static readonly ISqlDialect Shared = DialectCatalog.Builtin.Get("postgres");
 
-    public override string QuoteIdentifier(string identifier) => Shared.Quote(identifier);
+    public override string QuoteIdentifier(string identifier) => SharedQuoting.Quote(Shared, identifier);
 
     public override string ParameterReference(string name) => $"@{name}";
 

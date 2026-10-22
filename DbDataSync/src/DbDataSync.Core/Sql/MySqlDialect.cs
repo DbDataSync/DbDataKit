@@ -37,7 +37,7 @@ public sealed class MySqlDialect : SqlDialect
 
     protected override char IdentifierQuoteClose => '`';
 
-    public override string QuoteIdentifier(string identifier) => Shared.Quote(identifier);
+    public override string QuoteIdentifier(string identifier) => SharedQuoting.Quote(Shared, identifier);
 
     public override string ParameterReference(string name) => $"@{name}";
 

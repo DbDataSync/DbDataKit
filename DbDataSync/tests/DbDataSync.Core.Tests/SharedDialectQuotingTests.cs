@@ -37,10 +37,10 @@ public sealed class SharedDialectQuotingTests
 
     [Theory]
     [MemberData(nameof(Dialects))]
-    public void An_empty_name_and_a_control_character_are_refused(string id)
+    public void A_control_character_is_refused_and_an_empty_name_quotes_as_empty(string id)
     {
         var dialect = Get(id);
-        Assert.Throws<ArgumentException>(() => dialect.QuoteIdentifier(""));
+        Assert.Equal(dialect.QuoteIdentifier("x").Replace("x", ""), dialect.QuoteIdentifier(""));   // a blank schema/table of a query source
         Assert.Throws<ArgumentException>(() => dialect.QuoteIdentifier("a\u0000b"));
     }
 }
