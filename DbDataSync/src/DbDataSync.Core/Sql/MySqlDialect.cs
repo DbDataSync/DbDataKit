@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 namespace DbDataSync.Core.Sql;
 
 /// <summary>
@@ -29,7 +30,14 @@ public sealed class MySqlDialect : SqlDialect
 
     private MySqlDialect() { }
 
-    public override string QuoteIdentifier(string identifier) => $"`{identifier.Replace("`", "``")}`";
+    private static readonly ISqlDialect Shared = DialectCatalog.Builtin.Get("mysql");
+
+    // Backticks, so SplitQualifiedName unwraps `a.b` the way QuoteIdentifier wraps it (the base class assumed double quotes here).
+    protected override char IdentifierQuoteOpen => '`';
+
+    protected override char IdentifierQuoteClose => '`';
+
+    public override string QuoteIdentifier(string identifier) => SharedQuoting.Quote(Shared, identifier);
 
     public override string ParameterReference(string name) => $"@{name}";
 

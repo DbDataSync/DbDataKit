@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using System.Data.Common;
 
 namespace DbDataSync.Core.Sql;
@@ -10,7 +11,9 @@ public sealed class MsSqlDialect : SqlDialect
 
     private MsSqlDialect() { }
 
-    public override string QuoteIdentifier(string identifier) => $"[{identifier.Replace("]", "]]")}]";
+    private static readonly ISqlDialect Shared = DialectCatalog.Builtin.Get("sqlserver");
+
+    public override string QuoteIdentifier(string identifier) => SharedQuoting.Quote(Shared, identifier);
 
     public override string ParameterReference(string name) => $"@{name}";
 

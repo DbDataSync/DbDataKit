@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using System.Data.Common;
 
 namespace DbDataSync.Core.Sql;
@@ -19,7 +20,9 @@ public sealed class DuckDbDialect : SqlDialect
 
     private DuckDbDialect() { }
 
-    public override string QuoteIdentifier(string identifier) => $"\"{identifier.Replace("\"", "\"\"")}\"";
+    private static readonly ISqlDialect Shared = DialectCatalog.Builtin.Get("duckdb");
+
+    public override string QuoteIdentifier(string identifier) => SharedQuoting.Quote(Shared, identifier);
 
     /// <summary>DuckDB names a prepared parameter with <c>$name</c>; <c>@name</c> is not its syntax.</summary>
     public override string ParameterReference(string name) => $"${name}";
