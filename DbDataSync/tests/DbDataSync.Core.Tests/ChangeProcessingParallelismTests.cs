@@ -80,10 +80,11 @@ public sealed class ChangeProcessingParallelismTests : IDisposable
     /// <summary>
     /// The SPA wrote <c>parallelism: 1</c> under <c>reader</c>/<c>writer</c> for every replication it
     /// created (1 is not <c>default(int)</c>, so the serializer kept it). That key no longer maps to
-    /// anything — loading such a file must not throw, and the replication comes back on the default.
+    /// anything. Plan 13 (A02) made unknown keys an error, so loading such a file is refused with a message
+    /// that names each key (it used to be dropped silently); delete the two lines to load it.
     /// </summary>
     [Fact]
-    public void AConfigWithTheRetiredPerStageParallelismKey_StillLoads()
+    public void AConfigWithTheRetiredPerStageParallelismKey_IsRefusedNamingTheKey()
     {
         var dir = Path.Combine(_root, "config", "replications", "legacy");
         Directory.CreateDirectory(dir);
@@ -103,12 +104,10 @@ public sealed class ChangeProcessingParallelismTests : IDisposable
                 parallelism: 1
             """);
 
-        var loaded = _config.LoadReplicationTask("legacy");
+        var ex = Assert.Throws<ConfigFileException>(() => _config.LoadReplicationTask("legacy"));
 
-        Assert.Equal("MsSqlChangeTracking", loaded.ChangeProcessing.Reader.Kind);
-        Assert.Equal(
-            ChangeProcessingConfig.DefaultDegreeOfParallelism,
-            loaded.ChangeProcessing.DegreeOfParallelism);
+        Assert.Contains(ex.Diagnostics, d => d.KeyPath == "changeProcessing.reader.parallelism");
+        Assert.Contains(ex.Diagnostics, d => d.KeyPath == "changeProcessing.writer.parallelism");
     }
 
     [Theory]

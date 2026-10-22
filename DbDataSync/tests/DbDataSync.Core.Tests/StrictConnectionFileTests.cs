@@ -97,4 +97,21 @@ public sealed class StrictConnectionFileTests : IDisposable
             catch (InvalidDataException) { }   // the existing semantic checks on a loaded value
         }
     }
+
+    [Fact]
+    public void Task_mapping_and_script_manifest_files_refuse_unknown_keys_too()
+    {
+        var config = Path.Combine(_repoRoot, "config");
+        var task = Path.Combine(config, "replications", "r1", "task.yaml");
+        var mapping = Path.Combine(config, "replications", "r1", "table-mappings", "m1.yaml");
+        var script = Path.Combine(config, "scripts", "s1.yaml");
+        foreach (var file in new[] { task, mapping, script }) Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(task, "name: r1\nscedule: x\n");
+        File.WriteAllText(mapping, "name: m1\nsurprise: 1\n");
+        File.WriteAllText(script, "name: s1\nsurprise: 1\n");
+
+        Assert.Equal("scedule", Assert.Single(Assert.Throws<ConfigFileException>(() => _repository.LoadReplicationTask("r1")).Diagnostics).KeyPath);
+        Assert.Equal("surprise", Assert.Single(Assert.Throws<ConfigFileException>(() => _repository.LoadTableMapping("r1", "m1")).Diagnostics).KeyPath);
+        Assert.Equal("surprise", Assert.Single(Assert.Throws<ConfigFileException>(() => _repository.LoadScriptManifest("s1")).Diagnostics).KeyPath);
+    }
 }
