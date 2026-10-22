@@ -100,6 +100,42 @@ public static class CliApp
                     cmd.Options.Add(renderProject); cmd.Options.Add(renderTarget); cmd.Options.Add(renderCheck); cmd.Options.Add(renderContent);
                     cmd.SetAction(pr => Reported(pr, spec, (o, e) => Compile(spec, pr.GetValue(renderProject)!.FullName, pr.GetValue(renderModels) ?? [], pr.GetValue(renderTarget) ?? [], pr.GetValue(renderCheck), pr.GetValue(renderContent), o, e)));
                     break;
+                case "project file list":
+                    var flProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
+                    var flDir = new Argument<string?>("folder") { Description = "A folder of the project to list (default: the whole project; .git, .dbdatabuild, bin, obj and node_modules are left out)", Arity = ArgumentArity.ZeroOrOne };
+                    cmd.Arguments.Add(flDir); cmd.Options.Add(flProject);
+                    cmd.SetAction(pr => Reported(pr, spec, (o, e) => ProjectFileCommand.List(spec, pr.GetValue(flProject)!.FullName, pr.GetValue(flDir), o, e)));
+                    break;
+                case "project file read":
+                    var frProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
+                    var frPath = new Argument<string>("path") { Description = "The file, relative to the project root" };
+                    cmd.Arguments.Add(frPath); cmd.Options.Add(frProject);
+                    cmd.SetAction(pr => Reported(pr, spec, (o, e) => ProjectFileCommand.Read(spec, pr.GetValue(frProject)!.FullName, pr.GetValue(frPath)!, o, e)));
+                    break;
+                case "project file write":
+                    var fwProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
+                    var fwPath = new Argument<string>("path") { Description = "The file, relative to the project root" };
+                    var fwContent = new Option<string?>("--content") { Description = "The new text of the file (default: read it from standard input)" };
+                    var fwHash = new Option<string?>("--expect-hash") { Description = "The hash of the version this change is based on (from project file read or list); a different current content is refused" };
+                    var fwCreate = new Option<bool>("--create") { Description = "The file must not exist yet (instead of --expect-hash); missing folders are created" };
+                    cmd.Arguments.Add(fwPath); cmd.Options.Add(fwProject); cmd.Options.Add(fwContent); cmd.Options.Add(fwHash); cmd.Options.Add(fwCreate);
+                    cmd.SetAction(pr => Reported(pr, spec, (o, e) => ProjectFileCommand.Write(spec, pr.GetValue(fwProject)!.FullName, pr.GetValue(fwPath)!, pr.GetValue(fwContent) ?? input.ReadToEnd(), pr.GetValue(fwHash), pr.GetValue(fwCreate), o, e)));
+                    break;
+                case "project file move":
+                    var fmProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
+                    var fmFrom = new Argument<string>("from") { Description = "The file, relative to the project root" };
+                    var fmTo = new Argument<string>("to") { Description = "Where it goes, relative to the project root (must not exist)" };
+                    var fmHash = new Option<string?>("--expect-hash") { Description = "The hash of the version being moved (from project file read or list); required" };
+                    cmd.Arguments.Add(fmFrom); cmd.Arguments.Add(fmTo); cmd.Options.Add(fmProject); cmd.Options.Add(fmHash);
+                    cmd.SetAction(pr => Reported(pr, spec, (o, e) => ProjectFileCommand.Move(spec, pr.GetValue(fmProject)!.FullName, pr.GetValue(fmFrom)!, pr.GetValue(fmTo)!, pr.GetValue(fmHash), o, e)));
+                    break;
+                case "project file delete":
+                    var fdProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
+                    var fdPath = new Argument<string>("path") { Description = "The file, relative to the project root" };
+                    var fdHash = new Option<string?>("--expect-hash") { Description = "The hash of the version being deleted (from project file read or list); required" };
+                    cmd.Arguments.Add(fdPath); cmd.Options.Add(fdProject); cmd.Options.Add(fdHash);
+                    cmd.SetAction(pr => Reported(pr, spec, (o, e) => ProjectFileCommand.Delete(spec, pr.GetValue(fdProject)!.FullName, pr.GetValue(fdPath)!, pr.GetValue(fdHash), o, e)));
+                    break;
                 case "project agent-kit":
                     var kitProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
                     var kitDir = new Option<string?>("--dir") { Description = "Where to install the kit, relative to the project (default: .claude/skills/dbdatabuild)" };

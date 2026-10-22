@@ -19,6 +19,11 @@ Generated from the command tree of `dbdatabuild` (`UPDATE_GOLDEN=1 dotnet test t
 | [`project show metadata`](#project-show-metadata) | `P→` | Offline only | Print everything the tool knows about the project and its models (use --format json) |
 | [`project show refresh`](#project-show-refresh) | `P→` | Offline only | Read the compiled refresh plans (offline): the plans of each connection, or one plan with its members in the order they run, the inputs each load takes and where each default comes from, what each load waits for (the dependency graph the loads file carries, with model kinds and depth), what was left out and the hashes |
 | [`project show plan`](#project-show-plan) | `P→` | Offline only | Read plan files (offline, nothing applied): list a project's plans, or show one with its steps, risk, exact statements, report and what applying it would need to be allowed |
+| [`project file list`](#project-file-list) | `P→` | Offline only | List the files of the project (or of a folder in it) with their size and content hash; the way a console or an agent sees the tree |
+| [`project file read`](#project-file-read) | `P→` | Offline only | Print one text file of the project with its content hash (confined to the project tree) |
+| [`project file write`](#project-file-write) | `P⇒P` | Repo files only (no target connection) | Write one text file of the project: --expect-hash names the version the change is based on and a different one is refused, --create is for a file that does not exist yet |
+| [`project file move`](#project-file-move) | `P⇒P` | Repo files only (no target connection) | Move or rename one file of the project; --expect-hash names the version moved, and a destination that exists is refused |
+| [`project file delete`](#project-file-delete) | `P⇒P` | Repo files only (no target connection) | Delete one file of the project; --expect-hash names the version deleted |
 | [`project agent-kit`](#project-agent-kit) | `P⇒P` | Repo files only (no target connection) | Install the skill and JSON Schemas an AI coding agent needs to work in a project (lists them unless --write) |
 | [`connection inspect`](#connection-inspect) | `C→` | Target read-only | Can the tool use this connection, and if not, why: whether each login is set, connects and as whom, what it may do, whether the tracking tables are ready, which schema names the models use exist |
 | [`connection init`](#connection-init) | `P⇒T` | Tracking tables only | Create the tracking tables and their schema name (prints the script; --apply runs it) |
@@ -297,6 +302,92 @@ Usage: `dbdatabuild project show plan [plan] [options]`
 | Option | Meaning |
 |---|---|
 | `--connection` `<text>` | When listing, only the plans of this connection |
+| `--project` `<path>` | Project root |
+
+## project file list
+
+List the files of the project (or of a folder in it) with their size and content hash; the way a console or an agent sees the tree.
+
+Effect: Offline only. Reads and writes: `P→`.
+
+Usage: `dbdatabuild project file list [folder] [options]`
+
+| Argument | Meaning |
+|---|---|
+| `folder` | A folder of the project to list (default: the whole project; .git, .dbdatabuild, bin, obj and node_modules are left out) |
+
+| Option | Meaning |
+|---|---|
+| `--project` `<path>` | Project root |
+
+## project file read
+
+Print one text file of the project with its content hash (confined to the project tree).
+
+Effect: Offline only. Reads and writes: `P→`.
+
+Usage: `dbdatabuild project file read <path> [options]`
+
+| Argument | Meaning |
+|---|---|
+| `path` | The file, relative to the project root |
+
+| Option | Meaning |
+|---|---|
+| `--project` `<path>` | Project root |
+
+## project file write
+
+Write one text file of the project: --expect-hash names the version the change is based on and a different one is refused, --create is for a file that does not exist yet.
+
+Effect: Repo files only (no target connection). Reads and writes: `P⇒P`.
+
+Usage: `dbdatabuild project file write <path> [options]`
+
+| Argument | Meaning |
+|---|---|
+| `path` | The file, relative to the project root |
+
+| Option | Meaning |
+|---|---|
+| `--content` `<text>` | The new text of the file (default: read it from standard input) |
+| `--create` | The file must not exist yet (instead of --expect-hash); missing folders are created |
+| `--expect-hash` `<text>` | The hash of the version this change is based on (from project file read or list); a different current content is refused |
+| `--project` `<path>` | Project root |
+
+## project file move
+
+Move or rename one file of the project; --expect-hash names the version moved, and a destination that exists is refused.
+
+Effect: Repo files only (no target connection). Reads and writes: `P⇒P`.
+
+Usage: `dbdatabuild project file move <from> <to> [options]`
+
+| Argument | Meaning |
+|---|---|
+| `from` | The file, relative to the project root |
+| `to` | Where it goes, relative to the project root (must not exist) |
+
+| Option | Meaning |
+|---|---|
+| `--expect-hash` `<text>` | The hash of the version being moved (from project file read or list); required |
+| `--project` `<path>` | Project root |
+
+## project file delete
+
+Delete one file of the project; --expect-hash names the version deleted.
+
+Effect: Repo files only (no target connection). Reads and writes: `P⇒P`.
+
+Usage: `dbdatabuild project file delete <path> [options]`
+
+| Argument | Meaning |
+|---|---|
+| `path` | The file, relative to the project root |
+
+| Option | Meaning |
+|---|---|
+| `--expect-hash` `<text>` | The hash of the version being deleted (from project file read or list); required |
 | `--project` `<path>` | Project root |
 
 ## project agent-kit

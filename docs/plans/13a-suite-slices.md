@@ -263,7 +263,7 @@ no ClrKernel (D10).
 
 | # | Slice | Needs | Size | Done when |
 | --- | --- | --- | --- | --- |
-| W01 | `project file list|read|write|move|delete`, confined to the project tree, with content hashes | C01 | M | tests: path escapes refused, stale hash refused; mutation tests over every file it parses |
+| W01 | `project file list|read|write|move|delete`, confined to the project tree, with content hashes | C01 | M | tests: path escapes refused, stale hash refused; mutation tests over every file it parses | **Status: done** (branch `suite/w01-project-file-commands`). The five commands, three diagnostics (DDB-470 path, DDB-471 stale hash, DDB-472 unusable file), output schemas, skill and command reference; progress entry 181 in `DbDataBuild/docs/progress/state-and-apply.md`. The commands only move text and parse nothing, so there are no mutation tests of their own; the loaders that read what they write keep theirs
 | W02 | Workspaces: a git worktree per user on the Build server; list, create, abandon | R02, W01 | M | tests: a draft does not change what a scheduled run reads |
 | W03 | A long-lived child process per workspace (warm DuckDB and parser) | W02 | M | compile of a changed model under a set time on the template projects (measured in CI) |
 | W04 | Console: file tree and the SQL editor with diagnostics as markers | W02, R07 | M | Playwright: edit a model, see a diagnostic, fix it |
