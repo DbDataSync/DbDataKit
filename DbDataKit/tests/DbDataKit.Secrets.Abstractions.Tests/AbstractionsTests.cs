@@ -9,7 +9,6 @@ public class SecretRefTests
     [InlineData("env:MY_VAR", SecretRefKind.Env, "MY_VAR")]
     [InlineData("file:/run/secrets/x", SecretRefKind.File, "/run/secrets/x")]
     [InlineData("file:C:\\s\\x.txt", SecretRefKind.File, "C:\\s\\x.txt")]
-    [InlineData("keyring:svc/item", SecretRefKind.Keyring, "svc/item")]
     [InlineData("dpapi:AQAAANCM", SecretRefKind.Dpapi, "AQAAANCM")]
     [InlineData("  ENV:Upper ", SecretRefKind.Env, "Upper")]
     public void Parses(string text, SecretRefKind kind, string target)
@@ -23,9 +22,6 @@ public class SecretRefTests
     [InlineData("")]
     [InlineData("plain")]
     [InlineData("env:")]
-    [InlineData("keyring:noslash")]
-    [InlineData("keyring:/x")]
-    [InlineData("keyring:x/")]
     [InlineData("azkv:vault/x")]
     public void Rejects(string text)
     {
@@ -35,13 +31,11 @@ public class SecretRefTests
     }
 
     [Fact]
-    public void KeyringParts_RoundTrip_AndAuditElidesBlob()
+    public void AuditElidesAnInlineBlob_AndTheOldKeyringSchemeIsGone()
     {
-        var k = SecretRef.Parse("keyring:svc/a/b");
-        Assert.Equal("svc", k.Service);
-        Assert.Equal("a/b", k.Item);
-        Assert.Equal("keyring:svc/a/b", k.ToString());
         Assert.Equal("dpapi:<blob>", SecretRef.Parse("dpapi:AAAA").ToAuditString());
+        Assert.False(SecretRef.TryParse("keyring:svc/item", out _, out var error));          // no OS keychain (plan 13, D10)
+        Assert.Contains("expected secret:, env:, file: or dpapi:", error);
     }
 }
 

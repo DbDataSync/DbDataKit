@@ -50,6 +50,6 @@ public static class Env
     public static SecretResolverChain Chain(Dictionary<string, string> vars)
     {
         Func<string, string?> env = k => vars.TryGetValue(k, out var v) ? v : null;
-        return new SecretResolverChain([new EnvSecretProvider(env), new LegacyEnvProvider(env)]);
+        return new SecretResolverChain([new EnvSecretProvider(env)]);
     }
 }

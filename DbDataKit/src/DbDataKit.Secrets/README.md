@@ -1,5 +1,9 @@
 # DbDataKit.Secrets
 
+> **Where secrets live.** `secret:<name>` references are answered by the encrypted store in [`DbDataKit.Secrets.Store`](../DbDataKit.Secrets.Store/README.md) (a file, `secrets.yaml`, whose values are encrypted with a key kept
+> separately: DPAPI on Windows, a permission-restricted file elsewhere, or a key the platform provides). Back up that key apart from the file; either alone is useless. To move a server use `secret export` and `secret import` (commands in
+> [`DbDataKit.Secrets.Cli`](../DbDataKit.Secrets.Cli/README.md)), never a copy of the key. The providers below answer what the store does not have.
+
 Runtime for Plan 02. Depends on `DbDataKit.Secrets.Abstractions`.
 
 ## Public contract
@@ -10,9 +14,8 @@ Runtime for Plan 02. Depends on `DbDataKit.Secrets.Abstractions`.
 - `FileSecretProvider`: `file:<path>`, contents trimmed, `MaxBytes` (default 64 KiB; oversize throws, missing is null).
   Optional `SecretsDirectory` makes `secret:<name>` resolve to `<dir>/<name with ':' -> '_'>` (systemd
   `$CREDENTIALS_DIRECTORY`, Docker `/run/secrets`); traversal is refused.
-- `LegacyEnvProvider`: compatibility rules (configurable list of `EnvMapping`):
-  Build `dbdata:build:connection:<conn>:<read|write>` -> `DBDATABUILD_<CONN>_<READ|WRITE>` (whole connection string);
-  Sync `<anything>` -> `DBDATASYNC_SECRET_<REF sanitised>`.
+- The encrypted store that answers `secret:<name>` first is in `DbDataKit.Secrets.Store` (`EncryptedFileSecretStore`); the `secret` commands are in `DbDataKit.Secrets.Cli`.
+  (`LegacyEnvProvider`, which mapped Build's `DBDATABUILD_*` and Sync's `DBDATASYNC_SECRET_*` variables, is gone: plan 13, a clean break.)
 - `Redactor`: exact value + URL-encoded (both `EscapeDataString` and `UrlEncode`), base64 (UTF-8), JSON-escaped variants,
   longest first; always scrubs `Password=...`-style fragments and URL user-info. Values shorter than `MinLength` (3) are ignored.
 - `DelegateSecretAudit`, `PasswordHasher` (`PBKDF2-SHA256$iter$salt$hash`, fixed-time compare, `NeedsRehash`).

@@ -264,8 +264,32 @@ Configuration values that are secrets can be references instead of literals (sha
 |---|---|
 | `env:NAME` | the environment variable `NAME` |
 | `file:C:\secrets\erp.txt` | the file's contents, trimmed (Docker/Kubernetes secrets, systemd `LoadCredential`) |
-| `secret:dbdata:proxy:datasource:erp` | environment variable `DBDATA_SECRET_DBDATA_PROXY_DATASOURCE_ERP`; or, when `$CREDENTIALS_DIRECTORY` is set, the file `dbdata_proxy_datasource_erp` in it; or, on Windows, `<DataDirectory>\secrets\dbdata~proxy~datasource~erp.secret` (DPAPI) |
-| `dpapi:<base64>` | an inline DPAPI blob (Windows, machine scope). Create one with `DbDataProxy protect-secret` |
+| `secret:dbdata:proxy:datasource:erp:password` | the **encrypted secret store** of this installation, `<DataDirectory>/secrets/secrets.yaml` (set with `DbDataProxy secret set`, below); a name the store does not have falls through to the environment variable `DBDATA_SECRET_DBDATA_PROXY_DATASOURCE_ERP_PASSWORD`, then, when `$CREDENTIALS_DIRECTORY` is set, to the file `dbdata_proxy_datasource_erp_password` in it |
+| `dpapi:<base64>` | an inline DPAPI blob (Windows, machine scope), for one field where a store is not wanted. Create one with `DbDataProxy secret protect` (or `protect-secret`) |
+
+#### The secret store
+
+`secret:` names live in an encrypted file, `<DataDirectory>/secrets/secrets.yaml`: every value AES-256-GCM, with the secret's name as associated data (a value copied to another name does not decrypt),
+outside any git-tracked configuration. The key is separate from the file:
+
+* **Windows**: protected by DPAPI (machine scope, product entropy) in `<DataDirectory>\secrets\keys`, the directory restricted to the service account, SYSTEM and Administrators.
+* **Linux and macOS**: a file in `<DataDirectory>/secrets/keys` that only its owner can read (mode 0600 in a 0700 directory, owned by the user the proxy runs as). **The proxy refuses to start if that file or directory can be reached by anyone else** (the way ssh refuses a private key), and says which `chmod` fixes it.
+* **From outside**: `Proxy:Secrets:KeyFile` (or the environment variable `DBDATA_SECRETS_KEY_FILE`) names a key the platform provides: a Docker or Kubernetes secret, a systemd credential; 32 raw bytes, or base64 or hex text. Images never contain a key.
+
+The first start makes the key. **Back up the key separately from `secrets.yaml`: either one alone is useless.** A DPAPI key cannot be copied to another machine; to move a server, `secret export` and `secret import`.
+
+```
+DbDataProxy secret set dbdata:proxy:datasource:erp:password    # the value from a hidden prompt, or piped on stdin; never the command line
+DbDataProxy secret list [prefix]                               # names, when each was written, the key it uses; never values
+DbDataProxy secret check                                       # every secret reference in the settings resolves? (exit 1 if not)
+DbDataProxy secret delete <name>
+DbDataProxy secret rotate-key                                  # a new key; every value encrypted again under it; the old key deleted
+DbDataProxy secret export backup.yaml                          # to move a server: encrypted under a passphrase (PBKDF2-SHA256, 600,000 rounds)
+DbDataProxy secret import backup.yaml [--overwrite]
+DbDataProxy secret protect                                     # Windows: an inline dpapi: value for one field
+```
+
+No command prints a secret's value. The old per-secret DPAPI files (`secrets\dbdata~proxy~...secret`) are no longer read: set the values again.
 
 Where they work: a data source `ConnectionString` (the whole string, or just the value of a password key:
 `Server=SQL01;User Id=proxy_reader;Password=env:ERP_DB_PASSWORD`), `Proxy:Tls:CertificatePassword` and

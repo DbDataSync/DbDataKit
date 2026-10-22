@@ -42,28 +42,15 @@ public class LoginTests
     }
 
     [Fact]
-    public async Task Legacy_dbdatabuild_variables_are_found_through_the_secrets_legacy_provider()
-    {
-        var r = new LoginResolver(Env.Chain(new() { ["DBDATABUILD_WAREHOUSE_READ"] = "legacy-read", ["DBDATABUILD_WAREHOUSE_WRITE"] = "legacy-write" }), "build");
-        using var read = await r.ResolveAsync(Def(), LoginRole.Read);
-        using var write = await r.ResolveAsync(Def(), LoginRole.Write);
-        Assert.Equal("legacy-read", read!.ConnectionString!.RevealString());
-        Assert.Equal("legacy-write", write!.ConnectionString!.RevealString());
-    }
-
-    [Fact]
-    public async Task Legacy_refs_are_build_only()
-    {
-        var r = new LoginResolver(Env.Chain(new() { ["DBDATABUILD_WAREHOUSE_READ"] = "x" }), "proxy");
-        Assert.Null(await r.ResolveAsync(Def(), LoginRole.Read));
-    }
-
-    [Fact]
-    public async Task New_env_names_win_over_legacy()
+    public async Task The_old_DBDATABUILD_names_are_not_read()
     {
         var r = new LoginResolver(Env.Chain(new() { ["DBDATA_BUILD_WAREHOUSE_READ"] = "new", ["DBDATABUILD_WAREHOUSE_READ"] = "old" }), "build");
         using var login = await r.ResolveAsync(Def(), LoginRole.Read);
         Assert.Equal("new", login!.ConnectionString!.RevealString());
+
+        // and with only the old name set, nothing resolves
+        var onlyOld = new LoginResolver(Env.Chain(new() { ["DBDATABUILD_WAREHOUSE_READ"] = "old" }), "build");
+        Assert.Null(await onlyOld.ResolveAsync(Def(), LoginRole.Read));
     }
 
     [Fact]

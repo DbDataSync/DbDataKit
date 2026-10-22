@@ -45,6 +45,9 @@ public sealed class ProxyOptions
 
     public ListenOptions Listen { get; set; } = new();
     public TlsOptions Tls { get; set; } = new();
+
+    /// <summary>Where the encrypted secret store gets its key (<c>secret:</c> references).</summary>
+    public SecretsOptions Secrets { get; set; } = new();
     public CompressionOptions Compression { get; set; } = new();
     public AuthOptions Auth { get; set; } = new();
     public WorkerOptions Worker { get; set; } = new();
@@ -86,6 +89,16 @@ public enum TlsMode
     Store,
     /// <summary>Plain HTTP/2 without TLS. Credentials travel in clear text; only for local testing.</summary>
     None,
+}
+
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class SecretsOptions
+{
+    /// <summary>
+    /// A key file the platform provides (a Docker or Kubernetes secret, a systemd credential): 32 raw bytes, or the key as base64 or hex text. Empty (the default) keeps the key in
+    /// <c>&lt;DataDirectory&gt;/secrets/keys</c>, protected by DPAPI on Windows and by file permissions elsewhere. The environment variable <c>DBDATA_SECRETS_KEY_FILE</c> does the same.
+    /// </summary>
+    public string? KeyFile { get; set; }
 }
 
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
