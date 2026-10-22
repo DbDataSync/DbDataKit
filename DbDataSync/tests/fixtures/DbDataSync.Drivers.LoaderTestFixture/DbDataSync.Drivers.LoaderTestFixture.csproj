@@ -15,7 +15,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
     <ProjectReference Include="..\..\..\src\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />
   </ItemGroup>
 

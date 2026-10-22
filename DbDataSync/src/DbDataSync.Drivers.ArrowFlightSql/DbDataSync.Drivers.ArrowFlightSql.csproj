@@ -12,11 +12,11 @@
          it can name; Flight SQL is a set of managed packages (Apache.Arrow, Apache.Arrow.Flight,
          Grpc.*) with no factory, so it would need a multi-package catalog entry the installer has
          not been exercised with. See phase 197F's "Library packaging". -->
-    <PackageReference Include="Apache.Arrow.Flight.Sql" Version="23.0.0" />
+    <PackageReference Include="Apache.Arrow.Flight.Sql" />
     <!-- The LZ4 and Zstd codecs for Arrow's compressed record batches. Needed even though the Flight client
          is: its own DoGet reads batches without any codec, so a compressed one throws — see
          FlightDataReader, which reads DoGet itself so it can hand the codecs to Arrow's stream reader. -->
-    <PackageReference Include="Apache.Arrow.Compression" Version="23.0.0" />
+    <PackageReference Include="Apache.Arrow.Compression" />
   </ItemGroup>
 
   <ItemGroup>

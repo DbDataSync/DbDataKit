@@ -1,0 +1,24 @@
+{
+  "solution": {
+    "path": "../DbDataKit.slnx",
+    "projects": [
+      "DbDataBuild/spike/DbDataBuild.Spike/DbDataBuild.Spike.csproj",
+      "DbDataBuild/src/DbDataBuild.Apply/DbDataBuild.Apply.csproj",
+      "DbDataBuild/src/DbDataBuild.Cli/DbDataBuild.Cli.csproj",
+      "DbDataBuild/src/DbDataBuild.Core/DbDataBuild.Core.csproj",
+      "DbDataBuild/src/DbDataBuild.Define/DbDataBuild.Define.csproj",
+      "DbDataBuild/src/DbDataBuild.Execution/DbDataBuild.Execution.csproj",
+      "DbDataBuild/src/DbDataBuild.Lowering/DbDataBuild.Lowering.csproj",
+      "DbDataBuild/src/DbDataBuild.Models/DbDataBuild.Models.csproj",
+      "DbDataBuild/src/DbDataBuild.Planning/DbDataBuild.Planning.csproj",
+      "DbDataBuild/src/DbDataBuild.Sample/DbDataBuild.Sample.csproj",
+      "DbDataBuild/src/DbDataBuild.Sql/DbDataBuild.Sql.csproj",
+      "DbDataBuild/src/DbDataBuild.State/DbDataBuild.State.csproj",
+      "DbDataBuild/src/DbDataBuild.Targets.DuckDb/DbDataBuild.Targets.DuckDb.csproj",
+      "DbDataBuild/src/DbDataBuild.Targets/DbDataBuild.Targets.csproj",
+      "DbDataBuild/src/DbDataBuild.Tui/DbDataBuild.Tui.csproj",
+      "DbDataBuild/tests/DbDataBuild.Tests.Conformance/DbDataBuild.Tests.Conformance.csproj",
+      "DbDataBuild/tests/DbDataBuild.Tests.Unit/DbDataBuild.Tests.Unit.csproj"
+    ]
+  }
+}

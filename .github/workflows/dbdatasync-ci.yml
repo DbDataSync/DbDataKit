@@ -57,7 +57,7 @@ jobs:
           if [ -n "$base" ] && git rev-parse --verify --quiet "$base^{commit}" >/dev/null; then
             changed=$(git diff --name-only "$range")
             echo "changed in $range:"; echo "$changed"
-            echo "$changed" | grep -qE '^(DbDataSync/|DbDataKit/|\.github/workflows/(dbdatasync-|_))' || build=false
+            echo "$changed" | grep -qE '^(DbDataSync/|DbDataKit/|Directory\.(Build|Packages)\.props|global\.json|\.github/workflows/(dbdatasync-|_))' || build=false
           else
             echo "::notice::no base to compare with ($EVENT), so everything is treated as changed."
           fi
@@ -82,15 +82,15 @@ jobs:
           cache: true
           cache-dependency-path: "DbDataSync/**/*.csproj"
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore DbDataSync.slnf
       - name: Build
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build DbDataSync.slnf --no-restore --configuration Release
       - name: Test
         # Category=Integration tests need real database instances (SQL Server, Postgres, MySQL,
         # MariaDB, Oracle) — see the dotnet-integration job below, which brings up docker-compose.yml's
         # full topology (architecture/implementation/phase-7-e2e-validation.md, extended by phases
         # 153/154).
-        run: dotnet test --no-build --configuration Release --filter "Category!=Integration"
+        run: dotnet test DbDataSync.slnf --no-build --configuration Release --filter "Category!=Integration"
 
   # A real windows-latest runner for the `[WindowsOnlyFact]`-gated tests scattered across
   # DbDataSync.Cli.Tests/Api.Tests/Certificates.Tests (real icacls, the real Windows Event Log, the
@@ -115,15 +115,15 @@ jobs:
           cache: true
           cache-dependency-path: "DbDataSync/**/*.csproj"
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore DbDataSync.slnf
       - name: Build
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build DbDataSync.slnf --no-restore --configuration Release
       - name: Test
         # Plain `--logger trx`, deliberately without LogFileName: `dotnet test` on the solution runs each
         # test project separately, and a fixed name makes every one of them overwrite the last — the
         # first version of this step shipped that way and its artifact held one project's 207 results out
         # of the suite's ~1,500. The default name is per-project and timestamped, so they coexist.
-        run: dotnet test --no-build --configuration Release --filter "Category!=Integration" --logger trx --results-directory TestResults
+        run: dotnet test DbDataSync.slnf --no-build --configuration Release --filter "Category!=Integration" --logger trx --results-directory TestResults
       # The Windows service through the real Service Control Manager: install (twice), status, doctor, start, health, restart, stop,
       # uninstall, all via `dbdatasync service ...` (DbDataSync/tools/service-e2e.ps1). The unit tests cover the same flow against an
       # in-memory manager; this is the only place the real one is exercised.
@@ -188,14 +188,14 @@ jobs:
         # itself; no separate docker exec/sqlplus step needed any more.
         run: docker compose up -d --wait
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore DbDataSync.slnf
       - name: Build
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build DbDataSync.slnf --no-restore --configuration Release
       - name: Test (Integration)
         # Same topology as docker-compose.yml (SQL Server source: 14330, target: 14331; Postgres:
         # 15432; MySQL: 13306; MariaDB: 13307; Oracle: 15210) because it *is* docker-compose.yml now —
         # the tests' localhost-based defaults work unchanged in CI.
-        run: dotnet test --no-build --configuration Release --filter "Category=Integration"
+        run: dotnet test DbDataSync.slnf --no-build --configuration Release --filter "Category=Integration"
 
   web:
     needs: changes

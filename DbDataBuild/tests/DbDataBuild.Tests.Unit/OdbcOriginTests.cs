@@ -98,7 +98,9 @@ public class OdbcOriginTests
     {
         var source = new RecordingSource();
         var session = ReadSession.ForTesting(source, "odbc");
+        #pragma warning disable xUnit1031 // the test blocks on purpose
         session.QueryAsync("SELECT id FROM t WHERE a = ? AND (b = ? OR c = ?)", [new("a", DbType.String, "x"), new("b", DbType.String, "y"), new("a", DbType.String, "x")]).GetAwaiter().GetResult();
+        #pragma warning restore xUnit1031
         Assert.Equal(["x", "y", "x"], source.Last!.Select(p => p.Value).ToArray());
         Assert.Equal("ansi", session.Dialect.Name);
         Assert.Equal(DialectProfiles.Ansi.Catalog, session.Dialect.Catalog);

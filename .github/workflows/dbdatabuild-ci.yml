@@ -60,7 +60,7 @@ jobs:
           if [ -n "$base" ] && git rev-parse --verify --quiet "$base^{commit}" >/dev/null; then
             changed=$(git diff --name-only "$range")
             echo "changed in $range:"; echo "$changed"
-            echo "$changed" | grep -qE '^(DbDataBuild/|testenv/|\.github/workflows/(dbdatabuild-|_))' || build=false
+            echo "$changed" | grep -qE '^(DbDataBuild/|DbDataKit/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/workflows/(dbdatabuild-|_))' || build=false
           else
             echo "::notice::no base to compare with ($EVENT), so everything is treated as changed."
           fi
@@ -87,13 +87,13 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
-          global-json-file: DbDataBuild/global.json
+          global-json-file: global.json
       - name: Prebuilt polyglot library
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/fetch-native.sh
-      - run: dotnet build -c Release
+      - run: dotnet build DbDataBuild.slnf -c Release
       - run: dotnet test tests/DbDataBuild.Tests.Unit -c Release --no-build
 
   # The conformance suite against real engines, in groups that run side by side (each starts only the engines it needs): `quick` is
@@ -116,12 +116,12 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
-          global-json-file: DbDataBuild/global.json
+          global-json-file: global.json
       - name: Prebuilt polyglot library
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/fetch-native.sh
-      - run: dotnet build -c Release
+      - run: dotnet build DbDataBuild.slnf -c Release
       - name: Start the engines
         run: scripts/test-engines.sh up ${{ matrix.engines }}
       - name: Conformance tests
@@ -153,12 +153,12 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
-          global-json-file: DbDataBuild/global.json
+          global-json-file: global.json
       - name: Prebuilt polyglot library
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/fetch-native.sh
-      - run: dotnet build -c Release
+      - run: dotnet build DbDataBuild.slnf -c Release
       - name: Start the engines
         run: scripts/test-engines.sh up ${{ matrix.engines }}
       - name: Conformance tests

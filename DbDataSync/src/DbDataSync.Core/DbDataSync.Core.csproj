@@ -7,9 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ClrKernel.Core.Secrets" Version="0.11.0" />
-    <PackageReference Include="LibGit2Sharp" Version="0.32.0" />
-    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+    <PackageReference Include="ClrKernel.Core.Secrets" />
+    <PackageReference Include="LibGit2Sharp" />
+    <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 
 </Project>

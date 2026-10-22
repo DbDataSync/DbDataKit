@@ -338,7 +338,7 @@ public class RefreshParallelTests
     {
         var diags = new List<Diagnostic>();
         var config = ProjectConfigLoader.Load("connections:\n  shop: { engine: postgres, max_parallel: 3 }\n  hq: { engine: sqlserver }\n", "dbdatabuild.yml", diags);
-        Assert.Empty(diags.Where(d => d.Severity == Severity.Error));
+        Assert.DoesNotContain(diags, d => d.Severity == Severity.Error);
         Assert.Equal(3, config!.Connections["shop"].MaxParallel);
         Assert.Null(config.Connections["hq"].MaxParallel);
         foreach (var bad in new[] { "0", "65", "many", "-1", "1.5" })

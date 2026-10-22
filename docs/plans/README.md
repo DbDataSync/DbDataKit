@@ -1,6 +1,6 @@
 # Implementation Plans: Shared Modules
 
-Plans for extracting shared code into `DbDataKit/DbDataKit/`, derived from `docs/review/`. Each plan lists the
+Plans for extracting shared code into `DbDataKit/DbDataKit/`, derived from the code review (`docs/security-review.md` and the products' reviews: `DbDataSync/architecture/review.md`, `DbDataProxy/docs/review.md`, `DbDataBuild/docs/review.md`). Each plan lists the
 current state per product (with file references from the review), design, package layout, phases with exit
 criteria, risks and acceptance. Plans are proposals; review the "decisions" in each before starting.
 
@@ -18,6 +18,9 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 09 | [Monorepo branching, CI, releases](09-MONOREPO-BRANCHING-AND-RELEASES.md) | DbDataSync model, per-product lanes | Per-product dev/test, main as integration |
 | 10 | [Proxy adoption](10-proxy-adoption.md) | Plans 01-07 applied to DbDataProxy | Hub CI and publishing, feed and override, per-library adoption order (update system skipped) |
 | 11 | [CI and testing](11-ci-and-testing.md) | Three products plus the shared libraries, their test setups | One engine catalogue, shared workflows, Linux and Windows split, nightly full matrix |
+| 12 | [Shared TLS rollout](12-shared-tls-rollout.md) | Sync and Proxy certificates, services, systemd | One certificate, service and unit implementation |
+| 13 | [Suite standardization](13-suite-standardization.md) | Adoption state of plans 01-12, DuckDB 2.0, Sync scripting | dbdatakit console, product servers with no UI of their own, console-to-server trust, one grammar, shared scheduling, Build authoring; DuckDB 2.0; dotnet-script |
+| 13a | [Suite slices](13a-suite-slices.md) | Plan 13 | About 150 small pull requests with a test each, grouped into milestones, each naming the decision it waits on |
 
 ## Dependency graph
 
@@ -47,4 +50,4 @@ Parallelisable: 01, 02 and 05 have no dependencies on each other; 03 and 04 can 
 - Each package ships a README with the API contract; consumers should not need to read internals (agent-friendly).
 - Strangler migration: adapters in products first, delete duplicates only after parity tests; never a big-bang rewrite.
 - Each plan's conformance/golden tests live with the package and run in the hub's `contract.yml` against all three products.
-- Security acceptance criteria in each plan map to `docs/review/SECURITY.md` findings and are verified by tests, not review alone.
+- Security acceptance criteria in each plan map to `docs/security-review.md` findings and are verified by tests, not review alone.

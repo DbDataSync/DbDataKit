@@ -8,15 +8,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" Version="6.0.4" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
-    <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
     <!-- Phase 109h: DbDataSync.Drivers.Oracle.csproj's own PackageReference excludes runtime assets (it
          compiles against the reference assembly but does not ship the DLL) — see that project's
          identical comment. This test project needs its own, un-excluded, direct reference so a
          standalone `dotnet test` run here has a real local copy to actually connect with. -->
-    <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.9.1" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" VersionOverride="23.9.1" />
   </ItemGroup>
 
   <ItemGroup>

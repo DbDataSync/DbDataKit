@@ -1,0 +1,8 @@
+<Project>
+  <!-- the third-party versions are in the root Directory.Packages.props -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Packages.props', '$(MSBuildThisFileDirectory)../'))" />
+  <ItemGroup>
+    <!-- the shared libraries Build takes as packages when UseLocalDbDataKit is off (see Directory.Build.targets) -->
+    <PackageVersion Include="DbDataKit.Dialect.Abstractions" Version="$(DbDataKitVersion)" />
+  </ItemGroup>
+</Project>

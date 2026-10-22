@@ -1,0 +1,11 @@
+{
+  "solution": {
+    "path": "../DbDataKit.slnx",
+    "projects": [
+      "DbDataProxy/src/DbDataProxy.Core/DbDataProxy.Core.csproj",
+      "DbDataProxy/src/DbDataProxy.Server/DbDataProxy.Server.csproj",
+      "DbDataProxy/src/DbDataProxy.Worker/DbDataProxy.Worker.csproj",
+      "DbDataProxy/tests/DbDataProxy.Tests/DbDataProxy.Tests.csproj"
+    ]
+  }
+}

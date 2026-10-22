@@ -54,7 +54,7 @@ jobs:
           if [ -n "$base" ] && git rev-parse --verify --quiet "$base^{commit}" >/dev/null; then
             changed=$(git diff --name-only "$range")
             echo "changed in $range:"; echo "$changed"
-            echo "$changed" | grep -qE '^(DbDataProxy/|DbDataKit/|testenv/|\.github/workflows/(dbdataproxy-|_))' || build=false
+            echo "$changed" | grep -qE '^(DbDataProxy/|DbDataKit/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/workflows/(dbdataproxy-|_))' || build=false
           else
             echo "::notice::no base to compare with ($EVENT), so everything is treated as changed."
           fi
@@ -73,7 +73,7 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: DbDataProxy/global.json
-      - run: dotnet build -c Release
+      - run: dotnet build DbDataProxy.slnf -c Release
       - run: dotnet test --project tests/DbDataProxy.Tests -c Release --no-build --minimum-expected-tests 100
       - name: Package (smoke test)
         run: ./build/package.ps1 -Version 0.0.0-ci
@@ -107,7 +107,7 @@ jobs:
           sudo dpkg -i packages-microsoft-prod.deb
           sudo apt-get update
           sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
-      - run: dotnet build -c Release
+      - run: dotnet build DbDataProxy.slnf -c Release
       - run: dotnet test --project tests/DbDataProxy.Tests -c Release --no-build --minimum-expected-tests 100
       - name: Stop the shared engines
         if: always()

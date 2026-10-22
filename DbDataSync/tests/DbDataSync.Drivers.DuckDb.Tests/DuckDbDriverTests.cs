@@ -53,18 +53,18 @@ public sealed class DuckDbDriverTests
     /// <c>DuckDBConnection</c> takes ADO.NET syntax and throws on one. The driver reads the obvious
     /// meaning rather than bouncing back a syntax error about a syntax nobody mentioned.
     /// <para>
-    /// The expected values are lower-cased because every form goes out through
+    /// The expected values use the key spelling the builder emits (<c>DataSource</c>; DuckDB.NET 1.5.5 wrote <c>data source</c>) because every form goes out through
     /// <c>DuckDBConnectionStringBuilder</c>, which canonicalizes the key — including the one built
     /// from the <c>InMemory</c> default, so there is one output shape rather than two that differ by
     /// which branch produced them.
     /// </para>
     /// </summary>
     [Theory]
-    [InlineData(null, "data source=:memory:")]
-    [InlineData("", "data source=:memory:")]
-    [InlineData(":memory:", "data source=:memory:")]
-    [InlineData("/var/lib/warehouse.duckdb", "data source=/var/lib/warehouse.duckdb")]
-    [InlineData("Data Source=/var/lib/warehouse.duckdb", "data source=/var/lib/warehouse.duckdb")]
+    [InlineData(null, "DataSource=:memory:")]
+    [InlineData("", "DataSource=:memory:")]
+    [InlineData(":memory:", "DataSource=:memory:")]
+    [InlineData("/var/lib/warehouse.duckdb", "DataSource=/var/lib/warehouse.duckdb")]
+    [InlineData("Data Source=/var/lib/warehouse.duckdb", "DataSource=/var/lib/warehouse.duckdb")]
     public void ConnectionString_NormalizesABarePathAndDefaultsToInMemory(string? configured, string expected)
     {
         Assert.Equal(expected, DuckDbDriver.BuildConnectionString(Config(configured)));

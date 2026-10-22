@@ -1,7 +1,7 @@
 # Security Findings (consolidated)
 
 Static review only; nothing was built or run, and dependency vulnerability scans were not performed.
-Severities are the reviewers'. Evidence and remediation per finding are in `detail/<repo>.md`. Two High
+Severities are the reviewers'. Evidence and remediation per finding are in the product's review (`DbDataSync/architecture/review.md`, `DbDataProxy/docs/review.md`, `DbDataBuild/docs/review.md`). Two High
 findings were spot-checked: `DbDataSync/src/DbDataSync.Libraries/LibraryInstaller.cs:199` interpolates
 `p.Id`/`p.Version` directly into a generated `<PackageReference>`; `DbDataProxy` gates `AllowWrites` in
 `ProxyFlightServer.cs:179`.

@@ -1,4 +1,7 @@
 <Project>
+  <!-- the settings shared by every product -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
 
   <!-- Applied to every project, so `dotnet test` picks it up with no argument to remember. -->
   <PropertyGroup>
@@ -6,6 +9,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <!-- Monorepo layout: DbDataSync/ and DbDataKit/ (the shared libraries) are sibling folders at the repository root. -->
     <DbDataKitRoot Condition="'$(DbDataKitRoot)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', 'DbDataKit'))</DbDataKitRoot>
     <DbDataKitRoot>$([MSBuild]::EnsureTrailingSlash('$(DbDataKitRoot)'))</DbDataKitRoot>

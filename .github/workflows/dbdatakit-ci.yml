@@ -11,6 +11,9 @@ on:
     paths:
       - "DbDataKit/**"
       - "testenv/**"
+      - "Directory.Build.props"
+      - "Directory.Packages.props"
+      - "global.json"
       - ".github/workflows/dbdatakit-ci.yml"
       - ".github/workflows/_dbdatakit.yml"
   push:
@@ -18,6 +21,9 @@ on:
     paths:
       - "DbDataKit/**"
       - "testenv/**"
+      - "Directory.Build.props"
+      - "Directory.Packages.props"
+      - "global.json"
       - ".github/workflows/dbdatakit-ci.yml"
       - ".github/workflows/_dbdatakit.yml"
   workflow_dispatch:

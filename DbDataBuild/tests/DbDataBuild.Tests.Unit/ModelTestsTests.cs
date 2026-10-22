@@ -59,7 +59,7 @@ public class ModelTestsTests
         Assert.Equal(["critical", "orders"], t.Tags);
         Assert.Equal(["one", "two", "three"], t.Cases.Select(c => c.Name));
         var rows = t.Cases[0].Given.Single().Rows;
-        Assert.Equal(["null", null, null], [rows[0].Values["note"].Text, rows[1].Values["note"].Text, rows[2].Values["note"].Text]);   // quoted "null" is text; plain null, ~ and nothing are NULL
+        Assert.Equal(new string?[] { "null", null, null }, new string?[] { rows[0].Values["note"].Text, rows[1].Values["note"].Text, rows[2].Values["note"].Text });   // quoted "null" is text; plain null, ~ and nothing are NULL
         Assert.Equal("10.00", rows[0].Values["amount"].Text);
         Assert.Null(rows[1].Values["amount"].Text);
         Assert.True(t.Cases[0].Ordered);

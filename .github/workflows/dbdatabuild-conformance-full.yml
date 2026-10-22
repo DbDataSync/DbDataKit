@@ -56,7 +56,7 @@ jobs:
           ref: ${{ inputs.ref }}
       - uses: actions/setup-dotnet@v6
         with:
-          global-json-file: DbDataBuild/global.json
+          global-json-file: global.json
       - name: Prebuilt polyglot library
         env:
           GH_TOKEN: ${{ github.token }}
