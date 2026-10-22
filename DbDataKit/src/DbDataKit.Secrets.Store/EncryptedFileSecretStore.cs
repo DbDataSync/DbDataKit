@@ -32,7 +32,7 @@ public sealed record SecretInfo(SecretName Name, DateTimeOffset Updated, string 
 /// another name does not decrypt. The data key comes from an <see cref="IKeySource"/> (a key ring, or a key the platform provides); the key id is kept beside each value so keys can be rotated.
 /// Writes go to a restricted temporary file that replaces the store atomically, under a lock that holds across processes. It answers <c>secret:</c> references in the resolver chain.
 /// </summary>
-public sealed class EncryptedFileSecretStore : ISecretStore, ISecretProvider
+public sealed partial class EncryptedFileSecretStore : ISecretStore, ISecretProvider
 {
     public const string FileName = "secrets.yaml";
     private const int NonceLength = 12, TagLength = 16;
