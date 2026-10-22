@@ -428,7 +428,7 @@ public static class ProjectConfigLoader
 
         /// <summary>
         /// `connections:` maps names to `{ engine, version }`. A connection named after an engine needs no entry (and may only be declared with that engine, to set its version); any other name needs `engine`.
-        /// Names become the environment variables of the logins (`DBDATABUILD_&lt;NAME&gt;_READ`), so they are letters, digits and underscores, and two names that differ only in case would share one.
+        /// Names become the environment variables of the logins (`DBDATA_BUILD_&lt;NAME&gt;_READ`), so they are letters, digits and underscores, and two names that differ only in case would share one.
         /// </summary>
         private Dictionary<string, ConnectionConfig> ReadConnections(YamlMapping top, IReadOnlyDictionary<string, DialectProfile> dialects)
         {
@@ -443,7 +443,7 @@ public static class ProjectConfigLoader
                 if (!System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z][A-Za-z0-9_]*$"))
                 { Add(DiagnosticCatalog.InvalidValue, e.Key, $"`{name}` is not a valid connection name.", "Letters, digits and underscores, starting with a letter: the name is part of the login's environment variable."); continue; }
                 if (upper.TryGetValue(name.ToUpperInvariant(), out var other))
-                { Add(DiagnosticCatalog.DuplicateKey, e.Key, $"The connection names `{other}` and `{name}` differ only in case and would share the login variable `DBDATABUILD_{name.ToUpperInvariant()}_READ`."); continue; }
+                { Add(DiagnosticCatalog.DuplicateKey, e.Key, $"The connection names `{other}` and `{name}` differ only in case and would share the login variable `DBDATA_BUILD_{name.ToUpperInvariant()}_READ`."); continue; }
                 upper[name.ToUpperInvariant()] = name;
                 if (e.Value is not YamlMapping settings) { Add(DiagnosticCatalog.InvalidValue, e.Value, $"`connections.{name}` must be a mapping (for example `{{ engine: postgres }}`)."); continue; }
                 CheckKeys(settings, ConnectionKeys, $"`connections.{name}`");

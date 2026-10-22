@@ -26,7 +26,7 @@ public partial class CentralTrackingConformanceTests
         public string Dir => dir;
 
         // sqlserver is the data connection, postgres keeps the records
-        public string? Env(string v) => v is "DBDATABUILD_SQLSERVER_READ" or "DBDATABUILD_SQLSERVER_WRITE" ? data.ConnectionString : v is "DBDATABUILD_POSTGRES_READ" or "DBDATABUILD_POSTGRES_WRITE" ? tracking.ConnectionString : null;
+        public string? Env(string v) => v is "DBDATA_BUILD_SQLSERVER_READ" or "DBDATA_BUILD_SQLSERVER_WRITE" ? data.ConnectionString : v is "DBDATA_BUILD_POSTGRES_READ" or "DBDATA_BUILD_POSTGRES_WRITE" ? tracking.ConnectionString : null;
 
         public (int Exit, string Out, string Err) Cli(params string[] args)
         {

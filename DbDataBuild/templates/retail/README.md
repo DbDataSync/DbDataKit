@@ -48,7 +48,7 @@ is from a run of these commands against SQL Server 2022 (ids, times and hashes d
 
 - **Create the database case-sensitive**: `CREATE DATABASE retail COLLATE Latin1_General_100_CS_AS`. The project's string profile says text compares case-sensitively. In a database created with the server's
   default collation (`SQL_Latin1_General_CP1_CI_AS`) every command works, but `connection status` reports DDB-310 for `staging.orders.status`: a view column made of string literals takes the database's collation.
-- The logins are environment variables, one pair per connection: `DBDATABUILD_SQLSERVER_READ` for what reads and `DBDATABUILD_SQLSERVER_WRITE` for what writes
+- The logins are environment variables, one pair per connection: `DBDATA_BUILD_SQLSERVER_READ` for what reads and `DBDATA_BUILD_SQLSERVER_WRITE` for what writes
   (`Server=127.0.0.1,1433;User Id=...;Password=...;Database=retail;TrustServerCertificate=true`; for a trial the two may be the same login).
 
 **1. Compile, offline.** `dbdatabuild project compile` checks the project and writes `rendered/`: the lowered queries, one load script per model and connection, and the **load plans** of every load (`rendered/sqlserver/loads.yml`) and one file per **refresh plan** (`rendered/sqlserver/refresh/daily.yml`, `hourly.yml`: commit them, they document what the nightly and the hourly refresh run). The plans are declared in `dbdatabuild.yml` (`refresh.plans`); every mart is in `daily` because the folder file `models/marts/_dbdatabuild.yml` says so, and `fct_sales_lines` adds itself to `hourly` in its own file. `dbdatabuild project show refresh daily` reads one.
@@ -61,8 +61,8 @@ OK: 23 model(s) valid. 0 warning(s), 35 note(s).
 **2. Can the tool use the connection?** `dbdatabuild connection inspect sqlserver` connects with each login and says what is missing. It changes nothing.
 
 ```
-  read login    DBDATABUILD_SQLSERVER_READ: sa connects; Microsoft SQL Server 2022 (RTM-CU26) ...
-  write login   DBDATABUILD_SQLSERVER_WRITE: sa connects; ...; may create tables in the database
+  read login    DBDATA_BUILD_SQLSERVER_READ: sa connects; Microsoft SQL Server 2022 (RTM-CU26) ...
+  write login   DBDATA_BUILD_SQLSERVER_WRITE: sa connects; ...; may create tables in the database
   tracking      schema dbdatabuild on sqlserver: not there yet
   schema names  marts (missing: a deploy creates it), staging (missing: a deploy creates it)
 1 thing(s) in the way.

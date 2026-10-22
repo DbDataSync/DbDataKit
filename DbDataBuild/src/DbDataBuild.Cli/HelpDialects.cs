@@ -45,8 +45,8 @@ internal static class HelpDialects
           legacy:     { engine: readonly odbc ansi }
 
         # each connection has its own login; the proxy picks the system behind it from a header
-        #   DBDATABUILD_ERP_READ    = grpc+tls://proxy.example.com:8815;token_env=PROXY_TOKEN;header.x-datasource=erp
-        #   DBDATABUILD_SALES_READ  = grpc+tls://proxy.example.com:8815;token_env=PROXY_TOKEN;header.x-datasource=sales
+        #   DBDATA_BUILD_ERP_READ    = grpc+tls://proxy.example.com:8815;token_env=PROXY_TOKEN;header.x-datasource=erp
+        #   DBDATA_BUILD_SALES_READ  = grpc+tls://proxy.example.com:8815;token_env=PROXY_TOKEN;header.x-datasource=sales
         """;
 
     public static int Run(CommandSpec spec, TextWriter output)

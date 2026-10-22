@@ -141,8 +141,8 @@ public partial class AgentKitTests
             Assert.Equal(["ui", "mcp", "--project", "."], server["args"]!.AsArray().Select(a => (string)a!));
             var env = server["env"]!.AsObject().Select(p => p.Key).ToList();
             Assert.All(env, k => Assert.EndsWith("_READ", k));                    // the write login is never in the file
-            Assert.Contains("DBDATABUILD_POSTGRES_READ", env);
-            Assert.Equal("${DBDATABUILD_POSTGRES_READ:-}", (string)server["env"]!["DBDATABUILD_POSTGRES_READ"]!);       // a value comes from the environment, never from the file
+            Assert.Contains("DBDATA_BUILD_POSTGRES_READ", env);
+            Assert.Equal("${DBDATA_BUILD_POSTGRES_READ:-}", (string)server["env"]!["DBDATA_BUILD_POSTGRES_READ"]!);       // a value comes from the environment, never from the file
             Assert.DoesNotContain("--allow", File.ReadAllText(Path.Combine(dir, ".mcp.json")));                          // read-only
         }
         finally { Directory.Delete(dir, true); }

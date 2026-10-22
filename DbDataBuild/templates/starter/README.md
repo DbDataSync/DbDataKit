@@ -40,7 +40,7 @@ which fails a mart that has no title, description or `owner`. `models/marts/_dbd
 ## Trying it on a sandbox database
 
 The source tables are what `seeds/` generates, and `load-seeds` can put them in an empty SQL Server (or PostgreSQL) database you do not mind filling. The logins are environment variables
-(`DBDATABUILD_SQLSERVER_WRITE` for what writes, `DBDATABUILD_SQLSERVER_READ` for what reads; see the main documentation):
+(`DBDATA_BUILD_SQLSERVER_WRITE` for what writes, `DBDATA_BUILD_SQLSERVER_READ` for what reads; see the main documentation):
 
 ```
 dbdatabuild connection seed                 # shows what it would create and fill; connects to nothing

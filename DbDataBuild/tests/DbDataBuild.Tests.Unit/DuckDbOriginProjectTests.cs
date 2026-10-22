@@ -43,7 +43,7 @@ public class DuckDbOriginProjectTests : IDisposable
 
     private const string EventsModel = "name: src.events\nkind: mapped\nconnections=: [analytics]\ngrain: [id]\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n  - {name: day, type: DATE, nullable: false}\n  - {name: label, type: VARCHAR(20)}\n  - {name: amount, type: \"DECIMAL(18, 2)\"}\n";
 
-    private Func<string, string?> Env => v => v == "DBDATABUILD_ANALYTICS_READ" ? Db : v == "DBDATABUILD_LAKE_READ" ? ":memory:" : null;
+    private Func<string, string?> Env => v => v == "DBDATA_BUILD_ANALYTICS_READ" ? Db : v == "DBDATA_BUILD_LAKE_READ" ? ":memory:" : null;
 
     private (int Exit, string Out, string Err) Cli(params string[] args)
     {
@@ -67,7 +67,7 @@ public class DuckDbOriginProjectTests : IDisposable
         MakeDb(); Project();
         var r = Cli("connection", "inspect", "analytics");
         Assert.Contains("engine readonly duckdb", r.Out);
-        Assert.Contains("read login    DBDATABUILD_ANALYTICS_READ: default user connects; DuckDB v", r.Out);
+        Assert.Contains("read login    DBDATA_BUILD_ANALYTICS_READ: default user connects; DuckDB v", r.Out);
         Assert.Contains("write login   none: the connection is readonly", r.Out);
         Assert.DoesNotContain(Db, r.Out + r.Err);                                                  // the path is the login's value and is not printed
         var gone = Cli("connection", "inspect", "lake");                                          // `:memory:` answers too
@@ -103,7 +103,7 @@ public class DuckDbOriginProjectTests : IDisposable
         Assert.True(status.Exit is 0 or 1, status.Out + status.Err);
         Assert.DoesNotContain("DDB-455", status.Err);
         Assert.DoesNotContain("Exception", status.Out + status.Err);
-        Assert.Contains("login: DuckDB file, read-only (DBDATABUILD_ANALYTICS_READ)", status.Out);
+        Assert.Contains("login: DuckDB file, read-only (DBDATA_BUILD_ANALYTICS_READ)", status.Out);
         Assert.Contains("connections: analytics (readonly duckdb)", status.Out);
     }
 

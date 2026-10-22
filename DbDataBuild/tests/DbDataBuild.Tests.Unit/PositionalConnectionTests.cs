@@ -132,14 +132,14 @@ public class PositionalConnectionTests
     {
         var dir = Project(Two);
         var withConnection = Run("connection", "compare", "postgres", "staging.orders", "--against-schema", "dev", "--key", "order_id", "--project", dir);
-        Assert.Contains("DBDATABUILD_POSTGRES_READ", withConnection.Err + withConnection.Out);          // no login in this environment: it says whose
+        Assert.Contains("DBDATA_BUILD_POSTGRES_READ", withConnection.Err + withConnection.Out);          // no login in this environment: it says whose
         var tableOnly = Run("connection", "compare", "staging.orders", "--against-schema", "dev", "--key", "order_id", "--project", dir);
         Assert.Equal(CliApp.ExitUsage, tableOnly.Exit);                                                    // two default connections: it must be named
         Assert.Contains("A connection is required", tableOnly.Err);
 
         var one = Project(One);
         var viaDefault = Run("connection", "compare", "staging.orders", "--against-schema", "dev", "--key", "order_id", "--project", one);
-        Assert.Contains("DBDATABUILD_SQLSERVER_READ", viaDefault.Err + viaDefault.Out);
+        Assert.Contains("DBDATA_BUILD_SQLSERVER_READ", viaDefault.Err + viaDefault.Out);
         var none = Run("connection", "compare", "--project", one);
         Assert.Equal(CliApp.ExitUsage, none.Exit);
         Assert.Contains("The table to compare is required", none.Err);
@@ -150,12 +150,12 @@ public class PositionalConnectionTests
     {
         var dir = Project(Two);
         var named = Run("project", "import", "postgres", "staging.*", "--project", dir);
-        Assert.Contains("DBDATABUILD_POSTGRES_READ", named.Err + named.Out);
+        Assert.Contains("DBDATA_BUILD_POSTGRES_READ", named.Err + named.Out);
         var patternOnly = Run("project", "import", "staging.*", "--project", dir);
         Assert.Equal(CliApp.ExitUsage, patternOnly.Exit);
         var one = Project(One);
         var viaDefault = Run("project", "import", "staging.*", "--project", one);
-        Assert.Contains("DBDATABUILD_SQLSERVER_READ", viaDefault.Err + viaDefault.Out);
+        Assert.Contains("DBDATA_BUILD_SQLSERVER_READ", viaDefault.Err + viaDefault.Out);
     }
 
     [Fact]

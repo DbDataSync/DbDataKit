@@ -275,7 +275,7 @@
             ],
             "properties": {
               "origin": {
-                "description": "The connection the rows are read from (its read login, `DBDATABUILD_<NAME>_READ`).",
+                "description": "The connection the rows are read from (its read login, `DBDATA_BUILD_<NAME>_READ`).",
                 "type": "string",
                 "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
               },

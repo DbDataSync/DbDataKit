@@ -162,7 +162,7 @@ public partial class CopyConformanceTests
             var o = new StringWriter(); var e = new StringWriter();
             var exit = CliApp.Run(["connection", "deploy", "--apply-plan", planFile, "--project", pair.Dir], o, e, environment: v => v == LoginSettings.VariableName("sqlserver", Login.Read) || v == LoginSettings.VariableName("sqlserver", Login.Write) ? toEngine.ConnectionString : null);
             Assert.NotEqual(0, exit);
-            Assert.Contains("DBDATABUILD_POSTGRES_READ", e.ToString() + o.ToString());
+            Assert.Contains("DBDATA_BUILD_POSTGRES_READ", e.ToString() + o.ToString());
             Assert.Empty(await toEngine.RowsAsync("SELECT 1 FROM dst.items"));                                  // and nothing was copied
 
             // a decimal wider than the declared type cannot be held: the transfer stops, the destination table is not loaded
@@ -215,8 +215,8 @@ public partial class CopyConformanceTests
         await using var _17 = store17; await using var _18 = store18; await using var _wh = warehouse;
         var dir = Path.Combine(Path.GetTempPath(), "ddb-fanin-" + Guid.NewGuid().ToString("N"));
         string? Env(string v) =>
-            v == "DBDATABUILD_STORE_17_READ" ? store17.ConnectionString : v == "DBDATABUILD_STORE_18_READ" ? store18.ConnectionString
-            : v is "DBDATABUILD_SQLSERVER_READ" or "DBDATABUILD_SQLSERVER_WRITE" ? warehouse.ConnectionString : null;
+            v == "DBDATA_BUILD_STORE_17_READ" ? store17.ConnectionString : v == "DBDATA_BUILD_STORE_18_READ" ? store18.ConnectionString
+            : v is "DBDATA_BUILD_SQLSERVER_READ" or "DBDATA_BUILD_SQLSERVER_WRITE" ? warehouse.ConnectionString : null;
         (int Exit, string Out, string Err) Cli(params string[] args)
         {
             var o = new StringWriter(); var e = new StringWriter();
@@ -291,7 +291,7 @@ public partial class CopyConformanceTests
             var down = Cli("connection", "deploy", "sqlserver", "--write-plan");
             Ok(down, "plan before an origin goes away");
             var o = new StringWriter(); var e = new StringWriter();
-            var downExit = CliApp.Run(["connection", "deploy", "--apply-plan", PlanOf(down.Out), "--project", dir], o, e, environment: v => v == "DBDATABUILD_STORE_18_READ" ? null : Env(v));
+            var downExit = CliApp.Run(["connection", "deploy", "--apply-plan", PlanOf(down.Out), "--project", dir], o, e, environment: v => v == "DBDATA_BUILD_STORE_18_READ" ? null : Env(v));
             Assert.NotEqual(0, downExit);
             Assert.Contains("store_18", o.ToString() + e.ToString());
             Assert.Contains("7|017|70.00", await warehouse.RowsAsync("SELECT CAST(order_id AS VARCHAR(10)) + '|' + store_id + '|' + CAST(total AS VARCHAR(20)) FROM warehouse.orders"));
@@ -373,7 +373,7 @@ public partial class CopyConformanceTests
         var warehouseDb = "ddb_wh_" + Guid.NewGuid().ToString("N")[..8];
         var warehouse = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(server.ConnectionString) { InitialCatalog = warehouseDb }.ConnectionString;
         var dir = Path.Combine(Path.GetTempPath(), "ddb-built-origin-" + Guid.NewGuid().ToString("N"));
-        string? Env(string v) => v is "DBDATABUILD_ORIGIN_READ" or "DBDATABUILD_ORIGIN_WRITE" ? server.ConnectionString : v is "DBDATABUILD_WH_READ" or "DBDATABUILD_WH_WRITE" ? warehouse : null;
+        string? Env(string v) => v is "DBDATA_BUILD_ORIGIN_READ" or "DBDATA_BUILD_ORIGIN_WRITE" ? server.ConnectionString : v is "DBDATA_BUILD_WH_READ" or "DBDATA_BUILD_WH_WRITE" ? warehouse : null;
         (int Exit, string Out, string Err) Cli(params string[] args)
         {
             var o = new StringWriter(); var e = new StringWriter();

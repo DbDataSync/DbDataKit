@@ -92,7 +92,7 @@ public partial class NativeConformanceTests
         await origin.StartAsync(); await destination.StartAsync();
         await using var _o = origin; await using var _d = destination;
         var dir = Path.Combine(Path.GetTempPath(), "ddb-native-copy-" + Guid.NewGuid().ToString("N"));
-        string? Env(string v) => v == "DBDATABUILD_POSTGRES_READ" ? origin.ConnectionString : v is "DBDATABUILD_SQLSERVER_READ" or "DBDATABUILD_SQLSERVER_WRITE" ? destination.ConnectionString : null;
+        string? Env(string v) => v == "DBDATA_BUILD_POSTGRES_READ" ? origin.ConnectionString : v is "DBDATA_BUILD_SQLSERVER_READ" or "DBDATA_BUILD_SQLSERVER_WRITE" ? destination.ConnectionString : null;
         (int Exit, string Out, string Err) Cli(params string[] args)
         {
             var o = new StringWriter(); var e = new StringWriter();
@@ -254,7 +254,7 @@ public partial class NativeConformanceTests
         await engine.StartAsync();
         await using var _ = engine;
         var dir = Path.Combine(Path.GetTempPath(), "ddb-command-no-" + Guid.NewGuid().ToString("N"));
-        string? Env(string v) => v is "DBDATABUILD_SQLSERVER_READ" or "DBDATABUILD_SQLSERVER_WRITE" ? engine.ConnectionString : null;
+        string? Env(string v) => v is "DBDATA_BUILD_SQLSERVER_READ" or "DBDATA_BUILD_SQLSERVER_WRITE" ? engine.ConnectionString : null;
         try
         {
             Directory.CreateDirectory(Path.Combine(dir, "models", "src"));

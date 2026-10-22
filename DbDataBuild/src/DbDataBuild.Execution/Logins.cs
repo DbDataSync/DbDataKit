@@ -35,9 +35,9 @@ public sealed class LoginSettings
         Dialect = DialectProfiles.OfEngine(engine) ?? DialectProfiles.Ansi;
     }
 
-    /// <summary>`DBDATABUILD_SQLSERVER_READ`, `DBDATABUILD_WAREHOUSE_WRITE` and so on: the connection's name, in capitals.</summary>
+    /// <summary>`DBDATA_BUILD_SQLSERVER_READ`, `DBDATA_BUILD_WAREHOUSE_WRITE` and so on: the connection's name, in capitals.</summary>
     public static string VariableName(string connection, Login login) =>
-        $"{ProductInfo.Cli.ToUpperInvariant()}_{connection.ToUpperInvariant()}_{login.ToString().ToUpperInvariant()}";
+        $"DBDATA_BUILD_{connection.ToUpperInvariant()}_{login.ToString().ToUpperInvariant()}";
 
     /// <summary>Reads the login from the environment. There is deliberately no fallback from one login to the other.</summary>
     public static (LoginSettings? Settings, Diagnostic? Error) FromEnvironment(string connection, string engine, Login login, Func<string, string?>? env = null)

@@ -253,7 +253,7 @@ public class ReadOriginsTests
         Assert.Empty(asked);                                                                    // no _WRITE variable is read
         var (read, _) = LoginSettings.FromEnvironment(cfg.Connections["shop"], Login.Read, Env);
         Assert.True(read!.ReadOnly);
-        Assert.Equal("DBDATABUILD_SHOP_READ", read.Variable);
+        Assert.Equal("DBDATA_BUILD_SHOP_READ", read.Variable);
         var (warehouseWrite, none) = LoginSettings.FromEnvironment(cfg.Connections["warehouse"], Login.Write, Env);
         Assert.Null(none);
         Assert.False(warehouseWrite!.ReadOnly);
@@ -285,7 +285,7 @@ public class ReadOriginsTests
         Assert.Equal(0, Cli(["project", "create", "starter", dir]).Exit);
         var config = Path.Combine(dir, "dbdatabuild.yml");
         File.WriteAllText(config, File.ReadAllText(config).Replace("connections:\n  sqlserver:", "connections:\n  shop: { engine: readonly postgres }\n  sqlserver:"));
-        string? Env(string v) => v == "DBDATABUILD_SHOP_READ" ? "Host=127.0.0.1;Port=1;Username=x;Password=x;Timeout=1" : null;
+        string? Env(string v) => v == "DBDATA_BUILD_SHOP_READ" ? "Host=127.0.0.1;Port=1;Username=x;Password=x;Timeout=1" : null;
         foreach (var command in new[] { new[] { "connection", "deploy", "shop", "--write-plan" }, ["connection", "refresh", "shop"], ["connection", "seed", "shop"], ["connection", "init", "shop"], ["connection", "publish", "shop"] })
         {
             var r = Cli([.. command, "--project", dir], Env);
@@ -295,7 +295,7 @@ public class ReadOriginsTests
         var inspect = Cli(["connection", "inspect", "shop", "--project", dir], Env);
         Assert.Contains("engine readonly postgres", inspect.Out);
         Assert.Contains("write login   none: the connection is readonly, so no write login is read", inspect.Out);
-        Assert.DoesNotContain("DBDATABUILD_SHOP_WRITE", inspect.Out);
+        Assert.DoesNotContain("DBDATA_BUILD_SHOP_WRITE", inspect.Out);
     }
 
     // ---- parameters ----
