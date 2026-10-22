@@ -1,11 +1,9 @@
 ## Secrets (Plan 02)
 
-Implemented under `DbDataKit/`: `DbDataKit.Secrets.Abstractions`, `DbDataKit.Secrets`, `DbDataKit.Secrets.Windows`,
-`DbDataKit.Secrets.Keyring` (stub), `DbDataKit.Secrets.Cli`, each with tests in `DbDataKit/tests/`.
-Stubbed: no concrete OS-keyring backend (Phase 0 wrap-vs-fold decision on `ClrKernel.Core.Secrets` pending),
-`import-env` CLI command, cloud providers. Unverified: exact Sync env-var sanitisation for
-`DBDATASYNC_SECRET_<REF>`; Unix branch of `AclHelper` (tests skip on Windows).
-Run tests: `cd DbDataKit/tests/<Pkg>.Tests && dotnet test` (needs `DbDataKit/global.json` MTP runner).
+Implemented under `DbDataKit/`: `DbDataKit.Secrets.Abstractions`, `DbDataKit.Secrets` (providers, resolver chain, redactor, hasher), `DbDataKit.Secrets.Store` (the key ring and the encrypted
+file store: plan 13, W13), `DbDataKit.Secrets.Windows` (DPAPI), `DbDataKit.Secrets.Cli` (the `secret` commands), each with tests in `DbDataKit/tests/`.
+The OS-keyring stub, the `keyring:` scheme and `LegacyEnvProvider` are gone (plan 13, D10: a clean break). Still open: the Sync and Build adoption (A04, A05, R04), cloud providers.
+Run tests: `cd DbDataKit/tests/<Pkg>.Tests && dotnet test` (needs `DbDataKit/global.json` MTP runner), or run the built `<Pkg>.Tests` executable.
 
 ## Odbc (Plan 04 Part A)
 Branch worktree-agent-afbf86949a65d1ed2. DbDataKit/src/DbDataKit.Odbc.Metadata + tests: copied from DbDataProxy c08355f (no history split), hardened (options, row cap, timeouts, policy, Build/Quote, session, SQLWCHAR probe, LibraryImport), added TypeInfo/Procedures/driver inventory/diagnostics, PublicAPI baseline. 129 tests green. Not done: Proxy switch to the package, Linux/macOS live verification, Part B.

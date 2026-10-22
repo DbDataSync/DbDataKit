@@ -1,5 +1,9 @@
 # DbDataKit.Secrets
 
+> **Where secrets live.** `secret:<name>` references are answered by the encrypted store in [`DbDataKit.Secrets.Store`](../DbDataKit.Secrets.Store/README.md) (a file, `secrets.yaml`, whose values are encrypted with a key kept
+> separately: DPAPI on Windows, a permission-restricted file elsewhere, or a key the platform provides). Back up that key apart from the file; either alone is useless. To move a server use `secret export` and `secret import` (commands in
+> [`DbDataKit.Secrets.Cli`](../DbDataKit.Secrets.Cli/README.md)), never a copy of the key. The providers below answer what the store does not have.
+
 Runtime for Plan 02. Depends on `DbDataKit.Secrets.Abstractions`.
 
 ## Public contract
