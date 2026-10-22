@@ -94,7 +94,7 @@ public sealed class ConfigRepository
         var text = TryReadAllTextAllowingConcurrentReplace(path)
             ?? throw new FileNotFoundException($"Connection '{name}' was not found.", path);
 
-        return YamlConfigSerializer.Deserialize<ConnectionConfig>(text);
+        return StrictConfigFile.Load(text, path, YamlConfigSerializer.Deserialize<ConnectionConfig>);
     }
 
     public IReadOnlyList<string> ListConnections() =>
