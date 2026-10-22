@@ -34,9 +34,9 @@ public sealed class OracleDialect : SqlDialect
 
     private OracleDialect() { }
 
-    protected override ISqlDialect? SharedDialect { get; } = DialectCatalog.Builtin.Get("oracle");
+    private static readonly ISqlDialect Shared = DialectCatalog.Builtin.Get("oracle");
 
-    public override string QuoteIdentifier(string identifier) => SharedDialect!.Quote(identifier);
+    public override string QuoteIdentifier(string identifier) => Shared.Quote(identifier);
 
     public override string ParameterReference(string name) => $":{name}";
 

@@ -20,9 +20,9 @@ public sealed class DuckDbDialect : SqlDialect
 
     private DuckDbDialect() { }
 
-    protected override ISqlDialect? SharedDialect { get; } = DialectCatalog.Builtin.Get("duckdb");
+    private static readonly ISqlDialect Shared = DialectCatalog.Builtin.Get("duckdb");
 
-    public override string QuoteIdentifier(string identifier) => SharedDialect!.Quote(identifier);
+    public override string QuoteIdentifier(string identifier) => Shared.Quote(identifier);
 
     /// <summary>DuckDB names a prepared parameter with <c>$name</c>; <c>@name</c> is not its syntax.</summary>
     public override string ParameterReference(string name) => $"${name}";

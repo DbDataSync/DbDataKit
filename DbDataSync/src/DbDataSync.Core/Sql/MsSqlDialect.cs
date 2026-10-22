@@ -11,9 +11,9 @@ public sealed class MsSqlDialect : SqlDialect
 
     private MsSqlDialect() { }
 
-    protected override ISqlDialect? SharedDialect { get; } = DialectCatalog.Builtin.Get("sqlserver");
+    private static readonly ISqlDialect Shared = DialectCatalog.Builtin.Get("sqlserver");
 
-    public override string QuoteIdentifier(string identifier) => SharedDialect!.Quote(identifier);
+    public override string QuoteIdentifier(string identifier) => Shared.Quote(identifier);
 
     public override string ParameterReference(string name) => $"@{name}";
 

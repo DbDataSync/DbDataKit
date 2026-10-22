@@ -19,9 +19,9 @@ public sealed class AnsiDialect : SqlDialect
 
     private AnsiDialect() { }
 
-    protected override ISqlDialect? SharedDialect { get; } = DialectCatalog.Builtin.Get("ansi");
+    private static readonly ISqlDialect Shared = DialectCatalog.Builtin.Get("ansi");
 
-    public override string QuoteIdentifier(string identifier) => SharedDialect!.Quote(identifier);
+    public override string QuoteIdentifier(string identifier) => Shared.Quote(identifier);
 
     public override string ParameterReference(string name) => $"@{name}";
 

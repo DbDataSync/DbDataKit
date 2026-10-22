@@ -30,9 +30,9 @@ public sealed class MySqlDialect : SqlDialect
 
     private MySqlDialect() { }
 
-    protected override ISqlDialect? SharedDialect { get; } = DialectCatalog.Builtin.Get("mysql");
+    private static readonly ISqlDialect Shared = DialectCatalog.Builtin.Get("mysql");
 
-    public override string QuoteIdentifier(string identifier) => SharedDialect!.Quote(identifier);
+    public override string QuoteIdentifier(string identifier) => Shared.Quote(identifier);
 
     public override string ParameterReference(string name) => $"@{name}";
 

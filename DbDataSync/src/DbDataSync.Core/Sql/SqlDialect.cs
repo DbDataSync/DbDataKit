@@ -1,8 +1,6 @@
 using System.Data.Common;
 using System.Globalization;
 
-using DbDataKit.Dialect;
-
 namespace DbDataSync.Core.Sql;
 
 /// <summary>
@@ -60,9 +58,6 @@ public abstract class SqlDialect
     /// implementations still escape the closing delimiter so a name containing one cannot break out.</summary>
     public abstract string QuoteIdentifier(string identifier);
 
-    /// <summary>The shared dialect (<c>DbDataKit.Dialect</c>) that quotes and splits names for this engine, or null for a dialect whose quoting comes from a driver descriptor.</summary>
-    protected virtual ISqlDialect? SharedDialect => null;
-
     /// <summary>How a parameter is referenced *in statement text*: <c>@p</c> on SQL Server and MySQL,
     /// <c>:p</c> on Oracle.</summary>
     public abstract string ParameterReference(string name);
@@ -98,8 +93,6 @@ public abstract class SqlDialect
     /// </summary>
     public IReadOnlyList<string> SplitQualifiedName(string value)
     {
-        if (SharedDialect is { } shared) return shared.SplitQualifiedName(value);
-
         var parts = new List<string>();
         var current = new System.Text.StringBuilder();
         var quoted = false;
