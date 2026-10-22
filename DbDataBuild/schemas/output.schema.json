@@ -5156,6 +5156,18 @@
                       "null"
                     ]
                   },
+                  "schedule": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "time_zone": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
                   "parallel": {
                     "type": [
                       "integer",

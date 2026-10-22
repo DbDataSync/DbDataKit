@@ -1352,6 +1352,16 @@
                 "type": "string",
                 "pattern": "^[1-9][0-9]{0,5}[smhdw]$"
               },
+              "schedule": {
+                "description": "When the Build server runs the plan: a cron expression, for example `15 * * * *` or `0 2 * * 1-5`. Without it the plan runs only when asked. Declared in the project, so adding or changing a schedule is a commit.",
+                "type": "string",
+                "minLength": 1
+              },
+              "time_zone": {
+                "description": "The time zone `schedule` is read in (an IANA or Windows id such as `Europe/Berlin`); UTC when absent. Only with `schedule`.",
+                "type": "string",
+                "minLength": 1
+              },
               "parallel": {
                 "description": "How many loads may run together. Validated and kept; parallelism is a later step.",
                 "type": "integer",

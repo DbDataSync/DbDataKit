@@ -4,5 +4,6 @@
   <ItemGroup>
     <!-- the shared libraries Build takes as packages when UseLocalDbDataKit is off (see Directory.Build.targets) -->
     <PackageVersion Include="DbDataKit.Dialect.Abstractions" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Scheduling" Version="$(DbDataKitVersion)" />
   </ItemGroup>
 </Project>
