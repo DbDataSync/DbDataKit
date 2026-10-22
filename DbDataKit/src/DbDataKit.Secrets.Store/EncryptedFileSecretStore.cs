@@ -37,8 +37,8 @@ public sealed partial class EncryptedFileSecretStore : ISecretStore, ISecretProv
     public const string FileName = "secrets.yaml";
     private const int NonceLength = 12, TagLength = 16;
 
-    private static readonly ISerializer Serializer = new SerializerBuilder().WithQuotingNecessaryStrings().DisableAliases().Build();
-    private static readonly IDeserializer Deserializer = new DeserializerBuilder().IgnoreUnmatchedProperties().Build();
+    internal static readonly ISerializer Serializer = new SerializerBuilder().WithQuotingNecessaryStrings().DisableAliases().Build();
+    internal static readonly IDeserializer Deserializer = new DeserializerBuilder().IgnoreUnmatchedProperties().Build();
 
     private readonly string _directory;
     private readonly IKeySource _keys;
@@ -103,10 +103,28 @@ public sealed partial class EncryptedFileSecretStore : ISecretStore, ISecretProv
 
     // ---- encryption ----
 
+    private const int KeyLengthBytes = 32;
+
     private SecretEntry Encrypt(SecretName name, SecretValue value)
     {
         var keyId = _keys.ActiveKeyId;
         var key = _keys.GetKey(keyId);
+        try { return Seal(name, value, key, keyId); }
+        finally { CryptographicOperations.ZeroMemory(key); }
+    }
+
+    private SecretValue Decrypt(SecretName name, SecretEntry entry)
+    {
+        byte[] key;
+        try { key = _keys.GetKey(entry.Key); }
+        catch (KeyNotFoundException ex) { throw new SecretStoreException($"The secret '{name}' was written with key '{entry.Key}', which this store does not have. {ex.Message}", ex); }
+        try { return Open(name, entry, key, entry.Key, FilePath, wrongKeyHint: "It was changed, moved from another name, or written with a different key."); }
+        finally { CryptographicOperations.ZeroMemory(key); }
+    }
+
+    /// <summary>Encrypts a value with AES-256-GCM: a fresh nonce, the name as associated data. <paramref name="keyLabel"/> is what is recorded as the entry's key.</summary>
+    private SecretEntry Seal(SecretName name, SecretValue value, byte[] key, string keyLabel)
+    {
         var plain = Encoding.UTF8.GetBytes(value.Reveal().ToArray());
         try
         {
@@ -118,22 +136,19 @@ public sealed partial class EncryptedFileSecretStore : ISecretStore, ISecretProv
             nonce.CopyTo(sealedValue, 0);
             cipher.CopyTo(sealedValue, NonceLength);
             tag.CopyTo(sealedValue, NonceLength + cipher.Length);
-            return new SecretEntry { Version = 1, Key = keyId, Value = Convert.ToBase64String(sealedValue), Updated = _clock.GetUtcNow().ToString("O") };
+            return new SecretEntry { Version = 1, Key = keyLabel, Value = Convert.ToBase64String(sealedValue), Updated = _clock.GetUtcNow().ToString("O") };
         }
-        finally { CryptographicOperations.ZeroMemory(plain); CryptographicOperations.ZeroMemory(key); }
+        finally { CryptographicOperations.ZeroMemory(plain); }
     }
 
-    private SecretValue Decrypt(SecretName name, SecretEntry entry)
+    private static SecretValue Open(SecretName name, SecretEntry entry, byte[] key, string keyLabel, string where, string wrongKeyHint)
     {
         if (entry.Version != 1) throw new SecretStoreException($"The secret '{name}' is stored in format {entry.Version}; this build reads format 1.");
         byte[] sealedValue;
         try { sealedValue = Convert.FromBase64String(entry.Value); }
-        catch (FormatException ex) { throw new SecretStoreException($"The secret '{name}' in '{FilePath}' is not valid base64.", ex); }
-        if (sealedValue.Length < NonceLength + TagLength) throw new SecretStoreException($"The secret '{name}' in '{FilePath}' is too short to be an encrypted value.");
+        catch (FormatException ex) { throw new SecretStoreException($"The secret '{name}' in '{where}' is not valid base64.", ex); }
+        if (sealedValue.Length < NonceLength + TagLength) throw new SecretStoreException($"The secret '{name}' in '{where}' is too short to be an encrypted value.");
 
-        byte[] key;
-        try { key = _keys.GetKey(entry.Key); }
-        catch (KeyNotFoundException ex) { throw new SecretStoreException($"The secret '{name}' was written with key '{entry.Key}', which this store does not have. {ex.Message}", ex); }
         var plain = new byte[sealedValue.Length - NonceLength - TagLength];
         try
         {
@@ -143,9 +158,9 @@ public sealed partial class EncryptedFileSecretStore : ISecretStore, ISecretProv
         }
         catch (CryptographicException ex)
         {
-            throw new SecretStoreException($"The secret '{name}' in '{FilePath}' does not decrypt with key '{entry.Key}': it was changed, moved from another name, or written with a different key.", ex);
+            throw new SecretStoreException($"The secret '{name}' in '{where}' does not decrypt with key '{keyLabel}'. {wrongKeyHint}", ex);
         }
-        finally { CryptographicOperations.ZeroMemory(plain); CryptographicOperations.ZeroMemory(key); }
+        finally { CryptographicOperations.ZeroMemory(plain); }
     }
 
     // ---- the file ----
