@@ -5,7 +5,8 @@ Versions are chosen in the root Directory.Packages.props and nowhere else. This 
 
   * a project, props or targets file gives a PackageReference its own Version,
   * a package is listed twice in a Directory.Packages.props, or in two of them with different versions, or
-  * a project overrides a version (VersionOverride) for a package that is not in ALLOWED_OVERRIDES.
+  * a project overrides a version (VersionOverride) for a package that is not in ALLOWED_OVERRIDES, or
+  * a project references a package in FORBIDDEN (one DuckDB engine in the repository: the one from duckdb.pin).
 
 ALLOWED_OVERRIDES is the list of known exceptions; the slice that removes an exception removes it here.
 Run from anywhere: python3 scripts/check_package_versions.py [root]
@@ -16,6 +17,11 @@ import sys
 
 ALLOWED_OVERRIDES = {
     "Oracle.ManagedDataAccess.Core",  # Sync stays on 23.9.1 until A09 (the shared Oracle composer)
+}
+
+# Packages no project may reference, and why.
+FORBIDDEN = {
+    "DuckDB.NET.Data.Full": "it bundles a DuckDB 1.x engine; use DuckDB.NET.Data and the engine from duckdb.pin (plan 13, W1)",
 }
 
 SKIP_DIRS = {"node_modules", "bin", "obj", ".git"}
@@ -52,6 +58,8 @@ def check(root):
             name = include.group(1) if include else "(no Include)"
             if re.search(r'\sVersion="', tag):
                 problems.append(f"{rel}: PackageReference {name} has its own Version; set it in the root Directory.Packages.props")
+            if name in FORBIDDEN:
+                problems.append(f"{rel}: PackageReference {name} is not allowed: {FORBIDDEN[name]}")
             override = re.search(r'\sVersionOverride="', tag)
             if override and name not in ALLOWED_OVERRIDES:
                 problems.append(f"{rel}: PackageReference {name} overrides its version; one version of each package in the repository")
