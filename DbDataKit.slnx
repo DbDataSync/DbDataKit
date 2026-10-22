@@ -52,6 +52,7 @@
     <Project Path="DbDataKit/src/DbDataKit.Hosting/DbDataKit.Hosting.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Metadata.Abstractions/DbDataKit.Metadata.Abstractions.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Metadata/DbDataKit.Metadata.csproj" />
+    <Project Path="DbDataKit/src/DbDataKit.Monitoring/DbDataKit.Monitoring.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Odbc.Metadata/DbDataKit.Odbc.Metadata.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Secrets.Abstractions/DbDataKit.Secrets.Abstractions.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Secrets.Cli/DbDataKit.Secrets.Cli.csproj" />
@@ -101,6 +102,7 @@
     <Project Path="DbDataKit/tests/DbDataKit.Hosting.WindowsService.Tests/DbDataKit.Hosting.WindowsService.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Metadata.Abstractions.Tests/DbDataKit.Metadata.Abstractions.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Metadata.Tests/DbDataKit.Metadata.Tests.csproj" />
+    <Project Path="DbDataKit/tests/DbDataKit.Monitoring.Tests/DbDataKit.Monitoring.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Odbc.Metadata.Tests/DbDataKit.Odbc.Metadata.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Secrets.Abstractions.Tests/DbDataKit.Secrets.Abstractions.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Secrets.Cli.Tests/DbDataKit.Secrets.Cli.Tests.csproj" />
