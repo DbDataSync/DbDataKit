@@ -98,7 +98,6 @@ in_null
 initcap_like
 int_div
 int_div_zero
-int_floor_div
 int_plus_date
 json_array_item
 json_array_length
@@ -137,8 +136,6 @@ min_int_null
 min_str
 min_str_cmp
 minute
-mod
-mod_by_zero
 mod_neg
 mod_neg2
 month
