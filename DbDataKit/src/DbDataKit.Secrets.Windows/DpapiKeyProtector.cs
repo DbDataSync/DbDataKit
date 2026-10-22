@@ -20,3 +20,23 @@ public sealed class DpapiKeyProtector(byte[]? entropy, DataProtectionScope scope
 
     public byte[] Unprotect(ReadOnlySpan<byte> blob) => ProtectedData.Unprotect(blob.ToArray(), entropy, scope);
 }
+
+/// <summary>
+/// Resolves only the inline <c>dpapi:&lt;base64&gt;</c> references (the output of <c>secret protect</c>): a single field's value kept under DPAPI in the configuration file, where a store is not wanted.
+/// A named <c>secret:</c> reference is the encrypted store's, not this provider's.
+/// </summary>
+[SupportedOSPlatform("windows")]
+public sealed class DpapiInlineProvider(byte[]? entropy, DataProtectionScope scope = DataProtectionScope.LocalMachine) : ISecretProvider
+{
+    public string Name => "dpapi-inline";
+
+    public bool CanHandle(SecretRef reference) => reference.Kind == SecretRefKind.Dpapi;
+
+    public ValueTask<SecretValue?> TryResolveAsync(SecretRef reference, CancellationToken ct = default)
+    {
+        byte[] blob;
+        try { blob = Convert.FromBase64String(reference.Target); }
+        catch (FormatException) { throw new FormatException("dpapi reference is not valid base64."); }
+        return ValueTask.FromResult<SecretValue?>(DpapiProtector.Unprotect(blob, entropy, scope));
+    }
+}

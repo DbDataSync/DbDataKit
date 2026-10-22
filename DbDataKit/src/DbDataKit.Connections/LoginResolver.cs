@@ -21,7 +21,7 @@ public sealed class LoginResolver(ISecretResolver secrets, string app, bool lega
         return new string(chars);
     }
 
-    /// <summary>The Build reference <c>secret:dbdata:build:connection:&lt;conn&gt;:&lt;read|write&gt;</c> that the Secrets legacy provider maps to <c>DBDATABUILD_*</c>.</summary>
+    /// <summary>The Build reference <c>secret:dbdata:build:connection:&lt;conn&gt;:&lt;read|write&gt;</c>. It once mapped to <c>DBDATABUILD_*</c> through a legacy provider, which no longer exists; it resolves in the secret store like any other name (slice B02 retires this helper with the old names).</summary>
     public static SecretRef BuildLegacyRef(string connection, LoginRole role) =>
         new(SecretRefKind.Secret, $"dbdata:build:connection:{connection}:{(role == LoginRole.Read ? "read" : "write")}");
 

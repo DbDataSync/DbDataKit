@@ -40,62 +40,6 @@ internal static class EnvNames
     }
 }
 
-/// <summary>
-/// Compatibility with the existing product conventions, so no user breaks during migration:
-/// <list type="bullet">
-/// <item>Build: <c>dbdata:build:connection:&lt;conn&gt;:&lt;read|write&gt;</c> maps to <c>DBDATABUILD_&lt;CONN&gt;_&lt;READ|WRITE&gt;</c>
-/// (whole connection string). No fallback from read to write.</item>
-/// <item>Sync: any other ref maps to <c>DBDATASYNC_SECRET_&lt;REF&gt;</c>, REF being the ref upper-cased with
-/// non-alphanumerics replaced by '_' (e.g. <c>dbdatasync:connection:erp</c> becomes <c>DBDATASYNC_SECRET_DBDATASYNC_CONNECTION_ERP</c>).
-/// The exact Sync sanitisation lives in ClrKernel.Core.Secrets and must be confirmed in Phase 0; supply a custom rule if it differs.</item>
-/// </list>
-/// Only handles <c>secret:</c> references. Rules are tried in order; the first non-null variable name that is set wins.
-/// </summary>
-public sealed class LegacyEnvProvider : ISecretProvider
-{
-    private readonly Func<string, string?> _env;
-    private readonly IReadOnlyList<EnvMapping> _rules;
-
-    public LegacyEnvProvider(Func<string, string?>? env = null, IEnumerable<EnvMapping>? rules = null)
-    {
-        _env = env ?? Environment.GetEnvironmentVariable;
-        _rules = (rules ?? DefaultRules()).ToArray();
-    }
-
-    public string Name => "legacy-env";
-
-    /// <summary>Build rule with a configurable variable prefix (default <c>DBDATABUILD</c>).</summary>
-    public static EnvMapping BuildRule(string prefix = "DBDATABUILD") => target =>
-    {
-        var p = target.Split(':');
-        if (p.Length != 5 || !p[0].Equals("dbdata", StringComparison.OrdinalIgnoreCase)
-            || !p[1].Equals("build", StringComparison.OrdinalIgnoreCase)
-            || !p[2].Equals("connection", StringComparison.OrdinalIgnoreCase)) return null;
-        var part = p[4].ToUpperInvariant();
-        return part is "READ" or "WRITE" ? $"{prefix}_{EnvNames.Sanitize(p[3])}_{part}" : null;
-    };
-
-    /// <summary>Sync rule with a configurable prefix (default <c>DBDATASYNC_SECRET</c>).</summary>
-    public static EnvMapping SyncRule(string prefix = "DBDATASYNC_SECRET") =>
-        target => $"{prefix}_{EnvNames.Sanitize(target)}";
-
-    public static IEnumerable<EnvMapping> DefaultRules() => [BuildRule(), SyncRule()];
-
-    public bool CanHandle(SecretRef r) => r.Kind == SecretRefKind.Secret;
-
-    public ValueTask<SecretValue?> TryResolveAsync(SecretRef r, CancellationToken ct = default)
-    {
-        foreach (var rule in _rules)
-        {
-            var variable = rule(r.Target);
-            if (variable is null) continue;
-            var value = _env(variable);
-            if (!string.IsNullOrWhiteSpace(value)) return ValueTask.FromResult<SecretValue?>(SecretValue.From(value));
-        }
-        return ValueTask.FromResult<SecretValue?>(null);
-    }
-}
-
 public sealed class FileSecretOptions
 {
     /// <summary>Files larger than this are refused (not read). Default 64 KiB.</summary>

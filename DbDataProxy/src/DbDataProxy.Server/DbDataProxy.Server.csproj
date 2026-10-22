@@ -20,6 +20,8 @@
     <DbDataKitReference Include="Secrets.Abstractions" />
     <DbDataKitReference Include="Secrets" />
     <DbDataKitReference Include="Secrets.Windows" />
+    <DbDataKitReference Include="Secrets.Store" />
+    <DbDataKitReference Include="Secrets.Cli" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
     <DbDataKitReference Include="Hosting.Abstractions" />
     <DbDataKitReference Include="Hosting" />

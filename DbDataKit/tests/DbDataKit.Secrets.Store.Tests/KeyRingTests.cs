@@ -83,7 +83,7 @@ public class KeyRingTests
         var directory = System.IO.Path.Combine(t.Path, "keys");
         var id = new KeyRing(directory).CreateKey();
         Assert.StartsWith("DBKEY", Encoding.ASCII.GetString(File.ReadAllBytes(System.IO.Path.Combine(directory, id + ".key")), 0, 5));
-        Assert.Equal([id + ".key", "active"], Directory.EnumerateFiles(directory).Select(System.IO.Path.GetFileName).Order().ToArray());
+        Assert.Equal(new[] { id + ".key", "active" }.Order(StringComparer.Ordinal).ToArray(), Directory.EnumerateFiles(directory).Select(System.IO.Path.GetFileName).Order(StringComparer.Ordinal).ToArray());
     }
 
     [Fact]

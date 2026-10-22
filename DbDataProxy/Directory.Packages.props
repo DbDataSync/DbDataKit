@@ -22,6 +22,8 @@
     <PackageVersion Include="DbDataKit.Secrets.Abstractions" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Secrets" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Secrets.Windows" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Secrets.Store" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Secrets.Cli" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting.Abstractions" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting.WindowsService" Version="$(DbDataKitVersion)" />
