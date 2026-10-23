@@ -293,7 +293,7 @@ no ClrKernel (D10).
 | X01 | Remove code that plan 13 section 6 lists as replaced and that is still present | the slices that replace it | S each | a source scan per item finds no use |
 | X02 | Shared packages still without a consumer (except `Update.*`, shelved) removed | A20 | S | solution and package lists |
 | X03 | Product docs audited for the renamed commands and the console | C04, C06, R09, U11 | S | a docs test that fails on an old command name in any product doc |
-| X04 | Root `docs/plans/STATUS.md` brought up to date | | S | docs only |
+| X04 | Root `docs/plans/STATUS.md` brought up to date | | S | docs only | **Status: done** (branch `suite/x04-status-doc`). `STATUS.md` is rewritten: what the shared packages hold and lack, what each product has adopted, how to test, and what is not built. The old file was a stack of per-agent notes from the first build-out (branch names, "no product repo was changed", a `shared/` folder and a keyring stub that no longer exist). It points here for the work that remains and should be updated when a milestone closes
 
 ## What can start now
 
