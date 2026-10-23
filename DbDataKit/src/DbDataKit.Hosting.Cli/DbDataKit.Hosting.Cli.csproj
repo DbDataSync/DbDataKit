@@ -4,6 +4,7 @@
     <Description>Shared `service` and `cert` command set (plain classes: Execute(args, IConsole)).</Description>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Cli\DbDataKit.Cli.csproj" />
     <ProjectReference Include="..\DbDataKit.Hosting.Abstractions\DbDataKit.Hosting.Abstractions.csproj" />
     <ProjectReference Include="..\DbDataKit.Hosting.WindowsService\DbDataKit.Hosting.WindowsService.csproj" />
     <ProjectReference Include="..\DbDataKit.Hosting.Systemd\DbDataKit.Hosting.Systemd.csproj" />
