@@ -156,146 +156,18 @@ public sealed class OracleDialect : SqlDialect
         _ => base.ClassifyForBucketing(baseTypeName),
     };
 
-    /// <summary>
-    /// See the type-mapping table in phase 25 §2. Oracle's <c>DATE</c> carries a full date and
-    /// time-of-day with no sub-second component — not the same domain as ANSI <c>DATE</c> — so it maps
-    /// to <see cref="CanonicalTypeKind.Timestamp"/> at scale 0, not <see cref="CanonicalTypeKind.Date"/>;
-    /// treating it as date-only would silently drop the time-of-day every real Oracle <c>DATE</c> value
-    /// carries. <c>ROWID</c>/<c>UROWID</c> have no cross-engine equivalent and fall through to
-    /// <see cref="CanonicalTypeKind.Unmappable"/>.
-    /// <para>
-    /// A bare <c>NUMBER</c> (no declared precision/scale — confirmed against a live server that this is
-    /// exactly what an identity column's own catalog row looks like too) is genuinely ambiguous: it can
-    /// hold anything from a single digit to a 38-digit value with an arbitrary number of decimal places.
-    /// Approximated as <c>Decimal(38,10)</c> with a <see cref="CanonicalType.SourceNote"/> saying so,
-    /// rather than <see cref="CanonicalTypeKind.Unmappable"/> — a bare <c>NUMBER</c> is too common a
-    /// column shape in real Oracle schemas to refuse outright, but an operator who knows the real
-    /// domain should override it explicitly rather than trust the approximation.
-    /// </para>
-    /// </summary>
-    public override CanonicalType ToCanonicalType(string nativeType)
-    {
-        var trimmed = nativeType.Trim();
-        var upper = trimmed.ToUpperInvariant();
+    /// <summary>The type tables are the shared <c>oracle</c> dialect's (<c>dialects/oracle.yaml</c>): Oracle <c>DATE</c> reads as a
+    /// timestamp (it carries a time of day), <c>NUMBER(n,0)</c> as the smallest integer that holds it, a bare <c>NUMBER</c> as
+    /// <c>DECIMAL(38,10)</c> with a note, and <c>ROWID</c>/<c>UROWID</c>/<c>BFILE</c>/spatial types are unmappable.</summary>
+    public override CanonicalType ToCanonicalType(string nativeType) => SharedTypes.ToSync(Shared.ToCanonical(nativeType));
 
-        // TIMESTAMP's own DATA_TYPE spelling already embeds its precision ("TIMESTAMP(6)"), unlike
-        // every other Oracle type this dialect sees from OracleCatalog — confirmed against a live
-        // server rather than assumed. The WITH [LOCAL] TIME ZONE suffix sits after that closing paren,
-        // which CanonicalTypeSpec.Parse's own truncation-at-first-')' would silently drop, so both
-        // variants are matched here, on the raw string, before falling through to the shared parser.
-        if (upper.Contains("WITH TIME ZONE") || upper.Contains("WITH LOCAL TIME ZONE"))
-        {
-            var (_, tzArgs) = CanonicalTypeSpec.Parse(trimmed);
-            return new CanonicalType(
-                CanonicalTypeKind.TimestampTz, null, null, CanonicalTypeSpec.IntAt(tzArgs, 0, 6), false, false);
-        }
-
-        var (baseName, args) = CanonicalTypeSpec.Parse(trimmed);
-        return baseName switch
-        {
-            "number" when args.Count == 0 => new CanonicalType(
-                CanonicalTypeKind.Decimal, null, 38, 10, false, false,
-                SourceNote: "Oracle NUMBER with no declared precision/scale; approximated as DECIMAL(38,10) " +
-                    "— an operator-provided type override is the more precise route for a genuinely " +
-                    "unconstrained column."),
-            "number" => ClassifyNumber(CanonicalTypeSpec.IntAt(args, 0, 38)!.Value, CanonicalTypeSpec.IntAt(args, 1, 0)!.Value),
-
-            "binary_float" => Simple(CanonicalTypeKind.Float),
-            "binary_double" => Simple(CanonicalTypeKind.Double),
-
-            "varchar2" =>
-                new CanonicalType(CanonicalTypeKind.String, CanonicalTypeSpec.IntAt(args, 0, null), null, null, false, false),
-            "nvarchar2" =>
-                new CanonicalType(CanonicalTypeKind.String, CanonicalTypeSpec.IntAt(args, 0, null), null, null, true, false),
-            "char" =>
-                new CanonicalType(CanonicalTypeKind.String, CanonicalTypeSpec.IntAt(args, 0, 1), null, null, false, false),
-            "nchar" =>
-                new CanonicalType(CanonicalTypeKind.String, CanonicalTypeSpec.IntAt(args, 0, 1), null, null, true, false),
-            "clob" => new CanonicalType(CanonicalTypeKind.String, null, null, null, false, true),
-            "nclob" => new CanonicalType(CanonicalTypeKind.String, null, null, null, true, true),
-
-            "raw" =>
-                new CanonicalType(CanonicalTypeKind.Binary, CanonicalTypeSpec.IntAt(args, 0, null), null, null, false, false),
-            "long raw" or "blob" => new CanonicalType(CanonicalTypeKind.Binary, null, null, null, false, true),
-
-            // No sub-second component — see this method's own doc comment.
-            "date" => new CanonicalType(CanonicalTypeKind.Timestamp, null, null, 0, false, false),
-            "timestamp" =>
-                new CanonicalType(CanonicalTypeKind.Timestamp, null, null, CanonicalTypeSpec.IntAt(args, 0, 6), false, false),
-
-            "xmltype" => Simple(CanonicalTypeKind.Xml),
-
-            // rowid/urowid/bfile and Oracle's own spatial (SDO_GEOMETRY) and JSON-as-a-distinct-type
-            // (23c+, out of scope per this driver's 12c+ floor) have no faithful cross-engine target —
-            // none of these get a guessed rendering.
-            _ => Simple(CanonicalTypeKind.Unmappable),
-        };
-
-        static CanonicalType Simple(CanonicalTypeKind kind) => new(kind, null, null, null, false, false);
-
-        static CanonicalType ClassifyNumber(int precision, int scale) => scale switch
-        {
-            0 when precision <= 4 => Simple(CanonicalTypeKind.Int16),
-            0 when precision <= 9 => Simple(CanonicalTypeKind.Int32),
-            0 when precision <= 18 => Simple(CanonicalTypeKind.Int64),
-            _ => new CanonicalType(CanonicalTypeKind.Decimal, null, precision, scale, false, false),
-        };
-    }
-
-    public override RenderedColumnType RenderColumnType(CanonicalType type) => type.Kind switch
-    {
-        CanonicalTypeKind.Boolean => Faithful("number(1)", type),
-        CanonicalTypeKind.Int8 => Faithful("number(3)", type),
-        CanonicalTypeKind.Int16 => Faithful("number(5)", type),
-        CanonicalTypeKind.Int32 => Faithful("number(10)", type),
-        CanonicalTypeKind.Int64 => Faithful("number(19)", type),
-        CanonicalTypeKind.Decimal => Faithful($"number({type.Precision ?? 38},{type.Scale ?? 10})", type),
-        CanonicalTypeKind.Float => Faithful("binary_float", type),
-        CanonicalTypeKind.Double => Faithful("binary_double", type),
-
-        CanonicalTypeKind.String when type.IsMax =>
-            new RenderedColumnType(type.IsUnicode ? "nclob" : "clob", Combine(type, "No length bound at the target.")),
-        CanonicalTypeKind.String => Faithful(
-            type.IsUnicode ? $"nvarchar2({type.Length ?? 255})" : $"varchar2({type.Length ?? 255})", type),
-
-        CanonicalTypeKind.Binary => type.IsMax || type.Length is null
-            ? new RenderedColumnType("blob", type.SourceNote)
-            : (type.Length ?? 0) > 2000
-                ? new RenderedColumnType("blob", Combine(type, "Exceeds RAW's 2000-byte column limit; rendered as BLOB instead."))
-                : Faithful($"raw({type.Length})", type),
-
-        // See this class's ToCanonicalType doc comment: Oracle DATE is a low-precision timestamp, not
-        // a date-only type, so a canonical Date still renders faithfully as DATE — nothing is lost
-        // going *into* Oracle, only coming from it.
-        CanonicalTypeKind.Date => Faithful("date", type),
-
-        CanonicalTypeKind.Time => new RenderedColumnType(
+    /// <summary>Sync keeps a canonical <c>TIME</c> as a <c>TIMESTAMP</c> column, where the shared table says an interval of the day.
+    /// Existing Oracle targets were created that way, and the interval reads back as a different canonical type.</summary>
+    public override RenderedColumnType RenderColumnType(CanonicalType type) => type.Kind == CanonicalTypeKind.Time
+        ? new RenderedColumnType(
             $"timestamp({Math.Min(type.Scale ?? 6, 9)})",
-            Combine(type, "Oracle has no native TIME-only type; stored as TIMESTAMP, whose date portion is meaningless.")),
-
-        CanonicalTypeKind.Timestamp => Faithful($"timestamp({Math.Min(type.Scale ?? 6, 9)})", type),
-        CanonicalTypeKind.TimestampTz => Faithful($"timestamp({Math.Min(type.Scale ?? 6, 9)}) with time zone", type),
-
-        CanonicalTypeKind.Guid => Faithful("varchar2(36)", type with
-        {
-            SourceNote = Combine(type, "Oracle has no native GUID/UUID type; stored as its canonical 36-character text form."),
-        }),
-        // JSON as a distinct column type needs Oracle 21c+; this driver's floor is 12c+ (see
-        // OracleTriggerAudit), so CLOB is the broadly-compatible choice rather than a keyword that
-        // would fail to parse on an in-scope but pre-21c target.
-        CanonicalTypeKind.Json => new RenderedColumnType("clob", Combine(type,
-            "Oracle's native JSON column type needs 21c+; stored as CLOB, unvalidated, for broader version compatibility.")),
-        CanonicalTypeKind.Xml => Faithful("xmltype", type),
-
-        CanonicalTypeKind.Unmappable => throw new InvalidOperationException(
-            "RenderColumnType must never be called for Unmappable — the caller checks CanonicalType.Kind " +
-            "first and reports the plan as Unsupported instead."),
-
-        _ => throw new ArgumentOutOfRangeException(nameof(type), type.Kind, "Unknown canonical type kind."),
-    };
-
-    private static RenderedColumnType Faithful(string sql, CanonicalType type) => new(sql, type.SourceNote);
-
-    private static string Combine(CanonicalType type, string renderNote) =>
-        type.SourceNote is null ? renderNote : $"{type.SourceNote} {renderNote}";
+            type.SourceNote is null
+                ? "Oracle has no native TIME-only type; stored as TIMESTAMP, whose date portion is meaningless."
+                : $"{type.SourceNote} Oracle has no native TIME-only type; stored as TIMESTAMP, whose date portion is meaningless.")
+        : SharedTypes.Render(Shared, type);
 }

@@ -108,12 +108,12 @@ public sealed class PostgresDialectCanonicalTypeTests
     }
 
     [Fact]
-    public void RenderingNvarcharMax_ProducesText_WithANoLengthBoundNote()
+    public void RenderingNvarcharMax_ProducesText_Faithfully()
     {
         var canonical = new CanonicalType(CanonicalTypeKind.String, null, null, null, true, true);
         var rendered = Dialect.RenderColumnType(canonical);
         Assert.Equal("text", rendered.Sql);
-        Assert.Contains("length bound", rendered.Fidelity);
+        Assert.Null(rendered.Fidelity);
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public sealed class PostgresDialectCanonicalTypeTests
     public void RenderingDatetimeoffset_ProducesTimestamptz_Faithfully()
     {
         var rendered = Dialect.RenderColumnType(Simple(CanonicalTypeKind.TimestampTz));
-        Assert.Equal("timestamptz", rendered.Sql);
+        Assert.Equal("timestamp(6) with time zone", rendered.Sql);
         Assert.Null(rendered.Fidelity);
     }
 

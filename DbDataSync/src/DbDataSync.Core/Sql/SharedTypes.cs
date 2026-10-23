@@ -15,6 +15,18 @@ internal static class SharedTypes
 
         var note = mapping.Fidelity == Fidelity.Exact ? null : mapping.Note;
         var tz = t.TimeZone == true;
+        // Sync has no unsigned integers: the next wider signed type holds every value, and a 64-bit one becomes DECIMAL(20,0).
+        if (t.Unsigned == true)
+        {
+            var widened = Join(note, "Unsigned in the source; widened to the next signed type so every value fits.");
+            switch (t.Kind)
+            {
+                case CanonicalKind.Int8: return Simple(CanonicalTypeKind.Int16, widened);
+                case CanonicalKind.Int16: return Simple(CanonicalTypeKind.Int32, widened);
+                case CanonicalKind.Int32: return Simple(CanonicalTypeKind.Int64, widened);
+                case CanonicalKind.Int64: return new(CanonicalTypeKind.Decimal, null, 20, 0, false, false, widened);
+            }
+        }
         return t.Kind switch
         {
             CanonicalKind.Boolean => Simple(CanonicalTypeKind.Boolean, note),
@@ -45,6 +57,10 @@ internal static class SharedTypes
         var fidelity = mapping.Fidelity == Fidelity.Exact ? null : mapping.Note;
         return new RenderedColumnType(native, Join(type.SourceNote, fidelity));
     }
+
+    /// <summary>A time or timestamp with no stated precision means microseconds to Sync, where the shared tables' default is whole seconds.</summary>
+    public static CanonicalType MicrosecondsByDefault(CanonicalType type) =>
+        type is { Kind: CanonicalTypeKind.Time or CanonicalTypeKind.Timestamp or CanonicalTypeKind.TimestampTz, Scale: null } ? type with { Scale = 6 } : type;
 
     public static DbDataKit.Dialect.CanonicalType ToShared(CanonicalType type) => type.Kind switch
     {

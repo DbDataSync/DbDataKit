@@ -110,116 +110,19 @@ public sealed class MySqlDialect : SqlDialect
         _ => base.ClassifyForBucketing(baseTypeName),
     };
 
-    /// <summary>See the type-mapping table in phase 25 §2. <c>ENUM</c>, <c>SET</c>, <c>BIT</c> and the
-    /// spatial types have no cross-engine equivalent and fall through to
-    /// <see cref="CanonicalTypeKind.Unmappable"/> — no coercion layer guesses a rendering for any of
-    /// them. <c>tinyint(1)</c> is MySQL's own boolean convention (what every ORM and the server's own
-    /// tools already treat it as); a bare <c>tinyint</c> with no display width stays
-    /// <see cref="CanonicalTypeKind.Int8"/>.</summary>
+    /// <summary>The type tables are the shared <c>mysql</c> dialect's (<c>dialects/mysql.yaml</c>). Sync keeps fixed-length
+    /// <c>binary(n)</c> as fixed, where the shared table widens it to <c>varbinary</c> and says so.</summary>
     public override CanonicalType ToCanonicalType(string nativeType)
     {
         var (baseName, args) = CanonicalTypeSpec.Parse(nativeType);
-        return baseName switch
-        {
-            "tinyint" when CanonicalTypeSpec.IntAt(args, 0, null) == 1 => Simple(CanonicalTypeKind.Boolean),
-            "tinyint" => Simple(CanonicalTypeKind.Int8),
-            "smallint" => Simple(CanonicalTypeKind.Int16),
-            "mediumint" or "int" or "integer" => Simple(CanonicalTypeKind.Int32),
-            "bigint" => Simple(CanonicalTypeKind.Int64),
-
-            "decimal" or "numeric" => new CanonicalType(
-                CanonicalTypeKind.Decimal, null, CanonicalTypeSpec.IntAt(args, 0, 10), CanonicalTypeSpec.IntAt(args, 1, 0), false, false),
-
-            "float" => Simple(CanonicalTypeKind.Float),
-            "double" or "double precision" or "real" => Simple(CanonicalTypeKind.Double),
-
-            "varchar" =>
-                new CanonicalType(CanonicalTypeKind.String, CanonicalTypeSpec.IntAt(args, 0, null), null, null, true, false),
-            "char" =>
-                new CanonicalType(CanonicalTypeKind.String, CanonicalTypeSpec.IntAt(args, 0, 1), null, null, true, false),
-            "tinytext" or "text" or "mediumtext" or "longtext" =>
-                new CanonicalType(CanonicalTypeKind.String, null, null, null, true, true),
-
-            "binary" =>
-                new CanonicalType(CanonicalTypeKind.Binary, CanonicalTypeSpec.IntAt(args, 0, 1), null, null, false, false, IsFixed: true),
-            "varbinary" =>
-                new CanonicalType(CanonicalTypeKind.Binary, CanonicalTypeSpec.IntAt(args, 0, null), null, null, false, false),
-            "tinyblob" or "blob" or "mediumblob" or "longblob" =>
-                new CanonicalType(CanonicalTypeKind.Binary, null, null, null, false, true),
-
-            "date" => Simple(CanonicalTypeKind.Date),
-            "time" => new CanonicalType(CanonicalTypeKind.Time, null, null, CanonicalTypeSpec.IntAt(args, 0, 0), false, false),
-            "datetime" =>
-                new CanonicalType(CanonicalTypeKind.Timestamp, null, null, CanonicalTypeSpec.IntAt(args, 0, 0), false, false),
-
-            "timestamp" => new CanonicalType(CanonicalTypeKind.TimestampTz, null, null, CanonicalTypeSpec.IntAt(args, 0, 0), false, false,
-                SourceNote: "MySQL TIMESTAMP is stored in UTC and converted to/from the session time zone at " +
-                    "read and write; it carries no explicit offset of its own the way a true zone-aware type does."),
-
-            "json" => Simple(CanonicalTypeKind.Json),
-
-            // enum/set/bit/geometry and the other spatial types have no faithful cross-engine target —
-            // none of these get a guessed rendering.
-            _ => Simple(CanonicalTypeKind.Unmappable),
-        };
-
-        static CanonicalType Simple(CanonicalTypeKind kind) => new(kind, null, null, null, false, false);
+        return baseName == "binary"
+            ? new CanonicalType(CanonicalTypeKind.Binary, CanonicalTypeSpec.IntAt(args, 0, 1), null, null, false, false, IsFixed: true)
+            : SharedTypes.ToSync(Shared.ToCanonical(nativeType));
     }
 
-    public override RenderedColumnType RenderColumnType(CanonicalType type) => type.Kind switch
-    {
-        CanonicalTypeKind.Boolean => Faithful("tinyint(1)", type),
-        CanonicalTypeKind.Int8 => Faithful("tinyint", type),
-        CanonicalTypeKind.Int16 => Faithful("smallint", type),
-        CanonicalTypeKind.Int32 => Faithful("int", type),
-        CanonicalTypeKind.Int64 => Faithful("bigint", type),
-        CanonicalTypeKind.Decimal => Faithful($"decimal({type.Precision ?? 10},{type.Scale ?? 0})", type),
-        CanonicalTypeKind.Float => Faithful("float", type),
-        CanonicalTypeKind.Double => Faithful("double", type),
-
-        CanonicalTypeKind.String when type.IsMax =>
-            new RenderedColumnType("longtext", Combine(type, "No length bound at the target.")),
-        CanonicalTypeKind.String => (type.Length ?? 255) > 65535
-            ? new RenderedColumnType("longtext", Combine(type, "Exceeds VARCHAR's 65535-byte row-length ceiling; rendered as LONGTEXT instead."))
-            : Faithful($"varchar({type.Length ?? 255})", type),
-
-        CanonicalTypeKind.Binary => type.IsMax || type.Length is null
-            ? new RenderedColumnType("longblob", type.SourceNote)
-            : type.IsFixed
-                ? Faithful($"binary({type.Length})", type)
-                : Faithful($"varbinary({type.Length})", type),
-
-        CanonicalTypeKind.Date => Faithful("date", type),
-        CanonicalTypeKind.Time => Faithful($"time({Math.Min(type.Scale ?? 6, 6)})", type),
-
-        CanonicalTypeKind.Timestamp => (type.Scale ?? 6) > 6
-            ? new RenderedColumnType("datetime(6)", Combine(type,
-                "One digit of sub-second precision lost (SQL Server datetime2 supports 7 digits; MySQL DATETIME supports 6)."))
-            : Faithful($"datetime({type.Scale ?? 6})", type),
-
-        CanonicalTypeKind.TimestampTz => new RenderedColumnType($"timestamp({Math.Min(type.Scale ?? 6, 6)})",
-            Combine(type, "MySQL TIMESTAMP carries no explicit offset; it is stored in UTC and converted " +
-                "through the session time zone, which is not the same guarantee as a source zone-aware value.")),
-
-        CanonicalTypeKind.Guid => Faithful("char(36)", type with
-        {
-            SourceNote = Combine(type, "MySQL has no native GUID/UUID type; stored as its canonical 36-character text form."),
-        }),
-        CanonicalTypeKind.Json => Faithful("json", type),
-        CanonicalTypeKind.Xml => Faithful("longtext", type with
-        {
-            SourceNote = Combine(type, "MySQL has no native XML type; stored as text."),
-        }),
-
-        CanonicalTypeKind.Unmappable => throw new InvalidOperationException(
-            "RenderColumnType must never be called for Unmappable — the caller checks CanonicalType.Kind " +
-            "first and reports the plan as Unsupported instead."),
-
-        _ => throw new ArgumentOutOfRangeException(nameof(type), type.Kind, "Unknown canonical type kind."),
-    };
-
-    private static RenderedColumnType Faithful(string sql, CanonicalType type) => new(sql, type.SourceNote);
-
-    private static string Combine(CanonicalType type, string renderNote) =>
-        type.SourceNote is null ? renderNote : $"{type.SourceNote} {renderNote}";
+    /// <summary>A time or timestamp with no stated precision renders at microseconds (6), where the shared table's default is whole seconds.</summary>
+    public override RenderedColumnType RenderColumnType(CanonicalType type) =>
+        type is { Kind: CanonicalTypeKind.Binary, IsFixed: true, IsMax: false }
+            ? new RenderedColumnType($"binary({type.Length ?? 255})", type.SourceNote)
+            : SharedTypes.Render(Shared, SharedTypes.MicrosecondsByDefault(type));
 }

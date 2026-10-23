@@ -78,9 +78,9 @@ types:
   - { native: "time(6)", canonical: "time({s})", direction: from_canonical, fidelity: lossy, note: "fractional-second precision above 6 is reduced to microseconds", s_min: 7 }
   - { native: "datetime({s})", canonical: "timestamp({s})", defaults: { s: 0 }, s_max: 6 }
   - { native: "datetime(6)", canonical: "timestamp({s})", direction: from_canonical, fidelity: lossy, note: "fractional-second precision above 6 is reduced to microseconds", s_min: 7 }
-  - { native: "timestamp({s})", canonical: "timestamp(tz,{s})", direction: to_canonical, defaults: { s: 0 } }
-  - { native: "datetime({s})", canonical: "timestamp(tz,{s})", direction: from_canonical, defaults: { s: 0 }, s_max: 6, fidelity: lossy, note: "no zone-aware type that keeps the offset; the value is stored as datetime and must be normalised to UTC" }
-  - { native: "datetime(6)", canonical: "timestamp(tz,{s})", direction: from_canonical, fidelity: lossy, note: "no zone-aware type that keeps the offset; precision above 6 is reduced to microseconds", s_min: 7 }
+  - { native: "timestamp({s})", canonical: "timestamp(tz,{s})", direction: to_canonical, defaults: { s: 0 }, fidelity: lossy, note: "MySQL TIMESTAMP is stored in UTC and converted to and from the session time zone at read and write; it carries no explicit offset of its own." }
+  - { native: "timestamp({s})", canonical: "timestamp(tz,{s})", direction: from_canonical, defaults: { s: 0 }, s_max: 6, fidelity: lossy, note: "MySQL TIMESTAMP carries no explicit offset; it is stored in UTC and converted through the session time zone, which is not the same guarantee as a source zone-aware value, and it covers 1970-01-01 to 2038-01-19 only." }
+  - { native: "timestamp(6)", canonical: "timestamp(tz,{s})", direction: from_canonical, fidelity: lossy, note: "MySQL TIMESTAMP carries no explicit offset; it is stored in UTC and converted through the session time zone, which is not the same guarantee as a source zone-aware value, and it covers 1970-01-01 to 2038-01-19 only. Precision above 6 is reduced to microseconds.", s_min: 7 }
   - { native: "char(36)", canonical: "guid", direction: from_canonical, fidelity: widened, note: "stored as 36-character text" }
   - { native: "uuid", canonical: "guid", direction: to_canonical }
   - { native: "json", canonical: "json" }

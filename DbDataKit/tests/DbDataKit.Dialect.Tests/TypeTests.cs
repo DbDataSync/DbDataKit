@@ -86,7 +86,9 @@ public class TypeTests
     [InlineData("mysql", "bigint unsigned", "int64(unsigned)", Fidelity.Exact)]
     [InlineData("mysql", "datetime(6)", "timestamp(6)", Fidelity.Exact)]
     [InlineData("oracle", "NUMBER(10,2)", "decimal(10,2)", Fidelity.Exact)]
-    [InlineData("oracle", "NUMBER", "decimal", Fidelity.Lossy)]
+    [InlineData("oracle", "NUMBER", "decimal(38,10)", Fidelity.Lossy)]
+    [InlineData("oracle", "NUMBER(9,0)", "int32", Fidelity.Exact)]
+    [InlineData("oracle", "NUMBER(19,0)", "decimal(19,0)", Fidelity.Exact)]
     [InlineData("oracle", "VARCHAR2(30 CHAR)", "string(30)", Fidelity.Exact)]
     [InlineData("oracle", "DATE", "timestamp(0)", Fidelity.Widened)]
     [InlineData("duckdb", "HUGEINT", "decimal(38,0)", Fidelity.Lossy)]
@@ -126,10 +128,18 @@ public class TypeTests
                 if (written.Fidelity != Fidelity.Exact) continue;
                 var back = d.ToCanonical(written.Result!);
                 Assert.True(back.IsMapped, $"{id}: {c} -> {written.Result} did not read back");
-                // canonical form must be stable under a second render+read (Oracle NUMBER(3) reads back as decimal(3,0) by policy)
-                var again = d.ColumnType(back.Result!);
-                Assert.True(again.IsMapped, $"{id}: {back.Result} not renderable");
-                Assert.Equal(back.Result, d.ToCanonical(again.Result!).Result);
+                // render+read must reach a fixed point (Oracle NUMBER(3) reads back as int16, whose NUMBER(5) reads back as int32 because
+                // five digits may not fit an int16; int32 then holds)
+                var current = back.Result!;
+                for (int step = 0; ; step++)
+                {
+                    var again = d.ColumnType(current);
+                    Assert.True(again.IsMapped, $"{id}: {current} not renderable");
+                    var next = d.ToCanonical(again.Result!).Result!;
+                    if (next == current) break;
+                    Assert.True(step < 3, $"{id}: {c} does not settle under render+read");
+                    current = next;
+                }
             }
         }
     }
