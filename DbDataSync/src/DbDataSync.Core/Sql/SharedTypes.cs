@@ -8,6 +8,23 @@ namespace DbDataSync.Core.Sql;
 /// </summary>
 internal static class SharedTypes
 {
+    /// <summary>Like <see cref="ToSync"/>, for an engine whose unsigned integers must not be read as signed ones of the same width: each becomes the next wider signed
+    /// type (a 64-bit one <c>DECIMAL(20,0)</c>) with a note. DuckDB does this; SQL Server's <c>tinyint</c> keeps reading as <see cref="CanonicalTypeKind.Int8"/>.</summary>
+    public static CanonicalType ToSyncWideningUnsigned(TypeMapping<DbDataKit.Dialect.CanonicalType> mapping)
+    {
+        var plain = ToSync(mapping);
+        if (mapping.Result is not { Unsigned: true } t) return plain;
+        var note = Join(plain.SourceNote, "Unsigned in the source; widened to the next signed type so every value fits.");
+        return t.Kind switch
+        {
+            CanonicalKind.Int8 => Simple(CanonicalTypeKind.Int16, note),
+            CanonicalKind.Int16 => Simple(CanonicalTypeKind.Int32, note),
+            CanonicalKind.Int32 => Simple(CanonicalTypeKind.Int64, note),
+            CanonicalKind.Int64 => new(CanonicalTypeKind.Decimal, null, 20, 0, false, false, note),
+            _ => plain,
+        };
+    }
+
     public static CanonicalType ToSync(TypeMapping<DbDataKit.Dialect.CanonicalType> mapping)
     {
         if (!mapping.IsMapped || mapping.Result is not { } t)
@@ -15,18 +32,6 @@ internal static class SharedTypes
 
         var note = mapping.Fidelity == Fidelity.Exact ? null : mapping.Note;
         var tz = t.TimeZone == true;
-        // Sync has no unsigned integers: the next wider signed type holds every value, and a 64-bit one becomes DECIMAL(20,0).
-        if (t.Unsigned == true)
-        {
-            var widened = Join(note, "Unsigned in the source; widened to the next signed type so every value fits.");
-            switch (t.Kind)
-            {
-                case CanonicalKind.Int8: return Simple(CanonicalTypeKind.Int16, widened);
-                case CanonicalKind.Int16: return Simple(CanonicalTypeKind.Int32, widened);
-                case CanonicalKind.Int32: return Simple(CanonicalTypeKind.Int64, widened);
-                case CanonicalKind.Int64: return new(CanonicalTypeKind.Decimal, null, 20, 0, false, false, widened);
-            }
-        }
         return t.Kind switch
         {
             CanonicalKind.Boolean => Simple(CanonicalTypeKind.Boolean, note),

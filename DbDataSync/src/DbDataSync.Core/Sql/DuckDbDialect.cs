@@ -76,7 +76,7 @@ public sealed class DuckDbDialect : SqlDialect
     /// faithful scalar column on any target engine in scope, and guessing one would silently flatten
     /// data.
     /// </summary>
-    public override CanonicalType ToCanonicalType(string nativeType) => SharedTypes.ToSync(Shared.ToCanonical(nativeType));
+    public override CanonicalType ToCanonicalType(string nativeType) => SharedTypes.ToSyncWideningUnsigned(Shared.ToCanonical(nativeType));
 
     public override RenderedColumnType RenderColumnType(CanonicalType type) => SharedTypes.Render(Shared, SharedTypes.MicrosecondsByDefault(type));
 
