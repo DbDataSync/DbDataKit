@@ -251,7 +251,7 @@ internal sealed class FlightSqlRowSource : IRowSource, IMetadataCatalog, IServer
             await using var reader = (FlightSqlRowReader)await ExecuteAsync(Dialect.Bounded(sql, 0), parameters, null, false, ct);
             return reader.ResultSchema.FieldsList.Count == 0 ? null : ArrowConversions.Columns(reader.ResultSchema);
         }
-        catch (Exception ex) when (DriverFailure.Rpc(ex) != null) { return null; }
+        catch (Exception ex) when (FlightSqlFailure.Rpc(ex) != null) { return null; }
     }
 
     private async Task<IReadOnlyList<ColumnShape>?> DescribeByProtocolAsync(string sql, CancellationToken ct)
@@ -266,12 +266,12 @@ internal sealed class FlightSqlRowSource : IRowSource, IMetadataCatalog, IServer
                 prepared = await PrepareAsync(sql, options, ct);
                 schema = prepared.DatasetSchema;
             }
-            catch (Exception ex) when (DriverFailure.Rpc(ex) != null) { /* a server without prepared statements may still say the schema of a query */ }
+            catch (Exception ex) when (FlightSqlFailure.Rpc(ex) != null) { /* a server without prepared statements may still say the schema of a query */ }
             if (schema == null || schema.FieldsList.Count == 0)
             {
                 // the library's GetExecuteSchemaAsync prepares a statement it then leaves open when the server gives no schema: the GetSchema call is made here with the statement as a command
                 try { schema = await client.GetSchemaAsync(FlightDescriptor.CreateCommandDescriptor(Google.Protobuf.WellKnownTypes.Any.Pack(new Arrow.Flight.Protocol.Sql.CommandStatementQuery { Query = sql }).ToByteArray()), options, ct); }
-                catch (Exception ex) when (DriverFailure.Rpc(ex) != null) { return null; }
+                catch (Exception ex) when (FlightSqlFailure.Rpc(ex) != null) { return null; }
             }
             return schema == null || schema.FieldsList.Count == 0 ? null : ArrowConversions.Columns(schema);
         }
@@ -281,7 +281,7 @@ internal sealed class FlightSqlRowSource : IRowSource, IMetadataCatalog, IServer
     // ---- the metadata calls ----
 
     // the client library wraps a call's RpcException in an InvalidOperationException ("Failed to prepare statement"): the status is looked for down the chain
-    private static bool NotOffered(Exception ex) => DriverFailure.Rpc(ex)?.StatusCode is StatusCode.Unimplemented or StatusCode.InvalidArgument;
+    private static bool NotOffered(Exception ex) => FlightSqlFailure.Rpc(ex)?.StatusCode is StatusCode.Unimplemented or StatusCode.InvalidArgument;
 
     // The library's own metadata calls send an empty string for a filter left out (`catalog = ""`), which servers read as "the catalog with no name" and answer with nothing. These send only what is asked.
     private async Task<FlightInfo> MetadataInfoAsync(Google.Protobuf.IMessage command, FlightCallOptions options, CancellationToken ct) =>

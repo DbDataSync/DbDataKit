@@ -89,7 +89,7 @@ internal static class ConnectionCapture
                 {
                     GateRefusedException g => g.Diagnostic.Found,
                     CatalogUnavailableException c => c.Message,
-                    _ => $"it could not be read ({DriverFailure.Describe(ex)})",
+                    _ => $"it could not be read ({Failures.Describe(ex)})",
                 };
                 outcome.Connections.Add(new(name, connection.Engine, "skipped", why));
                 foreach (var d in descriptors) outcome.Skipped.Add((d.Name, $"not compared with its table: `{name}` {why}"));

@@ -11,7 +11,7 @@ namespace DbDataBuild.Apply;
 public sealed class SessionInputRunner(ReadSession session) : IInputQueryRunner
 {
     /// <summary>The error number of a database exception (SQL Server's `Number`, PostgreSQL's `SqlState`): what went wrong without the driver's message, which can quote a value.</summary>
-    internal static string DriverNumber(Exception ex) => DriverFailure.Number(ex);
+    internal static string DriverNumber(Exception ex) => Failures.Number(ex);
 
     public async Task<InputQueryResult> RunAsync(RefreshInputResolver resolver, string text, string? origin, CancellationToken ct)
     {
@@ -21,7 +21,7 @@ public sealed class SessionInputRunner(ReadSession session) : IInputQueryRunner
             return new(names, rows, null);
         }
         catch (GateRefusedException) { throw; }
-        catch (Exception ex) when (ex is not OperationCanceledException) { return new([], [], $"failed to run ({DriverFailure.Describe(ex)})"); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { return new([], [], $"failed to run ({Failures.Describe(ex)})"); }
     }
 }
 
@@ -33,7 +33,7 @@ public sealed class OriginInputRunner(Func<string, CancellationToken, Task<ReadS
     public async Task<InputQueryResult> RunAsync(RefreshInputResolver resolver, string text, string? ignored, CancellationToken ct)
     {
         try { session ??= await open(origin, ct); }
-        catch (Exception ex) when (ex is not (OperationCanceledException or GateRefusedException)) { return new([], [], $"could not reach the origin `{origin}` ({DriverFailure.Describe(ex)})"); }
+        catch (Exception ex) when (ex is not (OperationCanceledException or GateRefusedException)) { return new([], [], $"could not reach the origin `{origin}` ({Failures.Describe(ex)})"); }
         return await new SessionInputRunner(session).RunAsync(resolver, text, origin, ct);
     }
 

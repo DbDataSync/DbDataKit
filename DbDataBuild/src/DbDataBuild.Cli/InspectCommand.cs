@@ -38,7 +38,7 @@ internal static class InspectCommand
             try { probe = Task.Run(() => ProbeAsync(login, connection.Engine)).GetAwaiter().GetResult(); }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                probe = new(kind.ToString().ToLowerInvariant(), variable, true, login.User, false, null, (login.Target is { } where ? where + ": " : "") + DriverFailure.Describe(ex), null);
+                probe = new(kind.ToString().ToLowerInvariant(), variable, true, login.User, false, null, (login.Target is { } where ? where + ": " : "") + Failures.Describe(ex), null);
             }
             probes.Add(probe);
             if (kind == Login.Read) readProbe = probe;
@@ -107,7 +107,7 @@ internal static class InspectCommand
                 output.WriteLine($"  {"schema names",-13} {(schemas.Count == 0 ? "no model declares this connection" : string.Join(", ", schemas.Select(s => $"{s.Name} ({(s.Exists == true ? "exists" : "missing: a deploy creates it")})")))}");
             }
             catch (CatalogUnavailableException ex) { output.WriteLine($"  {"schema names",-13} not read: {ex.Brief}"); }
-            catch (Exception ex) when (ex is not OperationCanceledException) { output.WriteLine($"  {"schema names",-13} not read ({DriverFailure.Describe(ex)})"); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { output.WriteLine($"  {"schema names",-13} not read ({Failures.Describe(ex)})"); }
         }
 
         output.Payload("connection", connection.Name);

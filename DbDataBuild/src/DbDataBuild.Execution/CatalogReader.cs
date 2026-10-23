@@ -144,7 +144,7 @@ WHERE t.table_schema = ? AND t.table_type IN ('BASE TABLE', 'VIEW')";
         if (read.Metadata is { } metadata && await metadata.TablesAsync(schema, objectName, ct) is { } tables)
             return tables.ToDictionary(t => $"{schema}.{t.Name}", t => new ObjectShape(schema, t.Name, t.IsView ? ObjectKind.View : ObjectKind.Table, t.Columns, []));
         try { return await ReadInformationSchemaObjectsAsync(read, schema, objectName, ct); }
-        catch (Exception ex) when (DriverFailure.Rpc(ex) is { } rpc && rpc.StatusCode is not (Grpc.Core.StatusCode.Unavailable or Grpc.Core.StatusCode.Unauthenticated or Grpc.Core.StatusCode.PermissionDenied or Grpc.Core.StatusCode.DeadlineExceeded or Grpc.Core.StatusCode.Cancelled))
+        catch (Exception ex) when (FlightSqlFailure.Rpc(ex) is { } rpc && rpc.StatusCode is not (Grpc.Core.StatusCode.Unavailable or Grpc.Core.StatusCode.Unauthenticated or Grpc.Core.StatusCode.PermissionDenied or Grpc.Core.StatusCode.DeadlineExceeded or Grpc.Core.StatusCode.Cancelled))
         { throw CatalogUnavailableException.FlightSqlWithoutCatalog(read.Dialect.Name); }
     }
 

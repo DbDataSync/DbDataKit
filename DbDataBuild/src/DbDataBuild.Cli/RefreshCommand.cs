@@ -657,7 +657,7 @@ internal sealed record OriginAccess(ProjectConfig Config, Func<string, string?> 
             return null;
         }
         catch (GateRefusedException ex) { return ex.Diagnostic.Found; }
-        catch (Exception ex) when (ex is not OperationCanceledException) { return $"it could not be reached ({DbDataBuild.Execution.DriverFailure.Describe(ex)})."; }
+        catch (Exception ex) when (ex is not OperationCanceledException) { return $"it could not be reached ({DbDataBuild.Execution.Failures.Describe(ex)})."; }
     }
 }
 
