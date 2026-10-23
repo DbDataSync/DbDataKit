@@ -52,7 +52,7 @@ public sealed class InviteCommandTests : IDisposable
     {
         // Written by the CLI command under test, so clean it up the same way (`secret remove`), not by
         // reaching into SecretStore directly.
-        SecretCommand.Run(["remove", _secretRef]);
+        SecretCommand.Run(["remove", _secretRef, "--repo", _root]);
 
         Directory.Delete(_root, recursive: true);
 
@@ -81,7 +81,7 @@ public sealed class InviteCommandTests : IDisposable
         DbDataSyncConfigFile.SetValue(_root, "DbDataSync:State", "ConnectionString", connectionString);
 
         // The same command an admin locked out of this deployment would actually run.
-        Assert.Equal(0, SecretCommand.Run(["set", _secretRef, Password]));
+        Assert.Equal(0, SecretCommand.Run(["set", _secretRef, Password, "--repo", _root]));
 
         var (exitCode, output) = RunInvite(["--repo", _root, "--role", "Admin"]);
 
