@@ -23,6 +23,44 @@ public sealed class TempDir : IDisposable
 
 public class KeyRingTests
 {
+    /// <summary>A server and the workers it starts open a fresh store at the same moment. Each used to see "no keys" and make its own, so a ring ended up with many keys, or, when one saw the key file but not yet the <c>active</c> file, failed with "no active key".</summary>
+    [Fact]
+    public async Task Many_first_opens_at_once_make_exactly_one_key_and_agree_on_it()
+    {
+        using var t = new TempDir();
+        const int openers = 16;
+        using var start = new Barrier(openers);
+        var active = new string[openers];
+
+        // a thread each, so that all of them are waiting at the barrier together whatever the thread pool's size
+        var tasks = Enumerable.Range(0, openers).Select(i => Task.Factory.StartNew(() =>
+        {
+            start.SignalAndWait();
+            var source = SecretKeys.Open(t.Path, new SecretKeyOptions(), environment: _ => null);
+            active[i] = source.ActiveKeyId;
+            Assert.Equal(32, source.GetKey(source.ActiveKeyId).Length);
+        }, TaskCreationOptions.LongRunning)).ToArray();
+        await Task.WhenAll(tasks);
+
+        Assert.Single(active.Distinct());
+        Assert.Single(new KeyRing(System.IO.Path.Combine(SecretKeys.StoreDirectory(t.Path), "keys")).KeyIds());
+    }
+
+    [Fact]
+    public void A_ring_with_a_key_but_no_active_file_gets_that_key_activated_not_a_second_one()
+    {
+        using var t = new TempDir();
+        var directory = System.IO.Path.Combine(t.Path, "keys");
+        var ring = new KeyRing(directory);
+        var id = ring.CreateKey(activate: true);
+        File.Delete(System.IO.Path.Combine(directory, "active"));
+
+        new KeyRing(directory).EnsureActiveKey();
+
+        Assert.Equal(id, new KeyRing(directory).ActiveKeyId);
+        Assert.Equal([id], ring.KeyIds());
+    }
+
     [Fact]
     public void A_key_is_random_256_bits_and_reads_back_from_a_new_ring_over_the_same_directory()
     {
