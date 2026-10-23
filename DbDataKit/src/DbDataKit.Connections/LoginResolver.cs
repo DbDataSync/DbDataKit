@@ -4,26 +4,14 @@ namespace DbDataKit.Connections;
 
 /// <summary>
 /// Turns a definition and a role into a <see cref="ResolvedLogin"/> using the Plan 02 resolver.
-/// Order for <see cref="LoginRole.Read"/>: <c>read_login</c>, then the env var <c>DBDATA_&lt;APP&gt;_&lt;CONN&gt;_READ</c>, then the
-/// legacy Build reference, then <c>auth</c>. Write is the same with <c>write_login</c>/<c>_WRITE</c>. A read request never looks at
+/// Order for <see cref="LoginRole.Read"/>: <c>read_login</c>, then the env var <c>DBDATA_&lt;APP&gt;_&lt;CONN&gt;_READ</c>, then <c>auth</c>. Write is the same with <c>write_login</c>/<c>_WRITE</c>. A read request never looks at
 /// anything write: no fallback from read to write. A write request on a read-only connection is refused.
-/// The env var and legacy forms hold a whole connection string (the Build convention).
+/// The env var holds a whole connection string (the Build convention).
 /// </summary>
-public sealed class LoginResolver(ISecretResolver secrets, string app, bool legacyBuildRefs = true)
+public sealed class LoginResolver(ISecretResolver secrets, string app)
 {
-    /// <summary>The env variable name for a connection and role: <c>DBDATA_&lt;APP&gt;_&lt;CONN&gt;[_READ|_WRITE]</c>, upper case, other characters become underscores.</summary>
-    public static string EnvName(string app, string connection, LoginRole role) =>
-        $"DBDATA_{Sanitize(app)}_{Sanitize(connection)}" + role switch { LoginRole.Read => "_READ", LoginRole.Write => "_WRITE", _ => "" };
-
-    public static string Sanitize(string text)
-    {
-        var chars = text.Select(c => char.IsAsciiLetterOrDigit(c) ? char.ToUpperInvariant(c) : '_').ToArray();
-        return new string(chars);
-    }
-
-    /// <summary>The Build reference <c>secret:dbdata:build:connection:&lt;conn&gt;:&lt;read|write&gt;</c>. It once mapped to <c>DBDATABUILD_*</c> through a legacy provider, which no longer exists; it resolves in the secret store like any other name (slice B02 retires this helper with the old names).</summary>
-    public static SecretRef BuildLegacyRef(string connection, LoginRole role) =>
-        new(SecretRefKind.Secret, $"dbdata:build:connection:{connection}:{(role == LoginRole.Read ? "read" : "write")}");
+    /// <summary>The env variable name for a connection and role: see <see cref="LoginEnvironment.Name"/>.</summary>
+    public static string EnvName(string app, string connection, LoginRole role) => LoginEnvironment.Name(app, connection, role);
 
     public async ValueTask<ResolvedLogin?> ResolveAsync(ConnectionDefinition definition, LoginRole role, CancellationToken ct = default)
     {
@@ -38,13 +26,6 @@ public sealed class LoginResolver(ISecretResolver secrets, string app, bool lega
         var envName = EnvName(app, definition.Name, role);
         if (await TryAsync(new SecretRef(SecretRefKind.Env, envName), ct).ConfigureAwait(false) is { } fromEnv)
             return new ResolvedLogin(role, AuthMode.Sql, "env:" + envName) { ConnectionString = fromEnv };
-
-        if (legacyBuildRefs && role != LoginRole.Default && string.Equals(app, "build", StringComparison.OrdinalIgnoreCase))
-        {
-            var legacy = BuildLegacyRef(definition.Name, role);
-            if (await TryAsync(legacy, ct).ConfigureAwait(false) is { } fromLegacy)
-                return new ResolvedLogin(role, AuthMode.Sql, legacy.ToAuditString()) { ConnectionString = fromLegacy };
-        }
 
         if (definition.Auth is { } auth) return await FromSpecAsync(auth, role, "auth", ct).ConfigureAwait(false);
 

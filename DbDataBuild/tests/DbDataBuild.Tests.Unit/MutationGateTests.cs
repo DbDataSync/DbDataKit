@@ -174,6 +174,17 @@ public class MutationGateTests
         Assert.Contains("DBDATA_BUILD_SQLSERVER_READ", error.Found);
     }
 
+    [Theory]
+    [InlineData("warehouse", "DBDATA_BUILD_WAREHOUSE_READ")]
+    [InlineData("my-dw", "DBDATA_BUILD_MY_DW_READ")]
+    [InlineData("dw.1", "DBDATA_BUILD_DW_1_READ")]
+    public void The_variable_name_is_the_rule_every_product_shares(string connection, string expected)
+    {
+        Assert.Equal(expected, LoginSettings.VariableName(connection, Login.Read));
+        var env = new Dictionary<string, string?> { [expected] = "Server=x;User Id=reader;Password=hunter2" };
+        Assert.NotNull(LoginSettings.FromEnvironment(connection, Login.Read, env.GetValueOrDefault).Settings);
+    }
+
     [Fact]
     public void The_login_description_names_the_variable_and_user_and_never_the_password()
     {

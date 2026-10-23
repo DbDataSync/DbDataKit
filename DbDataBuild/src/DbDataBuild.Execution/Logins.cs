@@ -1,5 +1,6 @@
 using System.Data.Common;
 using DbDataBuild.Core;
+using DbDataKit.Connections;
 using DbDataBuild.Models;
 using DuckDB.NET.Data;
 using Microsoft.Data.SqlClient;
@@ -35,9 +36,9 @@ public sealed class LoginSettings
         Dialect = DialectProfiles.OfEngine(engine) ?? DialectProfiles.Ansi;
     }
 
-    /// <summary>`DBDATA_BUILD_SQLSERVER_READ`, `DBDATA_BUILD_WAREHOUSE_WRITE` and so on: the connection's name, in capitals.</summary>
+    /// <summary>`DBDATA_BUILD_SQLSERVER_READ`, `DBDATA_BUILD_WAREHOUSE_WRITE` and so on: the connection's name in capitals, anything but a letter or digit as an underscore (the rule every product shares).</summary>
     public static string VariableName(string connection, Login login) =>
-        $"DBDATA_BUILD_{connection.ToUpperInvariant()}_{login.ToString().ToUpperInvariant()}";
+        LoginEnvironment.Name("build", connection, login == Login.Read ? LoginRole.Read : LoginRole.Write);
 
     /// <summary>Reads the login from the environment. There is deliberately no fallback from one login to the other.</summary>
     public static (LoginSettings? Settings, Diagnostic? Error) FromEnvironment(string connection, string engine, Login login, Func<string, string?>? env = null)
