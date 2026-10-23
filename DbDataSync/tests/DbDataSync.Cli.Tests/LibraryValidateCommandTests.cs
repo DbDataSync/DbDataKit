@@ -1,4 +1,4 @@
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Core.Config;
 using DbDataKit.Config.Git;
 using DbDataSync.Libraries;
@@ -15,7 +15,7 @@ namespace DbDataSync.Cli.Tests;
 public sealed class LibraryValidateCommandTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("dbdatasync-validate-cli-").FullName;
-    private readonly SecretStore _secrets = new("DbDataSync", true);
+    private readonly SecretStore _secrets = SecretStore.ForProviders(new InMemorySecretProvider());
 
     public void Dispose() => GitTempDirectory.DeleteRecursively(_root);
 
@@ -34,7 +34,7 @@ public sealed class LibraryValidateCommandTests : IDisposable
 
     private static void ExposeCredential(string connectionName, string password) =>
         Environment.SetEnvironmentVariable(
-            $"DBDATASYNC_SECRET_DBDATASYNC_CONNECTION_{connectionName.Replace('-', '_').ToUpperInvariant()}",
+            $"DBDATA_SECRET_DBDATA_SYNC_CONNECTION_{connectionName.Replace('-', '_').ToUpperInvariant()}",
             password);
 
     [Fact]

@@ -3,7 +3,6 @@ using DbDataSync.Api.Configuration;
 using DbDataSync.Core.Config;
 using DbDataKit.Config.Git;
 using DbDataSync.Core.Secrets;
-using ClrKernel.Core.Secrets;
 using Microsoft.Extensions.Configuration.CommandLine;
 using Microsoft.Extensions.Configuration.EnvironmentVariables;
 using Microsoft.Extensions.Configuration.Json;

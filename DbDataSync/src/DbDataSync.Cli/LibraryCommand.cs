@@ -1,4 +1,4 @@
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Core.Config;
 using DbDataKit.Config.Git;
 using DbDataSync.Drivers.Abstractions;
@@ -186,7 +186,7 @@ public static class LibraryCommand
             return 1;
         }
 
-        var secretStore = new SecretStore("DbDataSync", true);
+        var secretStore = SecretStore.Open(repoRoot);
         var configRepository = new ConfigRepository(
             Path.Combine(repoRoot, "config"), new GitCommitService(repoRoot), secretStore);
 

@@ -1,5 +1,5 @@
 using System.Data.Common;
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;

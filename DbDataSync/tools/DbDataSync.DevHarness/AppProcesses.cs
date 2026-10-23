@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using ClrKernel.Core.Secrets;
 using DbDataSync.Core.Secrets;
 
 namespace DbDataSync.DevHarness;
@@ -72,10 +71,9 @@ public sealed class AppProcesses : IAsyncDisposable
         // repo — `--no-app` points at somebody else's API and does not touch its configuration.
         startInfo.Environment["DbDataSync__Auth__Network__Admin"] = "loopback";
 
-        // The spawned TaskRunner inherits these. In an environment with no OS keychain, SecretStore
-        // falls back to DBDATASYNC_SECRET_* variables (phase 93: prefixed "DbDataSync", not the
-        // package's own unconfigured "ClrKernel" default) — without them a run fails to resolve the
-        // connection password. Same workaround the Playwright suite and the integration tests use.
+        // The spawned TaskRunner inherits these. SecretStore falls back to DBDATA_SECRET_* variables when its encrypted store
+        // has no password — without them a run fails to resolve the connection password. Same workaround the Playwright
+        // suite and the integration tests use.
         foreach (var name in new[] { Scenario.SourceConnectionName, Scenario.TargetConnectionName })
             startInfo.Environment[SecretEnvVarName(name)] = Scenario.SaPassword;
 
@@ -155,10 +153,9 @@ public sealed class AppProcesses : IAsyncDisposable
             throw new HarnessException($"npm exited with code {process.ExitCode}.");
     }
 
-    // A prefix-only store (no providers) purely to compute the name SecretStore.EnvName would give this
-    // ref under the real "DbDataSync" prefix — the harness never reads or writes through this store
-    // itself, it only sets the environment variable the *spawned* process's own SecretStore resolves.
-    private static readonly SecretStore EnvNamer = SecretStore.ForProviders("DbDataSync", []);
+    // A store with no providers purely to compute the name SecretStore.EnvName gives this ref — the harness never reads or
+    // writes through this store itself, it only sets the environment variable the *spawned* process's own SecretStore resolves.
+    private static readonly SecretStore EnvNamer = SecretStore.ForProviders();
 
     public static string SecretEnvVarName(string connectionName) =>
         EnvNamer.EnvName(SecretRefs.ForConnection(connectionName));

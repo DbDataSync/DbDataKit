@@ -413,7 +413,7 @@ test.describe.serial('golden path: define, configure, and run a replication end-
 
     // The credential field an operator staring at an auth failure needs: which variable is read.
     await expect(page.getByTestId('credential-env-var')).toHaveValue(
-      `DBDATASYNC_SECRET_DBDATASYNC_CONNECTION_${SRC_CONNECTION_NAME.replace(/-/g, '_').toUpperCase()}`,
+      `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_${SRC_CONNECTION_NAME.replace(/-/g, '_').toUpperCase()}`,
     )
     await expect(page.getByTestId('credential-store-select')).toBeDisabled()
 

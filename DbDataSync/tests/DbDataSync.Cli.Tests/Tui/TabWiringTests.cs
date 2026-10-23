@@ -4,7 +4,6 @@ using DbDataSync.Cli.Tui.Tabs;
 using DbDataSync.Core.Config;
 using DbDataSync.Core.Secrets;
 using DbDataSync.Libraries;
-using ClrKernel.Core.Secrets;
 using Terminal.Gui.App;
 using Terminal.Gui.Input;
 using Terminal.Gui.Testing;
@@ -138,7 +137,7 @@ public sealed class TabWiringTests : IDisposable
         Assert.Equal("MsSql", config["DbDataSync:State:Engine"]);
         Assert.Equal(connectionString, config["DbDataSync:State:ConnectionString"]);
 
-        var secrets = new SecretStore("DbDataSync", true);
+        var secrets = SecretStore.Open(_root);
         Assert.True(secrets.TryResolve(SecretRefs.ForAppSetting("stateConnectionString"), out var password));
         Assert.Equal("hunter2", password);
         secrets.Delete(SecretRefs.ForAppSetting("stateConnectionString"));

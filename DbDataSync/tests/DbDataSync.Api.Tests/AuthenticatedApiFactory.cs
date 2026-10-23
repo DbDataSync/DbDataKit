@@ -1,5 +1,5 @@
 using System.Net;
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Api.Auth;
 using DbDataSync.State;
 using Microsoft.AspNetCore.Hosting;
@@ -46,9 +46,7 @@ public class AuthenticatedApiFactory : WebApplicationFactory<Program>
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<SecretStore>();
-            // Prefixed "DbDataSync" to match the real composition root — see TestApiFactory's identical
-            // override for why this matters now that SecretStore.EnvName is prefix-sensitive.
-            services.AddSingleton(SecretStore.ForProviders("DbDataSync", [new InMemorySecretProvider()]));
+            services.AddSingleton(SecretStore.ForProviders(new InMemorySecretProvider()));
             // This host registers Negotiate for real on Windows, exactly as production does — see
             // TestServerConnectionItemsFilter for the Kestrel feature TestServer owes it in return.
             services.AddTestServerConnectionItems();

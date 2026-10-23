@@ -65,11 +65,10 @@ const authEnv = {
   DbDataSync__Auth__Network__Admin: 'loopback',
 }
 
-// Phase 93: DBDATASYNC_SECRET_* now, not the package's unconfigured "ClrKernel" default — the API's
-// SecretStore is constructed with "DbDataSync" as its prefix.
+// The environment variables the API's SecretStore falls back to when its encrypted store has no password for the connection.
 const secretEnv = {
-  DBDATASYNC_SECRET_DBDATASYNC_CONNECTION_PLAYWRIGHT_SRC: 'DbDataSync_Test_Pw1',
-  DBDATASYNC_SECRET_DBDATASYNC_CONNECTION_PLAYWRIGHT_TGT: 'DbDataSync_Test_Pw1',
+  DBDATA_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_SRC: 'DbDataSync_Test_Pw1',
+  DBDATA_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_TGT: 'DbDataSync_Test_Pw1',
 }
 
 export default defineConfig({

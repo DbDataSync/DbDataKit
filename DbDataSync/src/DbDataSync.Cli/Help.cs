@@ -79,9 +79,9 @@ public static class Help
                         every subcommand's flags.
 
                     secret    set <ref> <value>|list [<ref> ...]|remove <ref>
-                        Stores, checks, or removes a secret in the OS credential store — e.g. the
+                        Stores, checks, or removes a secret in the encrypted secret store — e.g. the
                         state database's password:
-                        dbdatasync config secret set dbdatasync:config:stateConnectionString "Password=..."
+                        dbdatasync config secret set dbdata:sync:config:stateConnectionString "Password=..."
 
                     library   install <packageId>[ <packageId>...] [--as <id>] --version <v> [--factory-type type] [--source feed]
                     library   sync [<id>] | list | uninstall <id>
