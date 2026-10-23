@@ -34,43 +34,9 @@ defaults:
 
 jobs:
   changes:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      build: ${{ steps.diff.outputs.build }}
-      slow: ${{ steps.diff.outputs.slow }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - id: diff
-        working-directory: .
-        env:
-          EVENT: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref }}
-          BEFORE: ${{ github.event.before }}
-          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
-        run: |
-          build=true
-          case "$EVENT" in
-            pull_request) base="origin/$BASE_REF"; range="$base...HEAD" ;;
-            push)         base="$BEFORE"; range="$BEFORE..HEAD" ;;
-            *)            base="" ;;
-          esac
-          if [ -n "$base" ] && git rev-parse --verify --quiet "$base^{commit}" >/dev/null; then
-            changed=$(git diff --name-only "$range")
-            echo "changed in $range:"; echo "$changed"
-            echo "$changed" | grep -qE '^(DbDataBuild/|DbDataKit/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/workflows/(dbdatabuild-|_))' || build=false
-          else
-            echo "::notice::no base to compare with ($EVENT), so everything is treated as changed."
-          fi
-          # The slow engines: after a merge and on request, not on every pull request.
-          slow=true
-          if [ "$EVENT" = "pull_request" ]; then
-            case ",$LABELS," in *,ci:full,*) ;; *) slow=false ;; esac
-          fi
-          echo "build=$build" >> "$GITHUB_OUTPUT"
-          echo "slow=$slow" >> "$GITHUB_OUTPUT"
+    uses: ./.github/workflows/_changes.yml
+    with:
+      paths: '^(DbDataBuild/|DbDataKit/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/workflows/(dbdatabuild-|_))'
 
   unit:
     needs: changes
