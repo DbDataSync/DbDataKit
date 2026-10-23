@@ -1,4 +1,4 @@
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Core.Config;
 using DbDataKit.Config.Git;
 using DbDataSync.Drivers.Abstractions;
@@ -25,7 +25,7 @@ if (!TaskRunnerOptions.TryParse(args, out var options, out var parseError))
     return (int)ExitCode.ConfigError;
 }
 
-var secretStore = new SecretStore("DbDataSync", true);
+var secretStore = SecretStore.Open(options!.RepoRoot);
 var configRepository = new ConfigRepository(options!.ConfigRoot, new GitCommitService(options.RepoRoot), secretStore);
 
 // The cache is what makes scripting affordable here: this process is spawned per run, so without it

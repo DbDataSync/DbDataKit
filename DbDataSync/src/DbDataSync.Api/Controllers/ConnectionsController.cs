@@ -2,7 +2,6 @@ using DbDataSync.Core.Config;
 using System.Data.Common;
 using System.Diagnostics;
 using System.Net.Sockets;
-using ClrKernel.Core.Secrets;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Api.Services;
 using DbDataKit.Config.Git;

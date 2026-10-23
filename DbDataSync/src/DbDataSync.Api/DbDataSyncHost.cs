@@ -1,5 +1,5 @@
 using System.Text.Json.Serialization;
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Api.Configuration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication;
@@ -119,7 +119,7 @@ public static class DbDataSyncHost
         builder.Services.AddSingleton<PasskeyService>();
         builder.Services.AddSingleton(sp => CertificateOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
 
-        builder.Services.AddSingleton(new SecretStore("DbDataSync", true));
+        builder.Services.AddSingleton(sp => SecretStore.Open(sp.GetRequiredService<ApiOptions>().RepoRoot));
 
         // One GitCommitService per process, not one per consumer — its own doc comment explains why:
         // the in-process write lock that makes concurrent commits safe only holds if every writer to

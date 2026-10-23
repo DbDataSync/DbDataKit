@@ -8,7 +8,7 @@ namespace DbDataSync.Cli;
 /// <c>dbdatasync setup</c> — a TUI (Terminal.Gui, phase 128) for a fresh install or an existing one
 /// alike: <see cref="Tui.SetupScreen"/> is the one screen both cases open, pre-filled from the current
 /// configuration when there is one. Everything it writes goes through the same
-/// <see cref="DbDataSyncConfigFile"/> and <see cref="ClrKernel.Core.Secrets.SecretStore"/> calls a
+/// <see cref="DbDataSyncConfigFile"/> and <c>SecretStore</c> calls a
 /// scripted deployment already uses; this exists to save a first-time operator from having to know
 /// docs/configuration.md by heart, not to add a configuration path nothing else uses.
 /// </summary>

@@ -12,7 +12,6 @@
     <PackageVersion Include="Apache.Arrow.Flight.AspNetCore" Version="23.0.0" />
     <PackageVersion Include="Apache.Arrow.Flight.Sql" Version="23.0.0" />
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />
-    <PackageVersion Include="ClrKernel.Core.Secrets" Version="0.11.0" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="Cronos" Version="0.13.0" />
     <PackageVersion Include="DuckDB.NET.Data" Version="1.5.6" />

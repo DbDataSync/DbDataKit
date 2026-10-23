@@ -83,10 +83,9 @@ keep it elsewhere. This is one of several ways to start DbDataSync — see
 [Configuration](configuration.md) for the rest (the `dbdatasync` CLI, the Windows service, the
 container image) and everything each one can be configured with, including authentication.
 
-Secrets (connection passwords) need an OS keychain in production; in a sandboxed/CI environment
-without one, `SecretStore` falls back to environment variables named
-`DBDATASYNC_SECRET_DBDATASYNC_CONNECTION_<NAME>` (uppercased connection name) — set these before
-triggering a run if you hit that fallback path locally.
+Secrets (connection passwords) are in the encrypted store under the repository root (`secrets/`, see "Secrets" in
+[Configuration](configuration.md)); the environment variables `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_<NAME>` (the connection name in capitals)
+answer for a connection the store has no password for — set these before triggering a run if you would rather not store one locally.
 
 ## 4. Run the SPA
 

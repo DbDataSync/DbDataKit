@@ -1,4 +1,4 @@
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Api.Services;
 using DbDataSync.Core.Config;
 using DbDataKit.Config.Git;

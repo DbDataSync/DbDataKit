@@ -25,7 +25,7 @@ public sealed class ScriptedMetadataTests : IDisposable
         _configRepository = new ConfigRepository(
             Path.Combine(_repoRoot, "config"),
             new DbDataKit.Config.Git.GitCommitService(_repoRoot),
-            new ClrKernel.Core.Secrets.SecretStore(true));
+            DbDataSync.Core.Secrets.SecretStore.ForProviders(new DbDataSync.Core.Secrets.InMemorySecretProvider()));
         var host = new ScriptHost(
             _configRepository, new ScriptCompiler(new ScriptCacheDirectory(Path.Combine(_repoRoot, "cache"))));
         _metadata = new ScriptedMetadata(host, _configRepository);

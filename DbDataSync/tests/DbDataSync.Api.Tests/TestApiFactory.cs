@@ -1,4 +1,4 @@
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -56,10 +56,9 @@ public class TestApiFactory : WebApplicationFactory<Program>
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<SecretStore>();
-            // Prefixed "DbDataSync" to match the real composition root (DbDataSyncHost.cs) — tests that
-            // set an env var for a connection's credential (SecretStore.EnvName) need this store to name
-            // things exactly as production does, not under SecretPrefix.Default's "ClrKernel".
-            services.AddSingleton(SecretStore.ForProviders("DbDataSync", [new InMemorySecretProvider()]));
+            // In memory, with the environment behind it as in production: tests that set an env var for a connection's
+            // credential (SecretStore.EnvName) resolve through it.
+            services.AddSingleton(SecretStore.ForProviders(new InMemorySecretProvider()));
             // Without this, every request through this host answers 500 on Windows — see
             // TestServerConnectionItemsFilter for why that is nothing to do with auth being disabled here.
             services.AddTestServerConnectionItems();

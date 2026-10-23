@@ -1,4 +1,4 @@
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Api.Auth;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Api.Services;
@@ -529,9 +529,9 @@ public sealed class AdminConfigServiceTests : IDisposable
     /// test double.
     /// </summary>
     [Fact]
-    public void TheSecretEndpointHelper_AgainstADbDataSyncPrefixedStore_ResolvesUnderTheNewPrefix()
+    public void TheSecretEndpointHelper_StoresUnderTheDbDataSyncName()
     {
-        var secrets = SecretStore.ForProviders("DbDataSync", [new InMemorySecretProvider()]);
+        var secrets = SecretStore.ForProviders(new InMemorySecretProvider());
         var apiOptions = ApiOptions.FromConfiguration(ConfigurationWithFile());
         var service = new AdminConfigService(
             ConfigurationWithFile(),
@@ -545,6 +545,6 @@ public sealed class AdminConfigServiceTests : IDisposable
         var secretRef = DbDataSync.Core.Secrets.SecretRefs.ForAppSetting("stateConnectionString");
         Assert.True(service.SetStateConnectionSecret(StateConnectionStringKey, "hunter2"));
         Assert.Equal("hunter2", secrets.Resolve(secretRef));
-        Assert.Equal("DBDATASYNC_SECRET_DBDATASYNC_CONFIG_STATECONNECTIONSTRING", secrets.EnvName(secretRef));
+        Assert.Equal("DBDATA_SECRET_DBDATA_SYNC_CONFIG_STATECONNECTIONSTRING", secrets.EnvName(secretRef));
     }
 }

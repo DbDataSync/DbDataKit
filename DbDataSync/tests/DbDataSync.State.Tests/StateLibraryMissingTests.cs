@@ -1,4 +1,3 @@
-using ClrKernel.Core.Secrets;
 using DbDataSync.Core.Secrets;
 using DbDataSync.Libraries;
 

@@ -2,7 +2,6 @@ using DbDataKit.Hosting.Certificates.Windows;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using ClrKernel.Core.Secrets;
 using DbDataSync.Certificates;
 using DbDataSync.Core.Config;
 using DbDataKit.Config.Git;
@@ -147,7 +146,7 @@ public sealed class ReadinessChecksTests : IDisposable
         ServeCommand.Prepare(_root);
         var configRoot = Path.Combine(_root, "config");
         var repository = new ConfigRepository(
-            configRoot, new GitCommitService(_root), new SecretStore("DbDataSync", true));
+            configRoot, new GitCommitService(_root), SecretStore.ForProviders(new InMemorySecretProvider()));
         repository.SaveConnection(
             new ConnectionInput
             {

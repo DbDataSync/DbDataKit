@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Core.Config;
 using DbDataKit.Config.Git;
 using DbDataSync.State.Remote;

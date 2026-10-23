@@ -1,5 +1,5 @@
 using System.Text.Json.Serialization;
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Api.Hubs;
 using DbDataSync.Api.Services;
