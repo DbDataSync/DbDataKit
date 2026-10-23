@@ -274,13 +274,15 @@ the old flat names is migrated automatically the first time `serve`/`setup` runs
 | `App:AlternateUrls` | `DbDataSync__App__AlternateUrls` | none | every other origin this deployment is also reached at, beyond `App:Url` — comma- or semicolon-separated. Purely additive: `App:Url`'s own origin is always trusted for passkeys without needing to be listed here too |
 | `App:TrustedProxies` | `DbDataSync__App__TrustedProxies` | none | proxies (IP addresses or CIDR ranges such as `10.0.0.0/8`, comma- or semicolon-separated) whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are believed. Set it when a TLS-terminating reverse proxy sits in front of a plain-HTTP bind; see [Plain HTTP](#plain-http-and-reverse-proxies) |
 | `App:AllowInsecureHttp` | `DbDataSync__App__AllowInsecureHttp` | `false` (`true` in the container image) | serve plain HTTP to every client. Credentials and data then cross the network in clear text |
-| `App:TaskRunnerDllPath` | `DbDataSync__App__TaskRunnerDllPath` | resolved automatically | see below |
-| `App:CliDllPath` | `DbDataSync__App__CliDllPath` | resolved automatically | where `DbDataSync.Cli.dll` is, for the deep connection-scoped library-validation check to spawn itself in its own process |
+| `App:TaskRunnerDllPath` | `DbDataSync__App__TaskRunnerDllPath` | none | start replication workers as `dotnet exec` of this `DbDataSync.TaskRunner.dll`, see below |
+| `App:CliDllPath` | `DbDataSync__App__CliDllPath` | none | start the deep, connection-scoped library-validation check as `dotnet exec` of this `DbDataSync.Cli.dll`, see below |
 
-`App:TaskRunnerDllPath`/`App:CliDllPath` resolve in this order: (1) beside the running assembly — true
-for the tool, the container, and any plain `dotnet publish`; (2) a dev-repo-layout guess (swaps
-`DbDataSync.Api/bin` for `DbDataSync.TaskRunner/bin`/`DbDataSync.Cli/bin`) — true only for this
-repository's own working tree.
+Normally neither is set. The server starts a replication's worker, and a library validation, as **itself again**: `dbdatasync internal worker ...`
+and `dbdatasync config library validate ...`, using the same executable that is running the server (the launcher under an installed service,
+a published executable, or `dotnet DbDataSync.Cli.dll serve`). Nothing then needs `dotnet` on the path, which is what lets Sync be published
+self-contained. The two settings are for a host that is not `DbDataSync.Cli`, such as the test host, or `DbDataSync.Api.dll` run directly
+in this repository's working tree. When neither is set and the running program is not `DbDataSync.Cli`, the files beside the running
+assembly are used (or this repository's `DbDataSync.TaskRunner/bin` and `DbDataSync.Cli/bin`).
 
 #### Plain HTTP and reverse proxies
 

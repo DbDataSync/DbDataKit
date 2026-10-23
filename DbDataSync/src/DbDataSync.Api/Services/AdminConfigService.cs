@@ -83,7 +83,7 @@ public sealed class AdminConfigService(
             "the host itself, not through the console it protects.",
             SupportsWrite: false),
         new("DbDataSync:App:TaskRunnerDllPath",
-            "Where DbDataSync.TaskRunner.dll is. Resolved automatically for a normal install or container.",
+            "Optional. Start workers as `dotnet exec` of this DbDataSync.TaskRunner.dll instead of as `dbdatasync internal worker`. Leave empty for a normal install or container.",
             SupportsWrite: true),
         new("DbDataSync:State:DbPath",
             "The SQLite state file. Ignored when State:Engine is MsSql or Postgres.",
