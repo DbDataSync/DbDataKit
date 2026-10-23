@@ -3,7 +3,7 @@ using System.Net;
 using DbDataProxy.WorkerHost;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 
-// DbDataProxy.Worker.exe --port <n> [--parent <pid>]; the shared secret arrives in DBPROXY_WORKER_SECRET.
+// dbdataproxy-worker.exe --port <n> [--parent <pid>]; the shared secret arrives in DBPROXY_WORKER_SECRET.
 // Published as a 32-bit process so the proxy can reach 32-bit-only ODBC drivers through it.
 
 int port = ArgValue(args, "--port") is { } p ? int.Parse(p) : 0;

@@ -104,20 +104,20 @@ public static class Cli
 
         Usage:
           DbDataProxy [run]                Run the proxy (as a Windows service/systemd unit when started by one)
-          DbDataProxy hash-password [pw]   Print a password hash for the Proxy:Users configuration
+          dbdataproxy hash-password [pw]   Print a password hash for the Proxy:Users configuration
           DbDataProxy protect-secret [s]   Print a dpapi: reference (Windows, machine scope) for a config value
           DbDataProxy secret set|list|delete|check|rotate-key|export|import|protect
                                            The encrypted secret store (<data>/secrets): values come from a prompt or stdin, never the
                                            command line, and no command prints one. `secret` with no arguments lists the commands
-          DbDataProxy query --user U --password P --sql "..." [--address URL] [--datasource N]
+          dbdataproxy query --user U --password P --sql "..." [--address URL] [--datasource N]
                                            [--compression none|gzip|zstd|lz4] [--insecure]
                                            Run a query against a proxy (smoke test)
-          DbDataProxy service install [--name N] [--account A] [--password-secret env:NAME|file:PATH]
+          dbdataproxy service install [--name N] [--account A] [--password-secret env:NAME|file:PATH]
                                            Register the Windows service (run elevated). It runs as NT SERVICE\<name>
                                            unless --account says otherwise (LocalSystem needs --allow-localsystem).
                                            --password still works but warns; prefer --password-secret or the prompt.
-          DbDataProxy service uninstall|start|stop|restart|status|doctor [--name N]
-          DbDataProxy service unit         Print a hardened systemd unit (also: service --systemd)
+          dbdataproxy service uninstall|start|stop|restart|status|doctor [--name N]
+          dbdataproxy service unit         Print a hardened systemd unit (also: service --systemd)
           DbDataProxy install|uninstall    Same as "service install|uninstall"
           DbDataProxy cert show|ensure|renew|check
                                            Show, create or replace the self-signed TLS certificate

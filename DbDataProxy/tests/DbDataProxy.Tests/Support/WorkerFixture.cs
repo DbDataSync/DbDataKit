@@ -19,7 +19,7 @@ public static class WorkerBuild
     {
         string root = RepositoryRoot();
         string outDir = Path.Combine(root, "artifacts", "worker-x86");
-        string exe = Path.Combine(outDir, "DbDataProxy.Worker.exe");
+        string exe = Path.Combine(outDir, "dbdataproxy-worker.exe");
 
         lock (Gate)
         {

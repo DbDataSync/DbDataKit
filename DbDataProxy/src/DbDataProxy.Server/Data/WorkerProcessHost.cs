@@ -48,7 +48,7 @@ public sealed class WorkerProcessHost(IOptionsMonitor<ProxyOptions> options, ILo
         }
     }
 
-    public static string DefaultWorkerPath => Path.Combine(AppContext.BaseDirectory, "worker", "DbDataProxy.Worker.exe");
+    public static string DefaultWorkerPath => Path.Combine(AppContext.BaseDirectory, "worker", "dbdataproxy-worker.exe");
 
     private async Task StartAsync(CancellationToken cancellationToken)
     {

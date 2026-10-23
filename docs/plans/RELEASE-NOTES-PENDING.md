@@ -24,3 +24,10 @@ to it in the pull request that makes the change; a release moves the entries int
 - **Login variables are `DBDATA_BUILD_<CONNECTION>_<READ|WRITE>`.** The old `DBDATABUILD_*` names are not read, and the
   `secret:dbdata:build:connection:...` fallback is gone. A connection name with characters other than letters and digits has underscores in
   its variable (`my-dw` is `DBDATA_BUILD_MY_DW_READ`). A connection with no variable set is DDB-501, naming the variable. (B02)
+
+## DbDataProxy
+
+- **The executables are lower case.** `DbDataProxy.exe` is `dbdataproxy.exe` and the 32-bit worker `DbDataProxy.Worker.exe` is `dbdataproxy-worker.exe` (`worker\dbdataproxy-worker.exe`); the Docker image runs `dbdataproxy.dll`. The
+  Windows service is registered as `dbdataproxy` by default (the service control manager ignores case, so `service install` updates an existing registration in place, and its virtual account is the same one).
+  A script, a shortcut, an `ExecStart` or a `worker` setting that names the old file must be changed. The data directory is still `DbDataProxy`. (C03)
+

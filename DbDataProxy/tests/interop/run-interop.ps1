@@ -13,7 +13,7 @@ param(
   [int]$Port = 18817
 )
 $ErrorActionPreference = 'Stop'
-$exe = Join-Path (Resolve-Path $Published) 'DbDataProxy.exe'
+$exe = Join-Path (Resolve-Path $Published) 'dbdataproxy.exe'
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ('dbproxy-interop-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $tmp | Out-Null
 $db = Join-Path $tmp 'interop.duckdb'
