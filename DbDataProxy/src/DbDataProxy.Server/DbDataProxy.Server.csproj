@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <AssemblyName>DbDataProxy</AssemblyName>
+    <AssemblyName>dbdataproxy</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Apache.Arrow.Flight.AspNetCore" />

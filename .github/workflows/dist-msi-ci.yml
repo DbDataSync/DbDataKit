@@ -59,7 +59,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { product: dbdataproxy, display: DbDataProxy, exe: DbDataProxy.exe, service: DbDataProxy, runs: true,  path: false }
+          - { product: dbdataproxy, display: DbDataProxy, exe: dbdataproxy.exe, service: dbdataproxy, runs: true,  path: false }
           - { product: dbdatasync,  display: DbDataSync,  exe: dbdatasync.exe,  service: DbDataSync,  runs: false, path: true }
           - { product: dbdatabuild, display: DbDataBuild, exe: dbdatabuild.exe, service: '',          runs: false, path: true }
     name: windows (${{ matrix.product }})

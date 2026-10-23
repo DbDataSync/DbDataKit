@@ -21,6 +21,10 @@ public static class ProxyHost
 {
     public const string ServiceName = "DbDataProxy";
 
+    /// <summary>The name the Windows service is registered under by default: lower case like the executable (the service control manager compares names without case, so an existing registration is updated in place).
+    /// <see cref="ServiceName"/> stays the product's name for its data directory.</summary>
+    public const string RegistrationName = "dbdataproxy";
+
     /// <summary>
     /// The web application builder with the proxy's configuration sources (appsettings.json beside the executable, then the data directory's, DBPROXY_ environment variables, command line).
     /// A configuration file that cannot be parsed surfaces as <see cref="ProxyConfigException"/>.

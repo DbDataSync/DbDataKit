@@ -33,7 +33,7 @@ public sealed class ServiceAdminTests : IDisposable
         Assert.SkipUnless(Environment.IsPrivilegedProcess, "Needs an elevated prompt.");
         if (!OperatingSystem.IsWindows()) return;
 
-        string exe = Path.Combine(AppContext.BaseDirectory, "DbDataProxy.exe");
+        string exe = Path.Combine(AppContext.BaseDirectory, "dbdataproxy.exe");
         Assert.True(File.Exists(exe), exe);
         var console = new BufferConsole();
         ServiceCliEnvironment Env() => new()

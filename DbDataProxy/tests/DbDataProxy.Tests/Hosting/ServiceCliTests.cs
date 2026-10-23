@@ -11,7 +11,7 @@ namespace DbDataProxy.Tests.Hosting;
 /// </summary>
 public sealed class ServiceCliTests
 {
-    private const string Exe = @"C:\Program Files\DbDataProxy\DbDataProxy.exe";
+    private const string Exe = @"C:\Program Files\DbDataProxy\dbdataproxy.exe";
     private const string DataDir = @"C:\ProgramData\DbDataProxy";
 
     private sealed class Elevated(bool value) : IElevationChecker
@@ -71,7 +71,7 @@ public sealed class ServiceCliTests
         Assert.Equal(0, rig.Run("install"));
 
         var cfg = rig.Scm.GetConfig("DbDataProxy")!;
-        Assert.Equal(@"NT SERVICE\DbDataProxy", cfg.AccountName);
+        Assert.Equal(@"NT SERVICE\dbdataproxy", cfg.AccountName);
         Assert.Equal(ServiceStartMode.Automatic, cfg.StartMode); // "start= auto" before, not delayed
         Assert.Equal(3, cfg.FailureRestartActions); // restart 5s / 5s / 60s
         Assert.Equal(ServiceCli.DisplayName, cfg.DisplayName);
@@ -245,7 +245,7 @@ public sealed class ServiceCliTests
         Assert.Equal(0, rig.Run("install", "--dry-run"));
         Assert.Empty(rig.Scm.Operations);
         Assert.Empty(rig.Acl.Applied);
-        Assert.Contains("Create service 'DbDataProxy'", rig.Out);
+        Assert.Contains("Create service 'dbdataproxy'", rig.Out);
     }
 
     [Fact]

@@ -29,4 +29,4 @@ ENV DBPROXY_Proxy__DataDirectory=/data \
     DBPROXY_Proxy__Listen__Address=0.0.0.0
 VOLUME /data
 EXPOSE 8815
-ENTRYPOINT ["dotnet", "DbDataProxy.dll"]
+ENTRYPOINT ["dotnet", "dbdataproxy.dll"]

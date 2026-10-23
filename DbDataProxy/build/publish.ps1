@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Publishes the proxy as a standalone folder: DbDataProxy.exe (64-bit, self-contained single file) plus the
+  Publishes the proxy as a standalone folder: dbdataproxy.exe (64-bit, self-contained single file) plus the
   32-bit ODBC worker under worker\. No .NET runtime needs to be installed on the target machine.
 .EXAMPLE
   ./build/publish.ps1                      # -> artifacts/publish/win-x64
@@ -17,7 +17,7 @@ $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 $target = Join-Path $Output $Runtime
 $versionArgs = @(if ($Version) { "-p:Version=$Version" })
 
-# The DuckDB engine of the pin (duckdb.pin), which the publish copies next to DbDataProxy.exe.
+# The DuckDB engine of the pin (duckdb.pin), which the publish copies next to dbdataproxy.exe.
 & (Join-Path $root '..\scripts\fetch-duckdb.ps1') $Runtime
 if ($LASTEXITCODE) { throw 'Fetching the DuckDB engine failed.' }
 
