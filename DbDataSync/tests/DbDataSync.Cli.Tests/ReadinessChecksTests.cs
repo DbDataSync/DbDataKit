@@ -162,7 +162,7 @@ public sealed class ReadinessChecksTests : IDisposable
 
         var check = Find(results, "Libraries / drivers");
         Assert.Equal(CheckStatus.Fail, check.Status);
-        Assert.Contains("dbdatasync config driver install", check.Detail);
+        Assert.Contains("dbdatasync driver install", check.Detail);
     }
 
     [Fact]
@@ -275,7 +275,7 @@ public sealed class ReadinessChecksTests : IDisposable
 
     /// <summary>
     /// Puts a managed self-signed certificate at the well-known path and points Kestrel at it — what
-    /// <c>dbdatasync config cert new-self-signed</c> does off Windows.
+    /// <c>dbdatasync cert new-self-signed</c> does off Windows.
     /// <para>
     /// Written directly rather than by invoking that command, since phase 140: on Windows
     /// <c>CertCommand</c> dispatches <c>new-self-signed</c> to the certificate-*store* implementation

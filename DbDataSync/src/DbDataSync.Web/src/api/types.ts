@@ -972,7 +972,7 @@ export interface LibrarySummary {
   /** Whether this id matches a bundled `KnownLibraries` entry. */
   curated: boolean
   /** Phase 121: true when this library was written with no SDK available to restore it (the
-   * runtime-only image) and no in-image catalog cache hit for it — `config library sync` on a host
+   * runtime-only image) and no in-image catalog cache hit for it — `library sync` on a host
    * with the SDK finishes it. Distinct from `resolves` being false, which also covers a library whose
    * files are just broken. */
   pendingRestore: boolean
@@ -1016,7 +1016,7 @@ export interface KnownDriverSummary {
 }
 
 /** One row from `GET /api/libraries/search` (phase 119) — a NuGet package, reshaped from the public
- * search index. `id` is what a caller would pass as `packageId` to `config library install`. */
+ * search index. `id` is what a caller would pass as `packageId` to `library install`. */
 export interface LibrarySearchResult {
   id: string
   description: string

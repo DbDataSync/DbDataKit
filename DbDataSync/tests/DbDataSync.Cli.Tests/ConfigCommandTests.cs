@@ -50,52 +50,18 @@ public sealed class ConfigCommandTests : IDisposable
         Assert.Contains("State store:", output);
     }
 
-    [Fact]
-    public async Task Secret_ForwardsToSecretCommand()
+    /// <summary>Certificates, secrets, libraries and drivers are commands of their own since plan 13 (C06); the old <c>config</c> forms say what they are now.</summary>
+    [Theory]
+    [InlineData("secret")]
+    [InlineData("library")]
+    [InlineData("driver")]
+    [InlineData("cert")]
+    public async Task TheFormsThatMovedOutOfConfig_SayWhatTheyAreNow(string moved)
     {
-        var (setCode, _) = await Run(["secret", "set", _secretRef, "sup3r-secret", "--repo", _root]);
-        Assert.Equal(0, setCode);
+        var (exitCode, output) = await Run([moved, "list"]);
 
-        var (listCode, output) = await Run(["secret", "list", _secretRef, "--repo", _root]);
-
-        Assert.Equal(0, listCode);
-        Assert.Contains(_secretRef, output);
-        Assert.Contains("set", output);
-        Assert.DoesNotContain("sup3r-secret", output);
-    }
-
-    [Fact]
-    public async Task Library_ForwardsToLibraryCommand()
-    {
-        var (exitCode, output) = await Run(["library", "list", "--repo", _root]);
-
-        Assert.Equal(0, exitCode);
-        Assert.Contains("No libraries installed.", output);
-    }
-
-    [Fact]
-    public async Task Driver_ForwardsToDriverCommand()
-    {
-        var (exitCode, output) = await Run(["driver", "list", "--repo", _root]);
-
-        Assert.Equal(0, exitCode);
-        Assert.Contains("No drivers installed.", output);
-    }
-
-    [Fact]
-    public async Task Cert_ForwardsToCertCommand()
-    {
-        // An unknown subcommand, because what this test is about is the *forward* — that `config cert`
-        // reaches CertCommand at all — and only CertCommand knows the word "cert" in that message.
-        // It used to assert the Windows-only refusal for `cert list` instead, with a comment reading
-        // "this environment is Linux"; phase 140 stood up a windows-latest CI job where `cert list` is
-        // a real command that succeeds, and the test failed on a platform difference that has nothing
-        // to do with what it set out to prove. Unknown-subcommand handling is identical on every
-        // platform, so this proves the same thing everywhere.
-        var (exitCode, output) = await Run(["cert", "not-a-cert-command"]);
-
-        Assert.Equal(1, exitCode);
-        Assert.Contains("Unknown cert command", output);
+        Assert.Equal(2, exitCode);
+        Assert.Contains($"'dbdatasync config {moved}' is now 'dbdatasync {moved}'", output);
     }
 
     private static async Task<(int ExitCode, string Output)> Run(string[] args)

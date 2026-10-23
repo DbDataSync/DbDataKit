@@ -7,7 +7,7 @@ namespace DbDataSync.Certificates;
 
 /// <summary>
 /// Phase 130 — tier 2's cross-platform self-signed certificate: generation, storage, and the renewal
-/// decision, shared by <c>dbdatasync config cert new-self-signed</c>'s non-Windows branch (the CLI),
+/// decision, shared by <c>dbdatasync cert new-self-signed</c>'s non-Windows branch (the CLI),
 /// <c>SelfSignedCertificateService</c> (the daily renewal check), and <c>CertificateCheck</c> (the
 /// marker that distinguishes a certificate this codebase manages from one bound by accident).
 /// <para>

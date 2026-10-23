@@ -114,7 +114,7 @@ public class UpdatePlanTests
 
             Nothing has been changed. To install it:
 
-              1. Stop any running `dbdatasync serve` — files that are in use cannot be replaced
+              1. Stop any running `dbdatasync server run` — files that are in use cannot be replaced
               2. Update
                    dotnet tool update --global DbDataSync --add-source /home/dan/.local/share/DbDataSync/updates/2026.9.19.1432-snapshot.g65615e7 --version 2026.9.19.1432-snapshot.g65615e7
               3. Check

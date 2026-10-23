@@ -1,7 +1,7 @@
 namespace DbDataSync.Cli.Tests;
 
 /// <summary>
-/// <c>dbdatasync config driver install --from &lt;knownDriverId&gt;</c> — the phase 117 catalog path,
+/// <c>dbdatasync driver install --from &lt;knownDriverId&gt;</c> — the phase 117 catalog path,
 /// exercised through <see cref="DriverCommand.RunAsync"/> exactly as an operator would type it. These
 /// do a real <c>dotnet publish</c> against the public NuGet feed (installing the bound library), so
 /// they're integration tests, not unit tests.

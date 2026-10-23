@@ -44,7 +44,7 @@ public static class ConfigValueCommand
         // also requires the file to already hold a value, and a fresh starter is only comments.
         if (!LibGit2Sharp.Repository.IsValid(root))
         {
-            Console.Error.WriteLine($"No DbDataSync configuration at {root}. Run `dbdatasync setup` (or `dbdatasync serve`) first, or pass --repo <path>.");
+            Console.Error.WriteLine($"No DbDataSync configuration at {root}. Run `dbdatasync server setup` (or `dbdatasync server run`) first, or pass --repo <path>.");
             return 1;
         }
 

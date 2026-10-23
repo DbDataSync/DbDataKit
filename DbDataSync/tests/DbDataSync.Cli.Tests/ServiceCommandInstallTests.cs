@@ -42,7 +42,7 @@ public sealed class ServiceCommandInstallTests : IDisposable
         Assert.Equal(ServiceStartMode.Automatic, config.StartMode);
         Assert.Equal(0, config.FailureRestartActions);
         Assert.Equal(ServiceSidType.None, config.SidType);
-        Assert.StartsWith($"\"{Executable}\" serve --repo ", config.BinaryPathName);
+        Assert.StartsWith($"\"{Executable}\" server run --repo ", config.BinaryPathName);
         Assert.Contains(_root, config.BinaryPathName);
 
         Assert.Contains("Registering the 'DbDataSync' service:", output);
@@ -280,7 +280,7 @@ public sealed class ServiceCommandInstallTests : IDisposable
     }
 
     [Theory]
-    [InlineData("\"C:\\Program Files\\DbDataSync\\dbdatasync.exe\" serve --repo C:\\data", "C:\\Program Files\\DbDataSync\\dbdatasync.exe")]
+    [InlineData("\"C:\\Program Files\\DbDataSync\\dbdatasync.exe\" server run --repo C:\\data", "C:\\Program Files\\DbDataSync\\dbdatasync.exe")]
     [InlineData("C:\\tools\\dbdatasync.exe serve", "C:\\tools\\dbdatasync.exe")]
     public void ExecutableOf_ReadsTheProgramOutOfACommandLine(string commandLine, string expected)
     {

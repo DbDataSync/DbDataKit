@@ -113,7 +113,7 @@ function LibraryRow({ library, onRemove, busy }: {
         {library.pendingRestore ? (
           <>
             <span className="dot dot-bad" />
-            <span title={`No SDK was available to restore this — run \`dbdatasync config library sync ${library.id}\` on a host with the SDK.`}>
+            <span title={`No SDK was available to restore this — run \`dbdatasync library sync ${library.id}\` on a host with the SDK.`}>
               pending restore
             </span>
           </>

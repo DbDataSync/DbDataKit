@@ -150,7 +150,7 @@ export function DriverEditPage() {
         <div className="page-head">
           <h1 className="page-title">{isNew ? 'New driver' : `Edit ${existingId}`}</h1>
           <span className="page-note">
-            A <code>driver.yaml</code> descriptor — the same file <code>dbdatasync config driver install</code>
+            A <code>driver.yaml</code> descriptor — the same file <code>dbdatasync driver install</code>
             writes, editable here instead.
           </span>
           <div className="right" style={{ gap: 16 }}>

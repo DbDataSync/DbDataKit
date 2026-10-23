@@ -14,15 +14,18 @@ var rest = args.Skip(1).ToArray();
 
 return command switch
 {
-    "serve" => await ServeCommand.RunAsync(rest),
+    "server" => await ServerCommand.RunAsync(rest),
     "service" => ServiceCommand.Run(rest),
+    "cert" => CertCommand.Run(rest),
+    "secret" => SecretCommand.Run(rest),
+    "library" => await LibraryCommand.RunAsync(rest),
+    "driver" => await DriverCommand.RunAsync(rest),
+    "config" => await ConfigCommand.RunAsync(rest),
+    "health" => await HealthCommand.RunAsync(rest),
     "tool" => ToolCommand.Run(rest),
     "update" => await UpdateCommand.RunAsync(rest),
     "launcher" => await LauncherCommand.RunAsync(rest),
-    "health" => await HealthCommand.RunAsync(rest),
     "invite" => InviteCommand.Run(rest),
-    "config" => await ConfigCommand.RunAsync(rest),
-    "setup" => await SetupCommand.RunAsync(rest),
     "internal" => await InternalCommand.RunAsync(rest),
     "version" => Version(),
     _ => Unknown(command),
@@ -45,6 +48,12 @@ static int Version()
 
 static int Unknown(string command)
 {
+    // A command that was renamed says so: a service or a script that still runs the old form should be told the new one, not just "unknown".
+    if (RetiredCommands.ReplacementFor(command) is { } replacement)
+    {
+        Console.Error.WriteLine($"'dbdatasync {command}' is now 'dbdatasync {replacement}'.");
+        return 2;
+    }
     Console.Error.WriteLine($"Unknown command '{command}'.");
     Help.Print();
     return 1;

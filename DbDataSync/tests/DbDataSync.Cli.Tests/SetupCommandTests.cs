@@ -1,7 +1,7 @@
 namespace DbDataSync.Cli.Tests;
 
 /// <summary>
-/// <c>dbdatasync setup</c> is a Terminal.Gui TUI now (phase 128) — everything section-shaped
+/// <c>dbdatasync server setup</c> is a Terminal.Gui TUI now (phase 128) — everything section-shaped
 /// (config/secret/git writes) is covered UI-free by <c>SetupStepsTests</c>, and the real widget wiring
 /// by <c>Tui.TabWiringTests</c>. This covers the one thing left in <see cref="SetupCommand"/> itself:
 /// the no-terminal gate, which needs no fake at all — a test host's own stdio is already redirected, so

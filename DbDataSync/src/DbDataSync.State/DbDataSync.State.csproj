@@ -12,7 +12,7 @@
     <!-- SQLite is the default and the only engine an unconfigured deployment ever opens, so it stays a
          hard reference (phase 63); it is also offline and serverless, which is why phase 109g left it
          alone. Microsoft.Data.SqlClient and Npgsql are no longer referenced here at all — an operator
-         on StateEngine MsSql/Postgres runs `dbdatasync config library install
+         on StateEngine MsSql/Postgres runs `dbdatasync library install
          microsoft-data-sqlclient`/`npgsql` once instead (see StateDatabase.FromOptions and this
          project's retrospective phase doc). -->
     <PackageReference Include="Microsoft.Data.Sqlite" />

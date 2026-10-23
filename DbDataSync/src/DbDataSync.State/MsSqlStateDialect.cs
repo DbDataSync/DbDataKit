@@ -32,7 +32,7 @@ public sealed class MsSqlStateDialect : StateDialect
     private const int MaxIndexableChars = 450;
 
     /// <summary>The <see cref="KnownLibraries"/> catalog id this dialect resolves its connection
-    /// through — <c>dbdatasync config library install microsoft-data-sqlclient</c> is what a deployment
+    /// through — <c>dbdatasync library install microsoft-data-sqlclient</c> is what a deployment
     /// missing it is told to run (see <see cref="LibraryRegistry.GetFactory"/>'s own message, surfaced
     /// unmodified by <see cref="CreateConnection"/> below).</summary>
     public const string LibraryId = "microsoft-data-sqlclient";
@@ -47,7 +47,7 @@ public sealed class MsSqlStateDialect : StateDialect
 
     public override DbConnection CreateConnection(string connectionString)
     {
-        // GetFactory throws naming the fix (`dbdatasync config library install microsoft-data-sqlclient`)
+        // GetFactory throws naming the fix (`dbdatasync library install microsoft-data-sqlclient`)
         // when the library isn't installed — deliberately not caught or re-wrapped here, so a deployment
         // on this engine with the library missing fails at startup with that exact message rather than a
         // generic "no factory registered" or a connection attempt that can't possibly succeed.

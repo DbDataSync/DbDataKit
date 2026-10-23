@@ -80,7 +80,7 @@ public static class UpdatePlanRenderer
                 steps.Add(("Stop the service", [$"sudo systemctl stop {name}"]));
                 break;
             default:
-                steps.Add(("Stop any running `dbdatasync serve` — files that are in use cannot be replaced", []));
+                steps.Add(("Stop any running `dbdatasync server run` — files that are in use cannot be replaced", []));
                 break;
         }
 

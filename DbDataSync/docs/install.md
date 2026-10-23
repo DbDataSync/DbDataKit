@@ -15,7 +15,7 @@ Use this to try DbDataSync out, or for a single-user setup.
 
 ```sh
 dotnet tool install -g DbDataSync
-dbdatasync setup
+dbdatasync server setup
 ```
 
 This installs into your own profile (`~/.dotnet/tools`, `%USERPROFILE%\.dotnet\tools`). It's not

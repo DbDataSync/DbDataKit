@@ -7,7 +7,7 @@ using DbDataSync.Libraries;
 namespace DbDataSync.Cli;
 
 /// <summary>
-/// <c>dbdatasync config library install|sync|list|uninstall</c> — restores an ADO.NET library package
+/// <c>dbdatasync library install|sync|list|uninstall</c> — restores an ADO.NET library package
 /// DbDataSync does not reference at compile time into <c>&lt;repo&gt;/libraries/&lt;id&gt;/</c>, so a
 /// vendor's fix is a package swap, not a DbDataSync build. See
 /// <c>architecture/planning/todo/nuget-loaded-drivers.md</c> §*The provider layer*.
@@ -64,7 +64,7 @@ public static class LibraryCommand
         if (packageIds.Count == 0)
         {
             Console.Error.WriteLine(
-                "Usage: dbdatasync config library install <packageId>[ <packageId>...] [--as <id>] " +
+                "Usage: dbdatasync library install <packageId>[ <packageId>...] [--as <id>] " +
                 "[--version v] [--factory-type type] [--source feed]");
             return 1;
         }
@@ -111,7 +111,7 @@ public static class LibraryCommand
                 case LibraryInstaller.LibraryInstallOutcome.PendingRestore:
                     Console.WriteLine($"Wrote library '{manifest.Id}' ({packageList}), but there is no SDK here to restore it.");
                     Console.WriteLine($"Factory: {manifest.FactoryType}");
-                    Console.WriteLine($"Run `dbdatasync config library sync {manifest.Id}` on a host with the SDK to finish it.");
+                    Console.WriteLine($"Run `dbdatasync library sync {manifest.Id}` on a host with the SDK to finish it.");
                     break;
                 default:
                     Console.WriteLine($"Installed library '{manifest.Id}' ({packageList}).");
@@ -156,7 +156,7 @@ public static class LibraryCommand
     }
 
     /// <summary>
-    /// <c>dbdatasync config library validate &lt;id&gt; --connection &lt;name&gt;</c> — phase 109j's
+    /// <c>dbdatasync library validate &lt;id&gt; --connection &lt;name&gt;</c> — phase 109j's
     /// deeper, connection-scoped check: drives the connection's own driver's *native* (first-registered)
     /// staging provider and writer against a real scratch table on the real target, with a handful of
     /// synthetic rows. Deliberately not under <c>internal</c>: this is operator-facing (directly, or via
@@ -172,7 +172,7 @@ public static class LibraryCommand
     {
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("Usage: dbdatasync config library validate <id> --connection <name>");
+            Console.Error.WriteLine("Usage: dbdatasync library validate <id> --connection <name>");
             return 1;
         }
 
@@ -261,7 +261,7 @@ public static class LibraryCommand
             var packages = string.Join(", ", manifest.Packages.Select(p => $"{p.Id} {p.Version}"));
             var libDir = LibraryPaths.LibDir(LibraryPaths.LibraryDir(repoRoot, manifest.Id));
             var status = !Directory.Exists(libDir)
-                ? "PENDING RESTORE — run `dbdatasync config library sync " + manifest.Id + "`"
+                ? "PENDING RESTORE — run `dbdatasync library sync " + manifest.Id + "`"
                 : TryResolves(registry, manifest.Id) ? "resolves" : "DOES NOT RESOLVE";
             Console.WriteLine($"{manifest.Id}  [{packages}]  factory: {manifest.FactoryType}  {status}");
         }
@@ -286,7 +286,7 @@ public static class LibraryCommand
     {
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("Usage: dbdatasync config library uninstall <id>");
+            Console.Error.WriteLine("Usage: dbdatasync library uninstall <id>");
             return 1;
         }
 
@@ -357,11 +357,11 @@ public static class LibraryCommand
     {
         Console.Error.WriteLine("""
             Usage:
-              dbdatasync config library install <packageId>[ <packageId>...] [--as <id>] --version <v> [--factory-type type] [--source feed]
-              dbdatasync config library sync [<id>]
-              dbdatasync config library list
-              dbdatasync config library uninstall <id>
-              dbdatasync config library validate <id> --connection <name>
+              dbdatasync library install <packageId>[ <packageId>...] [--as <id>] --version <v> [--factory-type type] [--source feed]
+              dbdatasync library sync [<id>]
+              dbdatasync library list
+              dbdatasync library uninstall <id>
+              dbdatasync library validate <id> --connection <name>
             """);
     }
 }

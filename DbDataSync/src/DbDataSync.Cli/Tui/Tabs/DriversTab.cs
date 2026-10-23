@@ -19,7 +19,7 @@ internal sealed class DriversTab : View
     private readonly Label _other = new()
     {
         X = 1, Y = 6, Width = Dim.Fill(1),
-        Text = "For any other engine, run `dbdatasync config driver install <id> --library <name> " +
+        Text = "For any other engine, run `dbdatasync driver install <id> --library <name> " +
                "--version <v> [--from mysql]` once this finishes.",
     };
 

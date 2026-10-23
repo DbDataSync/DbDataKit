@@ -4,7 +4,7 @@
 `LocalMachine\My`, which needs an elevated prompt. Nothing was changed. `list`, `status`, `templates`, `discover` and
 `bind` do not need one.
 
-**"Both a CA and a template are needed."** Pass `--ca` and `--template`, or save them. `dbdatasync config cert discover`
+**"Both a CA and a template are needed."** Pass `--ca` and `--template`, or save them. `dbdatasync cert discover`
 finds them; see [enrollment](certificates-ad-cs-enroll.md).
 
 **`discover` or `templates` says NotDomainJoined, DirectoryUnreachable or AccessDenied.** The machine must be joined to
@@ -12,7 +12,7 @@ the domain and able to read the AD configuration partition. The message includes
 find the CA and templates by hand with `certutil`, and `--template` always accepts a name you already know.
 
 **The CA accepted the request, but installing failed.** The message gives the request id and the command
-`dbdatasync config cert retrieve --request-id <id>`. Run that rather than enrolling again.
+`dbdatasync cert retrieve --request-id <id>`. Run that rather than enrolling again.
 
 **`enroll` says the request is pending.** The template needs a certificate manager's approval. It is not an error; run
 `retrieve --request-id <id>` after it is approved. A pending request is remembered on this machine only, so retrieve it

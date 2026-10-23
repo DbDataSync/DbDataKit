@@ -8,7 +8,7 @@ namespace DbDataSync.Api.Tests;
 /// A <see cref="TestApiFactory"/> whose repo root already has the compiled
 /// <c>tests/fixtures/DbDataSync.Drivers.LoaderTestFixture</c> plugin installed under
 /// <c>drivers/&lt;id&gt;/</c> before the host ever starts — exactly the layout
-/// <c>dbdatasync config driver install --kind compiled</c> would leave. What
+/// <c>dbdatasync driver install --kind compiled</c> would leave. What
 /// <see cref="LibrariesAndDriversEndpointTests"/> proves is that <c>GET /api/drivers</c> reports this
 /// as <c>source: "compiled"</c> (phase 118), distinct from a built-in or a <c>driver.yaml</c>
 /// descriptor.

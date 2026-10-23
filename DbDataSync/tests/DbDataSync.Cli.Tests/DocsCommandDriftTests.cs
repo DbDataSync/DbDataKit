@@ -4,7 +4,7 @@ namespace DbDataSync.Cli.Tests;
 
 /// <summary>
 /// The docs tell operators what to type. A command that no longer exists there — <c>dbdatasync secret</c> and
-/// <c>dbdatasync cert</c> were still documented after phase 115 moved them under <c>config</c>, so anyone copy-pasting got
+/// <c>dbdatasync cert</c> were still documented after phase 115 moved them under <c>config</c> (and are top-level again since plan 13, C06), so anyone copy-pasting got
 /// "Unknown command" — is the kind of drift only a reader finds (phase 162). The CLI's own help is what says which commands exist.
 /// </summary>
 public sealed class DocsCommandDriftTests
@@ -63,7 +63,7 @@ public sealed class DocsCommandDriftTests
     public void EveryCommandTheDocsShow_IsOneTheCliHas()
     {
         var real = CommandWords(HelpText(), wholeTextIsCode: true).ToHashSet();
-        Assert.Contains("serve", real); // the extraction found the help's commands at all
+        Assert.Contains("server", real); // the extraction found the help's commands at all
 
         // Machinery a document may name without it being something to type: install.md says systemd runs
         // `dbdatasync internal apply-update` before a start, and the command is deliberately absent from the help.

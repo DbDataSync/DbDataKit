@@ -12,10 +12,10 @@ namespace DbDataSync.Cli.Tests;
 /// without also stripping its separate value token left an orphan that, for an *odd* count of such
 /// orphans, silently desyncs .NET's command-line parser for every <c>--DbDataSync:*</c> pair appended
 /// after it — dropping App:RepoRoot/State:DbPath entirely for something as ordinary as
-/// <c>dbdatasync serve --repo X</c> with no <c>--url</c>. Neither was ever exercised anywhere else:
+/// <c>dbdatasync server run --repo X</c> with no <c>--url</c>. Neither was ever exercised anywhere else:
 /// <c>ServeCommand.RunAsync</c> actually starts listening, so nothing calls it in a test, and the
 /// Playwright suite launches <c>DbDataSync.Api.dll</c> directly rather than through
-/// <c>dbdatasync serve</c>.
+/// <c>dbdatasync server run</c>.
 /// </para>
 /// </summary>
 public sealed class ServeCommandHostArgsTests
