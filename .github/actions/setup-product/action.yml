@@ -1,0 +1,31 @@
+name: Set up a product's build
+description: >
+  The .NET SDK from a global.json and the NuGet package cache keyed on the product's projects, then the pinned DuckDB engine. The steps every
+  product's jobs began with, in one place.
+
+inputs:
+  product:
+    description: The product folder (DbDataSync, DbDataProxy, DbDataBuild); its project files key the package cache.
+    required: true
+  global-json:
+    description: The global.json that picks the SDK, relative to the repository root. Proxy and the shared libraries have their own (they add the Microsoft Testing Platform runner).
+    default: global.json
+  duckdb:
+    description: Fetch the pinned DuckDB engine for this runner (scripts/fetch-duckdb.sh; Git Bash on Windows).
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-dotnet@v6
+      with:
+        global-json-file: ${{ inputs.global-json }}
+        # No packages.lock.json in this repository, so the cache key is a hash of the product's project files: any dependency change invalidates it.
+        # What is cached is the shared ~/.nuget/packages download, not a job's build output, so this only saves the trip to nuget.org.
+        cache: true
+        cache-dependency-path: ${{ inputs.product }}/**/*.csproj
+    - name: Fetch the pinned DuckDB engine
+      if: ${{ inputs.duckdb == 'true' }}
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: scripts/fetch-duckdb.sh

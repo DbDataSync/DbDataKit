@@ -32,7 +32,7 @@ jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataProxy/|DbDataKit/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/workflows/(dbdataproxy-|_))'
+      paths: '^(DbDataProxy/|DbDataKit/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataproxy-|_)|actions/setup-product))'
 
   # The Windows service, DPAPI, ACLs, the 32-bit worker and the text ODBC driver only exist here, so this is the only job that
   # exercises them; it also packages the release zip as a smoke test.
@@ -44,13 +44,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-product
         with:
-          global-json-file: DbDataProxy/global.json
-      - name: Fetch the pinned DuckDB engine
-        working-directory: .
-        shell: pwsh
-        run: ./scripts/fetch-duckdb.ps1
+          product: DbDataProxy
+          global-json: DbDataProxy/global.json
       - run: dotnet build DbDataProxy.slnf -c Release
       - run: dotnet test --project tests/DbDataProxy.Tests -c Release --no-build --minimum-expected-tests 100
       - name: Package (smoke test)
@@ -67,12 +64,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-product
         with:
-          global-json-file: DbDataProxy/global.json
-      - name: Fetch the pinned DuckDB engine
-        working-directory: .
-        run: scripts/fetch-duckdb.sh
+          product: DbDataProxy
+          global-json: DbDataProxy/global.json
       - name: Test the test-environment scripts
         working-directory: .
         run: testenv/selftest.sh
