@@ -12,6 +12,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="JsonSchema.Net" />
     <!-- Phase 109h: InviteCommandTests.cs uses Microsoft.Data.SqlClient directly (its own scratch-database
          scaffolding, ahead of the LibraryRegistry-backed install its own comment already documents) —
          previously supplied transitively through DbDataSync.Drivers.MsSql's own PackageReference, which

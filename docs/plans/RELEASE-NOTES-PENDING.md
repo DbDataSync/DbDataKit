@@ -21,6 +21,7 @@ to it in the pull request that makes the change; a release moves the entries int
 - **The command line has new names.** `dbdatasync serve` is `dbdatasync server run`, `setup` is `server setup`, `config cert|secret|library|driver ...` are `cert`, `secret`, `library` and `driver` (`config check|get|set`
   stay), and `health` is `health check`. The old forms exit 2 and print the new one. The Windows service, the systemd unit and the Docker image run `server run`, so **run `service install` again** on an
   existing installation (a service still registered with `serve` cannot start), and update container health checks to `health check`. `invite`, `update`, `launcher` and `tool` are unchanged for now. (C06)
+- **Sync commands accept `--format json`.** `server`, `service`, `cert`, `secret`, `library`, `driver`, `config` and `health` print one JSON document (`schema`, `command`, `exit_code`, `ok`, `data`, `messages`, `errors`); an unknown command now exits 2 with "'x' is not a command" (it was 1 with "Unknown command 'x'"). (C07)
 
 ## DbDataBuild
 
