@@ -4,7 +4,8 @@ namespace DbDataSync.Cli;
 
 /// <summary>
 /// <c>dbdatasync internal ...</c> — commands for the build, not for an operator. Deliberately absent
-/// from <see cref="Help.Print"/> and from every user-facing doc; the Dockerfile is the only caller.
+/// from <see cref="Help.Print"/> and from every user-facing doc; the Dockerfile and the API (which starts workers with
+/// <c>internal worker</c>, see <c>ChildCommand</c>) are the callers.
 /// </summary>
 public static class InternalCommand
 {
@@ -12,7 +13,7 @@ public static class InternalCommand
     {
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("Usage: dbdatasync internal build-catalog-cache <out-dir>");
+            Console.Error.WriteLine("Usage: dbdatasync internal build-catalog-cache <out-dir> | worker <worker arguments>");
             return 1;
         }
 
@@ -20,6 +21,7 @@ public static class InternalCommand
         {
             "build-catalog-cache" => await BuildCatalogCacheAsync(args[1..]),
             "apply-update" => await ApplyUpdateAsync(),
+            "worker" => await TaskRunner.WorkerEntry.RunAsync(args[1..]),
             var other => Unknown(other),
         };
     }

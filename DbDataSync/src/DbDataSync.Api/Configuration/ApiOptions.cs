@@ -96,14 +96,19 @@ public sealed class ApiOptions
     /// exactly as it did.
     /// </summary>
     public string? StateConnectionString { get; init; }
-    public required string TaskRunnerDllPath { get; init; }
+    /// <summary>
+    /// Where <c>DbDataSync.TaskRunner.dll</c> is, when a worker must be started as <c>dotnet exec</c> of that file; null for the normal
+    /// case, where the API starts workers as <c>dbdatasync internal worker</c> (see <c>ChildCommand</c>). Set by a test, or by a host that is
+    /// not <c>DbDataSync.Cli</c>.
+    /// </summary>
+    public string? TaskRunnerDllPath { get; init; }
 
     /// <summary>Phase 109j: where <c>DbDataSync.Cli.dll</c> is, for
     /// <c>LibraryValidationLauncher</c> to spawn <c>dotnet exec &lt;this&gt; config library validate
     /// ...</c> — the deep, connection-scoped check, isolated in its own child process for the identical
     /// reason <see cref="TaskRunnerDllPath"/> is. Resolved the same way, for the same reason: see
     /// <see cref="ResolveDefaultCliDllPath"/>.</summary>
-    public required string CliDllPath { get; init; }
+    public string? CliDllPath { get; init; }
 
     /// <summary>
     /// The loopback-only port the runner-state endpoint listens on (phase 39). 0 — the default — binds
@@ -213,8 +218,8 @@ public sealed class ApiOptions
 
         var repoRoot = app["RepoRoot"] ?? Path.Combine(Directory.GetCurrentDirectory(), "dbdatasync-repo");
         var stateDbPath = state["DbPath"] ?? Path.Combine(repoRoot, "state.db");
-        var taskRunnerDllPath = app["TaskRunnerDllPath"] ?? ResolveDefaultTaskRunnerDllPath();
-        var cliDllPath = app["CliDllPath"] ?? ResolveDefaultCliDllPath();
+        var taskRunnerDllPath = app["TaskRunnerDllPath"];
+        var cliDllPath = app["CliDllPath"];
 
         return new ApiOptions
         {
@@ -307,7 +312,7 @@ public sealed class ApiOptions
     /// somebody can look at rather than a plausible-looking one that never existed.
     /// </para>
     /// </summary>
-    private static string ResolveDefaultTaskRunnerDllPath()
+    internal static string ResolveDefaultTaskRunnerDllPath()
     {
         const string dll = "DbDataSync.TaskRunner.dll";
 
@@ -335,7 +340,7 @@ public sealed class ApiOptions
     /// swaps a `DbDataSync.Api/bin` segment for `DbDataSync.Cli/bin` — the one thing that's true of this
     /// working tree's own separate per-project build outputs and nothing else.
     /// </summary>
-    private static string ResolveDefaultCliDllPath()
+    internal static string ResolveDefaultCliDllPath()
     {
         const string dll = "DbDataSync.Cli.dll";
 
