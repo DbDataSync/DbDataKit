@@ -103,6 +103,7 @@ public class EngineDifferenceProbes
         ["sqlserver:left"] = Supplementary, ["sqlserver:right"] = Supplementary, ["sqlserver:reverse"] = Supplementary, ["sqlserver:ascii"] = "ASCII() is the first byte, DuckDB's ascii() is the code point (and '' is NULL, not 0); UNICODE() is the equivalent",
         ["sqlserver:upper_sharp_s"] = "str.case_mapping: SQL Server leaves 'ß' alone, DuckDB makes it 'ẞ'",
         ["postgres:upper"] = "str.case_mapping: under the C collation PostgreSQL's upper() changes ASCII only",
+        ["postgres:upper_sharp_s"] = "str.case_mapping: PostgreSQL's upper() uses the C library's case mapping; glibc (the shared test engine's Debian image) leaves 'ß' alone, DuckDB makes it 'ẞ' (musl, the Alpine image, agrees with DuckDB)",
         ["sqlserver:eq_trailing"] = "str.eq: SQL Server ignores trailing spaces in comparisons; the string profile (trailing_space) says so",
         ["postgres:substr_neg"] = "fn.substring_negative: a negative start does not count from the end on PostgreSQL",
         ["sqlserver:substr_neg"] = "fn.substring_negative: a negative start does not count from the end on SQL Server",
