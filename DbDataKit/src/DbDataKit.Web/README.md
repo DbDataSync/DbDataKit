@@ -19,3 +19,10 @@ The pairing, the local channel, the role check per command and the audit are the
 lines. `ManagementIdentity.CommitAuthor(token)` gives the name and address a configuration commit is authored by, so the history of a config repository says who changed what and through which
 console; `LocalAuthor` does the same for the local channel.
 
+## Write version checks
+
+`WriteGuard` makes a management write name the version it was based on. `RunAsync(key, expectedVersion, currentVersion, write)` takes a per-key lock, reads the current version
+under it, and runs the write only if the two match (a null expected version means "create": nothing may be there). A stale write returns `WriteResult.Stale(currentVersion)` (or
+throws `StaleWriteException` from `RunOrThrowAsync`), so the caller can read again, merge and retry. What a "version" is stays the caller's choice (a content hash for a file); it is
+read from the thing itself every time, so a change made outside the guard is caught too.
+

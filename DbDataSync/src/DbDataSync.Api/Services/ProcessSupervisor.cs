@@ -10,7 +10,7 @@ namespace DbDataSync.Api.Services;
 
 /// <summary>
 /// Spawns DbDataSync.TaskRunner as a genuine child process per replication (architecture/detailed-design.md
-/// §3.1) via `dotnet exec &lt;TaskRunnerDllPath&gt;` — the same host running the API, so this works
+/// §3.1) as `dbdatasync internal worker` (see <see cref="ChildCommand"/>) — the same executable running the API, so this works
 /// regardless of how TaskRunner itself was published. Tracked per replication name, not per run: one
 /// worker process claims and drains a replication's pending WorkQueue items with internal bounded
 /// concurrency across however many table mappings it has, rather than one process per triggered run
@@ -111,9 +111,10 @@ public sealed class ProcessSupervisor(
         ApiOptions options, string taskName, string stateEndpoint, string token,
         int changeParallelism, int bulkLoadParallelism)
     {
-        var startInfo = new ProcessStartInfo { FileName = "dotnet", UseShellExecute = false };
-        startInfo.ArgumentList.Add("exec");
-        startInfo.ArgumentList.Add(options.TaskRunnerDllPath);
+        var (fileName, leadingArguments) = ChildCommand.ForWorker(options);
+        var startInfo = new ProcessStartInfo { FileName = fileName, UseShellExecute = false };
+        foreach (var argument in leadingArguments)
+            startInfo.ArgumentList.Add(argument);
         startInfo.ArgumentList.Add("--repo-root");
         startInfo.ArgumentList.Add(options.RepoRoot);
         startInfo.ArgumentList.Add("--state-db");

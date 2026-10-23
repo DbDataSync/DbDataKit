@@ -68,15 +68,16 @@ public sealed class LibraryValidationLauncher(ApiOptions options)
     /// </summary>
     internal static ProcessStartInfo BuildStartInfo(ApiOptions options, string libraryId, string connectionName)
     {
+        var (fileName, leadingArguments) = ChildCommand.ForCli(options);
         var startInfo = new ProcessStartInfo
         {
-            FileName = "dotnet",
+            FileName = fileName,
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
-        startInfo.ArgumentList.Add("exec");
-        startInfo.ArgumentList.Add(options.CliDllPath);
+        foreach (var argument in leadingArguments)
+            startInfo.ArgumentList.Add(argument);
         startInfo.ArgumentList.Add("config");
         startInfo.ArgumentList.Add("library");
         startInfo.ArgumentList.Add("validate");
