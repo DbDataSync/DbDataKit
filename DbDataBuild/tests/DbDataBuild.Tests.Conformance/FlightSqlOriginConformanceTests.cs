@@ -381,8 +381,8 @@ public class FlightSqlOriginConformanceTests
         var timer = System.Diagnostics.Stopwatch.StartNew();
         var ex = await Assert.ThrowsAnyAsync<Exception>(() => session.QueryFirstRowsAsync("SELECT 1 /*slow*/", 1, 1));
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(8), $"the 1 s limit stopped the statement after {timer.Elapsed}");
-        Assert.Equal(Grpc.Core.StatusCode.DeadlineExceeded, DriverFailure.Rpc(ex)!.StatusCode);
-        Assert.Contains("did not answer in time", DriverFailure.Describe(ex));
+        Assert.Equal(Grpc.Core.StatusCode.DeadlineExceeded, FlightSqlFailure.Rpc(ex)!.StatusCode);
+        Assert.Contains("did not answer in time", Failures.Describe(ex));
     }
 
     [SkippableFact]

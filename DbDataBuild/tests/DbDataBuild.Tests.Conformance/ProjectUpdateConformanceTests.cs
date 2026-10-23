@@ -70,7 +70,7 @@ public class ProjectUpdateConformanceTests
         var b = new NpgsqlConnectionStringBuilder(from.ConnectionString);
         var login = $"Driver={{{driver}}};Server={b.Host};Port={b.Port};Database={b.Database};Uid={b.Username};Pwd={b.Password};";
         try { await using var probe = await ReadSession.OpenAsync(LoginSettings.FromEnvironment("legacy", "odbc", Login.Read, v => v == "DBDATA_BUILD_LEGACY_READ" ? login : null).Settings!); }
-        catch (Exception ex) when (DriverFailure.Prerequisite(ex) is { } why) { Skip.If(true, $"The ODBC driver manager or psqlodbc cannot be used on this machine: {why}"); }
+        catch (Exception ex) when (DbDataKit.Connections.Odbc.OdbcPrerequisite.Describe(ex) is { } why) { Skip.If(true, $"The ODBC driver manager or psqlodbc cannot be used on this machine: {why}"); }
         var dir = Path.Combine(Path.GetTempPath(), "ddb-update-odbc-" + Guid.NewGuid().ToString("N")[..10]);
         Directory.CreateDirectory(Path.Combine(dir, "models", "upd"));
         try

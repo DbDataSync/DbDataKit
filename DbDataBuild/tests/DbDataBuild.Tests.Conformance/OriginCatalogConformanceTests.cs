@@ -158,7 +158,7 @@ public class OriginCatalogConformanceTests
         var login = OdbcValue(driver, from);
         var project = Project.Create($"{dialects}connections:\n  legacy: {{ engine: {legacyEngine} }}\n", v => v == "DBDATA_BUILD_LEGACY_READ" ? login : null);
         try { await using var probe = await ReadSession.OpenAsync(LoginSettings.FromEnvironment("legacy", "odbc", Login.Read, v => v == "DBDATA_BUILD_LEGACY_READ" ? login : null).Settings!); }
-        catch (Exception ex) when (DriverFailure.Prerequisite(ex) is { } why) { project.Dispose(); await from.DisposeAsync(); Skip.If(true, $"The ODBC driver manager or the psqlodbc driver cannot be used on this machine: {why}"); }
+        catch (Exception ex) when (DbDataKit.Connections.Odbc.OdbcPrerequisite.Describe(ex) is { } why) { project.Dispose(); await from.DisposeAsync(); Skip.If(true, $"The ODBC driver manager or the psqlodbc driver cannot be used on this machine: {why}"); }
         return (from, project);
     }
 

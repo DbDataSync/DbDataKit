@@ -260,15 +260,15 @@ public class OdbcOriginTests
     public void A_missing_driver_manager_is_named_as_such()
     {
         var manager = new DllNotFoundException("Unable to load shared library 'libodbc.so.2' at /secret/path");
-        var text = DriverFailure.Describe(manager);
+        var text = Failures.Describe(manager);
         Assert.Contains("ODBC driver manager is not installed", text);
         Assert.Contains("unixODBC", text);
         Assert.DoesNotContain("/secret/path", text);
         // it may arrive wrapped, as the type initializer of the provider
-        Assert.Equal(text, DriverFailure.Describe(new TypeInitializationException("System.Data.Odbc.OdbcEnvironment", manager)));
-        Assert.Equal(text, DriverFailure.Describe(new InvalidOperationException("outer", new TypeInitializationException("x", manager))));
-        Assert.Null(DriverFailure.Prerequisite(new InvalidOperationException("boom")));
-        Assert.Equal("InvalidOperationException", DriverFailure.Describe(new InvalidOperationException("password=hunter2")));
+        Assert.Equal(text, Failures.Describe(new TypeInitializationException("System.Data.Odbc.OdbcEnvironment", manager)));
+        Assert.Equal(text, Failures.Describe(new InvalidOperationException("outer", new TypeInitializationException("x", manager))));
+        Assert.Null(DbDataKit.Connections.Odbc.OdbcPrerequisite.Describe(new InvalidOperationException("boom")));
+        Assert.Equal("InvalidOperationException", Failures.Describe(new InvalidOperationException("password=hunter2")));
     }
 
     [Fact]
@@ -278,7 +278,7 @@ public class OdbcOriginTests
         const string secret = "ddb_no_such_data_source_qq";
         string text;
         try { using var c = new OdbcConnection($"DSN={secret};UID=reader;PWD=hunter2"); c.Open(); return; }
-        catch (Exception ex) { text = DriverFailure.Describe(ex); }
+        catch (Exception ex) { text = Failures.Describe(ex); }
         Assert.True(text.Contains("ODBC driver manager is not installed") || text.Contains("ODBC driver or data source named in the login was not found"), text);
         Assert.DoesNotContain(secret, text);
         Assert.DoesNotContain("hunter2", text);

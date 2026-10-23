@@ -157,7 +157,7 @@ public class FlightSqlOriginTests
         var rpc = new RpcException(new Status(code, "user bob at 10.1.2.3: password hunter2 wrong; SELECT * FROM secret_table", tls ? new AuthenticationException("the remote certificate is invalid: CN=secret.internal") : null));
         foreach (var ex in new Exception[] { rpc, new InvalidOperationException("Failed to prepare statement", rpc) })           // the client library wraps the status
         {
-            var text = DriverFailure.Describe(ex);
+            var text = Failures.Describe(ex);
             Assert.Contains(sentence, text);
             Assert.Contains($"gRPC {code}", text);
             Assert.Contains("RpcException", text);
@@ -168,11 +168,11 @@ public class FlightSqlOriginTests
     [Fact]
     public void A_login_that_cannot_be_used_is_reported_with_our_sentence_and_other_failures_are_left_alone()
     {
-        var text = DriverFailure.Describe(new FlightSqlLoginException("The Flight SQL login names more than one way to authenticate."));
+        var text = Failures.Describe(new FlightSqlLoginException("The Flight SQL login names more than one way to authenticate."));
         Assert.Contains("more than one way to authenticate", text);
         Assert.Contains("FlightSqlLoginException", text);
-        Assert.Null(DriverFailure.FlightSql(new InvalidOperationException("boom")));
-        Assert.Equal("InvalidOperationException", DriverFailure.Describe(new InvalidOperationException("password=hunter2")));
+        Assert.Null(FlightSqlFailure.Describe(new InvalidOperationException("boom")));
+        Assert.Equal("InvalidOperationException", Failures.Describe(new InvalidOperationException("password=hunter2")));
     }
 
     [Fact]

@@ -153,7 +153,7 @@ public sealed class LoginSettings
 
     /// <summary>
     /// An ODBC origin: the login's value goes to the driver manager as written (unixODBC on Linux and macOS, the system's on Windows) and the vendor's driver it names; the tool ships neither. There is no write side to an ODBC
-    /// connection. A missing driver manager or driver surfaces here as an exception that <see cref="DriverFailure"/> turns into a sentence that says which is missing.
+    /// connection. A missing driver manager or driver surfaces here as an exception that <see cref="Failures"/> turns into a sentence that says which is missing.
     /// </summary>
     private async Task<DbConnection> OpenOdbcAsync(CancellationToken ct)
     {
