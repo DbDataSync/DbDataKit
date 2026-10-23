@@ -45,6 +45,35 @@ public sealed class KeyRing : IKeySource
         return System.IO.Directory.EnumerateFiles(_directory, "*.key").Select(f => Path.GetFileNameWithoutExtension(f)).Order(StringComparer.Ordinal).ToList();
     }
 
+    /// <summary>
+    /// Makes sure the ring has an active key, creating its first one when it has none. Safe to call from several threads and processes at
+    /// once on a fresh directory (a server and the workers it starts, all opening the store for the first time): they take turns on a lock
+    /// file beside the key directory, so exactly one key is made and every caller ends up with the same active key. A ring that has keys
+    /// but no <c>active</c> file (an interrupted first start) gets its first key activated rather than a new one.
+    /// </summary>
+    public void EnsureActiveKey()
+    {
+        if (ReadActive() is not null) return;
+        EnsureDirectory();
+        using var gate = AcquireCreationLock();
+        if (ReadActive() is not null) return;
+        var ids = KeyIds();
+        if (ids.Count == 0) CreateKey(activate: true);
+        else Activate(ids[0]);
+    }
+
+    // Beside the key directory, not in it: VerifyAll checks every file in the directory, and this one holds nothing.
+    private FileStream AcquireCreationLock()
+    {
+        var path = _directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + ".lock";
+        for (var attempt = 0; ; attempt++)
+        {
+            try { return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose); }
+            catch (IOException) when (attempt < 400) { Thread.Sleep(25); }
+            catch (IOException ex) { throw new InvalidOperationException($"Could not lock the key ring '{_directory}' to create its first key: another process is holding '{path}'.", ex); }
+        }
+    }
+
     /// <summary>Makes a new random key and returns its id. It becomes the active key when the ring had none or when <paramref name="activate"/> says so.</summary>
     public string CreateKey(bool activate = false)
     {
