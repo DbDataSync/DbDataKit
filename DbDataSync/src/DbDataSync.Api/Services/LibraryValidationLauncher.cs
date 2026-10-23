@@ -11,7 +11,7 @@ namespace DbDataSync.Api.Services;
 public sealed record LibraryValidationLaunchResult(bool Succeeded, string Output);
 
 /// <summary>
-/// Phase 109j item 4: spawns <c>dbdatasync config library validate &lt;id&gt; --connection &lt;name&gt;</c>
+/// Phase 109j item 4: spawns <c>dbdatasync library validate &lt;id&gt; --connection &lt;name&gt;</c>
 /// as a genuine child process and waits for it — the same <c>dotnet exec &lt;dll&gt;</c> shape
 /// <see cref="ProcessSupervisor.BuildStartInfo"/> already uses to spawn <c>DbDataSync.TaskRunner</c>,
 /// reused here rather than reinvented.
@@ -78,7 +78,6 @@ public sealed class LibraryValidationLauncher(ApiOptions options)
         };
         foreach (var argument in leadingArguments)
             startInfo.ArgumentList.Add(argument);
-        startInfo.ArgumentList.Add("config");
         startInfo.ArgumentList.Add("library");
         startInfo.ArgumentList.Add("validate");
         startInfo.ArgumentList.Add(libraryId);

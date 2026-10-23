@@ -95,7 +95,7 @@ internal static class ReadinessChecks
 
     /// <summary>One or two lines of human-readable text for <paramref name="result"/> — <c>config
     /// check</c>'s own plain-text report, one line at a time via <see cref="Console"/>. Phase 128's
-    /// <c>dbdatasync setup</c> TUI renders <see cref="CheckResult"/> directly instead (a color-coded
+    /// <c>dbdatasync server setup</c> TUI renders <see cref="CheckResult"/> directly instead (a color-coded
     /// list, not flattened text) — this stays here for <see cref="ConfigCommand"/>'s path only.</summary>
     internal static IReadOnlyList<string> FormatResult(CheckResult result)
     {
@@ -156,14 +156,14 @@ internal sealed class RepoCheck : IReadinessCheck
         {
             return Task.FromResult(new CheckResult(
                 "Repo", CheckStatus.Fail, $"'{context.Root}' does not exist.",
-                "Run `dbdatasync serve` once, or `dbdatasync setup`, to create it."));
+                "Run `dbdatasync server run` once, or `dbdatasync server setup`, to create it."));
         }
 
         if (!Repository.IsValid(context.Root))
         {
             return Task.FromResult(new CheckResult(
                 "Repo", CheckStatus.Fail, $"'{context.Root}' is not a git repository.",
-                "Run `dbdatasync serve` once to initialise it."));
+                "Run `dbdatasync server run` once to initialise it."));
         }
 
         try
@@ -235,7 +235,7 @@ internal sealed class StateStoreCheck : IReadinessCheck
             context.ApiOptions.StateEngine == StateEngineIds.Sqlite
                 ? $"Check that '{Path.GetDirectoryName(context.ApiOptions.StateDbPath)}' is writable."
                 : "Check DbDataSync:State:ConnectionString and the stored password " +
-                  "(`dbdatasync config secret set dbdata:sync:config:stateConnectionString ...`)."));
+                  "(`dbdatasync secret set dbdata:sync:config:stateConnectionString ...`)."));
     }
 }
 
@@ -262,7 +262,7 @@ internal sealed class LibrariesAndDriversCheck : IReadinessCheck
 
                 var libDir = LibraryPaths.LibDir(dir);
                 if (!Directory.Exists(libDir) || !Directory.EnumerateFileSystemEntries(libDir).Any())
-                    problems.Add($"library '{Path.GetFileName(dir)}' has no restored lib/ — run `dbdatasync config library sync`.");
+                    problems.Add($"library '{Path.GetFileName(dir)}' has no restored lib/ — run `dbdatasync library sync`.");
             }
         }
 
@@ -300,7 +300,7 @@ internal sealed class LibrariesAndDriversCheck : IReadinessCheck
                 {
                     problems.Add(
                         $"connection '{name}' names driver '{connection.DriverType}', which is not installed — " +
-                        $"run `dbdatasync config driver install {connection.DriverType} ...`.");
+                        $"run `dbdatasync driver install {connection.DriverType} ...`.");
                 }
             }
         }
@@ -377,7 +377,7 @@ internal sealed class LibraryCompatibilityCheck : IReadinessCheck
 
         return new CheckResult(
             "Library compatibility", CheckStatus.Warn, string.Join(" | ", details),
-            "Run `dbdatasync config library validate <id> --connection <name>` for a full, connection-scoped check, " +
+            "Run `dbdatasync library validate <id> --connection <name>` for a full, connection-scoped check, " +
             "or install a version of the library that has these members.");
     }
 }
@@ -490,7 +490,7 @@ internal sealed class CertificateCheck : IReadinessCheck
         {
             return Task.FromResult(new CheckResult(
                 "Certificate", CheckStatus.Fail, $"'{path}' does not exist.",
-                "Run `dbdatasync config cert use-pem`/`use-pfx` again with a valid path."));
+                "Run `dbdatasync cert use-pem`/`use-pfx` again with a valid path."));
         }
 
         X509Certificate2 certificate;
@@ -544,7 +544,7 @@ internal sealed class CertificateCheck : IReadinessCheck
                     ? $"self-signed (managed) — expires in {daysRemaining} day(s); the managed renewal " +
                       "service will regenerate it automatically (a restart is still needed to pick it up)."
                     : $"Expires in {daysRemaining} day(s) — renew soon.",
-                isManaged ? null : "Run `dbdatasync config cert use-pem`/`use-pfx` again with the renewed file."));
+                isManaged ? null : "Run `dbdatasync cert use-pem`/`use-pfx` again with the renewed file."));
         }
 
         return Task.FromResult(new CheckResult(
@@ -568,7 +568,7 @@ internal sealed class BindingCheck : IReadinessCheck
             {
                 return new CheckResult(
                     "Binding", CheckStatus.Fail, $"{url} answered {(int)response.StatusCode}.",
-                    "Start DbDataSync (`dbdatasync serve`) and check DbDataSync:App:Url.");
+                    "Start DbDataSync (`dbdatasync server run`) and check DbDataSync:App:Url.");
             }
 
             // A warning and not a failure: this binding works, which is what this check is about. The certificate's
@@ -578,14 +578,14 @@ internal sealed class BindingCheck : IReadinessCheck
             {
                 return new CheckResult(
                     "Binding", CheckStatus.Warn, $"{url} answers, but {certificate}",
-                    "Browsers will warn on it. `dbdatasync config cert use-pem`/`use-pfx` installs one whose name matches DbDataSync:App:Url.");
+                    "Browsers will warn on it. `dbdatasync cert use-pem`/`use-pfx` installs one whose name matches DbDataSync:App:Url.");
             }
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             return new CheckResult(
                 "Binding", CheckStatus.Fail, $"{url} did not answer: {ex.Message}",
-                "Start DbDataSync (`dbdatasync serve`) and check DbDataSync:App:Url.");
+                "Start DbDataSync (`dbdatasync server run`) and check DbDataSync:App:Url.");
         }
 
         var isLoopback = Uri.TryCreate(url, UriKind.Absolute, out var uri)

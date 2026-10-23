@@ -5,7 +5,7 @@ using Terminal.Gui.Views;
 namespace DbDataSync.Cli.Tui;
 
 /// <summary>
-/// The small set of one-off modal dialogs <c>dbdatasync setup</c> still needs outside the tabbed form —
+/// The small set of one-off modal dialogs <c>dbdatasync server setup</c> still needs outside the tabbed form —
 /// the "which folder?" prompt before <see cref="SetupScreen"/> even has a root to key off of, and the
 /// "type ALLOW" hard-confirm before disabling authentication. This, not a modal-per-field wizard, is
 /// the actual reusable piece a future TUI screen wants: a couple of shared dialog builders over one

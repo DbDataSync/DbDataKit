@@ -43,7 +43,7 @@ internal static class LegacyRootMigration
             {legacyRoot}
         The default is now {newRoot}. Either:
           - move that folder there, then re-run; or
-          - keep it where it is: dbdatasync serve --repo "{legacyRoot}"
+          - keep it where it is: dbdatasync server run --repo "{legacyRoot}"
             (and pass the same --repo to `service install` / set DbDataSync__App__RepoRoot / set it in
             dbdatasync.config.yaml)
         """;

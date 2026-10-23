@@ -50,7 +50,7 @@ public static class DbDataSyncHost
         });
         InsertConfigFile(builder);
 
-        // Applied only when this process really is a service, so `dbdatasync serve` in a terminal is
+        // Applied only when this process really is a service, so `dbdatasync server run` in a terminal is
         // unaffected — UseWindowsService changes lifetime and logging, and doing that to an
         // interactive run would make Ctrl+C and console output behave unlike every other command.
         if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService())

@@ -192,7 +192,7 @@ public sealed class LibraryLoadTests : IAsyncLifetime
 
         var ex = Assert.Throws<InvalidOperationException>(() => registry.GetFactory("NotInstalled"));
 
-        Assert.Contains("dbdatasync config library install", ex.Message);
+        Assert.Contains("dbdatasync library install", ex.Message);
     }
 
     /// <summary>
@@ -244,7 +244,7 @@ public sealed class LibraryLoadTests : IAsyncLifetime
 
         var ex = Assert.Throws<InvalidOperationException>(() => registry.GetFactory("mysql-connector"));
 
-        Assert.Contains("dbdatasync config library install mysql-connector", ex.Message);
+        Assert.Contains("dbdatasync library install mysql-connector", ex.Message);
     }
 
     private static string FindRepoRoot()

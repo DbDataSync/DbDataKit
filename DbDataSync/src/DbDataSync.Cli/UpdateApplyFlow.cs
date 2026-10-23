@@ -90,7 +90,7 @@ internal sealed class WindowsServiceControl : IServiceControl
     }
 }
 
-/// <summary>The same question <c>dbdatasync health</c> asks, asked repeatedly.</summary>
+/// <summary>The same question <c>dbdatasync health check</c> asks, asked repeatedly.</summary>
 internal sealed class HttpHealthProbe : IHealthProbe
 {
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(2);
@@ -221,7 +221,7 @@ internal static class UpdateApplyFlow
             store.Record(UpdatePhase.Succeeded, $"Switched to {change.ToVersion}.", change.FromVersion, change.ToVersion, change.RequestedBy);
             output.WriteLine(
                 $"Switched to {change.ToVersion} (slot {change.To}). The next `dbdatasync` run uses it; nothing runs as a service here, " +
-                "so restart a running `dbdatasync serve` yourself.");
+                "so restart a running `dbdatasync server run` yourself.");
             return 0;
         }
 
@@ -242,7 +242,7 @@ internal static class UpdateApplyFlow
                 store.Log($"health probe accepted an invalid certificate: {certificate}");
                 output.WriteLine(
                     $"  Note: {healthUrl} answered, but {certificate}. Browsers will warn on it — " +
-                    "`dbdatasync config cert use-pem`/`use-pfx` installs one that matches, and `dbdatasync ready` rechecks.");
+                    "`dbdatasync cert use-pem`/`use-pfx` installs one that matches, and `dbdatasync ready` rechecks.");
             }
 
             return 0;

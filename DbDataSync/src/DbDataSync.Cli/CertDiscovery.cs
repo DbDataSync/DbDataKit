@@ -4,7 +4,7 @@ using DbDataSync.Certificates;
 namespace DbDataSync.Cli;
 
 /// <summary>
-/// What <c>dbdatasync config cert discover</c> decides to write and say, separated from the directory query and
+/// What <c>dbdatasync cert discover</c> decides to write and say, separated from the directory query and
 /// the file write so every branch can be tested without a domain.
 /// </summary>
 /// <param name="WriteCaConfig">Set only when exactly one CA was found and none was configured.</param>
@@ -100,7 +100,7 @@ internal static class CertDiscovery
         if (template is not null)
         {
             lines.Add("");
-            lines.Add("Next: dbdatasync config cert enroll --dns <names>");
+            lines.Add("Next: dbdatasync cert enroll --dns <names>");
         }
 
         return new DiscoveryOutcome(writeCa, writeTemplate, lines, Succeeded: true);

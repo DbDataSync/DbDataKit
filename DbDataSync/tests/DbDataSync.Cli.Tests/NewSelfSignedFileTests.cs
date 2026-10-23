@@ -7,7 +7,7 @@ using LibGit2Sharp;
 namespace DbDataSync.Cli.Tests;
 
 /// <summary>
-/// <c>dbdatasync config cert new-self-signed</c>'s non-Windows branch (phase 130, tier 2) — driven
+/// <c>dbdatasync cert new-self-signed</c>'s non-Windows branch (phase 130, tier 2) — driven
 /// through the real <see cref="CertCommand"/> against a real temp repo, the same way
 /// <see cref="CertUsePemTests"/> exercises <c>use-pem</c>/<c>use-pfx</c>.
 /// <para>

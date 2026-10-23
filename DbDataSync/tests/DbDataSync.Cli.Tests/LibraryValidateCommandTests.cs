@@ -7,7 +7,7 @@ using Microsoft.Data.SqlClient;
 namespace DbDataSync.Cli.Tests;
 
 /// <summary>
-/// Phase 109j item 4's own "how to verify" bar, at the CLI layer (<c>dbdatasync config library
+/// Phase 109j item 4's own "how to verify" bar, at the CLI layer (<c>dbdatasync library
 /// validate</c>) rather than through the API's spawned-child-process endpoint (see
 /// <c>DbDataSync.Api.Tests.LibraryValidateIntegrationTests</c> for that half, including the no-DDL-rights
 /// case and the assembly-residency isolation check).

@@ -3,7 +3,7 @@ using Xunit;
 
 namespace DbDataSync.Libraries.Tests;
 
-/// <summary>Drives <c>dbdatasync config library ...</c> exactly as an operator would, through
+/// <summary>Drives <c>dbdatasync library ...</c> exactly as an operator would, through
 /// <see cref="LibraryCommand.RunAsync"/> rather than the lower-level <see cref="LibraryInstaller"/>
 /// this exercises indirectly.</summary>
 [Trait("Category", "Integration")]

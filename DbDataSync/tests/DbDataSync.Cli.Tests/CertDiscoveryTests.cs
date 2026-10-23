@@ -4,7 +4,7 @@ using DbDataSync.Certificates;
 namespace DbDataSync.Cli.Tests;
 
 /// <summary>
-/// What <c>dbdatasync config cert discover</c> decides to save and say. The directory query itself needs a domain
+/// What <c>dbdatasync cert discover</c> decides to save and say. The directory query itself needs a domain
 /// and is not covered here; every branch of the decision is.
 /// </summary>
 public sealed class CertDiscoveryTests
@@ -62,7 +62,7 @@ public sealed class CertDiscoveryTests
 
         Assert.Equal(@"ca01\One", outcome.WriteCaConfig);
         Assert.Equal("WebServer", outcome.WriteTemplate);
-        Assert.Contains("dbdatasync config cert enroll", Text(outcome));
+        Assert.Contains("dbdatasync cert enroll", Text(outcome));
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public sealed class CertDiscoveryTests
     {
         var lines = DbDataSync.Cli.Tui.SetupSteps.WindowsCertificateInstructions("enroll", null);
 
-        Assert.Contains(lines, l => l.Contains("config cert discover"));
-        Assert.Contains(lines, l => l.Contains("config cert enroll --dns"));
+        Assert.Contains(lines, l => l.Contains("cert discover"));
+        Assert.Contains(lines, l => l.Contains("cert enroll --dns"));
     }
 }

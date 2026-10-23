@@ -8,7 +8,7 @@ using LibGit2Sharp;
 namespace DbDataSync.Cli.Tests;
 
 /// <summary>
-/// <c>dbdatasync config cert use-pem</c>/<c>use-pfx</c> (phase 113) — the cross-platform TLS answer for
+/// <c>dbdatasync cert use-pem</c>/<c>use-pfx</c> (phase 113) — the cross-platform TLS answer for
 /// Linux/macOS, driven through the real <see cref="CertCommand"/> against a real temp repo, the same
 /// way <see cref="ServeCommandPrepareTests"/> exercises <c>ServeCommand.Prepare</c>.
 /// </summary>

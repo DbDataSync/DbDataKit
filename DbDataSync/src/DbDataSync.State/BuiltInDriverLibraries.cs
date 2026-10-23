@@ -86,7 +86,7 @@ public static class BuiltInDriverLibraries
             {
                 throw new InvalidOperationException(
                     $"'{libraryId}' has no SDK here to restore it, and no in-image catalog cache hit for it either — " +
-                    "its manifest was written but it is still pending restore. Run `dbdatasync config library sync` " +
+                    "its manifest was written but it is still pending restore. Run `dbdatasync library sync` " +
                     "on a host with the SDK, then retry.");
             }
         }

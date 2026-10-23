@@ -190,7 +190,7 @@ function KnownDriverRow({ entry, installing, justInstalled, onAdd }: {
 }) {
   const [version, setVersion] = useState('')
   const command =
-    `dbdatasync config driver install <id> --library ${entry.boundLibrary} --version ${version || '<v>'} --from ${entry.id}`
+    `dbdatasync driver install <id> --library ${entry.boundLibrary} --version ${version || '<v>'} --from ${entry.id}`
 
   const copy = async () => {
     try {

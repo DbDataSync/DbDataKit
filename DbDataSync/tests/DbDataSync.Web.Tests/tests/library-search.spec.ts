@@ -36,7 +36,7 @@ test.describe('admin: Libraries — NuGet search', () => {
 
     const command = page.getByTestId('admin-libraries-install-command')
     await expect(command).toBeVisible()
-    await expect(command).toContainText(`dbdatasync config library install MySqlConnector --version ${firstRealVersion}`)
+    await expect(command).toContainText(`dbdatasync library install MySqlConnector --version ${firstRealVersion}`)
     // MySqlConnector is a bundled, curated entry (phase 117) — no trust warning for it.
     await expect(command).not.toContainText("isn't one of the bundled")
 
@@ -55,7 +55,7 @@ test.describe('admin: Libraries — NuGet search', () => {
     await page.getByTestId('admin-libraries-command-version').fill('9.0.0')
 
     const command = page.getByTestId('admin-libraries-install-command')
-    await expect(command).toContainText('dbdatasync config library install Npgsql --version 9.0.0')
+    await expect(command).toContainText('dbdatasync library install Npgsql --version 9.0.0')
 
     await page.screenshot({ path: path.join(screenshotsDir, '119-curated-quick-add.png'), fullPage: true })
   })

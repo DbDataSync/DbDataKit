@@ -39,22 +39,22 @@ if (!isWorker) {
 }
 
 // Phase 109i: the webServer entry below launches DbDataSync.Api.dll with `dotnet exec` directly, not
-// through `dbdatasync serve` — deliberately, per that entry's own comment, so killing it reliably
+// through `dbdatasync server run` — deliberately, per that entry's own comment, so killing it reliably
 // kills the real process rather than a `dotnet run` wrapper. That means this scratch repo never goes
 // through ServeCommand.EnsureDuckDbInstalledAsync, the one place a real deployment (always started via
-// `dbdatasync serve`, confirmed against this repo's own Dockerfile) gets DuckDB installed
+// `dbdatasync server run`, confirmed against this repo's own Dockerfile) gets DuckDB installed
 // automatically. Seeded here, synchronously, the same way the mysql-connector catalog id used to be
 // seeded before phase 120 made installing it a real, UI-testable feature — DuckDB has no equivalent
 // "install it" scenario any golden-path test exercises (unlike mysql-connector, nothing here is
-// testing the *install*, only relying on DuckDB already being present the way a `dbdatasync serve`
+// testing the *install*, only relying on DuckDB already being present the way a `dbdatasync server run`
 // deployment always would be), so there is no feature test this shortcut would be standing in for.
-// A real install (`dbdatasync config library install`), not a hand-rolled fixture — this repo's own
+// A real install (`dbdatasync library install`), not a hand-rolled fixture — this repo's own
 // precedent for anything that has to make a package genuinely loadable, not merely on record.
 if (!isWorker) {
   execFileSync(
     'dotnet',
     ['exec', path.join(repoRoot, 'src/DbDataSync.Cli/bin/Debug/net10.0/DbDataSync.Cli.dll'),
-      'config', 'library', 'install', 'duckdb', '--version', '1.5.6', '--repo', scratchRepoRoot],
+      'library', 'install', 'duckdb', '--version', '1.5.6', '--repo', scratchRepoRoot],
     { stdio: 'inherit' },
   )
 }

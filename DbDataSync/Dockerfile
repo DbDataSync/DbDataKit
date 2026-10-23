@@ -82,9 +82,9 @@ COPY --from=build /app/ ./
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD ["dotnet", "/app/DbDataSync.Cli.dll", "health", "--url", "http://127.0.0.1:8080"]
+    CMD ["dotnet", "/app/DbDataSync.Cli.dll", "health", "check", "--url", "http://127.0.0.1:8080"]
 
-ENTRYPOINT ["dotnet", "/app/DbDataSync.Cli.dll", "serve", "--url", "http://0.0.0.0:8080"]
+ENTRYPOINT ["dotnet", "/app/DbDataSync.Cli.dll", "server", "run", "--url", "http://0.0.0.0:8080"]
 
 # ── The default image ───────────────────────────────────────────────────────────
 # Debian, not Alpine. LibGit2Sharp, Microsoft.Data.Sqlite and DuckDB.NET all ship glibc natives, and
@@ -131,6 +131,6 @@ EXPOSE 8080
 # pick its way around both — the first attempt used /dev/tcp under /bin/sh, which is a bash feature
 # under dash, and reported a healthy container as unhealthy every time.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD ["dotnet", "/app/DbDataSync.Cli.dll", "health", "--url", "http://127.0.0.1:8080"]
+    CMD ["dotnet", "/app/DbDataSync.Cli.dll", "health", "check", "--url", "http://127.0.0.1:8080"]
 
-ENTRYPOINT ["dotnet", "/app/DbDataSync.Cli.dll", "serve", "--url", "http://0.0.0.0:8080"]
+ENTRYPOINT ["dotnet", "/app/DbDataSync.Cli.dll", "server", "run", "--url", "http://0.0.0.0:8080"]

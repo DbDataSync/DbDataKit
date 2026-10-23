@@ -2,7 +2,7 @@ namespace DbDataSync.Api;
 
 /// <summary>
 /// Where the web console's files are (phase 160). ASP.NET looks for <c>wwwroot</c> under the process's
-/// <em>current directory</em>, which is the tool's own directory only by accident: a terminal <c>dbdatasync serve</c> runs
+/// <em>current directory</em>, which is the tool's own directory only by accident: a terminal <c>dbdatasync server run</c> runs
 /// wherever the user is, and the systemd unit sets <c>WorkingDirectory</c> to the data root. Neither has a <c>wwwroot</c>,
 /// so an installed tool answered <c>404 "No web assets are published"</c> to <c>/</c> while its own directory held the
 /// whole console. (The Windows service escapes it — <c>UseWindowsService</c> moves the content root to the app

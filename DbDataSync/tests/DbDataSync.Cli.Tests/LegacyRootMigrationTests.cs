@@ -69,7 +69,7 @@ public sealed class LegacyRootMigrationTests : IDisposable
 
         Assert.Contains(_legacyRoot, message);
         Assert.Contains(_defaultRoot, message);
-        Assert.Contains("dbdatasync serve --repo", message);
+        Assert.Contains("dbdatasync server run --repo", message);
     }
 
     /// <summary><see cref="ServeCommand.Prepare"/> alone only writes a fully-commented starter file —

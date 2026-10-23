@@ -31,7 +31,7 @@ base="http://127.0.0.1:$port"
 echo "== waiting for the container's own health check"
 healthy=false
 for _ in $(seq 1 45); do
-  if docker exec "$name" dotnet /app/DbDataSync.Cli.dll health --url http://127.0.0.1:8080 >/dev/null 2>&1; then healthy=true; break; fi
+  if docker exec "$name" dotnet /app/DbDataSync.Cli.dll health check --url http://127.0.0.1:8080 >/dev/null 2>&1; then healthy=true; break; fi
   [ "$(docker inspect -f '{{.State.Running}}' "$name")" = "true" ] || fail "the container exited"
   sleep 2
 done

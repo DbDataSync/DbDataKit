@@ -115,7 +115,7 @@ public sealed class LibraryRegistry
 
     /// <summary>
     /// <see cref="DbProviderFactories.GetFactory(string)"/>, with a message that names the fix
-    /// (<c>dbdatasync config library install</c>) instead of the BCL's generic "no factory registered".
+    /// (<c>dbdatasync library install</c>) instead of the BCL's generic "no factory registered".
     /// <para>
     /// A <see cref="KnownLibraries"/> entry has two different ids for the same library — a short catalog
     /// id (<c>"mysql-connector"</c>) and the real NuGet package id (<c>"MySqlConnector"</c>); see
@@ -151,10 +151,10 @@ public sealed class LibraryRegistry
             if (Installed.ContainsKey(installedId))
                 return $"Library '{id}' not found. A library is installed under the {installedIdKind} " +
                        $"'{installedId}'. Did you mean '{installedId}', or install '{id}' explicitly with " +
-                       $"`dbdatasync config library install {id}`?";
+                       $"`dbdatasync library install {id}`?";
         }
 
-        return $"Library '{id}' is not installed. Install it with `dbdatasync config library install {id}`.";
+        return $"Library '{id}' is not installed. Install it with `dbdatasync library install {id}`.";
     }
 
     /// <summary>The file names a native library called <paramref name="name"/> has on this platform.</summary>

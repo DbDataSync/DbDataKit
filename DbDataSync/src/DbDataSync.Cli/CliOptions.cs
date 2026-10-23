@@ -3,7 +3,7 @@ namespace DbDataSync.Cli;
 /// <summary>
 /// Where a tool that was just installed keeps its things.
 /// <para>
-/// Not the current directory, which is what the API's own defaults use: `dbdatasync serve` run from
+/// Not the current directory, which is what the API's own defaults use: `dbdatasync server run` run from
 /// wherever a shell happens to be would scatter a config repo and a state database across a user's
 /// filesystem, and the second run would find neither.
 /// </para>
