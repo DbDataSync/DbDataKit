@@ -31,13 +31,13 @@ switch (cmd)
     case "exit":
         return int.Parse(args[1]);
     case "sleep":
-        File.WriteAllText(args[1], Environment.ProcessId.ToString());
+        Publish(args[1], Environment.ProcessId.ToString());
         await Task.Delay(Timeout.Infinite);
         return 0;
     case "spawn":
     {
         var grand = Process.Start(new ProcessStartInfo(Environment.ProcessPath!, [typeof(Program).Assembly.Location, "sleep", args[1] + ".grand"]) { UseShellExecute = false })!;
-        File.WriteAllText(args[1], Environment.ProcessId.ToString());
+        Publish(args[1], Environment.ProcessId.ToString());
         await Task.Delay(Timeout.Infinite);
         return 0;
     }
@@ -47,10 +47,19 @@ switch (cmd)
         var pid = int.Parse(Environment.GetEnvironmentVariable("WATCH_PID")!);
         var start = long.Parse(Environment.GetEnvironmentVariable("WATCH_START") ?? "0");
         _ = ParentDeathMonitor.Start(pid, start, () => Environment.Exit(42));
-        File.WriteAllText(args[1], "ready");
+        Publish(args[1], "ready");
         await Task.Delay(Timeout.Infinite);
         return 0;
     }
     default:
         return 99;
+}
+
+// The tests wait for these files to exist and then read them. Written to a temporary name and moved into place, so that
+// "exists" means "complete": a reader never meets a file the child still has open (which on Windows fails the read).
+static void Publish(string path, string text)
+{
+    var temp = path + ".tmp";
+    File.WriteAllText(temp, text);
+    File.Move(temp, path, overwrite: true);
 }
