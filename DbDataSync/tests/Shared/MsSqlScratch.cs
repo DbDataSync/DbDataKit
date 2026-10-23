@@ -85,7 +85,9 @@ internal static class MsSqlScratch
             """;
     }
 
-    /// <summary>3702: database in use. 5061: ALTER DATABASE could not take its lock. 1205: deadlock victim, which
-    /// server-scoped operations running side by side produce.</summary>
-    private static bool IsContention(SqlException ex) => ex.Number is 3702 or 5061 or 1205;
+    /// <summary>3702: database in use. 5061: ALTER DATABASE could not take its lock. 5064: the database is in single-user
+    /// mode and another session took the one slot between the kick and the next statement (seen in CI in
+    /// <c>BulkLoadIntegrationTests</c>: the same race 5061 names, reported by the other path). 1205: deadlock
+    /// victim, which server-scoped operations running side by side produce.</summary>
+    private static bool IsContention(SqlException ex) => ex.Number is 3702 or 5061 or 5064 or 1205;
 }
