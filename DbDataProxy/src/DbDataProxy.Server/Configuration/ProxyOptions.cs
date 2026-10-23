@@ -279,7 +279,7 @@ public sealed class UserOptions
     /// <summary>How the user proves who they are.</summary>
     public UserAuthType AuthType { get; set; } = UserAuthType.Password;
 
-    /// <summary>PBKDF2 hash as produced by "dbdataproxy hash-password" (AuthType Password).</summary>
+    /// <summary>PBKDF2 hash as produced by "dbdataproxy secret hash" (AuthType Password).</summary>
     [Secret]
     public string? PasswordHash { get; set; }
 

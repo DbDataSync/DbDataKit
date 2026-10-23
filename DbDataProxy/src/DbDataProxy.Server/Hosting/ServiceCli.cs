@@ -87,7 +87,7 @@ public static class ServiceCli
                     Register the Windows service (run elevated). Default account: NT SERVICE\<name>.
           uninstall [--name N]            Stop and remove the service
           start|stop|restart|status|doctor [--name N]
-          unit      (or --systemd) [--name N] [--exec /path/to/DbDataProxy]
+          unit      (or --systemd) [--name N] [--exec /path/to/dbdataproxy]
                                           Print a hardened systemd unit
         """;
 
@@ -123,7 +123,7 @@ public static class ServiceCli
 
         if (verb == "install" && Path.GetFileNameWithoutExtension(env.BinaryPath).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
         {
-            console.Error.WriteLine("Run the service command from dbdataproxy.exe (not 'dotnet DbDataProxy.dll'): the service registers the executable it is started from.");
+            console.Error.WriteLine("Run the service command from dbdataproxy.exe (not 'dotnet dbdataproxy.dll'): the service registers the executable it is started from.");
             return ExitCodes.Failure;
         }
 
@@ -188,6 +188,8 @@ public static class ServiceCli
             Description = Description,
             BinaryPath = binaryPath,
             Version = ProxyHost.Version,
+            // the service runs the server: there is no default command
+            Arguments = ["server", "run"],
             Layout = layout,
             PrincipalResolver = principals,
             // Same as before: start at boot (not delayed); restart after a crash after 5s, 5s, then 60s; reset after a day.
@@ -202,7 +204,7 @@ public static class ServiceCli
         string name = (args.Name ?? "dbdataproxy").ToLowerInvariant();
         // On Linux the unit runs the executable it is generated from; elsewhere (a unit written on a Windows
         // machine) --exec gives the path on the target, defaulting to the conventional /opt location.
-        string exe = args.Exec ?? (env.BinaryPath.StartsWith('/') ? env.BinaryPath : "/opt/dbdataproxy/DbDataProxy");
+        string exe = args.Exec ?? (env.BinaryPath.StartsWith('/') ? env.BinaryPath : "/opt/dbdataproxy/dbdataproxy");
         try
         {
             env.Console.Out.Write(SystemdUnitGenerator.Generate(UnitOptions(name, exe)));
@@ -219,7 +221,7 @@ public static class ServiceCli
     {
         Name = name,
         Description = "DbDataProxy Arrow Flight SQL proxy",
-        ExecStart = executable,
+        ExecStart = executable + " server run",
         WorkingDirectory = executable[..executable.LastIndexOf((char)47)], // a Unix path whatever OS generates it
         // DynamicUser: no account to manage; the state directory under /var/lib/<name> is created and owned by systemd.
         StateDirectories = [name],

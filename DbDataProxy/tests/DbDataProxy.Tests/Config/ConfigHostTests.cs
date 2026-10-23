@@ -143,7 +143,7 @@ public sealed class ConfigStartupTests
         Console.SetError(stderr);
         try
         {
-            int code = await Cli.RunAsync(["run", "--Proxy:Listen:Prot=9000", $"--Proxy:Tls:CertificatePassword={secret}", "--Proxy:Listen:Port=99999"]);
+            int code = await Cli.RunAsync(["server", "run", "--Proxy:Listen:Prot=9000", $"--Proxy:Tls:CertificatePassword={secret}", "--Proxy:Listen:Port=99999"]);
             Assert.Equal(2, code);
         }
         finally { Console.SetError(original); }
@@ -163,7 +163,7 @@ public sealed class ConfigStartupTests
         Console.SetError(stderr);
         try
         {
-            int code = await Cli.RunAsync(["run", "--Proxy:Listen:Port=0", "--Proxy:Tls:Mode=None", "--Proxy:RequireReferencedSecrets=true",
+            int code = await Cli.RunAsync(["server", "run", "--Proxy:Listen:Port=0", "--Proxy:Tls:Mode=None", "--Proxy:RequireReferencedSecrets=true",
                 "--Proxy:DataSources:x:Provider=sqlserver", "--Proxy:DataSources:x:ConnectionString=Server=a;Password=LitSecret-77"]);
             Assert.Equal(2, code);
         }
@@ -180,7 +180,7 @@ public sealed class ConfigStartupTests
         try
         {
             Assert.Equal(2, await Cli.RunAsync(["--Proxy:Bogus=1"]));
-            Assert.Equal(ProxyConfigException.ExitCode, await Cli.RunAsync(["run", "--Proxy:Bogus=1"]));
+            Assert.Equal(ProxyConfigException.ExitCode, await Cli.RunAsync(["server", "run", "--Proxy:Bogus=1"]));
         }
         finally { Console.SetError(original); }
     }

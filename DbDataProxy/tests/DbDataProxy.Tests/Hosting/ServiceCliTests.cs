@@ -76,7 +76,7 @@ public sealed class ServiceCliTests
         Assert.Equal(3, cfg.FailureRestartActions); // restart 5s / 5s / 60s
         Assert.Equal(ServiceCli.DisplayName, cfg.DisplayName);
         Assert.Equal(ServiceCli.Description, cfg.Description);
-        Assert.Equal($"\"{Exe}\"", cfg.BinaryPathName);
+        Assert.Equal($"\"{Exe}\" server run", cfg.BinaryPathName);
         Assert.False(rig.Scm.LastPasswordSupplied);
     }
 
@@ -290,7 +290,7 @@ public sealed class ServiceCliTests
         Assert.Equal(ExitCodes.Failure, rig.Run("install"));
         Assert.Contains("only available on Windows", rig.Err);
         Assert.Equal(0, rig.Run("unit"));
-        Assert.Contains("ExecStart=/opt/dbdataproxy/DbDataProxy", rig.Out);
+        Assert.Contains("ExecStart=/opt/dbdataproxy/dbdataproxy server run", rig.Out);
     }
 
     [Fact]
@@ -323,7 +323,7 @@ public sealed class ServiceCliTests
     public void Systemd_unit_matches_the_golden_file()
     {
         var rig = new Rig { Windows = false };
-        Assert.Equal(0, rig.Run("--systemd", "--exec", "/opt/dbdataproxy/DbDataProxy"));
+        Assert.Equal(0, rig.Run("--systemd", "--exec", "/opt/dbdataproxy/dbdataproxy"));
         string actual = rig.Out.Replace("\r\n", "\n");
 
         string golden = Path.Combine(AppContext.BaseDirectory, "Hosting", "Golden", "dbdataproxy.service");

@@ -12,8 +12,8 @@
   "windowsScope": "machine",
   "service": {
     "name": "dbdataproxy",
-    "register": "install --name {name}",
-    "unregister": "uninstall --name {name}"
+    "register": "service install --name {name}",
+    "unregister": "service uninstall --name {name}"
   },
   "notes": "Settings live in %ProgramData%\\DbDataProxy\\appsettings.json. Registering the Windows service needs an elevated prompt: dbdataproxy service install",
   "msi": {

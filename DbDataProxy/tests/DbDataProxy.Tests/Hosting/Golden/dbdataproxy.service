@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=notify
-ExecStart=/opt/dbdataproxy/DbDataProxy
+ExecStart=/opt/dbdataproxy/dbdataproxy server run
 WorkingDirectory=/opt/dbdataproxy
 Restart=on-failure
 RestartSec=5

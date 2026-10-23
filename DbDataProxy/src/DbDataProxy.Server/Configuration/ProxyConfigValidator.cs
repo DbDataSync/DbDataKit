@@ -146,7 +146,7 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
                 seen[user.Name] = i;
 
             if (user.AuthType == UserAuthType.Password && string.IsNullOrWhiteSpace(user.PasswordHash))
-                cx.Error($"{at}.PasswordHash", "A password user needs a `PasswordHash`; the user could never sign in.", "Create one with: dbdataproxy hash-password");
+                cx.Error($"{at}.PasswordHash", "A password user needs a `PasswordHash`; the user could never sign in.", "Create one with: dbdataproxy secret hash");
             if (user.AuthType == UserAuthType.Windows && !string.IsNullOrWhiteSpace(user.PasswordHash))
                 cx.Warning($"{at}.PasswordHash", "A Windows user is checked by the operating system; `PasswordHash` is ignored.");
 
