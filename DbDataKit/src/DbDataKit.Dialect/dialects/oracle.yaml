@@ -22,7 +22,7 @@ literals:
   time: "INTERVAL '{v}' HOUR TO SECOND"
   timestamp: "TIMESTAMP '{v}'"
   timestamptz: "TIMESTAMP '{v}'"
-  guid: "HEXTORAW('{hexn}')"
+  guid: "'{v}'"
   json: "'{v}'"
   xml: "XMLTYPE('{v}')"
   fraction_digits: "6"
@@ -37,7 +37,13 @@ types:
   - { native: "number(10)", canonical: "int32(unsigned)", direction: from_canonical }
   - { native: "number(19)", canonical: "int64", direction: from_canonical }
   - { native: "number(20)", canonical: "int64(unsigned)", direction: from_canonical }
-  - { native: "number", canonical: "decimal", direction: to_canonical, fidelity: lossy, note: "NUMBER without precision is a floating decimal of up to 38 digits; mapped to an unconstrained decimal" }
+  - { native: "number", canonical: "decimal(38,10)", direction: to_canonical, fidelity: lossy, note: "Oracle NUMBER with no declared precision/scale; approximated as DECIMAL(38,10) - an operator-provided type override is the more precise route for a genuinely unconstrained column." }
+  - { native: "number({p})", canonical: "int16", direction: to_canonical, p_max: 4 }
+  - { native: "number({p})", canonical: "int32", direction: to_canonical, p_min: 5, p_max: 9 }
+  - { native: "number({p})", canonical: "int64", direction: to_canonical, p_min: 10, p_max: 18 }
+  - { native: "number({p},0)", canonical: "int16", direction: to_canonical, p_max: 4 }
+  - { native: "number({p},0)", canonical: "int32", direction: to_canonical, p_min: 5, p_max: 9 }
+  - { native: "number({p},0)", canonical: "int64", direction: to_canonical, p_min: 10, p_max: 18 }
   - { native: "number({p},{s})", canonical: "decimal({p},{s})", defaults: { s: 0 }, p_max: 38 }
   - { native: "numeric({p},{s})", canonical: "decimal({p},{s})", direction: to_canonical, defaults: { s: 0 } }
   - { native: "decimal({p},{s})", canonical: "decimal({p},{s})", direction: to_canonical, defaults: { s: 0 } }
@@ -70,7 +76,7 @@ types:
   - { native: "interval day({n}) to second({s})", canonical: "interval", direction: to_canonical, fidelity: lossy, note: "interval precision is not carried" }
   - { native: "interval day to second", canonical: "interval", direction: to_canonical, fidelity: lossy, note: "interval precision is not carried" }
   - { native: "interval day(9) to second(9)", canonical: "interval", direction: from_canonical }
-  - { native: "raw(16)", canonical: "guid", direction: from_canonical, fidelity: widened, note: "stored as raw(16); byte order follows the CLR Guid layout" }
+  - { native: "varchar2(36)", canonical: "guid", direction: from_canonical, fidelity: widened, note: "Oracle has no native GUID/UUID type; stored as its canonical 36-character text form." }
   - { native: "clob", canonical: "json", direction: from_canonical, fidelity: widened, note: "stored as text; use a native JSON column on 21c+ by overriding the table" }
   - { native: "json", canonical: "json", direction: to_canonical }
   - { native: "xmltype", canonical: "xml" }

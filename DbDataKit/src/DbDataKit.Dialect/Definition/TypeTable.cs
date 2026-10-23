@@ -143,6 +143,11 @@ internal sealed class TypeRule
         if (!CanRead) return null;
         var m = _regex.Match(Normalize(native));
         if (!m.Success) return null;
+        // A placeholder the canonical type does not carry only selects the row (number({p}) -> int16 for p up to 4), so its range
+        // applies when reading too; one the canonical type carries is read as written.
+        foreach (var (ph, lo) in Min) if (SelectsRow(ph) && m.Groups[ph.ToString()] is { Success: true } g && int.TryParse(g.Value, out int v) && v < lo) return null;
+        foreach (var (ph, hi) in Max) if (SelectsRow(ph) && m.Groups[ph.ToString()] is { Success: true } g && int.TryParse(g.Value, out int v) && v > hi) return null;
+        bool SelectsRow(char ph) => !Canon.Slots.Any(slot => slot.Item1 == ph);
         int? Slot(int k)
         {
             if (k >= Canon.Slots.Count) return null;
