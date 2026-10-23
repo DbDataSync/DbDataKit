@@ -1,4 +1,4 @@
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Core.Config;
 using DbDataSync.Libraries;
 using DbDataSync.State;
@@ -67,7 +67,7 @@ public static class InviteCommand
         {
             var libraryRegistry = new LibraryRegistry(root).LoadAll();
             database = StateDatabase.FromOptions(
-                engine, stateDb, stateConnectionString, new SecretStore("DbDataSync", true), libraryRegistry);
+                engine, stateDb, stateConnectionString, SecretStore.Open(root), libraryRegistry);
         }
         catch (InvalidOperationException ex)
         {

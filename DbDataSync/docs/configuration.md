@@ -102,7 +102,7 @@ commented out, as a reference rather than a default silently taking effect.
 `ConnectionConfig.ConnectionString` already is (`ConfigValidation.RejectEmbeddedCredential`) — a
 `password`/`pwd`/`passwd`/`secret`/`accountkey`/`apikey` key in the string is rejected outright. The
 password for a non-SQLite state store goes through the secret store instead, under the one fixed ref
-`dbdatasync:config:stateConnectionString` (see "Secrets," below) — the starter file's own comment names
+`dbdata:sync:config:stateConnectionString` (see "Secrets," below) — the starter file's own comment names
 this, and it and the connection string are spliced together at connect time.
 
 ### `dbdatasync serve`
@@ -225,19 +225,19 @@ the hardcoded default unless `--url` is passed (which the image's own `HEALTHCHE
 
 ### `dbdatasync config secret set|list|remove`
 
-Thin wrappers over the same secret store connections use (see "Secrets," below) — reachable without
+Thin wrappers over the encrypted secret store connections use (see "Secrets," below) — reachable without
 going through a connection's own save flow. Never prints a stored value back.
 
 | command | does |
 | --- | --- |
 | `dbdatasync config secret set <ref> <value>` | stores `value` under `ref` |
-| `dbdatasync config secret list [<ref> ...]` | reports whether each given ref is currently set (given none, checks the one fixed ref this build defines: `dbdatasync:config:stateConnectionString`) |
+| `dbdatasync config secret list [<ref> ...]` | reports whether each given ref is currently set (given none, checks the one fixed ref this build defines: `dbdata:sync:config:stateConnectionString`) |
 | `dbdatasync config secret remove <ref>` | deletes a stored value |
 
 Example — setting the state store's password for a `dbdatasync.config.yaml`-configured deployment:
 
 ```
-dbdatasync config secret set dbdatasync:config:stateConnectionString "Password=..."
+dbdatasync config secret set dbdata:sync:config:stateConnectionString "Password=..."
 ```
 
 ### `dbdatasync version`
@@ -570,19 +570,20 @@ be recreated rather than upgraded.**
 
 ## Secrets
 
-Connection credentials go through `ClrKernel.Core.Secrets.SecretStore` (an external package),
-constructed with `"DbDataSync"` as its configured prefix — every provider's naming (this environment
-variable fallback, the Windows Credential Manager target name, the macOS Keychain/Linux Secret Service
-service name) derives from it, rather than the package's own unconfigured `ClrKernel` default. The
-secret ref for a connection named `<name>` is `dbdatasync:connection:<name>` — a separate, this-app-owned
-namespacing convention inside the ref string itself, unrelated to the store's own prefix. When no OS
-keyring is available (a sandboxed or CI environment, most commonly), `SecretStore` falls back to an
-environment variable: the ref uppercased, with every non-alphanumeric character replaced by `_`, prefixed
-`DBDATASYNC_SECRET_`.
+Connection credentials and the state database's password are in an **encrypted store** under the repository root: `secrets/secrets.yaml`,
+each value AES-256-GCM encrypted under a key that is protected by DPAPI on Windows and kept in a file readable only by its owner
+(`secrets/keys`, created on first use) elsewhere. `DBDATA_SECRETS_KEY_FILE` names a key file kept somewhere else, such as a mounted secret.
+`secrets/` is added to the repository's `.gitignore` when the store is first opened. The same store is the one every DbData product uses
+(`DbDataKit.Secrets.Store`); back up `secrets/` together with its key, or the values cannot be read again.
 
-Example: a connection named `orders-db` resolves to `DBDATASYNC_SECRET_DBDATASYNC_CONNECTION_ORDERS_DB`
-— the repeated `DBDATASYNC` is expected: the store's prefix and the ref's own namespacing are two
-different things that happen to share a name.
+Names are `dbdata:sync:<kind>:<name>`: a connection named `<name>` has its password at `dbdata:sync:connection:<name>`, and the state
+database's at `dbdata:sync:config:stateConnectionString`. Names are lower-cased, so two connections whose names differ only by case share a
+secret. The names from before the store (`dbdatasync:connection:...`) are **not read**: the secrets are set again (`dbdatasync config secret set`,
+or save the connection with its password), and `dbdatasync config secret set` with an old-form name is refused with the form to use.
+
+When the store has no value, the environment answers: the name upper-cased, every character other than a letter or digit replaced by `_`,
+prefixed `DBDATA_SECRET_`. A connection named `orders-db` resolves to `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_ORDERS_DB`. A file named after the secret in
+the directory `CREDENTIALS_DIRECTORY` names (systemd `LoadCredential=`, a container secret mount) is the last place looked.
 
 ## SPA dev server (`src/DbDataSync.Web`)
 

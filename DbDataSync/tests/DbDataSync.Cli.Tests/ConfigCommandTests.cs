@@ -11,11 +11,10 @@ namespace DbDataSync.Cli.Tests;
 public sealed class ConfigCommandTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("dbdatasync-config-tests-").FullName;
-    private readonly string _secretRef = $"dbdatasync:test:{Guid.NewGuid():N}";
+    private readonly string _secretRef = "dbdata:sync:test:routing";
 
     public void Dispose()
     {
-        SecretCommand.Run(["remove", _secretRef]);
         GitTempDirectory.DeleteRecursively(_root);
     }
 
@@ -54,10 +53,10 @@ public sealed class ConfigCommandTests : IDisposable
     [Fact]
     public async Task Secret_ForwardsToSecretCommand()
     {
-        var (setCode, _) = await Run(["secret", "set", _secretRef, "sup3r-secret"]);
+        var (setCode, _) = await Run(["secret", "set", _secretRef, "sup3r-secret", "--repo", _root]);
         Assert.Equal(0, setCode);
 
-        var (listCode, output) = await Run(["secret", "list", _secretRef]);
+        var (listCode, output) = await Run(["secret", "list", _secretRef, "--repo", _root]);
 
         Assert.Equal(0, listCode);
         Assert.Contains(_secretRef, output);

@@ -1,4 +1,3 @@
-using ClrKernel.Core.Secrets;
 using DbDataSync.Api.Auth;
 using DbDataSync.Core.Config;
 using DbDataKit.Config.Git;
@@ -51,7 +50,7 @@ internal static class SetupSteps
         DbDataSyncConfigFile.SetValue(root, "DbDataSync:State", "Engine", engine);
         DbDataSyncConfigFile.SetValue(root, "DbDataSync:State", "ConnectionString", connectionString ?? "");
         if (password is not null)
-            new SecretStore("DbDataSync", true).Store(SecretRefs.ForAppSetting("stateConnectionString"), password);
+            SecretStore.Open(root).Store(SecretRefs.ForAppSetting("stateConnectionString"), password);
 
         var libraryRegistry = new LibraryRegistry(root).LoadAll();
         var libraryId = engine == StateEngineIds.MsSql ? MsSqlStateDialect.LibraryId : PostgresStateDialect.LibraryId;
@@ -82,7 +81,7 @@ internal static class SetupSteps
         try
         {
             StateDatabase.FromOptions(
-                engine, Path.Combine(root, "state.db"), connectionString, new SecretStore("DbDataSync", true),
+                engine, Path.Combine(root, "state.db"), connectionString, SecretStore.Open(root),
                 libraryRegistry);
             return new StepResult(false, "Connected — schema is current.");
         }
@@ -287,7 +286,7 @@ internal static class SetupSteps
     /// Every <c>DbDataSync:*</c> key the merged configuration resolves to — file, then environment,
     /// then command line, the same precedence <c>config check</c> and the running host use. Nothing
     /// here can embed a real credential (<see cref="DbDataSyncConfigFile.SetValue"/> refuses one, and
-    /// the state password lives only in <see cref="ClrKernel.Core.Secrets.SecretStore"/>), but an
+    /// the state password lives only in <c>SecretStore</c>), but an
     /// operator can still set one through an environment variable this command has no say over, so a
     /// value that looks like it carries one is redacted rather than trusted to be safe by construction.
     /// </summary>

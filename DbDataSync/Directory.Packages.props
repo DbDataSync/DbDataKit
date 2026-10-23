@@ -12,5 +12,9 @@
     <PackageVersion Include="DbDataKit.Dialect" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Dialect.Abstractions" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Config.Yaml" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Secrets.Abstractions" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Secrets" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Secrets.Store" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Secrets.Windows" Version="$(DbDataKitVersion)" />
   </ItemGroup>
 </Project>

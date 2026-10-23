@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using ClrKernel.Core.Secrets;
 using DbDataSync.Api.Auth;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Certificates;
@@ -41,7 +40,7 @@ internal sealed class ReadinessContext
     {
         try
         {
-            var secrets = new SecretStore("DbDataSync", true);
+            var secrets = SecretStore.Open(Root);
             var libraryRegistry = new LibraryRegistry(Root).LoadAll();
             var database = StateDatabase.FromOptions(
                 ApiOptions.StateEngine, ApiOptions.StateDbPath, ApiOptions.StateConnectionString, secrets,
@@ -236,7 +235,7 @@ internal sealed class StateStoreCheck : IReadinessCheck
             context.ApiOptions.StateEngine == StateEngineIds.Sqlite
                 ? $"Check that '{Path.GetDirectoryName(context.ApiOptions.StateDbPath)}' is writable."
                 : "Check DbDataSync:State:ConnectionString and the stored password " +
-                  "(`dbdatasync config secret set dbdatasync:config:stateConnectionString ...`)."));
+                  "(`dbdatasync config secret set dbdata:sync:config:stateConnectionString ...`)."));
     }
 }
 
@@ -293,7 +292,7 @@ internal sealed class LibrariesAndDriversCheck : IReadinessCheck
         {
             var configRoot = Path.Combine(context.Root, "config");
             var repository = new ConfigRepository(
-                configRoot, new GitCommitService(context.Root), new SecretStore("DbDataSync", true));
+                configRoot, new GitCommitService(context.Root), SecretStore.Open(context.Root));
             foreach (var name in repository.ListConnections())
             {
                 var connection = repository.LoadConnection(name);

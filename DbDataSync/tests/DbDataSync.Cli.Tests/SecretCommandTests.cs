@@ -1,31 +1,35 @@
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 
 namespace DbDataSync.Cli.Tests;
 
 /// <summary>
 /// <c>dbdatasync config secret set|list|remove</c> — thin wrappers over <see cref="SecretStore"/>, reachable
-/// without going through a connection's own save flow (phase 79). <c>SecretCommand</c> constructs its
-/// own <c>new SecretStore("DbDataSync", true)</c> per call rather than taking one as a parameter, the
-/// same shape every other CLI command in this file uses for its own dependencies — so these tests
-/// exercise it through the real store (env-var-backed in this environment; see
-/// <c>EnvironmentSecretProvider</c>), cleaning up what they write rather than injecting a fake.
+/// without going through a connection's own save flow (phase 79). The command opens the encrypted store under the repository root
+/// (<c>--repo</c>), so these run against a scratch root and read back through a store opened on the same one.
 /// </summary>
 public sealed class SecretCommandTests : IDisposable
 {
-    private readonly string _ref = $"dbdatasync:test:{Guid.NewGuid():N}";
+    private const string Ref = "dbdata:sync:test:sentinel";
 
-    public void Dispose() => SecretCommand.Run(["remove", _ref]);
+    private readonly string _root = Directory.CreateTempSubdirectory("dbdatasync-secret-cmd-").FullName;
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, recursive: true); }
+        catch { /* a scratch directory under the temp dir */ }
+    }
 
     [Fact]
     public void SetThenList_ReportsItAsSet_WithoutPrintingTheValue()
     {
-        var (setCode, _) = Run(["set", _ref, "sup3r-secret"]);
+        var (setCode, setOutput) = Run(["set", Ref, "sup3r-secret"]);
         Assert.Equal(0, setCode);
+        Assert.DoesNotContain("sup3r-secret", setOutput);
 
-        var (listCode, output) = Run(["list", _ref]);
+        var (listCode, output) = Run(["list", Ref]);
 
         Assert.Equal(0, listCode);
-        Assert.Contains(_ref, output);
+        Assert.Contains(Ref, output);
         Assert.Contains("set", output);
         Assert.DoesNotContain("sup3r-secret", output);
     }
@@ -33,7 +37,7 @@ public sealed class SecretCommandTests : IDisposable
     [Fact]
     public void List_ARefNeverSet_ReportsNotSet()
     {
-        var (code, output) = Run(["list", _ref]);
+        var (code, output) = Run(["list", Ref]);
 
         Assert.Equal(0, code);
         Assert.Contains("not set", output);
@@ -42,45 +46,45 @@ public sealed class SecretCommandTests : IDisposable
     [Fact]
     public void SetThenRemove_ThenList_ReportsNotSet()
     {
-        Run(["set", _ref, "sup3r-secret"]);
-        var (removeCode, _) = Run(["remove", _ref]);
+        Run(["set", Ref, "sup3r-secret"]);
+        var (removeCode, _) = Run(["remove", Ref]);
         Assert.Equal(0, removeCode);
 
-        var (_, output) = Run(["list", _ref]);
+        var (_, output) = Run(["list", Ref]);
         Assert.Contains("not set", output);
     }
 
     [Fact]
     public void Set_WrongArgumentCount_FailsWithoutStoringAnything()
     {
-        var (code, _) = Run(["set", _ref]);
+        var (code, _) = Run(["set", Ref]);
 
         Assert.NotEqual(0, code);
-        var (_, output) = Run(["list", _ref]);
+        var (_, output) = Run(["list", Ref]);
         Assert.Contains("not set", output);
     }
 
-    /// <summary>
-    /// Phase 93: <c>SecretCommand</c> now constructs <c>new SecretStore("DbDataSync", true)</c>, not the
-    /// old unprefixed <c>new SecretStore(true)</c> — proven here by resolving what it wrote through a
-    /// freshly-constructed, differently-prefixed store of each: a "DbDataSync"-prefixed store (matching
-    /// production) finds it, the package's own unconfigured default ("ClrKernel") does not, since they
-    /// are different provider namespaces (different Windows Credential Manager target names / env var
-    /// names) even for the exact same secret ref string.
-    /// </summary>
+    /// <summary>What the command wrote is in the encrypted store of that root: a store opened on it afterwards finds it.</summary>
     [Fact]
-    public void Set_IsResolvableUnderTheDbDataSyncPrefix_ButNotUnderThePackagesUnconfiguredDefault()
+    public void Set_IsResolvableFromAStoreOpenedOnTheSameRoot()
     {
-        Run(["set", _ref, "sup3r-secret"]);
+        Run(["set", Ref, "sup3r-secret"]);
 
-        var dbDataSyncPrefixed = new SecretStore("DbDataSync", true);
-        Assert.Equal("sup3r-secret", dbDataSyncPrefixed.Resolve(_ref));
-
-        var packageDefault = new SecretStore(true);
-        Assert.False(packageDefault.TryResolve(_ref, out _));
+        Assert.Equal("sup3r-secret", SecretStore.Open(_root).Resolve(Ref));
     }
 
-    private static (int ExitCode, string Output) Run(string[] args)
+    /// <summary>A name in the old form (<c>dbdatasync:...</c>) is not a name of the store: setting one is refused with the form to use, and nothing is stored.</summary>
+    [Fact]
+    public void Set_AnOldFormName_IsRefusedNamingTheForm()
+    {
+        var (code, output) = Run(["set", "dbdatasync:connection:erp", "sup3r-secret"]);
+
+        Assert.NotEqual(0, code);
+        Assert.Contains("dbdata:sync:", output);
+        Assert.DoesNotContain("sup3r-secret", output);
+    }
+
+    private (int ExitCode, string Output) Run(string[] args)
     {
         var originalOut = Console.Out;
         var originalErr = Console.Error;
@@ -89,7 +93,7 @@ public sealed class SecretCommandTests : IDisposable
         Console.SetError(output);
         try
         {
-            var exitCode = SecretCommand.Run(args);
+            var exitCode = SecretCommand.Run([.. args, "--repo", _root]);
             return (exitCode, output.ToString());
         }
         finally
