@@ -13,13 +13,13 @@ param(
   [int]$Port = 18817
 )
 $ErrorActionPreference = 'Stop'
-$exe = Join-Path (Resolve-Path $Published) 'DbDataProxy.exe'
+$exe = Join-Path (Resolve-Path $Published) 'dbdataproxy.exe'
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ('dbproxy-interop-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $tmp | Out-Null
 $db = Join-Path $tmp 'interop.duckdb'
 & $Python (Join-Path $PSScriptRoot 'seed.py') $db
 
-$hash = (& $exe hash-password interop-pw).Trim()
+$hash = ('interop-pw' | & $exe secret hash).Trim()
 $env:DBPROXY_Proxy__DataDirectory = $tmp
 $env:DBPROXY_Proxy__Listen__Port = "$Port"
 $env:DBPROXY_Proxy__Users__0__Name = 'py'
@@ -28,7 +28,7 @@ $env:DBPROXY_Proxy__Users__0__DataSources__0 = 'duck'
 $env:DBPROXY_Proxy__DataSources__duck__Provider = 'duckdb'
 $env:DBPROXY_Proxy__DataSources__duck__ConnectionString = "Data Source=$db"
 $env:DBPROXY_Proxy__DataSources__duck__AllowWrites = 'true'
-$proxy = Start-Process $exe -PassThru -WindowStyle Hidden `
+$proxy = Start-Process $exe -ArgumentList 'server','run' -PassThru -WindowStyle Hidden `
   -RedirectStandardOutput (Join-Path $tmp 'out.log') -RedirectStandardError (Join-Path $tmp 'err.log')
 try {
   Start-Sleep 5

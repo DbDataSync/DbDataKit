@@ -25,7 +25,7 @@ public sealed class PlainSecretNotAllowedException(string configKey, string mess
 /// </summary>
 public sealed class SecretsRuntime
 {
-    /// <summary>Entropy for DPAPI blobs written by <c>DbDataProxy protect-secret</c> (machine scope).</summary>
+    /// <summary>Entropy for DPAPI blobs written by <c>dbdataproxy secret protect</c> (machine scope).</summary>
     public static readonly byte[] DpapiEntropy = Encoding.UTF8.GetBytes("DbDataProxy");
 
     private readonly Redactor _redactor;

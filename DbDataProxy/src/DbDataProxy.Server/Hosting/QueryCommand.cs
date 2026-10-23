@@ -6,7 +6,7 @@ using Grpc.Net.Client;
 namespace DbDataProxy.Server.Hosting;
 
 /// <summary>
-/// "DbDataProxy query": a small built-in client for smoke-testing a running proxy (connectivity, credentials, data
+/// "dbdataproxy query": a small built-in client for smoke-testing a running proxy (connectivity, credentials, data
 /// sources, compression) without any other tooling.
 /// </summary>
 public static class QueryCommand
@@ -19,7 +19,7 @@ public static class QueryCommand
         string? sql = Option(args, "--sql");
         if (user is null || password is null || sql is null)
         {
-            Console.Error.WriteLine("Usage: DbDataProxy query --user U --password P --sql \"SELECT ...\" [--address URL] " +
+            Console.Error.WriteLine("Usage: dbdataproxy query run --user U --password P --sql \"SELECT ...\" [--address URL] " +
                                     "[--datasource NAME] [--compression none|gzip|zstd|lz4] [--max-rows N] [--insecure]");
             return 2;
         }

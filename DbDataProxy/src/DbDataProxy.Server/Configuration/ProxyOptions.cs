@@ -191,7 +191,7 @@ public sealed class AuthOptions
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class WorkerOptions
 {
-    /// <summary>Path to the 32-bit worker executable. Defaults to "worker/DbDataProxy.Worker.exe" beside the service.</summary>
+    /// <summary>Path to the 32-bit worker executable. Defaults to "worker/dbdataproxy-worker.exe" beside the service.</summary>
     public string? Path { get; set; }
     [ConfigKey(Min = 1, Max = 3600)]
     public int StartupTimeoutSeconds { get; set; } = 30;
@@ -279,7 +279,7 @@ public sealed class UserOptions
     /// <summary>How the user proves who they are.</summary>
     public UserAuthType AuthType { get; set; } = UserAuthType.Password;
 
-    /// <summary>PBKDF2 hash as produced by "DbDataProxy hash-password" (AuthType Password).</summary>
+    /// <summary>PBKDF2 hash as produced by "dbdataproxy secret hash" (AuthType Password).</summary>
     [Secret]
     public string? PasswordHash { get; set; }
 

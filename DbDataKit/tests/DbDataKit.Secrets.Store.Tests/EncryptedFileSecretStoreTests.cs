@@ -103,9 +103,12 @@ public class EncryptedFileSecretStoreTests
         await store.SetAsync(Crm, SecretValue.From("crm-secret"));
         var path = System.IO.Path.Combine(directory, "secrets.yaml");
         var lines = File.ReadAllLines(path);
-        string ValueOf(string name) => lines[Array.FindIndex(lines, l => l.Contains(name, StringComparison.Ordinal))..].First(l => l.TrimStart().StartsWith("value:", StringComparison.Ordinal));
-        var erpLine = ValueOf("erp");
-        var crmLine = ValueOf("crm");
+        // The entry is found by its whole name, then its own value line. Searching for a fragment ("erp") instead matched the first line that happened to contain it, and the
+        // base64 of the other entry's ciphertext contains "erp" about once in 6,500 runs: both lines were then the same one, nothing was swapped, and the test failed.
+        string ValueOf(SecretName name) => lines[Array.FindIndex(lines, l => l.TrimStart().StartsWith(name + ":", StringComparison.Ordinal))..].First(l => l.TrimStart().StartsWith("value:", StringComparison.Ordinal));
+        var erpLine = ValueOf(Erp);
+        var crmLine = ValueOf(Crm);
+        Assert.NotEqual(erpLine, crmLine);
         File.WriteAllText(path, File.ReadAllText(path).Replace(crmLine, "§").Replace(erpLine, crmLine).Replace("§", erpLine));     // swap the two ciphertexts
 
         await Assert.ThrowsAsync<SecretStoreException>(async () => await store.TryResolveAsync(Erp.ToRef()));

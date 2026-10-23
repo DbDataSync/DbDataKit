@@ -67,7 +67,7 @@ public static class ConsolePrompt
 }
 
 /// <summary>
-/// <c>DbDataProxy service install|uninstall|start|stop|restart|status|doctor|unit</c> on top of the shared service
+/// <c>dbdataproxy service install|uninstall|start|stop|restart|status|doctor|unit</c> on top of the shared service
 /// command (SCM API, no sc.exe). <c>install</c> and <c>uninstall</c> keep working as top-level verbs.
 /// <para>
 /// The service runs as the virtual account <c>NT SERVICE\DbDataProxy</c> unless <c>--account</c> says otherwise
@@ -81,13 +81,13 @@ public static class ServiceCli
     public const string Description = "Arrow Flight SQL proxy that forwards queries to ODBC/ADO.NET databases and compresses the results.";
 
     public const string Usage = """
-        Usage: DbDataProxy service <install|uninstall|start|stop|restart|status|doctor|unit> [options]
+        Usage: dbdataproxy service <install|uninstall|start|stop|restart|status|doctor|unit> [options]
           install   [--name N] [--account virtual|DOMAIN\user|DOMAIN\gmsa$] [--allow-localsystem]
                     [--password-secret env:NAME|file:PATH | --password-stdin] [--data-dir PATH] [--dry-run]
                     Register the Windows service (run elevated). Default account: NT SERVICE\<name>.
           uninstall [--name N]            Stop and remove the service
           start|stop|restart|status|doctor [--name N]
-          unit      (or --systemd) [--name N] [--exec /path/to/DbDataProxy]
+          unit      (or --systemd) [--name N] [--exec /path/to/dbdataproxy]
                                           Print a hardened systemd unit
         """;
 
@@ -123,7 +123,7 @@ public static class ServiceCli
 
         if (verb == "install" && Path.GetFileNameWithoutExtension(env.BinaryPath).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
         {
-            console.Error.WriteLine("Run the service command from DbDataProxy.exe (not 'dotnet DbDataProxy.dll'): the service registers the executable it is started from.");
+            console.Error.WriteLine("Run the service command from dbdataproxy.exe (not 'dotnet dbdataproxy.dll'): the service registers the executable it is started from.");
             return ExitCodes.Failure;
         }
 
@@ -145,7 +145,7 @@ public static class ServiceCli
 
         if (password is not null && !forwarded.Contains("--password-stdin")) forwarded.Add("--password-stdin");
 
-        string name = extracted.Name ?? ProxyHost.ServiceName;
+        string name = extracted.Name ?? ProxyHost.RegistrationName;
         string dataDirectory = ReadOption(forwarded, "--data-dir") is { } d ? Path.GetFullPath(d) : env.DefaultDataDirectory();
         if (ReadOption(forwarded, "--data-dir") is not null) ReplaceOption(forwarded, "--data-dir", dataDirectory);
 
@@ -157,7 +157,7 @@ public static class ServiceCli
         if (rc == 0 && verb == "install" && !forwarded.Contains("--dry-run"))
         {
             env.EnsureSettingsFile?.Invoke(dataDirectory);
-            console.Out.WriteLine($"Settings: {ProxyConfigFile.PathIn(dataDirectory)} (appsettings.example.json beside {env.BinaryPath} shows every option). Then run: DbDataProxy service start --name {name}");
+            console.Out.WriteLine($"Settings: {ProxyConfigFile.PathIn(dataDirectory)} (appsettings.example.json beside {env.BinaryPath} shows every option). Then run: dbdataproxy service start --name {name}");
             console.Out.WriteLine("Open the listening port in the Windows firewall if clients connect from other machines.");
         }
 
@@ -188,6 +188,8 @@ public static class ServiceCli
             Description = Description,
             BinaryPath = binaryPath,
             Version = ProxyHost.Version,
+            // the service runs the server: there is no default command
+            Arguments = ["server", "run"],
             Layout = layout,
             PrincipalResolver = principals,
             // Same as before: start at boot (not delayed); restart after a crash after 5s, 5s, then 60s; reset after a day.
@@ -202,7 +204,7 @@ public static class ServiceCli
         string name = (args.Name ?? "dbdataproxy").ToLowerInvariant();
         // On Linux the unit runs the executable it is generated from; elsewhere (a unit written on a Windows
         // machine) --exec gives the path on the target, defaulting to the conventional /opt location.
-        string exe = args.Exec ?? (env.BinaryPath.StartsWith('/') ? env.BinaryPath : "/opt/dbdataproxy/DbDataProxy");
+        string exe = args.Exec ?? (env.BinaryPath.StartsWith('/') ? env.BinaryPath : "/opt/dbdataproxy/dbdataproxy");
         try
         {
             env.Console.Out.Write(SystemdUnitGenerator.Generate(UnitOptions(name, exe)));
@@ -219,7 +221,7 @@ public static class ServiceCli
     {
         Name = name,
         Description = "DbDataProxy Arrow Flight SQL proxy",
-        ExecStart = executable,
+        ExecStart = executable + " server run",
         WorkingDirectory = executable[..executable.LastIndexOf((char)47)], // a Unix path whatever OS generates it
         // DynamicUser: no account to manage; the state directory under /var/lib/<name> is created and owned by systemd.
         StateDirectories = [name],
@@ -291,7 +293,7 @@ public static class ServiceCli
         // An explicit account needs a password; ask for it instead of failing, unless stdin carries it already.
         var account = ReadOption(forwarded, "--account");
         bool needsPassword = account is not null
-            && ServiceAccount.Parse(account, extracted.Name ?? ProxyHost.ServiceName).RequiresPassword
+            && ServiceAccount.Parse(account, extracted.Name ?? ProxyHost.RegistrationName).RequiresPassword
             && !forwarded.Contains("--password-stdin") && !forwarded.Contains("--dry-run");
         if (needsPassword && env.PromptPassword is { } prompt)
         {
