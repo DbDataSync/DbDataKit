@@ -1,0 +1,9 @@
+<Project>
+  <!-- Deliberately does not import the repository root file: this spike is a standalone solution that is not part of DbDataKit.slnx. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

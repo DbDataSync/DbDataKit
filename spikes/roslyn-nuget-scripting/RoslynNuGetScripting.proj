@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Named .proj, not .csproj, so that scripts/check_solution.py (which requires every .csproj to be in DbDataKit.slnx) ignores it. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>spike</AssemblyName>
+    <RootNamespace>RoslynNuGetScripting</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- The SDK picks the language targets from the file extension; say it is C#. -->
+    <LanguageTargets>$(MSBuildToolsPath)/Microsoft.CSharp.targets</LanguageTargets>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="src/**/*.cs" />
+    <Using Include="System" />
+    <Using Include="System.IO" />
+    <Using Include="System.Linq" />
+    <Using Include="System.Collections.Generic" />
+    <Using Include="System.Threading" />
+    <Using Include="System.Threading.Tasks" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.0.0" />
+    <PackageReference Include="NuGet.Protocol" Version="7.9.0" />
+    <PackageReference Include="NuGet.Packaging" Version="7.9.0" />
+    <PackageReference Include="NuGet.Frameworks" Version="7.9.0" />
+    <PackageReference Include="NuGet.Versioning" Version="7.9.0" />
+    <!-- NuGet.Packaging drags in 8.0.1 transitively, which has known advisories (NU1902/NU1903); the newer direct reference wins. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+  </ItemGroup>
+</Project>
