@@ -19,7 +19,7 @@ public static class QueryCommand
         string? sql = Option(args, "--sql");
         if (user is null || password is null || sql is null)
         {
-            Console.Error.WriteLine("Usage: dbdataproxy query --user U --password P --sql \"SELECT ...\" [--address URL] " +
+            Console.Error.WriteLine("Usage: dbdataproxy query run --user U --password P --sql \"SELECT ...\" [--address URL] " +
                                     "[--datasource NAME] [--compression none|gzip|zstd|lz4] [--max-rows N] [--insecure]");
             return 2;
         }

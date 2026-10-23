@@ -12,6 +12,7 @@
     <PackageReference Include="DuckDB.NET.Data" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
+    <DbDataKitReference Include="Cli" />   <!-- the shared noun-verb grammar; plan 13, C04 -->
     <DbDataKitReference Include="Connections.SqlServer" />
     <DbDataKitReference Include="Connections.DuckDb" />
     <DbDataKitReference Include="Config.Yaml" />

@@ -5,6 +5,7 @@
     <DbDataKitVersion>0.1.0</DbDataKitVersion>
   </PropertyGroup>
   <ItemGroup>
+    <PackageVersion Include="DbDataKit.Cli" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Connections.Abstractions" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Connections" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Connections.SqlServer" Version="$(DbDataKitVersion)" />

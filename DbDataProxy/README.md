@@ -20,11 +20,11 @@ Flight SQL client ──gRPC/TLS──▶ DbDataProxy (x64) ──▶ SQL Server
 ```powershell
 ./build/publish.ps1                 # -> artifacts/publish/win-x64 (dbdataproxy.exe + worker\)
 cd artifacts/publish/win-x64
-./dbdataproxy.exe hash-password     # prompts; paste the hash into the settings file
+./dbdataproxy.exe secret hash       # prompts (or reads standard input); paste the hash into the settings file
 # edit %ProgramData%\DbDataProxy\appsettings.json (see appsettings.example.json), then:
-./dbdataproxy.exe                   # run in a console
+./dbdataproxy.exe server run         # run in a console (there is no default command)
 ./dbdataproxy.exe service install   # or register the Windows service (elevated prompt), then: dbdataproxy service start
-./dbdataproxy.exe query --insecure --user me --password ... --datasource erp --sql "SELECT 1"
+./dbdataproxy.exe query run --insecure --user me --password ... --datasource erp --sql "SELECT 1"
 ```
 
 On first start the proxy writes `dbdataproxy-selfsigned.pfx` and `.cer` to its data directory
@@ -47,8 +47,7 @@ protected password. Manage the certificate with `DbDataProxy cert show|ensure|re
 ```
 dbdataproxy service install [--name N] [--account A] [--password-secret env:NAME|file:PATH] [--data-dir PATH] [--dry-run]
 dbdataproxy service uninstall|start|stop|restart|status|doctor [--name N]
-dbdataproxy service unit [--name N] [--exec /opt/dbdataproxy/DbDataProxy]     # hardened systemd unit (also: service --systemd)
-DbDataProxy install|uninstall                                                  # same as service install|uninstall
+dbdataproxy service unit [--name N] [--exec /opt/dbdataproxy/dbdataproxy]     # hardened systemd unit that runs "server run"
 ```
 
 The service is registered through the Service Control Manager API (no `sc.exe`). By default it runs as the virtual account
@@ -62,7 +61,7 @@ the counter resets after a day) and starts at boot.
 
 The proxy answers `GET /health`, `/health/live`, `/health/ready` and `/version` on its HTTP/2 listener, and on stop waits for
 running queries (`Proxy:Hosting:DrainSeconds`, default 30) before shutting down. `Proxy:Hosting:MaxConcurrentRequests`
-(default 1000) caps in-flight requests; further ones get 503. `DbDataProxy --healthcheck` probes the local proxy (HTTP/2, TLS
+(default 1000) caps in-flight requests; further ones get 503. `dbdataproxy health check` probes the local proxy (HTTP/2, TLS
 certificate accepted for loopback only) and exits 0 or 1, for a container HEALTHCHECK.
 
 ## Server info (GetSqlInfo)
@@ -265,7 +264,7 @@ Configuration values that are secrets can be references instead of literals (sha
 | `env:NAME` | the environment variable `NAME` |
 | `file:C:\secrets\erp.txt` | the file's contents, trimmed (Docker/Kubernetes secrets, systemd `LoadCredential`) |
 | `secret:dbdata:proxy:datasource:erp:password` | the **encrypted secret store** of this installation, `<DataDirectory>/secrets/secrets.yaml` (set with `DbDataProxy secret set`, below); a name the store does not have falls through to the environment variable `DBDATA_SECRET_DBDATA_PROXY_DATASOURCE_ERP_PASSWORD`, then, when `$CREDENTIALS_DIRECTORY` is set, to the file `dbdata_proxy_datasource_erp_password` in it |
-| `dpapi:<base64>` | an inline DPAPI blob (Windows, machine scope), for one field where a store is not wanted. Create one with `DbDataProxy secret protect` (or `protect-secret`) |
+| `dpapi:<base64>` | an inline DPAPI blob (Windows, machine scope), for one field where a store is not wanted. Create one with `dbdataproxy secret protect` (or `protect-secret`) |
 
 #### The secret store
 
@@ -305,7 +304,7 @@ Every resolved secret is registered with a redactor that scrubs all log output (
 text of errors returned to clients; `Password=...`-style fragments are scrubbed even when the value is unknown.
 
 Password hashes (`Proxy:Users:*:PasswordHash`) use the shared PBKDF2 hasher in the format `PBKDF2-SHA256$iterations$salt$hash`,
-the same format `hash-password` has always written, so existing hashes verify unchanged.
+the same format `secret hash` (formerly `hash-password`) has always written, so existing hashes verify unchanged.
 
 ### Authentication
 
