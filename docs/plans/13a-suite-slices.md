@@ -121,7 +121,7 @@ no ClrKernel (D10).
 | S08 | Old-format files refused: a `.cs` script, `library.json` or `driver.json` in a config repository stops the load with a message naming it (clean break) | S05-S07 | S | a test per file kind |
 | S09 | `dbdatasync script test <name>` and the editor stub for `.csx` | S07, C06 | S | CLI test runs a fixture script; the stub resolves in a C# language-server test |
 | S10 | Delete the old paths (`DbDataSync.Libraries`, plugin loading in `Drivers.Descriptor`, `ScriptCompiler`'s compilation, `Connections.Libraries`' installer) | S08 | S | tests green; a source scan finds no reference to the removed types |
-| S11 | Process-boundary audit: list every Sync API path that runs loaded code (connection test, discovery, previews, provisioning, scripted queries) and decide for each whether it runs in the API or in a child process; choose the rule for custom drivers in Sync and Proxy | S01 | S | a written table in plan 14 section 7 and the chosen rule; the unload measurements re-run on the chosen context policy. Today the API loads every library, driver and script itself and nothing is unloaded |
+| S11 | Not a work item: carry plan 14 section 7 into the slices that adopt custom drivers in Sync and Proxy (they make those isolated: a child process, or a collectible context where its limits are accepted) and into any refactor of the Sync API paths that run loaded code. The owner chose not to retrofit isolation or unloading into existing paths (2026-10-23) | S01 | - | when the first custom-driver slice starts, it lists the API paths involved and says where the code runs. Today the API loads every library, driver and script itself and nothing is unloaded |
 
 ## A. Sync adopts the shared libraries (W3)
 
