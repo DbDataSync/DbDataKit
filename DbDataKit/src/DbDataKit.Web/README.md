@@ -12,3 +12,11 @@ Trust between a console and the servers it manages (plan 13, W12). So far: the t
 * `ConsoleSigningKey`: the key pair (BouncyCastle Ed25519, since .NET has none), its fingerprint, the 32-byte seed to keep protected.
 
 The pairing, the local channel, the role check per command and the audit are the next slices (T02 to T09).
+
+## Write version checks
+
+`WriteGuard` makes a management write name the version it was based on. `RunAsync(key, expectedVersion, currentVersion, write)` takes a per-key lock, reads the current version
+under it, and runs the write only if the two match (a null expected version means "create": nothing may be there). A stale write returns `WriteResult.Stale(currentVersion)` (or
+throws `StaleWriteException` from `RunOrThrowAsync`), so the caller can read again, merge and retry. What a "version" is stays the caller's choice (a content hash for a file); it is
+read from the thing itself every time, so a change made outside the guard is caught too.
+
