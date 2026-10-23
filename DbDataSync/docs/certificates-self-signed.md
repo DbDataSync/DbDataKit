@@ -8,7 +8,7 @@ There are two places the certificate can live.
 ## A file (any platform)
 
 ```
-dbdatasync config cert new-self-signed
+dbdatasync cert new-self-signed
 ```
 
 This is the default off Windows, and `--file` asks for it on Windows too. It writes `<repo>/tls/dbdatasync.pfx` and
@@ -26,14 +26,14 @@ touches this one file; a certificate you supplied with `use-pem` or `use-pfx` is
 
 **Upgrading from an earlier version:** older versions wrote the PFX with no password. That file keeps being served until
 the next renewal check, which replaces it with a new certificate (a new key, so clients that trusted the old one must
-trust the new `.cer`). To do it straight away, run `dbdatasync config cert new-self-signed` and restart.
+trust the new `.cer`). To do it straight away, run `dbdatasync cert new-self-signed` and restart.
 
 Needs no elevation.
 
 ## The Windows machine store
 
 ```
-dbdatasync config cert new-self-signed --dns dbdatasync.example.com
+dbdatasync cert new-self-signed --dns dbdatasync.example.com
 ```
 
 From an **elevated** prompt, on Windows (`--store` states it explicitly). `--dns` is required and takes one or more
@@ -43,11 +43,11 @@ The certificate is installed in `LocalMachine\My` with a non-exportable private 
 briefly. Then:
 
 ```
-dbdatasync config cert bind --thumbprint <thumbprint>
+dbdatasync cert bind --thumbprint <thumbprint>
 ```
 
 `bind` writes `Kestrel:Certificates:Default:AllowInvalid: true` for a self-signed certificate, because Kestrel refuses a
 certificate whose chain it cannot build. It says so when it does.
 
-Nothing renews a store certificate for you. `dbdatasync config cert renew`, with no CA configured, issues a fresh
+Nothing renews a store certificate for you. `dbdatasync cert renew`, with no CA configured, issues a fresh
 self-signed one with the same subject and names. See [renewal and expiry](certificates-renewal-and-expiry.md).

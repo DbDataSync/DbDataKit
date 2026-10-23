@@ -5,7 +5,7 @@ using DbDataSync.Libraries;
 namespace DbDataSync.Cli;
 
 /// <summary>
-/// <c>dbdatasync setup</c> — a TUI (Terminal.Gui, phase 128) for a fresh install or an existing one
+/// <c>dbdatasync server setup</c> — a TUI (Terminal.Gui, phase 128) for a fresh install or an existing one
 /// alike: <see cref="Tui.SetupScreen"/> is the one screen both cases open, pre-filled from the current
 /// configuration when there is one. Everything it writes goes through the same
 /// <see cref="DbDataSyncConfigFile"/> and <c>SecretStore</c> calls a
@@ -52,7 +52,7 @@ public static class SetupCommand
             if (legacyRoot is not null)
                 Dialogs.Message(app, "Existing configuration found", LegacyRootMigration.Message(legacyRoot, candidate));
 
-            root = Path.GetFullPath(Dialogs.PromptText(app, "dbdatasync setup", "Config folder", legacyRoot ?? candidate));
+            root = Path.GetFullPath(Dialogs.PromptText(app, "dbdatasync server setup", "Config folder", legacyRoot ?? candidate));
 
             if (ExistingSetup.DetectedAt(root))
                 Dialogs.Message(app, "Already configured", "That folder already has a DbDataSync configuration.");

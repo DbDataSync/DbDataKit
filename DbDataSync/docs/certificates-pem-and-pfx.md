@@ -3,8 +3,8 @@
 For a certificate you were handed as a file, on any platform: certbot, an internal PKI, a platform team.
 
 ```
-dbdatasync config cert use-pem --cert /path/fullchain.pem --key /path/privkey.pem
-dbdatasync config cert use-pfx --pfx /path/server.pfx
+dbdatasync cert use-pem --cert /path/fullchain.pem --key /path/privkey.pem
+dbdatasync cert use-pfx --pfx /path/server.pfx
 ```
 
 Each writes `Kestrel:Certificates:Default:Path` (and `KeyPath` for PEM) into `dbdatasync.config.yaml`, which Kestrel
@@ -18,6 +18,6 @@ Limits:
 - **DbDataSync does not renew these.** Whatever issued the file renews it; replace the file and restart the service.
   The service never touches a certificate at a path other than its own managed self-signed one.
 
-`dbdatasync config cert status` reports the path, names, expiry and days remaining.
+`dbdatasync cert status` reports the path, names, expiry and days remaining.
 
 Restart the service for it to take effect.

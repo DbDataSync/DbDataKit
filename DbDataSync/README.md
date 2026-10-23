@@ -38,7 +38,7 @@ a YAML descriptor. See [Drivers and libraries](docs/drivers-and-libraries.md).
 
 ```sh
 dotnet tool install -g DbDataSync
-dbdatasync setup
+dbdatasync server setup
 ```
 
 This installs DbDataSync into your own profile and walks you through setup. See

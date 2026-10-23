@@ -636,7 +636,7 @@ public class UpdateCommandTests : IDisposable
         Assert.Equal(0, exit);
         Assert.Equal([InstallIntoB()], _events);
         Assert.Equal("b", Layout.Current);
-        Assert.Contains("restart a running `dbdatasync serve` yourself", output);
+        Assert.Contains("restart a running `dbdatasync server run` yourself", output);
     }
 
     [Fact]

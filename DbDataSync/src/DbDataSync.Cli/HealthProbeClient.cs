@@ -4,7 +4,7 @@ using System.Security.Cryptography.X509Certificates;
 namespace DbDataSync.Cli;
 
 /// <summary>
-/// The HTTP client behind every "is it answering?" probe in the tool — <c>dbdatasync health</c>, the readiness
+/// The HTTP client behind every "is it answering?" probe in the tool — <c>dbdatasync health check</c>, the readiness
 /// binding check, and the one an update waits on before it decides whether to keep the new version.
 /// <para>
 /// **It accepts any server certificate, and reports what was wrong with it.** This is the same call

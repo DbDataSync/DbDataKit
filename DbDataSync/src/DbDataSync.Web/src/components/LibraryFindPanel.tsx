@@ -322,7 +322,7 @@ function InstallCommand({
   // itself, before falling back to requiring one explicitly.
   const needsFactoryType = !curated
   const canInstall = hasVersion && !installing
-  const command = `dbdatasync config library install ${id} --version ${version || '<v>'}`
+  const command = `dbdatasync library install ${id} --version ${version || '<v>'}`
   const elapsedSeconds = useElapsedSeconds(installing)
 
   const copy = async () => {

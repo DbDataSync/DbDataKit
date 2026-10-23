@@ -4,7 +4,7 @@ using DbDataSync.Core.Config;
 namespace DbDataSync.Cli.Tests;
 
 /// <summary>
-/// <c>dbdatasync health</c> falls back to a resolved config's <c>DbDataSync:App:Url</c> when <c>--url</c> isn't
+/// <c>dbdatasync health check</c> falls back to a resolved config's <c>DbDataSync:App:Url</c> when <c>--url</c> isn't
 /// passed, before falling back to the hardcoded container default — phase 79.
 /// </summary>
 public sealed class HealthCommandTests : IDisposable
@@ -37,7 +37,7 @@ public sealed class HealthCommandTests : IDisposable
         Assert.True(server.WasHit);
     }
 
-    private static Task<int> RunHealthAsync(string[] args) => HealthCommand.RunAsync(args);
+    private static Task<int> RunHealthAsync(string[] args) => HealthCommand.RunAsync(["check", .. args]);
 
     /// <summary>A real loopback HTTP listener answering /api/health — exercising HealthCommand's actual
     /// HttpClient call rather than mocking it away.</summary>

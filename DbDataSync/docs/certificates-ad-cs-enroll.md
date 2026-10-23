@@ -8,7 +8,7 @@ You need three things: the **CA**, a **template**, and the DNS names the certifi
 ## Find the CA and template
 
 ```
-dbdatasync config cert discover
+dbdatasync cert discover
 ```
 
 Reads Active Directory (no elevation needed) and does the obvious thing:
@@ -39,7 +39,7 @@ From a domain-joined machine:
 
 - **CA:** run `certutil` with no arguments. The `Config:` line is the string to use, in the form `CASERVER\CA Name`. The CA
   console (`certsrv.msc`) shows the same name. Or ask the PKI administrator.
-- **Templates:** `dbdatasync config cert templates --ca "CASERVER\CA Name"` lists those the CA publishes, and
+- **Templates:** `dbdatasync cert templates --ca "CASERVER\CA Name"` lists those the CA publishes, and
   `certutil -CATemplates -config "CASERVER\CA Name"` is an alternative.
 
 Save them with `dbdatasync config set DbDataSync:Certificates:CaConfig "..."` and `... DbDataSync:Certificates:Template
@@ -50,7 +50,7 @@ Save them with `dbdatasync config set DbDataSync:Certificates:CaConfig "..."` an
 From an **elevated** prompt (it installs into `LocalMachine\My`):
 
 ```
-dbdatasync config cert enroll --dns dbdatasync.corp.local
+dbdatasync cert enroll --dns dbdatasync.corp.local
 ```
 
 `--dns` takes one or more names, comma-separated; the first is the subject. `--ca` and `--template` override the
@@ -60,8 +60,8 @@ service runs as.
 Then bind it and restart:
 
 ```
-dbdatasync config cert list
-dbdatasync config cert bind --thumbprint <thumbprint>
+dbdatasync cert list
+dbdatasync cert bind --thumbprint <thumbprint>
 ```
 
 ## When the CA needs approval
@@ -70,7 +70,7 @@ If the template requires a certificate manager to approve, `enroll` reports a **
 error. When it is approved, from an elevated prompt:
 
 ```
-dbdatasync config cert retrieve --request-id <id>
+dbdatasync cert retrieve --request-id <id>
 ```
 
 ## If installing fails after the CA issued it
@@ -79,12 +79,12 @@ The CA has already issued the certificate, so the request id is saved before any
 the message names the exact command that finishes the job:
 
 ```
-dbdatasync config cert retrieve --request-id <id>
+dbdatasync cert retrieve --request-id <id>
 ```
 
 Do not run `enroll` again: it asks the CA for a second certificate.
 
 ## Renewing
 
-`dbdatasync config cert renew` re-enrolls using the bound certificate's subject and names. It is a fresh request, not a
+`dbdatasync cert renew` re-enrolls using the bound certificate's subject and names. It is a fresh request, not a
 signed renewal, so it works even after the certificate has expired. See [renewal and expiry](certificates-renewal-and-expiry.md).

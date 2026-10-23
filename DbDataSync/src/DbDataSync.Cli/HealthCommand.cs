@@ -17,10 +17,16 @@ namespace DbDataSync.Cli;
 /// </summary>
 public static class HealthCommand
 {
-    public static async Task<int> RunAsync(string[] args)
+    public static async Task<int> RunAsync(string[] verbAndArgs)
     {
+        if (verbAndArgs.Length == 0 || verbAndArgs[0] != "check")
+        {
+            Console.Error.WriteLine("Usage: dbdatasync health check [--url <url>] [--repo <path>]");
+            return 2;
+        }
+        var args = verbAndArgs[1..];
         // Falls back to a resolved config's DbDataSync:App:Url before the hardcoded container default, so
-        // `dbdatasync health` against a config-backed install doesn't need --url repeated on every call.
+        // `dbdatasync health check` against a config-backed install doesn't need --url repeated on every call.
         // The container's own HEALTHCHECK always passes --url explicitly (no config file to find inside
         // the image's working directory), so it is unaffected either way.
         var root = DbDataSyncRoot.Resolve(args);

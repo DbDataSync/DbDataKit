@@ -3,7 +3,7 @@ using DbDataSync.Core.Secrets;
 namespace DbDataSync.Cli.Tests;
 
 /// <summary>
-/// <c>dbdatasync config secret set|list|remove</c> — thin wrappers over <see cref="SecretStore"/>, reachable
+/// <c>dbdatasync secret set|list|remove</c> — thin wrappers over <see cref="SecretStore"/>, reachable
 /// without going through a connection's own save flow (phase 79). The command opens the encrypted store under the repository root
 /// (<c>--repo</c>), so these run against a scratch root and read back through a store opened on the same one.
 /// </summary>

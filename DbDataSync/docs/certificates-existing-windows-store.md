@@ -4,8 +4,8 @@ For a certificate someone else put in `LocalMachine\My`: a platform team, group 
 yourself. Windows only. It does not need elevation, because it only reads the store and writes configuration.
 
 ```
-dbdatasync config cert list
-dbdatasync config cert bind --thumbprint <thumbprint>
+dbdatasync cert list
+dbdatasync cert bind --thumbprint <thumbprint>
 ```
 
 `list` shows the server-authentication certificates in the store (`--location CurrentUser` to look in the user store
@@ -22,7 +22,7 @@ instead). A certificate without the server-authentication usage cannot serve TLS
 
 Because the lookup is by subject, a new certificate with the same common name takes over on the next restart.
 
-The service account must be able to read the private key. `dbdatasync config cert status` reports whether it can; the
+The service account must be able to read the private key. `dbdatasync cert status` reports whether it can; the
 issuing commands grant it for you, but a certificate you bound by hand may need the grant done in the store's private
 key permissions.
 

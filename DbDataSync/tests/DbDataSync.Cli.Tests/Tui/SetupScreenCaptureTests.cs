@@ -43,7 +43,7 @@ public sealed class SetupScreenCaptureTests : IDisposable
         };
 
         await SetupScreen.RunAsync(_root, app, FailingInstallLibrary);
-        await TerminalCapture.SaveHtmlAsync(app, "dbdatasync setup — fresh repo, 80x25", "dbdatasync-setup-screen.html");
+        await TerminalCapture.SaveHtmlAsync(app, "dbdatasync server setup — fresh repo, 80x25", "dbdatasync-setup-screen.html");
 
         Assert.NotNull(plainText);
 

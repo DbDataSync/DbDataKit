@@ -8,7 +8,7 @@ to it in the pull request that makes the change; a release moves the entries int
 - **Secrets are in a new store and are set again.** Connection passwords and the state database's password were in the operating system's
   credential store (through `ClrKernel.Core.Secrets`) under `dbdatasync:...` names. They are now in an encrypted file store, `secrets/` under
   the repository root, under `dbdata:sync:...` names, and nothing is imported. Set each connection's password again (save the connection
-  with its password, or `dbdatasync config secret set dbdata:sync:connection:<name> <value>`) and the state database's
+  with its password, or `dbdatasync secret set dbdata:sync:connection:<name> <value>`) and the state database's
   (`dbdata:sync:config:stateConnectionString`). `secrets/` is added to the repository's `.gitignore`; back it up with its key. Names are
   lower-cased, so two connections whose names differ only in case share a password. The environment fallback is now
   `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_<NAME>` (was `DBDATASYNC_SECRET_DBDATASYNC_CONNECTION_<NAME>`); `DBDATASYNC_SECRETS_FILE` is gone. (A04, A05)
@@ -18,6 +18,9 @@ to it in the pull request that makes the change; a release moves the entries int
 - **Column types for some engines changed.** Oracle `uuid` stays `varchar2(36)`. Oracle `NUMBER(n,0)` up to 18 digits is read as an integer
   type. MySQL's time-zone timestamp is created as `timestamp(s)` (it ends in 2038). Postgres creates `timestamp(6) with time zone`.
   DuckDB's unsigned integers are read as the next wider signed type. (A07)
+- **The command line has new names.** `dbdatasync serve` is `dbdatasync server run`, `setup` is `server setup`, `config cert|secret|library|driver ...` are `cert`, `secret`, `library` and `driver` (`config check|get|set`
+  stay), and `health` is `health check`. The old forms exit 2 and print the new one. The Windows service, the systemd unit and the Docker image run `server run`, so **run `service install` again** on an
+  existing installation (a service still registered with `serve` cannot start), and update container health checks to `health check`. `invite`, `update`, `launcher` and `tool` are unchanged for now. (C06)
 
 ## DbDataBuild
 

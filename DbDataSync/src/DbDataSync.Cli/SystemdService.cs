@@ -261,7 +261,7 @@ internal static class SystemdService
         {
             Name = UnitName,
             Description = "DbDataSync — cross-database replication",
-            ExecStart = $"{QuoteForSystemd(executable)} serve --repo {QuoteForSystemd(root)}",
+            ExecStart = $"{QuoteForSystemd(executable)} server run --repo {QuoteForSystemd(root)}",
             WorkingDirectory = root,
             DynamicUser = false,
             User = user,

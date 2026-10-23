@@ -6,7 +6,7 @@ namespace DbDataSync.Api.Services;
 /// <summary>
 /// The program and leading arguments that start a child process of this application: a worker for one replication, or the
 /// connection-scoped library validation. A child gets its own process so a crash or a stuck driver stays out of the API, and it
-/// is started as <c>dbdatasync internal worker ...</c> or <c>dbdatasync config library validate ...</c>, that is, as this same
+/// is started as <c>dbdatasync internal worker ...</c> or <c>dbdatasync library validate ...</c>, that is, as this same
 /// executable again, rather than as <c>dotnet exec &lt;file&gt;</c>. That needs no <c>dotnet</c> on the path and so lets Sync be
 /// published self-contained (plan 13, D11 and slice F14).
 /// <para>
