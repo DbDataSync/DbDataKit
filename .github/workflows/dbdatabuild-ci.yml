@@ -36,7 +36,7 @@ jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataBuild/|DbDataKit/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/workflows/(dbdatabuild-|_))'
+      paths: '^(DbDataBuild/|DbDataKit/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatabuild-|_)|actions/setup-product))'
 
   unit:
     needs: changes
@@ -51,9 +51,10 @@ jobs:
     timeout-minutes: 25                 # the unit suite takes a few minutes; a hang should fail, not run for hours
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-product
         with:
-          global-json-file: global.json
+          product: DbDataBuild
+          duckdb: 'false'
       - name: Prebuilt polyglot library
         shell: bash
         env:
@@ -84,9 +85,10 @@ jobs:
     name: conformance (${{ matrix.group }})
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-product
         with:
-          global-json-file: global.json
+          product: DbDataBuild
+          duckdb: 'false'
       - name: Prebuilt polyglot library
         env:
           GH_TOKEN: ${{ github.token }}
@@ -125,9 +127,10 @@ jobs:
     name: conformance (${{ matrix.group }})
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-product
         with:
-          global-json-file: global.json
+          product: DbDataBuild
+          duckdb: 'false'
       - name: Prebuilt polyglot library
         env:
           GH_TOKEN: ${{ github.token }}
