@@ -1,0 +1,7 @@
+<Project>
+  <!-- Stops the repository root's central package management from applying: the spike pins its versions in the project file.
+       (The root check scripts only scan *.csproj, *.props and *.targets, and this file lists no PackageVersion.) -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>
