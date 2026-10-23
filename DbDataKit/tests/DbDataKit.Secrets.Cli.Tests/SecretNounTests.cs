@@ -13,7 +13,7 @@ public class SecretNounTests
         var store = new MemoryStore();
         var console = new FakeConsole();
         var cli = new SecretCli(store, store, store, () => [new SecretRef(SecretRefKind.Env, "PRESENT")], v => "dpapi:PROTECTED");
-        return (new NounRouter("prod", [SecretNoun.Create(cli, () => console)]), store, console);
+        return (new NounRouter("prod", [SecretNoun.Create(cli, _ => console)]), store, console);
     }
 
     private static CliContext Context() => new(new StringWriter(), new StringWriter(), TextReader.Null);

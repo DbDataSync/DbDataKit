@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
+    <PackageReference Include="JsonSchema.Net" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <Using Include="Xunit" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

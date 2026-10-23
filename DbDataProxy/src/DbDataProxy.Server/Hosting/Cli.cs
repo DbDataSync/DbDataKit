@@ -25,7 +25,7 @@ public static class Cli
         ConfigNoun(),
         QueryNoun(),
         HealthNoun(),
-    ]);
+    ], ProxyHost.Version);
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context)
     {
@@ -59,7 +59,7 @@ public static class Cli
     ]);
 
     private static Verb Service(string name, string summary, EffectClass effect, string usage) =>
-        new(name, summary, effect, usage, async (args, _) => await ServiceCli.RunAsync([name, .. args], ServiceCliEnvironment.Real()));
+        new(name, summary, effect, usage, async (args, context) => await ServiceCli.RunAsync([name, .. args], ServiceCliEnvironment.Real(DbDataKit.Hosting.Cli.HostingNouns.ConsoleFor(context))), DataSchemas.None);
 
     // ---- cert ----
 
@@ -72,11 +72,11 @@ public static class Cli
     ]);
 
     private static Verb Cert(string name, string summary, EffectClass effect) =>
-        new(name, summary, effect, "", (args, _) =>
+        new(name, summary, effect, "", (args, context) =>
         {
             var options = ProxyConfiguration.LoadOptions();
-            return Task.FromResult(CertCli.Run([name, .. args], options, ProxyHost.ResolveDataDirectory(options), new DbDataKit.Hosting.Cli.SystemConsole()));
-        });
+            return Task.FromResult(CertCli.Run([name, .. args], options, ProxyHost.ResolveDataDirectory(options), DbDataKit.Hosting.Cli.HostingNouns.ConsoleFor(context)));
+        }, DataSchemas.None);
 
     // ---- secret ----
 
@@ -90,12 +90,12 @@ public static class Cli
         Secret("export", "Write every secret to a file under a passphrase", EffectClass.OfflineOnly, "<file> [--prefix <prefix>] [--passphrase-stdin]"),
         Secret("import", "Read secrets from an export file", EffectClass.RepoFilesOnly, "<file> [--overwrite] [--passphrase-stdin]"),
         Secret("protect", "An inline, encrypted dpapi: reference for one value (Windows, machine scope)", EffectClass.OfflineOnly, "[--stdin]"),
-        new Verb("hash", "Print a password hash for a Proxy:Users entry; the password comes from a prompt or standard input", EffectClass.OfflineOnly, "", (args, context) => HashAsync(args, context)),
+        new Verb("hash", "Print a password hash for a Proxy:Users entry; the password comes from a prompt or standard input", EffectClass.OfflineOnly, "", (args, context) => HashAsync(args, context), DataSchemas.None),
     ]);
 
     private static Verb Secret(string name, string summary, EffectClass effect, string usage) =>
-        new(name, summary, effect, usage, async (args, _) =>
-            await SecretCommand.RunAsync([name, .. args], ProxyConfiguration.LoadOptions(), new DbDataKit.Secrets.Cli.SystemConsole()));
+        new(name, summary, effect, usage, async (args, context) =>
+            await SecretCommand.RunAsync([name, .. args], ProxyConfiguration.LoadOptions(), DbDataKit.Secrets.Cli.SecretNoun.Captured(context, new DbDataKit.Secrets.Cli.SystemConsole())), DataSchemas.None);
 
     private static async Task<int> HashAsync(string[] args, CliContext context)
     {
@@ -133,9 +133,9 @@ public static class Cli
     private static Noun ConfigNoun() => new("config", "The server's own configuration",
     [
         new Verb("check", "Validate the configuration (exit 0 valid, 2 invalid)", EffectClass.OfflineOnly, "[--file F]",
-            (args, context) => Task.FromResult(ConfigCommand.Run(["check", .. args], context.Out, context.Error))),
+            (args, context) => Task.FromResult(ConfigCommand.Run(["check", .. args], context.Out, context.Error)), DataSchemas.None),
         new Verb("show", "The effective configuration with secrets masked; --origin adds where each value came from", EffectClass.OfflineOnly, "[--origin] [--file F]",
-            (args, context) => Task.FromResult(ConfigCommand.Run(["show", .. args], context.Out, context.Error))),
+            (args, context) => Task.FromResult(ConfigCommand.Run(["show", .. args], context.Out, context.Error)), DataSchemas.None),
     ]);
 
     // ---- query ----
@@ -144,7 +144,7 @@ public static class Cli
     [
         new Verb("run", "Run one query against a proxy and print the result", EffectClass.OfflineOnly,
             "--user U --password P --sql \"...\" [--address URL] [--datasource N] [--compression none|gzip|zstd|lz4] [--max-rows N] [--insecure]",
-            (args, _) => QueryCommand.RunAsync(args)),
+            (args, context) => QueryCommand.RunAsync(args, context.Out, context.Error), DataSchemas.None),
     ]);
 
     // ---- health ----
@@ -167,7 +167,11 @@ public static class Cli
                     await context.Error.WriteLineAsync("The address must be an http or https URL.");
                     return CliExit.Usage;
                 }
-                return await DbDataKit.Hosting.HealthProbeClient.RunAsync(url, TimeSpan.FromSeconds(4), null, options);
-            }),
+                var exit = await DbDataKit.Hosting.HealthProbeClient.RunAsync(url, TimeSpan.FromSeconds(4), null, options);
+                context.Data["healthy"] = exit == 0;
+                context.Data["url"] = url.ToString();
+                await (exit == 0 ? context.Out : context.Error).WriteLineAsync(exit == 0 ? "healthy" : "unhealthy");
+                return exit;
+            }, DataSchemas.Object([("healthy", DataSchemas.Boolean), ("url", DataSchemas.String)], "healthy", "url")),
     ]);
 }

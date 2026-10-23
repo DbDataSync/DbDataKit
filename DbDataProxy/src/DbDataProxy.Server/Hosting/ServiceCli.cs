@@ -35,12 +35,12 @@ public sealed class ServiceCliEnvironment
     /// <summary>Maps the service account to the SIDs the directory ACLs are written for.</summary>
     public Func<ServiceAccount, IPrincipalResolver> PrincipalResolver { get; init; } = account => new WindowsPrincipalResolver(account);
 
-    public static ServiceCliEnvironment Real() => new()
+    public static ServiceCliEnvironment Real(IConsole? console = null) => new()
     {
         Scm = OperatingSystem.IsWindows() ? new WindowsServiceControlManager() : new InMemoryServiceControlManager(),
         Acl = new FileSystemAclService(),
         Elevation = new ElevationDetector(),
-        Console = new SystemConsole(),
+        Console = console ?? new SystemConsole(),
         BinaryPath = Environment.ProcessPath ?? "",
         DefaultDataDirectory = () => ProxyHost.ResolveDataDirectory(ProxyConfiguration.LoadOptions()),
         EnsureSettingsFile = dataDirectory => ProxyConfigFile.EnsureStarter(dataDirectory),

@@ -10,6 +10,6 @@ public static class ServerNoun
     /// <param name="run">Starts the product's server with the arguments after <c>server run</c> and returns its exit code when it has stopped.</param>
     public static Noun Create(Func<string[], CliContext, Task<int>> run) => new("server", "The long-running process",
     [
-        new Verb("run", "Run the server in the foreground (what the operating system's service runs); not offered through the management API", EffectClass.OfflineOnly, "[options]", run),
+        new Verb("run", "Run the server in the foreground (what the operating system's service runs); not offered through the management API", EffectClass.OfflineOnly, "[options]", run, DataSchemas.None),
     ]);
 }

@@ -60,6 +60,7 @@ public sealed class SharedNounTests
               health  Is a running server answering
 
             Run 'dbdatademo <noun> help' for the verbs of one.
+            Add --format json to any command for a JSON document instead of text.
 
             """.Replace("\r\n", "\n"), Router().Help());
     }
@@ -240,8 +241,10 @@ public sealed class SharedNounTests
         await Router().RunAsync(["config", "show", "--format", "json"], io.Context());
 
         using var document = JsonDocument.Parse(io.Out.ToString());
-        Assert.Equal(2, document.RootElement.GetArrayLength());
-        Assert.Equal("***", document.RootElement[1].GetProperty("value").GetString());
+        var settings = document.RootElement.GetProperty("data").GetProperty("settings");
+        Assert.Equal(2, settings.GetArrayLength());
+        Assert.Equal("***", settings[1].GetProperty("value").GetString());
+        Assert.True(settings[1].GetProperty("is_secret").GetBoolean());
         Assert.DoesNotContain("hunter2", io.Out.ToString());
     }
 
@@ -311,11 +314,14 @@ public sealed class SharedNounTests
         var config = new FakeConfig { Problems = { "a" } };
         var io = new Io();
 
-        await Router(config: config).RunAsync(["config", "check", "--format", "json"], io.Context());
+        var exit = await Router(config: config).RunAsync(["config", "check", "--format", "json"], io.Context());
 
         using var document = JsonDocument.Parse(io.Out.ToString());
+        Assert.Equal(CliExit.Failure, exit);
         Assert.False(document.RootElement.GetProperty("ok").GetBoolean());
-        Assert.Equal("a", document.RootElement.GetProperty("problems")[0].GetString());
+        Assert.Equal(1, document.RootElement.GetProperty("exit_code").GetInt32());
+        Assert.Equal("a", document.RootElement.GetProperty("data").GetProperty("problems")[0].GetString());
+        Assert.Equal("a", document.RootElement.GetProperty("errors")[0].GetString());
     }
 
     [Fact]
@@ -331,7 +337,6 @@ public sealed class SharedNounTests
     [InlineData("config", "get")]
     [InlineData("config", "get", "a", "b")]
     [InlineData("config", "set", "a")]
-    [InlineData("config", "show", "--format", "xml")]
     [InlineData("config", "check", "--bogus")]
     public async Task Config_verbs_refuse_the_wrong_arguments_with_the_usage_exit_code(params string[] args)
     {

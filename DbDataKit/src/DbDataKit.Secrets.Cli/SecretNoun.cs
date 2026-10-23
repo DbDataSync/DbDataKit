@@ -8,7 +8,7 @@ namespace DbDataKit.Secrets.Cli;
 /// </summary>
 public static class SecretNoun
 {
-    public static Noun Create(SecretCli cli, Func<IConsole> console) => new("secret", "Secret references and protected values",
+    public static Noun Create(SecretCli cli, Func<CliContext, IConsole> console) => new("secret", "Secret references and protected values",
     [
         Forward(cli, console, "set", "Store one secret; the value comes from a prompt or standard input, never an argument", EffectClass.RepoFilesOnly, "<name> [--stdin]"),
         Forward(cli, console, "list", "Names and when each was written, never values", EffectClass.OfflineOnly, "[<prefix>]"),
@@ -20,6 +20,25 @@ public static class SecretNoun
         Forward(cli, console, "protect", "An inline, encrypted form of one value for a single field", EffectClass.OfflineOnly, "[--stdin]"),
     ]);
 
-    private static Verb Forward(SecretCli cli, Func<IConsole> console, string name, string summary, EffectClass effect, string usage) =>
-        new(name, summary, effect, usage, (args, context) => cli.ExecuteAsync([name, .. args], console(), context.Cancellation));
+    private static Verb Forward(SecretCli cli, Func<CliContext, IConsole> console, string name, string summary, EffectClass effect, string usage) =>
+        new(name, summary, effect, usage, (args, context) => cli.ExecuteAsync([name, .. args], console(context), context.Cancellation), DataSchemas.None);
+
+    /// <summary>
+    /// A console whose output goes to the context (so the JSON form captures it) and whose input, hidden prompt and redirection come from <paramref name="input"/> (normally a <see cref="SystemConsole"/>):
+    /// the product gives this as the noun's console.
+    /// </summary>
+    public static IConsole Captured(CliContext context, IConsole input) => new CapturedConsole(context, input);
+
+    private sealed class CapturedConsole(CliContext context, IConsole input) : IConsole
+    {
+        public void WriteLine(string text) => context.Out.WriteLine(text);
+
+        public void WriteError(string text) => context.Error.WriteLine(text);
+
+        public bool IsInputRedirected => input.IsInputRedirected;
+
+        public string ReadStdin() => input.ReadStdin();
+
+        public string? ReadSecret(string prompt) => input.ReadSecret(prompt);
+    }
 }

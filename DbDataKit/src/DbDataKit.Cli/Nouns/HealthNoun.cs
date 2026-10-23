@@ -35,7 +35,8 @@ public static class HealthNoun
     public static Noun Create(IHealthProbe probe, string defaultUrl) => new("health", "Is a running server answering",
     [
         new Verb("check", "Ask the server's health address; exit 0 when it answers, 1 when it does not", EffectClass.OfflineOnly, "[--url <url>] [--timeout <seconds>]",
-            (args, context) => CheckAsync(probe, defaultUrl, args, context)),
+            (args, context) => CheckAsync(probe, defaultUrl, args, context),
+            DataSchemas.Object([("healthy", DataSchemas.Boolean), ("detail", DataSchemas.String), ("url", DataSchemas.String)], "healthy", "detail")),
     ]);
 
     private static async Task<int> CheckAsync(IHealthProbe probe, string defaultUrl, string[] args, CliContext context)
@@ -64,6 +65,9 @@ public static class HealthNoun
         try { result = await probe.CheckAsync(url, timeout.Token); }
         catch (OperationCanceledException) when (!context.Cancellation.IsCancellationRequested) { result = new HealthResult(false, $"no answer in {seconds} s"); }
 
+        context.Data["healthy"] = result.Healthy;
+        context.Data["detail"] = result.Detail;
+        context.Data["url"] = url.ToString();
         await (result.Healthy ? context.Out : context.Error).WriteLineAsync($"{(result.Healthy ? "healthy" : "unhealthy")}: {result.Detail}");
         return result.Healthy ? CliExit.Ok : CliExit.Failure;
     }

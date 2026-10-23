@@ -1,3 +1,4 @@
+using Json.Schema;
 using DbDataKit.Cli;
 using DbDataProxy.Server.Hosting;
 
@@ -33,6 +34,7 @@ public sealed class CliGrammarTests
               health   Is a running proxy answering
 
             Run 'dbdataproxy <noun> help' for the verbs of one.
+            Add --format json to any command for a JSON document instead of text.
 
             """.Replace("\r\n", "\n"), result.Out);
     }
@@ -87,16 +89,10 @@ public sealed class CliGrammarTests
     [Fact]
     public async Task Query_run_without_its_options_prints_the_usage_with_the_new_name()
     {
-        var originalError = Console.Error;
-        using var error = new StringWriter();
-        Console.SetError(error);
-        try
-        {
-            var result = await Run("query", "run");
-            Assert.Equal(CliExit.Usage, result.Exit);
-            Assert.Contains("dbdataproxy query run --user", error.ToString());
-        }
-        finally { Console.SetError(originalError); }
+        var result = await Run("query", "run");
+
+        Assert.Equal(CliExit.Usage, result.Exit);
+        Assert.Contains("dbdataproxy query run --user", result.Error);
     }
 
     [Fact]
@@ -106,4 +102,53 @@ public sealed class CliGrammarTests
 
         Assert.Equal(CliExit.Usage, result.Exit);
     }
+
+    // ---- the JSON form (plan 13, C05) ----
+
+    private static string SchemaPath() => Path.Combine(Support.WorkerBuild.RepositoryRoot(), "schemas", "output.schema.json");
+
+    [Fact]
+    public void The_checked_in_output_schema_is_current()
+    {
+        string actual = Cli.Router().OutputSchema().Replace("\r\n", "\n");
+        if (Environment.GetEnvironmentVariable("UPDATE_GOLDEN") == "1") File.WriteAllText(SchemaPath(), actual);
+
+        Assert.Equal(File.ReadAllText(SchemaPath()).Replace("\r\n", "\n"), actual);
+    }
+
+    [Fact]
+    public void Every_command_the_help_lists_has_a_schema_for_its_data()
+    {
+        var router = Cli.Router();
+        using var schema = System.Text.Json.JsonDocument.Parse(router.OutputSchema());
+        var defs = schema.RootElement.GetProperty("$defs").EnumerateObject().Select(p => p.Name).ToHashSet();
+
+        Assert.NotEmpty(router.Specs());
+        Assert.All(router.Specs(), spec => Assert.Contains("data_" + spec.Id, defs));
+    }
+
+    [Theory]
+    [InlineData("health", "check", "--url", "ftp://x")]
+    [InlineData("secret", "hash", "hunter2")]
+    [InlineData("bogus")]
+    [InlineData("query", "run")]
+    public async Task A_command_that_fails_still_writes_one_document_that_satisfies_the_schema(params string[] args)
+    {
+        var originalError = Console.Error;
+        using var captured = new StringWriter();
+        Console.SetError(captured);
+        try
+        {
+            var result = await Run([.. args, "--format", "json"]);
+
+            using var document = System.Text.Json.JsonDocument.Parse(result.Out);
+            var schema = Json.Schema.JsonSchema.FromText(Cli.Router().OutputSchema());
+            Assert.NotEqual(0, result.Exit);
+            Assert.Equal(result.Exit, document.RootElement.GetProperty("exit_code").GetInt32());
+            Assert.True(schema.Evaluate(document.RootElement, new Json.Schema.EvaluationOptions { OutputFormat = Json.Schema.OutputFormat.List }).IsValid, result.Out);
+            Assert.DoesNotContain("hunter2", result.Out);
+        }
+        finally { Console.SetError(originalError); }
+    }
 }
+

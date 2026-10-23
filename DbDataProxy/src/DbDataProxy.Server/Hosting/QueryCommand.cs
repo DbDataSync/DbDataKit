@@ -11,7 +11,9 @@ namespace DbDataProxy.Server.Hosting;
 /// </summary>
 public static class QueryCommand
 {
-    public static async Task<int> RunAsync(string[] args)
+    public static Task<int> RunAsync(string[] args) => RunAsync(args, Console.Out, Console.Error);
+
+    public static async Task<int> RunAsync(string[] args, TextWriter output, TextWriter error)
     {
         string? address = Option(args, "--address") ?? "https://localhost:8815";
         string? user = Option(args, "--user");
@@ -19,7 +21,7 @@ public static class QueryCommand
         string? sql = Option(args, "--sql");
         if (user is null || password is null || sql is null)
         {
-            Console.Error.WriteLine("Usage: dbdataproxy query run --user U --password P --sql \"SELECT ...\" [--address URL] " +
+            error.WriteLine("Usage: dbdataproxy query run --user U --password P --sql \"SELECT ...\" [--address URL] " +
                                     "[--datasource NAME] [--compression none|gzip|zstd|lz4] [--max-rows N] [--insecure]");
             return 2;
         }
@@ -36,19 +38,19 @@ public static class QueryCommand
             var options = new QueryOptions { DataSource = Option(args, "--datasource"), Compression = Option(args, "--compression") };
             var result = await client.QueryAsync(sql, options);
 
-            Console.WriteLine(string.Join(" | ", result.Schema.FieldsList.Select(f => $"{f.Name}:{f.DataType.Name}")));
+            output.WriteLine(string.Join(" | ", result.Schema.FieldsList.Select(f => $"{f.Name}:{f.DataType.Name}")));
             long rows = 0;
             await foreach (var batch in result)
             {
                 for (int r = 0; r < batch.Length; r++, rows++)
-                    if (rows < maxRows) Console.WriteLine(Format(batch, r));
+                    if (rows < maxRows) output.WriteLine(Format(batch, r));
             }
-            Console.WriteLine($"({rows} rows)");
+            output.WriteLine($"({rows} rows)");
             return 0;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine(ex.InnerException?.Message ?? ex.Message);
+            error.WriteLine(ex.InnerException?.Message ?? ex.Message);
             return 1;
         }
     }

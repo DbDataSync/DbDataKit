@@ -3,6 +3,12 @@ namespace DbDataKit.Cli;
 /// <summary>Where a command reads and writes, and how it is told to stop. Tests pass writers over strings; a program passes the console and its cancel key.</summary>
 public sealed record CliContext(TextWriter Out, TextWriter Error, TextReader In, CancellationToken Cancellation = default)
 {
+    /// <summary>
+    /// What a command found or did, as values and not as text, for the <c>--format json</c> document's <c>data</c> (the shape is the verb's <see cref="Verb.DataSchema"/>). A command still writes its text as it
+    /// always did; in JSON mode the text becomes the document's <c>messages</c> and <c>errors</c>. Keys and property names are written in snake_case.
+    /// </summary>
+    public IDictionary<string, object?> Data { get; init; } = new Dictionary<string, object?>(StringComparer.Ordinal);
+
     public static CliContext Console(CancellationToken cancellation = default) => new(System.Console.Out, System.Console.Error, System.Console.In, cancellation);
 }
 
