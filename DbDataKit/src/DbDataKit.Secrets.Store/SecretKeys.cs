@@ -26,7 +26,7 @@ public static class SecretKeys
         if (!string.IsNullOrWhiteSpace(external)) return new ExternalKeyFile(external);
 
         var ring = new KeyRing(Path.Combine(StoreDirectory(dataDirectory), "keys"), protector);
-        if (!ring.HasKeys) ring.CreateKey(activate: true);
+        ring.EnsureActiveKey();
         ring.VerifyAll();
         return ring;
     }
