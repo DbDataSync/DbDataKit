@@ -6,11 +6,10 @@ using Apache.Arrow.Flight;
 using Apache.Arrow.Flight.Client;
 using Apache.Arrow.Flight.Sql;
 using Apache.Arrow.Flight.Sql.Client;
-using DbDataSync.Core.Sql;
 using Grpc.Core;
 using Grpc.Net.Client;
 
-namespace DbDataSync.Drivers.ArrowFlightSql;
+namespace DbDataKit.Connections.FlightSql;
 
 /// <summary>
 /// A read-only ADO.NET connection to an Arrow Flight SQL server.
@@ -36,16 +35,17 @@ public sealed class FlightSqlConnection : DbConnection
     private string? _authorization;
     private ConnectionState _state = ConnectionState.Closed;
 
-    public FlightSqlConnection(FlightSqlSettings settings, SqlDialect dialect)
+    public FlightSqlConnection(FlightSqlSettings settings, Func<object?, string> renderLiteral)
     {
         _settings = settings;
         _catalog = settings.Catalog;
-        Dialect = dialect;
+        RenderLiteral = renderLiteral ?? throw new ArgumentNullException(nameof(renderLiteral));
     }
 
     /// <summary>The dialect this connection's commands render inline literals with (see
     /// <see cref="FlightSqlParameterMode.Inline"/>) and read parameter markers by.</summary>
-    internal SqlDialect Dialect { get; }
+    /// <summary>How a parameter value is written into the SQL text when <see cref="FlightSqlParameterMode.Inline"/> is chosen: the engine behind the server decides the literal syntax.</summary>
+    internal Func<object?, string> RenderLiteral { get; }
 
     internal FlightSqlSettings Settings => _settings;
 

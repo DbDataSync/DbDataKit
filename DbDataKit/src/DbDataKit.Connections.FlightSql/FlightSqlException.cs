@@ -2,7 +2,7 @@ using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using Grpc.Core;
 
-namespace DbDataSync.Drivers.ArrowFlightSql;
+namespace DbDataKit.Connections.FlightSql;
 
 /// <summary>
 /// A failed call to a Flight SQL server, as a <see cref="DbException"/>. gRPC reports failure with an

@@ -1,7 +1,7 @@
 using Apache.Arrow;
 using Apache.Arrow.Types;
 
-namespace DbDataSync.Drivers.ArrowFlightSql;
+namespace DbDataKit.Connections.FlightSql;
 
 /// <summary>Builds the one-row record batch a prepared statement's parameters travel as: one column per
 /// positional marker, typed from the CLR value.</summary>
