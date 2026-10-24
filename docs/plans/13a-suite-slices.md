@@ -47,7 +47,7 @@ Each milestone is a point where something can be shown working. They follow plan
 | **M0 Foundations** | F01-F14, K01-K12, V01-V07, S01 | one build setup and one version per package; every product on DuckDB 2.0.0; the encrypted secret store on every platform; the dotnet-script spike report |
 | **M1 Engines and loaders** | S02-S10, A01-A07, B01-B03, U01-U03 | Sync loads libraries, drivers and scripts through dotnet-script; Sync's secrets in the shared store and no ClrKernel; Sync's UI builds from the shared workspace |
 | **M2 Console with Sync** | T01-T09, U04-U12, C01-C07, E01, E04, M01-M06, A08-A10, A17-A18 | Sync is managed from the dbdatakit console on another machine; the new command names; Sync's scheduler on the shared packages |
-| **M3 Proxy and Build managed** | P01-P10, R01-R09, M07-M11, E02-E03, E05, A11-A16, A19, A20, B04-B08, C08 | Proxy and Build are configured and operated from the console; Build refreshes run on schedule and are monitored |
+| **M3 Proxy and Build managed** | P01-P10, R01-R09, M07-M11, E02-E03, E05, A11-A16, A19, A20, B04-B08, C08, T10, T11 | Proxy and Build are configured and operated from the console; Build refreshes run on schedule and are monitored |
 | **M4 Authoring and release** | W01-W10, L01-L06 | a Build project authored, approved and applied from the console; the first suite release |
 | **M5 Clean-up** | X01-X04 | the duplicated code listed in plan 13 section 6 is gone |
 
@@ -179,13 +179,15 @@ no ClrKernel (D10).
 | --- | --- | --- | --- | --- |
 | T01 | Token format, signing and validation in `DbDataKit.Web` (ed25519, issuer, audience, expiry, replay, ceiling) | | M | unit tests, including hostile tokens: wrong key, wrong audience, expired, replayed, above the ceiling, malformed |
 | T02 | The local channel in `DbDataKit.Hosting`: named pipe (Windows) and Unix socket, OS-restricted | | M | tests on Linux and on the Windows job: allowed identity connects, another is refused |
-| T03 | Server side of pairing: `server pair` (single-use code), paired consoles in `server.yaml`, `server consoles`, `server unpair` | T01, T02, C02 | M | tests: code expires, code is single use, unpair takes effect on the next call |
+| T03 | Server side of pairing: `server pair` (single-use code), paired **clients** in `server.yaml` (each with a `kind`: console, server, cli), `server clients`, `server unpair` | T01, T02, C02 | M | tests: code expires, code is single use, unpair takes effect on the next call |
 | T04 | Console side: `dbdatakit instance add`, certificate pinning, the console's signing key in a protected store | T03, U07 | M | an end-to-end test pairs a console with a fake server over HTTPS with a self-signed certificate |
-| T05 | Authorization on management APIs: the role from the effect class, the ceiling, the lower of the two | T01, C01 | S | a test per role and effect class; the server refuses what the console would hide |
+| T05 | Authorization on management APIs: the role from the effect class, the ceiling, the lower of the two; ceilings can carry an owner scope (`managed_by`) for server clients (T10) | T01, C01 | S | a test per role and effect class; the server refuses what the console would hide |
 | T06 | Audit: user and console on every change, and as the author of config commits | T05, U06 | S | tests read the audit log and the git author after a change |
 | T07 | Signing key rotation (the new key signed with the old) | T04 | S | after rotation old tokens fail, new ones pass, no re-pairing |
 | T08 | Write version checks (stale writes refused with the current version) | T05 | S | two concurrent writes: the second is refused with the current version |
 | T09 | Management API version reported at pairing and on every call; the console's N and N-1 rule (D17) | T04 | S | a console refuses a server two versions ahead with the upgrade message (test) |
+| T10 | Server-to-server clients (plan 13 W12, "Server-to-server clients"): a Build server or CLI pairs with a Proxy (`dbdatabuild server proxy add`, `dbdatabuild proxy pair`), the Publisher ceiling with its owner scope, `managed_by` on created objects, tokens naming the person, `--adopt` | T03-T05, T09, R01 | M | an end-to-end test: a paired Build server creates and updates its own data source on a Proxy, is refused on a hand-made one and on `extensions.proxy`, and the Proxy's audit names the person and the Build server |
+| T11 | The console brokers a pairing between two servers it is paired with (no code typed) | T10, U12 | S | a test: Build and Proxy paired with one console; the console pairs them; T10's test passes on that pairing |
 
 ## U. Shared web platform and the console host (W5)
 

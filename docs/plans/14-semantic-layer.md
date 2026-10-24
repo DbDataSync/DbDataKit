@@ -110,8 +110,9 @@ manage it in both places, so the connection has one owner and two views:
 - **Server to server.** Plan 13 W12's rule is that a console calls a server and never the reverse. This adds one more kind of paired
   client: **a Build server pairs with a Proxy** the same way a console does (a code from `dbdataproxy server pair`, entered on the Build
   side), with a fixed ceiling role, **Publisher**, which can manage only the data sources and semantic models that this Build server
-  created. A Build CLI on a developer's machine pairs the same way, its key in the user's secret store. Plan 13's pairing must therefore not
-  assume that every client is a console (noted in plan 13 W12).
+  created. A Build CLI on a developer's machine pairs the same way, its key in the user's secret store. The rules for this kind of client
+  (owner-scoped ceilings, tokens naming a person, what may be sent) are in plan 13 W12, "Server-to-server clients", with slices T10 and
+  T11 in plan 13a.
 - **Deploying from the console** is the same path: the console asks the Build server to deploy, and the Build server calls Proxy.
 
 ### R2. DbDataProxy serves semantic queries
@@ -213,6 +214,42 @@ Why a DuckDB subset:
   our own to design, document and fuzz.
 - **The semantics are a closed mapping.** Every accepted query is a JSON request; anything outside the subset is refused with a named
   diagnostic (the QIS `unsupported` codes), never approximated.
+
+**Naming: model-anchored structures** (decided with the owner). Users see SQL that looks like plain SQL over nested columns, with no
+joins:
+
+```sql
+SELECT customer.region,
+       order_date.fiscal_month,
+       MEASURE(orders.net_revenue),
+       MEASURE(budget.amount)
+FROM sales                         -- the semantic model, not a table
+GROUP BY ALL
+LIMIT 100
+```
+
+- **`FROM` names the semantic model.** Its members are addressed as nested structures, with DuckDB's ordinary `a.b.c` syntax.
+- **Conformed dimensions are top-level structures of the model** (`customer.region`, `order_date.fiscal_month`, `product.category.name`
+  for a snowflake), usable with every fact that reaches them. This is what keeps a query over two facts (revenue against budget) free of
+  joins and of any choice about "whose region".
+- **Facts are namespaces** for their measures and for what only they have: role-playing dimensions (`orders.ship_date.month` beside the
+  conformed `order_date`), degenerate dimensions and the fact's own columns (`orders.status`).
+- **A path from a fact is the explicit form.** `orders.customer.region` means `customer.region` when that is unambiguous, and is required
+  where it is not (two roles of one dimension). Every path is many-to-one by construction, which is the semantic layer's no-fan-out rule
+  read as syntax: a structure field has one value per row.
+- **Ad hoc and master data attributes attach where they belong**: a territory bridge on customers is `customer.territory`.
+- **Struct operations have defined meanings or clear refusals**: grouping by a whole dimension (`GROUP BY customer`) groups by its key
+  and label; `customer.*` expands to the dimension's attributes; `struct_extract` and the like are refused inside a semantic query, and
+  work as usual in an outer query.
+- **The canonical SQL** is the shortest unambiguous form; that is what end users see and what JSON to SQL renders.
+- **Real SQL on the results.** An outer query (joins with other results, windows, `QUALIFY`, set operations) runs in DuckDB over the
+  semantic query's result, where a dimension can be a real DuckDB struct.
+
+**Flattened names** for tools that cannot use nested columns (Postgres-wire BI tools, Excel's field lists, CSV exports): every member also
+has a flat column name, `customer_region` by default, from the path joined by a **separator** that the model configures (`_` by default;
+`__` or another where single underscores are common in names). Where two paths flatten to the same name, or a flat name collides with a
+member, **the model fails to compile with both paths named**, and the author fixes it by giving one member an explicit `flat_name`. The
+flat form is a rendering of the same model, never a second model: a query written with flat names translates to the same JSON request.
 
 The mapping:
 

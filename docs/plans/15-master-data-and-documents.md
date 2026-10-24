@@ -70,9 +70,12 @@ entities:
 - **Rules**: required, unique, default, ranges, patterns, allowed values (or a reference to another entity), references, and a small
   closed set of cross-row rules (a sum per group, no overlapping effective dates, a hierarchy without cycles). Each is checked on write,
   and reported with the field and the row, in the suite's error shape.
-- **History**: `none`, `audit` (who changed what and when, in a history table beside the entity), or `effective_dated` (rows carry
-  valid-from and valid-to; a change closes the old version). Kept by the service in its own tables, the same on every engine, rather than
-  through engine features that exist on some (SQL Server and MariaDB system-versioned tables) and not others.
+- **History**: `none`, `audit` (who changed what and when), or `effective_dated` (versioned rows with valid-from and valid-to; a change
+  closes the old version). The owner wants versioned, effective-dated records and accepts either implementation: **native temporal tables**
+  where the engine has them (SQL Server and MariaDB system-versioned tables) or an **application-managed** version of the same concept. One
+  conformance suite defines the behaviour (as-of reads, history of a row, corrections, concurrent edits) and both implementations must pass
+  it; the application-managed one is the baseline because it works on every engine, and an engine's native tables are used only where they
+  pass the same tests.
 - **Semantics for the semantic layer**: an entity can say it is a dimension (with a hierarchy over its attributes), a mapping (a value
   map or bridge: from, to, optional weight), or a calendar. That is what lets the semantic layer use it without extra binding (section 7).
 
@@ -116,8 +119,10 @@ connection with a schema each.
 
 ## 6. Documents
 
-- **A document store**: files with versions, owners, permissions (roles per folder from the console), metadata and tags, on the server's
-  disk or an object store. Sync's planned user-provided files store (`DbDataSync/architecture/implementation/todo/phase-173V-user-provided-files-store.md`) and the console's
+- **A document store**: files with versions, owners, permissions (roles per folder from the console), metadata and tags. **Files are always
+  stored in a database** (owner decision), on the same engines as the models: content in chunks in a binary column (`varbinary(max)`,
+  `bytea`, `BLOB`), so a large workbook is read and written in pieces, with the version, hash and size beside it. Backups, permissions and
+  replication are then the database's, like the rest of the data. Sync's planned user-provided files store (`DbDataSync/architecture/implementation/todo/phase-173V-user-provided-files-store.md`) and the console's
   Files page become this, rather than a second store.
 - **WebDAV for Excel.** Office opens, locks, edits and saves a document over WebDAV (`PROPFIND`, `GET`, `PUT`, `LOCK`, `UNLOCK`,
   `PROPPATCH`) on HTTPS with Windows or Basic authentication. Library options found:
@@ -133,15 +138,23 @@ connection with a schema each.
   it. Where the library falls short, fix it in our fork or upstream rather than switching to a commercial engine; record what Excel sends,
   as for XMLA, so the fixes have tests. The WebDAV listener is its own, off by default.
 - **Every save is a version.** A `PUT` (or an upload from the console) creates a new version; nothing is overwritten.
+- **Excel's WebDAV traffic is recorded for tests**, as plan 14 does for XMLA: on the Excel VM, a request-and-response recording of opening,
+  locking, editing, saving and closing a workbook (Windows and Mac) becomes the fixtures the WebDAV listener is tested against in CI.
 
 ## 7. Extraction and consumption
 
 - **Extraction runs on save.** A document can have a saved extraction spec (plan 14's QIS extraction: match, fingerprint, tables, checks
   against the sheet's own totals). Each new version is checked against the fingerprint; a sheet whose layout moved is reported (a
   notification through `DbDataKit.Monitoring`, with what moved), and its last good extraction stays in place.
-- **Extracted tables land in a model.** Recommended: an extraction writes into an entity of a master data model (with its rules and
-  history), so what consumers read is always an ordinary, validated table. Session-scope ad hoc tables (plan 14) stay for one-off
-  questions; anything others will read becomes an entity.
+- **Extracted tables land in a model by default.** An extraction writes into an entity of a master data model (with its rules and
+  history), so what consumers read is an ordinary, validated table. This is the default, not the only destination: session-scope ad hoc
+  tables (plan 14) stay for one-off questions, and other destinations can be added when a case needs one.
+- **From a query to managed data** (collaboration). A temporary mapping table an agent or a user made for one semantic query (an ad hoc
+  table, a value map, a bridge, a weighted relation; plan 14) can be **promoted** into DbDataStore: the service creates an entity for it
+  (keys and types from the table's descriptor, the map's from/to/weight columns), loads the rows, and from then on it is visible to others,
+  edited in the grid, versioned, and read by later queries as a governed relation instead of a session one. The query that made it keeps
+  working, now pointing at the managed entity. This is the main collaboration path between people and agents, and QIS's `shared` and
+  `governed` scopes become "promoted into DbDataStore".
 - **Consumers read tables**:
 
 | Consumer | How |
@@ -170,16 +183,19 @@ connection with a schema each.
 | Agent tools | the shared command surface (plan 13 W4a) | model, row and change-request tools |
 | Console | the shared web packages (plan 13 W5) | model designer, grid editor, change review |
 
-## 9. Questions for the owner
+## 9. Decisions and open questions
 
-1. ~~Name~~: **decided**, DbDataStore (`dbdatastore`).
-2. ~~Structure changes~~: **decided**, Build's planner moves into `DbDataKit.Schema`.
-3. **History**: service-managed history tables on every engine (recommended), or native temporal tables where the engine has them?
-4. **Approval**: per model, as in section 5, with agents' writes always change requests unless the owner allows otherwise?
-5. ~~WebDAV~~: **decided**, open source only; Dav.AspNetCore.Server first.
-6. **Document storage**: the server's disk first, an object store (S3-compatible, Azure Blob) later?
-7. **Extraction results**: always into an entity of a model (recommended), or also as standalone tables?
-8. **Engine order**: SQL Server, PostgreSQL, SQLite first (the three the suite covers or nearly covers), then MariaDB, MySQL, Oracle?
+| # | Question | Status |
+| --- | --- | --- |
+| 1 | Name | **decided**: DbDataStore (`dbdatastore`) |
+| 2 | Structure changes | **decided**: Build's planner moves into `DbDataKit.Schema` |
+| 3 | History | **decided**: versioned, effective-dated records; native temporal tables or application-managed, behind one conformance suite (section 3) |
+| 4 | Approval model | **open**: to be specified together with the owner (who approves what, per model and per kind of change; agents' writes; emergency edits; what an approval records) |
+| 5 | WebDAV | **decided**: open source only; Dav.AspNetCore.Server first, NWebDav second; Excel's traffic recorded as fixtures |
+| 6 | Document storage | **decided**: always in a database |
+| 7 | Extraction results | **decided**: into a model entity by default, not the only destination |
+| 8 | Engine order | **decided**: SQL Server, PostgreSQL, SQLite, MariaDB, MySQL, Oracle, unless something comes up |
+| 9 | Where DbDataStore is hosted | **open, later**: its own server first (section 11); Proxy hosting it is an option to keep possible |
 
 ## 10. Suggested order, once approved
 
@@ -190,7 +206,25 @@ After plan 13's M3 (the console manages all products) and with plan 14's semanti
 | M1 | The server skeleton on plan 13's shape; `model/1` and its validation; SQL Server and PostgreSQL storage for new models (create only) |
 | M2 | Row writes with rules, history and audit; the console grid editor; agent tools as change requests |
 | M3 | `DbDataKit.Schema` from Build's planner; structure changes with plans and approval |
-| M4 | SQLite; then MariaDB and MySQL; then Oracle (with the shared providers, readers and writers they need) |
-| M5 | The document store with versions; WebDAV with Dav.AspNetCore.Server, tested against Excel on the VM |
+| M4 | SQLite; then MariaDB, MySQL and Oracle, in that order (with the shared providers, readers and writers they need) |
+| M5 | The document store in the database, with versions; WebDAV with Dav.AspNetCore.Server, tested against Excel's recorded traffic |
 | M6 | Extraction on save into entities; fingerprint drift notifications |
 | M7 | Consumers: change events and the "on change" trigger for Sync and Build; Build import of entities; semantic dimensions, maps and calendars from entities |
+| M8 | Promotion of a query's temporary mapping tables into managed entities (section 7) |
+
+## 11. Hosting: its own server, or Proxy
+
+The owner may later want **DbDataProxy to host DbDataStore**, serving its queries and updates, and is open to another architecture if
+one fits better. The options:
+
+| Option | For | Against |
+| --- | --- | --- |
+| **A. Its own server** (`dbdatastore server`), as planned above | one product, one purpose; Proxy stays read-only, which is a large part of its security case; DbDataStore can be installed alone | one more service to install where both are used |
+| **B. Proxy hosts DbDataStore** | one endpoint for reading and writing managed data; Proxy already has the identities, limits, protocols and the connections | Proxy gains a write path, which every Proxy install would then carry and every review of Proxy must cover |
+| **C. DbDataStore as libraries, hosted by either** | A first, B later, without rewriting | the discipline of keeping the logic out of the host |
+
+**Recommendation: C, starting with A.** The model, validation, history, change requests, documents and extraction live in shared
+libraries (`DbDataKit.Store.*`), and `dbdatastore server` is a thin host, like the other servers. Reads of managed data go through Proxy
+from the start, because master data is ordinary tables on an ordinary data source. If Proxy later hosts DbDataStore, it hosts the same
+libraries and the write path stays theirs: Proxy's own query path stays read-only, writes are allowed only for DbDataStore entities and only
+through DbDataStore's validation, history and approval, under a separate role. Nothing in A should make B hard.
