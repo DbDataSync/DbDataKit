@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>When a job is due: schedule definitions (cron in a time zone, or an interval), a pure evaluator that also says what was missed, and the gate that decides whether a job may run at all. No product logic.</Description>
+    <Description>When a job is due: schedule definitions (cron in a time zone, or an interval), a pure evaluator that also says what was missed, the gate that decides whether a job may run at all, and the durable work queue and run lock (on the `State` dialects) that hand due work to the workers. No product logic.</Description>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Cronos" />
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
   </ItemGroup>
 </Project>
