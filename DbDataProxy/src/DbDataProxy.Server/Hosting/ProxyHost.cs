@@ -198,6 +198,9 @@ public static class ProxyHost
         string dataDirectory = ResolveDataDirectory(options);
         var holder = new TlsCertificateHolder();
         builder.Services.AddSingleton(holder);
+        builder.Services.AddSingleton(_ => DbDataProxy.Server.State.ProxyState.Open(dataDirectory));
+        builder.Services.AddSingleton(sp => new DbDataKit.State.NotificationStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
+        builder.Services.AddHostedService<DbDataProxy.Server.State.ProxyStateStartup>();
         builder.Services.AddSingleton<IReadinessProbe>(new CertificateReadinessProbe(() => holder.Current, CertificateProvider.RenewBeforeDays));
         builder.Services.AddHostedService(sp => new CertificateRotationService(
             holder, options, dataDirectory, sp.GetRequiredService<ILogger<CertificateRotationService>>()));

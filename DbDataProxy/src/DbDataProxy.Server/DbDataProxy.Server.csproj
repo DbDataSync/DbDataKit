@@ -32,6 +32,7 @@
     <DbDataKitReference Include="Hosting.Children" />
     <DbDataKitReference Include="Hosting.Cli" />
     <DbDataKitReference Include="Security.Acl" />
+    <DbDataKitReference Include="State" />   <!-- the proxy's state database; plan 13, P02 -->
     <ProjectReference Include="..\DbDataProxy.Core\DbDataProxy.Core.csproj" />
   </ItemGroup>
   <Import Project="$(DbDataKitRoot)build/DuckDb.Native.targets" />
