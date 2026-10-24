@@ -70,6 +70,8 @@ public sealed class ApiClient(string baseUrl) : IDisposable
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
             Password = Scenario.SaPassword,
+            // the dev containers use self-signed certificates
+            Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
         }, cancellationToken);
 
         await PutAsync($"/api/connections/{Scenario.TargetConnectionName}", new ConnectionInput
@@ -82,6 +84,13 @@ public sealed class ApiClient(string baseUrl) : IDisposable
             AuthMode = AuthMode.SqlAuth,
             UserId = target.UserId,
             Password = target.Password,
+            // the dev containers use self-signed certificates, or none
+            Properties = target.DriverType switch
+            {
+                DriverIds.MsSql => new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
+                DriverIds.Postgres => new Dictionary<string, string> { ["SSL Mode"] = "Disable" },
+                _ => new Dictionary<string, string>(),
+            },
         }, cancellationToken);
 
         await PutAsync($"/api/replications/{Scenario.ReplicationName}", new ReplicationTaskConfig

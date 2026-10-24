@@ -14,6 +14,8 @@
     <DbDataKitReference Include="Dialect" />   <!-- identifier quoting and name splitting for the built-in engines; plan 13, A06 -->
     <DbDataKitReference Include="Config.Yaml" />   <!-- the strict reader connection files pass through; plan 13, A01 -->
     <DbDataKitReference Include="Config.Git" />   <!-- the config repository's git service (brings LibGit2Sharp); plan 13, U06 -->
+    <DbDataKitReference Include="Connections.Abstractions" />   <!-- the connection definition and the policy composers apply; plan 13, A08 -->
+    <DbDataKitReference Include="Connections" />   <!-- the composer pipeline (credentials last, round-trip proof) -->
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 

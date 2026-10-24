@@ -85,6 +85,7 @@ public sealed class ChangeCounterSourceIntegrationTests : IClassFixture<TestApiF
             DriverType = DriverIds.MsSql,
             Host = "localhost",
             Port = 14330,
+            Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = _databaseName,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",

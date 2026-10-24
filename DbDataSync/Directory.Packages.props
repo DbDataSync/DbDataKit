@@ -9,6 +9,11 @@
     <PackageVersion Include="DbDataKit.Hosting.Systemd" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Scheduling" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Config.Git" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Connections.Abstractions" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Connections" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Connections.SqlServer" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Connections.Postgres" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Odbc.Metadata" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Dialect" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Dialect.Abstractions" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Config.Yaml" Version="$(DbDataKitVersion)" />

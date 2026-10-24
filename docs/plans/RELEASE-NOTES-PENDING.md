@@ -21,6 +21,11 @@ to it in the pull request that makes the change; a release moves the entries int
 - **The command line has new names.** `dbdatasync serve` is `dbdatasync server run`, `setup` is `server setup`, `config cert|secret|library|driver ...` are `cert`, `secret`, `library` and `driver` (`config check|get|set`
   stay), and `health` is `health check`. The old forms exit 2 and print the new one. The Windows service, the systemd unit and the Docker image run `server run`, so **run `service install` again** on an
   existing installation (a service still registered with `serve` cannot start), and update container health checks to `health check`. `invite`, `update`, `launcher` and `tool` are unchanged for now. (C06)
+- **SQL Server and PostgreSQL connections verify the server certificate by default.** The built-in `TrustServerCertificate=true` is gone: SQL Server connections are encrypted (`Encrypt=Mandatory`) and the
+  certificate is checked, and PostgreSQL uses `SSL Mode=VerifyFull` (Npgsql's default was `Prefer`, which did not verify). A server with a self-signed certificate needs `TrustServerCertificate=True` in the
+  connection string or in the connection's properties; a PostgreSQL server without TLS needs `SSL Mode=Disable` (or `Require`, which encrypts without verifying). `Encrypt`, `SSL Mode` and `Root Certificate` in a
+  connection string or in properties are still honoured. A connect timeout in properties still wins. Any other property the shared policy reserves (credentials, host and database keys, `Application Intent`,
+  `Multi Subnet Failover`, `Options`, `Search Path`, command timeouts) is now refused with a message naming it; put it in the connection string instead. (A08)
 
 ## DbDataBuild
 

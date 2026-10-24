@@ -130,6 +130,7 @@ public sealed class ConnectionStringAddressingTests(TestApiFactory factory) : IC
             DriverType = DriverIds.MsSql,
             Host = "localhost",
             Port = 14330,
+            Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = "master",
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
@@ -153,7 +154,7 @@ public sealed class ConnectionStringAddressingTests(TestApiFactory factory) : IC
         {
             Name = name,
             DriverType = DriverIds.Postgres,
-            ConnectionString = "Host=localhost;Port=15432;Timeout=5",
+            ConnectionString = "Host=localhost;Port=15432;Timeout=5;SSL Mode=Disable",
             Database = "postgres",
             AuthMode = AuthMode.SqlAuth,
             UserId = "dbdatasync",

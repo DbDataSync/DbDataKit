@@ -7,6 +7,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <DbDataKitReference Include="Connections.SqlServer" />   <!-- the SqlClient composer; plan 13, A08 -->
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- ExcludeAssets="runtime" (phase 109h): the reference assembly stays available to the compiler —
          every SqlBulkCopy/SqlDbType/SqlConnectionStringBuilder call site keeps compiling unchanged — but
          the real DLL is neither copied into this project's own output nor listed in the hosting

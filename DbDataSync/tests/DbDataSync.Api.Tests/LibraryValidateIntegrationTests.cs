@@ -46,6 +46,7 @@ public sealed class LibraryValidateIntegrationTests(TestApiFactory factory) : IC
             DriverType = DriverIds.MsSql,
             Host = "localhost",
             Port = 14330,
+            Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = "master",
             AuthMode = AuthMode.SqlAuth,
             UserId = userId,

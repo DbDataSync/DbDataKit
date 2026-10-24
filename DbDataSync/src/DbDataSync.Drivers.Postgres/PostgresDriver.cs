@@ -1,3 +1,4 @@
+using DbDataKit.Connections.Postgres;
 using System.Data.Common;
 using System.Diagnostics;
 using DbDataSync.Core.Config;
@@ -82,54 +83,36 @@ public sealed class PostgresDriver : IDriver, IConnectionTester, IDialectProvide
 
     public DbConnection CreateConnection(ConnectionConfig connection, string? credential)
     {
-        // An operator's own connection string is the base, not the whole truth: the credential goes on
-        // top through this builder, so it is escaped correctly and config never carries it.
-        var builder = string.IsNullOrWhiteSpace(connection.ConnectionString)
-            ? new NpgsqlConnectionStringBuilder { Host = connection.Host, Database = connection.Database ?? "postgres" }
-            : new NpgsqlConnectionStringBuilder(connection.ConnectionString);
-
-        if (!string.IsNullOrWhiteSpace(connection.Database))
-            builder.Database = connection.Database;
-
-        if (connection.Port is int port)
-            builder.Port = port;
-
-        // Npgsql spells it `Timeout`, and means the same thing SqlClient's ConnectTimeout does. The
-        // setting wins when set; otherwise a connection string that already carried one keeps it, and
-        // only a connection string silent on the subject gets our default.
-        if (connection.ConnectTimeoutSeconds is int connectTimeout)
-            builder.Timeout = connectTimeout;
-        else if (!ConnectionTimeouts.AddressCarriesOwnConnectTimeout(connection, "Timeout"))
-            builder.Timeout = ConnectionTimeouts.DefaultConnectSeconds;
-
-        if (connection.AuthMode == AuthMode.None)
-        {
-            // Whatever the address or the environment provides — a .pgpass file, a certificate, a
-            // credential already in the connection string. DbDataSync adds nothing.
-        }
-        else if (connection.AuthMode == AuthMode.IntegratedAuth)
-        {
-            // Kerberos/GSSAPI or peer auth, depending on the server's pg_hba.conf. Npgsql needs a
-            // username either way; there is no equivalent of SQL Server's "integrated security" flag
-            // that supplies one.
-            builder.Username = connection.UserId
-                ?? throw new InvalidOperationException("UserId is required even for IntegratedAuth on PostgreSQL.");
-        }
-        else
-        {
-            builder.Username = connection.UserId
-                ?? throw new InvalidOperationException("UserId is required for SqlAuth connections.");
-            builder.Password = credential
-                ?? throw new InvalidOperationException("A resolved credential is required for SqlAuth connections.");
-        }
-
-        foreach (var (key, value) in connection.Properties)
-            builder[key] = value;
+        // The shared composer builds the string (plan 13, A08): the operator's own string is still the base and the credential goes on
+        // top, escaped by the builder. SSL Mode is VerifyFull unless the operator's string or `properties` name another mode.
+        string connectionString = SharedConnection.Compose(connection, credential, Composition);
 
         // Stamped here, at the one moment the config and the connection are in the same hand. Every
         // command raised through CreateTimedCommand() reads it back off the connection.
-        return new NpgsqlConnection(builder.ConnectionString).WithCommandTimeout(connection);
+        return new NpgsqlConnection(connectionString).WithCommandTimeout(connection);
     }
+
+    private static readonly SharedConnectionOptions Composition = new()
+    {
+        Composer = new PostgresComposer(),
+        DefaultDatabase = "postgres",
+        // Npgsql spells the connect timeout `Timeout`, and means the same thing SqlClient's ConnectTimeout does.
+        ConnectTimeoutKeys = ["Timeout"],
+        TlsKeys = ["SSL Mode", "SslMode", "Root Certificate", "RootCertificate", "SSL Root Certificate"],
+        ReadTls = (written, tls) =>
+        {
+            if (written.TryGetValue("sslmode", out var mode))
+            {
+                if (mode.Equals("disable", StringComparison.OrdinalIgnoreCase)) tls.Encrypt = false;
+                else if (!mode.StartsWith("verify", StringComparison.OrdinalIgnoreCase)) tls.Verify = false; // allow, prefer, require: encrypted when it can be, not verified
+            }
+            if (written.TryGetValue("rootcertificate", out var root)) tls.CaFile = root;
+            else if (written.TryGetValue("sslrootcertificate", out var sslRoot)) tls.CaFile = sslRoot;
+        },
+        // Kerberos/GSSAPI or peer auth, depending on the server's pg_hba.conf. Npgsql needs a username either way; there
+        // is no equivalent of SQL Server's "integrated security" flag that supplies one.
+        IntegratedNeedsUser = true,
+    };
 
     /// <summary>
     /// <c>datistemplate = false</c> drops template0/template1; <c>datallowconn</c> drops anything the

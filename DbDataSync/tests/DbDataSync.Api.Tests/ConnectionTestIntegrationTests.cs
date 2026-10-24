@@ -90,6 +90,7 @@ public sealed class ConnectionTestIntegrationTests(TestApiFactory factory) : ICl
             DriverType = DriverIds.MsSql,
             Host = "localhost",
             Port = 14330,
+            Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = "master",
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
