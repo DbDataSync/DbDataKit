@@ -1,3 +1,4 @@
+using DbDataKit.Connections.SqlServer;
 using System.Data.Common;
 using System.Diagnostics;
 using DbDataSync.Core.Config;
@@ -74,83 +75,38 @@ public sealed class MsSqlDriver : IDriver, IConnectionTester, IDialectProvider, 
 
     public DbConnection CreateConnection(ConnectionConfig connection, string? credential)
     {
-        // An operator's own connection string is the *base*, not the whole truth: the credential is
-        // applied on top through this builder, so it is escaped correctly rather than concatenated, and
-        // config never has to carry it. Everything below then behaves identically in both modes.
-        var builder = string.IsNullOrWhiteSpace(connection.ConnectionString)
-            ? new SqlConnectionStringBuilder
-            {
-                DataSource = connection.Port is int port ? $"{connection.Host},{port}" : connection.Host,
-                InitialCatalog = connection.Database ?? "master",
-            }
-            : new SqlConnectionStringBuilder(connection.ConnectionString);
-
-        if (!string.IsNullOrWhiteSpace(connection.Database))
-            builder.InitialCatalog = connection.Database;
-
-        ApplyDefaults(builder);
-
-        // The setting wins when it is set, and defers to a connection string that already said
-        // otherwise when it is not — the same rule ApplyDefaults follows above, for the same reason:
-        // an operator who wrote `Connect Timeout=5` into their own connection string meant it, and
-        // silently replacing it with our 30 would be worse than never having had a default.
-        if (connection.ConnectTimeoutSeconds is int connectTimeout)
-            builder.ConnectTimeout = connectTimeout;
-        else if (!ConnectionTimeouts.AddressCarriesOwnConnectTimeout(
-            connection, "Connect Timeout", "Connection Timeout", "ConnectTimeout"))
-        {
-            // All three spellings, because SqlClient accepts all three and an operator who used the
-            // one we did not check would have their value silently replaced.
-            builder.ConnectTimeout = ConnectionTimeouts.DefaultConnectSeconds;
-        }
-
-        if (connection.AuthMode == AuthMode.IntegratedAuth)
-        {
-            builder.IntegratedSecurity = true;
-        }
-        else if (connection.AuthMode == AuthMode.SqlAuth)
-        {
-            builder.UserID = connection.UserId
-                ?? throw new InvalidOperationException("UserId is required for SqlAuth connections.");
-            builder.Password = credential
-                ?? throw new InvalidOperationException("A resolved credential is required for SqlAuth connections.");
-        }
-
-        // AuthMode.None: whatever the address or the environment provides is used, and DbDataSync adds
-        // nothing.
-
-        foreach (var (key, value) in connection.Properties)
-            builder[key] = value;
+        // The shared composer builds the string (plan 13, A08): the operator's own string is still the base and the credential goes on
+        // top, escaped by the builder. Encryption is Mandatory and the certificate is verified unless the operator's string or
+        // `properties` say TrustServerCertificate / Encrypt otherwise; the old default of trusting any certificate is gone.
+        string connectionString = SharedConnection.Compose(connection, credential, Composition);
 
         // Stamped here, at the one moment the config and the connection are in the same hand. Every
         // command raised through CreateTimedCommand() reads it back off the connection.
-        return new SqlConnection(builder.ConnectionString).WithCommandTimeout(connection);
+        return new SqlConnection(connectionString).WithCommandTimeout(connection);
     }
 
-    private static void ApplyDefaults(SqlConnectionStringBuilder builder)
+    private static readonly SharedConnectionOptions Composition = new()
     {
-        var defaults = new SqlConnectionStringBuilder
+        Composer = new SqlServerComposer(),
+        DefaultDatabase = "master",
+        ConnectTimeoutKeys = ["Connect Timeout", "Connection Timeout", "ConnectTimeout"],
+        TlsKeys = ["Encrypt", "TrustServerCertificate", "Trust Server Certificate", "Server Certificate", "ServerCertificate"],
+        ReadTls = (written, tls) =>
         {
-            // Dev/test default for connecting to self-signed instances (e.g. the local Docker
-            // container used in Phase 3 testing). Revisit before any hardened-production deployment
-            // guidance ships — see architecture/implementation/done/phase-003-mssql-driver.md.
-            TrustServerCertificate = true,
-            // Required: a source read (an open, streaming SqlDataReader from CHANGETABLE/a batch
-            // query) and a staging SqlBulkCopy/MERGE against the target can both be in flight on one
-            // connection at once when source and target share a server. Without MARS that combination
-            // deadlocks rather than throwing — see architecture/implementation/done/phase-003-mssql-driver.md.
-            MultipleActiveResultSets = true,
-        };
+            if (written.TryGetValue("trustservercertificate", out var trust)) tls.TrustServerCertificate = IsTrue(trust);
+            if (written.TryGetValue("encrypt", out var encrypt)) tls.Encrypt = !(IsFalse(encrypt) || encrypt.Equals("optional", StringComparison.OrdinalIgnoreCase));
+            if (written.TryGetValue("servercertificate", out var pin)) tls.CaFile = pin;
+        },
+        // Required: a source read (an open, streaming SqlDataReader from CHANGETABLE/a batch query) and a staging
+        // SqlBulkCopy/MERGE against the target can both be in flight on one connection at once when source and target
+        // share a server. Without MARS that combination deadlocks rather than throwing — see
+        // architecture/implementation/done/phase-003-mssql-driver.md. An operator who turned MARS off meant it.
+        DefaultProperties = new Dictionary<string, string> { ["MultipleActiveResultSets"] = "True" },
+        DefaultPropertySynonyms = new Dictionary<string, string[]> { ["MultipleActiveResultSets"] = ["MARS"] },
+    };
 
-        // Only where the operator has not already said otherwise — a connection string that sets
-        // Encrypt or turns MARS off meant it, and silently overriding it would be worse than the
-        // default being absent.
-        foreach (var key in new[] { nameof(SqlConnectionStringBuilder.TrustServerCertificate), nameof(SqlConnectionStringBuilder.MultipleActiveResultSets) })
-        {
-            if (!builder.ShouldSerialize(key))
-                builder[key] = defaults[key];
-        }
-    }
+    private static bool IsTrue(string value) => value.Equals("true", StringComparison.OrdinalIgnoreCase) || value.Equals("yes", StringComparison.OrdinalIgnoreCase) || value == "1";
+    private static bool IsFalse(string value) => value.Equals("false", StringComparison.OrdinalIgnoreCase) || value.Equals("no", StringComparison.OrdinalIgnoreCase) || value == "0";
 
     public async Task<IReadOnlyList<string>> ListDatabasesAsync(DbConnection connection, CancellationToken cancellationToken)
     {

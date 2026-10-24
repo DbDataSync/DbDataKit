@@ -170,6 +170,7 @@ public sealed class DescriptorDriverTests : IClassFixture<DescriptorDriverApiFac
             DriverType = DriverIds.MsSql,
             Host = "localhost",
             Port = 14330,
+            Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = _targetDatabase,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",

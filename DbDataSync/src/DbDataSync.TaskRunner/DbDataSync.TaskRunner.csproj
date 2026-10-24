@@ -1,6 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <!-- The shared SqlClient and Npgsql composers (plan 13, A08) bring their packages with runtime assets. A direct reference that
+         excludes them wins over the transitive one, so the drivers still come from <repo>/libraries/ at first touch, as the driver
+         projects' own comments describe. -->
+    <PackageReference Include="Microsoft.Data.SqlClient" ExcludeAssets="runtime" />
+    <PackageReference Include="Npgsql" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
     <ProjectReference Include="..\DbDataSync.Scripting\DbDataSync.Scripting.csproj" />
     <ProjectReference Include="..\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />

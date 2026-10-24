@@ -266,6 +266,7 @@ public sealed class BulkCreateRunIntegrationTests : IClassFixture<TestApiFactory
             DriverType = DriverIds.MsSql,
             Host = "localhost",
             Port = 14330,
+            Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = database,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",

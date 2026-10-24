@@ -61,7 +61,7 @@ public sealed class ConnectionTestFallbackTests : IClassFixture<TestApiFactory>
             {
                 Name = name,
                 DriverType = AlwaysFailingProbeDriver.Id,
-                ConnectionString = "Host=localhost;Port=15432;Database=postgres",
+                ConnectionString = "Host=localhost;Port=15432;Database=postgres;SSL Mode=Disable",
                 AuthMode = AuthMode.SqlAuth,
                 UserId = "dbdatasync",
                 Password = "DbDataSync_Test_Pw1",
@@ -97,7 +97,7 @@ public sealed class ConnectionTestFallbackTests : IClassFixture<TestApiFactory>
             {
                 Name = name,
                 DriverType = AlwaysFailingProbeDriver.Id,
-                ConnectionString = "Host=localhost;Port=15432;Database=postgres",
+                ConnectionString = "Host=localhost;Port=15432;Database=postgres;SSL Mode=Disable",
                 AuthMode = AuthMode.SqlAuth,
                 UserId = "dbdatasync",
                 Password = "DbDataSync_Test_Pw1",
