@@ -158,7 +158,10 @@ public sealed class SchedulerServiceReconcileTests(TestApiFactory factory) : ICl
             Every = new SchedulingConfig { Mode = ScheduleMode.Continuous, FrequencySeconds = 3600 },
         });
 
-        // No Primary pass has ever read anything yet — nothing to react to.
+        // A Primary pass that has read nothing yet — nothing to react to. Recorded first, not left to the tick: a tick that finds the Primary pass due enqueues
+        // one and starts a real worker, which claims it, cannot reach the database and fails it, racing the pass recorded below (it ended the run as Failed after
+        // the test had recorded it as Succeeded on a Windows runner, so the rows it read were not counted).
+        RecordPrimaryPass(replicationName, "orders", rowsRead: 0);
         await TickAsync(BuildScheduler());
         Assert.Equal(0, ReconcileRunCount(replicationName, "orders"));
 
