@@ -131,6 +131,50 @@ public sealed class OraclePipelineTests(OracleTestDatabase db) : IClassFixture<O
     private static Dictionary<string, string> SegmentOption(BatchReloadSegment segment) =>
         new() { [SegmentSerializer.SegmentOptionKey] = SegmentSerializer.Serialize(segment) };
 
+    /// <summary>The shared catalog reader (plan 13, A12) on a real server: composed types, identity, key order, and a missing table as Sync's own error.</summary>
+    [Fact]
+    public async Task Catalog_columns_report_the_types_identity_key_order_and_a_missing_table()
+    {
+        var table = $"CAT_{Guid.NewGuid():N}".ToUpperInvariant();
+        _tablesToDrop.Add(table);
+        await ExecuteAsync(_source, $"CREATE TABLE \"{table}\" (b number(10,0) not null, a number generated always as identity, name varchar2(50), stamp timestamp(6), blob_col raw(16), constraint \"PK_{table}\" primary key (b, a))");
+
+        var columns = await OracleCatalog.Instance.GetColumnsAsync(_source, db.SchemaName, table.ToLowerInvariant(), CancellationToken.None);
+
+        Assert.Equal(["B", "A", "NAME", "STAMP", "BLOB_COL"], columns.Select(c => c.Name));
+        Assert.Equal("NUMBER(10,0)", columns.Single(c => c.Name == "B").NativeType);
+        Assert.Equal("VARCHAR2(50)", columns.Single(c => c.Name == "NAME").NativeType);
+        Assert.Equal("TIMESTAMP(6)", columns.Single(c => c.Name == "STAMP").NativeType);
+        Assert.Equal("RAW(16)", columns.Single(c => c.Name == "BLOB_COL").NativeType);
+        Assert.True(columns.Single(c => c.Name == "A").IsIdentity);
+        Assert.False(columns.Single(c => c.Name == "B").IsIdentity);
+        Assert.True(columns.Single(c => c.Name == "NAME").IsNullable);
+        Assert.Equal(1, columns.Single(c => c.Name == "B").KeyOrdinal);
+        Assert.Equal(2, columns.Single(c => c.Name == "A").KeyOrdinal);
+        Assert.Equal(0, columns.Single(c => c.Name == "NAME").KeyOrdinal);
+
+        // The whole shape: foreign key, index and row estimate on a child table.
+        var child = $"CHD_{Guid.NewGuid():N}".ToUpperInvariant();
+        _tablesToDrop.Insert(0, child);
+        await ExecuteAsync(_source, $"CREATE TABLE \"{child}\" (id number(10,0) primary key, pb number(10,0), pa number, tag varchar2(20), constraint \"FK_{child}\" foreign key (pb, pa) references \"{table}\" (b, a) on delete cascade)");
+        await ExecuteAsync(_source, $"CREATE UNIQUE INDEX \"IX_{child}\" ON \"{child}\" (tag DESC, pb)");
+        var shape = await new DbDataKit.Metadata.OracleCatalogReader(_source).GetShapeAsync(new DbDataKit.Metadata.TableRef(null, db.SchemaName, child));
+        Assert.Equal(["ID"], shape.PrimaryKey!.Columns);
+        var fk = Assert.Single(shape.ForeignKeys);
+        Assert.Equal(["PB", "PA"], fk.Columns);
+        Assert.Equal(["B", "A"], fk.ReferencedColumns);
+        Assert.Equal(table, fk.Referenced.Name);
+        Assert.Equal(DbDataKit.Metadata.ReferentialAction.Cascade, fk.OnDelete);
+        var index = Assert.Single(shape.Indexes);
+        Assert.True(index.Unique);
+        Assert.Equal(["<expression>", "PB"], index.Columns.Select(c => c.Name));
+        Assert.True(index.Columns[0].Descending);
+
+        var missing = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            OracleCatalog.Instance.GetColumnsAsync(_source, db.SchemaName, "NO_SUCH_TABLE", CancellationToken.None));
+        Assert.Contains("was not found", missing.Message);
+    }
+
     [Fact]
     public async Task FullReload_LandsEveryRow()
     {

@@ -41,7 +41,8 @@ limits, hash) as a deterministic `dialects.lock.yml`-style file. Parsing is stri
 - SQL_TINYINT maps to unsigned Int8 on SQL Server/Fabric and signed elsewhere (open policy decision from Plan 05).
 - DuckDB foreign keys assume the referenced table is in the same schema (`duckdb_constraints()` does not report its schema) and report no referential actions.
 - PostgreSQL generated columns need server 12+.
-- Not done: `FlightSqlCatalogReader`, procedures through `ICatalogReader` (use `OdbcCatalogReader.Session.Catalog.ProceduresAsync`), MySQL/Oracle readers (they fall back to INFORMATION_SCHEMA).
+- MySQL (`MySqlCatalogReader`) and Oracle (`OracleCatalogReader`, 12c+; column defaults and collations are not read) have their own readers.
+- Not done: `FlightSqlCatalogReader`, procedures through `ICatalogReader` (use `OdbcCatalogReader.Session.Catalog.ProceduresAsync`).
 
 ## Tests
 `dotnet test --project tests/DbDataKit.Metadata.Tests` from `shared/`. DuckDB tests run in-process (DuckDB.NET.Data.Full); SQL Server and PostgreSQL are tested offline
