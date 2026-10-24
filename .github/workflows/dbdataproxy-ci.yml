@@ -89,3 +89,30 @@ jobs:
         if: always()
         working-directory: .
         run: testenv/testenv.sh down
+
+  # The shared Flight SQL client (DbDataKit.Connections.FlightSql) against a real `dbdataproxy server` in front of SQL Server and DuckDB: queries, every
+  # compression, prepared and inline parameters, login failures, and the read-only checks. The script builds and starts the proxy; see its header.
+  flightsql-e2e:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-product
+        with:
+          product: DbDataProxy
+          global-json: DbDataProxy/global.json
+      - name: Start SQL Server (shared test engines)
+        working-directory: .
+        run: testenv/testenv.sh up mssql
+      - name: Point the script at it
+        working-directory: .
+        run: testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
+      - name: Proxy and the shared client, end to end
+        working-directory: .
+        run: DbDataProxy/tests/interop/run-flightsql-e2e.sh
+      - name: Stop the shared engines
+        if: always()
+        working-directory: .
+        run: testenv/testenv.sh down

@@ -42,8 +42,6 @@ public sealed class FlightSqlConnection : DbConnection
         RenderLiteral = renderLiteral ?? throw new ArgumentNullException(nameof(renderLiteral));
     }
 
-    /// <summary>The dialect this connection's commands render inline literals with (see
-    /// <see cref="FlightSqlParameterMode.Inline"/>) and read parameter markers by.</summary>
     /// <summary>How a parameter value is written into the SQL text when <see cref="FlightSqlParameterMode.Inline"/> is chosen: the engine behind the server decides the literal syntax.</summary>
     internal Func<object?, string> RenderLiteral { get; }
 

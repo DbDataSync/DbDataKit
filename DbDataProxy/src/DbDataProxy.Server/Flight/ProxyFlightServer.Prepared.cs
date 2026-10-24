@@ -22,9 +22,13 @@ public sealed class PreparedStatementStore(TimeProvider time)
     private static readonly TimeSpan IdleLifetime = TimeSpan.FromHours(1);
     private readonly ConcurrentDictionary<string, PreparedStatement> _statements = new();
 
+    /// <summary>
+    /// A new handle: 32 hex characters as ASCII bytes. Not raw random bytes: the Apache .NET Flight SQL client keeps the handle as a string, so bytes that are not valid
+    /// UTF-8 come back changed and the statement is "unknown" (found by the end-to-end test in plan 13, A18).
+    /// </summary>
     public byte[] Add(string owner, string dataSource, string sql)
     {
-        byte[] handle = RandomNumberGenerator.GetBytes(16);
+        byte[] handle = System.Text.Encoding.ASCII.GetBytes(Convert.ToHexString(RandomNumberGenerator.GetBytes(16)));
         _statements[Convert.ToHexString(handle)] = new PreparedStatement(owner, dataSource, sql, time.GetUtcNow());
         return handle;
     }
