@@ -1,13 +1,13 @@
 using System.Data.Common;
 
-namespace DbDataSync.State;
+namespace DbDataKit.State;
 
 /// <summary>What a notification is about. Stored as text, not as an enum ordinal, so an unknown value
 /// written by a newer build reads back as itself rather than as whichever kind happens to share its
 /// number.</summary>
 public static class NotificationKinds
 {
-    /// <summary>A run ended <see cref="RunStatus.Failed"/> — phase 77.</summary>
+    /// <summary>A run ended failed — phase 77.</summary>
     public const string RunFailed = "RunFailed";
 
     /// <summary>Somebody held a replication — phase 80. Pauses only; a resume is not news.</summary>
@@ -77,7 +77,7 @@ public sealed record NotificationFeed(
 /// <para>
 /// **The producers are not here.** A notification about a failed run is written inside the same
 /// transaction that records the failure, by the store that owns that table — see
-/// <see cref="TaskRunStore.CompleteRun"/> and <see cref="TaskRunStore.SetPaused"/> — because a
+/// <c>TaskRunStore.CompleteRun</c> and <c>TaskRunStore.SetPaused</c> — because a
 /// notification that could land without the event it describes, or the event without it, is worse
 /// than either alone. <see cref="Insert"/> is the shared statement those call sites write through.
 /// </para>
@@ -93,7 +93,7 @@ public sealed class NotificationStore(StateDatabase database)
     /// would invite a second write from a caller with nothing to be atomic with.
     /// </para>
     /// </summary>
-    internal static void Insert(
+    public static void Insert(
         StateDatabase database, DbConnection connection, DbTransaction? transaction,
         string kind, string message, string? taskName, string? mappingName, Guid? runId)
     {

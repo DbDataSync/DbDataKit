@@ -35,6 +35,7 @@ to it in the pull request that makes the change; a release moves the entries int
   unless the connection string or `properties` name another `SSL Mode` (`None`, `Preferred`, `Required`, `VerifyCA`); `SSL CA` is the root certificate. An Oracle connection given as a host, port and service name is written as
   `tcps://host:port/service`; put `Encrypt` = `false` in `properties` for a listener that has no TLS. A connection string is still the base and its own data source (an alias, a descriptor, a wallet) is not rewritten.
   Credential, host, port, database and timeout keys in `properties` are refused with a message naming the key (Oracle's `Data Source` included). Failures from these engines now show the shared classified message. (A09)
+- **Changing a user's role, or disabling a user, now works when the state store is on SQL Server or PostgreSQL.** It failed with a syntax error on those two engines (SQLite was unaffected). (U04)
 - **MySQL, MariaDB and Oracle table columns are read by the shared catalog readers.** MySQL and MariaDB column types now carry the full engine type (`bigint unsigned`, and MariaDB's `bigint(20) unsigned`; `text` instead of `text(65535)`), so an unsigned column is no longer mistaken for a signed one. Oracle reports the same types as before. (A12)
 
 ## DbDataBuild

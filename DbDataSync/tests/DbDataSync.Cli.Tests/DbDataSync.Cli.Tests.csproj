@@ -27,6 +27,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DbDataSync.Cli\DbDataSync.Cli.csproj" />
+    <Using Include="DbDataKit.State" />   <!-- plan 13, U04 -->
+    <Using Include="DbDataSync.State.StateDatabase" Alias="StateDatabase" />
   </ItemGroup>
 
   <ItemGroup>

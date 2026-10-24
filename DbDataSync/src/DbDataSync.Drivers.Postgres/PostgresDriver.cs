@@ -43,7 +43,7 @@ public sealed class PostgresDriver : IDriver, IConnectionTester, IDialectProvide
 
     /// <summary>Phase 109j: the <c>KnownLibraries</c> id this driver's own <c>NpgsqlDbType</c>/
     /// <c>NpgsqlConnectionStringBuilder</c> usage depends on — the same id
-    /// <see cref="DbDataSync.State.PostgresStateDialect.LibraryId"/> and
+    /// <see cref="DbDataKit.State.PostgresStateDialect.LibraryId"/> and
     /// <c>DriverConnectionFactory.BuiltInDriverLibraryIds</c> already resolve this exact package
     /// through, restated here as a literal for the same reason <c>MsSqlDriver</c>'s own copy is.</summary>
     public string? RequiredLibraryId => "npgsql";
