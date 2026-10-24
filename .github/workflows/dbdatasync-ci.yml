@@ -169,26 +169,26 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: DbDataSync/src/DbDataSync.Web
+        working-directory: DbDataKit/web
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: "npm"
-          cache-dependency-path: DbDataSync/src/DbDataSync.Web/package-lock.json
+          cache-dependency-path: DbDataKit/web/package-lock.json
       - name: Install
         run: npm ci
       # Phase 160: the renderer's tests — what markup a document may and may not produce. Plain Node, no browser.
       - name: Test
-        run: npm test
+        run: npm test -w @dbdatakit/sync
       # Phase 162: the script that makes the package README's links absolute (tools/docs/nuget-readme.mjs), tested with
       # node's own runner — plain Node, nothing to install. Run from the product root (DbDataSync/), not this job's working directory.
       - name: Test the NuGet README rewriter
         working-directory: DbDataSync
         run: node --test tools/docs/*.test.mjs
       - name: Build
-        run: npm run build
+        run: npm run build -w @dbdatakit/sync
 
   # The Playwright E2E suite. Not running it anywhere but a developer's machine is what let
   # apply-button-does-not-cache-provisioned-columns.md's golden-path test 18 sit failing on main from
@@ -216,7 +216,7 @@ jobs:
           node-version: "24"
           cache: "npm"
           cache-dependency-path: |
-            DbDataSync/src/DbDataSync.Web/package-lock.json
+            DbDataKit/web/package-lock.json
             DbDataSync/tests/DbDataSync.Web.Tests/package-lock.json
       - name: Start the databases
         # --wait blocks on the healthchecks docker-compose.yml already declares, so the suite never
@@ -246,7 +246,7 @@ jobs:
           dotnet build src/DbDataSync.TaskRunner
           dotnet build src/DbDataSync.Cli
       - name: Install the SPA's dependencies
-        working-directory: DbDataSync/src/DbDataSync.Web
+        working-directory: DbDataKit/web
         run: npm ci
       - name: Install the suite's dependencies
         # Its own package.json — @playwright/test lives here, not in the SPA's tree.

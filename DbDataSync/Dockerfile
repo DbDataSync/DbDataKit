@@ -2,11 +2,12 @@
 
 # ── The SPA ────────────────────────────────────────────────────────────────────
 FROM node:22-bookworm-slim AS web
-WORKDIR /src/DbDataSync.Web
-COPY DbDataSync/src/DbDataSync.Web/package*.json ./
+WORKDIR /src/DbDataKit/web
+COPY DbDataKit/web/package*.json ./
+COPY DbDataKit/web/sync/package.json ./sync/
 RUN npm ci
-COPY DbDataSync/src/DbDataSync.Web/ ./
-RUN npm run build
+COPY DbDataKit/web/ ./
+RUN npm run build -w @dbdatakit/sync
 
 # ── The .NET side ──────────────────────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
@@ -35,7 +36,7 @@ ARG VERSION=""
 RUN dotnet publish src/DbDataSync.Cli/DbDataSync.Cli.csproj \
     -c Release -o /app -p:SkipWebBuild=true -p:LauncherRuntimeIdentifiers=none ${VERSION:+-p:Version=$VERSION}
 
-COPY --from=web /src/DbDataSync.Web/dist/ /app/wwwroot/
+COPY --from=web /src/DbDataKit/web/sync/dist/ /app/wwwroot/
 
 # Phase 160: the docs, beside the SPA — the publish above ran in a stage that never had docs/ (only src, tests
 # and tools are copied in), so the csproj's CopyDocs target had nothing to copy and this is what ships them.

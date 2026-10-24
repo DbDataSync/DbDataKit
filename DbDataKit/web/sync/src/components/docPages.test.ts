@@ -3,7 +3,7 @@ import { DOC_PAGES, DOC_SLUGS } from './docPages'
 import { resolveDocImage, resolveLink } from './markdownLinks'
 
 // The repo's docs/, read at test time — the same files the build copies into the package.
-const sources = import.meta.glob('../../../../docs/*.md', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
+const sources = import.meta.glob('../../../../../DbDataSync/docs/*.md', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
 const docs = Object.entries(sources).map(([path, text]) => ({ slug: path.split('/').pop()!.replace(/\.md$/, ''), text }))
 
 describe('DOC_PAGES', () => {
@@ -30,7 +30,7 @@ describe('the links between the docs', () => {
 })
 
 // Every picture the docs show must exist, or a reader gets a broken image and nobody finds out until they do.
-const screenshots = Object.keys(import.meta.glob('../../../../screenshots/**/*.png'))
+const screenshots = Object.keys(import.meta.glob('../../../../../DbDataSync/screenshots/**/*.png'))
   .map(path => path.replace(/^.*\/screenshots\//, ''))
 
 describe('the pictures in the docs', () => {
@@ -53,7 +53,7 @@ describe('the pictures in the docs', () => {
 
 // docs/images.txt is what the build ships (csproj, Dockerfile, and the release checks all read it). It has to be exactly
 // the pictures the docs show: a missing line is a broken image in the embedded docs, an extra one is dead weight in every package.
-const manifests = import.meta.glob('../../../../docs/images.txt', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
+const manifests = import.meta.glob('../../../../../DbDataSync/docs/images.txt', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
 
 describe('docs/images.txt', () => {
   const listed = Object.values(manifests)[0]?.split(/\r?\n/).filter(line => line.trim()) ?? []

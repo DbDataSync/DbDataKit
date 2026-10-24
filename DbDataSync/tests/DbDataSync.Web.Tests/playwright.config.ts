@@ -138,7 +138,7 @@ export default defineConfig({
       // though vite itself started and logged "ready" well within that window. Forcing the bind
       // address to match the probe's own address fixed it outright in manual testing.
       command: 'npm run dev -- --port 5173 --strictPort --host 127.0.0.1',
-      cwd: path.join(repoRoot, 'src/DbDataSync.Web'),
+      cwd: path.join(repoRoot, '..', 'DbDataKit', 'web', 'sync'),
       url: 'http://127.0.0.1:5173',
       reuseExistingServer: false,
       timeout: 30_000,

@@ -69,15 +69,15 @@
   -->
   <PropertyGroup>
     <SkipWebBuild Condition="'$(SkipWebBuild)' == ''">false</SkipWebBuild>
-    <WebProjectDir>$(MSBuildProjectDirectory)/../DbDataSync.Web</WebProjectDir>
+    <WebProjectDir>$(MSBuildProjectDirectory)/../../../DbDataKit/web</WebProjectDir>
   </PropertyGroup>
 
   <Target Name="BuildSpa" BeforeTargets="PrepareForPublish" Condition="'$(SkipWebBuild)' != 'true'">
     <Message Importance="high" Text="Building the SPA in $(WebProjectDir)" />
     <Exec Command="npm ci" WorkingDirectory="$(WebProjectDir)" />
-    <Exec Command="npm run build" WorkingDirectory="$(WebProjectDir)" />
+    <Exec Command="npm run build -w @dbdatakit/sync" WorkingDirectory="$(WebProjectDir)" />
     <ItemGroup>
-      <SpaOutput Include="$(WebProjectDir)/dist/**/*" />
+      <SpaOutput Include="$(WebProjectDir)/sync/dist/**/*" />
       <!-- Published rather than copied into the source tree: a wwwroot full of build output is a
            wwwroot somebody commits by accident. -->
       <ResolvedFileToPublish Include="@(SpaOutput)">
