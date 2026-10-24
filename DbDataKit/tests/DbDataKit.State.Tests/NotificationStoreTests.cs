@@ -1,3 +1,4 @@
+using DbDataKit.Monitoring;
 namespace DbDataKit.State.Tests;
 
 public sealed class NotificationStoreTests : IDisposable
@@ -80,5 +81,22 @@ public sealed class NotificationStoreTests : IDisposable
         Assert.Equal(0, store.PruneNotifications(null));
         Assert.Equal(1, store.PruneNotifications(TimeSpan.FromDays(7)));
         Assert.Equal(["new"], store.List().Select(n => n.Message));
+    }
+
+    [Theory]
+    [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
+    public void Two_consoles_read_one_feed_through_the_contract_and_advance_independently(string engine)
+    {
+        INotificationFeed feed = new NotificationStore(_engines.Open(engine));
+        feed.Raise(NotificationKinds.CertificateExpiring, "one");
+        feed.Raise(NotificationKinds.CertificateExpired, "two");
+        var ids = feed.List().Select(n => n.Id).ToArray();
+
+        feed.MarkSeen("console:a", ids[1]);
+        feed.MarkSeen("console:b", ids[0]);
+
+        Assert.Equal(0, feed.UnreadCount(feed.GetCursor("console:a")));
+        Assert.Equal(1, feed.UnreadCount(feed.GetCursor("console:b")));
+        Assert.Equal(2, feed.UnreadCount(feed.GetCursor("console:c")));
     }
 }
