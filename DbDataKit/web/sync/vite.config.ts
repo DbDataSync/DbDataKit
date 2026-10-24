@@ -11,8 +11,8 @@ const apiTarget = process.env.DBDATASYNC_API_URL ?? 'http://localhost:5183'
 // In a published build the docs are files in wwwroot/docs, put there by the build (phase 160). Vite's dev server has
 // no such folder, so serve the repository's own docs/ (and the pictures they show, from screenshots/) at the same address — the viewer then works unchanged in dev,
 // and edits to a page show up on the next load.
-const docsDir = path.resolve(import.meta.dirname, '../../docs')
-const screenshotsDir = path.resolve(import.meta.dirname, '../../screenshots')
+const docsDir = path.resolve(import.meta.dirname, '../../../DbDataSync/docs')
+const screenshotsDir = path.resolve(import.meta.dirname, '../../../DbDataSync/screenshots')
 const serveRepoDocs: Plugin = {
   name: 'serve-repo-docs',
   configureServer(server) {

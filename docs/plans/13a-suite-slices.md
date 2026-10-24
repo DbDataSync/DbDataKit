@@ -192,7 +192,7 @@ no ClrKernel (D10).
 
 | # | Slice | Needs | Size | Done when |
 | --- | --- | --- | --- | --- |
-| U01 | npm workspace at `DbDataKit/web/`; `DbDataSync.Web` moved in as `@dbdatakit/sync`, building the same output | | S | Sync's vitest and Playwright suites pass; the served files are the same |
+| U01 | npm workspace at `DbDataKit/web/`; `DbDataSync.Web` moved in as `@dbdatakit/sync`, building the same output | | S | Sync's vitest and Playwright suites pass; the served files are the same | **Status: done.** `DbDataKit/web/` is the workspace (`sync` is `@dbdatakit/sync`); Dockerfile, csprojs, CI, release and Playwright paths follow it; vitest passes and the image builds the same `dist/`. |
 | U02 | `@dbdatakit/shell` extracted (shell, sign-in, common components, API client) | U01 | M | suites unchanged; `shell` imports nothing from `sync` (lint rule) |
 | U03 | `@dbdatakit/admin` extracted (users, certificates, updates, config history, libraries, drivers, files, docs) | U02 | M | suites unchanged; `admin` imports nothing from `sync` |
 | U04 | `DbDataKit.State`: users, sessions, invites, notifications and audit stores out of `DbDataSync.State` | F04 | M | the moved store tests pass on SQLite, SQL Server and PostgreSQL |

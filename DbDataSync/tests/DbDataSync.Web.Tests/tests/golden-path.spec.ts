@@ -1619,7 +1619,7 @@ public sealed class Shout : IValueColumnExpression
     // Two hand-maintained copies of one glyph, which is fine only while something notices when they
     // stop matching. The favicon used to be unrelated artwork, so the tab and the app advertised two
     // different products.
-    const webRoot = path.join(__dirname, '..', '..', '..', 'src', 'DbDataSync.Web')
+    const webRoot = path.join(__dirname, '..', '..', '..', '..', 'DbDataKit', 'web', 'sync')
     const logo = fs.readFileSync(path.join(webRoot, 'src', 'components', 'icons.tsx'), 'utf8')
       .split('export function LogoIcon()')[1].split('export function')[0]
     const paths = [...logo.matchAll(/d="([^"]+)"/g)].map((m) => m[1])

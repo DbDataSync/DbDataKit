@@ -124,12 +124,12 @@
     build`/`dotnet test` with no dist/ present (and no npm available) is unaffected.
   -->
   <PropertyGroup>
-    <WebProjectDir>$(MSBuildProjectDirectory)/../DbDataSync.Web</WebProjectDir>
+    <WebProjectDir>$(MSBuildProjectDirectory)/../../../DbDataKit/web</WebProjectDir>
   </PropertyGroup>
 
-  <Target Name="CopyPrebuiltSpa" BeforeTargets="Publish" Condition="Exists('$(WebProjectDir)/dist')">
+  <Target Name="CopyPrebuiltSpa" BeforeTargets="Publish" Condition="Exists('$(WebProjectDir)/sync/dist')">
     <ItemGroup>
-      <_SpaDist Include="$(WebProjectDir)/dist/**/*" />
+      <_SpaDist Include="$(WebProjectDir)/sync/dist/**/*" />
     </ItemGroup>
     <Copy SourceFiles="@(_SpaDist)"
           DestinationFiles="@(_SpaDist->'$(PublishDir)wwwroot/%(RecursiveDir)%(Filename)%(Extension)')" />
