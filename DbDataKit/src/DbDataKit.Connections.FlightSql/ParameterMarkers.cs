@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace DbDataSync.Drivers.ArrowFlightSql;
+namespace DbDataKit.Connections.FlightSql;
 
 /// <summary>
 /// Finds named parameter markers (<c>@name</c>, <c>:name</c>, <c>$name</c>) in statement text and

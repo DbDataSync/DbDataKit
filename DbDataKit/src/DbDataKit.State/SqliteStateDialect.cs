@@ -1,8 +1,7 @@
 using System.Data.Common;
-using DbDataSync.Core.Sql;
 using Microsoft.Data.Sqlite;
 
-namespace DbDataSync.State;
+namespace DbDataKit.State;
 
 /// <summary>
 /// The default engine, and the only one that needs a retry loop.
@@ -20,7 +19,7 @@ public sealed class SqliteStateDialect : StateDialect
 
     public override string Engine => StateEngineIds.Sqlite;
 
-    public override SqlDialect Sql => SqliteSqlDialect.Instance;
+    public override string Parameter(string name) => $"${name}";
 
     public override DbConnection CreateConnection(string connectionString) => new SqliteConnection(connectionString);
 
@@ -88,34 +87,4 @@ public sealed class SqliteStateDialect : StateDialect
     // needs an application-level retry.
     public override bool ShouldRetry(Exception exception) =>
         exception is SqliteException { SqliteErrorCode: 5 or 6 };
-}
-
-/// <summary>
-/// SQLite's answers to the mechanical variations, for the state store's own use.
-/// <para>
-/// There is no SQLite replication driver — SQLite is a state engine here, not a source or a target —
-/// so unlike MsSql and Postgres there was no existing dialect to reuse and this is the whole of it.
-/// The column-type half of <see cref="SqlDialect"/> is not implemented, because the state store's
-/// schema is fixed and internal and nothing ever asks it to map a customer's column type.
-/// </para>
-/// </summary>
-public sealed class SqliteSqlDialect : SqlDialect
-{
-    public static SqliteSqlDialect Instance { get; } = new();
-
-    private SqliteSqlDialect() { }
-
-    public override string QuoteIdentifier(string identifier) => $"\"{identifier.Replace("\"", "\"\"")}\"";
-
-    public override string ParameterReference(string name) => $"${name}";
-
-    public override CanonicalType ToCanonicalType(string nativeType) =>
-        throw new NotSupportedException(
-            "SQLite is a state-store engine here, not a replication source or target — nothing maps " +
-            "column types through it.");
-
-    public override RenderedColumnType RenderColumnType(CanonicalType type) =>
-        throw new NotSupportedException(
-            "SQLite is a state-store engine here, not a replication source or target — nothing maps " +
-            "column types through it.");
 }

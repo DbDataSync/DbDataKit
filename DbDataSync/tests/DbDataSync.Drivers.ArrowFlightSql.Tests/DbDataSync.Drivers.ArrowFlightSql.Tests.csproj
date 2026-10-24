@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="DbDataKit.Connections.FlightSql" />   <!-- the client moved to the shared library; plan 13, A17 -->
   </ItemGroup>
 
   <ItemGroup>

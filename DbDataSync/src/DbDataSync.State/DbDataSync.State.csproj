@@ -9,6 +9,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <DbDataKitReference Include="State" />   <!-- the engine, dialects and the identity and notification stores; plan 13, U04 -->
+    <Using Include="DbDataKit.State" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- SQLite is the default and the only engine an unconfigured deployment ever opens, so it stays a
          hard reference (phase 63); it is also offline and serverless, which is why phase 109g left it
          alone. Microsoft.Data.SqlClient and Npgsql are no longer referenced here at all — an operator

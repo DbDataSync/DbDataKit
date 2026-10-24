@@ -59,7 +59,7 @@ public static class WorkerEntry
             [DbDataKit.Dialect.EngineId.Oracle] = OracleDriver.FailureMapper,
         };
         foreach (var id in DriverIds.ArrowFlightSqlVariants)
-            failureMappers[DriverFailures.EngineFor(id)] = new DbDataSync.Drivers.ArrowFlightSql.FlightSqlFailureMapper();
+            failureMappers[DriverFailures.EngineFor(id)] = new DbDataKit.Connections.FlightSql.FlightSqlFailureMapper();
         DriverFailures.Configure(
             failureMappers,
             string.Equals(Environment.GetEnvironmentVariable("Diagnostics__DriverDetails"), "true", StringComparison.OrdinalIgnoreCase));

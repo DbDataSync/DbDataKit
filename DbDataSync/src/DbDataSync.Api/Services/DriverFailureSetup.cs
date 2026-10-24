@@ -28,7 +28,7 @@ internal static class DriverFailureSetup
             [EngineId.MySql] = MySqlDriver.FailureMapper,
             [EngineId.Oracle] = OracleDriver.FailureMapper,
         };
-        var flight = new FlightSqlFailureMapper();
+        var flight = new DbDataKit.Connections.FlightSql.FlightSqlFailureMapper();
         foreach (var id in DriverIds.ArrowFlightSqlVariants) mappers[DriverFailures.EngineFor(id)] = flight;
         return mappers;
     }

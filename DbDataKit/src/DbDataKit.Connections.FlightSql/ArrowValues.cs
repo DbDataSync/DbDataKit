@@ -3,7 +3,7 @@ using System.Text;
 using Apache.Arrow;
 using Apache.Arrow.Types;
 
-namespace DbDataSync.Drivers.ArrowFlightSql;
+namespace DbDataKit.Connections.FlightSql;
 
 /// <summary>
 /// Arrow arrays to the CLR values an ADO.NET reader hands out, and Arrow types to the ANSI type names a

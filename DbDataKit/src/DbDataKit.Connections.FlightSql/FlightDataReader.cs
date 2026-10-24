@@ -6,7 +6,7 @@ using Apache.Arrow.Ipc;
 using Google.Protobuf;
 using Grpc.Core;
 
-namespace DbDataSync.Drivers.ArrowFlightSql;
+namespace DbDataKit.Connections.FlightSql;
 
 /// <summary>
 /// Reads a <c>DoGet</c> stream into record batches — **including compressed ones**.

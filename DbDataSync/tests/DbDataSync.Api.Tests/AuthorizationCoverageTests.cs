@@ -102,7 +102,7 @@ public sealed class AuthorizationEnforcementTests(AuthenticatedApiFactory factor
     [Fact]
     public async Task AViewer_CanRead()
     {
-        var client = await factory.SignedInAsAsync(DbDataSync.State.UserRole.Viewer);
+        var client = await factory.SignedInAsAsync(DbDataKit.State.UserRole.Viewer);
 
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/replications")).StatusCode);
     }
@@ -113,7 +113,7 @@ public sealed class AuthorizationEnforcementTests(AuthenticatedApiFactory factor
     [InlineData("/api/scripts/anything/compile")]
     public async Task AViewer_CannotMakeAnythingHappen(string path)
     {
-        var client = await factory.SignedInAsAsync(DbDataSync.State.UserRole.Viewer);
+        var client = await factory.SignedInAsAsync(DbDataKit.State.UserRole.Viewer);
 
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync(path, null)).StatusCode);
     }
@@ -123,7 +123,7 @@ public sealed class AuthorizationEnforcementTests(AuthenticatedApiFactory factor
     [Fact]
     public async Task AnAdmin_CanRead()
     {
-        var client = await factory.SignedInAsAsync(DbDataSync.State.UserRole.Admin);
+        var client = await factory.SignedInAsAsync(DbDataKit.State.UserRole.Admin);
 
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/replications")).StatusCode);
     }
@@ -135,7 +135,7 @@ public sealed class AuthorizationEnforcementTests(AuthenticatedApiFactory factor
     [Fact]
     public async Task DisablingAUser_TakesEffectOnTheNextRequest()
     {
-        var (client, user) = await factory.SignedInWithUserAsync(DbDataSync.State.UserRole.Admin);
+        var (client, user) = await factory.SignedInWithUserAsync(DbDataKit.State.UserRole.Admin);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/replications")).StatusCode);
 
         factory.Users.SetEnabled(user.Id, enabled: false);
@@ -146,7 +146,7 @@ public sealed class AuthorizationEnforcementTests(AuthenticatedApiFactory factor
     [Fact]
     public async Task SigningOut_EndsTheSession()
     {
-        var client = await factory.SignedInAsAsync(DbDataSync.State.UserRole.Admin);
+        var client = await factory.SignedInAsAsync(DbDataKit.State.UserRole.Admin);
 
         (await client.PostAsync("/api/auth/sign-out", null)).EnsureSuccessStatusCode();
 
