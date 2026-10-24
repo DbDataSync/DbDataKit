@@ -15,7 +15,17 @@ public static class SyncCli
     /// <summary>The commands that stay outside the router: flag-driven or retired from the suite's grammar for now.</summary>
     public static readonly IReadOnlySet<string> Legacy = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "tool", "update", "launcher", "invite", "internal", "version" };
 
-    public static NounRouter Router(string version = "0") => new(Program,
+    /// <summary>What <c>ui mcp</c> never offers: nothing that sets a secret or loads an installed library, and nothing that is long-running or interactive (<see cref="McpOptions.Always"/>).</summary>
+    private static readonly string[] NotForAgents = ["secret set", "secret remove", "library validate"];
+
+    public static NounRouter Router(string version = "0")
+    {
+        NounRouter? router = null;
+        router = Build(version, () => router!);
+        return router;
+    }
+
+    private static NounRouter Build(string version, Func<NounRouter> self) => new(Program,
     [
         new Noun("server", "The long-running process and its first-run setup",
         [
@@ -84,6 +94,7 @@ public static class SyncCli
                 },
                 DataSchemas.Object([("healthy", DataSchemas.Boolean)], "healthy")),
         ]),
+        UiNoun.Create(self, Program, version, NotForAgents),
     ], version);
 
     private static Verb Forward(string name, string summary, EffectClass effect, string usage, Func<string[], Task<int>> run) =>

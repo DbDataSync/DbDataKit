@@ -1,0 +1,224 @@
+{
+  "tools": [
+    {
+      "name": "service_status",
+      "description": "Whether the service is installed and running. [Offline only] Usage: service status",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "service_doctor",
+      "description": "Check the registration, the account and the directory permissions. [Offline only] Usage: service doctor",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "cert_status",
+      "description": "The certificate in use. [Offline only] Usage: cert status [--account <account>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "cert_list",
+      "description": "List certificates in the Windows certificate store (Windows only). [Offline only] Usage: cert list [--location LocalMachine|CurrentUser]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "cert_templates",
+      "description": "List the CA's templates (Windows only). [Offline only] Usage: cert templates [--ca <config>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "secret_list",
+      "description": "Whether each given reference is set, never the value. [Offline only] Usage: secret list [<ref> ...] [--repo <path>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "library_list",
+      "description": "The installed libraries. [Offline only] Usage: library list",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "driver_list",
+      "description": "The installed drivers. [Offline only] Usage: driver list",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "config_check",
+      "description": "Readiness check: repository, state store, libraries and drivers, auth, binding, first admin. [Offline only] Usage: config check [--repo <path>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "config_get",
+      "description": "One setting of dbdatasync.config.yaml. [Offline only] Usage: config get <key> [--repo <path>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "health_check",
+      "description": "Exit 0 when a running DbDataSync answers, 1 when it does not (what the container's health check runs). [Offline only] Usage: health check [--url <url>] [--repo <path>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    }
+  ]
+}
