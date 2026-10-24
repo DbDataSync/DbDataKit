@@ -21,6 +21,8 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 12 | [Shared TLS rollout](12-shared-tls-rollout.md) | Sync and Proxy certificates, services, systemd | One certificate, service and unit implementation |
 | 13 | [Suite standardization](13-suite-standardization.md) | Adoption state of plans 01-12, DuckDB 2.0, Sync scripting | dbdatakit console, product servers with no UI of their own, console-to-server trust, one grammar, shared scheduling, Build authoring; DuckDB 2.0; dotnet-script |
 | 13a | [Suite slices](13a-suite-slices.md) | Plan 13 | About 150 small pull requests with a test each, grouped into milestones, each naming the decision it waits on |
+| 14 | [Semantic layer](14-semantic-layer.md) | QueryIntentSpec at `139bbf9`, Build metadata, Proxy | Proposal for review (not in 13a): semantic models authored and deployed by Build and hosted by Proxy, one connection managed in Build, one engine registry, semantic SQL, MDX for Excel over XMLA, more protocols |
+| 15 | [DbDataStore: master data and documents](15-master-data-and-documents.md) | Owner's direction, plans 13 and 14 | Proposal for review (not in 13a): user- and agent-defined models on SQL engines, documents with WebDAV, extraction, consumed by Sync, Build and semantic queries |
 
 ## Dependency graph
 

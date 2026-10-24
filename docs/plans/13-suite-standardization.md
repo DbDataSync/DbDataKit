@@ -561,11 +561,13 @@ or containers on a shared network). Nothing in this design depends on which.
 
 **Rules**
 
-1. **The console calls the server; the server never calls the console.** A server needs no credentials for any console, keeps running
-   when every console is gone, and monitoring, notifications and run history are pulled by the console. A server that a console cannot
+1. **The client calls the server; a server never calls a console.** A server needs no credentials for any console, keeps running
+   when every console is gone, and monitoring, notifications and run history are pulled by the console. A server calls *another server*
+   only as that server's paired client, for a purpose a plan names (see "Server-to-server clients" below). A server that a console cannot
    reach inbound (behind a firewall) is out of scope; a later option is the server dialling out to the console.
-2. **A server can be paired with several consoles** (for example a team console and an operations console, or a standby). Each pairing
-   is independent: its own key, its own role ceiling, revoked on its own.
+2. **A server can be paired with several clients** (for example a team console and an operations console, or a standby). Each pairing
+   is independent: its own key, its own role ceiling, revoked on its own. **The paired client is not always a console**: a Build server
+   pairs with a Proxy to deploy what it serves (below), so pairing, tokens and ceilings must not assume a console on the other end.
 3. **The server is the security boundary.** A console hides what a user may not do, but the server checks every call itself and never
    trusts the UI.
 
@@ -581,12 +583,13 @@ self-signed is fine because the console pins its fingerprint at pairing.
    from an environment variable at first start.
 2. In a console an administrator runs `dbdatakit instance add <url> --code <code>` (or uses the console's screen).
 3. The exchange gives the console the server's certificate fingerprint and instance id, and gives the server the console's id, its name
-   and its public token-signing key (ed25519). The server adds an entry to the list of paired consoles in `server.yaml`; pairing again
-   with another console adds another entry.
+   and its public token-signing key (ed25519). The server adds an entry to the list of **paired clients** in `server.yaml` (each entry has a
+   `kind`: `console`, `server` or `cli`); pairing again with another client adds another entry.
 4. `--max-role` caps what any user of that console can do on this server (a read-only operations console, for example). A token claiming
    more is refused.
-5. `<product> server consoles` lists the pairings (name, id, key fingerprint, ceiling, when last used); `server unpair <console>` removes
-   one, effective at once. A console rotates its signing key by sending the new key signed with the old one, so its servers need no re-pairing.
+5. `<product> server clients` lists the pairings (kind, name, id, key fingerprint, ceiling, when last used); `server unpair <client>`
+   removes one, effective at once. A client rotates its signing key by sending the new key signed with the old one, so its servers need no
+   re-pairing.
 
 **Authentication on every call.** The console signs a short-lived token (about 5 minutes) with: issuer (console id), audience (the
 server's instance id), subject (the user's id and name, or the console itself for background polling), the user's roles on that server
@@ -618,6 +621,33 @@ authorized when it starts and runs to the end under that user.
   in two consoles, bounded on each server by that console's ceiling. Single sign-on across consoles is out of scope.
 - **Notifications** are kept on the server; each console tracks what it has read.
 
+**Server-to-server clients.** Some servers must change another server as part of their own work. The first case is plan 14 R2a: a
+Build deploy creates and updates the Proxy data source that serves a Build connection, and deploys the semantic model to it, so the user
+manages the connection once, in Build. A second expected case is plan 15: Sync and Build servers reading DbDataStore's change events.
+The rules:
+
+- **Same pairing, another kind of client.** On the server being called: `dbdataproxy server pair --max-role Publisher --name build-prod`
+  prints a code. On the calling side: `dbdatabuild server proxy add <url> --code <code>` for a Build server, or `dbdatabuild proxy pair
+  <url> --code <code>` for a Build CLI on someone's machine. The caller's signing key is kept in its own secret store (W13), the CLI's in
+  the user's. A console that is paired with both servers can broker the pairing (ask one for a code, hand it to the other), so nobody types
+  a code; this is a convenience, not a requirement.
+- **Tokens name a person.** A server client signs tokens like a console, with itself as issuer; the subject is the person on whose
+  behalf it acts (the console user who started the deploy, the Build user who approved the plan, the OS user of a CLI), so the called
+  server's audit says who, through which client. Background work with no person (a scheduled refresh's deploy) names the client itself.
+- **Ownership-scoped roles.** A server client's ceiling is a role with a **scope**: **Publisher** may create objects, and change or delete
+  only the objects this client created. Every object a client creates is marked `managed_by: <client id>`; the called server checks the
+  role, the ceiling *and* the owner on every call. A Publisher cannot touch a data source someone made by hand, change Proxy's serving policy
+  (`extensions.proxy`), or read secrets back. Taking over an existing object is an administrator's act on the called server (`--adopt`).
+- **What a server client may send.** Only what its purpose needs: Build sends a connection definition with the **read login only** (the
+  write login never leaves Build) and a semantic package. Secrets travel once over the pinned TLS channel and are stored in the called
+  server's own secret store.
+- **No call chains to consoles, no cycles.** A server client calls one server for one purpose; the called server never calls back. If two
+  servers need each other, one of them pulls.
+- **Revocation and visibility.** `server unpair` on the called server ends it at once (the caller's next deploy fails with a message
+  saying so). `server clients` and the console show each client's kind, ceiling, owner-scoped objects and last use.
+- **Monitoring.** The called server records each server client's calls in its audit log and the shared monitoring view (W10), so a
+  failing deploy from Build to Proxy is visible from either side.
+
 **Secrets.** No console holds database credentials. Each server resolves its own secret references and redacts its responses; a secret
 typed into a console is sent once to the server, which stores it in its own secret store, and the console keeps only the reference.
 
@@ -631,7 +661,8 @@ the network. `server pair` and `server unpair` work this way.
 each server) and `DbDataKit.Hosting` (the local channel, pairing codes), so the four hosts behave the same.
 
 Exit: a console on another machine pairs with a server of each product and manages it; a second console pairs with the same server with a
-lower ceiling and is refused above it; unpairing one console leaves the other working; every change on the server names its user and console.
+lower ceiling and is refused above it; unpairing one console leaves the other working; every change on the server names its user and console;
+a Build server paired with a Proxy as a Publisher creates and updates its own data sources there and is refused on anyone else's.
 
 ### W13. The shared secret store (M)
 
@@ -730,7 +761,7 @@ decision any more.
 | D11 | Suite binaries self-contained vs framework-dependent | **decided: self-contained**, with the .NET SDK required only for library, driver and script features (as today). Sync needs one change first: `ProcessSupervisor` starts its workers with `dotnet exec`, which needs the shared runtime; it must start them as their own executables |
 | D12 | How the Build server runs commands | **decided (accepted):** **child processes**: one per command for runs and deploys, and one long-lived child per authoring workspace (W11) so feedback is fast; isolation from the native library either way |
 | D13 | Where a Build schedule lives: only in the project (committed with the refresh plan), or also added by an operator at the server | **decided (accepted):** **project first** (fits Build's "everything is a file" rule and its review of plans); an operator can pause or run now from the console, but adding a schedule is a commit. Revisit if operators need schedules a project author should not own |
-| D14 | How product servers trust consoles | **decided:** the console calls the server, never the reverse; a server can be paired with several consoles, each with its own key and role ceiling; short-lived signed tokens per call; the server enforces roles; the local CLI over a named pipe or Unix socket (W12) |
+| D14 | How servers trust their clients | **decided:** a client (console, server or CLI) calls a server, never the reverse, and a server never calls a console; a server can be paired with several clients, each with its own key and role ceiling; short-lived signed tokens per call naming a person; ownership-scoped ceilings (Publisher) for server clients; the server enforces roles; the local CLI over a named pipe or Unix socket (W12) |
 | D15 | Where authoring merges | **decided (accepted):** push to the project's git remote and open a pull request when a remote is configured; otherwise merge into the deploy branch inside the Build server, recorded with the author's identity |
 | D16 | How the browser reaches product servers | **decided (accepted):** **the console's back-end relays every call** (the browser talks only to the console): servers stay off the browser's network, pinned self-signed certificates work, no CORS, and live updates (Sync's SignalR run hub) are relayed by the console. The other option, browsers calling servers directly with tokens, is rejected |
 | D17 | Version compatibility between a console and its servers | **decided (accepted):** products release on their own (D4), so a console and a server can differ in version. The management API carries its own integer version, reported at pairing and on every call; a console supports its own API version and the one before, and shows a clear "upgrade this server / this console" message otherwise |
