@@ -6,6 +6,9 @@
 #
 #   mssql      14330     SQL Server 2022, user sa
 #   postgres   15432     PostgreSQL 17, user postgres
+#   mysql      13306     MySQL 9, user root
+#   mariadb    13307     MariaDB 11, user root
+#   oracle     15210     Oracle Database Free 23ai (gvenzl/oracle-free:23-slim), service FREEPDB1, user dbkit (sys/system: the same password)
 #
 # (DbDataSync's own docker-compose.yml still runs its engines on 14330/14331/15432/...; it moves into this file engine by
 # engine, and the two can't run together on one machine until it has.)
@@ -59,3 +62,54 @@ services:
       timeout: 5s
       retries: 20
       start_period: 5s
+
+  mysql:
+    profiles: [mysql]
+    image: mysql:9
+    container_name: dbkit-test-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: *password
+      MYSQL_DATABASE: dbkit
+    ports:
+      - "13306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  mariadb:
+    profiles: [mariadb]
+    image: mariadb:11
+    container_name: dbkit-test-mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: *password
+      MARIADB_DATABASE: dbkit
+    ports:
+      - "13307:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh --connect --innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  # The slowest to start (a couple of minutes the first time). Ask for it only when a suite needs it. A generic engine: Sync's Oracle flashback-reader tests
+  # also need EXECUTE on DBMS_FLASHBACK and FLASHBACK ANY TABLE for their user, which DbDataSync/docker/oracle-init grants on Sync's own stack.
+  oracle:
+    profiles: [oracle]
+    image: gvenzl/oracle-free:23-slim
+    container_name: dbkit-test-oracle
+    environment:
+      ORACLE_PASSWORD: *password
+      APP_USER: dbkit
+      APP_USER_PASSWORD: *password
+    ports:
+      - "15210:1521"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 90s
