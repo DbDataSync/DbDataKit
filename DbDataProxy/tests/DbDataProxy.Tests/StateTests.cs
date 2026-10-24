@@ -1,3 +1,4 @@
+using DbDataKit.Monitoring;
 using DbDataKit.State;
 using DbDataProxy.Server.State;
 using DbDataProxy.Tests.Support;
