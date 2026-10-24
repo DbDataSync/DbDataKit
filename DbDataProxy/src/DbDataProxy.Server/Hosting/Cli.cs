@@ -16,7 +16,17 @@ public static class Cli
 
     public static Task<int> RunAsync(string[] args, CliContext context) => Router().RunAsync(args, context);
 
-    public static NounRouter Router() => new(Program,
+    /// <summary>What <c>ui mcp</c> never offers: secrets (they read standard input, which is the protocol's channel) and queries (they return rows; an agent works without data).</summary>
+    private static readonly string[] NotForAgents = ["secret", "query"];
+
+    public static NounRouter Router()
+    {
+        NounRouter? router = null;
+        router = Build(() => router!);
+        return router;
+    }
+
+    private static NounRouter Build(Func<NounRouter> self) => new(Program,
     [
         ServerNoun.Create(RunServerAsync),
         ServiceNoun(),
@@ -25,6 +35,7 @@ public static class Cli
         ConfigNoun(),
         QueryNoun(),
         HealthNoun(),
+        UiNoun.Create(self, Program, ProxyHost.Version, NotForAgents),
     ], ProxyHost.Version);
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context)

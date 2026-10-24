@@ -32,6 +32,7 @@ public sealed class CliGrammarTests
               config   The server's own configuration
               query    A client for smoke-testing a running proxy
               health   Is a running proxy answering
+              ui       The local interfaces
 
             Run 'dbdataproxy <noun> help' for the verbs of one.
             Add --format json to any command for a JSON document instead of text.
@@ -106,6 +107,19 @@ public sealed class CliGrammarTests
     // ---- the JSON form (plan 13, C05) ----
 
     private static string SchemaPath() => Path.Combine(Support.WorkerBuild.RepositoryRoot(), "schemas", "output.schema.json");
+
+    private static string McpToolsPath() => Path.Combine(Support.WorkerBuild.RepositoryRoot(), "schemas", "mcp-tools.json");
+
+    [Fact]
+    public async Task The_checked_in_mcp_tool_list_is_current()
+    {
+        var server = new DbDataKit.Cli.McpServer(Cli.Router(), new DbDataKit.Cli.McpOptions(new HashSet<string>(["secret", "query"])), Cli.Program, "0");
+        var reply = (await server.HandleAsync(System.Text.Json.Nodes.JsonNode.Parse("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}""")!)).Single();
+        string actual = reply["result"]!.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }).Replace("\r\n", "\n") + "\n";
+        if (Environment.GetEnvironmentVariable("UPDATE_GOLDEN") == "1") File.WriteAllText(McpToolsPath(), actual);
+
+        Assert.Equal(File.ReadAllText(McpToolsPath()).Replace("\r\n", "\n"), actual);
+    }
 
     [Fact]
     public void The_checked_in_output_schema_is_current()
