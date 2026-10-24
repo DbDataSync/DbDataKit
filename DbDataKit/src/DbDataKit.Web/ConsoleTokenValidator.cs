@@ -8,7 +8,7 @@ namespace DbDataKit.Web.Trust;
 /// console's key, then the audience (this server's instance id), the times, the lifetime, the console's ceiling and, last, that the token id has not been used before. Each refusal has a
 /// <see cref="TokenFailure"/> for the server's log; the caller is only told it was refused. Nothing is cached before the signature has been verified, so garbage cannot fill the replay cache.
 /// </summary>
-public sealed class ConsoleTokenValidator(string instanceId, IPairedConsoles consoles, IReplayCache replay, TimeProvider? clock = null)
+public sealed class ConsoleTokenValidator(string instanceId, IPairedClients clients, IReplayCache replay, TimeProvider? clock = null)
 {
     /// <summary>The longest a token may live from issue to expiry, whatever its console wrote.</summary>
     public const int MaximumLifetimeSeconds = 600;
@@ -44,7 +44,7 @@ public sealed class ConsoleTokenValidator(string instanceId, IPairedConsoles con
             var root = claims.RootElement;
             var issuer = Str(root, "iss");
             if (issuer is null) return TokenResult.Refused(TokenFailure.MissingClaim, "iss");
-            var console = consoles.Find(issuer);
+            var console = clients.Find(issuer);
             if (console is null) return TokenResult.Refused(TokenFailure.UnknownIssuer, $"console '{issuer}' is not paired");
 
             var signingInput = Encoding.ASCII.GetBytes(parts[0] + "." + parts[1]);
