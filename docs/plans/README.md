@@ -23,6 +23,7 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 13a | [Suite slices](13a-suite-slices.md) | Plan 13 | About 150 small pull requests with a test each, grouped into milestones, each naming the decision it waits on |
 | 14 | [Semantic layer](14-semantic-layer.md) | QueryIntentSpec at `139bbf9`, Build metadata, Proxy | Proposal for review (not in 13a): semantic models authored and deployed by Build and hosted by Proxy, one connection managed in Build, one engine registry, semantic SQL, MDX for Excel over XMLA, more protocols |
 | 15 | [DbDataStore: master data and documents](15-master-data-and-documents.md) | Owner's direction, plans 13 and 14 | Proposal for review (not in 13a): user- and agent-defined models on SQL engines, documents with WebDAV, extraction, consumed by Sync, Build and semantic queries |
+| 16 | [Embedded agents and custom front ends](16-embedded-agents-and-custom-front-ends.md) | Owner's backlog, plans 13 and 15 | Backlog (not scheduled): agents in the console on OpenAI, Anthropic and Microsoft Foundry with every object reachable through the command surface; custom front ends on DbDataStore, deployable through MCP |
 
 ## Dependency graph
 
