@@ -46,6 +46,7 @@ to it in the pull request that makes the change; a release moves the entries int
 
 ## DbDataProxy
 
+- **Parameterised queries work from the Apache .NET Flight SQL client.** A prepared-statement handle was random binary data, which that client turns into a string and back, so the proxy no longer recognised it and answered `NotFound: Unknown or closed prepared statement`. Handles are now 32 hexadecimal characters; clients need no change. (A18)
 - **The executables are lower case.** `DbDataProxy.exe` is `dbdataproxy.exe` and the 32-bit worker `DbDataProxy.Worker.exe` is `dbdataproxy-worker.exe` (`worker\dbdataproxy-worker.exe`); the Docker image runs `dbdataproxy.dll`. The
   Windows service is registered as `dbdataproxy` by default (the service control manager ignores case, so `service install` updates an existing registration in place, and its virtual account is the same one).
   A script, a shortcut, an `ExecStart` or a `worker` setting that names the old file must be changed. The data directory is still `DbDataProxy`. (C03)
