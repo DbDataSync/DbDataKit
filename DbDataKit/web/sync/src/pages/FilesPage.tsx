@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { DriversTabs } from '../components/DriversTabs'
 import { AppShell } from '../components/AppShell'
-import { ErrorBanner } from '../components/ErrorBanner'
+import { ErrorBanner } from '@dbdatakit/shell'
 import { FileUploadPanel } from '../components/FileUploadPanel'
-import { formatBytes } from '../components/formatBytes'
-import { useIsAdmin } from '../components/useIsAdmin'
+import { formatBytes } from '@dbdatakit/shell'
+import { useIsAdmin } from '@dbdatakit/shell'
 import { useFiles, useRemoveFile } from '../api/hooks'
 import type { FileSummary } from '../api/types'
 

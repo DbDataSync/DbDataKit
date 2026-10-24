@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/AppShell'
-import { useIsAdmin } from '../components/useIsAdmin'
-import { tabClass } from '../components/tabClass'
-import { ErrorBanner } from '../components/ErrorBanner'
+import { useIsAdmin } from '@dbdatakit/shell'
+import { tabClass } from '@dbdatakit/shell'
+import { ErrorBanner } from '@dbdatakit/shell'
 import { MetricsCard } from './replication-detail/MetricsCard'
 import { StatusCard } from './replication-detail/StatusCard'
 import {

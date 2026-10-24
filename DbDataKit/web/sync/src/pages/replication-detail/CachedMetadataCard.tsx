@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useRefreshMappingMetadata } from '../../api/hooks'
-import { ErrorBanner } from '../../components/ErrorBanner'
+import { ErrorBanner } from '@dbdatakit/shell'
 import type { MetadataRefreshResult, MetadataRefreshSide, TableMappingConfig } from '../../api/types'
 
 interface Props {

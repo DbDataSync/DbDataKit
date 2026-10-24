@@ -1,4 +1,4 @@
-import { ApiError } from '../api/client'
+import { ApiError } from '../api/http'
 
 export function ErrorBanner({ error }: { error: unknown }) {
   if (!error) return null

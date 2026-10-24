@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { CodeEditor } from '../../components/CodeEditor'
 import { ColumnMultiPicker } from '../../components/ColumnMultiPicker'
-import { Field } from '../../components/Field'
+import { Field } from '@dbdatakit/shell'
 import { ParameterForm } from '../../components/ParameterForm'
 import { useScripts } from '../../api/hooks'
 import type { TableMappingConfig, VerificationCheckConfig, VerificationCheckKind } from '../../api/types'

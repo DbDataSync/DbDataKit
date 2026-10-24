@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { tabClass } from './tabClass'
+import { tabClass } from '@dbdatakit/shell'
 
 /**
  * The Drivers section's own tab strip — Drivers, Libraries and Files, moved out of Admin into their

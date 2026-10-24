@@ -1629,7 +1629,7 @@ public sealed class Shout : IValueColumnExpression
     for (const d of paths) expect(served, 'the favicon draws the same glyph as LogoIcon').toContain(d)
 
     // On the accent square the rail draws around the same mark, not a colour invented for this asset.
-    const accent = fs.readFileSync(path.join(webRoot, 'src', 'index.css'), 'utf8')
+    const accent = fs.readFileSync(path.join(webRoot, '..', 'shell', 'src', 'styles.css'), 'utf8')   // the design tokens are the shell's (plan 13, U02)
       .match(/--accent:\s*(#[0-9a-f]{6})/i)![1]
     expect(served.toLowerCase()).toContain(accent.toLowerCase())
 

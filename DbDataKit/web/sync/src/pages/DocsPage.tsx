@@ -3,7 +3,7 @@ import { Link, NavLink, useLocation, useParams } from 'react-router-dom'
 import { useAbout, useDocPage } from '../api/hooks'
 import { AppShell } from '../components/AppShell'
 import { DOC_PAGES } from '../components/docPages'
-import { ErrorBanner } from '../components/ErrorBanner'
+import { ErrorBanner } from '@dbdatakit/shell'
 import { RichMarkdown } from '../components/RichMarkdown'
 
 /**

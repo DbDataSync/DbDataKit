@@ -1,5 +1,5 @@
-import { Field } from './Field'
-import { KeyValueTable } from './KeyValueTable'
+import { Field } from '@dbdatakit/shell'
+import { KeyValueTable } from '@dbdatakit/shell'
 import { useScripts, useScriptSlots } from '../api/hooks'
 import { ParameterForm } from './ParameterForm'
 import type { ScriptBinding, ScriptBindings, ScriptConfig, ScriptSlotInfo } from '../api/types'

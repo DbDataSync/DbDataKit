@@ -1,4 +1,4 @@
-import type { SubTab } from '../../components/SubTabs'
+import type { SubTab } from '@dbdatakit/shell'
 import { useProvisioning } from '../../api/hooks'
 
 /**

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { ErrorBanner } from '../../components/ErrorBanner'
-import { Field } from '../../components/Field'
+import { ErrorBanner } from '@dbdatakit/shell'
+import { Field } from '@dbdatakit/shell'
 import {
   useBulkLoad,
   useCapabilities,

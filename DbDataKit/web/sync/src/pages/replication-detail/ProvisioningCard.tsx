@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { CodeEditor } from '../../components/CodeEditor'
 import { InheritableToggle } from '../../components/InheritableToggle'
-import { ErrorBanner } from '../../components/ErrorBanner'
+import { ErrorBanner } from '@dbdatakit/shell'
 import { useApplyProvisioning, useProvisioning } from '../../api/hooks'
 import type { EndpointSide } from '../../components/EndpointSidePair'
 import type { ApplyResult, ProvisioningConfig, ProvisioningPlan, ProvisioningState } from '../../api/types'

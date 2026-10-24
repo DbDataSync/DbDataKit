@@ -1,6 +1,6 @@
 import { CodeEditor } from './CodeEditor'
-import { Field } from './Field'
-import { KeyValueTable } from './KeyValueTable'
+import { Field } from '@dbdatakit/shell'
+import { KeyValueTable } from '@dbdatakit/shell'
 import { isVararg, occurrences, varargEntries, withVararg } from './parameterValues'
 import type { ParameterDescriptor } from '../api/types'
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Outlet, useOutletContext } from 'react-router-dom'
-import { ErrorBanner } from '../../components/ErrorBanner'
-import { Field } from '../../components/Field'
+import { ErrorBanner } from '@dbdatakit/shell'
+import { Field } from '@dbdatakit/shell'
 import {
   useColumns, useConnections, useDeleteTableMapping, useReplication, useTables,
   useUpsertTableMapping,
@@ -20,7 +20,7 @@ import { ColumnMappingEditor } from './ColumnMappingEditor'
 import { CachedMetadataCard } from './CachedMetadataCard'
 import { ScriptBindingsCard } from '../../components/ScriptBindings'
 import { NotesPanel } from '../../components/NotesPanel'
-import { SubTabs } from '../../components/SubTabs'
+import { SubTabs } from '@dbdatakit/shell'
 import { useMappingTabs } from './mappingTabs'
 import { ProvisioningCard } from './ProvisioningCard'
 import { RelationshipsCard } from './RelationshipsCard'
