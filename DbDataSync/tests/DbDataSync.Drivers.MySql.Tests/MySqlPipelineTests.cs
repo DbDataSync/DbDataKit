@@ -207,6 +207,31 @@ public abstract class MySqlFamilyPipelineTestsBase<TFixture> : IClassFixture<TFi
         Assert.Equal(2, (int)Assert.Single(rows)["id"]!);
     }
 
+    /// <summary>The shared catalog reader (plan 13, A12) on a real server: the full column type, key order, and a missing table as Sync's own error.</summary>
+    [Fact]
+    public async Task Catalog_columns_report_the_column_type_the_key_order_and_a_missing_table()
+    {
+        var table = $"cat_{Guid.NewGuid():N}";
+        await ExecuteAsync(_source, $"CREATE TABLE `{table}` (b INT NOT NULL, a BIGINT UNSIGNED NOT NULL, name VARCHAR(50) NULL, amount DECIMAL(18,2), PRIMARY KEY (b, a)) ENGINE=InnoDB;");
+
+        var columns = await MySqlCatalog.Instance.GetColumnsAsync(_source, _db.DatabaseName, table, CancellationToken.None);
+
+        Assert.Equal(["b", "a", "name", "amount"], columns.Select(c => c.Name));
+        // MariaDB (and MySQL before 8.0.19) report the display width: bigint(20) unsigned.
+        Assert.Matches(@"^bigint(\(20\))? unsigned$", columns.Single(c => c.Name == "a").NativeType);
+        Assert.Equal("varchar(50)", columns.Single(c => c.Name == "name").NativeType);
+        Assert.Equal("decimal(18,2)", columns.Single(c => c.Name == "amount").NativeType);
+        Assert.True(columns.Single(c => c.Name == "name").IsNullable);
+        Assert.False(columns.Single(c => c.Name == "b").IsNullable);
+        Assert.Equal(1, columns.Single(c => c.Name == "b").KeyOrdinal);
+        Assert.Equal(2, columns.Single(c => c.Name == "a").KeyOrdinal);
+        Assert.Equal(0, columns.Single(c => c.Name == "name").KeyOrdinal);
+
+        var missing = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            MySqlCatalog.Instance.GetColumnsAsync(_source, _db.DatabaseName, "no_such_table", CancellationToken.None));
+        Assert.Contains("was not found", missing.Message);
+    }
+
     /// <summary>
     /// The absence of the problem <c>PostgresPipelineTests.GeneratedAlwaysIdentity_...</c> exists to
     /// prove a fix for. MySQL accepts an explicit value for an AUTO_INCREMENT column through a plain
