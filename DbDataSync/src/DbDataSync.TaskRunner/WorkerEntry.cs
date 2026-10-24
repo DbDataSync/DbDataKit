@@ -55,6 +55,8 @@ public static class WorkerEntry
         {
             [DbDataKit.Dialect.EngineId.SqlServer] = MsSqlDriver.FailureMapper,
             [DbDataKit.Dialect.EngineId.Postgres] = PostgresDriver.FailureMapper,
+            [DbDataKit.Dialect.EngineId.MySql] = MySqlDriver.FailureMapper,
+            [DbDataKit.Dialect.EngineId.Oracle] = OracleDriver.FailureMapper,
         };
         foreach (var id in DriverIds.ArrowFlightSqlVariants)
             failureMappers[DriverFailures.EngineFor(id)] = new DbDataSync.Drivers.ArrowFlightSql.FlightSqlFailureMapper();

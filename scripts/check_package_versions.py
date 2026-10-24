@@ -15,9 +15,7 @@ import os
 import re
 import sys
 
-ALLOWED_OVERRIDES = {
-    "Oracle.ManagedDataAccess.Core",  # Sync stays on 23.9.1 until A09 (the shared Oracle composer)
-}
+ALLOWED_OVERRIDES = set()
 
 # Packages no project may reference, and why.
 FORBIDDEN = {

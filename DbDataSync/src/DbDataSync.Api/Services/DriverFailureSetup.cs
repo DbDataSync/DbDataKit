@@ -4,6 +4,8 @@ using DbDataSync.Core.Config;
 using DbDataSync.Core.Sql;
 using DbDataSync.Drivers.ArrowFlightSql;
 using DbDataSync.Drivers.MsSql;
+using DbDataSync.Drivers.MySql;
+using DbDataSync.Drivers.Oracle;
 using DbDataSync.Drivers.Postgres;
 
 namespace DbDataSync.Api.Services;
@@ -23,6 +25,8 @@ internal static class DriverFailureSetup
         {
             [EngineId.SqlServer] = MsSqlDriver.FailureMapper,
             [EngineId.Postgres] = PostgresDriver.FailureMapper,
+            [EngineId.MySql] = MySqlDriver.FailureMapper,
+            [EngineId.Oracle] = OracleDriver.FailureMapper,
         };
         var flight = new FlightSqlFailureMapper();
         foreach (var id in DriverIds.ArrowFlightSqlVariants) mappers[DriverFailures.EngineFor(id)] = flight;

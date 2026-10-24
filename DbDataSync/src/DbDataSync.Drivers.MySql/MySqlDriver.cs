@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Diagnostics;
+using DbDataKit.Connections.MySql;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
@@ -56,55 +57,38 @@ public sealed class MySqlDriver : IDriver, IConnectionTester, IDialectProvider, 
         new Scd2Writer(MySqlDialect.Instance, MySqlCatalog.Instance),
     ];
 
+    /// <summary>The shared MySQL failure mapper (error numbers to kinds), for <see cref="DriverFailures"/>.</summary>
+    public static DbDataKit.Connections.IFailureMapper FailureMapper { get; } = new MySqlFailureMapper();
+
     public DbConnection CreateConnection(ConnectionConfig connection, string? credential)
     {
-        // An operator's own connection string is the base, not the whole truth: the credential goes on
-        // top through this builder, so it is escaped correctly and config never carries it.
-        var builder = string.IsNullOrWhiteSpace(connection.ConnectionString)
-            ? new MySqlConnectionStringBuilder { Server = connection.Host, Database = connection.Database ?? "" }
-            : new MySqlConnectionStringBuilder(connection.ConnectionString);
-
-        if (!string.IsNullOrWhiteSpace(connection.Database))
-            builder.Database = connection.Database;
-
-        if (connection.Port is int port)
-            builder.Port = (uint)port;
-
-        if (connection.ConnectTimeoutSeconds is int connectTimeout)
-            builder.ConnectionTimeout = (uint)connectTimeout;
-        else if (!ConnectionTimeouts.AddressCarriesOwnConnectTimeout(connection, "Connection Timeout", "Connect Timeout"))
-            builder.ConnectionTimeout = (uint)ConnectionTimeouts.DefaultConnectSeconds;
-
-        if (connection.AuthMode == AuthMode.None)
-        {
-            // Whatever the address or the environment provides — a credential already in the connection
-            // string, a server-side auth plugin configured to need nothing further. DbDataSync adds
-            // nothing.
-        }
-        else if (connection.AuthMode == AuthMode.IntegratedAuth)
-        {
-            // MySQL has no equivalent of SQL Server's "integrated security" flag. The closest thing — an
-            // auth plugin such as authentication_ldap_sasl or a PAM/Kerberos plugin — is server-side
-            // configuration reached through Properties, not a driver-level switch; MySqlConnector still
-            // needs a username either way.
-            builder.UserID = connection.UserId
-                ?? throw new InvalidOperationException("UserId is required even for IntegratedAuth on MySQL/MariaDB.");
-        }
-        else
-        {
-            builder.UserID = connection.UserId
-                ?? throw new InvalidOperationException("UserId is required for SqlAuth connections.");
-            builder.Password = credential
-                ?? throw new InvalidOperationException("A resolved credential is required for SqlAuth connections.");
-        }
-
-        foreach (var (key, value) in connection.Properties)
-            builder[key] = value;
+        // The shared composer builds the string (plan 13, A09): the operator's own string is still the base and the credential goes on
+        // top, escaped by the builder. SSL Mode is VerifyFull unless the operator's string or `properties` name another mode.
+        string connectionString = SharedConnection.Compose(connection, credential, Composition);
 
         // Stamped here, at the one moment the config and the connection are in the same hand. Every
         // command raised through CreateTimedCommand() reads it back off the connection.
-        return new MySqlConnection(builder.ConnectionString).WithCommandTimeout(connection);
+        return new MySqlConnection(connectionString).WithCommandTimeout(connection);
     }
+
+    private static readonly SharedConnectionOptions Composition = new()
+    {
+        Composer = new MySqlComposer(),
+        ConnectTimeoutKeys = ["Connection Timeout", "Connect Timeout", "ConnectionTimeout", "ConnectTimeout"],
+        TlsKeys = ["SSL Mode", "SslMode", "SSL CA", "SslCa", "CA Certificate File", "CACertificateFile"],
+        ReadTls = (written, tls) =>
+        {
+            if (written.TryGetValue("sslmode", out var mode))
+            {
+                if (mode.Equals("none", StringComparison.OrdinalIgnoreCase) || mode.Equals("disabled", StringComparison.OrdinalIgnoreCase)) tls.Encrypt = false;
+                else if (!mode.StartsWith("verify", StringComparison.OrdinalIgnoreCase)) tls.Verify = false; // preferred, required: encrypted when it can be, not verified
+            }
+            foreach (var key in new[] { "sslca", "cacertificatefile" })
+                if (written.TryGetValue(key, out var ca)) { tls.CaFile = ca; break; }
+        },
+        // MySQL has no integrated flag; an authentication plugin is server configuration and the user name is still written.
+        IntegratedNeedsUser = true,
+    };
 
     /// <summary>
     /// The instance's user databases — <c>information_schema</c>, <c>mysql</c>, <c>performance_schema</c>

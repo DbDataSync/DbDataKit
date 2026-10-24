@@ -43,13 +43,13 @@ class CheckPackageVersions(unittest.TestCase):
         })
         self.assertEqual(1, len(check.check(root)))
 
-    def test_an_override_fails_unless_it_is_listed(self):
+    def test_an_override_fails_unless_it_is_listed_and_none_is(self):
         root = tree({
             "A/A.csproj": '<Project><ItemGroup><PackageReference Include="Npgsql" VersionOverride="9.0.3" />'
                           '<PackageReference Include="Oracle.ManagedDataAccess.Core" VersionOverride="23.9.1" /></ItemGroup></Project>',
         })
         problems = check.check(root)
-        self.assertEqual(1, len(problems))
+        self.assertEqual(2, len(problems))   # the list of allowed overrides is empty since A09
         self.assertIn("Npgsql", problems[0])
 
     def test_a_package_listed_twice_or_with_two_versions_fails(self):

@@ -7,10 +7,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <DbDataKitReference Include="Connections.Oracle" />   <!-- the ODP.NET composer; plan 13, A09 -->
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- ExcludeAssets="runtime" (phase 109h) — see DbDataSync.Drivers.Postgres.csproj's identical comment
          for why: compiles unchanged, ships nothing, resolved at first touch through LibraryRegistry's
          AssemblyLoadContext.Resolving handler from <repo>/libraries/oracle-managed-data-access/lib/. -->
-    <PackageReference Include="Oracle.ManagedDataAccess.Core" VersionOverride="23.9.1" ExcludeAssets="runtime" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <ItemGroup>
