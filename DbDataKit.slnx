@@ -37,6 +37,7 @@
     <Project Path="DbDataKit/src/DbDataKit.Connections.Libraries/DbDataKit.Connections.Libraries.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Connections.Odbc/DbDataKit.Connections.Odbc.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Connections.Postgres/DbDataKit.Connections.Postgres.csproj" />
+    <Project Path="DbDataKit/src/DbDataKit.Connections.FlightSql/DbDataKit.Connections.FlightSql.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Connections.MySql/DbDataKit.Connections.MySql.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Connections.Oracle/DbDataKit.Connections.Oracle.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Connections.SqlServer/DbDataKit.Connections.SqlServer.csproj" />
@@ -92,6 +93,7 @@
     <Project Path="DbDataKit/tests/DbDataKit.Connections.Libraries.Tests/DbDataKit.Connections.Libraries.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Connections.Odbc.Tests/DbDataKit.Connections.Odbc.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Connections.Postgres.Tests/DbDataKit.Connections.Postgres.Tests.csproj" />
+    <Project Path="DbDataKit/tests/DbDataKit.Connections.FlightSql.Tests/DbDataKit.Connections.FlightSql.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Connections.MySql.Tests/DbDataKit.Connections.MySql.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Connections.Oracle.Tests/DbDataKit.Connections.Oracle.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Connections.SqlServer.Tests/DbDataKit.Connections.SqlServer.Tests.csproj" />

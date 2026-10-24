@@ -2,7 +2,7 @@ using DbDataKit.Connections;
 using DbDataKit.Dialect;
 using Grpc.Core;
 
-namespace DbDataSync.Drivers.ArrowFlightSql;
+namespace DbDataKit.Connections.FlightSql;
 
 /// <summary>Maps a Flight SQL call's gRPC status to the shared failure kinds (plan 13, A10). The status name is the public code; the server's detail text is never used.</summary>
 public sealed class FlightSqlFailureMapper : IFailureMapper

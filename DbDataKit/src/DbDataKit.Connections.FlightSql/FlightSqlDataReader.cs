@@ -6,7 +6,7 @@ using Apache.Arrow.Flight;
 using Apache.Arrow.Flight.Sql;
 using Grpc.Core;
 
-namespace DbDataSync.Drivers.ArrowFlightSql;
+namespace DbDataKit.Connections.FlightSql;
 
 /// <summary>
 /// Streams a query's result: each of the <see cref="FlightInfo"/>'s endpoints is fetched in order with
