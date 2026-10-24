@@ -39,7 +39,9 @@ internal static class ConnectionDiagnostics
     /// <see cref="InvalidOperationException"/> around a driver-specific inner exception) doesn't lose the
     /// inner message.
     /// </summary>
-    public static string Describe(Exception ex) => ex is JdbcSqlException jdbc ? jdbc.Message : ex.ToString();
+    public static string Describe(Exception ex) =>
+        DbDataSync.Core.Sql.DriverFailures.CameFromADriver(ex) ? DbDataSync.Core.Sql.DriverFailures.Describe(ex)
+        : ex is JdbcSqlException jdbc ? jdbc.Message : ex.ToString();
 
     /// <summary>
     /// By literal secret value, applied once at the boundary — deliberately not "only show

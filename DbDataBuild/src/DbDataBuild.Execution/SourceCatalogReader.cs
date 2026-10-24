@@ -90,7 +90,7 @@ ORDER BY kcu.table_name, kcu.constraint_name, kcu.ordinal_position";
     private static async Task<T> FlightSqlFallbackAsync<T>(ReadSession read, Func<Task<T>> informationSchema)
     {
         try { return await informationSchema(); }
-        catch (Exception ex) when (DriverFailure.Rpc(ex) is { } rpc && rpc.StatusCode is not (Grpc.Core.StatusCode.Unavailable or Grpc.Core.StatusCode.Unauthenticated or Grpc.Core.StatusCode.PermissionDenied or Grpc.Core.StatusCode.DeadlineExceeded or Grpc.Core.StatusCode.Cancelled))
+        catch (Exception ex) when (FlightSqlFailure.Rpc(ex) is { } rpc && rpc.StatusCode is not (Grpc.Core.StatusCode.Unavailable or Grpc.Core.StatusCode.Unauthenticated or Grpc.Core.StatusCode.PermissionDenied or Grpc.Core.StatusCode.DeadlineExceeded or Grpc.Core.StatusCode.Cancelled))
         { throw CatalogUnavailableException.FlightSqlWithoutCatalog(read.Dialect.Name); }
     }
 
@@ -264,7 +264,7 @@ ORDER BY kcu.table_name, kcu.constraint_name, kcu.ordinal_position";
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // the catalog functions need the driver manager's library to load and the driver to answer; an import without indexes is still an import
-            read.Note($"indexes were not read: SQLStatistics failed ({DriverFailure.Describe(ex)}), so declare them by hand");
+            read.Note($"indexes were not read: SQLStatistics failed ({Failures.Describe(ex)}), so declare them by hand");
         }
         return null;
     }

@@ -2,10 +2,9 @@ using DbDataSync.Core.Config;
 using System.Data.Common;
 using System.Diagnostics;
 using System.Net.Sockets;
-using ClrKernel.Core.Secrets;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Api.Services;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Core.Secrets;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Api.Auth;
@@ -263,7 +262,7 @@ public sealed class ConnectionsController(
 
     /// <summary>
     /// Phase 109j item 4: the deep, connection-scoped check — spawns
-    /// <c>dbdatasync config library validate &lt;id&gt; --connection &lt;name&gt;</c> as a real child
+    /// <c>dbdatasync library validate &lt;id&gt; --connection &lt;name&gt;</c> as a real child
     /// process (<see cref="LibraryValidationLauncher"/>) and waits for it. Separate from
     /// <see cref="Test"/> deliberately: this needs DDL rights on the target and costs a real process
     /// spawn plus a real scratch table create/write/drop, none of which belong on the cheap, frequent

@@ -24,7 +24,7 @@ public class TestGateTests
     private static (int Exit, string Out, string Err) Cli(string dir, params string[] args)
     {
         var o = new StringWriter(); var e = new StringWriter();
-        var env = new Dictionary<string, string?> { ["DBDATABUILD_SQLSERVER_READ"] = "Server=127.0.0.1,1;User Id=r;Password=x;Connect Timeout=1" };
+        var env = new Dictionary<string, string?> { ["DBDATA_BUILD_SQLSERVER_READ"] = "Server=127.0.0.1,1;User Id=r;Password=x;Connect Timeout=1" };
         var exit = CliApp.Run([.. args, "--project", dir], o, e, environment: v => env.GetValueOrDefault(v));
         return (exit, o.ToString(), e.ToString());
     }

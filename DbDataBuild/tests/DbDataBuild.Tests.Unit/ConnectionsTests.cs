@@ -54,9 +54,9 @@ public class ConnectionsTests
     [Fact]
     public void The_login_of_a_connection_is_its_name_in_capitals_and_never_falls_back_to_another()
     {
-        Assert.Equal("DBDATABUILD_WAREHOUSE_READ", LoginSettings.VariableName("warehouse", Login.Read));
-        Assert.Equal("DBDATABUILD_WH_NEW_WRITE", LoginSettings.VariableName("wh_new", Login.Write));
-        var env = new Dictionary<string, string?> { ["DBDATABUILD_SQLSERVER_READ"] = "Server=a;User Id=u;Password=p", ["DBDATABUILD_WH_NEW_READ"] = "Server=b;User Id=v;Password=q" };
+        Assert.Equal("DBDATA_BUILD_WAREHOUSE_READ", LoginSettings.VariableName("warehouse", Login.Read));
+        Assert.Equal("DBDATA_BUILD_WH_NEW_WRITE", LoginSettings.VariableName("wh_new", Login.Write));
+        var env = new Dictionary<string, string?> { ["DBDATA_BUILD_SQLSERVER_READ"] = "Server=a;User Id=u;Password=p", ["DBDATA_BUILD_WH_NEW_READ"] = "Server=b;User Id=v;Password=q" };
         var (own, _) = LoginSettings.FromEnvironment("wh_new", "sqlserver", Login.Read, env.GetValueOrDefault);
         Assert.Equal(("wh_new", "sqlserver", "v"), (own!.Connection, own.Engine, own.User));
         var (missing, error) = LoginSettings.FromEnvironment("wh_old", "sqlserver", Login.Read, env.GetValueOrDefault);
@@ -141,7 +141,7 @@ public class ConnectionsTests
         var (exit, output, err) = Run("connection", "init", "wh_pg", "--project", dir, "--apply");
         Assert.NotEqual(0, exit);
         Assert.Contains("connection: wh_pg", output);
-        Assert.Contains("DBDATABUILD_WH_PG_WRITE", err + output);                                             // not DBDATABUILD_POSTGRES_WRITE
+        Assert.Contains("DBDATA_BUILD_WH_PG_WRITE", err + output);                                             // not DBDATA_BUILD_POSTGRES_WRITE
         var script = Run("connection", "init", "wh_pg", "--project", dir);
         Assert.Contains("CREATE SCHEMA", script.Out);
         Assert.DoesNotContain("[", script.Out.Split('\n').Where(l => l.StartsWith("CREATE", StringComparison.Ordinal)).FirstOrDefault() ?? "");      // PostgreSQL quoting, not SQL Server's

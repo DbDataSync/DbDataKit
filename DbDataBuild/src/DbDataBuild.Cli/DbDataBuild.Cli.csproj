@@ -17,7 +17,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.CommandLine" Version="2.0.12" />
+    <DbDataKitReference Include="Cli" />
+    <PackageReference Include="System.CommandLine" />
   </ItemGroup>
 
   <ItemGroup>
@@ -40,5 +41,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="DbDataKit.Cli" />
+  </ItemGroup>
 
 </Project>

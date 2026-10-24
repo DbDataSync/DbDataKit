@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Connections.MySql</RootNamespace>
+    <PackageId>DbDataKit.Connections.MySql</PackageId>
+    <Description>MySQL and MariaDB provider: MySqlConnector composer with verify-full TLS default, read-only session recipe and error-number failure mapping.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <PackageReference Include="MySqlConnector" />
+    <ProjectReference Include="..\DbDataKit.Connections\DbDataKit.Connections.csproj" />
+  </ItemGroup>
+</Project>

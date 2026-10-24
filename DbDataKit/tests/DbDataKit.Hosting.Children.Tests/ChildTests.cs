@@ -193,7 +193,7 @@ public class ProcessTests
         var pidFile = Path.Combine(Path.GetTempPath(), "dbdata-child-" + Guid.NewGuid().ToString("N"));
         var child = ChildProcessHost.Launch(Spec(null, "spawn", pidFile));
         Assert.True(await WaitFor(() => File.Exists(pidFile) && File.Exists(pidFile + ".grand")));
-        var childPid = int.Parse(File.ReadAllText(pidFile));
+        var childPid = int.Parse(await ReadWhenReady(pidFile));
         var grandPid = int.Parse(await ReadWhenReady(pidFile + ".grand"));
 
         await child.DisposeAsync();

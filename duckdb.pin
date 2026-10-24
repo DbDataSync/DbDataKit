@@ -1,0 +1,33 @@
+# The DuckDB engine every product uses: a published release of https://github.com/duckdb/duckdb (plan 13, W1).
+# Read by scripts/fetch-duckdb.sh and scripts/fetch-duckdb.ps1 (KEY=value lines, nothing else is evaluated).
+# Each archive is checked against the SHA-256 recorded here, not one fetched from the same release, and so is the library inside it.
+# To move to a new release: set VERSION, then for each platform the archive name, the archive's SHA-256 (the release's asset digest) and
+# the SHA-256 of the library inside it, and run scripts/fetch-duckdb.sh all.
+VERSION=2.0.0
+BASE=https://github.com/duckdb/duckdb/releases/download/v2.0.0
+
+# rid:  the .NET runtime identifier the library is installed under (runtimes/<rid>/native/)
+ARCHIVE_linux_x64=duckdb-shared-libs-linux-amd64.tar.gz
+ARCHIVE_SHA256_linux_x64=993ad89e7dfca66cd6da994c2cad090c2fc160ddf9f550498a098ab4bb13cfb1
+LIB_linux_x64=libduckdb.so
+LIB_SHA256_linux_x64=1f425596ada498cf1703d98768ba833d79254394c3581e5022b270ec7c2dee07
+
+ARCHIVE_linux_arm64=duckdb-shared-libs-linux-arm64.tar.gz
+ARCHIVE_SHA256_linux_arm64=c60eecf91143ca6bbac55c4f4d40dc22520488b0ac257c86e0fe9a2b451cf2b7
+LIB_linux_arm64=libduckdb.so
+LIB_SHA256_linux_arm64=e81ab176315947cc2000328571cf372f07071bb472f6d54abf8e61c530be4624
+
+ARCHIVE_win_x64=duckdb-shared-libs-windows-amd64.tar.gz
+ARCHIVE_SHA256_win_x64=2b83169128239de5f45fe21de80f99bf436e53aa4bb24020dd951a1ba8d4b95f
+LIB_win_x64=duckdb.dll
+LIB_SHA256_win_x64=8785bcbb0f4570c9662c4c890f9fa5c7cfb3239ce25e589c29693ce2139f9897
+
+ARCHIVE_osx_arm64=duckdb-shared-libs-osx-arm64.tar.gz
+ARCHIVE_SHA256_osx_arm64=c35d60080b31ba5d11a3ce505a6831be784f003b4c575d32a4c2badb3b41cdf0
+LIB_osx_arm64=libduckdb.dylib
+LIB_SHA256_osx_arm64=72b50268165284d321ec0263b39fafa9551379e72558e443d4b4f1eeb4f4042c
+
+ARCHIVE_osx_x64=duckdb-shared-libs-osx-amd64.tar.gz
+ARCHIVE_SHA256_osx_x64=98fef9fcad856555ca0403fe4d9d6680acfd26c67e8c6f004d61a248d6bc0eff
+LIB_osx_x64=libduckdb.dylib
+LIB_SHA256_osx_x64=7ca435043015f7d9a98333b5a9bd269216b253aa7d6a1dcd99d4aa281394bf14

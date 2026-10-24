@@ -2,10 +2,9 @@ using DbDataKit.Hosting.Certificates.Windows;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using ClrKernel.Core.Secrets;
 using DbDataSync.Certificates;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Core.Secrets;
 using DbDataSync.Libraries;
 
@@ -147,7 +146,7 @@ public sealed class ReadinessChecksTests : IDisposable
         ServeCommand.Prepare(_root);
         var configRoot = Path.Combine(_root, "config");
         var repository = new ConfigRepository(
-            configRoot, new GitCommitService(_root), new SecretStore("DbDataSync", true));
+            configRoot, new GitCommitService(_root), SecretStore.ForProviders(new InMemorySecretProvider()));
         repository.SaveConnection(
             new ConnectionInput
             {
@@ -163,7 +162,7 @@ public sealed class ReadinessChecksTests : IDisposable
 
         var check = Find(results, "Libraries / drivers");
         Assert.Equal(CheckStatus.Fail, check.Status);
-        Assert.Contains("dbdatasync config driver install", check.Detail);
+        Assert.Contains("dbdatasync driver install", check.Detail);
     }
 
     [Fact]
@@ -276,7 +275,7 @@ public sealed class ReadinessChecksTests : IDisposable
 
     /// <summary>
     /// Puts a managed self-signed certificate at the well-known path and points Kestrel at it — what
-    /// <c>dbdatasync config cert new-self-signed</c> does off Windows.
+    /// <c>dbdatasync cert new-self-signed</c> does off Windows.
     /// <para>
     /// Written directly rather than by invoking that command, since phase 140: on Windows
     /// <c>CertCommand</c> dispatches <c>new-self-signed</c> to the certificate-*store* implementation

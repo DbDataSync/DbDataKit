@@ -75,11 +75,14 @@ public enum AuthMode
 
 /// <summary>
 /// Persisted, git-tracked representation of a connection. Never carries a plaintext credential —
-/// <see cref="CredentialSecretRef"/> is a key into ClrKernel.Core.Secrets.SecretStore, resolved at
+/// <see cref="CredentialSecretRef"/> is a name in the encrypted secret store (<c>dbdata:sync:connection:&lt;name&gt;</c>), resolved at
 /// connect time, never at config-load time.
 /// </summary>
 public sealed class ConnectionConfig
 {
+    /// <summary>The version of this file's format (plan 13, A03). Required: a file without it, or from an older format, is refused with a message rather than read as if it were current.</summary>
+    public int SchemaVersion { get; set; } = ConfigSchema.Current;
+
     public required string Name { get; set; }
     public required string DriverType { get; set; }
 

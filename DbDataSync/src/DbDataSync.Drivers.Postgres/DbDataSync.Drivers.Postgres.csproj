@@ -7,10 +7,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <DbDataKitReference Include="Connections.Postgres" />   <!-- the Npgsql composer; plan 13, A08 -->
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- ExcludeAssets="runtime" (phase 109h) — see DbDataSync.Drivers.MsSql.csproj's identical comment
          for why: compiles unchanged, ships nothing, resolved at first touch through LibraryRegistry's
          AssemblyLoadContext.Resolving handler from <repo>/libraries/npgsql/lib/. -->
-    <PackageReference Include="Npgsql" Version="9.0.3" ExcludeAssets="runtime" />
+    <PackageReference Include="Npgsql" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <ItemGroup>

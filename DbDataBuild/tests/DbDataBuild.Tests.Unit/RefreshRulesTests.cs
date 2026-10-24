@@ -51,6 +51,33 @@ public class RefreshRulesTests
     }
 
     [Fact]
+    public void A_plan_declares_a_cron_schedule_and_a_time_zone_and_both_are_kept_in_the_plan_file()
+    {
+        var diags = new List<Diagnostic>();
+        var config = ProjectConfigLoader.Load("refresh:\n  plans:\n    p: { schedule: \"15 * * * *\", time_zone: Europe/Berlin }\n    q: { schedule: \"0 2 * * 1-5\" }\n    r: {}\n", "dbdatabuild.yml", diags);
+        Assert.Empty(diags);
+        Assert.Equal(("15 * * * *", "Europe/Berlin"), (config!.RefreshPlans["p"].Schedule, config.RefreshPlans["p"].TimeZone));
+        Assert.Equal(("0 2 * * 1-5", null), (config.RefreshPlans["q"].Schedule, config.RefreshPlans["q"].TimeZone));
+        Assert.Null(config.RefreshPlans["r"].Schedule);
+        var text = RefreshPlanSettingsText.From(config.RefreshPlans["p"]);
+        Assert.Equal(("15 * * * *", "Europe/Berlin"), (text.Schedule, text.TimeZone));
+    }
+
+    [Theory]
+    [InlineData("schedule: nonsense", "schedule")]
+    [InlineData("schedule: \"61 * * * *\"", "schedule")]
+    [InlineData("schedule: \"15 * * * *\", time_zone: Mars/Olympus", "schedule")]
+    [InlineData("time_zone: UTC", "time_zone")]
+    [InlineData("schedule: [a]", "schedule")]
+    [InlineData("schedule: \"\"", "schedule")]
+    public void A_bad_schedule_or_a_time_zone_without_one_is_a_diagnostic_that_names_the_key(string settings, string key)
+    {
+        var d = new List<Diagnostic>();
+        Assert.Null(ProjectConfigLoader.Load($"refresh:\n  plans:\n    p: {{ {settings} }}\n", "dbdatabuild.yml", d));
+        Assert.Contains(d, x => x.Found.Contains($"refresh.plans.p.{key}"));
+    }
+
+    [Fact]
     public void A_load_declares_its_max_runtime_and_a_bad_one_is_a_diagnostic()
     {
         var good = Load(ValidModel.Replace("connections: [sqlserver, fabric]\n", "") + "\nloads:\n  default: { default: true, strategy: full_replace, max_runtime: 2m }\n");

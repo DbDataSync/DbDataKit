@@ -1708,15 +1708,28 @@ public partial class ApplyConformanceTests
                 while (r.Read()) ids.Add(Convert.ToString(r.GetValue(0), System.Globalization.CultureInfo.InvariantCulture)!);
                 return ids;
             }
-            for (var i = 0; i < queries.Length; i++)
+            // DuckDB 2.0 plans `x op ANY/ALL (subquery)` as a CASE the targets cannot reproduce, and the tool refuses it (DDB-324, K08): each query is compiled alone, and what is refused must be refused by name,
+            // what is lowered must give DuckDB's rows on the engine
+            bool TryAdd(string stem, string yml, string sql)
             {
-                run.Write($"models/marts/q{i}.yml", $"name: marts.q{i}\nkind: full\ncolumns:\n  - {{name: id, type: INTEGER, nullable: false}}\n");
-                run.Write($"models/marts/q{i}.sql", $"SELECT s.id FROM staging.s1 s WHERE {queries[i]}\n");
+                run.Write($"models/marts/{stem}.yml", yml);
+                run.Write($"models/marts/{stem}.sql", sql);
+                var r = run.Cli("project", "compile");
+                if (r.Exit == 0) return true;
+                Assert.Contains("DDB-324", r.Out + r.Err);
+                Assert.True(System.Text.RegularExpressions.Regex.IsMatch(r.Out + r.Err, "ANY(,| or) ALL|EMPTY_RESULT"), $"{stem}: {r.Out}{r.Err}");                                  // (the CASE form 2.0 plans, a comparison used as a value, or the EMPTY_RESULT operator 2.0 plans for an empty subquery: all named refusals)
+                File.Delete(Path.Combine(run.Dir, $"models/marts/{stem}.yml")); File.Delete(Path.Combine(run.Dir, $"models/marts/{stem}.sql"));
+                return false;
             }
+            var lowered = new List<int>();
+            for (var i = 0; i < queries.Length; i++)
+                if (TryAdd($"q{i}", $"name: marts.q{i}\nkind: full\ncolumns:\n  - {{name: id, type: INTEGER, nullable: false}}\n", $"SELECT s.id FROM staging.s1 s WHERE {queries[i]}\n")) lowered.Add(i);
+            Assert.NotEmpty(lowered);                                                           // the row-value IN and the plain NOT IN forms still lower
+            Assert.True(lowered.Count < queries.Length, "some of the ANY/ALL forms are refused on DuckDB 2.0");
             Ok(run.Cli("connection", "init", "--apply"), "init");
             Ok(run.Cli("project", "compile"), "render");
             Ok(run.Cli("connection", "deploy", "--apply-plan", run.PlanFile(run.Cli("connection", "deploy", "--write-plan").Out)), "apply");
-            for (var i = 0; i < queries.Length; i++)
+            foreach (var i in lowered)
                 Assert.True(Expected(queries[i]).SequenceEqual(await engine.RowsAsync($"SELECT id FROM marts.q{i} ORDER BY id")), $"q{i}: {queries[i]}");
             Assert.NotEmpty(Expected(queries[0]));                                              // the cases are not all empty
 
@@ -1729,14 +1742,13 @@ public partial class ApplyConformanceTests
                 "NOT (s.x > ANY (SELECT b.z FROM staging.s2 b))",
                 "(s.x, s.y) NOT IN (SELECT b.z, b.w FROM staging.s2 b)",
             };
+            var loweredValues = new List<int>();
             for (var i = 0; i < valueQueries.Length; i++)
-            {
-                run.Write($"models/marts/qv{i}.yml", $"name: marts.qv{i}\nkind: full\ncolumns:\n  - {{name: id, type: INTEGER, nullable: false}}\n  - {{name: g, type: BOOLEAN}}\n");
-                run.Write($"models/marts/qv{i}.sql", $"SELECT s.id, {valueQueries[i]} AS g FROM staging.s1 s\n");
-            }
+                if (TryAdd($"qv{i}", $"name: marts.qv{i}\nkind: full\ncolumns:\n  - {{name: id, type: INTEGER, nullable: false}}\n  - {{name: g, type: BOOLEAN}}\n", $"SELECT s.id, {valueQueries[i]} AS g FROM staging.s1 s\n")) loweredValues.Add(i);
+            Assert.NotEmpty(loweredValues);
             Ok(run.Cli("project", "compile"), "render values");
             Ok(run.Cli("connection", "deploy", "--apply-plan", run.PlanFile(run.Cli("connection", "deploy", "--write-plan").Out)), "apply values");
-            for (var i = 0; i < valueQueries.Length; i++)
+            foreach (var i in loweredValues)
             {
                 using var cmd = duck.CreateCommand();
                 cmd.CommandText = $"SELECT s.id, CASE WHEN ({valueQueries[i]}) THEN '1' WHEN NOT ({valueQueries[i]}) THEN '0' ELSE 'n' END FROM staging.s1 s ORDER BY s.id";

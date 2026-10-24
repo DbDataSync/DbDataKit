@@ -91,10 +91,10 @@ jobs:
       # Build the SPA here, ahead of the pack step below, so Cli.csproj's CopyPrebuiltSpa target has a
       # dist/ to copy in.
       - name: Build the SPA
-        working-directory: DbDataSync/src/DbDataSync.Web
+        working-directory: DbDataKit/web
         run: |
           npm ci
-          npm run build
+          npm run build -w @dbdatakit/sync
 
       # The shipped version is computed here, from the clock — not typed by a human anywhere.
       # YYYY.MM.DD.HHmm in UTC, which is a valid four-part assembly version (every part is well under

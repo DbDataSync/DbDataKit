@@ -110,6 +110,13 @@ public class LoweringIntegrationTests
     [Theory]
     [InlineData("SELECT customer_id, [1, 2] AS l FROM staging.orders", "DDB-324", "list_value")]
     [InlineData("SELECT DISTINCT ON (customer_id) customer_id, order_id FROM staging.orders", "DDB-324", "DISTINCT ON")]
+    [InlineData("SELECT customer_id FROM staging.orders WHERE order_id > ANY (SELECT order_id FROM staging.orders WHERE customer_id = 1)", "DDB-324", "ANY or ALL")]
+    [InlineData("SELECT customer_id FROM staging.orders WHERE order_id >= ALL (SELECT order_id FROM staging.orders WHERE customer_id = 1)", "DDB-324", "ANY or ALL")]
+    [InlineData("SELECT customer_id, order_id > ANY (SELECT order_id FROM staging.orders WHERE customer_id = 1) AS later FROM staging.orders", "DDB-324", "ANY or ALL")]
+    [InlineData("SELECT customer_id, current_setting('threads') AS v FROM staging.orders", "DDB-324", "current_setting")]
+    [InlineData("SELECT customer_id, current_schemas(true) AS v FROM staging.orders", "DDB-324", "current_schemas")]
+    [InlineData("SELECT customer_id, getvariable('x') AS v FROM staging.orders", "DDB-324", "getvariable")]
+    [InlineData("SELECT customer_id, getenv('HOME') AS v FROM staging.orders", "DDB-324", "getenv")]
     [InlineData("SELEC customer_id FROM staging.orders", "DDB-306", "syntax error")]
     [InlineData("SELECT customer_id FROM staging.missing", "DDB-218", "missing")]
     public void A_query_that_cannot_be_lowered_is_an_error_that_names_why_and_nothing_is_written(string sql, string code, string mention)

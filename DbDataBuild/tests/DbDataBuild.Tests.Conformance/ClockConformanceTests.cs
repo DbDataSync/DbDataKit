@@ -8,7 +8,7 @@ namespace DbDataBuild.Tests.Conformance;
 /// The clock functions the planning connections keep as calls (docs/research/duckdb-2.0/README.md, section 2026-10-15), on the real engines. A query that uses `current_date`, `now()` and their relatives inside another
 /// call is lowered, rendered and run on SQL Server and PostgreSQL; the rows are DuckDB's. The answers cannot depend on which day the test runs, so each query compares a clock call with a date or time derived
 /// from the same call or with the probe table's fixed dates, and the rendered text must carry no date literal (a folded clock would be one). On DuckDB 2.0 the lowering only keeps the calls because of the replacements:
-/// `scripts/test-duckdb-preview.sh` with TEST_PROJECT=tests/DbDataBuild.Tests.Conformance runs this against it.
+/// was run against the DuckDB 2.0 preview before 2.0.0 was released (scripts/test-duckdb-preview.sh, retired in K12).
 /// </summary>
 public class ClockConformanceTests
 {

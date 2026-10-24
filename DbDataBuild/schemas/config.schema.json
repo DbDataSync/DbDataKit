@@ -51,7 +51,7 @@
       }
     },
     "connections": {
-      "description": "Named database endpoints. A connection named after an engine (sqlserver, fabric, postgres) exists without being declared; declaring it sets its version. Any other name needs an `engine`. The name is part of the login's environment variable: DBDATABUILD_<NAME>_READ and _WRITE.",
+      "description": "Named database endpoints. A connection named after an engine (sqlserver, fabric, postgres) exists without being declared; declaring it sets its version. Any other name needs an `engine`. The name is part of the login's environment variable: DBDATA_BUILD_<NAME>_READ and _WRITE.",
       "type": "object",
       "properties": {
         "sqlserver": {
@@ -1351,6 +1351,16 @@
                 "description": "How often the plan is meant to run, for example `15m`, `1h`, `1d`, `1w`. `connection status` and `connection monitor` warn when the last run is older than this (overdue) or took longer (slow) and name the slowest load.",
                 "type": "string",
                 "pattern": "^[1-9][0-9]{0,5}[smhdw]$"
+              },
+              "schedule": {
+                "description": "When the Build server runs the plan: a cron expression, for example `15 * * * *` or `0 2 * * 1-5`. Without it the plan runs only when asked. Declared in the project, so adding or changing a schedule is a commit.",
+                "type": "string",
+                "minLength": 1
+              },
+              "time_zone": {
+                "description": "The time zone `schedule` is read in (an IANA or Windows id such as `Europe/Berlin`); UTC when absent. Only with `schedule`.",
+                "type": "string",
+                "minLength": 1
               },
               "parallel": {
                 "description": "How many loads may run together. Validated and kept; parallelism is a later step.",

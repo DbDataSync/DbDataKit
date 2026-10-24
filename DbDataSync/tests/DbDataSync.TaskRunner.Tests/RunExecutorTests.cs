@@ -1,9 +1,9 @@
 using System.Diagnostics;
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Core.Config;
 using DbDataSync.Core.Sql;
 using DbDataSync.Scripting;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.MsSql;
 using DbDataSync.Libraries;

@@ -30,8 +30,8 @@ public enum LimitStyle { Limit, Top, Fetch }
 public sealed record DialectProfile(string Name, string QuoteOpen, string QuoteClose, ParameterStyle Parameters, string Ping, CatalogStyle Catalog, IdentifierCase Case, LimitStyle Limit,
     IReadOnlyDictionary<string, string> Types, string? Extends = null)
 {
-    /// <summary>An identifier in this dialect's quotes; a closing quote inside the name is doubled.</summary>
-    public string Quote(string identifier) => QuoteOpen + identifier.Replace(QuoteClose, QuoteClose + QuoteClose, StringComparison.Ordinal) + QuoteClose;
+    /// <summary>An identifier in this dialect's quotes; a closing quote inside the name is doubled. A profile that quotes like the shared dialect of its name (a built-in) quotes through it; a project's own profile with other quote characters keeps its own rule.</summary>
+    public string Quote(string identifier) => SharedQuoting.For(Name) is { } shared && shared.Quote("a") == QuoteOpen + "a" + QuoteClose ? shared.Quote(identifier) : QuoteOpen + identifier.Replace(QuoteClose, QuoteClose + QuoteClose, StringComparison.Ordinal) + QuoteClose;
 
     /// <summary>
     /// A SELECT bounded to <paramref name="rows"/> rows, in this dialect's <see cref="Limit"/> style, with the original as a derived table: the one way the tool makes a bounded read of an origin (to learn the columns a

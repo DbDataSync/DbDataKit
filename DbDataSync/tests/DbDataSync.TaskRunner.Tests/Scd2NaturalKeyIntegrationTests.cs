@@ -1,6 +1,6 @@
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Core.Sql;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
@@ -183,6 +183,7 @@ public sealed class Scd2NaturalKeyIntegrationTests : IAsyncLifetime
             DriverType = DriverIds.MsSql,
             Host = "localhost",
             Port = 14330,
+            Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = _databaseName,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",

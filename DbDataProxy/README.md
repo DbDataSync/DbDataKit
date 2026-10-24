@@ -13,18 +13,18 @@ Flight SQL client ──gRPC/TLS──▶ DbDataProxy (x64) ──▶ SQL Server
 
 * .NET 10, Kestrel, runs as a Windows service (also systemd/Docker). Windows Server 2016+ is supported.
   IIS is not used: gRPC over IIS needs HTTP/2 response trailers, which Windows Server 2016 IIS lacks.
-* Standalone: a self-contained single-file `DbDataProxy.exe` that generates its own self-signed TLS certificate.
+* Standalone: a self-contained single-file `dbdataproxy.exe` that generates its own self-signed TLS certificate.
 
 ## Quick start
 
 ```powershell
-./build/publish.ps1                 # -> artifacts/publish/win-x64 (DbDataProxy.exe + worker\)
+./build/publish.ps1                 # -> artifacts/publish/win-x64 (dbdataproxy.exe + worker\)
 cd artifacts/publish/win-x64
-./DbDataProxy.exe hash-password     # prompts; paste the hash into the settings file
+./dbdataproxy.exe secret hash       # prompts (or reads standard input); paste the hash into the settings file
 # edit %ProgramData%\DbDataProxy\appsettings.json (see appsettings.example.json), then:
-./DbDataProxy.exe                   # run in a console
-./DbDataProxy.exe service install   # or register the Windows service (elevated prompt), then: DbDataProxy service start
-./DbDataProxy.exe query --insecure --user me --password ... --datasource erp --sql "SELECT 1"
+./dbdataproxy.exe server run         # run in a console (there is no default command)
+./dbdataproxy.exe service install   # or register the Windows service (elevated prompt), then: dbdataproxy service start
+./dbdataproxy.exe query run --insecure --user me --password ... --datasource erp --sql "SELECT 1"
 ```
 
 On first start the proxy writes `dbdataproxy-selfsigned.pfx` and `.cer` to its data directory
@@ -42,13 +42,18 @@ earlier version (empty password) is re-encrypted in place on the first start, ke
 `Tls:CertificatePassword` set in the configuration is still honoured for the self-signed file; remove it to use the
 protected password. Manage the certificate with `DbDataProxy cert show|ensure|renew|check`.
 
+## JSON output
+
+Every command takes `--format json` and writes one document instead of text: `{ schema, command, tool_version, exit_code, ok, data, messages, errors }`. `data` is what the command found or did
+(its shape is the command's own, listed in `schemas/output.schema.json`), `messages` and `errors` are the lines the text form writes to standard output and standard error, and `exit_code` is the code text mode
+exits with (0 done, 1 the answer is no or it failed, 2 used wrongly). The schema is generated from the commands and a test fails when it is out of date (`UPDATE_GOLDEN=1` rewrites it).
+
 ## Service, containers and health
 
 ```
-DbDataProxy service install [--name N] [--account A] [--password-secret env:NAME|file:PATH] [--data-dir PATH] [--dry-run]
-DbDataProxy service uninstall|start|stop|restart|status|doctor [--name N]
-DbDataProxy service unit [--name N] [--exec /opt/dbdataproxy/DbDataProxy]     # hardened systemd unit (also: service --systemd)
-DbDataProxy install|uninstall                                                  # same as service install|uninstall
+dbdataproxy service install [--name N] [--account A] [--password-secret env:NAME|file:PATH] [--data-dir PATH] [--dry-run]
+dbdataproxy service uninstall|start|stop|restart|status|doctor [--name N]
+dbdataproxy service unit [--name N] [--exec /opt/dbdataproxy/dbdataproxy]     # hardened systemd unit that runs "server run"
 ```
 
 The service is registered through the Service Control Manager API (no `sc.exe`). By default it runs as the virtual account
@@ -62,7 +67,7 @@ the counter resets after a day) and starts at boot.
 
 The proxy answers `GET /health`, `/health/live`, `/health/ready` and `/version` on its HTTP/2 listener, and on stop waits for
 running queries (`Proxy:Hosting:DrainSeconds`, default 30) before shutting down. `Proxy:Hosting:MaxConcurrentRequests`
-(default 1000) caps in-flight requests; further ones get 503. `DbDataProxy --healthcheck` probes the local proxy (HTTP/2, TLS
+(default 1000) caps in-flight requests; further ones get 503. `dbdataproxy health check` probes the local proxy (HTTP/2, TLS
 certificate accepted for loopback only) and exits 0 or 1, for a container HEALTHCHECK.
 
 ## Server info (GetSqlInfo)
@@ -127,7 +132,7 @@ The script finds the newest stable DbDataProxy release, verifies the download ag
 `%ProgramFiles%\DbDataProxy` (`-InstallDir`), stops and restarts a running service around an upgrade (the settings are in
 `%ProgramData%`, so replacing the program files never touches them), and registers the service only with `-InstallService`. Also `-Version`, `-IncludePrerelease`, `-DryRun` (needs no
 elevation) and `-Repo`; Scoop works too: `scoop install https://github.com/DbDataSync/DbDataKit/releases/download/dbdataproxy/dist/dbdataproxy.json`
-(registering the service is then `DbDataProxy service install` from an elevated prompt).
+(registering the service is then `dbdataproxy service install` from an elevated prompt).
 
 ## Configuration
 
@@ -264,8 +269,32 @@ Configuration values that are secrets can be references instead of literals (sha
 |---|---|
 | `env:NAME` | the environment variable `NAME` |
 | `file:C:\secrets\erp.txt` | the file's contents, trimmed (Docker/Kubernetes secrets, systemd `LoadCredential`) |
-| `secret:dbdata:proxy:datasource:erp` | environment variable `DBDATA_SECRET_DBDATA_PROXY_DATASOURCE_ERP`; or, when `$CREDENTIALS_DIRECTORY` is set, the file `dbdata_proxy_datasource_erp` in it; or, on Windows, `<DataDirectory>\secrets\dbdata~proxy~datasource~erp.secret` (DPAPI) |
-| `dpapi:<base64>` | an inline DPAPI blob (Windows, machine scope). Create one with `DbDataProxy protect-secret` |
+| `secret:dbdata:proxy:datasource:erp:password` | the **encrypted secret store** of this installation, `<DataDirectory>/secrets/secrets.yaml` (set with `DbDataProxy secret set`, below); a name the store does not have falls through to the environment variable `DBDATA_SECRET_DBDATA_PROXY_DATASOURCE_ERP_PASSWORD`, then, when `$CREDENTIALS_DIRECTORY` is set, to the file `dbdata_proxy_datasource_erp_password` in it |
+| `dpapi:<base64>` | an inline DPAPI blob (Windows, machine scope), for one field where a store is not wanted. Create one with `dbdataproxy secret protect` (or `protect-secret`) |
+
+#### The secret store
+
+`secret:` names live in an encrypted file, `<DataDirectory>/secrets/secrets.yaml`: every value AES-256-GCM, with the secret's name as associated data (a value copied to another name does not decrypt),
+outside any git-tracked configuration. The key is separate from the file:
+
+* **Windows**: protected by DPAPI (machine scope, product entropy) in `<DataDirectory>\secrets\keys`, the directory restricted to the service account, SYSTEM and Administrators.
+* **Linux and macOS**: a file in `<DataDirectory>/secrets/keys` that only its owner can read (mode 0600 in a 0700 directory, owned by the user the proxy runs as). **The proxy refuses to start if that file or directory can be reached by anyone else** (the way ssh refuses a private key), and says which `chmod` fixes it.
+* **From outside**: `Proxy:Secrets:KeyFile` (or the environment variable `DBDATA_SECRETS_KEY_FILE`) names a key the platform provides: a Docker or Kubernetes secret, a systemd credential; 32 raw bytes, or base64 or hex text. Images never contain a key.
+
+The first start makes the key. **Back up the key separately from `secrets.yaml`: either one alone is useless.** A DPAPI key cannot be copied to another machine; to move a server, `secret export` and `secret import`.
+
+```
+DbDataProxy secret set dbdata:proxy:datasource:erp:password    # the value from a hidden prompt, or piped on stdin; never the command line
+DbDataProxy secret list [prefix]                               # names, when each was written, the key it uses; never values
+DbDataProxy secret check                                       # every secret reference in the settings resolves? (exit 1 if not)
+DbDataProxy secret delete <name>
+DbDataProxy secret rotate-key                                  # a new key; every value encrypted again under it; the old key deleted
+DbDataProxy secret export backup.yaml                          # to move a server: encrypted under a passphrase (PBKDF2-SHA256, 600,000 rounds)
+DbDataProxy secret import backup.yaml [--overwrite]
+DbDataProxy secret protect                                     # Windows: an inline dpapi: value for one field
+```
+
+No command prints a secret's value. The old per-secret DPAPI files (`secrets\dbdata~proxy~...secret`) are no longer read: set the values again.
 
 Where they work: a data source `ConnectionString` (the whole string, or just the value of a password key:
 `Server=SQL01;User Id=proxy_reader;Password=env:ERP_DB_PASSWORD`), `Proxy:Tls:CertificatePassword` and
@@ -281,7 +310,7 @@ Every resolved secret is registered with a redactor that scrubs all log output (
 text of errors returned to clients; `Password=...`-style fragments are scrubbed even when the value is unknown.
 
 Password hashes (`Proxy:Users:*:PasswordHash`) use the shared PBKDF2 hasher in the format `PBKDF2-SHA256$iterations$salt$hash`,
-the same format `hash-password` has always written, so existing hashes verify unchanged.
+the same format `secret hash` (formerly `hash-password`) has always written, so existing hashes verify unchanged.
 
 ### Authentication
 
@@ -309,7 +338,7 @@ Always run with TLS (`SelfSigned`, `File` or `Store`) outside local testing: cre
 ### 32-bit ODBC
 
 A 64-bit process cannot load 32-bit drivers, so `Bitness: "x86"` ODBC sources are executed by
-`DbDataProxy.Worker.exe` (published `win-x86`, in `worker\`). The proxy starts it on first use, talks to it over a
+`dbdataproxy-worker.exe` (published `win-x86`, in `worker\`). The proxy starts it on first use, talks to it over a
 loopback Flight connection guarded by a random per-launch secret, restarts it if it dies and stops it with the
 service; the worker also exits if the proxy disappears. If you publish the whole proxy as `win-x86`
 (`./build/publish.ps1 -Runtime win-x86`) the sources run in-process and no worker is needed.

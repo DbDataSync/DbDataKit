@@ -5,7 +5,7 @@ namespace DbDataProxy.Tests.Auth;
 
 /// <summary>
 /// Pins the stored password format. The golden hashes were produced by the previous, Proxy-owned
-/// <c>PasswordHasher</c> (<c>DbDataProxy hash-password</c> before the shared hasher was adopted); the shared
+/// <c>PasswordHasher</c> (<c>dbdataproxy hash-password</c> before the shared hasher was adopted); the shared
 /// <c>DbDataKit.Secrets.PasswordHasher</c> behind the adapter must keep verifying them.
 /// </summary>
 public class PasswordHasherCompatibilityTests

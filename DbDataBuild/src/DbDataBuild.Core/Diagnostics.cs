@@ -191,7 +191,7 @@ public static class DiagnosticCatalog
         "PostgreSQL cuts an identifier longer than 63 bytes without saying so, so a column the model declares as `a_very_long_name...` exists in the database under a shorter name, the shape the plan expects is never found, and the step fails after it ran. SQL Server refuses a name over 128 characters. The check is made for every connection the model is built on, with the limit of its engine, before anything is planned.");
     public static readonly DiagnosticDescriptor DatabaseErrorUnhandled = E("242", "The database refused or lost a command and the tool had no more to say",
         "a login the server accepts, a server that stays reachable and statements it can run",
-        "Read the error number: 18456 (SQL Server) and 28P01 (PostgreSQL) are a refused login (check the connection string in DBDATABUILD_<CONNECTION>_READ and _WRITE); 53300 and 53200 are too many connections or no memory; a number of 40000 or more on SQL Server is a connection the server closed. The statement log under .dbdatabuild/statement-log/ says what had run.",
+        "Read the error number: 18456 (SQL Server) and 28P01 (PostgreSQL) are a refused login (check the connection string in DBDATA_BUILD_<CONNECTION>_READ and _WRITE); 53300 and 53200 are too many connections or no memory; a number of 40000 or more on SQL Server is a connection the server closed. The statement log under .dbdatabuild/statement-log/ says what had run.",
         "A database exception that no command handled itself. The tool shows its type and its error number and never the driver's message, because a message can quote a server name, a login or a value from the data (DESIGN.md 14.2). It is not a defect of the tool: the command stopped because the database did not do what was asked, and everything that had been sent is in the statement log.");
     public static readonly DiagnosticDescriptor InfoOutOfBounds = E("243", "A title, description, tag or property is outside its limits",
         "a title of one line and at most 200 characters; a description of at most 4000; tags of at most 128 characters made of letters, digits, `_`, `-`, `.` and `:`; property keys of at most 128 characters of the same kind that start with a letter or `_` and do not end in `-`; property values of at most 4000 characters",
@@ -308,7 +308,7 @@ public static class DiagnosticCatalog
     public static readonly DiagnosticDescriptor QueryNotLowerable = E("324", "Model query cannot be lowered",
         "A query whose bound plan the lowerer knows: tables and views, joins, filters, aggregates, windows, set operations, CTEs, and the expressions in docs/research/duckdb-plan-lowering.",
         "Rewrite the construct the message names, or turn lowering off with `lowering: { enabled: false }` in dbdatabuild.yml.",
-        "Every model query is bound by DuckDB and lowered to one explicit query (star, USING, GROUP BY ALL, macros and implicit casts expanded) before it is checked against the support matrix and transpiled. A construct with no lowering yet (correlated subqueries, UNNEST, sampling, DISTINCT ON, nested types) is an error, not a silent fallback.");
+        "Every model query is bound by DuckDB and lowered to one explicit query (star, USING, GROUP BY ALL, macros and implicit casts expanded) before it is checked against the support matrix and transpiled. A construct with no lowering yet (UNNEST, sampling, DISTINCT ON, nested types, and `x op ANY/ALL (subquery)` in the CASE form DuckDB 2.0 plans it in, whose NULL result SQL Server and PostgreSQL cannot reproduce; `median`/`quantile_cont` over a DECIMAL, which 2.0 interpolates in a way no target reproduces to the last digit; and `getvariable`, `current_setting`, `current_schemas` and `getenv`, whose answer 2.0 folds into a constant) is an error, not a silent fallback.");
 
     public static readonly DiagnosticDescriptor MacroDefaultIsClock = E("325", "Macro parameter defaults to a clock or session function",
         "A macro parameter whose default is a constant: a literal, or an expression of literals. The clock (`current_date`, `now()`, `today()`, `current_timestamp`, `localtimestamp`) and the session functions (`version()`, `current_schema()`) are not constants.",
@@ -533,6 +533,22 @@ public static class DiagnosticCatalog
         "n/a", "Report this with the command line used.",
         "An unhandled exception occurred. This is a bug in the tool, not in your configuration.");
 
+    // 470..472: the project file commands (`project file ...`)
+    public static readonly DiagnosticDescriptor ProjectFilePathRefused = E("470", "A path is outside what the project file commands may touch",
+        "a relative path inside the project, written with `/` or `\\`, that does not climb out with `..`, is not absolute, goes through no symbolic link, and is not under `.git/`",
+        "Name the file relative to the project root (`models/marts/fct_orders.sql`).",
+        "`project file` is how a console or an agent edits a project, so it is confined to the project tree: a path that escapes it, an absolute path, a path through a link that leaves the tree, and the repository's own `.git` folder are refused before anything is read or written.");
+
+    public static readonly DiagnosticDescriptor ProjectFileHashStale = E("471", "The file is not the version the change was based on",
+        "a write, move or delete that carries the hash of the file's current content (`--expect-hash`), or `--create` for a file that must not exist yet",
+        "Read the file again (`project file read`), apply the change to what is there, and send the new hash.",
+        "Every change names the version it was made from, so a second editor's work is never overwritten silently. The hash is the SHA-256 of the file's text with line endings read as LF, as `project file list` and `read` report it.");
+
+    public static readonly DiagnosticDescriptor ProjectFileUnusable = E("472", "The file cannot be used as asked",
+        "an existing text file (UTF-8, at most 1 MiB) to read, move or delete; a destination that does not exist yet for a move or `--create`",
+        "Check the path with `project file list`; binary or large files are not edited through these commands.",
+        "The file is missing, is a directory, is not UTF-8 text, is larger than the limit, or the destination of a move already exists.");
+
     public static readonly IReadOnlyList<DiagnosticDescriptor> All =
     [
         YamlSyntax, DuplicateKey, UnsupportedYamlFeature, UnknownKey, MissingKey, InvalidValue, NameMismatch, OrphanFile, ConfigNotFound, CopyOriginDiffers, ModelReadsAnotherConnection, NativeReadsNotDeclared, StringsCompareDifferently, TrimmedColumnHasTrailingSpaces, QueryHeadInvalid, LoadSliceSourceNotIndexed, ReadsInconsistentHistory, NameTooLongForEngine, DatabaseErrorUnhandled, InfoOutOfBounds, NativeDefinitionChanged, NativeDefinitionNotChecked, TrackingNotConfigured,
@@ -544,7 +560,7 @@ public static class DiagnosticCatalog
         DefinitionOutOfSync, RenderedFileOutOfDate, ObjectChangedOutsideTool, LoadDefinitionChanged, AdoptionDeclined, UpstreamBlocked, ModelUnplannable, PlanFileInvalid, StepNeedsAllowance, PlanIsStale, PlanAlreadyStarted, ApplyLockHeld, StepFailed, RefreshPlanMissing, RefreshCheckFailed, RefreshFileChanged, RefreshPlanUndeclared, RefreshMembershipDuplicate, RefreshMembershipInvalid, KindWrittenOldWay, KindShapeInvalid, RefreshInputMissing, RefreshPlanUnknown, ReadOnlyConnectionNotWritable, DialectProfileInvalid, DialectLockInvalid, DialectLockMissing, DialectLockStale, OriginDialectChanged, ProjectUpdateDiffers, InputResolverInvalid, InputsDependOnEachOther, InputNotResolved, InputsMoved, StepResultDiffers, DirtyWorkingTree, HistoryInconsistent, DefinitionFileChanged, DefinitionNotEditable,
         TestFailed, TestCouldNotRun, TestNotASelect,
         LoginNotConfigured, GateRefused, StatementLogUnavailable, ReadStatementRefused, TrackingNotInitialized,
-        InternalError,
+        InternalError, ProjectFilePathRefused, ProjectFileHashStale, ProjectFileUnusable,
     ];
 
     public static DiagnosticDescriptor? Find(string code) =>

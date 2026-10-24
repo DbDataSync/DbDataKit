@@ -15,12 +15,6 @@ public class PlanLowererTests
     {
         var c = PlanningConnection.Open(lockDown: false);          // the connection that plans is the one that answers too: on DuckDB 2.0 it keeps the clock calls in the plan, and its replacements return the real time
         Exec(c, File.ReadAllText(Path.Combine(RepoRoot(), "spike", "seed.duckdb.sql")));
-        // DuckDB 2.0 raises for `%` and `//` by zero where 1.x gave NULL, and the lowering writes the 1.x answer (NULLIF); the oracle answers like 1.x so the rows can be compared (owner decision pending)
-        using (var probe = c.CreateCommand())
-        {
-            probe.CommandText = "SELECT count(*) FROM duckdb_settings() WHERE name = 'error_on_division_by_zero'";
-            if (Convert.ToInt64(probe.ExecuteScalar()) > 0) Exec(c, "SET error_on_division_by_zero = false");
-        }
         return c;
     }
 
@@ -372,7 +366,7 @@ public class PlanLowererTests
     [InlineData("SELECT median(a) AS m FROM t")]
     [InlineData("SELECT quantile_cont(a, 0.9) AS q, quantile_cont(a, 0.1) AS p FROM t")]
     [InlineData("SELECT quantile_disc(a, 0.5) AS q, quantile_disc(a, 0.0) AS z, quantile_disc(a, 1.0) AS o FROM t")]
-    [InlineData("SELECT id % 2 AS g, median(a) AS m, quantile_cont(CAST(a AS DECIMAL(10, 2)), 0.75) AS q, count(*) AS n FROM t GROUP BY id % 2")]
+    [InlineData("SELECT id % 2 AS g, median(a) AS m, quantile_cont(CAST(a AS DOUBLE), 0.75) AS q, count(*) AS n FROM t GROUP BY id % 2")]
     [InlineData("SELECT median(a) FILTER (WHERE id > 1000) AS m FROM t")]
     public void Median_and_quantiles_are_ranked_and_read_off_with_the_same_values_as_DuckDB(string source)
     {
@@ -385,19 +379,42 @@ public class PlanLowererTests
         Assert.Equal(Rows(c, source, false), Rows(c, lowered, false));
     }
 
+    private static void CreateDecimalQuantileTable(DuckDBConnection c) =>
+        Exec(c, "CREATE TABLE dq AS SELECT i % 9 AS g, CASE WHEN i % 40 = 0 THEN NULL ELSE CAST((hash(i) % 100000000) / 10000.0 AS DECIMAL(19, 4)) END AS d FROM range(1, 1500) t(i)");
+
+    /// <summary>
+    /// DuckDB 2.0 interpolates a DECIMAL quantile on its own terms, and no formula tried in double or exact arithmetic reproduces it on every group and fraction (K10, D8), so the lowering refuses it
+    /// and says to cast to DOUBLE, where the interpolation is the one it has always matched.
+    /// </summary>
     [Theory]
-    [InlineData("SELECT g, median(d) AS m, quantile_cont(d, 0.9) AS p, quantile_cont(d, 0.1) AS q, quantile_disc(d, 0.75) AS r FROM dq GROUP BY g")]
-    [InlineData("SELECT median(d) AS m, quantile_cont(d, 0.37) AS p, quantile_cont(CAST(d AS DECIMAL(18, 2)), 0.9) AS q FROM dq")]
-    public void Quantiles_of_decimals_cut_to_a_whole_number_of_the_scale_like_DuckDB_and_agree_on_many_rows(string source)
+    [InlineData("SELECT g, median(d) AS m FROM dq GROUP BY g")]
+    [InlineData("SELECT g, quantile_cont(d, 0.9) AS p FROM dq GROUP BY g")]
+    [InlineData("SELECT median(d) AS m, quantile_cont(CAST(d AS DECIMAL(18, 2)), 0.9) AS q FROM dq")]
+    public void Quantiles_of_decimals_are_refused_with_the_fix(string source)
     {
         using var c = Open();
-        using (var cmd = c.CreateCommand())
-        {
-            cmd.CommandText = "CREATE TABLE dq AS SELECT i % 9 AS g, CASE WHEN i % 40 = 0 THEN NULL ELSE CAST((hash(i) % 100000000) / 10000.0 AS DECIMAL(19, 4)) END AS d FROM range(1, 1500) t(i)";
-            cmd.ExecuteNonQuery();
-        }
+        CreateDecimalQuantileTable(c);
+        var ex = Assert.Throws<LoweringException>(() => Lower(c, source));
+        Assert.Contains("over a DECIMAL", ex.Message);
+        Assert.Contains("CAST(x AS DOUBLE)", ex.Message);
+    }
+
+    /// <summary>
+    /// A DOUBLE quantile agrees to six decimals, not to the last bit: DuckDB 2.0's interpolation differs from the lowered one by an ulp now and then (none of the forms of lo + (hi - lo) * d tried reproduces
+    /// it on every group and fraction), as the engines' own PERCENTILE_CONT will.
+    /// </summary>
+    [Theory]
+    [InlineData("SELECT g, median(CAST(d AS DOUBLE)) AS m, quantile_cont(CAST(d AS DOUBLE), 0.9) AS p, quantile_cont(CAST(d AS DOUBLE), 0.1) AS q, quantile_disc(d, 0.75) AS r FROM dq GROUP BY g")]
+    [InlineData("SELECT median(CAST(d AS DOUBLE)) AS m, quantile_cont(CAST(d AS DOUBLE), 0.37) AS p, quantile_cont(CAST(d AS DOUBLE), 0.9) AS q FROM dq")]
+    public void Quantiles_of_decimals_cast_to_DOUBLE_agree_with_DuckDB_to_six_decimals_on_many_rows(string source)
+    {
+        using var c = Open();
+        CreateDecimalQuantileTable(c);
         var lowered = Lower(c, source);
-        Assert.Equal(Rows(c, source, false), Rows(c, lowered, false));
+        Assert.DoesNotContain("median(", lowered);
+        Assert.DoesNotContain("quantile_", lowered);
+        string Rounded(string sql) => $"SELECT * REPLACE (round(m, 6) AS m, round(p, 6) AS p, round(q, 6) AS q) FROM ({sql})";
+        Assert.Equal(Rows(c, Rounded(source), false), Rows(c, Rounded(lowered), false));
     }
 
     [Theory]
@@ -654,9 +671,9 @@ public class PlanLowererTests
         { "SELECT id, round(a * 0.5) AS v FROM t", "round(" },
         { "SELECT id, year(d) AS y, month(d) AS m, day(d) AS dd, quarter(d) AS q, hour(ts) AS h, minute(ts) AS mi, second(ts) AS s2 FROM t", "date_part('year', d)" },
         { "SELECT id, dayofweek(d) AS w, dayofyear(d) AS y, isodow(d) AS i FROM t", "date_part('dow', d)" },
-        { "SELECT id, a % b AS v FROM t", "NULLIF(b, 0)" },
+        { "SELECT id, a % b AS v FROM t WHERE b <> 0", "(a % b)" },
         { "SELECT id, a % 3 AS v FROM t", "(a % 3)" },
-        { "SELECT id, a // b AS v FROM t", "trunc(" },
+        { "SELECT id, a // b AS v FROM t WHERE b <> 0", "(a % b)" },
         { "SELECT id, CAST(a * 0.5 AS INTEGER) AS v FROM t", "decimal-to-int" },
         { "SELECT id, CAST(CAST(a AS DECIMAL(10, 2)) AS SMALLINT) AS v FROM t", "round(" },
         { "SELECT id, CAST(a / 2 AS INTEGER) AS v FROM t", "double-to-int" },
@@ -670,6 +687,72 @@ public class PlanLowererTests
         { "SELECT id, d1 - id AS v FROM t", "date-plus-days" },
         { "SELECT id, id + d1 AS v FROM t", "date-plus-days" },
     };
+
+    /// <summary>
+    /// `%` and `//` by zero raise in DuckDB 2.0 (1.x gave NULL), in SQL Server and in PostgreSQL, so the lowering writes them as they are (K09, D8): the lowered query raises
+    /// wherever the original does, and a NULL divisor is still NULL.
+    /// </summary>
+    [Theory]
+    [InlineData("SELECT id, a % b AS v FROM t")]
+    [InlineData("SELECT id, a // b AS v FROM t")]
+    [InlineData("SELECT id, a % 0 AS v FROM t")]
+    [InlineData("SELECT id, a // 0 AS v FROM t")]
+    public void A_division_by_zero_raises_in_the_lowered_query_as_in_the_original(string source)
+    {
+        using var c = Open();
+        var lowered = Lower(c, source);
+        Assert.DoesNotContain("NULLIF", lowered);
+        Assert.ThrowsAny<Exception>(() => Rows(c, source, false));
+        Assert.ThrowsAny<Exception>(() => Rows(c, lowered, false));
+    }
+
+    [Fact]
+    public void Integer_division_is_the_exact_truncated_quotient_written_with_a_modulo_that_raises_first()
+    {
+        using var c = Open();
+        var lowered = Lower(c, "SELECT id, a // b AS v FROM t WHERE b <> 0");
+        Assert.Contains("% b", lowered);
+        Assert.DoesNotContain("trunc", lowered);
+        // negative operands truncate toward zero, as DuckDB's own // does
+        foreach (var (x, y) in new[] { (7, 2), (-7, 2), (7, -2), (-7, -2), (0, 5), (6, 3), (-6, 3), (1, 7), (-1, 7) })
+        {
+            var source = $"SELECT CAST({x} AS INTEGER) // CAST({y} AS INTEGER) AS v";
+            Assert.Equal(Rows(c, source, false), Rows(c, Lower(c, source), false));
+        }
+    }
+
+    [Fact]
+    public void Integer_division_of_an_expression_that_is_not_deterministic_is_refused()
+    {
+        using var c = Open();
+        var ex = Assert.Throws<LoweringException>(() => Lower(c, "SELECT CAST(random() * 100 AS INTEGER) // CAST(id AS INTEGER) AS v FROM t"));
+        Assert.Contains("not deterministic", ex.Message);
+    }
+
+    /// <summary>DuckDB 2.0 folds more into constants and writes some of them in ways 1.x did not (K11): a NaN as a bare JSON token, a 32-bit constant as a plain number, a date operand without a type of its own.</summary>
+    [Theory]
+    [InlineData("SELECT isnan(CAST('NaN' AS DOUBLE)) AS v", "CAST('NaN' AS DOUBLE)")]
+    [InlineData("SELECT isinf(CAST('Infinity' AS DOUBLE)) AS v", "CAST('Infinity' AS DOUBLE)")]
+    [InlineData("SELECT isinf(CAST('-Infinity' AS DOUBLE)) AS v", "CAST('-Infinity' AS DOUBLE)")]
+    [InlineData("SELECT CAST(0.1 AS FLOAT) AS v", "CAST(0.1 AS FLOAT)")]
+    [InlineData("SELECT CAST(d AS REAL) + CAST(0.1 AS REAL) AS v FROM (SELECT 1.5 AS d)", "CAST(0.1 AS FLOAT)")]
+    [InlineData("SELECT dt - DATE '2024-01-01' AS v FROM (SELECT DATE '2024-03-01' AS dt)", "date_diff('day'")]
+    [InlineData("SELECT strftime(DATE '2024-02-29', '%Y') AS v", "2024")]
+    public void A_constant_the_plan_folds_keeps_its_type_and_reads(string source, string expected)
+    {
+        using var c = Open();
+        var lowered = Lower(c, source);
+        Assert.Contains(expected, lowered);
+        Assert.Equal(Rows(c, source, false), Rows(c, lowered, false));
+    }
+
+    [Fact]
+    public void A_NULL_divisor_is_still_NULL_and_a_non_zero_one_divides_alike()
+    {
+        using var c = Open();
+        foreach (var source in new[] { "SELECT a % NULL AS v FROM t", "SELECT a // NULL AS v FROM t", "SELECT id, a % 3 AS v, a // 3 AS w FROM t" })
+            Assert.Equal(Rows(c, source, false), Rows(c, Lower(c, source), false));
+    }
 
     [Theory, MemberData(nameof(Probed))]
     public void Constructs_the_engine_probes_found_wrong_lower_to_queries_with_DuckDBs_own_rows(string source, string expectedInLowered)

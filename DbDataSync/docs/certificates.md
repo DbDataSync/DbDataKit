@@ -20,4 +20,4 @@ The command reference is in [configuration.md](configuration.md#dbdatasync-confi
 the settings are under [`DbDataSync:Certificates:*`](configuration.md#dbdatasynccertificates) and
 [`Kestrel:Certificates:Default:*`](configuration.md#kestrelcertificatesdefault).
 
-`dbdatasync config cert status` reports what is configured right now, on any platform.
+`dbdatasync cert status` reports what is configured right now, on any platform.

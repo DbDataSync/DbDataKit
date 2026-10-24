@@ -2,7 +2,6 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using ClrKernel.Core.Secrets;
 using DbDataSync.Api.Services;
 using DbDataSync.Core.Config;
 using DbDataSync.Core.Secrets;
@@ -76,6 +75,7 @@ public sealed class RawQuerySourceTests(TestApiFactory factory) : IClassFixture<
             DriverType = DriverIds.MsSql,
             Host = "localhost",
             Port = 14330,
+            Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = _databaseName,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",

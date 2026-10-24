@@ -18,15 +18,20 @@
 #             DBKIT_TEST_MSSQL_ODBC       ODBC connection string for "ODBC Driver 18 for SQL Server"
 #   postgres  DBKIT_TEST_POSTGRES         Npgsql connection string
 #             DBKIT_TEST_POSTGRES_HOST / _PORT / _USER / _PASSWORD / _DB
+#   mysql     DBKIT_TEST_MYSQL            MySqlConnector connection string (root)
+#   mariadb   DBKIT_TEST_MARIADB          the same, for MariaDB
+#             DBKIT_TEST_MYSQL_HOST / _PORT / _USER / _PASSWORD / _DB (and DBKIT_TEST_MARIADB_...)
+#   oracle    DBKIT_TEST_ORACLE           ODP.NET connection string (user dbkit, service FREEPDB1)
+#             DBKIT_TEST_ORACLE_HOST / _PORT / _SERVICE / _USER / _PASSWORD
 #
-# Set TESTENV_ASSUME_RUNNING="mssql postgres" to print variables without Docker (testenv/selftest.sh does).
+# Set TESTENV_ASSUME_RUNNING="mssql postgres mysql" to print variables without Docker (testenv/selftest.sh does).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 compose=(docker compose -f "$here/docker-compose.yml")
 password="${DBKIT_TEST_PASSWORD:-DbKit_Test_Pw1}"
 host=127.0.0.1
-engines_all=(mssql postgres)
+engines_all=(mssql postgres mysql mariadb oracle)
 
 running() {
   if [ -n "${TESTENV_ASSUME_RUNNING+x}" ]; then
@@ -68,6 +73,27 @@ canonical() {
     echo "DBKIT_TEST_POSTGRES_PASSWORD=$password"
     echo "DBKIT_TEST_POSTGRES_DB=postgres"
     echo "DBKIT_TEST_POSTGRES=Host=$host;Port=15432;Username=postgres;Password=$password;Database=postgres"
+  fi
+  local engine port
+  for engine in mysql mariadb; do
+    if grep -qx "$engine" <<<"$up"; then
+      port=13306; [ "$engine" = mariadb ] && port=13307
+      local name="${engine^^}"
+      echo "DBKIT_TEST_${name}_HOST=$host"
+      echo "DBKIT_TEST_${name}_PORT=$port"
+      echo "DBKIT_TEST_${name}_USER=root"
+      echo "DBKIT_TEST_${name}_PASSWORD=$password"
+      echo "DBKIT_TEST_${name}_DB=dbkit"
+      echo "DBKIT_TEST_${name}=Server=$host;Port=$port;User ID=root;Password=$password;AllowUserVariables=true"
+    fi
+  done
+  if grep -qx oracle <<<"$up"; then
+    echo "DBKIT_TEST_ORACLE_HOST=$host"
+    echo "DBKIT_TEST_ORACLE_PORT=15210"
+    echo "DBKIT_TEST_ORACLE_SERVICE=FREEPDB1"
+    echo "DBKIT_TEST_ORACLE_USER=dbkit"
+    echo "DBKIT_TEST_ORACLE_PASSWORD=$password"
+    echo "DBKIT_TEST_ORACLE=Data Source=$host:15210/FREEPDB1;User Id=dbkit;Password=$password"
   fi
 }
 

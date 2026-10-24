@@ -45,7 +45,7 @@ quintiles, the year-on-year comparison, the on-time flags.
 
 ## Running the cycle on a database
 
-`connection seed` puts the tables of the mapped models in an empty database you do not mind filling; the logins are environment variables (`DBDATABUILD_SQLSERVER_READ` and `DBDATABUILD_SQLSERVER_WRITE`, or `..._POSTGRES_...`).
+`connection seed` puts the tables of the mapped models in an empty database you do not mind filling; the logins are environment variables (`DBDATA_BUILD_SQLSERVER_READ` and `DBDATA_BUILD_SQLSERVER_WRITE`, or `..._POSTGRES_...`).
 Create a SQL Server database case-sensitive (`CREATE DATABASE adventureworks COLLATE Latin1_General_100_CS_AS`) to match the project's string profile; with the server default `connection status` reports DDB-310 for a view column made of literals.
 The numbers below are from a run against SQL Server 2022 (the same cycle ran on PostgreSQL 17 with the profile in the comment at the top of `dbdatabuild.yml`: same counts, with `postgres` as the connection); ids and times differ in yours.
 

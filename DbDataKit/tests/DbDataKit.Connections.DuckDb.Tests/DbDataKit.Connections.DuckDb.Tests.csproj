@@ -5,4 +5,5 @@
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\DbDataKit.Connections.DuckDb\DbDataKit.Connections.DuckDb.csproj" />
   </ItemGroup>
+  <Import Project="..\..\build\DuckDb.Native.targets" />
 </Project>

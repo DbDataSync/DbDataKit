@@ -51,7 +51,7 @@ public class ProjectUpdateMappedModelsTests : IDisposable
         Write("models/src/computed.yml", "name: src.computed\nkind: {native: {access: select, query: \"SELECT 1 AS n\"}}\nconnections=: [analytics]\ncolumns:\n  - {name: n, type: INTEGER}\n");
     }
 
-    private Func<string, string?> Env => v => v == "DBDATABUILD_ANALYTICS_READ" ? Db : null;      // `lost` has no read login
+    private Func<string, string?> Env => v => v == "DBDATA_BUILD_ANALYTICS_READ" ? Db : null;      // `lost` has no read login
 
     private (int Exit, JsonNode Doc, string Text) Cli(params string[] args)
     {
@@ -91,8 +91,8 @@ public class ProjectUpdateMappedModelsTests : IDisposable
         Assert.Equal(0, exit);                                                                      // a skipped connection is a note, not a failure
         var skipped = Source(doc, "src.elsewhere");
         Assert.Equal("skipped", (string)skipped["status"]!);
-        Assert.Contains("DBDATABUILD_LOST_READ", (string)skipped["reason"]!);
-        Assert.Contains("DBDATABUILD_LOST_READ", text);
+        Assert.Contains("DBDATA_BUILD_LOST_READ", (string)skipped["reason"]!);
+        Assert.Contains("DBDATA_BUILD_LOST_READ", text);
         Assert.Equal("skipped", (string)Source(doc, "src.computed")["status"]!);                    // a native model has no table to read, and says so
         Assert.Contains(doc["data"]!["connections"]!.AsArray(), c => (string)c!["connection"]! == "lost" && (string)c["status"]! == "skipped");
         Assert.Contains("amount", File.ReadAllText(Path.Combine(dir, "models", "src", "events.yml")));

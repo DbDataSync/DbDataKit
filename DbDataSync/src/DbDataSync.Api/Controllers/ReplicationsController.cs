@@ -1,6 +1,6 @@
 using DbDataSync.Api.Services;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Api.Auth;
 using DbDataSync.State;
 using Microsoft.AspNetCore.Authorization;

@@ -230,7 +230,7 @@ public sealed class ArrowFlightSqlDriver : IDriver, IConnectionTester, IDialectP
     /// <summary>The returned connection is not open; the caller opens it, which is where authentication
     /// happens.</summary>
     public DbConnection CreateConnection(ConnectionConfig connection, string? credential) =>
-        new FlightSqlConnection(FlightSqlSettings.From(connection, credential), Dialect).WithCommandTimeout(connection);
+        new FlightSqlConnection(FlightSqlSettings.From(connection, credential), Dialect.RenderLiteral).WithCommandTimeout(connection);
 
     // ---- Introspection ----
 
@@ -269,7 +269,7 @@ public sealed class ArrowFlightSqlDriver : IDriver, IConnectionTester, IDialectP
         }
         catch (DbException ex)
         {
-            return new ConnectionTestResult(false, Stopwatch.GetElapsedTime(started), null, ex.Message);
+            return new ConnectionTestResult(false, Stopwatch.GetElapsedTime(started), null, DriverFailures.Describe(ex, DriverIds.ArrowFlightSql));
         }
     }
 

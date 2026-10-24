@@ -32,30 +32,6 @@ public class ProviderTests
         Assert.False(new EnvSecretProvider(secretPrefix: null).CanHandle(SecretRef.Parse("secret:x")));
 
     [Fact]
-    public async Task Legacy_Build_MapsConnectionReadWrite_NoFallbackBetweenThem()
-    {
-        var p = new LegacyEnvProvider(Env(("DBDATABUILD_WAREHOUSE_WRITE", "Server=w")));
-        Assert.Equal("Server=w", (await p.TryResolveAsync(SecretRef.Parse("secret:dbdata:build:connection:warehouse:write")))!.RevealString());
-        Assert.Null(await p.TryResolveAsync(SecretRef.Parse("secret:dbdata:build:connection:warehouse:read")));
-    }
-
-    [Fact]
-    public async Task Legacy_Sync_MapsRefToSecretEnv()
-    {
-        var p = new LegacyEnvProvider(Env(("DBDATASYNC_SECRET_DBDATASYNC_CONNECTION_ERP", "pw")));
-        Assert.Equal("pw", (await p.TryResolveAsync(SecretRef.Parse("secret:dbdatasync:connection:erp")))!.RevealString());
-    }
-
-    [Fact]
-    public async Task Legacy_PrefixAndRulesAreConfigurable()
-    {
-        var p = new LegacyEnvProvider(Env(("ACME_ORDERS_READ", "x"), ("CUSTOM_ONE", "y")),
-            [LegacyEnvProvider.BuildRule("ACME"), t => t == "secret-one" ? "CUSTOM_ONE" : null]);
-        Assert.Equal("x", (await p.TryResolveAsync(SecretRef.Parse("secret:dbdata:build:connection:orders:read")))!.RevealString());
-        Assert.Equal("y", (await p.TryResolveAsync(SecretRef.Parse("secret:secret-one")))!.RevealString());
-    }
-
-    [Fact]
     public async Task File_TrimsContents_MissingIsNull_OversizeThrows()
     {
         var dir = Directory.CreateTempSubdirectory();

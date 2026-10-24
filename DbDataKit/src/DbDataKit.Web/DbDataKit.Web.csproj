@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Trust between a console and the servers it manages: signed short-lived tokens (Ed25519), their validation with the console's ceiling and a replay check, and the roles they carry; and the session sign-in that serves a console's own users: the session cookie, passkeys, Windows sign-in, the first-run invite.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <Using Include="Microsoft.AspNetCore.Http" />
+    <Using Include="Microsoft.Extensions.Configuration" />
+    <Using Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="BouncyCastle.Cryptography" />
+    <PackageReference Include="Fido2.AspNet" />
+    <ProjectReference Include="..\DbDataKit.Cli\DbDataKit.Cli.csproj" />
+    <ProjectReference Include="..\DbDataKit.Config.Git\DbDataKit.Config.Git.csproj" />
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+  </ItemGroup>
+</Project>

@@ -328,7 +328,7 @@ public sealed class PgCopyStagingProvider(SqlDialect dialect, ITableCatalog cata
                 $"converts nothing, so a value it cannot be written as is refused here rather than " +
                 $"coerced. {Hint(value, type)}Staging this mapping through " +
                 $"'{PostgresDriverKinds.StagingTable}' instead sends parameters the server will " +
-                $"convert, at the cost of the bulk path. Npgsql said: {ex.Message}", ex);
+                $"convert, at the cost of the bulk path. Npgsql said: {DriverFailures.Describe(ex, DriverIds.Postgres)}", ex);
         }
     }
 

@@ -8,7 +8,7 @@ dbdatabuild is a .NET 10 CLI that builds analytics tables and views on SQL Serve
 scripts/fetch-native.sh                        # once: the published polyglot library (docs/native-library.md)
 dotnet build                                   # warnings are errors
 dotnet test tests/DbDataBuild.Tests.Unit       # no database needed; about 15 seconds
-scripts/test-engines.sh up                     # SQL Server 2022 and PostgreSQL 17 in docker, loopback only (`up all` adds SQL Server 2025 (`mssql2025`: probes and one load, at database compatibility levels 170 and 160), and Oracle, Spark SQL and the BigQuery emulator, which are only probed for their dialect; `up flight` adds two Arrow Flight SQL servers, plain and TLS, as origins)
+scripts/test-engines.sh up                     # SQL Server 2022 and PostgreSQL 17 (the shared engines of testenv/testenv.sh, ports 14330 and 15432), loopback only (`up all` adds SQL Server 2025 (`mssql2025`: probes and one load, at database compatibility levels 170 and 160), and Oracle, Spark SQL and the BigQuery emulator, which are only probed for their dialect; `up flight` adds two Arrow Flight SQL servers, plain and TLS, as origins)
 eval "$(scripts/test-engines.sh env)"
 dotnet test tests/DbDataBuild.Tests.Conformance   # real engines, about 6 minutes in all; skipped without the env vars; groups: --filter "Group=apply", "Group=templates", "Group!=apply&Group!=templates&Group!=release" (the quick one), "Group=release" (sample projects with the rewrites off), "DisplayName~oracle"
 scripts/test-engines.sh down
@@ -16,12 +16,11 @@ UPDATE_GOLDEN=1 dotnet test tests/DbDataBuild.Tests.Unit   # rewrites golden fil
 scripts/publish.sh linux-x64                   # one self-contained executable (win-x64 too: scripts/fetch-native.sh win-x64 first)
 node scripts/mcp-app-host.mjs <project>       # a stand-in MCP Apps host: opens the app in a browser (node and a browser needed; --allow-apply, --inspectable)
 scripts/test-windows-wine.sh                  # the unit tests with Windows semantics under Wine (TEST_PROJECT=DbDataBuild.Tests.Conformance for the engines; PostgreSQL cannot log in under Wine)
-scripts/test-duckdb-preview.sh                 # the unit tests against DuckDB's preview library (2.0 alpha); see docs/research/duckdb-2.0
 ```
 
 ## Rules the tests enforce (read before you add code)
 
-- **Statements to a target go through `MutationGate` (writes) or `ReadSession` (reads), nowhere else** (`GateInvariantTests` scans the source). Logins come from `DBDATABUILD_<TARGET>_<READ|WRITE>`, with no fallback from one to the other. Driver messages are never echoed: failures report the exception type and error number (the real-engine scrub test checks this).
+- **Statements to a target go through `MutationGate` (writes) or `ReadSession` (reads), nowhere else** (`GateInvariantTests` scans the source). Logins come from `DBDATA_BUILD_<TARGET>_<READ|WRITE>`, with no fallback from one to the other. Driver messages are never echoed: failures report the exception type and error number (the real-engine scrub test checks this).
 - **Every command** has a `CommandSpecs` entry (with its effect class), a case in `CliApp.Build`, a `--format json` document that satisfies a closed `data` schema in `schemas/output.schema.json` (edit it by hand; a test fails if a command has none), and appears in the TUI catalog automatically. A new option needs a description. `tui` is the one command with no JSON form.
 - **Every diagnostic code** is in `DiagnosticCatalog.All`, has a fixture in `DiagnosticCatalogTests` (or is listed there with the test that covers it), and has `supported`, `fix` and `explanation` text. Never reuse a code.
 - **The support matrix** (`matrix/constructs.yml`) is data: a row needs a fixture in `MatrixLinterTests`, a case in `spike/constructs.yml`, and a status per target. Changing it changes the matrix hash, which is in every rendered header, so regenerate the goldens (`UPDATE_GOLDEN=1`) and look at the diff. Do not use polyglot's `unsupportedLevel: raise`; the linter walks the AST.

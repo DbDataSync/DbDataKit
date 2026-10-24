@@ -1,7 +1,6 @@
-using ClrKernel.Core.Secrets;
 using DbDataSync.Api.Auth;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Core.Secrets;
 using DbDataSync.Drivers.Descriptor;
 using DbDataSync.Libraries;
@@ -11,7 +10,7 @@ using Microsoft.Extensions.Configuration;
 namespace DbDataSync.Cli.Tui;
 
 /// <summary>
-/// The UI-free half of every <c>dbdatasync setup</c> section — everything <c>SetupCommand</c>'s
+/// The UI-free half of every <c>dbdatasync server setup</c> section — everything <c>SetupCommand</c>'s
 /// walk-through used to do inline between <c>Prompt</c> calls (<c>SetValue</c>/<c>SecretStore.Store</c>
 /// calls, a driver install, a connection test), now callable with plain values so a test exercises it
 /// directly rather than needing to drive a TUI to prove a config file or secret got written correctly.
@@ -51,7 +50,7 @@ internal static class SetupSteps
         DbDataSyncConfigFile.SetValue(root, "DbDataSync:State", "Engine", engine);
         DbDataSyncConfigFile.SetValue(root, "DbDataSync:State", "ConnectionString", connectionString ?? "");
         if (password is not null)
-            new SecretStore("DbDataSync", true).Store(SecretRefs.ForAppSetting("stateConnectionString"), password);
+            SecretStore.Open(root).Store(SecretRefs.ForAppSetting("stateConnectionString"), password);
 
         var libraryRegistry = new LibraryRegistry(root).LoadAll();
         var libraryId = engine == StateEngineIds.MsSql ? MsSqlStateDialect.LibraryId : PostgresStateDialect.LibraryId;
@@ -82,7 +81,7 @@ internal static class SetupSteps
         try
         {
             StateDatabase.FromOptions(
-                engine, Path.Combine(root, "state.db"), connectionString, new SecretStore("DbDataSync", true),
+                engine, Path.Combine(root, "state.db"), connectionString, SecretStore.Open(root),
                 libraryRegistry);
             return new StepResult(false, "Connected — schema is current.");
         }
@@ -246,20 +245,20 @@ internal static class SetupSteps
         "Run the matching command, then bind the thumbprint it prints:",
         .. certChoice switch
         {
-            "self-signed" => new[] { $"    dbdatasync config cert new-self-signed --dns {host ?? "localhost"}" },
+            "self-signed" => new[] { $"    dbdatasync cert new-self-signed --dns {host ?? "localhost"}" },
             "enroll" =>
             [
-                "    dbdatasync config cert discover    (finds the CA and template; saves them when there is only one)",
-                "    dbdatasync config cert enroll --dns <names>",
+                "    dbdatasync cert discover    (finds the CA and template; saves them when there is only one)",
+                "    dbdatasync cert enroll --dns <names>",
             ],
-            _ => ["    dbdatasync config cert bind --thumbprint <thumbprint>"],
+            _ => ["    dbdatasync cert bind --thumbprint <thumbprint>"],
         },
     ];
 
     internal static IReadOnlyList<string> PemCertificateInstructions(string root, string certPath, string keyPath) =>
     [
         "Run this to finish:",
-        $"    dbdatasync config cert use-pem --cert \"{certPath}\" --key \"{keyPath}\" --repo \"{root}\"",
+        $"    dbdatasync cert use-pem --cert \"{certPath}\" --key \"{keyPath}\" --repo \"{root}\"",
     ];
 
     /// <summary>Phase 130, tier 2 — printed rather than invoked, the same choice phase 113 made for
@@ -270,7 +269,7 @@ internal static class SetupSteps
     internal static IReadOnlyList<string> SelfSignedCertificateInstructions(string root) =>
     [
         "Run this to finish:",
-        $"    dbdatasync config cert new-self-signed --repo \"{root}\"",
+        $"    dbdatasync cert new-self-signed --repo \"{root}\"",
         "",
         "Every client reaching this console will need to trust this certificate once — there is no CA " +
         "behind it. A daily background check renews it automatically before it expires (a restart is " +
@@ -281,13 +280,13 @@ internal static class SetupSteps
     /// clean commit" shape the console walk-through's own finish step produced.</summary>
     internal static void CommitChanges(string root) =>
         new GitCommitService(root).CommitChanges(
-            [DbDataSyncConfigFile.PathIn(root)], "dbdatasync setup", CurrentUser.SystemAuthor);
+            [DbDataSyncConfigFile.PathIn(root)], "dbdatasync server setup", CurrentUser.SystemAuthor);
 
     /// <summary>
     /// Every <c>DbDataSync:*</c> key the merged configuration resolves to — file, then environment,
     /// then command line, the same precedence <c>config check</c> and the running host use. Nothing
     /// here can embed a real credential (<see cref="DbDataSyncConfigFile.SetValue"/> refuses one, and
-    /// the state password lives only in <see cref="ClrKernel.Core.Secrets.SecretStore"/>), but an
+    /// the state password lives only in <c>SecretStore</c>), but an
     /// operator can still set one through an environment variable this command has no say over, so a
     /// value that looks like it carries one is redacted rather than trusted to be safe by construction.
     /// </summary>

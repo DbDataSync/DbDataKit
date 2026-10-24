@@ -9,7 +9,7 @@ using TGAttribute = Terminal.Gui.Drawing.Attribute;
 namespace DbDataSync.Cli.Tui;
 
 /// <summary>
-/// The one screen <c>dbdatasync setup</c> shows, for a fresh root or an existing one alike — a tabbed
+/// The one screen <c>dbdatasync server setup</c> shows, for a fresh root or an existing one alike — a tabbed
 /// form (one tab per config section, mirroring the old console walk-through's steps 2–7) with a
 /// <see cref="ChecksSidebar"/> beside it, and a persistent action bar below both. There is no separate
 /// review screen any more: an existing install just opens with its tabs pre-filled.

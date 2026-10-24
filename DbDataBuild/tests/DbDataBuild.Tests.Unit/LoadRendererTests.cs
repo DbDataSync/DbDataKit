@@ -238,7 +238,7 @@ public class LoadRendererTests
     public void A_construct_the_transpiler_rejects_is_a_named_pair_error_too()
     {
         var r = Render(Def(FullYaml), "SELECT c.customer_id, c.name FROM staging.customers c UNION ALL SELECT customer_id, name FROM staging.customers", ["sqlserver"]);
-        Assert.Empty(r.Diagnostics.Where(d => d.Severity == Severity.Error));         // a plain UNION ALL is fine: no false positive
+        Assert.DoesNotContain(r.Diagnostics, d => d.Severity == Severity.Error);         // a plain UNION ALL is fine: no false positive
         var bad = Render(Def(FullYaml), "SELECT c.customer_id, c.name FROM staging.customers c LEFT JOIN staging.customers d USING (customer_id)", ["sqlserver"]);
         Assert.Contains(bad.Diagnostics, d => d.Code == "DDB-317");
     }
@@ -267,7 +267,7 @@ public class LoadRendererTests
         Assert.Contains(r.Files, f => f.Path.EndsWith("load.everything.sql", StringComparison.Ordinal));   // the other operations still render
 
         var ok = ProjectConfigLoader.Load("connections:\n  postgres: { version: 15 }\n", "dbdatabuild.yml", [])!;
-        Assert.Empty(Render(def, AllOpsSql, ["postgres"], ok).Diagnostics.Where(x => x.Severity == Severity.Error));
+        Assert.DoesNotContain(Render(def, AllOpsSql, ["postgres"], ok).Diagnostics, x => x.Severity == Severity.Error);
     }
 
     [Fact]

@@ -1,6 +1,6 @@
 using DbDataSync.Api.Services;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Scripting;
 using DbDataSync.Scripting.Abstractions;
 using DbDataSync.Api.Auth;

@@ -33,11 +33,11 @@ A model is a query and a declaration of the columns it returns. `dbdatabuild pro
 
 ## 3. Build on a database
 
-The tool uses two logins per connection, named by environment variable, and nothing falls back from one to the other: `DBDATABUILD_<CONNECTION>_READ` (planning, compare, import, status, monitor) and `DBDATABUILD_<CONNECTION>_WRITE` (applying a plan, refresh, init, publish). The connection name is the one in `dbdatabuild.yml` (`sqlserver` and `postgres` exist without being declared). A login is a connection string for the engine.
+The tool uses two logins per connection, named by environment variable, and nothing falls back from one to the other: `DBDATA_BUILD_<CONNECTION>_READ` (planning, compare, import, status, monitor) and `DBDATA_BUILD_<CONNECTION>_WRITE` (applying a plan, refresh, init, publish). The connection name is the one in `dbdatabuild.yml` (`sqlserver` and `postgres` exist without being declared). A login is a connection string for the engine.
 
 ```
-export DBDATABUILD_SQLSERVER_READ='Server=localhost,1433;User Id=reader;Password=...;TrustServerCertificate=true'
-export DBDATABUILD_SQLSERVER_WRITE='Server=localhost,1433;User Id=builder;Password=...;TrustServerCertificate=true'
+export DBDATA_BUILD_SQLSERVER_READ='Server=localhost,1433;User Id=reader;Password=...;TrustServerCertificate=true'
+export DBDATA_BUILD_SQLSERVER_WRITE='Server=localhost,1433;User Id=builder;Password=...;TrustServerCertificate=true'
 
 dbdatabuild connection seed --apply                      # optional: put the seeded tables (the mapped models) into the database (without --apply it only shows what it would do)
 dbdatabuild connection init sqlserver --apply   # create the tracking tables (without --apply it shows the statements)

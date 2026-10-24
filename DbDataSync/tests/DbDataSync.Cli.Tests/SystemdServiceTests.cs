@@ -19,7 +19,7 @@ public sealed class SystemdServiceTests : IDisposable
         var unit = SystemdService.RenderUnit("/usr/bin/dbdatasync", "/var/lib/dbdatasync", "dbdatasync");
 
         Assert.Contains("Type=notify", unit);
-        Assert.Contains("ExecStart=\"/usr/bin/dbdatasync\" serve --repo \"/var/lib/dbdatasync\"", unit);
+        Assert.Contains("ExecStart=\"/usr/bin/dbdatasync\" server run --repo \"/var/lib/dbdatasync\"", unit);
         Assert.Contains("User=dbdatasync", unit);
         Assert.Contains("Group=dbdatasync", unit);
         Assert.Contains("WorkingDirectory=/var/lib/dbdatasync", unit);
@@ -45,7 +45,7 @@ public sealed class SystemdServiceTests : IDisposable
             "\n" +
             "[Service]\n" +
             "Type=notify\n" +
-            "ExecStart=\"/usr/bin/dbdatasync\" serve --repo \"/var/lib/dbdatasync\"\n" +
+            "ExecStart=\"/usr/bin/dbdatasync\" server run --repo \"/var/lib/dbdatasync\"\n" +
             "WorkingDirectory=/var/lib/dbdatasync\n" +
             "Restart=on-failure\n" +
             "RestartSec=5\n" +
@@ -81,7 +81,7 @@ public sealed class SystemdServiceTests : IDisposable
             "\n" +
             "[Service]\n" +
             "Type=notify\n" +
-            "ExecStart=\"/usr/bin/dbdatasync\" serve --repo \"/srv/dbdatasync\"\n" +
+            "ExecStart=\"/usr/bin/dbdatasync\" server run --repo \"/srv/dbdatasync\"\n" +
             "WorkingDirectory=/srv/dbdatasync\n" +
             "Restart=on-failure\n" +
             "RestartSec=5\n" +
@@ -136,7 +136,7 @@ public sealed class SystemdServiceTests : IDisposable
         foreach (var line in unit.Split('\n'))
             Assert.False(line.StartsWith(' ') || line.StartsWith('\t'), $"indented line: '{line}'");
         Assert.Contains("\nEnvironment=\"DOTNET_ROOT=/usr/lib/dotnet\"\n", unit);
-        Assert.Contains("\nExecStart=\"/opt/dbdatasync/dbdatasync\" serve", unit);
+        Assert.Contains("\nExecStart=\"/opt/dbdatasync/dbdatasync\" server run", unit);
         Assert.Contains("\nUser=dbdatasync\n", unit);
         Assert.Contains("\nStateDirectory=dbdatasync\n", unit);
         Assert.EndsWith("WantedBy=multi-user.target\n", unit);

@@ -1,7 +1,8 @@
+using DbDataSync.Core.Sql;
 using DbDataSync.Api.Hubs;
 using DbDataSync.Api.Services;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Api.Auth;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
@@ -98,7 +99,7 @@ public sealed class TableMappingsController(
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = DriverFailures.Describe(ex) });
         }
 
         var stored = watermarks.GetReadState(replicationName, mappingName, sourceTable);
@@ -166,7 +167,7 @@ public sealed class TableMappingsController(
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = DriverFailures.Describe(ex) });
         }
 
         var previousHold = watermarks.GetReadState(replicationName, mappingName, sourceTable)?.Hold ?? ReadHold.None;
@@ -245,7 +246,7 @@ public sealed class TableMappingsController(
         }
         catch (ConfigValidationException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = DriverFailures.Describe(ex) });
         }
     }
 
@@ -273,7 +274,7 @@ public sealed class TableMappingsController(
         }
         catch (ConfigValidationException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = DriverFailures.Describe(ex) });
         }
     }
 
@@ -363,7 +364,7 @@ public sealed class TableMappingsController(
             {
                 return BadRequest(new
                 {
-                    error = $"Creating '{name}' failed: {ex.Message}",
+                    error = $"Creating '{name}' failed: {DriverFailures.Describe(ex)}",
                     created,
                     skipped,
                 });

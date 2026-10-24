@@ -119,6 +119,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/fetch-native.sh ${{ matrix.rid }}
+      - name: Pinned DuckDB engine
+        shell: bash
+        working-directory: .
+        run: scripts/fetch-duckdb.sh ${{ matrix.rid }}
       - name: Unit tests
         run: dotnet test tests/DbDataBuild.Tests.Unit -c Release
       - name: Publish
@@ -130,6 +134,10 @@ jobs:
           exe=out/dbdatabuild; [ -f out/dbdatabuild.exe ] && exe=out/dbdatabuild.exe
           "$exe" --help > /dev/null
           "$exe" help matrix --format json | grep -q '"ok": true'
+          # The bundled DuckDB engine loads and is the pinned release: seeding a project writes a DuckDB file, whose header names the engine.
+          want=$(sed -n 's/^VERSION=//p' ../duckdb.pin)
+          "$exe" project create retail smoke > /dev/null
+          (cd smoke && "../$exe" project compile > /dev/null && "../$exe" project seed > /dev/null && grep -aq "v$want" .dbdatabuild/seed.duckdb)
       # The standard package (dist/README.md): files at the zip root, named <product>-v<version>-<rid>.zip.
       - name: Package
         shell: bash

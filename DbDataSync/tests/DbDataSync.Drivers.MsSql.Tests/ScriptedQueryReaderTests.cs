@@ -30,8 +30,8 @@ public sealed class ScriptedQueryReaderTests(MsSqlTestDatabase db) : IClassFixtu
         LibGit2Sharp.Repository.Init(_repoRoot);
         _configRepository = new ConfigRepository(
             Path.Combine(_repoRoot, "config"),
-            new Core.Git.GitCommitService(_repoRoot),
-            new ClrKernel.Core.Secrets.SecretStore(true));
+            new DbDataKit.Config.Git.GitCommitService(_repoRoot),
+            DbDataSync.Core.Secrets.SecretStore.ForProviders(new DbDataSync.Core.Secrets.InMemorySecretProvider()));
 
         var host = new ScriptHost(
             _configRepository, new ScriptCompiler(new ScriptCacheDirectory(Path.Combine(_repoRoot, "cache"))));
@@ -127,7 +127,7 @@ public sealed class ScriptedQueryReaderTests(MsSqlTestDatabase db) : IClassFixtu
                 Manifest = new ScriptConfig { Name = "audit-query", Kind = ScriptSlots.SqlColumnExpression, EntryType = "AuditQuery" },
                 Code = AuditQuery,
             },
-            new Core.Git.GitAuthor("t", "t@t"));
+            new DbDataKit.Config.Git.GitAuthor("t", "t@t"));
 
     private Dictionary<string, string> Options() => new()
     {
@@ -241,7 +241,7 @@ public sealed class ScriptedQueryReaderTests(MsSqlTestDatabase db) : IClassFixtu
                     }
                     """,
             },
-            new Core.Git.GitAuthor("t", "t@t"));
+            new DbDataKit.Config.Git.GitAuthor("t", "t@t"));
 
         var options = new Dictionary<string, string> { [ScriptedQueryReader.ScriptOption] = "wrong-op" };
         var read = await _reader.ReadChangesAsync(

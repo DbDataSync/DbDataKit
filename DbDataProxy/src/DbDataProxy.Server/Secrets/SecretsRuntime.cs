@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text;
 using DbDataKit.Secrets;
+using DbDataKit.Secrets.Store;
 using DbDataKit.Secrets.Windows;
 using DbDataProxy.Server.Configuration;
 using Microsoft.Extensions.Options;
@@ -24,7 +25,7 @@ public sealed class PlainSecretNotAllowedException(string configKey, string mess
 /// </summary>
 public sealed class SecretsRuntime
 {
-    /// <summary>Entropy for DPAPI blobs written by <c>DbDataProxy protect-secret</c> (machine scope).</summary>
+    /// <summary>Entropy for DPAPI blobs written by <c>dbdataproxy secret protect</c> (machine scope).</summary>
     public static readonly byte[] DpapiEntropy = Encoding.UTF8.GetBytes("DbDataProxy");
 
     private readonly Redactor _redactor;
@@ -42,20 +43,45 @@ public sealed class SecretsRuntime
             new DelegateSecretAudit(line => _log.LogDebug("{Audit}", line)), redactor);
     }
 
-    private static List<ISecretProvider> CreateProviders(ProxyOptions options)
+    /// <summary>The providers in the order they answer: the store, inline DPAPI (Windows), the environment, the credentials directory. The server and the <c>secret</c> command use the same list.</summary>
+    public static List<ISecretProvider> CreateProviders(ProxyOptions options, EncryptedFileSecretStore? store = null)
     {
-        var providers = new List<ISecretProvider> { new EnvSecretProvider() };
+        // secret:<name> is the encrypted store's first; the environment and the credentials directory answer what it does not have
+        var providers = new List<ISecretProvider> { store ?? OpenStore(options) };
+        if (OperatingSystem.IsWindows()) providers.Add(new DpapiInlineProvider(DpapiEntropy));      // dpapi:<blob> inline, from `secret protect`
+        providers.Add(new EnvSecretProvider());
 
         // systemd LoadCredential= and container secret mounts: secret:<name> resolves to a file in that directory.
         var credentials = Environment.GetEnvironmentVariable("CREDENTIALS_DIRECTORY");
         providers.Add(new FileSecretProvider(new FileSecretOptions { SecretsDirectory = string.IsNullOrWhiteSpace(credentials) ? null : credentials }));
-
-        if (OperatingSystem.IsWindows())
-        {
-            string directory = Path.Combine(Hosting.ProxyHost.ResolveDataDirectory(options), "secrets");
-            providers.Add(new DpapiSecretStore(directory, DpapiEntropy));
-        }
         return providers;
+    }
+
+    /// <summary>
+    /// The encrypted secret store of this installation: <c>&lt;DataDirectory&gt;/secrets/secrets.yaml</c>, its key in <c>secrets/keys</c> (DPAPI on Windows, a 0600 file elsewhere, created on first use)
+    /// or the key file the options or <c>DBDATA_SECRETS_KEY_FILE</c> name. Refuses a key file that others can read.
+    /// </summary>
+    public static EncryptedFileSecretStore OpenStore(ProxyOptions options, Func<string, string?>? environment = null)
+    {
+        string dataDirectory = Hosting.ProxyHost.ResolveDataDirectory(options);
+        IKeyProtector? protector = OperatingSystem.IsWindows() ? new DpapiKeyProtector(DpapiEntropy) : null;
+        var keys = SecretKeys.Open(dataDirectory, new SecretKeyOptions { KeyFile = options.Secrets.KeyFile }, protector, environment);
+        return new EncryptedFileSecretStore(SecretKeys.StoreDirectory(dataDirectory), keys);
+    }
+
+    /// <summary>Every secret reference the options hold, for <c>secret check</c>: whole connection strings, credential keys inside them, the TLS password and the JWT signing key.</summary>
+    public static IReadOnlyList<SecretRef> ConfiguredReferences(ProxyOptions options)
+    {
+        var references = new List<SecretRef>();
+        void Add(string? text) { if (SecretRef.TryParse(text, out var r)) references.Add(r); }
+        foreach (var source in options.DataSources.Values)
+        {
+            if (ConnectionStringReferences.IsWholeReference(source.ConnectionString, out var whole)) references.Add(whole!);
+            else references.AddRange(ConnectionStringReferences.Find(source.ConnectionString).Select(f => f.Reference));
+        }
+        Add(options.Tls.CertificatePassword);
+        Add(options.Auth.Jwt.SigningKey);
+        return references;
     }
 
     private bool Require => _options.CurrentValue.RequireReferencedSecrets;
@@ -128,7 +154,7 @@ public sealed class SecretsRuntime
     }
 
     private static bool IsReadFailure(Exception ex) =>
-        ex is IOException or InvalidDataException or FormatException or System.Security.Cryptography.CryptographicException or UnauthorizedAccessException;
+        ex is IOException or InvalidDataException or FormatException or System.Security.Cryptography.CryptographicException or UnauthorizedAccessException or SecretStoreException;
 
     private SecretConfigurationException Fail(SecretConfigurationException ex)
     {
@@ -140,7 +166,8 @@ public sealed class SecretsRuntime
         new(configKey, $"The secret reference {reference} in {configKey} could not be resolved.");
 
     private static SecretConfigurationException Unreadable(string configKey, Exception ex) =>
-        new(configKey, $"A secret reference in {configKey} could not be read ({ex.GetType().Name}).");
+        // the store's messages name the secret and the key, never a value, and say what to do
+        new(configKey, ex is SecretStoreException ? $"A secret reference in {configKey} could not be read: {ex.Message}" : $"A secret reference in {configKey} could not be read ({ex.GetType().Name}).");
 
     /// <summary>One-time warning (or, with RequireReferencedSecrets, an exception) for a literal secret at <paramref name="configKey"/>.</summary>
     private void NotePlain(string configKey, string? detail)

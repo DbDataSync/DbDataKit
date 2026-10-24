@@ -1,4 +1,3 @@
-using ClrKernel.Core.Secrets;
 using DbDataSync.Core.Secrets;
 
 namespace DbDataSync.Cli;
@@ -9,7 +8,7 @@ namespace DbDataSync.Cli;
 /// already makes for a connection's own credential, reachable here without going through a
 /// connection's save flow. This is what "easily settable using the CLI tool" means concretely for
 /// phase 79's one standardized ref:
-/// <code>dbdatasync config secret set dbdatasync:config:stateConnectionString "Password=..."</code>
+/// <code>dbdatasync secret set dbdata:sync:config:stateConnectionString "Password=..."</code>
 /// </summary>
 public static class SecretCommand
 {
@@ -25,22 +24,44 @@ public static class SecretCommand
             return 1;
         }
 
-        var secrets = new SecretStore("DbDataSync", true);
+        var root = DbDataSyncRoot.Resolve(args);
+        var secrets = SecretStore.Open(root);
+        args = WithoutRepoOption(args);
 
-        return args[0].ToLowerInvariant() switch
+        try
         {
-            "set" => Set(args, secrets),
-            "list" => List(args, secrets),
-            "remove" => Remove(args, secrets),
-            var other => Unknown(other),
-        };
+            return args[0].ToLowerInvariant() switch
+            {
+                "set" => Set(args, secrets),
+                "list" => List(args, secrets),
+                "remove" => Remove(args, secrets),
+                var other => Unknown(other),
+            };
+        }
+        catch (FormatException ex)
+        {
+            // a name that is not dbdata:sync:<kind>:<name> (the old dbdatasync:... form among them); the message never holds a value
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
+    private static string[] WithoutRepoOption(string[] args)
+    {
+        var rest = new List<string>();
+        for (var i = 0; i < args.Length; i++)
+        {
+            if (args[i] == "--repo") { i++; continue; }
+            rest.Add(args[i]);
+        }
+        return [.. rest];
     }
 
     private static int Set(string[] args, SecretStore secrets)
     {
         if (args.Length != 3)
         {
-            Console.Error.WriteLine("Usage: dbdatasync config secret set <ref> <value>");
+            Console.Error.WriteLine("Usage: dbdatasync secret set <ref> <value>");
             return 1;
         }
 
@@ -52,12 +73,12 @@ public static class SecretCommand
     /// <summary>
     /// Ref names and whether each currently resolves — never the value itself.
     /// <para>
-    /// <see cref="SecretStore"/> has no enumeration API (by design — it's a thin layer over the OS
-    /// keyring, which doesn't offer one either), so this cannot show "everything stored" the way a
+    /// <see cref="SecretStore"/> offers no enumeration (the shared store lists names, but the environment and
+    /// the credentials directory behind it cannot), so this cannot show "everything stored" the way a
     /// directory listing would. Given no ref, it checks <see cref="KnownRefs"/> — right now, just the
     /// one fixed ref this phase's starter file documents. Given one or more refs, it checks exactly
     /// those instead, which is how a script or an operator who already knows a connection's ref
-    /// (<c>dbdatasync:connection:&lt;name&gt;</c>) checks it without this command having to know
+    /// (<c>dbdata:sync:connection:&lt;name&gt;</c>) checks it without this command having to know
     /// connections exist.
     /// </para>
     /// </summary>
@@ -74,7 +95,7 @@ public static class SecretCommand
     {
         if (args.Length != 2)
         {
-            Console.Error.WriteLine("Usage: dbdatasync config secret remove <ref>");
+            Console.Error.WriteLine("Usage: dbdatasync secret remove <ref>");
             return 1;
         }
 
@@ -92,8 +113,8 @@ public static class SecretCommand
     private static void PrintUsage() =>
         Console.Error.WriteLine(
             """
-            Usage: dbdatasync config secret set <ref> <value>
-                   dbdatasync config secret list [<ref> ...]
-                   dbdatasync config secret remove <ref>
+            Usage: dbdatasync secret set <ref> <value> [--repo <path>]
+                   dbdatasync secret list [<ref> ...] [--repo <path>]
+                   dbdatasync secret remove <ref> [--repo <path>]
             """);
 }

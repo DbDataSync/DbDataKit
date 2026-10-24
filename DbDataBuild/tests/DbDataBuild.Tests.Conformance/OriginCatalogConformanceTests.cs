@@ -63,7 +63,7 @@ public class OriginCatalogConformanceTests
                 "CREATE UNIQUE INDEX ux_orders_total ON sales.orders (total)",
                 "CREATE INDEX ix_orders_expr ON sales.orders ((total * 2))",
                 "CREATE VIEW sales.big_orders AS SELECT * FROM sales.orders WHERE total > 100");
-            using var project = Project.Create("connections:\n  analytics: { engine: readonly duckdb }\n", v => v == "DBDATABUILD_ANALYTICS_READ" ? file : null);
+            using var project = Project.Create("connections:\n  analytics: { engine: readonly duckdb }\n", v => v == "DBDATA_BUILD_ANALYTICS_READ" ? file : null);
             var imported = project.Cli("project", "import", "analytics", "sales.*", "--write");
             Ok(imported, "import");
             var orders = project.Descriptor("orders.yml");
@@ -112,7 +112,7 @@ public class OriginCatalogConformanceTests
     {
         await using var server = await InProcessFlightSqlServer.StartAsync();
         server.Exec("CREATE SCHEMA src", "CREATE TABLE src.items (id BIGINT NOT NULL PRIMARY KEY, ratio DOUBLE, price DECIMAL(10,2), code VARCHAR, flag BOOLEAN, tiny TINYINT)", "CREATE INDEX ix_items_code ON src.items (code)");
-        using var project = Project.Create("connections:\n  proxy: { engine: readonly flightsql duckdb }\n", v => v == "DBDATABUILD_PROXY_READ" ? server.Login("token") : null);
+        using var project = Project.Create("connections:\n  proxy: { engine: readonly flightsql duckdb }\n", v => v == "DBDATA_BUILD_PROXY_READ" ? server.Login("token") : null);
         var imported = project.Cli("project", "import", "proxy", "src.items", "--write");
         Ok(imported, "import");
         var items = project.Descriptor("items.yml");
@@ -156,9 +156,9 @@ public class OriginCatalogConformanceTests
         var from = new PostgresEngine();
         await from.StartAsync();
         var login = OdbcValue(driver, from);
-        var project = Project.Create($"{dialects}connections:\n  legacy: {{ engine: {legacyEngine} }}\n", v => v == "DBDATABUILD_LEGACY_READ" ? login : null);
-        try { await using var probe = await ReadSession.OpenAsync(LoginSettings.FromEnvironment("legacy", "odbc", Login.Read, v => v == "DBDATABUILD_LEGACY_READ" ? login : null).Settings!); }
-        catch (Exception ex) when (DriverFailure.Prerequisite(ex) is { } why) { project.Dispose(); await from.DisposeAsync(); Skip.If(true, $"The ODBC driver manager or the psqlodbc driver cannot be used on this machine: {why}"); }
+        var project = Project.Create($"{dialects}connections:\n  legacy: {{ engine: {legacyEngine} }}\n", v => v == "DBDATA_BUILD_LEGACY_READ" ? login : null);
+        try { await using var probe = await ReadSession.OpenAsync(LoginSettings.FromEnvironment("legacy", "odbc", Login.Read, v => v == "DBDATA_BUILD_LEGACY_READ" ? login : null).Settings!); }
+        catch (Exception ex) when (DbDataKit.Connections.Odbc.OdbcPrerequisite.Describe(ex) is { } why) { project.Dispose(); await from.DisposeAsync(); Skip.If(true, $"The ODBC driver manager or the psqlodbc driver cannot be used on this machine: {why}"); }
         return (from, project);
     }
 

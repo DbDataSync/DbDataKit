@@ -2,11 +2,11 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace DbDataKit.Secrets;
 
-public enum SecretRefKind { Secret, Env, File, Keyring, Dpapi }
+public enum SecretRefKind { Secret, Env, File, Dpapi }
 
 /// <summary>
 /// A reference to a secret, as written in config. Forms: <c>secret:&lt;name&gt;</c>, <c>env:NAME</c>,
-/// <c>file:/path</c>, <c>keyring:&lt;service&gt;/&lt;name&gt;</c>, <c>dpapi:&lt;base64&gt;</c>.
+/// <c>file:/path</c>, <c>dpapi:&lt;base64&gt;</c>.
 /// </summary>
 public sealed record SecretRef(SecretRefKind Kind, string Target)
 {
@@ -15,7 +15,6 @@ public sealed record SecretRef(SecretRefKind Kind, string Target)
         ("secret:", SecretRefKind.Secret),
         ("env:", SecretRefKind.Env),
         ("file:", SecretRefKind.File),
-        ("keyring:", SecretRefKind.Keyring),
         ("dpapi:", SecretRefKind.Dpapi),
     ];
 
@@ -43,28 +42,13 @@ public sealed record SecretRef(SecretRefKind Kind, string Target)
                 error = $"Secret reference '{prefix}' has no target.";
                 return false;
             }
-            if (kind == SecretRefKind.Keyring)
-            {
-                var slash = target.IndexOf('/');
-                if (slash <= 0 || slash == target.Length - 1)
-                {
-                    error = "keyring references must be 'keyring:<service>/<name>'.";
-                    return false;
-                }
-            }
             result = new SecretRef(kind, target);
             error = null;
             return true;
         }
-        error = "Unknown secret reference scheme; expected secret:, env:, file:, keyring: or dpapi:.";
+        error = "Unknown secret reference scheme; expected secret:, env:, file: or dpapi:.";
         return false;
     }
-
-    /// <summary>Keyring service part (only for <see cref="SecretRefKind.Keyring"/>).</summary>
-    public string? Service => Kind == SecretRefKind.Keyring ? Target[..Target.IndexOf('/')] : null;
-
-    /// <summary>Keyring item name (only for <see cref="SecretRefKind.Keyring"/>).</summary>
-    public string? Item => Kind == SecretRefKind.Keyring ? Target[(Target.IndexOf('/') + 1)..] : null;
 
     /// <summary>The reference as written in config.</summary>
     public override string ToString() => Schemes.First(s => s.Kind == Kind).Prefix + Target;

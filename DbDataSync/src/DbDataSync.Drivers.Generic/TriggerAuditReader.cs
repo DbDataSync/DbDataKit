@@ -274,7 +274,7 @@ public sealed class TriggerAuditReader(SqlDialect dialect, ITableCatalog catalog
             throw new InvalidOperationException(
                 $"Could not read the shadow table for '{source.Schema}.{source.Table}'. Change capture " +
                 "has to be enabled for this table first — the Setup card generates the trigger and the " +
-                $"shadow table for this engine. ({ex.Message})", ex);
+                $"shadow table for this engine. ({DriverFailures.Describe(ex)})", ex);
         }
     }
 
@@ -299,7 +299,7 @@ public sealed class TriggerAuditReader(SqlDialect dialect, ITableCatalog catalog
             throw new InvalidOperationException(
                 $"Could not read the shadow table for '{source.Schema}.{source.Table}'. Change capture " +
                 "has to be enabled for this table first — the Setup card generates the trigger and the " +
-                $"shadow table for this engine. ({ex.Message})", ex);
+                $"shadow table for this engine. ({DriverFailures.Describe(ex)})", ex);
         }
     }
 

@@ -21,6 +21,10 @@ public static class ProxyHost
 {
     public const string ServiceName = "DbDataProxy";
 
+    /// <summary>The name the Windows service is registered under by default: lower case like the executable (the service control manager compares names without case, so an existing registration is updated in place).
+    /// <see cref="ServiceName"/> stays the product's name for its data directory.</summary>
+    public const string RegistrationName = "dbdataproxy";
+
     /// <summary>
     /// The web application builder with the proxy's configuration sources (appsettings.json beside the executable, then the data directory's, DBPROXY_ environment variables, command line).
     /// A configuration file that cannot be parsed surfaces as <see cref="ProxyConfigException"/>.
@@ -194,6 +198,9 @@ public static class ProxyHost
         string dataDirectory = ResolveDataDirectory(options);
         var holder = new TlsCertificateHolder();
         builder.Services.AddSingleton(holder);
+        builder.Services.AddSingleton(_ => DbDataProxy.Server.State.ProxyState.Open(dataDirectory));
+        builder.Services.AddSingleton(sp => new DbDataKit.State.NotificationStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
+        builder.Services.AddHostedService<DbDataProxy.Server.State.ProxyStateStartup>();
         builder.Services.AddSingleton<IReadinessProbe>(new CertificateReadinessProbe(() => holder.Current, CertificateProvider.RenewBeforeDays));
         builder.Services.AddHostedService(sp => new CertificateRotationService(
             holder, options, dataDirectory, sp.GetRequiredService<ILogger<CertificateRotationService>>()));

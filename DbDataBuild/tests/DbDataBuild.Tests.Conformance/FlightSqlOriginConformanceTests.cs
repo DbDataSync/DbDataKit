@@ -15,7 +15,7 @@ internal sealed class FlightRun(Engine destination, string name, string dir, str
 
     public string? Env(string v) =>
         v == LoginSettings.VariableName(name, Login.Read) || v == LoginSettings.VariableName(name, Login.Write) ? destination.ConnectionString
-        : v == "DBDATABUILD_PROXY_READ" ? OriginLogin : null;
+        : v == "DBDATA_BUILD_PROXY_READ" ? OriginLogin : null;
 
     public (int Exit, string Out, string Err) Cli(params string[] args)
     {
@@ -147,7 +147,7 @@ public class FlightSqlOriginConformanceTests
         var inspect = run.Cli("connection", "inspect", "proxy");
         Ok(inspect, "inspect the origin");
         Assert.Contains("Flight SQL server 127.0.0.1:", inspect.Out);
-        Assert.Contains("DBDATABUILD_PROXY_READ", inspect.Out);
+        Assert.Contains("DBDATA_BUILD_PROXY_READ", inspect.Out);
         Assert.DoesNotContain(InProcessFlightSqlServer.Password, inspect.Out + inspect.Err);                       // the login's value is never printed
         Assert.Contains("basic", string.Join(",", server.Handshakes).ToLowerInvariant());                         // the user and password were traded for a token by the server's handshake
 
@@ -381,8 +381,8 @@ public class FlightSqlOriginConformanceTests
         var timer = System.Diagnostics.Stopwatch.StartNew();
         var ex = await Assert.ThrowsAnyAsync<Exception>(() => session.QueryFirstRowsAsync("SELECT 1 /*slow*/", 1, 1));
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(8), $"the 1 s limit stopped the statement after {timer.Elapsed}");
-        Assert.Equal(Grpc.Core.StatusCode.DeadlineExceeded, DriverFailure.Rpc(ex)!.StatusCode);
-        Assert.Contains("did not answer in time", DriverFailure.Describe(ex));
+        Assert.Equal(Grpc.Core.StatusCode.DeadlineExceeded, FlightSqlFailure.Rpc(ex)!.StatusCode);
+        Assert.Contains("did not answer in time", Failures.Describe(ex));
     }
 
     [SkippableFact]

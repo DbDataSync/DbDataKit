@@ -1,3 +1,4 @@
+using DbDataSync.Core.Sql;
 using DbDataSync.Core.Config;
 
 namespace DbDataSync.Api.Services;
@@ -44,7 +45,7 @@ public sealed class MappingColumnReader(IColumnCatalog metadata)
         // takes down a forty-table bulk create instead of annotating one line of its result.
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return Unreadable(ex.Message);
+            return Unreadable(DriverFailures.Describe(ex));
         }
     }
 

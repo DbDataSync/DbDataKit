@@ -62,12 +62,12 @@ public class InitCommandTests
     {
         var dir = Project("defaults: {connections: [sqlserver]}\ntracking: { connection: sqlserver }\n");
         // a read login being present must not stand in for the write login
-        var env = new Dictionary<string, string?> { ["DBDATABUILD_SQLSERVER_READ"] = "Server=127.0.0.1,1;User Id=r;Password=hunter2" };
+        var env = new Dictionary<string, string?> { ["DBDATA_BUILD_SQLSERVER_READ"] = "Server=127.0.0.1,1;User Id=r;Password=hunter2" };
         var before = Snapshot(dir);
         var (exit, output, err) = Run(env.GetValueOrDefault, "connection", "init", "--project", dir, "--apply");
         Assert.Equal(CliApp.ExitFindings, exit);
         Assert.Contains("DDB-501", err);
-        Assert.Contains("DBDATABUILD_SQLSERVER_WRITE", err);
+        Assert.Contains("DBDATA_BUILD_SQLSERVER_WRITE", err);
         Assert.DoesNotContain("hunter2", output + err);
         Assert.Equal(before, Snapshot(dir));
     }

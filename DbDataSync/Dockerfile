@@ -2,21 +2,25 @@
 
 # ── The SPA ────────────────────────────────────────────────────────────────────
 FROM node:22-bookworm-slim AS web
-WORKDIR /src/DbDataSync.Web
-COPY DbDataSync/src/DbDataSync.Web/package*.json ./
+WORKDIR /src/DbDataKit/web
+COPY DbDataKit/web/package*.json ./
+COPY DbDataKit/web/shell/package.json ./shell/
+COPY DbDataKit/web/admin/package.json ./admin/
+COPY DbDataKit/web/sync/package.json ./sync/
 RUN npm ci
-COPY DbDataSync/src/DbDataSync.Web/ ./
-RUN npm run build
+COPY DbDataKit/web/ ./
+RUN npm run build -w @dbdatakit/sync
 
 # ── The .NET side ──────────────────────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 # The shared libraries sit next to the product, as in the repository: DbDataSync's Directory.Build.props finds them at ../DbDataKit.
 WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props global.json ./
+COPY duckdb.pin ./
 COPY DbDataKit/Directory.Build.props DbDataKit/global.json DbDataKit/
 COPY DbDataKit/src/ DbDataKit/src/
 WORKDIR /src/DbDataSync
-COPY DbDataSync/DbDataSync.slnx DbDataSync/Directory.Build.props DbDataSync/Directory.Build.targets DbDataSync/dbdatasync.runsettings ./
+COPY DbDataSync/DbDataSync.slnx DbDataSync/Directory.Build.props DbDataSync/Directory.Build.targets DbDataSync/Directory.Packages.props DbDataSync/dbdatasync.runsettings ./
 COPY DbDataSync/src/ ./src/
 COPY DbDataSync/tests/ ./tests/
 COPY DbDataSync/tools/ ./tools/
@@ -34,7 +38,7 @@ ARG VERSION=""
 RUN dotnet publish src/DbDataSync.Cli/DbDataSync.Cli.csproj \
     -c Release -o /app -p:SkipWebBuild=true -p:LauncherRuntimeIdentifiers=none ${VERSION:+-p:Version=$VERSION}
 
-COPY --from=web /src/DbDataSync.Web/dist/ /app/wwwroot/
+COPY --from=web /src/DbDataKit/web/sync/dist/ /app/wwwroot/
 
 # Phase 160: the docs, beside the SPA — the publish above ran in a stage that never had docs/ (only src, tests
 # and tools are copied in), so the csproj's CopyDocs target had nothing to copy and this is what ships them.
@@ -50,10 +54,9 @@ RUN mkdir -p /app/wwwroot/docs \
 
 # Phase 121: every KnownLibraries entry, restored once at its pinned version, while this stage still
 # has both the SDK and the just-published CLI (the "internal" command exists only for this — see
-# InternalCommand.cs). Shipped into *both* final images below: it's a few megabytes for all seven
-# entries (measured, not guessed — Oracle's the largest at ~6MB), so there's no real cost to giving
-# the default (SDK) image the same no-network fast path for a catalog install that the runtime-only
-# image needs to have at all.
+# InternalCommand.cs). Shipped into *both* final images below: a few megabytes per entry (Oracle ~6MB) except
+# DuckDB, which carries its engine (about 100MB: DuckDbEngine downloads it from duckdb.pin, hash-checked, here at build time), so the
+# runtime-only image needs no network for it and the default (SDK) image gets the same no-network fast path.
 RUN dotnet /app/DbDataSync.Cli.dll internal build-catalog-cache /app/library-cache
 
 # ── The runtime-only image (phase 121) ─────────────────────────────────────────
@@ -82,9 +85,9 @@ COPY --from=build /app/ ./
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD ["dotnet", "/app/DbDataSync.Cli.dll", "health", "--url", "http://127.0.0.1:8080"]
+    CMD ["dotnet", "/app/DbDataSync.Cli.dll", "health", "check", "--url", "http://127.0.0.1:8080"]
 
-ENTRYPOINT ["dotnet", "/app/DbDataSync.Cli.dll", "serve", "--url", "http://0.0.0.0:8080"]
+ENTRYPOINT ["dotnet", "/app/DbDataSync.Cli.dll", "server", "run", "--url", "http://0.0.0.0:8080"]
 
 # ── The default image ───────────────────────────────────────────────────────────
 # Debian, not Alpine. LibGit2Sharp, Microsoft.Data.Sqlite and DuckDB.NET all ship glibc natives, and
@@ -131,6 +134,6 @@ EXPOSE 8080
 # pick its way around both — the first attempt used /dev/tcp under /bin/sh, which is a bash feature
 # under dash, and reported a healthy container as unhealthy every time.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD ["dotnet", "/app/DbDataSync.Cli.dll", "health", "--url", "http://127.0.0.1:8080"]
+    CMD ["dotnet", "/app/DbDataSync.Cli.dll", "health", "check", "--url", "http://127.0.0.1:8080"]
 
-ENTRYPOINT ["dotnet", "/app/DbDataSync.Cli.dll", "serve", "--url", "http://0.0.0.0:8080"]
+ENTRYPOINT ["dotnet", "/app/DbDataSync.Cli.dll", "server", "run", "--url", "http://0.0.0.0:8080"]

@@ -45,6 +45,7 @@ public sealed class MsSqlDriverMetadataTests(MsSqlTestDatabase db) : IClassFixtu
             DriverType = DriverIds.MsSql,
             Host = "localhost",
             Port = 14330,
+            Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = db.DatabaseName,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",

@@ -1,5 +1,5 @@
 using System.Data.Common;
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Core.Config;
 using DbDataSync.Core.Sql;
 using DbDataSync.Drivers.Abstractions;
@@ -73,7 +73,7 @@ public static class LibraryValidationRunner
         }
         catch (Exception ex) when (ex is DbException or InvalidOperationException or FileNotFoundException
             or FileLoadException or BadImageFormatException or TypeLoadException or MissingMethodException
-            or ClrKernel.Core.Secrets.SecretNotFoundException)
+            or DbDataKit.Secrets.SecretNotFoundException)
         {
             return LibraryValidationResult.Failed($"Could not build a connection for '{connection.Name}': {ex.Message}");
         }

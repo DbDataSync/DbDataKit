@@ -1,109 +1,52 @@
-## Secrets (Plan 02)
-
-Implemented under `DbDataKit/`: `DbDataKit.Secrets.Abstractions`, `DbDataKit.Secrets`, `DbDataKit.Secrets.Windows`,
-`DbDataKit.Secrets.Keyring` (stub), `DbDataKit.Secrets.Cli`, each with tests in `DbDataKit/tests/`.
-Stubbed: no concrete OS-keyring backend (Phase 0 wrap-vs-fold decision on `ClrKernel.Core.Secrets` pending),
-`import-env` CLI command, cloud providers. Unverified: exact Sync env-var sanitisation for
-`DBDATASYNC_SECRET_<REF>`; Unix branch of `AclHelper` (tests skip on Windows).
-Run tests: `cd DbDataKit/tests/<Pkg>.Tests && dotnet test` (needs `DbDataKit/global.json` MTP runner).
-
-## Odbc (Plan 04 Part A)
-Branch worktree-agent-afbf86949a65d1ed2. DbDataKit/src/DbDataKit.Odbc.Metadata + tests: copied from DbDataProxy c08355f (no history split), hardened (options, row cap, timeouts, policy, Build/Quote, session, SQLWCHAR probe, LibraryImport), added TypeInfo/Procedures/driver inventory/diagnostics, PublicAPI baseline. 129 tests green. Not done: Proxy switch to the package, Linux/macOS live verification, Part B.
 # Plan status
 
-## Update (Plan 08)
+What exists in the repository, what the three products have adopted, and what is not built. The work that remains is the slice table in
+[13a-suite-slices.md](13a-suite-slices.md), whose rows carry their own status; this page is the overview, kept short. Last brought up to date on
+2026-10-23 (slice X04).
 
-Implemented in `DbDataKit/`: `DbDataKit.Update.Abstractions`, `DbDataKit.Update`, `DbDataKit.Update.Service`, `DbDataKit.Update.Detect`, `DbDataKit.Update.Tools` (dotnet tool `dbdata-update`), `DbDataKit.Update.Updater` (console `dbdata-updater`). Tests: `DbDataKit/tests/DbDataKit.Update*.Tests` (all offline).
+## Layout
 
-Done: release/1 manifest, semver + channels, UpdateChecker (min-safe, revocation, downgrade), sources (GitHub/NuGet/Folder/Url), downloader (trusted prefix, resume, size+sha256), ed25519 verification with key rotation, zip/tar-safe extraction, UpdateMode/window, side-by-side layout, update-plan journal with recovery, helper state machine with rollback, install-method detection and appliers, manifest create/sign/verify tool.
+One repository: `DbDataKit/` (the shared libraries), `DbDataSync/`, `DbDataProxy/`, `DbDataBuild/`, `dist/` (packaging), `testenv/` (the shared test
+engines), `scripts/` (repository checks). `DbDataKit.slnx` lists every project; `<Product>.slnf` is a product's filter of it. Versions are in the root
+`Directory.Packages.props`. [CLAUDE.md](../../CLAUDE.md) has the build and test commands.
 
-Stubbed / not done: real service control and Event Log (Plan 03; `dbdata-updater` has a throwing stub), Authenticode, helper trigger (scheduled task/systemd), cross-process helper mutex, `install.ps1` replacement (phase 6), Scoop/winget generation from manifest, porting Sync `Updates` onto the library (phase 2), reusable-release.yml (sketch only in Tools README), key custody decision.
-# Plan status
+## Shared libraries (`DbDataKit/src`)
 
-## Config (Plan 01)
+| Area | Packages | State |
+| --- | --- | --- |
+| Config (plan 01) | `Config`, `Config.Yaml`, `Config.Hosting`, `Config.Testing`, `Config.Git` | strict reader, layering, schema versions, golden and fuzz helpers; git service moved in from Sync (U06). Not done: git-commit backup mode, JSON input behind the node tree |
+| Secrets (plan 02) | `Secrets.Abstractions`, `Secrets`, `Secrets.Store`, `Secrets.Windows`, `Secrets.Cli` | encrypted file store with DPAPI or restricted-file keys, rotation, export and import, the `secret` verbs; the first key is created safely from several processes at once. No OS keychain (D10). Cloud providers are not built |
+| Hosting (plan 03) | `Hosting.Abstractions`, `Hosting`, `Hosting.WindowsService`, `Hosting.Systemd`, `Hosting.Certificates` (+ `.Windows`), `Hosting.Children`, `Hosting.Cli`, `Hosting.Local`, `Security.Acl` | one ACL implementation; the real service-control manager test needs `DBDATA_ADMIN_TESTS=1` and an elevated prompt |
+| ODBC and metadata (plan 04) | `Odbc.Metadata`, `Metadata.Abstractions`, `Metadata` | catalog readers for INFORMATION_SCHEMA, SQL Server, PostgreSQL, DuckDB and ODBC. Not built: a Flight SQL reader, MySQL and Oracle readers |
+| Dialects (plan 05) | `Dialect.Abstractions`, `Dialect`, `Dialect.Arrow`, `Dialect.Conformance` | data-driven dialect tables (`dialects/*.yaml`) for type mapping, quoting and literals; Sync and Build read them directly, Proxy through `Connections` and `Metadata` |
+| Connections (plan 06) | `Connections.Abstractions`, `Connections`, `.SqlServer`, `.Postgres`, `.DuckDb`, `.Odbc`, `.Descriptor`, `.Libraries` | `connection/1`, composers, the failure classifier and its mappers, login names (`LoginEnvironment`). Not built: Flight SQL, JDBC, MySQL and Oracle providers |
+| Transfer (plan 07) | `Transfer.Abstractions`, `Transfer`, `.Conformance`, `.SqlServer`, `.Postgres` | contracts, value conversion, staging policy, strategy SQL builders. Not built: Arrow-first and Parquet staging, MySQL and Oracle writers, a verifier, segmenting, SCD2 |
+| Update (plan 08) | `Update.Abstractions`, `Update`, `.Service`, `.Detect`, `.Tools`, `.Updater` | manifests, channels, checks, downloads, signature checks. Not done: Authenticode, the scheduled helper |
+| Suite (plan 13) | `Cli`, `Scheduling`, `Monitoring`, `Web` | shared command specs and effect classes (C01); cron and time-zone evaluation (M01); the management authorization model (T05) |
 
-- Done (DbDataKit/src, tests green via `dotnet test --project DbDataKit/tests/<Pkg>.Tests`): DbDataKit.Config.Yaml (reader, merge, editor, diff, fuzz), DbDataKit.Config (attributes, binder, layering, env/CLI, migrations, JSON Schema), DbDataKit.Config.Hosting (MEC provider, options validation, ShowOrigin).
-- Not done: DbDataKit.Config.Testing; products do not consume the packages yet (phases 1, 5, 6); JSON input format behind the node tree; git-commit backup mode; `schema: kind/int` form; CLI commands (`config show/migrate/schema`) are library APIs only.
-## Hosting (Plan 03)
+## What the products have adopted
 
-Branch: worktree-agent-ad4903181a885165d. Packages in `DbDataKit/src`: DbDataKit.Hosting.Abstractions, DbDataKit.Hosting, DbDataKit.Hosting.WindowsService, DbDataKit.Hosting.Systemd, DbDataKit.Hosting.Certificates, DbDataKit.Hosting.Children, DbDataKit.Hosting.Cli (tests in `DbDataKit/tests`).
+- **DbDataSync:** strict config reading with a required `schemaVersion` (A01-A03); the encrypted secret store under `dbdata:sync:...` names, with
+  nothing imported from the old store (A04, A05); the shared dialect tables for every engine's type mapping (A06, A07); the shared git service and
+  scheduler evaluator; workers and library validation start as the same executable (F14, in review). Not yet: connection composers, the shared transfer
+  strategies, the console, the script and library loader of plan 14.
+- **DbDataBuild:** shared quoting, command specs and effect classes (C01), the login variable rule (B02), the failure classifier (B03), the
+  project file commands (W01). Not yet: the shared connection types and ODBC catalog reader, the server, scheduling.
+- **DbDataProxy:** the shared connections, metadata readers and failure model (plan 10), secrets in the encrypted store (V06). Not yet:
+  the management API, the console.
 
-- Done: all six deliverables with unit tests (Windows-only tests are skipped elsewhere; the real-SCM mutating test needs `DBDATA_ADMIN_TESTS=1` and an elevated prompt and was not run here).
-- Run tests from `DbDataKit/`: `dotnet test --project tests/<Package>.Tests` (`DbDataKit/global.json` selects the Microsoft.Testing.Platform runner required by xunit.v3 on the .NET 10 SDK).
-- Stubbed: ADCS enrolment (interface only), UAC relaunch, logging/redactor wiring in `UseDbDataHost`, job assignment is post-start (tiny race documented).
-- To reconcile at merge: `IAclPolicy`/`WindowsAclPolicy` here vs the Secrets agent's AclHelper (`DbDataKit.Secrets.Windows`); `DbDataKit/global.json` may also be added by other agents.
-# Implementation status
+## Tests and checks
 
-## Dialect (Plan 05)
+- Repository: `python3 -I -m unittest discover -s scripts/tests`, `python3 -I scripts/check_package_versions.py`, `python3 -I scripts/check_solution.py`.
+- Engines: `testenv/testenv.sh up mssql postgres`, then `eval "$(testenv/testenv.sh env <product>)"`. Build's slow engines (SQL Server 2025, Oracle,
+  Spark, BigQuery, Flight SQL) still start from `DbDataBuild/scripts/test-engines.sh`.
+- Shared libraries and Proxy use xunit v3 on the Microsoft Testing Platform (run the built test executable if `dotnet test` cannot start the host);
+  Sync and Build use xunit v2.
+- CI is one workflow per product plus `dbdatakit-ci.yml`, `repo-checks.yml` and the `dist-*` workflows; product jobs start from
+  `.github/actions/setup-product`.
 
-Branch `worktree-agent-a12e81128462776ae`. Packages under `DbDataKit/src`: `DbDataKit.Dialect.Abstractions`, `DbDataKit.Dialect`, `DbDataKit.Dialect.Arrow`, `DbDataKit.Dialect.Conformance`; tests under `DbDataKit/tests`.
+## Not built (carried forward)
 
-- Done: engine ids/caps, parameterised `CanonicalType`, `TypeMapping`/`Fidelity`, `ISqlDialect`; shared `SqlLexer` (+ fuzz/property tests), parameter rewriter, statement classifier, `ReadOnlyPolicy` with per-dialect deny lists and `ISqlParser` seam; strict `dialect.yaml` loader; built-in ansi/sqlserver/postgres/mysql/oracle/duckdb/fabric + generic ODBC from facts; type tables with `types.golden.yml`; Canonical<->Arrow table; offline conformance suite green for all dialects.
-- Stubbed: live conformance (skipped unless `DBDATA_CONFORMANCE_<ENGINE>` is set; no driver in `DbDataKit/`), live type round trip, DDL fragments (`CreateTable` etc. not in `ISqlDialect` yet), array/list native types, product adoption (migration phases 1 and 6).
-- Run tests from `DbDataKit/` (a `DbDataKit/global.json` opts into the Microsoft.Testing.Platform runner required by .NET 10 `dotnet test`).
-
-## Wave 1 merge summary (main)
-Merged: Secrets, Odbc.Metadata, Update, Config, Hosting, Dialect. `DbDataKit/DbDataKit.Shared.slnx` builds everything;
-run `cd shared && dotnet test --solution DbDataKit.Shared.slnx` (962 pass, 17 skipped by design: live DB, admin, Unix).
-Merge conventions: union-resolve `Directory.Packages.props`/`STATUS.md`; `DbDataKit/tests/Directory.Build.props` supplies xunit.v3
-(do not add it per test project); `DbDataKit/**` is pinned to LF in `.gitattributes`.
-Open decisions: Sync env-var sanitisation rule (Secrets), camelCase default keys (Config), migrations per product,
-BouncyCastle for ed25519 (Update), signing-key custody (Update), Oracle/tinyint type policy (Dialect).
-Reconcile pending: Hosting `IAclPolicy` vs Secrets `AclHelper`.
-Wave 2 (in progress): Connections (06), Transfer (07), Metadata Part B (04), Config.Testing + ACL reconcile.
-
-## Cleanup (ACL reconcile, Config.Testing)
-- ACL: new `DbDataKit/src/DbDataKit.Security.Acl` is the single implementation (`AclHelper`, `IAclService`/`FileSystemAclService`, `AclSpecification`). `DbDataKit.Secrets.Windows` and `DbDataKit.Hosting.WindowsService` reference it; Hosting's `IAclPolicy`, `WindowsAclPolicy` and `IFileSystemAclReader` are gone (doctor and `ServiceCommand` take one `IAclService`; `LayoutAcl.Apply` maps layout to spec). `AclHelper` namespace moved to `DbDataKit.Security.Acl` (breaking for any product code that used `DbDataKit.Secrets.Windows.AclHelper`).
-- Config: `DbDataKit.Config.Testing` added (golden migration pairs, fuzz helper, schema/binder agreement, catalog completeness) with tests, and used by `DbDataKit.Config.Tests`. `schema: <kind>/<int>` header and JSON input (`*.json`, `JsonInput`) implemented with tests. Still not done: git-commit backup mode, CLI commands.
-- `cd shared && dotnet test --solution DbDataKit.Shared.slnx` green; new projects added to the slnx.
-## Metadata (Plan 04 Part B)
-Branch worktree-agent-a1cd09b6bde6b9eb0. `DbDataKit/src/DbDataKit.Metadata.Abstractions` (TableRef, ColumnInfo/KeyInfo/ForeignKeyInfo/IndexInfo, TableShape + ShapeSupport, QueryShape, ServerFacts, CatalogCapabilities, ICatalogReader, TableFilter/LikePattern, CatalogNames, ICatalogCache/ConnectionFingerprint) and `DbDataKit/src/DbDataKit.Metadata` (InformationSchema, SqlServer, Postgres, DuckDB, ODBC readers; ServerFactsProbe; DialectProfiles; dialects.lock-style YAML; CachingCatalogReader). Added `SQLPrepare`/`SQLDescribeCol` (`OdbcCatalog.DescribeQueryAsync`) and raw `GetInfoTextAsync/GetInfoNumberAsync` to `DbDataKit.Odbc.Metadata` (PublicAPI updated, fake-backed tests).
-- Done: tests green (`dotnet test --project tests/DbDataKit.Metadata.Tests`; DuckDB in-process, SQL Server/Postgres via recording fake DbConnection, ODBC via fakes). New package version: DuckDB.NET.Data.Full 1.5.6.
-- Stubbed/not done: live SQL Server/Postgres runs (need a provider package, skipped; env `DBDATA_METADATA_*`), `FlightSqlCatalogReader`, MySQL/Oracle-specific readers, procedures on `ICatalogReader`, product adoption (Proxy `Metadata.cs`, Sync, Build).
-- Open: where the DuckDB/Npgsql/SqlClient live tests should get providers; SQL_TINYINT signedness policy; whether `ServerFacts` should replace Build's `ServerFacts` record directly.
-## Transfer (Plan 07, phases 0-4 and part of 5)
-
-Branch `worktree-agent-ae65f8928374b45cd`. Plan 07a (`docs/plans/07a-strategy-comparison.md`) written from the Sync and Build code. Packages in `DbDataKit/src`: `DbDataKit.Transfer.Abstractions`, `DbDataKit.Transfer`, `DbDataKit.Transfer.Conformance`, `DbDataKit.Transfer.SqlServer`, `DbDataKit.Transfer.Postgres`; tests in `DbDataKit/tests/DbDataKit.Transfer*.Tests`; benchmark stub in `DbDataKit/benchmarks`.
-
-- Done: abstractions (schema, `DataBatch` with reader and Arrow views, source/writer/staging/strategy/state/verifier contracts); `ValueConverter` (plan per column, fidelity, Fail/Null/Truncate/Clamp, edge-case tests); staging policy (Build-compatible names, run suffix, temp variants, lifecycle, generic provider); six strategy SQL builders (full_replace, delete_insert_by_key, merge_by_key, delete_insert_by_range, watermark_append, key_reconcile_delete with DeleteGuard); capability matrix as data; `WriteGate` (intent, readonly, permitted kinds, locks, transactions, statement log with hashes/types by default, redaction, dry-run) and the reusable source-scan invariant helper; DuckDB conformance (all six strategies, idempotent re-run); SQL Server `SqlBulkCopy` and Postgres binary COPY writers (offline tests green; live tests gated by `DBDATA_TEST_SQLSERVER` / `DBDATA_TEST_POSTGRES`).
-- Not run: any live SQL Server/Postgres test; MySQL/Oracle/Fabric SQL is text-tested only. Matrix marks SQL Server/Postgres `product-verified` (Build conformance), not verified here.
-- Not done: Arrow-first and Parquet staging, MySQL/Oracle writers, `ITransferVerifier` implementation, segmenter, SCD2/Snapshot, Windows ACL on the statement log, Sync/Build adoption (phases 3-5 product work), benchmark gate in CI (baseline of current paths not measured; stub compares only in-memory feeding).
-- Open: Windows ACL for the statement log; whether Sync Merge (commit per chunk) should map to a non-transactional `merge_by_key` option; `DateOnly`/`TimeOnly` bulk behaviour on SqlClient is adapted to `DateTime`/`TimeSpan` defensively and unverified live.
-## Connections (Plan 06)
-
-Packages in `DbDataKit/src`: `DbDataKit.Connections.Abstractions`, `DbDataKit.Connections`, `.SqlServer`, `.Postgres`, `.DuckDb`, `.Odbc`, `.Descriptor`, `.Libraries` (tests in `DbDataKit/tests`, all offline; live variants gated by `DBDATA_TEST_SQLSERVER`, `DBDATA_TEST_POSTGRES`, `DBDATA_TEST_ODBC`).
-
-- Done: `connection/1` strict loader and JSON Schema; failure model and classifier with engine mappers; composers (SqlClient, Npgsql, generic ADO, ODBC with brace quoting and Plan 04 policy) with credentials last, properties deny-list, TLS verify-by-default and hostile-credential tests; pass-through injection that strips integrated-security keys and asserts none remain; login resolution (`DBDATA_<APP>_<CONN>_<READ|WRITE>` plus legacy `DBDATABUILD_*`, no read-to-write fallback); `ParameterStyleAdapter`; pool with limits, timeouts, idle reaping and metrics; DuckDB sandbox proven in-process; YAML engine descriptors (`engine/1`) with locked fixed properties; library-install validation and planning (H1 corpus).
-- Stubbed or not done: JDBC/IKVM, Flight SQL, MySql/Oracle providers, plugins package, `IDbProvider.Catalog` (waits for Plan 04 part B), `SQL_ATTR_ACCESS_MODE` is reflection based and unrun against a real driver, `DotnetPublishExecutor` unrun, no product adoption, `KnownLibraries`/compat checkers not ported.
-- Conventions: `Microsoft.Data.SqlClient` 7.1.1, `Npgsql` 10.0.3, `DuckDB.NET.Data.Full` 1.5.6 added to `Directory.Packages.props`; `System.Security.Cryptography.Pkcs` pinned to 10.0.13 for a transitive advisory.
-
-## Proxy adoption C5: Connections and Metadata (offline; branches hub-c5 and DbDataProxy adopt-c5)
-
-DbDataProxy now connects through `Connections.*` (providers, composers, failure model), sandboxes read-only DuckDB sources, classifies every database failure
-for clients (kind, code, fixed sentence; raw text only in the redacted log), feeds rejected pass-through logins to the login throttle, defaults SQL Server sources to
-encrypt-and-verify, offers optional concurrency limits, and reads all catalog metadata through `Metadata` readers (golden Flight SQL responses reproduced byte for byte).
-Shared changes made for it (all tested in `shared/tests`; 1873 total, 0 failed, 50 skipped):
-- DuckDB: `AllowedDirectories` sandbox option; in-memory sources work read-only; a second connection to the same file no longer fails on the sandbox lock (DuckDB.NET shares
-  one instance per file, the lock is instance state: later connections verify instead of setting); write/lock refusals map to `Permission`.
-- `ConcurrencyGate` extracted from `ConnectionPool` (limits for things that are not pooled `DbConnection`s); fixes a per-user slot leak on a cancelled wait.
-- SQL Server composer keeps `Encrypt=Strict`; the legacy ODBC driver named `SQL Server` gets no TLS/intent keys; providers can keep redacted raw failure text.
-- Metadata: `ICatalogReader.ListSchemasAsync` and `GetColumnsAsync` (default interface members, real implementations in the INFORMATION_SCHEMA and ODBC readers).
-Friction and gaps seen from a real consumer:
-- The composers write TLS and timeout keys from the definition over whatever the administrator's string said; a consumer with existing strings must first lift explicit
-  values into `TlsSpec`/`TimeoutSpec` (Proxy: `ConnectionHints`). A "keep explicit values" mode or a `FromConnectionString` helper would remove that.
-- `ReadOnlySession` is one static object per provider; per-source variations (allowed directories) need one provider instance per variation.
-- Providers classify open failures only; command and reader exceptions need the consumer to run `FailureClassifier` itself (Proxy: `FailureTranslator`), and
-  `ConnectionFailureException` drops the exception, so raw text must be captured at classification time.
-- Default interface members are not callable on the concrete reader types without a cast; `OdbcCatalogReader` construction reads about a dozen SQLGetInfo values per call.
-- DuckDB: a sandboxed source and a read-write source (or two different sandboxes) cannot share one file in one process (instance cache); documented, fails closed.
-- Not verified: `SQL_ATTR_ACCESS_MODE` against a real 64-bit driver (only the 32-bit text driver is installed); ODBC PostgreSQL TLS keys; Linux/Docker.
-
-## Overall status (all planned waves merged)
-Packages on main (DbDataKit/): Config (Yaml, Config, Hosting, Testing), Secrets (Abstractions, core, Windows, Keyring stub, Cli), Security.Acl,
-Dialect (Abstractions, core, Arrow, Conformance), Odbc.Metadata, Metadata (Abstractions, core), Connections (Abstractions, core, SqlServer,
-Postgres, DuckDb, Odbc, Descriptor, Libraries), Transfer (Abstractions, core, Conformance, SqlServer, Postgres), Update (Abstractions, core,
-Service, Detect, Tools), Hosting (Abstractions, core, WindowsService, Systemd, Certificates, Children, Cli).
-`cd shared && dotnet test --solution DbDataKit.Shared.slnx`: 1833 total, 0 failed, 50 skipped (live DB/admin/Unix gated).
-Not built: Flight SQL and JDBC providers, MySQL/Oracle providers and writers, plugins package, Arrow-first/Parquet staging, verifier implementation,
-keyring backend, config CLI commands, reusable-release workflow, product adoption (no product repo was changed).
-Open decisions are listed per package section above.
+Flight SQL and JDBC providers; MySQL and Oracle providers and writers; Arrow-first and Parquet staging; a transfer verifier; config CLI commands
+beyond the shared `secret` verbs (the C-series); the reusable release workflow and the suite release (the L-series). Decisions are in plan 13,
+section 7; breaking changes since the last release are in [RELEASE-NOTES-PENDING.md](RELEASE-NOTES-PENDING.md).

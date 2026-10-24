@@ -33,35 +33,9 @@ defaults:
 
 jobs:
   changes:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      build: ${{ steps.diff.outputs.build }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - id: diff
-        working-directory: .
-        env:
-          EVENT: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref }}
-          BEFORE: ${{ github.event.before }}
-        run: |
-          build=true
-          case "$EVENT" in
-            pull_request) base="origin/$BASE_REF"; range="$base...HEAD" ;;
-            push)         base="$BEFORE"; range="$BEFORE..HEAD" ;;
-            *)            base="" ;;
-          esac
-          if [ -n "$base" ] && git rev-parse --verify --quiet "$base^{commit}" >/dev/null; then
-            changed=$(git diff --name-only "$range")
-            echo "changed in $range:"; echo "$changed"
-            echo "$changed" | grep -qE '^(DbDataSync/|DbDataKit/|\.github/workflows/(dbdatasync-|_))' || build=false
-          else
-            echo "::notice::no base to compare with ($EVENT), so everything is treated as changed."
-          fi
-          echo "build=$build" >> "$GITHUB_OUTPUT"
+    uses: ./.github/workflows/_changes.yml
+    with:
+      paths: '^(DbDataSync/|DbDataKit/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatasync-|_)|actions/setup-product))'
 
   # ---- ported jobs ----
   dotnet:
@@ -71,26 +45,19 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-product
         with:
-          dotnet-version: "10.0.x"
-          # No packages.lock.json in this repo, so the cache key is a hash of every .csproj instead —
-          # any dependency change invalidates it. What's cached is the shared ~/.nuget/packages
-          # download, not a job's own build output, so this is safe to turn on in every job that
-          # restores: it only saves the network round-trip to nuget.org, already-restored packages are
-          # still resolved into each project's own bin/obj exactly as before.
-          cache: true
-          cache-dependency-path: "DbDataSync/**/*.csproj"
+          product: DbDataSync
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore DbDataSync.slnf
       - name: Build
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build DbDataSync.slnf --no-restore --configuration Release
       - name: Test
         # Category=Integration tests need real database instances (SQL Server, Postgres, MySQL,
         # MariaDB, Oracle) — see the dotnet-integration job below, which brings up docker-compose.yml's
         # full topology (architecture/implementation/phase-7-e2e-validation.md, extended by phases
         # 153/154).
-        run: dotnet test --no-build --configuration Release --filter "Category!=Integration"
+        run: dotnet test DbDataSync.slnf --no-build --configuration Release --filter "Category!=Integration"
 
   # A real windows-latest runner for the `[WindowsOnlyFact]`-gated tests scattered across
   # DbDataSync.Cli.Tests/Api.Tests/Certificates.Tests (real icacls, the real Windows Event Log, the
@@ -109,21 +76,19 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-product
         with:
-          dotnet-version: "10.0.x"
-          cache: true
-          cache-dependency-path: "DbDataSync/**/*.csproj"
+          product: DbDataSync
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore DbDataSync.slnf
       - name: Build
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build DbDataSync.slnf --no-restore --configuration Release
       - name: Test
         # Plain `--logger trx`, deliberately without LogFileName: `dotnet test` on the solution runs each
         # test project separately, and a fixed name makes every one of them overwrite the last — the
         # first version of this step shipped that way and its artifact held one project's 207 results out
         # of the suite's ~1,500. The default name is per-project and timestamped, so they coexist.
-        run: dotnet test --no-build --configuration Release --filter "Category!=Integration" --logger trx --results-directory TestResults
+        run: dotnet test DbDataSync.slnf --no-build --configuration Release --filter "Category!=Integration" --logger trx --results-directory TestResults
       # The Windows service through the real Service Control Manager: install (twice), status, doctor, start, health, restart, stop,
       # uninstall, all via `dbdatasync service ...` (DbDataSync/tools/service-e2e.ps1). The unit tests cover the same flow against an
       # in-memory manager; this is the only place the real one is exercised.
@@ -164,16 +129,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-product
         with:
-          dotnet-version: "10.0.x"
-          # No packages.lock.json in this repo, so the cache key is a hash of every .csproj instead —
-          # any dependency change invalidates it. What's cached is the shared ~/.nuget/packages
-          # download, not a job's own build output, so this is safe to turn on in every job that
-          # restores: it only saves the network round-trip to nuget.org, already-restored packages are
-          # still resolved into each project's own bin/obj exactly as before.
-          cache: true
-          cache-dependency-path: "DbDataSync/**/*.csproj"
+          product: DbDataSync
+          duckdb: 'false'
       - name: Start the databases
         # No explicit service names, unlike the playwright job below — this one genuinely needs every
         # service docker-compose.yml defines, so naming a subset here would just be one more list to
@@ -187,15 +146,21 @@ jobs:
         # exist on disk the moment the container looks for them. The image's own entrypoint runs them
         # itself; no separate docker exec/sqlplus step needed any more.
         run: docker compose up -d --wait
+      - name: Fetch the pinned DuckDB engine
+        working-directory: .
+        run: scripts/fetch-duckdb.sh
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore DbDataSync.slnf
       - name: Build
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build DbDataSync.slnf --no-restore --configuration Release
       - name: Test (Integration)
         # Same topology as docker-compose.yml (SQL Server source: 14330, target: 14331; Postgres:
         # 15432; MySQL: 13306; MariaDB: 13307; Oracle: 15210) because it *is* docker-compose.yml now —
         # the tests' localhost-based defaults work unchanged in CI.
-        run: dotnet test --no-build --configuration Release --filter "Category=Integration"
+        run: dotnet test DbDataSync.slnf --no-build --configuration Release --filter "Category=Integration"
+        env:
+          # The DuckDB extension test downloads httpfs for the pinned engine from DuckDB's extension server (K06).
+          DBDATASYNC_TEST_NETWORK: "true"
 
   web:
     needs: changes
@@ -204,26 +169,29 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: DbDataSync/src/DbDataSync.Web
+        working-directory: DbDataKit/web
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: "npm"
-          cache-dependency-path: DbDataSync/src/DbDataSync.Web/package-lock.json
+          cache-dependency-path: DbDataKit/web/package-lock.json
       - name: Install
         run: npm ci
       # Phase 160: the renderer's tests — what markup a document may and may not produce. Plain Node, no browser.
       - name: Test
-        run: npm test
+        run: |
+          npm test -w @dbdatakit/shell
+          npm test -w @dbdatakit/admin
+          npm test -w @dbdatakit/sync
       # Phase 162: the script that makes the package README's links absolute (tools/docs/nuget-readme.mjs), tested with
       # node's own runner — plain Node, nothing to install. Run from the product root (DbDataSync/), not this job's working directory.
       - name: Test the NuGet README rewriter
         working-directory: DbDataSync
         run: node --test tools/docs/*.test.mjs
       - name: Build
-        run: npm run build
+        run: npm run build -w @dbdatakit/sync
 
   # The Playwright E2E suite. Not running it anywhere but a developer's machine is what let
   # apply-button-does-not-cache-provisioned-columns.md's golden-path test 18 sit failing on main from
@@ -242,22 +210,16 @@ jobs:
     # written against locally, so CI runs the topology unchanged rather than a lookalike.
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-product
         with:
-          dotnet-version: "10.0.x"
-          # No packages.lock.json in this repo, so the cache key is a hash of every .csproj instead —
-          # any dependency change invalidates it. What's cached is the shared ~/.nuget/packages
-          # download, not a job's own build output, so this is safe to turn on in every job that
-          # restores: it only saves the network round-trip to nuget.org, already-restored packages are
-          # still resolved into each project's own bin/obj exactly as before.
-          cache: true
-          cache-dependency-path: "DbDataSync/**/*.csproj"
+          product: DbDataSync
+          duckdb: 'false'
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: "npm"
           cache-dependency-path: |
-            DbDataSync/src/DbDataSync.Web/package-lock.json
+            DbDataKit/web/package-lock.json
             DbDataSync/tests/DbDataSync.Web.Tests/package-lock.json
       - name: Start the databases
         # --wait blocks on the healthchecks docker-compose.yml already declares, so the suite never
@@ -287,7 +249,7 @@ jobs:
           dotnet build src/DbDataSync.TaskRunner
           dotnet build src/DbDataSync.Cli
       - name: Install the SPA's dependencies
-        working-directory: DbDataSync/src/DbDataSync.Web
+        working-directory: DbDataKit/web
         run: npm ci
       - name: Install the suite's dependencies
         # Its own package.json — @playwright/test lives here, not in the SPA's tree.

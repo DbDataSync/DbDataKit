@@ -25,9 +25,9 @@ Status: **proposed** (2026-10-21), **revised twice the same day after the owner'
 Scope: everything needed to turn three products that share a repository into one suite with one
 management console, one set of definitions and one release, while removing as much duplicated code as possible. Breaking changes are
 allowed. Two pieces of work are folded in: **finishing DuckDB 2.0** and **moving DbDataSync's libraries, drivers and scripts to
-dotnet-script**.
+Roslyn scripting with NuGet package loading** (no SDK at run time; W2).
 
-Inputs: plans 01-12, `docs/plans/STATUS.md`, `docs/review/OVERLAP-AND-CONSOLIDATION.md`, `DbDataBuild/docs/research/duckdb-2.0/README.md`,
+Inputs: plans 01-12, `docs/plans/STATUS.md`, the overlap review (`docs/review/OVERLAP-AND-CONSOLIDATION.md`, removed in F13; in git history), `DbDataBuild/docs/research/duckdb-2.0/README.md`,
 `DbDataBuild/docs/progress/OPEN-ITEMS.md` (section H), `DbDataSync/docs/drivers-and-libraries.md`,
 `DbDataSync/architecture/planning/done/csharp-scripting-host.md`, and the code at `90cdbc5`.
 
@@ -138,7 +138,7 @@ Descriptor drivers (`driver.yaml`) are data, not code, and are not affected. JDB
                           └─────────────────────────┴────────────────────────────────┘
                                                     ▼
                 DbDataKit/: Config · Secrets · Dialect · Connections (+ FlightSql) · Metadata · Transfer · Hosting
-                            Scheduling · Monitoring · Scripting (dotnet-script) · Cli (command surface, MCP) · Web · State
+                            Scheduling · Monitoring · Scripting (Roslyn + NuGet) · Cli (command surface, MCP) · Web · State
 ```
 
 - **The console and the products are separate.** Each product is its own services: a server process (registered as an OS service) with
@@ -160,7 +160,7 @@ Descriptor drivers (`driver.yaml`) are data, not code, and are not affected. JDB
 
 **Clean break** (owner decision, applies to every workstream): the new releases start from nothing. No migration, import, upgrade path or
 compatibility reader is written for existing configs, scripts, libraries, drivers, secrets, users, sessions or state databases, and no
-legacy names are kept (old CLI forms, old environment variable names such as `DBDATABUILD_*` and `DBDATASYNC_SECRET_*`). Instead, a server
+legacy names are kept (old CLI forms, old environment variable names such as `DBDATA_BUILD_*` and `DBDATASYNC_SECRET_*`). Instead, a server
 or CLI that finds a file in an old format (no `schemaVersion`, an older one, `appsettings.json` where `server.yaml` belongs, a `.cs`
 script, a `library.json`) **refuses to start or to load it, with a message naming the file and pointing to the documentation**. Release
 notes say plainly that an existing install is set up again. Users' own data (their databases and DuckDB files) is not ours to break and
@@ -219,28 +219,27 @@ show DuckDB.NET 1.5.6 runs unchanged on the 2.0 library, because 2.0 keeps the o
 
 Exit: one DuckDB engine (2.0.0) in every product, from one pin; every suite green on it on Linux and Windows; no 1.x-only code left.
 
-### W2. Libraries, drivers and scripts on dotnet-script (L)
+### W2. Libraries, drivers and scripts on Roslyn scripting and NuGet (L)
 
-Goal: **one resolver and one loader** for all code DbDataSync loads at runtime, built on dotnet-script (`Dotnet.Script.Core` and
-`Dotnet.Script.DependencyModel`). dotnet-script 2.0 supports .NET 10 and C# 14, needs SDK 10.0.100 or later, and loads assemblies in an
-isolated load context. The shared package is `DbDataKit.Scripting`.
+Goal: **one resolver and one loader** for all code DbDataSync loads at runtime, built on the native Roslyn scripting API
+(`Microsoft.CodeAnalysis.CSharp.Scripting`) and the NuGet libraries (`NuGet.Protocol`, `NuGet.Packaging`, `NuGet.Frameworks`,
+`NuGet.Versioning`), resolving `#r "nuget: id, version"` in process, so **no .NET SDK is needed at run time**, only the runtime. This replaces
+the dotnet-script route this section first proposed: dotnet-script runs `dotnet restore`, which needs the SDK. The design, the spike
+that proved it (DuckDB's native library, SQLite, Npgsql, offline, in a runtime-only container) and its risks are in
+[14-roslyn-nuget-scripting-spike.md](14-roslyn-nuget-scripting-spike.md). The shared package is `DbDataKit.Scripting`.
 
 | Today | After |
 | --- | --- |
-| library: throwaway project + `dotnet publish` + `library.json` + a Resolving hook on the default load context | `libraries/<id>/library.csx` holding only `#r "nuget: <id>, <exact version>"` lines; dotnet-script's dependency model gives the runtime and native asset paths, cached by hash; one `AssemblyLoadContext` per library |
+| library: throwaway project + `dotnet publish` + `library.json` + a Resolving hook on the default load context | `libraries/<id>/library.csx` holding only `#r "nuget: <id>, <exact version>"` lines; the resolver gives the runtime and native asset paths, cached by hash with a lock file; one `AssemblyLoadContext` per library |
 | compiled plugin driver: you build and package an assembly, then `driver.json` names it | `drivers/<id>/driver.csx`: `#r "nuget: ..."`, `#load` for helpers, and a class implementing `IDriver`, compiled by the same host; no packaging step. Descriptor YAML drivers are unchanged |
 | script: `config/scripts/<name>.cs` + manifest, no package references | `config/scripts/<name>.csx` + the same manifest. A script may `#r` packages that are on the allowed list or already installed as libraries, and `#load` shared helpers. The allow-listed reference set and `ScriptSyntaxGuard` stay as lints, documented as not a security boundary, as they are today |
 
 Steps:
 
-1. **Spike (S, first).** Embed `Dotnet.Script.Core` 2.x in the ASP.NET host on .NET 10. Check: restore from nuget.org and from an offline
-   local feed; native assets (DuckDB, SQLite, Oracle); unloading; cold-compile time against today's Roslyn path; the Docker image (needs the
-   SDK, which library installs already require: `SdkAvailability`); Windows service account profile paths for the NuGet cache. Decide D9
-   (embed or call `dotnet script` as a subprocess) from the result.
-2. **`DbDataKit.Scripting`**: a resolver (package references to a resolved closure on disk), a compiler (`.csx` to a cached assembly with an
-   allow-list policy), a loader (a collectible load context per library, driver or script), and diagnostics. All package input
-   goes through `Connections.Libraries.Validation` (the H1 corpus: id, exact version, source, path safety). Package source mapping
-   restricts feeds.
+1. **Spike: done** (section 1 of plan 14; D9 decided). A Windows pass of the spike comes before S02.
+2. **`DbDataKit.Scripting`**: a resolver, a compiler, a loader and diagnostics (slices S02-S04). All package input goes through
+   `Connections.Libraries.Validation` (the H1 corpus: id, exact version, source, path safety). Package source mapping restricts feeds.
+   Unload is best effort and native libraries are never unloaded; where that matters, code runs in a child process (plan 14, section 7).
 3. **Port Sync** onto it in three PRs (libraries, drivers, scripts), adapter first. The web pages (Libraries, Drivers, script editor with
    Monaco) keep working. Add `dbdatasync script test <name>` and editor support: generate a stub so VS Code's C# tooling resolves
    `#r` to the scripting abstractions.
@@ -249,9 +248,10 @@ Steps:
 5. **Delete** `DbDataSync.Libraries`, the plugin loading in `Drivers.Descriptor`, `ScriptCompiler`'s compilation path, and
    `DbDataKit.Connections.Libraries`' installer (its `Validation` moves into `DbDataKit.Scripting`).
 6. **Reuse elsewhere.** Proxy can offer "any ADO.NET provider" data sources through the same library catalog and the generic composer
-   in `Connections`. Build hooks could accept `.csx` later. Both are optional.
+   in `Connections`; because Proxy loads no code today, the first version runs them in a child process or not at all. Build hooks could
+   accept `.csx` later. Both are optional.
 
-Exit: one way to restore and load code at runtime; old-format files are refused with a message; the web pages work as before.
+Exit: one way to restore and load code at runtime; old-format files are refused with a message; the web pages work as before; no SDK on the machine that runs it.
 
 ### W3. Shared libraries in Sync and Build (L, ongoing)
 
@@ -273,7 +273,7 @@ Plan 10's rules apply: adapter first, delete second, one concern per PR, existin
 
 1. `Dialect.*` behind `DialectProfile` (keep Build's matrix and rules; the shared package gets Build's fixtures as conformance cases).
 2. `Connections.*` replaces `Logins`, `OdbcLogin`, `FlightSqlLogin`, `DriverFailure`. Logins come from `DBDATA_BUILD_<CONN>_<READ|WRITE>`;
-   the old `DBDATABUILD_*` names are dropped, here and in the shared resolver (clean break). Build's rule "driver messages are never echoed" becomes a shared-classifier test.
+   the old `DBDATA_BUILD_*` names are dropped, here and in the shared resolver (clean break). Build's rule "driver messages are never echoed" becomes a shared-classifier test.
 3. `Metadata.*` replaces `CatalogReader`, `SourceCatalogReader`, `OdbcCatalogClient`. `ServerFacts` becomes the shared record (plan 04's open question).
 4. `Transfer.*` replaces `Transfer.cs`, `MutationGate` and `StatementLog`. The shared `WriteGate` was modelled on Build's gate, so
    `GateInvariantTests` moves to the shared package and runs against both.
@@ -686,7 +686,7 @@ that works on every platform, key management, and the commands.
 | Key at rest, Linux and macOS | the raw key in a 0600 file owned by the service user, in a 0700 directory; **the server refuses to start if the key file or directory is readable by anyone else** (as ssh does with keys) |
 | Key from outside | `secrets.keyFile` in `server.yaml` (or `DBDATA_SECRETS_KEY_FILE`) points at a key provided by the platform: a Docker or Kubernetes secret, a systemd `LoadCredentialEncrypted` credential. Images never contain a key; a container without one generates it on first start only into a mounted volume, and says so |
 | Writes | atomic (write a temporary file, then rename), the file restricted before content is written (`AclHelper.WriteAllBytesRestricted`) |
-| Reading | `EncryptedFileSecretStore : ISecretStore, ISecretProvider` answers `secret:` references in the resolver chain, ahead of `env:`/`file:`; inline `dpapi:` values (`secret protect`, Windows) resolve too. `LegacyEnvProvider` (the old `DBDATABUILD_*` and `DBDATASYNC_SECRET_*` names) is deleted |
+| Reading | `EncryptedFileSecretStore : ISecretStore, ISecretProvider` answers `secret:` references in the resolver chain, ahead of `env:`/`file:`; inline `dpapi:` values (`secret protect`, Windows) resolve too. `LegacyEnvProvider` (the old `DBDATA_BUILD_*` and `DBDATASYNC_SECRET_*` names) is deleted |
 | Rotation | `secret rotate-key`: a new key, every value re-encrypted, the old key deleted after the last value is rewritten; interrupted rotation resumes |
 | Moving a server | `secret export --to <file>` / `secret import <file>`: values re-encrypted under a passphrase (PBKDF2-SHA256, 600,000 iterations, the existing hasher's primitive). The key file itself is never copied by a command |
 | Commands | the shared `secret` noun (W4): `set <name>` (value from a prompt or stdin, never an argument), `list` (names and dates, never values), `delete`, `check` (every reference in the config resolves), `rotate-key`, `export`, `import`, `protect` (an inline value for a single field, where a store is not wanted). There is no command that prints a value |
@@ -700,7 +700,7 @@ it, and `ClrKernel.Core.Secrets`, `LegacyEnvProvider` and the `Secrets.Keyring` 
 
 ```
 P0 foundations ─► P1 engines and loaders ─► P2 console ─────► P3 Proxy and Build ─► P4 authoring, release ─► P5 retire
-  W0                W2 (dotnet-script)        W5 back-end      W6 Proxy API/module    W11 authoring            ui web,
+  W0                W2 (Roslyn + NuGet)       W5 back-end      W6 Proxy API/module    W11 authoring            ui web,
   W1 (DuckDB 2.0.0) W3 Config/Secrets/        W5 console host  W7 Build server/module W9 suite release         dead shared
   W13 secret store  Dialect in Sync, Build    (Sync's UI moves W10 Build schedules                             packages
   W2.1 spike        W5 front-end extraction   into it)         W3 Metadata/Transfer
@@ -743,7 +743,7 @@ These are rough line counts of today's code that this plan replaces. They show w
 ## 7. Decisions
 
 **All decisions are made** (2026-10-21): the owner accepted every recommendation below, chose to move to DuckDB 2.0.0 now (D6) and
-chose the secret store design (D10). D9 is settled by the W2 spike. Nothing in [13a-suite-slices.md](13a-suite-slices.md) waits on a
+chose the secret store design (D10). D9 is settled by the W2 spike (2026-10-23). Nothing in [13a-suite-slices.md](13a-suite-slices.md) waits on a
 decision any more.
 
 | # | Decision | Recommendation |
@@ -756,7 +756,7 @@ decision any more.
 | D6 | DuckDB.NET 2.0 lag | **decided: do not wait.** DuckDB 2.0.0 now: the released engine, pinned, with DuckDB.NET's packages that carry no engine (W1) |
 | D7 | Keep DuckDB 1.x after 2.0 is the default | **decided: no.** 2.0 only; code that exists only for 1.x plans is deleted |
 | D8 | Build's open 2.0 semantics | **decided:** refusal with a named diagnostic for anything not reproduced exactly (ANY/ALL, decimal quantiles if the targets cannot match, the functions that still fold); `%` and `//` by zero follow 2.0 and the targets (they raise), so the `NULLIF` goes (W1 step 5) |
-| D9 | dotnet-script embedded (`Dotnet.Script.Core`) vs the `dotnet script` CLI as a subprocess | **embedded**, if the W2 spike passes (the spike decides) |
+| D9 | dotnet-script embedded (`Dotnet.Script.Core`) vs the `dotnet script` CLI as a subprocess | **decided (2026-10-23): neither.** Roslyn scripting plus the NuGet libraries, embedded, with no SDK at run time (plan 14); the first two options needed `dotnet restore` |
 | D10 | Secret store | **decided:** finish the shared code, no ClrKernel and nothing imported from it; encrypted values in a YAML file, the key protected by DPAPI on Windows and a permission-restricted file elsewhere (W13) |
 | D11 | Suite binaries self-contained vs framework-dependent | **decided: self-contained**, with the .NET SDK required only for library, driver and script features (as today). Sync needs one change first: `ProcessSupervisor` starts its workers with `dotnet exec`, which needs the shared runtime; it must start them as their own executables |
 | D12 | How the Build server runs commands | **decided (accepted):** **child processes**: one per command for runs and deploys, and one long-lived child per authoring workspace (W11) so feedback is fast; isolation from the native library either way |
@@ -779,7 +779,7 @@ artifacts can be reconsidered once the console is in use.
 
 | Risk | Mitigation |
 | --- | --- |
-| dotnet-script is a small open-source project (maintenance, .NET release lag) | everything goes through `DbDataKit.Scripting`'s own interfaces, so the engine behind them can be swapped (back to plain Roslyn, or .NET 10's file-based apps with `#:package`) without changing configs |
+| We own the package-resolution rules, where `dotnet restore` owns them today (odd package graphs, distro-specific runtime ids) | a lock file with pinned hashes in stored configs, the spike's conflict warnings, and everything behind `DbDataKit.Scripting`'s own interfaces so the engine can be swapped (for example .NET 10's file-based apps with `#:package`) without changing configs |
 | DuckDB.NET 1.5.6 against the 2.0 engine: a C API call 2.0 removed or changed fails only when it is called | every product's whole suite runs on 2.0.0 before its switch merges; Build's runs on the 2.0 alphas already cover its calls, including scalar-function registration |
 | The engine is a native file per platform that DuckDB.NET no longer brings | one pin with hashes; the build fails when the file is missing; a test per published artifact (zip, image, MSI) loads the engine |
 | The secrets key is lost (disk, rebuild) | the documentation and `server setup` say to back it up separately; `secret export` moves values between machines; the store is useless without it, by design |

@@ -103,6 +103,7 @@ public class EngineDifferenceProbes
         ["sqlserver:left"] = Supplementary, ["sqlserver:right"] = Supplementary, ["sqlserver:reverse"] = Supplementary, ["sqlserver:ascii"] = "ASCII() is the first byte, DuckDB's ascii() is the code point (and '' is NULL, not 0); UNICODE() is the equivalent",
         ["sqlserver:upper_sharp_s"] = "str.case_mapping: SQL Server leaves 'ß' alone, DuckDB makes it 'ẞ'",
         ["postgres:upper"] = "str.case_mapping: under the C collation PostgreSQL's upper() changes ASCII only",
+        ["postgres:upper_sharp_s"] = "str.case_mapping: PostgreSQL's upper() uses the C library's case mapping; glibc (the shared test engine's Debian image) leaves 'ß' alone, DuckDB makes it 'ẞ' (musl, the Alpine image, agrees with DuckDB)",
         ["sqlserver:eq_trailing"] = "str.eq: SQL Server ignores trailing spaces in comparisons; the string profile (trailing_space) says so",
         ["postgres:substr_neg"] = "fn.substring_negative: a negative start does not count from the end on PostgreSQL",
         ["sqlserver:substr_neg"] = "fn.substring_negative: a negative start does not count from the end on SQL Server",
@@ -114,7 +115,6 @@ public class EngineDifferenceProbes
        
                 ["sqlserver:lpad"] = Supplementary, ["sqlserver:rpad"] = Supplementary, ["sqlserver:lpad_short"] = Supplementary, ["sqlserver:lpad_multi"] = Supplementary, ["sqlserver:rpad_multi"] = Supplementary, ["sqlserver:lpad_exact"] = Supplementary, ["sqlserver:lpad_zero"] = Supplementary,
         ["sqlserver:strpos_concat"] = Supplementary, ["sqlserver:position_concat"] = Supplementary,
-        ["sqlserver:dec_product_wide"] = "type.decimal_product_wide",
         ["sqlserver:json_object_value"] = "fn.json_extract_string: JSON_VALUE gives NULL for an object or an array", ["postgres:json_object_value"] = "fn.json_extract_string: the text of an object keeps the document's spacing",
         ["sqlserver:json_array_length"] = "fn.json_array_length", ["sqlserver:json_valid"] = "fn.json_other", ["postgres:json_valid"] = "fn.json_other",
         ["sqlserver:re_matches"] = "fn.regexp", ["sqlserver:re_matches_inner"] = "fn.regexp", ["sqlserver:re_matches_case"] = "fn.regexp", ["sqlserver:re_full_match"] = "fn.regexp_full_match",

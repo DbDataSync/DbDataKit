@@ -49,7 +49,7 @@ Two things worth being explicit about here, beyond what Configuration already co
   file references no `Microsoft.Data.SqlClient`/`Npgsql` package at all; it resolves
   `microsoft-data-sqlclient`/`npgsql` through `LibraryRegistry` at connect time, exactly like the
   built-in `MsSql`/`Postgres` replication drivers do. Run
-  `dbdatasync config library install microsoft-data-sqlclient` (or `npgsql`) once; a `StateEngine` set
+  `dbdatasync library install microsoft-data-sqlclient` (or `npgsql`) once; a `StateEngine` set
   to either without its library installed fails at startup naming that exact command. See
   [Drivers and libraries](drivers-and-libraries.md) for the general mechanism.
 

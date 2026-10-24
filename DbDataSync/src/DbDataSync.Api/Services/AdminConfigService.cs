@@ -1,9 +1,8 @@
 using DbDataSync.Api.Auth;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Core.Secrets;
-using ClrKernel.Core.Secrets;
 using Microsoft.Extensions.Configuration.CommandLine;
 using Microsoft.Extensions.Configuration.EnvironmentVariables;
 using Microsoft.Extensions.Configuration.Json;
@@ -58,7 +57,7 @@ public sealed class AdminConfigService(
             "value inside that same file could never relocate it — not editable here.",
             SupportsWrite: false),
         new("DbDataSync:App:Url",
-            "Console/API bind address. Only `dbdatasync serve`/`dbdatasync health` resolve this themselves " +
+            "Console/API bind address. Only `dbdatasync server run`/`dbdatasync health check` resolve this themselves " +
             "before translating it to Kestrel's --urls; the raw `dotnet run` entry point ignores it.",
             SupportsWrite: true),
         new("DbDataSync:App:Server",
@@ -84,7 +83,7 @@ public sealed class AdminConfigService(
             "the host itself, not through the console it protects.",
             SupportsWrite: false),
         new("DbDataSync:App:TaskRunnerDllPath",
-            "Where DbDataSync.TaskRunner.dll is. Resolved automatically for a normal install or container.",
+            "Optional. Start workers as `dotnet exec` of this DbDataSync.TaskRunner.dll instead of as `dbdatasync internal worker`. Leave empty for a normal install or container.",
             SupportsWrite: true),
         new("DbDataSync:State:DbPath",
             "The SQLite state file. Ignored when State:Engine is MsSql or Postgres.",
@@ -137,12 +136,12 @@ public sealed class AdminConfigService(
             "beside it.",
             SupportsWrite: true),
         new("DbDataSync:Certificates:CaConfig",
-            "The enterprise CA `dbdatasync config cert enroll`, `renew` and `templates` ask, as `CASERVER\\CA Name`." +
-            "`dbdatasync config cert discover` finds and saves it. Read by the CLI, not the running service.",
+            "The enterprise CA `dbdatasync cert enroll`, `renew` and `templates` ask, as `CASERVER\\CA Name`." +
+            "`dbdatasync cert discover` finds and saves it. Read by the CLI, not the running service.",
             SupportsWrite: true),
         new("DbDataSync:Certificates:Template",
-            "The certificate template name `dbdatasync config cert enroll` and `renew` request. " +
-            "`dbdatasync config cert discover` lists the ones the CA publishes. Read by the CLI, not the running service.",
+            "The certificate template name `dbdatasync cert enroll` and `renew` request. " +
+            "`dbdatasync cert discover` lists the ones the CA publishes. Read by the CLI, not the running service.",
             SupportsWrite: true),
         new("DbDataSync:Auth:Network:Admin",
             "Trusts an unauthenticated request from loopback as Admin: loopback or disabled. There is no " +
@@ -242,7 +241,7 @@ public sealed class AdminConfigService(
     }
 
     /// <summary>
-    /// Sets State:ConnectionString's password through the same store <c>dbdatasync config secret set</c> writes
+    /// Sets State:ConnectionString's password through the same store <c>dbdatasync secret set</c> writes
     /// to — this screen and the CLI command are two doors onto the same store, not two stores. The only
     /// key this applies to today; see docs/configuration.md's "Secrets" section.
     /// </summary>

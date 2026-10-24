@@ -3,7 +3,7 @@ using DbDataKit.Hosting.Systemd;
 using DbDataSync.Api.Auth;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 
 namespace DbDataSync.Cli;
 
@@ -261,7 +261,7 @@ internal static class SystemdService
         {
             Name = UnitName,
             Description = "DbDataSync — cross-database replication",
-            ExecStart = $"{QuoteForSystemd(executable)} serve --repo {QuoteForSystemd(root)}",
+            ExecStart = $"{QuoteForSystemd(executable)} server run --repo {QuoteForSystemd(root)}",
             WorkingDirectory = root,
             DynamicUser = false,
             User = user,

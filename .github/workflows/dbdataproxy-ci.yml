@@ -30,35 +30,9 @@ defaults:
 
 jobs:
   changes:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      build: ${{ steps.diff.outputs.build }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - id: diff
-        working-directory: .
-        env:
-          EVENT: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref }}
-          BEFORE: ${{ github.event.before }}
-        run: |
-          build=true
-          case "$EVENT" in
-            pull_request) base="origin/$BASE_REF"; range="$base...HEAD" ;;
-            push)         base="$BEFORE"; range="$BEFORE..HEAD" ;;
-            *)            base="" ;;
-          esac
-          if [ -n "$base" ] && git rev-parse --verify --quiet "$base^{commit}" >/dev/null; then
-            changed=$(git diff --name-only "$range")
-            echo "changed in $range:"; echo "$changed"
-            echo "$changed" | grep -qE '^(DbDataProxy/|DbDataKit/|testenv/|\.github/workflows/(dbdataproxy-|_))' || build=false
-          else
-            echo "::notice::no base to compare with ($EVENT), so everything is treated as changed."
-          fi
-          echo "build=$build" >> "$GITHUB_OUTPUT"
+    uses: ./.github/workflows/_changes.yml
+    with:
+      paths: '^(DbDataProxy/|DbDataKit/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataproxy-|_)|actions/setup-product))'
 
   # The Windows service, DPAPI, ACLs, the 32-bit worker and the text ODBC driver only exist here, so this is the only job that
   # exercises them; it also packages the release zip as a smoke test.
@@ -70,10 +44,11 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-product
         with:
-          global-json-file: DbDataProxy/global.json
-      - run: dotnet build -c Release
+          product: DbDataProxy
+          global-json: DbDataProxy/global.json
+      - run: dotnet build DbDataProxy.slnf -c Release
       - run: dotnet test --project tests/DbDataProxy.Tests -c Release --no-build --minimum-expected-tests 100
       - name: Package (smoke test)
         run: ./build/package.ps1 -Version 0.0.0-ci
@@ -89,9 +64,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-product
         with:
-          global-json-file: DbDataProxy/global.json
+          product: DbDataProxy
+          global-json: DbDataProxy/global.json
       - name: Test the test-environment scripts
         working-directory: .
         run: testenv/selftest.sh
@@ -107,8 +83,35 @@ jobs:
           sudo dpkg -i packages-microsoft-prod.deb
           sudo apt-get update
           sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
-      - run: dotnet build -c Release
+      - run: dotnet build DbDataProxy.slnf -c Release
       - run: dotnet test --project tests/DbDataProxy.Tests -c Release --no-build --minimum-expected-tests 100
+      - name: Stop the shared engines
+        if: always()
+        working-directory: .
+        run: testenv/testenv.sh down
+
+  # The shared Flight SQL client (DbDataKit.Connections.FlightSql) against a real `dbdataproxy server` in front of SQL Server and DuckDB: queries, every
+  # compression, prepared and inline parameters, login failures, and the read-only checks. The script builds and starts the proxy; see its header.
+  flightsql-e2e:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-product
+        with:
+          product: DbDataProxy
+          global-json: DbDataProxy/global.json
+      - name: Start SQL Server (shared test engines)
+        working-directory: .
+        run: testenv/testenv.sh up mssql
+      - name: Point the script at it
+        working-directory: .
+        run: testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
+      - name: Proxy and the shared client, end to end
+        working-directory: .
+        run: DbDataProxy/tests/interop/run-flightsql-e2e.sh
       - name: Stop the shared engines
         if: always()
         working-directory: .

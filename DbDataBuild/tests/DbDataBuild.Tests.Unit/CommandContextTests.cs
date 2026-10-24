@@ -42,7 +42,11 @@ public class CommandContextTests
         var gate = new Barrier(2);
         var ta = Task.Run(() => CommandContext.With(a, () => { gate.SignalAndWait(); return CommandContext.Hooks; }));
         var tb = Task.Run(() => CommandContext.With(b, () => { gate.SignalAndWait(); return CommandContext.Hooks; }));
+        #pragma warning disable xUnit1031 // the test blocks on purpose
         Assert.Same(a, ta.GetAwaiter().GetResult());
+        #pragma warning restore xUnit1031
+        #pragma warning disable xUnit1031 // the test blocks on purpose
         Assert.Same(b, tb.GetAwaiter().GetResult());
+        #pragma warning restore xUnit1031
     }
 }

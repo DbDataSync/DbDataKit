@@ -1,4 +1,3 @@
-using ClrKernel.Core.Secrets;
 using DbDataSync.Core.Secrets;
 using DbDataSync.Libraries;
 
@@ -34,7 +33,7 @@ public sealed class StateLibraryMissingTests : IDisposable
             libraryRegistry));
 
         Assert.Contains(libraryId, ex.Message);
-        Assert.Contains($"dbdatasync config library install {libraryId}", ex.Message);
+        Assert.Contains($"dbdatasync library install {libraryId}", ex.Message);
     }
 
     /// <summary>The failure happens before any network attempt — GetFactory refuses by

@@ -4,7 +4,7 @@ Status: proposed. Scope: hub CI and publishing of `DbDataKit.*`, how Proxy depen
 Proxy adopts each one. **Out of scope: the update system** (`DbDataKit.Update.*`, `dbdata-updater`, signed manifests,
 side-by-side service swap). Proxy keeps `scripts/install.ps1` and its release process as they were when this plan was written; see "Deliberately skipped". (Since the monorepo move, `install.ps1` reads `dbdataproxy/v*` releases from DbDataKit and the release is `dbdataproxy-release.yml`; see plan 09 and `DbDataProxy/README.md`.)
 
-Inputs: `docs/review/detail/DbDataProxy.md`, `docs/review/SECURITY.md`, plans 01-07, `docs/plans/STATUS.md`.
+Inputs: `DbDataProxy/docs/review.md`, `docs/security-review.md`, plans 01-07, `docs/plans/STATUS.md`.
 Finding IDs (H2-H4, S-1, S-2, S-6, S-9, S-10) are the ones used in those documents.
 
 ## 1. Where Proxy stands (as of `293362e`)
@@ -115,7 +115,7 @@ When the hub's `DbDataKit.Build` props package exists, this moves there and Prox
 ### B4. Per-PR checklist (applies to every phase in section 5)
 1. Develop with the local override; write the adapter and tests; run the full Proxy suite plus the SQL Server job locally via Docker.
 2. Publish the needed shared version (preview if needed); switch Proxy to the published version; CI green on both jobs.
-3. Update `docs/review/SECURITY.md` finding status and the Proxy README/appsettings example in the same PR.
+3. Update `docs/security-review.md` finding status and the Proxy README/appsettings example in the same PR.
 4. Behaviour-compatibility note in the PR description: config keys, CLI verbs, wire behaviour, logs; "none" is the expected answer unless the phase says otherwise.
 
 ## 5. Phase C: Adoption order in DbDataProxy

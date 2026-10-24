@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Reflection.MetadataLoadContext" Version="10.0.0" />
+    <PackageReference Include="System.Reflection.MetadataLoadContext" />
     <!--
       Phase 109j: reads a driver's own already-built DLL's IL metadata (which members it references
       into its required library assembly) without executing anything — the same "read, never load"
@@ -19,7 +19,12 @@
       one call, with no need for AsmResolver's fuller (and heavier) PE/managed-image object model this
       phase has no other use for.
     -->
-    <PackageReference Include="Mono.Cecil" Version="0.11.6" />
+    <PackageReference Include="Mono.Cecil" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The DuckDB engine pin (the repository's duckdb.pin), which DuckDbEngine reads. -->
+    <EmbeddedResource Include="..\..\..\duckdb.pin" LogicalName="duckdb.pin" Link="duckdb.pin" />
   </ItemGroup>
 
   <ItemGroup>

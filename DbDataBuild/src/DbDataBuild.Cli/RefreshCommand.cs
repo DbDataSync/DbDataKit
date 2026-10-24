@@ -625,7 +625,7 @@ internal static class RefreshCommand
 }
 
 /// <summary>
-/// How a refresh reaches the origins of its copies: each by its connection name, on its read login from the environment (`DBDATABUILD_&lt;ORIGIN&gt;_READ`), through <see cref="ReadSession"/> only. A failure is described by its
+/// How a refresh reaches the origins of its copies: each by its connection name, on its read login from the environment (`DBDATA_BUILD_&lt;ORIGIN&gt;_READ`), through <see cref="ReadSession"/> only. A failure is described by its
 /// type and error number, never by the driver's message.
 /// </summary>
 internal sealed record OriginAccess(ProjectConfig Config, Func<string, string?> Env, SessionLimits? Limits = null, SessionOpener? Open = null)
@@ -657,7 +657,7 @@ internal sealed record OriginAccess(ProjectConfig Config, Func<string, string?> 
             return null;
         }
         catch (GateRefusedException ex) { return ex.Diagnostic.Found; }
-        catch (Exception ex) when (ex is not OperationCanceledException) { return $"it could not be reached ({DbDataBuild.Execution.DriverFailure.Describe(ex)})."; }
+        catch (Exception ex) when (ex is not OperationCanceledException) { return $"it could not be reached ({DbDataBuild.Execution.Failures.Describe(ex)})."; }
     }
 }
 

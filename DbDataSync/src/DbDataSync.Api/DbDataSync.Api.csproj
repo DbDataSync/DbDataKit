@@ -7,19 +7,30 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Cronos" Version="0.13.0" />
-    <PackageReference Include="Fido2.AspNet" Version="4.0.1" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <!-- The shared SqlClient, Npgsql, MySqlConnector and ODP.NET composers (plan 13, A08, A09) bring their packages with runtime assets. A direct reference that
+         excludes them wins over the transitive one, so the drivers still come from <repo>/libraries/ at first touch, as the driver
+         projects' own comments describe. -->
+    <PackageReference Include="Microsoft.Data.SqlClient" ExcludeAssets="runtime" />
+    <PackageReference Include="Npgsql" ExcludeAssets="runtime" />
+    <PackageReference Include="MySqlConnector" ExcludeAssets="runtime" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <DbDataKitReference Include="Web" />   <!-- session sign-in: cookie, passkeys, Windows sign-in, first-run invite; plan 13, U05 -->
+    <DbDataKitReference Include="Scheduling" />   <!-- the schedule evaluator (Cronos comes with it); plan 13, M01 -->
+    <PackageReference Include="Fido2.AspNet" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <!-- Lifetime and logging for a process the Windows SCM starts. Cross-platform to reference; the
          helper it provides answers false everywhere else, so nothing is conditional here. -->
-    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
     <!-- Phase 111's systemd analog of the package above — sd_notify(READY=1)/journal logging for a
          process systemd starts. Same cross-platform-to-reference reasoning: its own helper answers
          false everywhere but a real systemd unit. -->
-    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
     <!-- Kerberos/NTLM under Kestrel. Cross-platform to reference; it only authenticates anybody on
          Windows, and the sign-in endpoint says so where it does not. -->
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.Negotiate" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Negotiate" />
   </ItemGroup>
 
   <ItemGroup>
@@ -49,6 +60,11 @@
     <ProjectReference Include="..\DbDataSync.Drivers.Jdbc\DbDataSync.Drivers.Jdbc.csproj" />
     <ProjectReference Include="..\DbDataSync.Libraries\DbDataSync.Libraries.csproj" />
     <ProjectReference Include="..\DbDataSync.State\DbDataSync.State.csproj" />
+    <!-- the shared state types come with the project reference; StateDatabase is Sync's own (plan 13, U04) -->
+    <Using Include="DbDataKit.State" />
+    <Using Include="DbDataKit.Web.Auth" />
+    <Using Include="DbDataKit.Monitoring" />
+    <Using Include="DbDataSync.State.StateDatabase" Alias="StateDatabase" />
     <ProjectReference Include="..\DbDataSync.Updates\DbDataSync.Updates.csproj" />
     <ProjectReference Include="..\DbDataSync.Verification\DbDataSync.Verification.csproj" />
   </ItemGroup>
@@ -61,15 +77,15 @@
   -->
   <PropertyGroup>
     <SkipWebBuild Condition="'$(SkipWebBuild)' == ''">false</SkipWebBuild>
-    <WebProjectDir>$(MSBuildProjectDirectory)/../DbDataSync.Web</WebProjectDir>
+    <WebProjectDir>$(MSBuildProjectDirectory)/../../../DbDataKit/web</WebProjectDir>
   </PropertyGroup>
 
   <Target Name="BuildSpa" BeforeTargets="PrepareForPublish" Condition="'$(SkipWebBuild)' != 'true'">
     <Message Importance="high" Text="Building the SPA in $(WebProjectDir)" />
     <Exec Command="npm ci" WorkingDirectory="$(WebProjectDir)" />
-    <Exec Command="npm run build" WorkingDirectory="$(WebProjectDir)" />
+    <Exec Command="npm run build -w @dbdatakit/sync" WorkingDirectory="$(WebProjectDir)" />
     <ItemGroup>
-      <SpaOutput Include="$(WebProjectDir)/dist/**/*" />
+      <SpaOutput Include="$(WebProjectDir)/sync/dist/**/*" />
       <!-- Published rather than copied into the source tree: a wwwroot full of build output is a
            wwwroot somebody commits by accident. -->
       <ResolvedFileToPublish Include="@(SpaOutput)">

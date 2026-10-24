@@ -5,7 +5,7 @@ namespace DbDataBuild.Targets.Loaders;
 /// <summary>PostgreSQL statement assembly. MERGE needs PostgreSQL 15 or later (see matrix/strategies.yml).</summary>
 public sealed class PostgresLoader : LoaderBase
 {
-    protected override string Quote(string identifier) => "\"" + identifier.Replace("\"", "\"\"") + "\"";
+    protected override string Quote(string identifier) => SharedQuoting.Quote("postgres", identifier);
     protected override string Stage => "ddb_stage";
     protected override IReadOnlyList<string> Prelude => [];
     protected override IReadOnlyList<string> OpenTransaction => ["BEGIN;"];

@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <Description>A neutral model of runs (job, run, outcome, timing, failure) and the health rules over it: overdue, slow, failed, running too long, lagging; and the notification feed contract with its record types.</Description>
+  </PropertyGroup>
+</Project>

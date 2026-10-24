@@ -6,7 +6,7 @@ Status: proposed. Depends on: none. Consumed by Plans 01 (secret-typed keys), 03
 
 | | Sync | Proxy | Build |
 |---|---|---|---|
-| Store | `ClrKernel.Core.Secrets` 0.11.0: OS keyring, env fallback `DBDATASYNC_SECRET_<REF>` | **none**; passwords in `appsettings.json` connection strings, JWT key and cert password plaintext | env vars only: `DBDATABUILD_<CONN>_<READ\|WRITE>` hold whole connection strings |
+| Store | `ClrKernel.Core.Secrets` 0.11.0: OS keyring, env fallback `DBDATASYNC_SECRET_<REF>` | **none**; passwords in `appsettings.json` connection strings, JWT key and cert password plaintext | env vars only: `DBDATA_BUILD_<CONN>_<READ\|WRITE>` hold whole connection strings |
 | Reference in config | `CredentialSecretRef` (`dbdatasync:connection:<name>`) | none | none (name derived from connection name) |
 | Redaction | `ConnectionDiagnostics.Redact` (exact literal only) | none; raw DB error text returned to clients; `LogSql` default true | `DriverFailure` never echoes driver text; statement log keeps parameters |
 | Credential-in-config checks | `ConfigValidation.cs:55-120` on `ConnectionString` only (not `Properties`) | none | n/a |
@@ -53,7 +53,7 @@ deployment mode (below). `ISecretResolver` never logs values; resolve events are
 
 ### 3.3 Deployment contexts (the hard part)
 - **Interactive CLI (Build, Sync dev)**: keyring then env. Build keeps the whole-connection-string env var as
-  a compatibility provider (`DBDATABUILD_<CONN>_<READ|WRITE>`, `LegacyEnvProvider`) so no user breaks.
+  a compatibility provider (`DBDATA_BUILD_<CONN>_<READ|WRITE>`, `LegacyEnvProvider`) so no user breaks.
 - **Windows service**: Credential Manager is per user profile, awkward for virtual accounts and gMSA. Provide
   `DpapiMachineStore`: secrets in `%ProgramData%\<Product>\secrets\` encrypted with DPAPI LocalMachine
   scope plus per-product entropy, ACL restricted to the service account and Administrators (ACL helper lives
@@ -109,7 +109,7 @@ DbDataKit.Secrets.Cli            shared command set
 | 0 | Review `ClrKernel.Core.Secrets` (threat-model fallback encryption, memory); decide wrap vs fold into this repo. Write the threat model. | Decision recorded |
 | 1 | Abstractions + env/file providers + redactor + detector; unit and fuzz tests for redaction | Package published |
 | 2 | Sync adopts: map `dbdatasync:connection:*` refs and `DBDATASYNC_SECRET_*` env through compat; extend detector to `Properties`; Viewer redaction | No config changes needed for existing repos |
-| 3 | Build adopts: `LegacyEnvProvider` keeps `DBDATABUILD_*`; add `secret:` references as an option; statement-log redaction | Existing envs still work |
+| 3 | Build adopts: `LegacyEnvProvider` keeps `DBDATA_BUILD_*`; add `secret:` references as an option; statement-log redaction | Existing envs still work |
 | 4 | DPAPI machine store + ACL helper (needs Plan 03 service identity decisions) | Service reads secrets as virtual account in a Windows CI test |
 | 5 | Proxy adopts: `PasswordSecret`/`ConnectionStringSecret`, JWT key and cert password via refs; startup warning for plaintext, then error; random PFX password | S-3 closed; install.ps1 sets ACLs |
 | 6 | Cloud providers (Key Vault etc.) if needed | n/a |

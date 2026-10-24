@@ -1,6 +1,6 @@
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using LibGit2Sharp;
 
 namespace DbDataSync.Core.Tests;
@@ -141,6 +141,7 @@ public sealed class CachedColumnsYamlRoundTripTests : IDisposable
         var path = Path.Combine(_root, "config", "replications", "r", "table-mappings", "old.yaml");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, """
+            schemaVersion: 1
             name: old
             sources:
             - connectionName: s

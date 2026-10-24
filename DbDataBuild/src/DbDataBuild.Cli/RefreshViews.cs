@@ -173,7 +173,7 @@ internal static class RefreshViews
         output.Payload("plans", rows.Select(r => new
         {
             connection = r.Connection, name = r.Plan.Name, title = r.Plan.Info.Title, description = r.Plan.Info.Description, hash = r.Plan.Hash, members = r.Plan.Members.Count,
-            settings = new { on_failure = r.Plan.Settings.OnFailure, on_busy = r.Plan.Settings.OnBusy, expected_every = r.Plan.Settings.ExpectedEvery, parallel = r.Plan.Settings.Parallel, check = r.Plan.Settings.Check, on_fail = r.Plan.Settings.OnFail },
+            settings = new { on_failure = r.Plan.Settings.OnFailure, on_busy = r.Plan.Settings.OnBusy, expected_every = r.Plan.Settings.ExpectedEvery, schedule = r.Plan.Settings.Schedule, time_zone = r.Plan.Settings.TimeZone, parallel = r.Plan.Settings.Parallel, check = r.Plan.Settings.Check, on_fail = r.Plan.Settings.OnFail },
             load_members = planArg == null ? null : r.Plan.Members.Select(m => Member(r.Connection, r.Plan.Name, m, r.Loads, GraphOf(r.Plan, r.Loads))).ToList(),
             dependencies = GraphOf(r.Plan, r.Loads)?.Select(d => new { model = d.Model, model_kind = d.ModelKind, depends_on = d.DependsOn, depends_on_kind = d.DependsOnKind, depth = d.Depth }).ToList(),
             excluded = r.Plan.Excluded.Select(x => new { model = x.Model, member = x.Member, reason = x.Reason }).ToList(),
@@ -196,7 +196,7 @@ internal static class RefreshViews
             if (r.Plan.Info.Title != null) output.WriteLine($"  {r.Plan.Info.Title}");
             if (r.Plan.Info.Description != null) output.WriteLine($"  {r.Plan.Info.Description}");
             var s = r.Plan.Settings;
-            var settings = new[] { s.OnFailure != null ? $"on_failure {s.OnFailure}" : null, s.OnBusy != null ? $"on_busy {s.OnBusy}" : null, s.ExpectedEvery != null ? $"expected_every {s.ExpectedEvery}" : null, s.Parallel != null ? $"parallel {s.Parallel}" : null, s.Check != null ? $"check {s.Check}" : null, s.OnFail != null ? $"on_fail {s.OnFail}" : null }.Where(x => x != null);
+            var settings = new[] { s.OnFailure != null ? $"on_failure {s.OnFailure}" : null, s.OnBusy != null ? $"on_busy {s.OnBusy}" : null, s.ExpectedEvery != null ? $"expected_every {s.ExpectedEvery}" : null, s.Schedule != null ? $"schedule \"{s.Schedule}\"{(s.TimeZone != null ? $" in {s.TimeZone}" : "")}" : null, s.Parallel != null ? $"parallel {s.Parallel}" : null, s.Check != null ? $"check {s.Check}" : null, s.OnFail != null ? $"on_fail {s.OnFail}" : null }.Where(x => x != null);
             if (settings.Any()) output.WriteLine($"  settings: {string.Join(", ", settings)}");
             output.WriteLine(graphs[(r.Connection, r.Plan.Name)] is { } shown
                 ? $"  dependency graph of the loads file: {shown.Count} edge(s) among these members (direct and through others; a member waits for what it reads)"

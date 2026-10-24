@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Npgsql" />
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\DbDataKit.Scheduling\DbDataKit.Scheduling.csproj" />
+    <!-- the throwaway state database per engine, the same one the State tests use -->
+    <Compile Include="..\DbDataKit.State.Tests\StateEngines.cs" Link="StateEngines.cs" />
+  </ItemGroup>
+</Project>

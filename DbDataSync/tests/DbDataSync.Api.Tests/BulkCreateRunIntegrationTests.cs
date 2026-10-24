@@ -2,7 +2,6 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using ClrKernel.Core.Secrets;
 using DbDataSync.Core.Config;
 using DbDataSync.Core.Secrets;
 using Microsoft.Data.SqlClient;
@@ -267,6 +266,7 @@ public sealed class BulkCreateRunIntegrationTests : IClassFixture<TestApiFactory
             DriverType = DriverIds.MsSql,
             Host = "localhost",
             Port = 14330,
+            Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = database,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",

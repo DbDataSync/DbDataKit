@@ -8,7 +8,7 @@ using DbDataKit.Security.Acl;
 using DbDataSync.Api.Auth;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 
 namespace DbDataSync.Cli;
 
@@ -96,7 +96,7 @@ public static class ServiceCommand
         }
 
         Console.Error.WriteLine(
-            "Service registration is Windows and Linux (systemd) only. On macOS, run `dbdatasync serve` " +
+            "Service registration is Windows and Linux (systemd) only. On macOS, run `dbdatasync server run` " +
             "directly, or use the container image.");
         return 1;
     }
@@ -277,7 +277,7 @@ public static class ServiceCommand
         Name = ServiceName,
         DisplayName = ServiceName,
         BinaryPath = executable,
-        Arguments = ["serve", "--repo", root],
+        Arguments = ["server", "run", "--repo", root],
         Account = ServiceAccount.Parse(account ?? "LocalSystem", ServiceName),
         AllowLocalSystem = true,
         StartMode = ServiceStartMode.Automatic,
@@ -533,7 +533,7 @@ public static class ServiceCommand
     }
 
     /// <summary>What the service runs: the executable, <c>serve</c>, and the resolved data directory.</summary>
-    internal static string BinPath(string executable, string root) => CommandLineQuoting.Build(executable, ["serve", "--repo", root]);
+    internal static string BinPath(string executable, string root) => CommandLineQuoting.Build(executable, ["server", "run", "--repo", root]);
 
     internal static int Sc(params string[] arguments)
     {

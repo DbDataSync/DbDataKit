@@ -1,4 +1,5 @@
 using System.Text;
+using DbDataKit.Secrets.Store;
 
 namespace DbDataKit.Secrets.Cli;
 
@@ -41,20 +42,33 @@ public sealed class SystemConsole : IConsole
 }
 
 /// <summary>
-/// <c>secret set|get|list|rm|test</c>. A plain class: a product mounts it under whatever verb it likes by
-/// passing the arguments after <c>secret</c> to <see cref="Execute"/>. Exit codes: 0 ok, 1 not found or
-/// failed, 2 usage error. <b>Secret values are never accepted from, or echoed into, argv.</b>
+/// The shared <c>secret</c> commands. A plain class: a product mounts it under its <c>secret</c> noun by passing the arguments after <c>secret</c> to <see cref="Execute"/>. Exit codes: 0 ok, 1 failed
+/// or something did not resolve, 2 usage error. <b>No command prints a secret's value, and none accepts one on the command line</b>: a value comes from a hidden prompt or stdin, a passphrase
+/// likewise.
 /// </summary>
-public sealed class SecretCli(ISecretResolver resolver, ISecretStore store)
+/// <param name="resolver">Resolves references for <c>check</c>.</param>
+/// <param name="store">Writes and deletes secrets.</param>
+/// <param name="admin">Inventory, rotation, export and import; without it <c>list</c> shows names only and those verbs say they are not available.</param>
+/// <param name="references">The references the product's configuration holds, for <c>check</c> without arguments.</param>
+/// <param name="protect">Makes the inline form of a value for a single field (<c>dpapi:</c> on Windows); without it <c>protect</c> says it is not available on this platform.</param>
+public sealed class SecretCli(
+    ISecretResolver resolver,
+    ISecretStore store,
+    ISecretAdmin? admin = null,
+    Func<IEnumerable<SecretRef>>? references = null,
+    Func<SecretValue, string>? protect = null)
 {
     public const string Usage =
         "usage: secret <command>\n" +
-        "  set <name> [--stdin]     store a secret; value comes from a hidden prompt or stdin, never the command line\n" +
-        "  get <name|ref> [--reveal] show whether a secret exists; --reveal prints the value\n" +
-        "  list [prefix]            list secret names (never values)\n" +
-        "  rm <name>                delete a secret\n" +
-        "  test <ref>               resolve a reference and report ok / not found without printing it\n" +
-        "names look like dbdata:<product>:<kind>:<name>[:<part>]; refs like env:X, file:/p, secret:<name>";
+        "  set <name> [--stdin]            store a secret; the value comes from a hidden prompt or stdin, never the command line\n" +
+        "  list [prefix]                   list secret names with when each was written (never values)\n" +
+        "  delete <name>                   delete a secret\n" +
+        "  check [ref...]                  resolve each reference (those given, or every one in the configuration) and say which do not\n" +
+        "  rotate-key                      a new data key; every value is encrypted again under it and the old key is deleted\n" +
+        "  export <file> [--prefix p] [--passphrase-stdin]   write the secrets, encrypted under a passphrase, to move a server\n" +
+        "  import <file> [--overwrite] [--passphrase-stdin]  read an export made by `export`\n" +
+        "  protect [--stdin]               an inline, encrypted form of one value for a single field (Windows: dpapi:)\n" +
+        "names look like dbdata:<product>:<kind>:<name>[:<part>]; refs like secret:<name>, env:X, file:/p. There is no command that prints a value.";
 
     public int Execute(string[] args, IConsole console, CancellationToken ct = default) =>
         ExecuteAsync(args, console, ct).GetAwaiter().GetResult();
@@ -62,17 +76,27 @@ public sealed class SecretCli(ISecretResolver resolver, ISecretStore store)
     public async Task<int> ExecuteAsync(string[] args, IConsole console, CancellationToken ct = default)
     {
         if (args.Length == 0 || args[0] is "-h" or "--help" or "help") { console.WriteLine(Usage); return args.Length == 0 ? 2 : 0; }
-        var flags = args.Skip(1).Where(a => a.StartsWith("--", StringComparison.Ordinal)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var positional = args.Skip(1).Where(a => !a.StartsWith("--", StringComparison.Ordinal)).ToArray();
+        var rest = args.Skip(1).ToArray();
+        var flags = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var positional = new List<string>();
+        for (var i = 0; i < rest.Length; i++)
+        {
+            if (!rest[i].StartsWith("--", StringComparison.Ordinal)) { positional.Add(rest[i]); continue; }
+            // --prefix takes the next argument; the others are switches
+            flags[rest[i]] = rest[i].Equals("--prefix", StringComparison.OrdinalIgnoreCase) && i + 1 < rest.Length ? rest[++i] : null;
+        }
         try
         {
             return args[0].ToLowerInvariant() switch
             {
                 "set" => await SetAsync(positional, flags, console, ct).ConfigureAwait(false),
-                "get" => await GetAsync(positional, flags, console, ct).ConfigureAwait(false),
                 "list" => await ListAsync(positional, console, ct).ConfigureAwait(false),
-                "rm" or "remove" or "delete" => await RemoveAsync(positional, console, ct).ConfigureAwait(false),
-                "test" => await TestAsync(positional, console, ct).ConfigureAwait(false),
+                "delete" or "rm" or "remove" => await DeleteAsync(positional, console, ct).ConfigureAwait(false),
+                "check" or "test" => await CheckAsync(positional, console, ct).ConfigureAwait(false),
+                "rotate-key" => await RotateAsync(positional, console, ct).ConfigureAwait(false),
+                "export" => await ExportAsync(positional, flags, console, ct).ConfigureAwait(false),
+                "import" => await ImportAsync(positional, flags, console, ct).ConfigureAwait(false),
+                "protect" => Protect(positional, flags, console),
                 _ => Usage_(console, $"unknown command '{args[0]}'"),
             };
         }
@@ -90,28 +114,49 @@ public sealed class SecretCli(ISecretResolver resolver, ISecretStore store)
         return 2;
     }
 
-    private async Task<int> SetAsync(string[] positional, HashSet<string> flags, IConsole console, CancellationToken ct)
+    private static string? ReadValue(IConsole console, IDictionary<string, string?> flags, string prompt, bool confirm, string noun)
     {
-        if (positional.Length > 1)
-            return Usage_(console, "set takes only a name. The value is read from a hidden prompt or stdin; it is never accepted on the command line.");
-        if (positional.Length == 0 || !SecretName.TryParse(positional[0], out var name))
-            return Usage_(console, "set needs a secret name like dbdata:<product>:<kind>:<name>[:<part>].");
-
         string? text;
-        if (flags.Contains("--stdin") || console.IsInputRedirected)
+        if (flags.ContainsKey("--stdin") || console.IsInputRedirected)
         {
             text = console.ReadStdin();
             if (text.EndsWith("\r\n", StringComparison.Ordinal)) text = text[..^2];
             else if (text.EndsWith('\n')) text = text[..^1];
+            return text;
+        }
+        text = console.ReadSecret(prompt);
+        if (text is null) { console.WriteError($"no terminal for a prompt; pipe the {noun} on stdin instead."); return null; }
+        if (confirm && console.ReadSecret("Confirm: ") != text) { console.WriteError($"the {noun}s do not match; nothing done."); return null; }
+        return text;
+    }
+
+    /// <summary>The passphrase of an export or import: the first line of stdin with <c>--passphrase-stdin</c>, otherwise a hidden prompt (twice when it is being chosen).</summary>
+    private static SecretValue? ReadPassphrase(IConsole console, IDictionary<string, string?> flags, bool confirm)
+    {
+        string? text;
+        if (flags.ContainsKey("--passphrase-stdin"))
+        {
+            text = console.ReadStdin().Split('\n')[0].TrimEnd('\r');
         }
         else
         {
-            text = console.ReadSecret("Secret value: ");
-            if (text is null) { console.WriteError("no terminal for a prompt; pipe the value on stdin instead."); return 1; }
-            var again = console.ReadSecret("Confirm value: ");
-            if (again != text) { console.WriteError("values do not match; nothing stored."); return 1; }
+            text = console.ReadSecret("Passphrase: ");
+            if (text is null) { console.WriteError("no terminal for a prompt; use --passphrase-stdin and pipe the passphrase."); return null; }
+            if (confirm && console.ReadSecret("Confirm passphrase: ") != text) { console.WriteError("the passphrases do not match; nothing done."); return null; }
         }
-        if (string.IsNullOrEmpty(text)) { console.WriteError("empty value; nothing stored."); return 1; }
+        return SecretValue.From(text);
+    }
+
+    private async Task<int> SetAsync(List<string> positional, IDictionary<string, string?> flags, IConsole console, CancellationToken ct)
+    {
+        if (positional.Count > 1)
+            return Usage_(console, "set takes only a name. The value is read from a hidden prompt or stdin; it is never accepted on the command line.");
+        if (positional.Count == 0 || !SecretName.TryParse(positional[0], out var name))
+            return Usage_(console, "set needs a secret name like dbdata:<product>:<kind>:<name>[:<part>].");
+
+        var text = ReadValue(console, flags, "Secret value: ", confirm: true, "value");
+        if (text is null) return 1;
+        if (text.Length == 0) { console.WriteError("empty value; nothing stored."); return 1; }
 
         using var value = SecretValue.From(text);
         await store.SetAsync(name, value, ct).ConfigureAwait(false);
@@ -119,57 +164,108 @@ public sealed class SecretCli(ISecretResolver resolver, ISecretStore store)
         return 0;
     }
 
-    private async Task<int> GetAsync(string[] positional, HashSet<string> flags, IConsole console, CancellationToken ct)
+    private async Task<int> ListAsync(List<string> positional, IConsole console, CancellationToken ct)
     {
-        if (positional.Length != 1 || !TryRef(positional[0], out var r)) return Usage_(console, "get needs one secret name or reference.");
-        try
-        {
-            using var value = await resolver.ResolveAsync(r, ct).ConfigureAwait(false);
-            console.WriteLine(flags.Contains("--reveal") ? value.RevealString() : $"{SecretValue.Mask} (found; use --reveal to print)");
-            return 0;
-        }
-        catch (SecretNotFoundException)
-        {
-            console.WriteError($"not found: {r.ToAuditString()}");
-            return 1;
-        }
-    }
-
-    private async Task<int> ListAsync(string[] positional, IConsole console, CancellationToken ct)
-    {
-        if (positional.Length > 1) return Usage_(console, "list takes at most one prefix.");
+        if (positional.Count > 1) return Usage_(console, "list takes at most one prefix.");
+        var prefix = positional.Count == 1 ? positional[0] : "dbdata:";
         var count = 0;
-        await foreach (var n in store.ListAsync(positional.Length == 1 ? positional[0] : "dbdata:", ct).ConfigureAwait(false))
+        if (admin is not null)
         {
-            console.WriteLine(n.ToString());
-            count++;
+            foreach (var info in await admin.ListInfoAsync(prefix, ct).ConfigureAwait(false))
+            {
+                console.WriteLine($"{info.Name}  written {(info.Updated == default ? "(unknown)" : info.Updated.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", System.Globalization.CultureInfo.InvariantCulture))}  key {info.KeyId}");
+                count++;
+            }
+        }
+        else
+        {
+            await foreach (var n in store.ListAsync(prefix, ct).ConfigureAwait(false)) { console.WriteLine(n.ToString()); count++; }
         }
         if (count == 0) console.WriteError("no secrets found.");
         return 0;
     }
 
-    private async Task<int> RemoveAsync(string[] positional, IConsole console, CancellationToken ct)
+    private async Task<int> DeleteAsync(List<string> positional, IConsole console, CancellationToken ct)
     {
-        if (positional.Length != 1 || !SecretName.TryParse(positional[0], out var name)) return Usage_(console, "rm needs one secret name.");
+        if (positional.Count != 1 || !SecretName.TryParse(positional[0], out var name)) return Usage_(console, "delete needs one secret name.");
         await store.DeleteAsync(name, ct).ConfigureAwait(false);
-        console.WriteLine($"removed {name}");
+        console.WriteLine($"deleted {name}");
         return 0;
     }
 
-    private async Task<int> TestAsync(string[] positional, IConsole console, CancellationToken ct)
+    private async Task<int> CheckAsync(List<string> positional, IConsole console, CancellationToken ct)
     {
-        if (positional.Length != 1 || !TryRef(positional[0], out var r)) return Usage_(console, "test needs one reference or secret name.");
-        try
+        var refs = new List<SecretRef>();
+        foreach (var text in positional)
         {
-            using var _ = await resolver.ResolveAsync(r, ct).ConfigureAwait(false);
-            console.WriteLine($"ok: {r.ToAuditString()}");
-            return 0;
+            if (!TryRef(text, out var r)) return Usage_(console, $"'{text}' is not a secret name or reference.");
+            refs.Add(r);
         }
-        catch (SecretNotFoundException)
+        if (positional.Count == 0)
         {
-            console.WriteError($"not found: {r.ToAuditString()}");
-            return 1;
+            if (references is null) return Usage_(console, "check needs references to resolve; this product gives none from its configuration.");
+            refs.AddRange(references());
         }
+        var missing = 0;
+        foreach (var r in refs.DistinctBy(x => x.ToString()))
+        {
+            try
+            {
+                using var _ = await resolver.ResolveAsync(r, ct).ConfigureAwait(false);
+                console.WriteLine($"ok: {r.ToAuditString()}");
+            }
+            catch (SecretNotFoundException)
+            {
+                console.WriteError($"not found: {r.ToAuditString()}");
+                missing++;
+            }
+        }
+        if (refs.Count == 0) console.WriteLine("no secret references in the configuration.");
+        else if (missing > 0) console.WriteError($"{missing} of {refs.Count} reference(s) do not resolve.");
+        return missing == 0 ? 0 : 1;
+    }
+
+    private async Task<int> RotateAsync(List<string> positional, IConsole console, CancellationToken ct)
+    {
+        if (positional.Count != 0) return Usage_(console, "rotate-key takes no arguments.");
+        if (admin is null) { console.WriteError("rotate-key is not available here."); return 1; }
+        var result = await admin.RotateKeyAsync(ct: ct).ConfigureAwait(false);
+        console.WriteLine($"rotated: {result.Reencrypted} value(s) now under key {result.NewKeyId}; {result.RemovedKeyIds.Count} old key(s) deleted{(result.Resumed ? " (an interrupted rotation was finished)" : "")}");
+        return 0;
+    }
+
+    private async Task<int> ExportAsync(List<string> positional, IDictionary<string, string?> flags, IConsole console, CancellationToken ct)
+    {
+        if (positional.Count != 1) return Usage_(console, "export needs one file to write.");
+        if (admin is null) { console.WriteError("export is not available here."); return 1; }
+        using var passphrase = ReadPassphrase(console, flags, confirm: true);
+        if (passphrase is null) return 1;
+        var count = await admin.ExportAsync(positional[0], passphrase, flags.TryGetValue("--prefix", out var prefix) ? prefix ?? "" : "", ct).ConfigureAwait(false);
+        console.WriteLine($"exported {count} secret(s) to {positional[0]}; keep the passphrase apart from the file");
+        return 0;
+    }
+
+    private async Task<int> ImportAsync(List<string> positional, IDictionary<string, string?> flags, IConsole console, CancellationToken ct)
+    {
+        if (positional.Count != 1) return Usage_(console, "import needs one export file.");
+        if (admin is null) { console.WriteError("import is not available here."); return 1; }
+        using var passphrase = ReadPassphrase(console, flags, confirm: false);
+        if (passphrase is null) return 1;
+        var result = await admin.ImportAsync(positional[0], passphrase, flags.ContainsKey("--overwrite"), ct).ConfigureAwait(false);
+        console.WriteLine($"imported {result.Imported}, overwritten {result.Overwritten}, kept {result.Skipped} that were already there");
+        return 0;
+    }
+
+    private int Protect(List<string> positional, IDictionary<string, string?> flags, IConsole console)
+    {
+        if (positional.Count != 0) return Usage_(console, "protect takes no arguments. The value is read from a hidden prompt or stdin.");
+        if (protect is null) { console.WriteError("protect is not available on this platform (it makes a DPAPI value on Windows)."); return 1; }
+        var text = ReadValue(console, flags, "Value to protect: ", confirm: true, "value");
+        if (text is null) return 1;
+        if (text.Length == 0) { console.WriteError("empty value; nothing done."); return 1; }
+        using var value = SecretValue.From(text);
+        console.WriteLine(protect(value));
+        return 0;
     }
 
     private static bool TryRef(string text, out SecretRef r)

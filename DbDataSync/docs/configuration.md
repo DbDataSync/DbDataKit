@@ -12,9 +12,9 @@ distinction matters more than any individual setting below, so it's worth readin
   path documented in [Building from source](development.md).
 - **`dbdatasync`** — a dotnet global tool (`src/DbDataSync.Cli`, `PackAsTool=true`,
   `ToolCommandName=dbdatasync`, [on NuGet](https://www.nuget.org/packages/DbDataSync)). This is the
-  actual product distribution: `dbdatasync setup`, `dbdatasync serve`,
-  `dbdatasync service install|uninstall|status`, `dbdatasync config cert ...`, `dbdatasync invite`,
-  `dbdatasync health`, `dbdatasync version`. It's also what the Docker image runs. See
+  actual product distribution: `dbdatasync server setup`, `dbdatasync server run`,
+  `dbdatasync service install|uninstall|status`, `dbdatasync cert ...`, `dbdatasync invite`,
+  `dbdatasync health check`, `dbdatasync version`. It's also what the Docker image runs. See
   [Install](install.md) for every way to install and run it.
 
 Both ultimately call the same `DbDataSyncHost.Build(args)` composition root
@@ -28,12 +28,12 @@ the SPA reach the API" confusion:
 | how it's started | default port |
 | --- | --- |
 | `dotnet run --project src/DbDataSync.Api` (dev loop) | `5183` (`http`), plus `7186` (`https`) |
-| `dbdatasync serve` | `5080` |
+| `dbdatasync server run` | `5080` |
 | the Docker image | `8080` |
 
 The SPA's dev-server proxy (`DBDATASYNC_API_URL`, below) defaults to `5183` — i.e. it assumes the raw
 `dotnet run` dev loop, not a CLI-launched backend. Point it at `5080` if you're running against
-`dbdatasync serve` instead.
+`dbdatasync server run` instead.
 
 ## `dbdatasync` CLI (`src/DbDataSync.Cli`)
 
@@ -102,10 +102,10 @@ commented out, as a reference rather than a default silently taking effect.
 `ConnectionConfig.ConnectionString` already is (`ConfigValidation.RejectEmbeddedCredential`) — a
 `password`/`pwd`/`passwd`/`secret`/`accountkey`/`apikey` key in the string is rejected outright. The
 password for a non-SQLite state store goes through the secret store instead, under the one fixed ref
-`dbdatasync:config:stateConnectionString` (see "Secrets," below) — the starter file's own comment names
+`dbdata:sync:config:stateConnectionString` (see "Secrets," below) — the starter file's own comment names
 this, and it and the connection string are spliced together at connect time.
 
-### `dbdatasync serve`
+### `dbdatasync server run`
 
 Starts the API, the scheduler and the web console in one process.
 
@@ -123,7 +123,7 @@ defaults.
 ### `dbdatasync service install|uninstall|status|start|stop|restart|doctor`
 
 Windows or Linux (systemd); `install` needs an elevated prompt (Windows) or root (Linux,
-`sudo`). macOS keeps bailing with a pointer to `dbdatasync serve` / the container.
+`sudo`). macOS keeps bailing with a pointer to `dbdatasync server run` / the container.
 
 | flag | applies to | default |
 | --- | --- | --- |
@@ -145,12 +145,12 @@ output is visible rather than scrolling by during `install`. Either way, **a con
 integrated authentication connects/authenticates as this account** — worth deciding `--account`/
 `--user` deliberately rather than accepting the default.
 
-### `dbdatasync config cert use-pem|use-pfx|status|list|new-self-signed|enroll|renew|retrieve|templates|discover|bind`
+### `dbdatasync cert use-pem|use-pfx|status|list|new-self-signed|enroll|renew|retrieve|templates|discover|bind`
 
 `use-pem`/`use-pfx`/`status` work on any platform; everything else is Windows-only
 — issues, installs, binds, renews and reports on the certificate Kestrel serves TLS with,
 entirely from the CLI so setting up HTTPS never depends on HTTPS already working. Run
-`dbdatasync config cert` with no subcommand for the full flag list. A walk-through of each method is in
+`dbdatasync cert` with no subcommand for the full flag list. A walk-through of each method is in
 [certificates](certificates.md).
 
 | command | does |
@@ -183,7 +183,7 @@ dbdatasync config set <key> <value> [--repo <path>]
 ```
 
 Reads or writes one `DbDataSync:*` setting in `dbdatasync.config.yaml` — the same settings, and the same commit, as
-**Admin → Configuration** in the web console; `dbdatasync setup` edits some of the same ones. `<key>` is the name from the
+**Admin → Configuration** in the web console; `dbdatasync server setup` edits some of the same ones. `<key>` is the name from the
 tables below, with or without the `DbDataSync:` prefix (`config set Notes:MarkdownRenderer rich`), and can be nested
 (`config set Auth:Windows:AdminGroup "DbDataSync Admins"`) — any depth works; only
 `App:RepoRoot` (how the file itself is found) is refused. A setting with a caution — a mode that widens what an
@@ -212,7 +212,7 @@ unconditionally and had no way to reach the other two. For SQLite, requires the 
 to already exist (i.e., DbDataSync has been started at least once); for the other two engines, it
 connects to whatever `State:Engine`/`State:ConnectionString` (plus the secret store, if needed) name.
 
-### `dbdatasync health`
+### `dbdatasync health check`
 
 | flag | default |
 | --- | --- |
@@ -223,21 +223,21 @@ Hits `{url}/api/health`; exits `0` on success, `1` otherwise. This is what the c
 `HEALTHCHECK` runs — inside the image there's no config file to find, so it always falls through to
 the hardcoded default unless `--url` is passed (which the image's own `HEALTHCHECK` does).
 
-### `dbdatasync config secret set|list|remove`
+### `dbdatasync secret set|list|remove`
 
-Thin wrappers over the same secret store connections use (see "Secrets," below) — reachable without
+Thin wrappers over the encrypted secret store connections use (see "Secrets," below) — reachable without
 going through a connection's own save flow. Never prints a stored value back.
 
 | command | does |
 | --- | --- |
-| `dbdatasync config secret set <ref> <value>` | stores `value` under `ref` |
-| `dbdatasync config secret list [<ref> ...]` | reports whether each given ref is currently set (given none, checks the one fixed ref this build defines: `dbdatasync:config:stateConnectionString`) |
-| `dbdatasync config secret remove <ref>` | deletes a stored value |
+| `dbdatasync secret set <ref> <value>` | stores `value` under `ref` |
+| `dbdatasync secret list [<ref> ...]` | reports whether each given ref is currently set (given none, checks the one fixed ref this build defines: `dbdata:sync:config:stateConnectionString`) |
+| `dbdatasync secret remove <ref>` | deletes a stored value |
 
 Example — setting the state store's password for a `dbdatasync.config.yaml`-configured deployment:
 
 ```
-dbdatasync config secret set dbdatasync:config:stateConnectionString "Password=..."
+dbdatasync secret set dbdata:sync:config:stateConnectionString "Password=..."
 ```
 
 ### `dbdatasync version`
@@ -261,26 +261,28 @@ The key surface is grouped by area, and every bare boolean has been replaced wit
 (`enabled`/`disabled`, or something richer where a setting genuinely has more than two states) — a mode
 self-documents in `config get`/the Admin screen the way `true`/`false` never did, and leaves room for a
 setting to grow a third state without another schema change. An existing `dbdatasync.config.yaml` using
-the old flat names is migrated automatically the first time `serve`/`setup` runs against it (see
+the old flat names is migrated automatically the first time `server run`/`server setup` runs against it (see
 "Migrating an existing `dbdatasync.config.yaml`," below).
 
 #### `DbDataSync:App:*`
 
 | key | env var | default | notes |
 | --- | --- | --- | --- |
-| `App:RepoRoot` | `DbDataSync__App__RepoRoot` | `<cwd>/dbdatasync-repo` under raw `dotnet run`; the CLI's `--repo` default under `dbdatasync serve` | git-tracked config store root |
-| `App:Url` | `DbDataSync__App__Url` | `http://localhost:5080` | `dbdatasync serve`/`dbdatasync health` read this themselves (see above) and translate it to `--urls`/Kestrel's bind address; also this deployment's own always-trusted passkey origin (see `Auth:Passkeys:*`, below) |
+| `App:RepoRoot` | `DbDataSync__App__RepoRoot` | `<cwd>/dbdatasync-repo` under raw `dotnet run`; the CLI's `--repo` default under `dbdatasync server run` | git-tracked config store root |
+| `App:Url` | `DbDataSync__App__Url` | `http://localhost:5080` | `dbdatasync server run`/`dbdatasync health check` read this themselves (see above) and translate it to `--urls`/Kestrel's bind address; also this deployment's own always-trusted passkey origin (see `Auth:Passkeys:*`, below) |
 | `App:Server` | `DbDataSync__App__Server` | `kestrel` | `kestrel` or `httpsys`. `httpsys` is Windows-only and exists so the port can be shared with other processes — see "Sharing a port with HTTP.sys," below. Anything else refuses to start. Takes effect on restart |
 | `App:AlternateUrls` | `DbDataSync__App__AlternateUrls` | none | every other origin this deployment is also reached at, beyond `App:Url` — comma- or semicolon-separated. Purely additive: `App:Url`'s own origin is always trusted for passkeys without needing to be listed here too |
 | `App:TrustedProxies` | `DbDataSync__App__TrustedProxies` | none | proxies (IP addresses or CIDR ranges such as `10.0.0.0/8`, comma- or semicolon-separated) whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are believed. Set it when a TLS-terminating reverse proxy sits in front of a plain-HTTP bind; see [Plain HTTP](#plain-http-and-reverse-proxies) |
 | `App:AllowInsecureHttp` | `DbDataSync__App__AllowInsecureHttp` | `false` (`true` in the container image) | serve plain HTTP to every client. Credentials and data then cross the network in clear text |
-| `App:TaskRunnerDllPath` | `DbDataSync__App__TaskRunnerDllPath` | resolved automatically | see below |
-| `App:CliDllPath` | `DbDataSync__App__CliDllPath` | resolved automatically | where `DbDataSync.Cli.dll` is, for the deep connection-scoped library-validation check to spawn itself in its own process |
+| `App:TaskRunnerDllPath` | `DbDataSync__App__TaskRunnerDllPath` | none | start replication workers as `dotnet exec` of this `DbDataSync.TaskRunner.dll`, see below |
+| `App:CliDllPath` | `DbDataSync__App__CliDllPath` | none | start the deep, connection-scoped library-validation check as `dotnet exec` of this `DbDataSync.Cli.dll`, see below |
 
-`App:TaskRunnerDllPath`/`App:CliDllPath` resolve in this order: (1) beside the running assembly — true
-for the tool, the container, and any plain `dotnet publish`; (2) a dev-repo-layout guess (swaps
-`DbDataSync.Api/bin` for `DbDataSync.TaskRunner/bin`/`DbDataSync.Cli/bin`) — true only for this
-repository's own working tree.
+Normally neither is set. The server starts a replication's worker, and a library validation, as **itself again**: `dbdatasync internal worker ...`
+and `dbdatasync library validate ...`, using the same executable that is running the server (the launcher under an installed service,
+a published executable, or `dotnet DbDataSync.Cli.dll serve`). Nothing then needs `dotnet` on the path, which is what lets Sync be published
+self-contained. The two settings are for a host that is not `DbDataSync.Cli`, such as the test host, or `DbDataSync.Api.dll` run directly
+in this repository's working tree. When neither is set and the running program is not `DbDataSync.Cli`, the files beside the running
+assembly are used (or this repository's `DbDataSync.TaskRunner/bin` and `DbDataSync.Cli/bin`).
 
 #### Plain HTTP and reverse proxies
 
@@ -327,8 +329,8 @@ Two things worth being explicit about:
   error — a typo here is worth surfacing loudly rather than silently landing on `Sqlite`.
 - **`MsSql`/`Postgres` need their library installed.** Neither ships as a package this build carries by
   default — each resolves its connection through the same restorable-library mechanism
-  `config driver install` uses. Run `dbdatasync config library install microsoft-data-sqlclient` (for
-  `MsSql`) or `dbdatasync config library install npgsql` (for `Postgres`) once; a `State:Engine` set to
+  `config driver install` uses. Run `dbdatasync library install microsoft-data-sqlclient` (for
+  `MsSql`) or `dbdatasync library install npgsql` (for `Postgres`) once; a `State:Engine` set to
   either without its library installed fails at startup naming that exact command. See
   [Drivers and libraries](drivers-and-libraries.md) for the general mechanism — the same one a
   replication's own `MsSql`/`Postgres` connections use, and the one a descriptor driver's own `library:`
@@ -348,7 +350,7 @@ verification run's `TaskRuns` row is pruned, but its result file and index entry
 
 | key | env var | default | notes |
 | --- | --- | --- | --- |
-| `Notes:MarkdownRenderer` | `DbDataSync__Notes__MarkdownRenderer` | `basic` | `basic` or `rich` — whether Notes render tables, task lists and strikethrough with the full Markdown renderer instead of the small one they use by default. Basic by default: a note is written by one operator and shown in other people's sessions, and a richer renderer is a wider surface — raw HTML is never interpreted and only `http(s)`/`mailto` links are followed, but the risk is not zero. Images in a note show as links, not inline. Change it in Admin → Configuration, on `dbdatasync setup`'s General tab, or with [`dbdatasync config set Notes:MarkdownRenderer rich`](#dbdatasync-config-getset); takes effect on restart |
+| `Notes:MarkdownRenderer` | `DbDataSync__Notes__MarkdownRenderer` | `basic` | `basic` or `rich` — whether Notes render tables, task lists and strikethrough with the full Markdown renderer instead of the small one they use by default. Basic by default: a note is written by one operator and shown in other people's sessions, and a richer renderer is a wider surface — raw HTML is never interpreted and only `http(s)`/`mailto` links are followed, but the risk is not zero. Images in a note show as links, not inline. Change it in Admin → Configuration, on `dbdatasync server setup`'s General tab, or with [`dbdatasync config set Notes:MarkdownRenderer rich`](#dbdatasync-config-getset); takes effect on restart |
 
 #### `DbDataSync:Updates:*`
 
@@ -413,7 +415,7 @@ enroll a key.
 ### Migrating an existing `dbdatasync.config.yaml`
 
 An operator upgrading from an earlier version does not need to hand-edit anything: the first time
-`serve`/`setup` runs against a `dbdatasync.config.yaml` still using the old flat key names, it rewrites
+`server run`/`server setup` runs against a `dbdatasync.config.yaml` still using the old flat key names, it rewrites
 each one to its new grouped location (and, for what used to be a bare boolean, to the closest mode
 string — `Auth:Disabled: true` becomes `Auth:Network:Admin: loopback`, deliberately narrower than the
 old flag's "admin from anywhere") and commits the result, the same one-line-per-change history every
@@ -425,17 +427,17 @@ migrated — update those by hand if you set configuration that way.
 | key | env var | default | meaning |
 | --- | --- | --- | --- |
 | `DbDataSync:Certificates:ExpiryWarningDays` | `DbDataSync__Certificates__ExpiryWarningDays` | `30` | how many days before the bound certificate's `NotAfter` the daily expiry check starts raising a `CertificateExpiring` notification; raised at most once a day, and `CertificateExpired` once past `NotAfter` |
-| `DbDataSync:Certificates:CaConfig` | `DbDataSync__Certificates__CaConfig` | none | the enterprise CA's `CASERVER\CA Name` string — read by `dbdatasync config cert enroll`/`renew`/`templates`, and saved by `dbdatasync config cert discover` (a CLI-process concern; the running API never needs to know which CA a certificate came from, only which one is bound) |
-| `DbDataSync:Certificates:Template` | `DbDataSync__Certificates__Template` | none | the certificate template name for `dbdatasync config cert enroll`/`renew`; `dbdatasync config cert discover` lists the ones the CA publishes |
+| `DbDataSync:Certificates:CaConfig` | `DbDataSync__Certificates__CaConfig` | none | the enterprise CA's `CASERVER\CA Name` string — read by `dbdatasync cert enroll`/`renew`/`templates`, and saved by `dbdatasync cert discover` (a CLI-process concern; the running API never needs to know which CA a certificate came from, only which one is bound) |
+| `DbDataSync:Certificates:Template` | `DbDataSync__Certificates__Template` | none | the certificate template name for `dbdatasync cert enroll`/`renew`; `dbdatasync cert discover` lists the ones the CA publishes |
 
-Windows-only end to end — see `dbdatasync config cert`, above, for issuance/installation/binding.
+Windows-only end to end — see `dbdatasync cert`, above, for issuance/installation/binding.
 The daily expiry check is a hosted service in the API process, registered only when
 `OperatingSystem.IsWindows()`, on the same pattern `SchedulerService`/`RunPruningService` already use.
 
 ### `Kestrel:Certificates:Default:*`
 
 Not a `DbDataSync:*` key — ASP.NET Core's own Kestrel configuration, read the same way (config file,
-environment variable, CLI flag), and what `dbdatasync config cert bind` writes into `dbdatasync.config.yaml`:
+environment variable, CLI flag), and what `dbdatasync cert bind` writes into `dbdatasync.config.yaml`:
 
 | key | meaning |
 | --- | --- |
@@ -468,7 +470,7 @@ What changes, and what you do about it:
 | --- | --- | --- |
 | `App:Url` | any bind address, including `http://0.0.0.0:8080` | a URL *prefix*: `http://dbdatasync.example.com:80` only answers requests whose `Host` is that name. `http://+:80` takes any host and `http://*:80` is the weak wildcard (anything nobody else claimed). `0.0.0.0` is not valid. **Share by host name, not by path** — the console is served from the root of its origin, so a path prefix such as `/dbdatasync/` is not supported (startup logs a warning if you try) |
 | Permission to bind | the port is free or it is not | a URL reservation for the service account unless it is `LocalSystem` or an administrator: `netsh http add urlacl url=http://dbdatasync.example.com:80/ user="<the service account>"`. `dbdatasync service install` does not create it yet |
-| Certificate for https | `Kestrel:Certificates:Default:*` — what `dbdatasync config cert bind`, `use-pem`, `use-pfx` and `new-self-signed` write | **Ignored** (startup logs a warning if it is set). Bind a certificate from the machine store to the port in the OS: `netsh http add sslcert hostnameport=dbdatasync.example.com:443 certhash=<thumbprint> appid={<any guid>} certstorename=MY`. The certificate screens, `cert status` and the expiry notification still read the Kestrel keys, so they do not describe an HTTP.sys binding |
+| Certificate for https | `Kestrel:Certificates:Default:*` — what `dbdatasync cert bind`, `use-pem`, `use-pfx` and `new-self-signed` write | **Ignored** (startup logs a warning if it is set). Bind a certificate from the machine store to the port in the OS: `netsh http add sslcert hostnameport=dbdatasync.example.com:443 certhash=<thumbprint> appid={<any guid>} certstorename=MY`. The certificate screens, `cert status` and the expiry notification still read the Kestrel keys, so they do not describe an HTTP.sys binding |
 | Windows sign-in | the Negotiate package, inside this process | HTTP.sys authenticates in the kernel and hands over a Windows identity; the same sign-in endpoint turns it into a session, with the same groups and the same rules |
 | Request limits | Kestrel defaults | HTTP.sys defaults (its own request-size, timeout and queue limits). The file upload endpoint's 200 MB limit is set per request on both, but has not been verified under HTTP.sys |
 
@@ -477,7 +479,7 @@ IIS and anything built on `HttpListener` or `UseHttpSys` do. A Kestrel process c
 
 Known gaps while this is opt-in:
 
-- **Certificates are not integrated.** `dbdatasync config cert`, the Admin certificate screen and the expiry
+- **Certificates are not integrated.** `dbdatasync cert`, the Admin certificate screen and the expiry
   notification only know about the Kestrel configuration above, so under HTTP.sys they do not create, bind or
   report on the certificate; use `netsh` and the Windows certificate store directly.
 - **No URL reservation on install.** `dbdatasync service install` does not create one, so a service account
@@ -570,19 +572,20 @@ be recreated rather than upgraded.**
 
 ## Secrets
 
-Connection credentials go through `ClrKernel.Core.Secrets.SecretStore` (an external package),
-constructed with `"DbDataSync"` as its configured prefix — every provider's naming (this environment
-variable fallback, the Windows Credential Manager target name, the macOS Keychain/Linux Secret Service
-service name) derives from it, rather than the package's own unconfigured `ClrKernel` default. The
-secret ref for a connection named `<name>` is `dbdatasync:connection:<name>` — a separate, this-app-owned
-namespacing convention inside the ref string itself, unrelated to the store's own prefix. When no OS
-keyring is available (a sandboxed or CI environment, most commonly), `SecretStore` falls back to an
-environment variable: the ref uppercased, with every non-alphanumeric character replaced by `_`, prefixed
-`DBDATASYNC_SECRET_`.
+Connection credentials and the state database's password are in an **encrypted store** under the repository root: `secrets/secrets.yaml`,
+each value AES-256-GCM encrypted under a key that is protected by DPAPI on Windows and kept in a file readable only by its owner
+(`secrets/keys`, created on first use) elsewhere. `DBDATA_SECRETS_KEY_FILE` names a key file kept somewhere else, such as a mounted secret.
+`secrets/` is added to the repository's `.gitignore` when the store is first opened. The same store is the one every DbData product uses
+(`DbDataKit.Secrets.Store`); back up `secrets/` together with its key, or the values cannot be read again.
 
-Example: a connection named `orders-db` resolves to `DBDATASYNC_SECRET_DBDATASYNC_CONNECTION_ORDERS_DB`
-— the repeated `DBDATASYNC` is expected: the store's prefix and the ref's own namespacing are two
-different things that happen to share a name.
+Names are `dbdata:sync:<kind>:<name>`: a connection named `<name>` has its password at `dbdata:sync:connection:<name>`, and the state
+database's at `dbdata:sync:config:stateConnectionString`. Names are lower-cased, so two connections whose names differ only by case share a
+secret. The names from before the store (`dbdatasync:connection:...`) are **not read**: the secrets are set again (`dbdatasync secret set`,
+or save the connection with its password), and `dbdatasync secret set` with an old-form name is refused with the form to use.
+
+When the store has no value, the environment answers: the name upper-cased, every character other than a letter or digit replaced by `_`,
+prefixed `DBDATA_SECRET_`. A connection named `orders-db` resolves to `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_ORDERS_DB`. A file named after the secret in
+the directory `CREDENTIALS_DIRECTORY` names (systemd `LoadCredential=`, a container secret mount) is the last place looked.
 
 ## SPA dev server (`src/DbDataSync.Web`)
 
@@ -605,8 +608,8 @@ docker run -p 8080:8080 -v dbdatasync-data:/var/lib/dbdatasync ghcr.io/dbdatasyn
 `ghcr.io/dbdatasync/dbdatasync` is published for `linux/amd64` and `linux/arm64`, in a default and a smaller `runtime` variant —
 see [Installing → Running in a container](install.md#running-in-a-container) for the tags.
 
-- `EXPOSE 8080`; entrypoint is `dbdatasync serve --url http://0.0.0.0:8080` — no trailing `--repo` argument; override at `docker run` time (`docker run ... <image> --repo /some/other/path`) to pass different `dbdatasync serve` flags.
-- `HEALTHCHECK` runs `dbdatasync health --url http://127.0.0.1:8080`.
+- `EXPOSE 8080`; entrypoint is `dbdatasync server run --url http://0.0.0.0:8080` — no trailing `--repo` argument; override at `docker run` time (`docker run ... <image> --repo /some/other/path`) to pass different `dbdatasync server run` flags.
+- `HEALTHCHECK` runs `dbdatasync health check --url http://127.0.0.1:8080`.
 - The image carries these docs (`/app/wwwroot/docs`) and the pictures they show, so **Docs** in the console works with no
   network — see [Getting started](getting-started.md#reading-these-docs-in-the-console).
 - `VOLUME ["/var/lib/dbdatasync"]` — one mount is a complete deployment: the config repository and the state database live together, so a backup of this directory is a backup of everything that isn't the image itself.

@@ -4,7 +4,7 @@ using Terminal.Gui.Time;
 namespace DbDataSync.Cli.Tui;
 
 /// <summary>
-/// Owns the one <see cref="IApplication"/> instance for a <c>dbdatasync setup</c> session — one
+/// Owns the one <see cref="IApplication"/> instance for a <c>dbdatasync server setup</c> session — one
 /// init/dispose bracket for the whole command, not one per screen or dialog. Built on Terminal.Gui's
 /// instance-based <c>IApplication</c> (<see cref="Application.Create"/>), not the static
 /// <c>Application.Init/Run/Shutdown/RaiseKeyDownEvent</c> facade — the shipped 2.5.0 package marks that

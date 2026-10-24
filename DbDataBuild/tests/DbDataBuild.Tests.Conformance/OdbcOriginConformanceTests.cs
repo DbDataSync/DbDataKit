@@ -56,7 +56,7 @@ public class OdbcOriginConformanceTests
 
         public string? Env(string v) =>
             v == LoginSettings.VariableName(name, Login.Read) || v == LoginSettings.VariableName(name, Login.Write) ? destination.ConnectionString
-            : v == "DBDATABUILD_LEGACY_READ" ? Legacy : null;
+            : v == "DBDATA_BUILD_LEGACY_READ" ? Legacy : null;
 
         public (int Exit, string Out, string Err) Cli(params string[] args)
         {
@@ -88,8 +88,8 @@ public class OdbcOriginConformanceTests
         Directory.CreateDirectory(run.Dir);
         run.Write("dbdatabuild.yml", $"defaults: {{connections: [{destination}]}}\ntracking: {{ connection: {destination} }}\nconnections:\n  legacy: {{ engine: {legacyEngine} }}\n{extraConfig}" + Sensitive(destination));
         // the driver manager and the driver have to work before anything is asked of the tool
-        try { await from.RowsAsync("SELECT 1"); await using var probe = await ReadSession.OpenAsync(LoginSettings.FromEnvironment("legacy", "odbc", Login.Read, v => v == "DBDATABUILD_LEGACY_READ" ? run.Legacy : null).Settings!); }
-        catch (Exception ex) when (DriverFailure.Prerequisite(ex) is { } why) { await from.DisposeAsync(); await to.DisposeAsync(); Skip.If(true, $"The ODBC driver manager or the psqlodbc driver cannot be used on this machine: {why}."); }
+        try { await from.RowsAsync("SELECT 1"); await using var probe = await ReadSession.OpenAsync(LoginSettings.FromEnvironment("legacy", "odbc", Login.Read, v => v == "DBDATA_BUILD_LEGACY_READ" ? run.Legacy : null).Settings!); }
+        catch (Exception ex) when (DbDataKit.Connections.Odbc.OdbcPrerequisite.Describe(ex) is { } why) { await from.DisposeAsync(); await to.DisposeAsync(); Skip.If(true, $"The ODBC driver manager or the psqlodbc driver cannot be used on this machine: {why}."); }
         return run;
     }
 

@@ -60,18 +60,28 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The shared SqlClient, Npgsql, MySqlConnector and ODP.NET composers (plan 13, A08, A09) bring their packages with runtime assets. A direct reference that
+         excludes them wins over the transitive one, so the drivers still come from <repo>/libraries/ at first touch, as the driver
+         projects' own comments describe. -->
+    <PackageReference Include="Microsoft.Data.SqlClient" ExcludeAssets="runtime" />
+    <PackageReference Include="Npgsql" ExcludeAssets="runtime" />
+    <PackageReference Include="MySqlConnector" ExcludeAssets="runtime" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- The `setup` command's TUI (phase 128) — this project's first real package dependency.
          Managed-only (no runtimes/ native assets), net10.0-targeted like this project itself, so it
          adds nothing to worry about for `dotnet tool install -g` or the container image. Pinned
          exact, not a floating range, matching how this repo pins everywhere else. -->
-    <PackageReference Include="Terminal.Gui" Version="2.5.0" />
+    <PackageReference Include="Terminal.Gui" />
     <!-- Phase 136: WindowsServiceEventLog writes/registers directly against the Windows Event Log —
          cross-platform to reference (its own APIs throw PlatformNotSupportedException off Windows,
          which is why every call site is [SupportedOSPlatform("windows")]), same "safe to reference
          everywhere, only does anything real on Windows" reasoning as
          Microsoft.Extensions.Hosting.WindowsServices in DbDataSync.Api.csproj. Pinned to the same
          "10.0.0" this repo already uses for that package and for Microsoft.Extensions.Hosting.Systemd. -->
-    <PackageReference Include="System.Diagnostics.EventLog" Version="10.0.0" />
+    <PackageReference Include="System.Diagnostics.EventLog" />
   </ItemGroup>
 
   <ItemGroup>
@@ -80,6 +90,11 @@
     <ProjectReference Include="..\DbDataSync.Drivers.Descriptor\DbDataSync.Drivers.Descriptor.csproj" />
     <ProjectReference Include="..\DbDataSync.Libraries\DbDataSync.Libraries.csproj" />
     <ProjectReference Include="..\DbDataSync.State\DbDataSync.State.csproj" />
+    <!-- the shared state types come with the project reference; StateDatabase is Sync's own (plan 13, U04) -->
+    <Using Include="DbDataKit.State" />
+    <Using Include="DbDataKit.Web.Auth" />
+    <Using Include="DbDataKit.Monitoring" />
+    <Using Include="DbDataSync.State.StateDatabase" Alias="StateDatabase" />
     <!-- Referenced so the worker lands in the same output directory as the host that spawns it,
          which is what ApiOptions' beside-the-assembly resolution then finds. -->
     <ProjectReference Include="..\DbDataSync.TaskRunner\DbDataSync.TaskRunner.csproj" />
@@ -90,6 +105,7 @@
 
   <ItemGroup>
     <!-- The shared `cert` command's verb table (docs/plans/12-shared-tls-rollout.md, slice 7). -->
+    <DbDataKitReference Include="Cli" />   <!-- the shared noun-verb grammar and the JSON document; plan 13, C07 -->
     <DbDataKitReference Include="Hosting.Cli" />
     <DbDataKitReference Include="Hosting.Systemd" />
   </ItemGroup>
@@ -113,12 +129,12 @@
     build`/`dotnet test` with no dist/ present (and no npm available) is unaffected.
   -->
   <PropertyGroup>
-    <WebProjectDir>$(MSBuildProjectDirectory)/../DbDataSync.Web</WebProjectDir>
+    <WebProjectDir>$(MSBuildProjectDirectory)/../../../DbDataKit/web</WebProjectDir>
   </PropertyGroup>
 
-  <Target Name="CopyPrebuiltSpa" BeforeTargets="Publish" Condition="Exists('$(WebProjectDir)/dist')">
+  <Target Name="CopyPrebuiltSpa" BeforeTargets="Publish" Condition="Exists('$(WebProjectDir)/sync/dist')">
     <ItemGroup>
-      <_SpaDist Include="$(WebProjectDir)/dist/**/*" />
+      <_SpaDist Include="$(WebProjectDir)/sync/dist/**/*" />
     </ItemGroup>
     <Copy SourceFiles="@(_SpaDist)"
           DestinationFiles="@(_SpaDist->'$(PublishDir)wwwroot/%(RecursiveDir)%(Filename)%(Extension)')" />

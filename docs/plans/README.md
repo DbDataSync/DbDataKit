@@ -1,6 +1,6 @@
 # Implementation Plans: Shared Modules
 
-Plans for extracting shared code into `DbDataKit/DbDataKit/`, derived from `docs/review/`. Each plan lists the
+Plans for extracting shared code into `DbDataKit/DbDataKit/`, derived from the code review (`docs/security-review.md` and the products' reviews: `DbDataSync/architecture/review.md`, `DbDataProxy/docs/review.md`, `DbDataBuild/docs/review.md`). Each plan lists the
 current state per product (with file references from the review), design, package layout, phases with exit
 criteria, risks and acceptance. Plans are proposals; review the "decisions" in each before starting.
 
@@ -52,4 +52,4 @@ Parallelisable: 01, 02 and 05 have no dependencies on each other; 03 and 04 can 
 - Each package ships a README with the API contract; consumers should not need to read internals (agent-friendly).
 - Strangler migration: adapters in products first, delete duplicates only after parity tests; never a big-bang rewrite.
 - Each plan's conformance/golden tests live with the package and run in the hub's `contract.yml` against all three products.
-- Security acceptance criteria in each plan map to `docs/review/SECURITY.md` findings and are verified by tests, not review alone.
+- Security acceptance criteria in each plan map to `docs/security-review.md` findings and are verified by tests, not review alone.

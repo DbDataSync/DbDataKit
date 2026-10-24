@@ -29,6 +29,7 @@ namespace DbDataSync.Libraries;
 public sealed class LibraryRegistry
 {
     private static readonly List<AssemblyDependencyResolver> Resolvers = [];
+    private static readonly List<string> LibDirs = [];
     private static bool _resolverArmed;
     private static readonly object ResolverLock = new();
 
@@ -114,7 +115,7 @@ public sealed class LibraryRegistry
 
     /// <summary>
     /// <see cref="DbProviderFactories.GetFactory(string)"/>, with a message that names the fix
-    /// (<c>dbdatasync config library install</c>) instead of the BCL's generic "no factory registered".
+    /// (<c>dbdatasync library install</c>) instead of the BCL's generic "no factory registered".
     /// <para>
     /// A <see cref="KnownLibraries"/> entry has two different ids for the same library — a short catalog
     /// id (<c>"mysql-connector"</c>) and the real NuGet package id (<c>"MySqlConnector"</c>); see
@@ -150,10 +151,18 @@ public sealed class LibraryRegistry
             if (Installed.ContainsKey(installedId))
                 return $"Library '{id}' not found. A library is installed under the {installedIdKind} " +
                        $"'{installedId}'. Did you mean '{installedId}', or install '{id}' explicitly with " +
-                       $"`dbdatasync config library install {id}`?";
+                       $"`dbdatasync library install {id}`?";
         }
 
-        return $"Library '{id}' is not installed. Install it with `dbdatasync config library install {id}`.";
+        return $"Library '{id}' is not installed. Install it with `dbdatasync library install {id}`.";
+    }
+
+    /// <summary>The file names a native library called <paramref name="name"/> has on this platform.</summary>
+    private static IEnumerable<string> NativeFileNames(string name)
+    {
+        if (OperatingSystem.IsWindows()) return [name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? name : name + ".dll"];
+        var extension = OperatingSystem.IsMacOS() ? ".dylib" : ".so";
+        return [$"lib{name}{extension}", name.EndsWith(extension, StringComparison.Ordinal) ? name : name + extension];
     }
 
     private static void ArmResolver(string libDir)
@@ -168,6 +177,7 @@ public sealed class LibraryRegistry
         lock (ResolverLock)
         {
             Resolvers.Add(resolver);
+            if (!LibDirs.Contains(libDir)) LibDirs.Add(libDir);
             EnsureResolverArmed();
         }
     }
@@ -193,6 +203,18 @@ public sealed class LibraryRegistry
                     var path = resolver.ResolveUnmanagedDllToPath(unmanagedName);
                     if (path is not null)
                         return NativeLibrary.Load(path);
+                }
+
+                // A native library placed beside the library's assemblies without a deps.json entry (the DuckDB engine,
+                // from the pin): the platform's file name for it, in a library folder.
+                foreach (var dir in LibDirs)
+                {
+                    foreach (var candidate in NativeFileNames(unmanagedName))
+                    {
+                        var file = Path.Combine(dir, candidate);
+                        if (File.Exists(file))
+                            return NativeLibrary.Load(file);
+                    }
                 }
             }
             return IntPtr.Zero;

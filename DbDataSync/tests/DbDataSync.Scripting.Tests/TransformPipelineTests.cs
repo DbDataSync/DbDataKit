@@ -24,8 +24,8 @@ public sealed class TransformPipelineTests : IDisposable
         LibGit2Sharp.Repository.Init(_repoRoot);
         _configRepository = new ConfigRepository(
             Path.Combine(_repoRoot, "config"),
-            new Core.Git.GitCommitService(_repoRoot),
-            new ClrKernel.Core.Secrets.SecretStore(true));
+            new DbDataKit.Config.Git.GitCommitService(_repoRoot),
+            DbDataSync.Core.Secrets.SecretStore.ForProviders(new DbDataSync.Core.Secrets.InMemorySecretProvider()));
         _host = new ScriptHost(
             _configRepository, new ScriptCompiler(new ScriptCacheDirectory(Path.Combine(_repoRoot, "cache"))));
     }
@@ -39,7 +39,7 @@ public sealed class TransformPipelineTests : IDisposable
                 Manifest = new ScriptConfig { Name = name, Kind = kind, EntryType = entryType },
                 Code = code,
             },
-            new Core.Git.GitAuthor("t", "t@t"));
+            new DbDataKit.Config.Git.GitAuthor("t", "t@t"));
 
     private static readonly List<ColumnMapping> Mappings =
     [

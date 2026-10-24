@@ -3,12 +3,8 @@ using System.Text.Json;
 namespace DbDataSync.Cli;
 
 /// <summary>
-/// <c>dbdatasync config check|get|set|cert|secret|library|driver</c> — every configuration-related command
-/// grouped under one root, phase 115's answer to the CLI having grown one verb per feature
-/// (<c>doctor</c>, <c>cert</c>, <c>secret</c>, <c>library</c>, <c>driver</c> were all separately
-/// top-level before this). <c>cert</c>/<c>secret</c>/<c>library</c>/<c>driver</c> keep their own
-/// existing implementations untouched — this only changes how they're reached, forwarding
-/// "everything after my own verb" to each exactly as <c>Program.cs</c> used to.
+/// <c>dbdatasync config check|get|set</c>: the server's own configuration. Certificates, secrets, libraries and drivers were verbs of <c>config</c> from phase 115 to plan 13 (C06) and are
+/// nouns of their own again (<c>cert</c>, <c>secret</c>, <c>library</c>, <c>driver</c>), the same names every DbData command line uses.
 /// <para>
 /// <c>check</c> is new here: it's <c>doctor</c>'s old non-interactive entry point, unchanged in
 /// behaviour, reached one level down. <c>setup</c> is deliberately not nested under <c>config</c> —
@@ -32,10 +28,6 @@ public static class ConfigCommand
             "check" => await CheckAsync(rest),
             "get" => ConfigValueCommand.Get(rest),
             "set" => ConfigValueCommand.Set(rest),
-            "cert" => CertCommand.Run(rest),
-            "secret" => SecretCommand.Run(rest),
-            "library" => await LibraryCommand.RunAsync(rest),
-            "driver" => await DriverCommand.RunAsync(rest),
             var other => Unknown(other),
         };
     }
@@ -71,6 +63,11 @@ public static class ConfigCommand
 
     private static int Unknown(string sub)
     {
+        if (RetiredCommands.ConfigReplacementFor(sub) is { } replacement)
+        {
+            Console.Error.WriteLine($"'dbdatasync config {sub}' is now 'dbdatasync {replacement}'.");
+            return 2;
+        }
         Console.Error.WriteLine($"Unknown config subcommand '{sub}'.");
         PrintUsage();
         return 1;
@@ -83,10 +80,6 @@ public static class ConfigCommand
               dbdatasync config check [--repo <path>] [--json]
               dbdatasync config get <key> [--repo <path>]
               dbdatasync config set <key> <value> [--repo <path>]
-              dbdatasync config cert status|list|new-self-signed|enroll|renew|retrieve|templates|bind
-              dbdatasync config secret set <ref> <value>|list [<ref> ...]|remove <ref>
-              dbdatasync config library install|sync|list|uninstall
-              dbdatasync config driver install|list|uninstall
-            Run `dbdatasync config <name>` with no further arguments to see that group's own flags.
+            (certificates, secrets, libraries and drivers are commands of their own: `dbdatasync cert`, `secret`, `library`, `driver`.)
             """);
 }

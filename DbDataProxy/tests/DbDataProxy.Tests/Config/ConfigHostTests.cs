@@ -143,7 +143,7 @@ public sealed class ConfigStartupTests
         Console.SetError(stderr);
         try
         {
-            int code = await Cli.RunAsync(["run", "--Proxy:Listen:Prot=9000", $"--Proxy:Tls:CertificatePassword={secret}", "--Proxy:Listen:Port=99999"]);
+            int code = await Cli.RunAsync(["server", "run", "--Proxy:Listen:Prot=9000", $"--Proxy:Tls:CertificatePassword={secret}", "--Proxy:Listen:Port=99999"]);
             Assert.Equal(2, code);
         }
         finally { Console.SetError(original); }
@@ -163,7 +163,7 @@ public sealed class ConfigStartupTests
         Console.SetError(stderr);
         try
         {
-            int code = await Cli.RunAsync(["run", "--Proxy:Listen:Port=0", "--Proxy:Tls:Mode=None", "--Proxy:RequireReferencedSecrets=true",
+            int code = await Cli.RunAsync(["server", "run", "--Proxy:Listen:Port=0", "--Proxy:Tls:Mode=None", "--Proxy:RequireReferencedSecrets=true",
                 "--Proxy:DataSources:x:Provider=sqlserver", "--Proxy:DataSources:x:ConnectionString=Server=a;Password=LitSecret-77"]);
             Assert.Equal(2, code);
         }
@@ -180,7 +180,7 @@ public sealed class ConfigStartupTests
         try
         {
             Assert.Equal(2, await Cli.RunAsync(["--Proxy:Bogus=1"]));
-            Assert.Equal(ProxyConfigException.ExitCode, await Cli.RunAsync(["run", "--Proxy:Bogus=1"]));
+            Assert.Equal(ProxyConfigException.ExitCode, await Cli.RunAsync(["server", "run", "--Proxy:Bogus=1"]));
         }
         finally { Console.SetError(original); }
     }
@@ -318,6 +318,9 @@ public sealed class ConfigReloadTests
         return condition();
     }
 
+    // The edits are applied by calling Reload, not by waiting for the operating system to report a file change: what these tests pin is what the monitor does with a
+    // reload (validate it, keep the last good one, say why), which is the same code the file watcher triggers. The watcher is the framework's; one test below drives
+    // it through the provider's polling watcher, which does not depend on the operating system's delivery of change events.
     [Fact]
     public void An_invalid_reload_keeps_serving_the_last_good_configuration()
     {
@@ -325,7 +328,7 @@ public sealed class ConfigReloadTests
         var capture = new CaptureLoggerProvider();
         using var loggers = LoggerFactory.Create(b => b.AddProvider(capture));
 
-        var builder = new ConfigurationBuilder().AddJsonFile(file.Path, optional: false, reloadOnChange: true);
+        var builder = new ConfigurationBuilder().AddJsonFile(file.Path, optional: false, reloadOnChange: false);
         var guard = ProxyConfigLoadGuard.Install(builder);
         var root = builder.Build();
         using var monitor = new ProxyOptionsMonitor(root, ProxyConfig.LoadOrThrow(root).Value!, loggers.CreateLogger("DbDataProxy.Config"), guard);
@@ -337,12 +340,14 @@ public sealed class ConfigReloadTests
 
         // a valid edit is picked up
         File.WriteAllText(file.Path, Json(9002));
+        root.Reload();
         Assert.True(Wait(() => monitor.CurrentValue.Listen.Port == 9002), "valid change not applied");
         Assert.True(Wait(() => changes >= 1));
 
         // semantically invalid edit (TLS file mode without a path, unknown key): rejected, last good stays
         int before = Rejections();
         File.WriteAllText(file.Path, Json(9003, """, "Tls": { "Mode": "File" }"""));
+        root.Reload();
         Assert.True(Wait(() => Rejections() > before), "invalid change not reported");
         Assert.Equal(9002, monitor.CurrentValue.Listen.Port);
         var line = capture.Lines.Last(l => l.Level == LogLevel.Error).Text;
@@ -352,6 +357,7 @@ public sealed class ConfigReloadTests
         // a misspelt key is rejected too
         before = Rejections();
         File.WriteAllText(file.Path, Json(9003, """, "Bogus": 1"""));
+        root.Reload();
         Assert.True(Wait(() => Rejections() > before), "unknown key not reported");
         Assert.Equal(9002, monitor.CurrentValue.Listen.Port);
         Assert.Contains("Proxy:Bogus", capture.Lines.Last(l => l.Level == LogLevel.Error).Text);
@@ -359,11 +365,13 @@ public sealed class ConfigReloadTests
         // syntactically broken edit: also rejected (and the process is still alive to assert it)
         before = Rejections();
         File.WriteAllText(file.Path, "{ \"Proxy\": { \"Listen\": { \"Port\": ");
+        root.Reload();
         Assert.True(Wait(() => Rejections() > before), "broken file not reported");
         Assert.Equal(9002, monitor.CurrentValue.Listen.Port);
 
         // fixing the file recovers
         File.WriteAllText(file.Path, Json(9004));
+        root.Reload();
         Assert.True(Wait(() => monitor.CurrentValue.Listen.Port == 9004), "recovery not applied");
     }
 
@@ -371,13 +379,32 @@ public sealed class ConfigReloadTests
     public void A_reload_that_only_adds_warnings_is_applied()
     {
         using var file = TempFile.Create(Json(9001));
-        var builder = new ConfigurationBuilder().AddJsonFile(file.Path, optional: false, reloadOnChange: true);
+        var builder = new ConfigurationBuilder().AddJsonFile(file.Path, optional: false, reloadOnChange: false);
         var guard = ProxyConfigLoadGuard.Install(builder);
         var root = builder.Build();
         using var monitor = new ProxyOptionsMonitor(root, ProxyConfig.LoadOrThrow(root).Value!, LoggerFactory.Create(_ => { }).CreateLogger("x"), guard);
 
         File.WriteAllText(file.Path, Json(9005, """, "Users": [ { "Name": "nobody", "PasswordHash": "h" } ]"""));   // warning: no data sources
+        root.Reload();
         Assert.True(Wait(() => monitor.CurrentValue.Listen.Port == 9005));
         Assert.Single(monitor.CurrentValue.Users);
+    }
+
+    [Fact]
+    public void A_file_edit_is_picked_up_through_the_providers_polling_watcher()
+    {
+        using var file = TempFile.Create(Json(9001));
+        using var files = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(file.DirectoryPath) { UsePollingFileWatcher = true, UseActivePolling = true };
+        var builder = new ConfigurationBuilder().AddJsonFile(files, System.IO.Path.GetFileName(file.Path), optional: false, reloadOnChange: true);
+        var guard = ProxyConfigLoadGuard.Install(builder);
+        var root = builder.Build();
+        using var monitor = new ProxyOptionsMonitor(root, ProxyConfig.LoadOrThrow(root).Value!, LoggerFactory.Create(_ => { }).CreateLogger("x"), guard);
+
+        File.WriteAllText(file.Path, Json(9006));
+        // The polling watcher compares last-write times, and the two texts have the same length: on a file system with a coarse timestamp (a Windows runner) the edit can
+        // carry the same time as the file's creation and never be seen. Making the time differ makes the test about the watcher and not about the clock.
+        File.SetLastWriteTimeUtc(file.Path, DateTime.UtcNow.AddMinutes(1));
+
+        Assert.True(Wait(() => monitor.CurrentValue.Listen.Port == 9006, seconds: 30), "the edit was not picked up");
     }
 }

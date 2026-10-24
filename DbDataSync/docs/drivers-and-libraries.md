@@ -5,7 +5,7 @@
 Two separate concepts, easy to conflate because they usually show up together:
 
 - **A library** is the ADO.NET provider a connection actually opens through — `Microsoft.Data.SqlClient`,
-  `Npgsql`, `MySqlConnector`, `DuckDB.NET.Data.Full`, and so on. DbDataSync doesn't ship any of these
+  `Npgsql`, `MySqlConnector`, `DuckDB.NET.Data`, and so on. DbDataSync doesn't ship any of these
   inside the tool itself (DuckDB is the one exception — see below); each is restored once, on the
   machine that needs it, the first time something asks for it.
 - **A driver** is what actually runs a replication against one engine — the readers, staging providers,
@@ -43,17 +43,24 @@ saves typing out a package id and factory type by hand.
 | `oracle-managed-data-access` | `Oracle.ManagedDataAccess.Core` | Oracle |
 | `system-data-odbc` | `System.Data.Odbc` | anything reachable through an installed ODBC driver |
 | `firebird-client` | `FirebirdSql.Data.FirebirdClient` | Firebird |
-| `duckdb` | `DuckDB.NET.Data.Full` | embedded, not a server |
+| `duckdb` | `DuckDB.NET.Data` (plus the DuckDB 2.0.0 engine) | embedded, not a server |
 
 `duckdb` is the one exception to "nothing ships inside the tool": DbDataSync's own verification and
 DuckDB-kind custom segmenting strategies run on it regardless of which replication engines a deployment
 ever configures, so it installs itself automatically on every `serve` start rather than waiting to be
 asked for. Nothing else on this list installs itself.
 
-### `dbdatasync config library install`
+The package carries only the managed bindings. The engine itself (DuckDB 2.0.0, the version this release is built for) is downloaded
+from DuckDB's release page for the machine's platform at the same time, and checked against checksums recorded in the release: a
+file that does not match is refused. It is available for Linux (glibc) on x64 and arm64, Windows x64 and macOS on x64 and arm64.
+On a machine without internet access, download `duckdb-shared-libs-<os>-<arch>.tar.gz` for the platform from the DuckDB 2.0.0 release
+elsewhere, put it in a directory, and set `DBDATASYNC_DUCKDB_ENGINE_SOURCE` to that directory before the first `serve`; the docker
+images already contain it.
+
+### `dbdatasync library install`
 
 ```
-dbdatasync config library install <packageId>[ <packageId>...] [--as <id>] --version <v> [--factory-type type] [--source feed]
+dbdatasync library install <packageId>[ <packageId>...] [--as <id>] --version <v> [--factory-type type] [--source feed]
 ```
 
 | flag | required | notes |
@@ -66,10 +73,10 @@ dbdatasync config library install <packageId>[ <packageId>...] [--as <id>] --ver
 
 ```sh
 # Catalog shorthand — factory type resolved from KnownLibraries, version still required.
-dbdatasync config library install npgsql --version 9.0.3
+dbdatasync library install npgsql --version 9.0.3
 
 # A package not in the catalog, with the factory type spelled out explicitly.
-dbdatasync config library install SomeVendor.Data.Provider --version 3.1.0 \
+dbdatasync library install SomeVendor.Data.Provider --version 3.1.0 \
   --factory-type "SomeVendor.Data.SomeFactory, SomeVendor.Data.Provider"
 ```
 
@@ -82,10 +89,10 @@ an SDK.
 
 | command | does |
 | --- | --- |
-| `dbdatasync config library sync [<id>]` | re-restores one library (or, with no id, every installed library) at its pinned version — how a pending install (above) gets completed, or how a hand-edited `library.json` version bump takes effect |
-| `dbdatasync config library list` | every installed library, its packages/versions, its factory type, and whether it currently resolves, doesn't resolve, or is still pending a `sync` |
-| `dbdatasync config library uninstall <id>` | deletes `<RepoRoot>/libraries/<id>` entirely |
-| `dbdatasync config library validate <id> --connection <name>` | for a library backing a *built-in* driver only: opens the named connection for real and drives that driver's actual staging/writer pipeline against a real scratch table, reporting rows written — proof the library resolves correctly, not just that the manifest parses |
+| `dbdatasync library sync [<id>]` | re-restores one library (or, with no id, every installed library) at its pinned version — how a pending install (above) gets completed, or how a hand-edited `library.json` version bump takes effect |
+| `dbdatasync library list` | every installed library, its packages/versions, its factory type, and whether it currently resolves, doesn't resolve, or is still pending a `sync` |
+| `dbdatasync library uninstall <id>` | deletes `<RepoRoot>/libraries/<id>` entirely |
+| `dbdatasync library validate <id> --connection <name>` | for a library backing a *built-in* driver only: opens the named connection for real and drives that driver's actual staging/writer pipeline against a real scratch table, reporting rows written — proof the library resolves correctly, not just that the manifest parses |
 
 ### From the web console
 
@@ -115,7 +122,7 @@ installed doesn't fail at save time — the config itself is valid — it fails 
 actually tries to open it, with:
 
 ```
-Library 'microsoft-data-sqlclient' is not installed. Install it with `dbdatasync config library install microsoft-data-sqlclient`.
+Library 'microsoft-data-sqlclient' is not installed. Install it with `dbdatasync library install microsoft-data-sqlclient`.
 ```
 
 Run that once (pin whatever version you want — see above) and every subsequent connection using that
@@ -198,10 +205,10 @@ A small, curated set of starter descriptors ships as embedded resource templates
 (`KnownDrivers.cs`) — currently just `mysql.generic`, seeded via `--from mysql.generic` below. Anything
 else starts from a blank shell and gets filled in by hand.
 
-### `dbdatasync config driver install`
+### `dbdatasync driver install`
 
 ```
-dbdatasync config driver install <id> [--library <name>] --version <v> [--factory-type type] [--from <knownDriverId>] [--display-name name]
+dbdatasync driver install <id> [--library <name>] --version <v> [--factory-type type] [--from <knownDriverId>] [--display-name name]
 ```
 
 | flag | required | notes |
@@ -220,11 +227,11 @@ through the CLI.
 
 ```sh
 # From the starter template — installs the mysql-connector library too, if not already there.
-dbdatasync config driver install my.mysql --version 2.4.0 --from mysql.generic
+dbdatasync driver install my.mysql --version 2.4.0 --from mysql.generic
 
 # A blank shell for an engine with no template, reusing a library already installed under a
 # different driver.
-dbdatasync config driver install my.other-engine --library mysql-connector --version 2.4.0
+dbdatasync driver install my.other-engine --library mysql-connector --version 2.4.0
 ```
 
 A minimal (`--from`-less) `driver.yaml` starts with an empty `typeMap: {}` and a comment noting that
@@ -233,7 +240,7 @@ every native type is `Unmappable` until you fill it in — deliberately not a gu
 ### Compiled plugin drivers
 
 ```
-dbdatasync config driver install <id> --kind compiled --package <packageId> --version <v> --assembly <name.dll> --driver-type <FQTypeName> [--source feed]
+dbdatasync driver install <id> --kind compiled --package <packageId> --version <v> --assembly <name.dll> --driver-type <FQTypeName> [--source feed]
 ```
 
 Restores a package into a private `<RepoRoot>/drivers/<id>/lib/` (never the shared `libraries/` a
@@ -246,8 +253,8 @@ implementation yourself — and is out of scope for this page beyond the command
 
 | command | does |
 | --- | --- |
-| `dbdatasync config driver list` | every driver on disk — descriptor (`library: <id>`) or compiled (`assembly:`/`type:`) — plus a `[FAILED TO PARSE: ...]` line for one that doesn't, rather than crashing |
-| `dbdatasync config driver uninstall <id>` | deletes `<RepoRoot>/drivers/<id>`. Its library is untouched — `config library uninstall` separately if nothing else still needs it |
+| `dbdatasync driver list` | every driver on disk — descriptor (`library: <id>`) or compiled (`assembly:`/`type:`) — plus a `[FAILED TO PARSE: ...]` line for one that doesn't, rather than crashing |
+| `dbdatasync driver uninstall <id>` | deletes `<RepoRoot>/drivers/<id>`. Its library is untouched — `config library uninstall` separately if nothing else still needs it |
 
 ### From the web console
 
@@ -275,7 +282,7 @@ a slower path, an engine that also has a compiled driver now.
    not already installed) and writes `<RepoRoot>/drivers/mysql.generic/driver.yaml`:
 
    ```sh
-   dbdatasync config driver install mysql.generic --version 2.4.0 --from mysql.generic
+   dbdatasync driver install mysql.generic --version 2.4.0 --from mysql.generic
    ```
 
 2. **Restart** the API (and any running worker) so the newly-written descriptor is picked up.

@@ -1,3 +1,5 @@
+using DbDataKit.State;
+
 namespace DbDataSync.State;
 
 /// <summary>
@@ -21,79 +23,6 @@ namespace DbDataSync.State;
 /// </summary>
 internal static class Migrations
 {
-    /// <summary>Each script's statements, rendered for one engine and split so they can be executed
-    /// one at a time — some engines refuse several DDL statements in a single command.</summary>
-    public static IReadOnlyList<IReadOnlyList<string>> ScriptsFor(StateDialect dialect) =>
-        [.. Templates.Select(template => SplitStatements(Render(template, dialect)))];
-
-    private static string Render(string template, StateDialect dialect) => DropIndexToken.Replace(
-        template
-            .Replace("{{text}}", dialect.Text)
-            .Replace("{{key}}", dialect.KeyText)
-            .Replace("{{int}}", dialect.Integer)
-            .Replace("{{addcolumn}}", dialect.AddColumn)
-            .Replace("{{identity:Id}}", dialect.IdentityKey("Id")),
-        match => dialect.DropIndex(match.Groups["index"].Value, match.Groups["table"].Value));
-
-    /// <summary><c>{{dropindex:IndexName:TableName}}</c> — the table is part of the token because SQL
-    /// Server needs it and the other two do not, so the schema has to state it either way.</summary>
-    private static readonly System.Text.RegularExpressions.Regex DropIndexToken = new(
-        @"\{\{dropindex:(?<index>\w+):(?<table>\w+)\}\}");
-
-    /// <summary>
-    /// Splits a script into statements on top-level semicolons.
-    /// <para>
-    /// Comment-aware, and not optionally: these scripts carry more prose than DDL, and several of
-    /// those comments contain a semicolon mid-sentence. Splitting naively would cut a statement in
-    /// half at a word boundary inside a comment and produce two fragments that are each a syntax
-    /// error.
-    /// </para>
-    /// </summary>
-    private static IReadOnlyList<string> SplitStatements(string script)
-    {
-        var statements = new List<string>();
-        var current = new System.Text.StringBuilder();
-        var inLineComment = false;
-        var inString = false;
-
-        for (var i = 0; i < script.Length; i++)
-        {
-            var c = script[i];
-
-            if (inLineComment)
-            {
-                if (c == '\n') inLineComment = false;
-            }
-            else if (inString)
-            {
-                // '' is an escaped quote inside a literal, not the end of one.
-                if (c == '\'' && (i + 1 >= script.Length || script[i + 1] != '\'')) inString = false;
-                else if (c == '\'') { current.Append(c); i++; }
-            }
-            else if (c == '-' && i + 1 < script.Length && script[i + 1] == '-') inLineComment = true;
-            else if (c == '\'') inString = true;
-            else if (c == ';')
-            {
-                Flush();
-                continue;
-            }
-
-            current.Append(c);
-        }
-
-        Flush();
-        return statements;
-
-        void Flush()
-        {
-            var statement = current.ToString().Trim();
-            current.Clear();
-            // A trailing fragment of nothing but comments is not a statement.
-            if (statement.Split('\n').Any(line => line.TrimStart().Length > 0 && !line.TrimStart().StartsWith("--")))
-                statements.Add(statement);
-        }
-    }
-
     private static readonly string[] Templates =
     [
         """
@@ -256,72 +185,9 @@ internal static class Migrations
         ALTER TABLE TaskRuns {{addcolumn}} FailureKind {{text}} NULL;
         """,
 
-        """
-        -- Who may use this, and how they prove it.
-        --
-        -- In the state store rather than the config repo: users are runtime state, and putting an
-        -- access-control list in a git history the UI diffs on screen would publish it to everyone
-        -- who can read the repo.
-        CREATE TABLE Users (
-            Id           {{key}} PRIMARY KEY,   -- opaque; never a login name, which people change
-            DisplayName  {{text}} NOT NULL,
-            Email        {{text}} NULL,          -- for git attribution, where there is one
-            Role         {{text}} NOT NULL,      -- Admin | Viewer
-            Enabled      {{int}} NOT NULL,
-            CreatedAtUtc {{text}} NOT NULL
-        );
+        IdentitySchema.Accounts,
 
-        -- A credential per method, all pointing at one user. That shape is what makes "one person,
-        -- both methods" cheap: signing in is "find the credential, take its user", and adding a
-        -- passkey to an account that already signs in with Windows is inserting a row. Columns named
-        -- WindowsSid and PasskeyPublicKey on Users would have made the same requirement a migration.
-        CREATE TABLE UserCredentials (
-            Id            {{key}} PRIMARY KEY,
-            UserId        {{key}} NOT NULL REFERENCES Users(Id),
-            Method        {{key}} NOT NULL,      -- Windows | Passkey
-            -- Windows: the account SID. Passkey: the credential id. What a sign-in is looked up by.
-            Subject       {{key}} NOT NULL,
-            Secret        {{text}} NULL,          -- a passkey's *public* key; null for Windows
-            Label         {{text}} NULL,
-            CreatedAtUtc  {{text}} NOT NULL,
-            LastUsedAtUtc {{text}} NULL
-        );
-
-        CREATE UNIQUE INDEX UX_UserCredentials_Subject ON UserCredentials(Method, Subject);
-        CREATE INDEX IX_UserCredentials_User ON UserCredentials(UserId);
-
-        -- Server-side, so signing somebody out — or disabling them — takes effect on their next
-        -- request rather than whenever a token would have expired.
-        CREATE TABLE Sessions (
-            Id           {{key}} PRIMARY KEY,
-            UserId       {{key}} NOT NULL REFERENCES Users(Id),
-            CreatedAtUtc {{text}} NOT NULL,
-            ExpiresAtUtc {{text}} NOT NULL
-        );
-
-        CREATE INDEX IX_Sessions_User ON Sessions(UserId);
-        """,
-
-        """
-        -- A one-time capability to create a user, or to add a credential to one.
-        --
-        -- The code itself is never stored — only a hash of it. It is a bearer credential that arrives
-        -- over chat or email and is worth exactly what a password is worth, and a database somebody
-        -- can read is a database somebody can sign in from.
-        CREATE TABLE Invites (
-            Id               {{key}} PRIMARY KEY,
-            CodeHash         {{key}} NOT NULL,
-            Role             {{text}} NOT NULL,   -- what the invited user becomes
-            UserId           {{text}} NULL,       -- set when adding a credential to an existing user
-            CreatedByUserId  {{text}} NULL,       -- null for the bootstrap invite: nobody made it
-            CreatedAtUtc     {{text}} NOT NULL,
-            ExpiresAtUtc     {{text}} NOT NULL,
-            RedeemedAtUtc    {{text}} NULL,
-            RedeemedByUserId {{text}} NULL
-        );
-
-        CREATE UNIQUE INDEX UX_Invites_CodeHash ON Invites(CodeHash);
-        """,
+        IdentitySchema.Invites,
 
         """
         -- Per-pass timing, for a mapping that opted into tracing it — see phase 59.
@@ -552,62 +418,7 @@ internal static class Migrations
         CREATE INDEX IX_ChangeCheckHistory_CheckedAt ON ChangeCheckHistory(CheckedAtUtc);
         """,
 
-        """
-        -- The notification feed, and the per-user cursor into it — see phase 77.
-        --
-        -- Global and append-only: one row per notable event, visible to everybody, in the same
-        -- Id-ordered shape Logs has. That shape is the point rather than a coincidence — a client
-        -- polls with WHERE Id > $sinceId and gets exactly what it has not seen, with no server-side
-        -- session and nothing to reconcile if a poll is missed or repeated. Per-user rows were the
-        -- alternative and were rejected in planning: broadcast semantics were what was asked for, and
-        -- a fan-out row per user per event would multiply this table by the size of the org to store
-        -- the same sentence N times.
-        --
-        -- Kind is a category, not a message. This phase writes exactly one value into it (RunFailed);
-        -- phase 80 adds two more and later phases will add others, and none of them should be a
-        -- migration. A UI that wants to filter or icon-code by kind reads this column; a UI that wants
-        -- to render the event reads Message.
-        --
-        -- Message is stored, not composed at read time from the context columns. The context that
-        -- explains a failure — the error summary, the position that expired — lives in rows that are
-        -- themselves pruned on their own schedule, so a feed that rebuilt its sentences by joining
-        -- back to TaskRuns would start saying less about older events precisely as they became harder
-        -- to remember. A notification is a record of what was said, at the moment it was said.
-        --
-        -- TaskName/MappingName/RunId are nullable because not every kind has all three: a paused
-        -- replication has no run and no mapping, and a future kind may have neither. They exist beside
-        -- Message so a later notification centre can link to the thing a row is about without parsing
-        -- the sentence, which is the one thing a rendered string cannot be asked to support.
-        CREATE TABLE Notifications (
-            {{identity:Id}},
-            Kind         {{key}} NOT NULL,   -- 'RunFailed' | 'ReplicationPaused' | 'PositionExpired'
-            CreatedAtUtc {{key}} NOT NULL,
-            TaskName     {{text}} NULL,
-            MappingName  {{text}} NULL,
-            RunId        {{text}} NULL,
-            Message      {{text}} NOT NULL
-        );
-
-        -- On CreatedAtUtc alone, for the age purge. Reads by Id use the primary key, and Kind is
-        -- indexed as part of nothing on the same reasoning ChangeCheckHistory's group columns are: no
-        -- reader filters on it yet, and an index for a hypothetical one costs every write.
-        CREATE INDEX IX_Notifications_CreatedAt ON Notifications(CreatedAtUtc);
-
-        -- One row per user, holding the highest Id that user has acknowledged. Everything above it is
-        -- unread; the count is a comparison, not a per-notification flag table.
-        --
-        -- **No row is written for a deployment with authentication disabled.** There is no user id to
-        -- key one to, and inventing a shared sentinel would mean one person's dismissal silencing the
-        -- badge for everybody at a terminal where nobody can be told apart. That mode has a defined
-        -- answer instead — everything always reads as unread — stated by the API rather than left to
-        -- a null key landing somewhere by accident. See NotificationStore.
-        CREATE TABLE NotificationReadState (
-            UserId                 {{key}} NOT NULL,
-            LastSeenNotificationId {{int}} NOT NULL,
-            UpdatedAtUtc           {{text}} NOT NULL,
-            PRIMARY KEY (UserId)
-        );
-        """,
+        NotificationSchema.Feed,
 
         """
         -- The time the source itself says its current position was committed — see phase 85.
@@ -831,4 +642,7 @@ internal static class Migrations
         ALTER TABLE WorkQueue {{addcolumn}} CancelRequestedUtc {{text}} NULL;
         """,
     ];
+
+    /// <summary>The schema, for <see cref="StateDatabase"/> to apply.</summary>
+    public static readonly StateSchema Schema = new(Templates);
 }

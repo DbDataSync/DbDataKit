@@ -6,7 +6,7 @@ namespace DbDataSync.Drivers.Abstractions;
 /// <summary>
 /// Identifies a database engine and advertises which readers/staging providers/writers it supports,
 /// per architecture/detailed-design.md §3.4. Also owns connection creation and metadata introspection
-/// so credential resolution (via ClrKernel.Core.Secrets.SecretStore) happens in exactly one place per
+/// so credential resolution (via the secret store) happens in exactly one place per
 /// engine rather than being duplicated across every reader/writer.
 /// </summary>
 public interface IDriver

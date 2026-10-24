@@ -67,6 +67,11 @@ test.describe.serial('golden path: define, configure, and run a replication end-
       await page.getByTestId('connection-parameters-database').fill(DB_NAME)
       await page.getByTestId('connection-parameters-userId').fill('sa')
       await page.getByTestId('connection-parameters-password').fill(SA_PASSWORD)
+      // the test container's certificate is self-signed, and certificates are verified unless told otherwise
+      const tlsTable = page.getByTestId('connection-parameters-properties')
+      await tlsTable.getByPlaceholder('Custom properties name').fill('TrustServerCertificate')
+      await tlsTable.getByRole('button', { name: '+ Add' }).click()
+      await tlsTable.getByLabel('TrustServerCertificate value').fill('true')
       if (name === SRC_CONNECTION_NAME) await shot(page, '02-connection-form.png')
       await page.getByTestId('save-connection-button').click()
       await expect(page.getByTestId('connections-table')).toContainText(name)
@@ -413,7 +418,7 @@ test.describe.serial('golden path: define, configure, and run a replication end-
 
     // The credential field an operator staring at an auth failure needs: which variable is read.
     await expect(page.getByTestId('credential-env-var')).toHaveValue(
-      `DBDATASYNC_SECRET_DBDATASYNC_CONNECTION_${SRC_CONNECTION_NAME.replace(/-/g, '_').toUpperCase()}`,
+      `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_${SRC_CONNECTION_NAME.replace(/-/g, '_').toUpperCase()}`,
     )
     await expect(page.getByTestId('credential-store-select')).toBeDisabled()
 
@@ -1614,7 +1619,7 @@ public sealed class Shout : IValueColumnExpression
     // Two hand-maintained copies of one glyph, which is fine only while something notices when they
     // stop matching. The favicon used to be unrelated artwork, so the tab and the app advertised two
     // different products.
-    const webRoot = path.join(__dirname, '..', '..', '..', 'src', 'DbDataSync.Web')
+    const webRoot = path.join(__dirname, '..', '..', '..', '..', 'DbDataKit', 'web', 'sync')
     const logo = fs.readFileSync(path.join(webRoot, 'src', 'components', 'icons.tsx'), 'utf8')
       .split('export function LogoIcon()')[1].split('export function')[0]
     const paths = [...logo.matchAll(/d="([^"]+)"/g)].map((m) => m[1])
@@ -1624,7 +1629,7 @@ public sealed class Shout : IValueColumnExpression
     for (const d of paths) expect(served, 'the favicon draws the same glyph as LogoIcon').toContain(d)
 
     // On the accent square the rail draws around the same mark, not a colour invented for this asset.
-    const accent = fs.readFileSync(path.join(webRoot, 'src', 'index.css'), 'utf8')
+    const accent = fs.readFileSync(path.join(webRoot, '..', 'shell', 'src', 'styles.css'), 'utf8')   // the design tokens are the shell's (plan 13, U02)
       .match(/--accent:\s*(#[0-9a-f]{6})/i)![1]
     expect(served.toLowerCase()).toContain(accent.toLowerCase())
 

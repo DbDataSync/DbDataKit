@@ -1,13 +1,13 @@
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Libraries;
 using Microsoft.Data.SqlClient;
 
 namespace DbDataSync.Cli.Tests;
 
 /// <summary>
-/// Phase 109j item 4's own "how to verify" bar, at the CLI layer (<c>dbdatasync config library
+/// Phase 109j item 4's own "how to verify" bar, at the CLI layer (<c>dbdatasync library
 /// validate</c>) rather than through the API's spawned-child-process endpoint (see
 /// <c>DbDataSync.Api.Tests.LibraryValidateIntegrationTests</c> for that half, including the no-DDL-rights
 /// case and the assembly-residency isolation check).
@@ -15,7 +15,7 @@ namespace DbDataSync.Cli.Tests;
 public sealed class LibraryValidateCommandTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("dbdatasync-validate-cli-").FullName;
-    private readonly SecretStore _secrets = new("DbDataSync", true);
+    private readonly SecretStore _secrets = SecretStore.ForProviders(new InMemorySecretProvider());
 
     public void Dispose() => GitTempDirectory.DeleteRecursively(_root);
 
@@ -34,7 +34,7 @@ public sealed class LibraryValidateCommandTests : IDisposable
 
     private static void ExposeCredential(string connectionName, string password) =>
         Environment.SetEnvironmentVariable(
-            $"DBDATASYNC_SECRET_DBDATASYNC_CONNECTION_{connectionName.Replace('-', '_').ToUpperInvariant()}",
+            $"DBDATA_SECRET_DBDATA_SYNC_CONNECTION_{connectionName.Replace('-', '_').ToUpperInvariant()}",
             password);
 
     [Fact]
@@ -68,6 +68,7 @@ public sealed class LibraryValidateCommandTests : IDisposable
             DriverType = DriverIds.MsSql,
             Host = "localhost",
             Port = 14330,
+            Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = "master",
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
@@ -112,6 +113,7 @@ public sealed class LibraryValidateCommandTests : IDisposable
             DriverType = DriverIds.MsSql,
             Host = "localhost",
             Port = 14330,
+            Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = "master",
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
@@ -149,6 +151,7 @@ public sealed class LibraryValidateCommandTests : IDisposable
             DriverType = DriverIds.Postgres,
             Host = "localhost",
             Port = 15432,
+            Properties = new Dictionary<string, string> { ["SSL Mode"] = "Disable" },
             Database = "dbdatasync",
             AuthMode = AuthMode.SqlAuth,
             UserId = "dbdatasync",

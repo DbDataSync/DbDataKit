@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <Description>The state database a product keeps beside its configuration: SQLite, SQL Server or PostgreSQL behind one dialect, schema fragments, and the stores for users, sessions, invites and notifications.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <ProjectReference Include="..\DbDataKit.Monitoring\DbDataKit.Monitoring.csproj" />
+  </ItemGroup>
+</Project>

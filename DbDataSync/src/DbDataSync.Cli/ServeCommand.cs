@@ -4,7 +4,7 @@ using DbDataSync.Api.Configuration;
 using DbDataSync.Api.Services;
 using Microsoft.Extensions.DependencyInjection;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Libraries;
 using LibGit2Sharp;
 
@@ -180,7 +180,7 @@ public static class ServeCommand
     /// regardless of which replication engines this deployment ever configures — unlike 109h's two
     /// providers, there is no "engine chosen" operator decision to hang the install off, so this
     /// installs it unconditionally, here, on every <c>serve</c> start. This is also the one call site
-    /// both <c>dbdatasync serve</c> directly and <c>setup</c>'s own Start button reach —
+    /// both <c>dbdatasync server run</c> directly and <c>setup</c>'s own Start button reach —
     /// <see cref="Tui.SetupScreen"/>'s Start button already calls <see cref="RunAsync"/> — so one change
     /// covers both entry points.
     /// <para>
@@ -214,7 +214,7 @@ public static class ServeCommand
         {
             Console.Error.WriteLine(
                 $"Could not install '{libraryId}' automatically: {ex.Message}. Verification and " +
-                "DuckDB-backed segmenting strategies will not work until `dbdatasync config library " +
+                "DuckDB-backed segmenting strategies will not work until `dbdatasync library " +
                 "sync` completes it; replication itself is unaffected.");
         }
     }
@@ -259,7 +259,7 @@ public static class ServeCommand
     /// parse key/value tokens by counting from the start of the array: an odd number of leftover,
     /// unrecognized non-flag tokens ahead of a real <c>--Key value</c> pair desyncs that counting, and
     /// the pair silently fails to parse at all — verified directly against the real provider. A single
-    /// <c>dbdatasync serve --repo X</c> (no <c>--url</c>) left exactly one such orphan and would have
+    /// <c>dbdatasync server run --repo X</c> (no <c>--url</c>) left exactly one such orphan and would have
     /// silently dropped <em>every</em> <c>--DbDataSync:*</c> argument appended after it, App:RepoRoot
     /// and State:DbPath included — not merely a display glitch, a deployment silently running against
     /// the wrong repo. Stripping the flag's value token too removes the orphan instead of leaving one

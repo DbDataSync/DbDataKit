@@ -24,8 +24,8 @@ public sealed class ScriptedMetadataTests : IDisposable
         LibGit2Sharp.Repository.Init(_repoRoot);
         _configRepository = new ConfigRepository(
             Path.Combine(_repoRoot, "config"),
-            new Core.Git.GitCommitService(_repoRoot),
-            new ClrKernel.Core.Secrets.SecretStore(true));
+            new DbDataKit.Config.Git.GitCommitService(_repoRoot),
+            DbDataSync.Core.Secrets.SecretStore.ForProviders(new DbDataSync.Core.Secrets.InMemorySecretProvider()));
         var host = new ScriptHost(
             _configRepository, new ScriptCompiler(new ScriptCacheDirectory(Path.Combine(_repoRoot, "cache"))));
         _metadata = new ScriptedMetadata(host, _configRepository);
@@ -43,7 +43,7 @@ public sealed class ScriptedMetadataTests : IDisposable
         };
         if (boundScript is not null)
             input.Scripts[ScriptSlots.MetadataProvider] = new ScriptBinding { ScriptName = boundScript };
-        _configRepository.SaveConnection(input, new Core.Git.GitAuthor("t", "t@t"));
+        _configRepository.SaveConnection(input, new DbDataKit.Config.Git.GitAuthor("t", "t@t"));
     }
 
     private void SaveScript(string name, string entryType, string code) =>
@@ -53,7 +53,7 @@ public sealed class ScriptedMetadataTests : IDisposable
                 Manifest = new ScriptConfig { Name = name, Kind = ScriptSlots.MetadataProvider, EntryType = entryType },
                 Code = code,
             },
-            new Core.Git.GitAuthor("t", "t@t"));
+            new DbDataKit.Config.Git.GitAuthor("t", "t@t"));
 
     private Task<IReadOnlyList<ColumnMetadata>> ColumnsAsync() =>
         _metadata.ListColumnsAsync(

@@ -6,9 +6,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.runner.visualstudio" />
-    <PackageReference Include="DuckDB.NET.Data.Full" />
+    <PackageReference Include="DuckDB.NET.Data" />
     <PackageReference Include="System.Data.Odbc" />
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\DbDataKit.Metadata\DbDataKit.Metadata.csproj" />
   </ItemGroup>
+  <Import Project="..\..\build\DuckDb.Native.targets" />
 </Project>

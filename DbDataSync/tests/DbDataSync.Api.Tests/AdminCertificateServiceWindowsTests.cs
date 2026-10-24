@@ -7,7 +7,7 @@ using DbDataSync.Api.Configuration;
 using DbDataSync.Api.Services;
 using DbDataSync.Certificates;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using Xunit;
 
 namespace DbDataSync.Api.Tests;

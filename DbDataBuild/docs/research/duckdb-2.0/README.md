@@ -129,8 +129,8 @@ Differential run (unit, same seeded data, 1.5.6 against alpha48141): the 126 que
 
 - **ANY / ALL**: `x op ANY (S)` is planned as a cross product with `min`/`max`, `count(*)` and `count(x)` of S and a CASE chain (uncorrelated), or with a count-bug guard (correlated). That CASE is a boolean value SQL Server cannot use as a condition. It is **refused** (DDB-324), never written; the six row-value and ANY/ALL cases of the unit tests accept exactly that refusal on a 2.0 plan. Not translated.
 - **Row-value `IN` with NULLs**: 2.0 follows the standard (a component that is definitely different makes the row definitely not a match); 1.x made the row unknown when any component was NULL. The lowering writes the standard's form on a 2.0 plan (one comparison per row is the same in both), so the *text* of a multi-column `NOT IN` differs by version, on purpose.
-- **`%` and `//` by zero raise** in 2.0; the lowering still writes the 1.x answer (NULL, `NULLIF`). The unit tests set `error_on_division_by_zero = false` on the DuckDB that answers, so the rows compare. Decision for the owner.
-- **Decimal quantiles** (`quantile_cont`/`median` over a DECIMAL) differ in the last digit from the lowering's (`838.155` against `838.1551`): 2.0 changed the interpolation. One unit test fails on the preview (`Quantiles_of_decimals_cut_to_a_whole_number_of_the_scale...`).
+- **`%` and `//` by zero raise** in 2.0. **Decided (D8) and done (K09, 2026-10-21): the lowering no longer writes the 1.x answer.** `a % b` is written as it is. `a // b` is written `CAST((a - (a % b)) / b AS T)`, the exact truncated quotient, because the transpiler turns every `/` into a float division guarded with `NULLIF` for SQL Server and PostgreSQL (and has no `//` for SQL Server or Fabric); with the `%` first, a zero divisor raises on DuckDB 2.0, SQL Server and PostgreSQL alike (checked against the real engines by the `int_floor_div` and `mod_by_zero` probes). The left operand is written twice, so one that calls `random()`, `uuid()` and the like is refused. The unit tests no longer set `error_on_division_by_zero = false`; the plain `/` (float division: inf in DuckDB, NULL on the engines) is unchanged and still a documented difference.
+- **Decimal quantiles** (`quantile_cont`/`median` over a DECIMAL) differ in the last digit from the lowering's (`838.155` against `838.1551`): 2.0 changed the interpolation. **Decided and done (K10, 2026-10-21): refused over a DECIMAL** (DDB-324, with the fix: cast to DOUBLE and back). On the released 2.0.0 none of `lo*(1-d)+hi*d`, `lo+(hi-lo)*d`, `hi-(hi-lo)*(1-d)`, a lerp or exact rational arithmetic, truncated or rounded, reproduces DuckDB over 144 group/fraction pairs (the best misses 3 to 4); for DOUBLE the same formulas miss the last bit in 12 to 13% of cases. So a DOUBLE quantile is checked to six decimals, not bit for bit. `quantile_disc` returns a value of the data and is unchanged. One unit test fails on the preview (`Quantiles_of_decimals_cut_to_a_whole_number_of_the_scale...`).
 - **(Solved the same day, entry 174: see the last section.) `current_date()` in a macro default** is folded to a DATE constant when the macro is bound (a literal of the day of the lowering), where 1.x kept the call. The plan cannot tell the two apart, so the lowered text would freeze the day: one unit test fails on the preview (`MacroTests.A_macro_with_default_parameters...`). This is the one finding that makes a 2.0 adoption unsafe as it stands: it needs a decision (refuse a DATE/TIMESTAMP literal equal to the day of lowering, or bind macro defaults differently).
 
 ## Update 2026-10-15 (later): the clock is folded into constants, and the planning connections replace it (entry 174)
@@ -172,3 +172,52 @@ The calls are made through DuckDB.NET.Bindings (`NativeMethods.ScalarFunction`, 
 **How to see it.** `scripts/test-duckdb-preview.sh`, then `dotnet test tests/DbDataBuild.Tests.Unit --filter ClockOverridesTests`: `Without_the_replacements_a_folding_DuckDB_freezes_the_day_and_with_them_it_does_not` shows the constant. Against the engines: `DBDATABUILD_DUCKDB_CLOCK_OVERRIDES=never` on the preview makes `ClockConformanceTests` fail with `CAST('2026-10-15' AS DATE)` in the rendered text; with the override it passes on SQL Server 2022 and PostgreSQL 17.
 
 **Verified** (see entry 174 for the numbers): unit and conformance on 1.5.6 (nothing changed there but the new tests); unit, quick and apply on `v2.0.0-alpha48256`. **Not verified**: Windows and macOS library names (the bindings resolve them, untested), Fabric (never run), DuckDB.NET on 2.0 (no build).
+
+## Storage format and the places a product opens DuckDB (K03, 2026-10-21)
+
+Plan 13 asked, before the first product moves to 2.0.0, what 2.0 does to a database file that 1.x wrote, and which products open DuckDB
+files read-write. The tests are `DbDataKit/tests/DbDataKit.DuckDb.Native.Tests/StorageFormatTests.cs`, on a file the 1.5.6 engine wrote
+(`fixtures/duckdb-1.5.6.duckdb`: a table with a primary key, decimal, date and list columns, and a view).
+
+What the 2.0.0 engine does:
+
+| Case | Result |
+| --- | --- |
+| Open a 1.5.6 file with `access_mode=READ_ONLY`, read tables, a view and a list column | works; the file's bytes and modification time are unchanged and no `.wal` appears |
+| Open it read-write and only read | works; bytes unchanged |
+| Open it read-write and write (a new table, an insert) | works; the header still says storage version 64 and `v1.5.6`, and 1.5.6 still opens the file and reads its rows (checked by hand with 1.5.6 read-only) |
+| Create a **new** database | storage version 69, header `v2.0.0`; 1.5.6 refuses it: `Trying to read a database file with version number 69, but we can only read versions between 64 and 68` |
+
+So 2.0 does not convert an existing file by opening it or by writing to it. A file is in the 2.0 format only if 2.0 created it (or if a user asks
+for it explicitly, which no product does; not tested: `ATTACH ... (STORAGE_VERSION ...)` and `EXPORT`/`IMPORT DATABASE`).
+
+Every place the products open DuckDB:
+
+| Product | Where | Opens | Writes a user's file? | Consequence |
+| --- | --- | --- | --- | --- |
+| DbDataKit | `Connections.DuckDb` `DuckDbProvider` (the sandbox recipe) | `access_mode=READ_ONLY` plus a locked configuration whenever the context is read-only; a read-write source opens its file as given | only for a source configured read-write (Proxy `AllowWrites`) | an existing file keeps its version; a file the proxy creates is 2.0 and unreadable by 1.x. Release note for Proxy |
+| DbDataKit | `Connections` `OdbcComposer`, DuckDB ODBC profile | `access_mode=READ_ONLY` | no | none |
+| DbDataKit | `Transfer.Conformance` | in-memory | no | none |
+| DbDataSync | `Drivers.DuckDb` `DuckDbDriver` | the configured address; read-write unless the connection string sets `access_mode` | yes: a DuckDB target is written by design | an existing target keeps its version; a target Sync creates is 2.0. Release note for Sync: DuckDB targets created from now on need a 2.0 reader |
+| DbDataSync | `Verification`, `Scripting` (segmenting) | in-memory | no | none |
+| DbDataBuild | `Execution` `Logins` (DuckDB origin) | `access_mode=READ_ONLY` | no | none |
+| DbDataBuild | `Sample` `SeedRun.WriteFile` | creates a fresh file at a path the command is given, deleting what was there | a generated file, not a user's | none (it was always a new file) |
+| DbDataBuild | `Targets.DuckDb`, `Sample`, `Models` | in-memory | no | none |
+
+No read-write open of an existing user file converts it. The two release notes above are the whole consequence.
+
+## ANY / ALL on the released 2.0.0 (K08, 2026-10-21)
+
+Decision D8 stands: `x op ANY/ALL (subquery)` in the CASE form that 2.0 plans it in is **refused, never approximated** (DDB-324, "a subquery
+comparison (ANY or ALL) in the form DuckDB 2.0 plans it ..."). On 2.0.0 the six unit cases (`PlanLowererTests`, through
+`LowerExceptTheKnown2AnyAllGap`) accept the refusal, and `LoweringIntegrationTests` adds three project-level fixtures: a filter `> ANY (...)`, a filter `>= ALL (...)`,
+and `> ANY (...)` used as a value each fail `project compile` with DDB-324 naming "ANY or ALL" and write nothing. `<> ALL` is a plain `NOT IN` and lowers.
+
+## Session functions, and the covariance probe (K10, 2026-10-21)
+
+`getvariable`, `current_setting`, `current_schemas` and `getenv` answer about the DuckDB session and 2.0 folds the answer into a constant at bind time, so a lowered query would freeze the
+answer of the day it was lowered (`getvariable('x')` of an unset variable lowered silently to `NULL`). A model query, or a macro it reaches, that calls one is now refused by name before it is
+planned (DDB-324), found by DuckDB's own parser for the query and by name in the text of its macros. Seeds are not affected (`getvariable('scale')` is how a seed reads its scale).
+
+The covariance probe (`FunctionRulesTests.Covariance_on_PostgreSQL...`): with an outlier of 1e10 pairing every row with every other, the exact covariance is 0 and the rewritten exact sums give 0, while 2.0.0 returns
+rounding noise (about -78 for `covar_pop`, 1e-18 of the 1e20 size of the products). That query is now judged against the scale of the data; the other five are compared as before.

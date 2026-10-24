@@ -1,5 +1,5 @@
 using System.Text.Json.Serialization;
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Api.Configuration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication;
@@ -10,7 +10,8 @@ using DbDataSync.Api.Services;
 using DbDataSync.Api.State;
 using DbDataSync.State.Remote;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataSync.Core.Sql;
+using DbDataKit.Config.Git;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.ArrowFlightSql;
 using DbDataSync.Drivers.DuckDb;
@@ -50,7 +51,7 @@ public static class DbDataSyncHost
         });
         InsertConfigFile(builder);
 
-        // Applied only when this process really is a service, so `dbdatasync serve` in a terminal is
+        // Applied only when this process really is a service, so `dbdatasync server run` in a terminal is
         // unaffected — UseWindowsService changes lifetime and logging, and doing that to an
         // interactive run would make Ctrl+C and console output behave unlike every other command.
         if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService())
@@ -119,7 +120,7 @@ public static class DbDataSyncHost
         builder.Services.AddSingleton<PasskeyService>();
         builder.Services.AddSingleton(sp => CertificateOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
 
-        builder.Services.AddSingleton(new SecretStore("DbDataSync", true));
+        builder.Services.AddSingleton(sp => SecretStore.Open(sp.GetRequiredService<ApiOptions>().RepoRoot));
 
         // One GitCommitService per process, not one per consumer — its own doc comment explains why:
         // the in-process write lock that makes concurrent commits safe only holds if every writer to
@@ -311,6 +312,7 @@ public static class DbDataSyncHost
         builder.Services.AddHostedService<SchedulerService>();
         builder.Services.AddHostedService<RunMonitorService>();
         builder.Services.AddHostedService<RunPruningService>();
+        builder.Services.AddSingleton(sp => new BootstrapInviteLocation(sp.GetRequiredService<ApiOptions>().RepoRoot));
         builder.Services.AddHostedService<BootstrapInvite>();
 
         // Windows-only, registered only there — the same gating this file already uses a few lines
@@ -390,6 +392,13 @@ public static class DbDataSyncHost
                 .Build());
 
         var app = builder.Build();
+
+        // Driver failures are shown as their classified message (plan 13, A10); the driver's own text goes to the log, and into the
+        // response only with Diagnostics:DriverDetails on. The worker processes inherit the setting through the environment.
+        bool driverDetails = app.Configuration.GetValue<bool>("Diagnostics:DriverDetails");
+        if (driverDetails) Environment.SetEnvironmentVariable(DriverFailureSetup.DetailsVariable, "true");
+        DriverFailureSetup.Configure(driverDetails);
+        DriverFailures.SetLog(line => app.Logger.LogWarning("{Failure}", line));
 
         // A fresh process has, by construction, already picked up whatever the marker was recording.
         app.Services.GetRequiredService<RestartRequiredState>().Clear();

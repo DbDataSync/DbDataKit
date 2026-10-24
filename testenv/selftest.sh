@@ -27,6 +27,20 @@ check "kit: SQL Server required" '[[ "$out" == *"DBDATA_REQUIRE_SQLSERVER=true"*
 out="$(t postgres dbdatakit --dotenv)"
 check "kit: only PostgreSQL when only it runs" '[[ "$out" == *"DBDATA_TEST_POSTGRES="* && "$out" != *SQLSERVER* && "$out" != *ODBC* ]]'
 
+# DbDataBuild mapping
+out="$(t "mssql postgres" dbdatabuild --dotenv)"
+check "build: SQL Server and PostgreSQL connection strings" '[[ "$out" == *"DBDATABUILD_TEST_MSSQL=Server=127.0.0.1,14330;"* && "$out" == *"DBDATABUILD_TEST_PG=Host=127.0.0.1;Port=15432;"* ]]'
+out="$(t postgres dbdatabuild --dotenv)"
+check "build: only PostgreSQL when only it runs" '[[ "$out" == *"DBDATABUILD_TEST_PG="* && "$out" != *DBDATABUILD_TEST_MSSQL* ]]'
+
+# MySQL, MariaDB and Oracle
+out="$(t mysql --dotenv)"
+check "mysql: a MySqlConnector string and its parts" '[[ "$out" == *"DBKIT_TEST_MYSQL=Server=127.0.0.1;Port=13306;User ID=root;Password=DbKit_Test_Pw1;"* && "$out" == *"DBKIT_TEST_MYSQL_PORT=13306"* && "$out" != *MARIADB* ]]'
+out="$(t mariadb --dotenv)"
+check "mariadb: its own port and names" '[[ "$out" == *"DBKIT_TEST_MARIADB=Server=127.0.0.1;Port=13307;"* && "$out" != *DBKIT_TEST_MYSQL* ]]'
+out="$(t oracle --dotenv)"
+check "oracle: an ODP.NET string for the pluggable database" '[[ "$out" == *"DBKIT_TEST_ORACLE=Data Source=127.0.0.1:15210/FREEPDB1;User Id=dbkit;Password=DbKit_Test_Pw1"* && "$out" == *"DBKIT_TEST_ORACLE_SERVICE=FREEPDB1"* ]]'
+
 # Output formats
 check "shell format quotes values" '[[ "$(t postgres)" == *"export DBKIT_TEST_POSTGRES_USER='"'"'postgres'"'"'"* ]]'
 check "eval makes the variables real" '(eval "$(t mssql dbdataproxy)"; [ "$DBPROXY_TEST_SQLSERVER_USER" = sa ] && [ "$DBPROXY_REQUIRE_SQLSERVER" = true ])'

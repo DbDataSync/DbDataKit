@@ -1,0 +1,1021 @@
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
+import { api } from './client'
+
+// Who the caller is and the notification feed are the shell's hooks, used by every product's console the same way.
+export { useAuthStatus, useMarkNotificationsSeen, useNotifications, useSignInWithWindows, useSignOut } from '@dbdatakit/shell'
+import type {
+  BulkCreateRequest,
+  BulkLoadHistoryFilters,
+  DriverType,
+  ScriptDefinition, ScriptTestRequest, MetricsWindow, BulkLoadRequest, ReconcileDeletesRequest, ConnectionInput, ReplicationTaskConfig,
+  RunHistoryFilters,
+  SegmentingStrategyConfig, SetMappingReadStateRequest, TableMappingConfig } from './types'
+
+// The admin screens' hooks are `@dbdatakit/admin`'s; re-exported so the rest of this app imports them from here as before.
+export {
+  ACTIVE_UPDATE_PHASES,
+  useAdminCertificate,
+  useAdminCertificateCandidates,
+  useAdminConfig,
+  useBindCertificate,
+  useCreateDriver,
+  useCreateSelfSignedCertificate,
+  useDocPage,
+  useDriverStatus,
+  useDriverYaml,
+  useDrivers,
+  useEnrollCertificate,
+  useFiles,
+  useInstallDriverFromCatalog,
+  useInstallLibrary,
+  useKnownDriverKinds,
+  useKnownDrivers,
+  useKnownLibraries,
+  useLibraries,
+  useRemoveFile,
+  useRemoveLibrary,
+  useRestartRequired,
+  useRetrieveCertificate,
+  useSearchLibraries,
+  useSetAdminConfig,
+  useSetAdminConfigSecret,
+  useUpdateDriverYaml,
+  useUpdateReleases,
+  useUpdateStatus,
+  useUploadFiles,
+  useValidateDriverYaml,
+} from '@dbdatakit/admin'
+
+// Query keys are centralized here so mutations know exactly what to invalidate.
+const keys = {
+  connections: ['connections'] as const,
+  connection: (name: string) => ['connections', name] as const,
+  capabilities: (name: string) => ['connections', name, 'capabilities'] as const,
+  scripts: ['scripts'] as const,
+  script: (name: string) => ['scripts', name] as const,
+  scriptSlots: ['scripts', 'slots'] as const,
+  credentialSource: (name: string) => ['connections', name, 'credential-source'] as const,
+  databases: (connectionName: string) => ['metadata', connectionName, 'databases'] as const,
+  tables: (connectionName: string, database: string) => ['metadata', connectionName, database, 'tables'] as const,
+  columns: (connectionName: string, database: string, schema: string, table: string) =>
+    ['metadata', connectionName, database, schema, table, 'columns'] as const,
+  replications: ['replications'] as const,
+  replication: (name: string) => ['replications', name] as const,
+  replicationHistory: (name: string) => ['replications', name, 'history'] as const,
+  replicationCommitDiff: (name: string, sha: string) =>
+    ['replications', name, 'history', sha, 'diff'] as const,
+  replicationRestorePreview: (name: string, sha: string) =>
+    ['replications', name, 'history', sha, 'restore-preview'] as const,
+  replicationPauseHistory: (name: string) => ['replications', name, 'pause-history'] as const,
+  tableMappings: (replicationName: string) => ['replications', replicationName, 'table-mappings'] as const,
+  tableMapping: (replicationName: string, mappingName: string) =>
+    ['replications', replicationName, 'table-mappings', mappingName] as const,
+  runHistory: (replicationName: string) => ['replications', replicationName, 'runs'] as const,
+  runWatermarkTimes: (replicationName: string) =>
+    ['replications', replicationName, 'runs', 'watermark-times'] as const,
+  run: (runId: string) => ['runs', runId] as const,
+  provisioning: (replicationName: string, mappingName: string) =>
+    ['replications', replicationName, 'table-mappings', mappingName, 'provisioning'] as const,
+  replicationProvisioningPlan: (replicationName: string) =>
+    ['replications', replicationName, 'provisioning'] as const,
+  inferredColumnTypes: (replicationName: string, mappingName: string) =>
+    ['replications', replicationName, 'table-mappings', mappingName, 'inferred-column-types'] as const,
+  inferredNaturalKey: (replicationName: string, mappingName: string) =>
+    ['replications', replicationName, 'table-mappings', mappingName, 'inferred-natural-key'] as const,
+  preview: (replicationName: string, mappingName: string) =>
+    ['replications', replicationName, 'table-mappings', mappingName, 'preview'] as const,
+  replicationStatus: (replicationName: string) =>
+    ['replications', replicationName, 'status'] as const,
+  metrics: (replicationName: string, window: string) =>
+    ['replications', replicationName, 'metrics', window] as const,
+  replicationLag: (replicationName: string) => ['replications', replicationName, 'lag'] as const,
+  bulkLoads: (replicationName: string) => ['replications', replicationName, 'bulk-loads'] as const,
+  bulkLoadHistory: (replicationName: string) =>
+    ['replications', replicationName, 'bulk-loads', 'history'] as const,
+  mappingReadState: (replicationName: string, mappingName: string) =>
+    ['replications', replicationName, 'table-mappings', mappingName, 'read-state'] as const,
+  verificationResults: (replicationName: string, mappingName: string) =>
+    ['replications', replicationName, 'verification-results', mappingName] as const,
+  verificationResult: (replicationName: string, id: number) =>
+    ['replications', replicationName, 'verification-results', id] as const,
+}
+
+export function useConnections() {
+  return useQuery({ queryKey: keys.connections, queryFn: api.connections.list })
+}
+
+export function useConnection(name: string | undefined) {
+  return useQuery({
+    queryKey: keys.connection(name ?? ''),
+    queryFn: () => api.connections.get(name!),
+    enabled: !!name,
+  })
+}
+
+export function useUpsertConnection() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, input }: { name: string; input: ConnectionInput }) => api.connections.upsert(name, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.connections }),
+  })
+}
+
+export function useDeleteConnection() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => api.connections.delete(name),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.connections }),
+  })
+}
+
+/**
+ * What the driver behind one connection supports. Cached hard: capabilities are fixed for the
+ * lifetime of the API process (they're derived from which drivers are registered in it), so
+ * refetching them on window focus would be pure noise.
+ */
+export function useCapabilities(connectionName: string | undefined) {
+  return useQuery({
+    queryKey: keys.capabilities(connectionName ?? ''),
+    queryFn: () => api.connections.capabilities(connectionName!),
+    enabled: !!connectionName,
+    staleTime: Infinity,
+  })
+}
+
+/**
+ * The reader/staging/writer Kinds available to one replication. Readers are resolved against its
+ * source connection's driver and staging/writers against its target's, since that is where each
+ * actually runs — taken from the replication's first table mapping.
+ *
+ * A replication with no mappings yet has no connections to ask, so it falls back to the first
+ * configured connection: with a single registered driver that is the same answer, and it keeps a
+ * brand-new replication's settings editable instead of showing empty pickers until a mapping exists.
+ */
+export function useReplicationCapabilities(replicationName: string | undefined) {
+  const { data: mappingNames } = useTableMappings(replicationName)
+  const { data: mapping } = useTableMapping(replicationName, mappingNames?.[0])
+  const { data: connections } = useConnections()
+
+  const fallbackConnection = connections?.[0]?.name
+  const source = useCapabilities(mapping?.sources[0]?.connectionName ?? fallbackConnection)
+  const target = useCapabilities(mapping?.targets[0]?.connectionName ?? fallbackConnection)
+
+  return {
+    readers: source.data?.readers ?? [],
+    stagingProviders: target.data?.stagingProviders ?? [],
+    writers: target.data?.writers ?? [],
+    isLoading: source.isLoading || target.isLoading,
+    error: source.error ?? target.error,
+  }
+}
+
+// A by-driver-type capabilities hook lived here from phase 42 until phase 50, for the connection
+// form's declared settings. Those now come from POST /api/drivers/{type}/connection-parameters, which
+// is the same question asked with the values that decide the answer — so nothing in this app asks the
+// valueless version any more. The endpoint stays; a hook with no caller does not.
+//
+// useDefaultCapabilities (a new replication's pipeline defaults, resolved from "the system's first
+// connection" regardless of driver) lived here too, from phase 010 until it was found to be the cause
+// of a real bug: a JDBC-sourced replication could be created already stamped with an MsSql-specific
+// reader Kind just because some unrelated MsSql connection happened to sort first system-wide.
+// ReplicationsPage now defaults to the generic, engine-neutral Kinds every driver can offer instead —
+// see that page's own comment.
+
+export function useDatabases(connectionName: string | undefined) {
+  return useQuery({
+    queryKey: keys.databases(connectionName ?? ''),
+    queryFn: () => api.metadata.databases(connectionName!),
+    enabled: !!connectionName,
+  })
+}
+
+export function useTables(connectionName: string | undefined, database: string | undefined) {
+  return useQuery({
+    queryKey: keys.tables(connectionName ?? '', database ?? ''),
+    queryFn: () => api.metadata.tables(connectionName!, database!),
+    enabled: !!connectionName && !!database,
+  })
+}
+
+export function useColumns(
+  connectionName: string | undefined,
+  database: string | undefined,
+  schema: string | undefined,
+  table: string | undefined,
+) {
+  return useQuery({
+    queryKey: keys.columns(connectionName ?? '', database ?? '', schema ?? '', table ?? ''),
+    queryFn: () => api.metadata.columns(connectionName!, database!, schema!, table!),
+    enabled: !!connectionName && !!database && !!schema && !!table,
+  })
+}
+
+/**
+ * Every declared relationship's own foreign-table columns, fetched live for the mapping editor's own
+ * pickers — phase 189J. `useQueries` rather than one `useColumns` per relationship, the same reason
+ * `useTableMappingDetails` below uses it: the count varies with how many relationships a mapping
+ * declares, and a hook cannot be called a variable number of times. Returned in the same order as
+ * `relationships`, so a caller zips the two by index.
+ */
+export function useRelationshipColumns(
+  connectionName: string | undefined, database: string | undefined,
+  relationships: { schema: string; table: string }[],
+) {
+  return useQueries({
+    queries: relationships.map((r) => ({
+      queryKey: keys.columns(connectionName ?? '', database ?? '', r.schema, r.table),
+      queryFn: () => api.metadata.columns(connectionName!, database!, r.schema, r.table),
+      enabled: !!connectionName && !!database && !!r.schema && !!r.table,
+    })),
+  })
+}
+
+export function useReplications() {
+  return useQuery({ queryKey: keys.replications, queryFn: api.replications.list })
+}
+
+/**
+ * Every one of a replication's mappings, loaded in full.
+ *
+ * N requests, and deliberately so rather than a new endpoint: the mappings sidebar is mounted
+ * alongside every screen that wants this and already loads each mapping by name, so these come back
+ * from react-query's cache without a second request being made. An endpoint would be a new surface
+ * to keep correct in exchange for saving nothing.
+ */
+export function useTableMappingDetails(replicationName: string, names: string[] | undefined) {
+  return useQueries({
+    queries: (names ?? []).map((name) => ({
+      queryKey: keys.tableMapping(replicationName, name),
+      queryFn: () => api.tableMappings.get(replicationName, name),
+    })),
+  })
+}
+
+/**
+ * Creates one mapping per selected table in a single request, reporting progress over the run hub's
+ * push channel under a batch id the caller owns.
+ */
+export function useBulkCreateMappings(replicationName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: BulkCreateRequest) => api.tableMappings.bulkCreate(replicationName, request),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.tableMappings(replicationName) }),
+  })
+}
+
+/**
+ * What a connection of this driver takes, given the values it has so far.
+ *
+ * Keyed on the driver and on the values of the parameters the *server* marked `recalc`, so typing in
+ * a host field costs nothing and switching address mode asks again. The request body carries the live
+ * values rather than the key, because the key is only the subset that changes the answer.
+ *
+ * The first render has no descriptors yet and so an empty recalc key; the body still carries the real
+ * draft, so that first answer is correct and the one refetch that follows changes nothing on screen.
+ */
+export function useConnectionParameters(
+  driverType: DriverType | undefined,
+  values: Record<string, string>,
+  recalcKey: Record<string, string>,
+) {
+  return useQuery({
+    queryKey: ['drivers', driverType ?? '', 'connection-parameters', recalcKey] as const,
+    queryFn: () => api.drivers.connectionParameters(driverType!, values),
+    enabled: !!driverType,
+    placeholderData: (previous) => previous,
+  })
+}
+
+/**
+ * The recovery for a run whose source position expired: reload the table, and clear the watermark so
+ * the incremental pass can start again.
+ *
+ * A mutation and never a refetch side effect — a full reload of a table that fell behind can be hours
+ * of work, and it happens because somebody pressed the button.
+ */
+export function useResyncRun(replicationName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (runId: string) => api.runs.resync(runId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.replicationHistory(replicationName) }),
+  })
+}
+
+export function useReplication(name: string | undefined) {
+  return useQuery({
+    queryKey: keys.replication(name ?? ''),
+    queryFn: () => api.replications.get(name!),
+    enabled: !!name,
+  })
+}
+
+/**
+ * What the worker is doing, polled.
+ *
+ * Pulled rather than pushed, on run-metrics' call — and at five seconds rather than thirty, because a
+ * worker's whole life is measured in seconds: a card that refreshed twice a minute would mostly show
+ * a process that has already exited.
+ */
+export function useReplicationStatus(replicationName: string | undefined) {
+  return useQuery({
+    queryKey: keys.replicationStatus(replicationName ?? ''),
+    queryFn: () => api.replicationStatus.get(replicationName!),
+    enabled: !!replicationName,
+    refetchInterval: 5_000,
+  })
+}
+
+/**
+ * Turns a replication on or off, on its own.
+ *
+ * Deliberately not the upsert: this commits immediately from any tab, and it must not carry along
+ * whatever unsaved edit is sitting in the Overview's draft. The replication query is invalidated so
+ * the accent that reflects enabled/disabled follows.
+ */
+export function useSetReplicationEnabled(replicationName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (enabled: boolean) => api.replicationStatus.setEnabled(replicationName, enabled),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.replication(replicationName) })
+      queryClient.invalidateQueries({ queryKey: keys.replications })
+    },
+  })
+}
+
+/**
+ * Holds a replication, or releases it, with whatever note the operator entered.
+ *
+ * Invalidates the status query and nothing else: pausing writes no config, so the replication query
+ * has not changed and refetching it would be a request for an answer nobody asked a new question
+ * about.
+ */
+export function useSetReplicationPaused(replicationName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ paused, note }: { paused: boolean; note: string | null }) =>
+      api.replicationStatus.setPaused(replicationName, paused, note),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.replicationStatus(replicationName) })
+      // Phase 131: every pause writes a history row now, so a Pause History tab already open
+      // elsewhere should not keep showing a list that is missing this one.
+      queryClient.invalidateQueries({ queryKey: keys.replicationPauseHistory(replicationName) })
+    },
+  })
+}
+
+export function useUpsertReplication() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, task }: { name: string; task: ReplicationTaskConfig }) => api.replications.upsert(name, task),
+    onSuccess: (_data, { name }) => {
+      queryClient.invalidateQueries({ queryKey: keys.replications })
+      queryClient.invalidateQueries({ queryKey: keys.replication(name) })
+      queryClient.invalidateQueries({ queryKey: keys.replicationHistory(name) })
+    },
+  })
+}
+
+export function useDeleteReplication() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => api.replications.delete(name),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.replications }),
+  })
+}
+
+export function useReplicationHistory(name: string | undefined) {
+  return useQuery({
+    queryKey: keys.replicationHistory(name ?? ''),
+    queryFn: () => api.replications.history(name!),
+    enabled: !!name,
+  })
+}
+
+/**
+ * The patch one commit made — phase 35's "View changes". Fetched only once a commit is chosen, which
+ * is what `enabled` is doing: the Version Control tab renders a log of fifty commits and nobody wants
+ * fifty patches.
+ */
+export function useReplicationCommitDiff(name: string | undefined, sha: string | undefined) {
+  return useQuery({
+    queryKey: keys.replicationCommitDiff(name ?? '', sha ?? ''),
+    queryFn: () => api.replications.commitDiff(name!, sha!),
+    enabled: !!name && !!sha,
+  })
+}
+
+/**
+ * What restoring to that commit would change — *not* the commit's own patch, which is why it is a
+ * second query rather than a reuse of the one above. A commit that only renamed a column may, restored
+ * today, delete three mappings created since; none of those appear in its own patch, and the
+ * confirmation has to name them.
+ */
+export function useReplicationRestorePreview(name: string | undefined, sha: string | undefined) {
+  return useQuery({
+    queryKey: keys.replicationRestorePreview(name ?? '', sha ?? ''),
+    queryFn: () => api.replications.restorePreview(name!, sha!),
+    enabled: !!name && !!sha,
+  })
+}
+
+/**
+ * Puts the config back and records it as a new commit. Invalidates the history — the log grows by the
+ * restore — and the replication and its mappings, which are what just changed underneath whatever
+ * screen the operator came from.
+ */
+export function useRestoreReplication(name: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (sha: string) => api.replications.restore(name, sha),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.replicationHistory(name) })
+      queryClient.invalidateQueries({ queryKey: keys.replication(name) })
+      queryClient.invalidateQueries({ queryKey: keys.tableMappings(name) })
+    },
+  })
+}
+
+/**
+ * Every pause/resume this replication has recorded, over both grains — the Monitoring section's Pause
+ * History sub-tab (phase 131).
+ *
+ * Plain, on-demand — no `refetchInterval`, matching `useReplicationHistory` beside it rather than the
+ * live-polled Monitoring queries: this is a low-volume audit list of past, human-initiated actions, not
+ * an operational view that goes stale the way lag or a running pass does.
+ */
+export function useReplicationPauseHistory(replicationName: string | undefined) {
+  return useQuery({
+    queryKey: keys.replicationPauseHistory(replicationName ?? ''),
+    queryFn: () => api.replications.pauseHistory(replicationName!),
+    enabled: !!replicationName,
+  })
+}
+
+export function useTableMappings(replicationName: string | undefined) {
+  return useQuery({
+    queryKey: keys.tableMappings(replicationName ?? ''),
+    queryFn: () => api.tableMappings.list(replicationName!),
+    enabled: !!replicationName,
+  })
+}
+
+export function useTableMapping(replicationName: string | undefined, mappingName: string | undefined) {
+  return useQuery({
+    queryKey: keys.tableMapping(replicationName ?? '', mappingName ?? ''),
+    queryFn: () => api.tableMappings.get(replicationName!, mappingName!),
+    enabled: !!replicationName && !!mappingName,
+  })
+}
+
+export function useUpsertTableMapping(replicationName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ mappingName, mapping }: { mappingName: string; mapping: TableMappingConfig }) =>
+      api.tableMappings.upsert(replicationName, mappingName, mapping),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.tableMappings(replicationName) })
+      queryClient.invalidateQueries({ queryKey: keys.replicationHistory(replicationName) })
+    },
+  })
+}
+
+/**
+ * Re-reads both sides' catalogs and overwrites this mapping's cached column metadata — phase 90.
+ *
+ * A mutation rather than a query, and not on any refetch cadence: it opens connections to the source
+ * and target, writes config and makes a git commit. The entire premise of the cache is that it moves
+ * only when somebody moved it, so a hook that could fire on a window focus would defeat it.
+ *
+ * The mapping comes back in the result, so the caller does not re-fetch to see what it asked for —
+ * but the mapping's own query is invalidated anyway, because a git commit just happened and the
+ * Version Control tab is looking at the same repository.
+ */
+export function useRefreshMappingMetadata(replicationName: string, mappingName: string | undefined) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.tableMappings.refreshMetadata(replicationName, mappingName!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.tableMapping(replicationName, mappingName ?? '') })
+      queryClient.invalidateQueries({ queryKey: keys.replicationHistory(replicationName) })
+    },
+  })
+}
+
+export function useDeleteTableMapping(replicationName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (mappingName: string) => api.tableMappings.delete(replicationName, mappingName),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.tableMappings(replicationName) }),
+  })
+}
+
+/**
+ * The one cadence the three monitoring panels share — the run list, the metrics card and the lag
+ * tab (phase 88).
+ *
+ * Ten seconds, down from thirty on the two that polled and up from never on the one that only
+ * listened. It is a single constant rather than three literals because the number is now a promise
+ * the UI makes out loud: each of those panels renders a countdown to its own next refresh, and a
+ * panel whose interval drifted from the number beside it would be worse than one with no countdown
+ * at all.
+ *
+ * Deliberately not applied to `useReplicationStatus` (5s), `useNotifications` (15s) or
+ * `useVerificationResults` (5s). Those cadences answer different questions — two of them are
+ * screens somebody is watching immediately after pressing a button — and none of them was asked
+ * about.
+ */
+export const MONITORING_REFRESH_MS = 10_000
+
+/**
+ * A page of run history — filtered and paged server-side since phase 104 (`filters` carries `kind`,
+ * `mappingName`, `status` and the opaque `cursor` a previous page handed back).
+ *
+ * `filters` is appended to the query key rather than replacing it, so `keys.runHistory(name)` stays a
+ * valid *prefix* every existing invalidation (a trigger, a cancel, a run completing on the hub) can
+ * still match — react-query's `invalidateQueries` matches by prefix by default, so those call sites
+ * needed no change to keep refreshing whichever filter and page happens to be open.
+ */
+export function useRunHistory(
+  replicationName: string | undefined, filters: RunHistoryFilters, refetchInterval?: number,
+) {
+  return useQuery({
+    queryKey: [...keys.runHistory(replicationName ?? ''), filters],
+    queryFn: () => api.runs.history(replicationName!, filters),
+    enabled: !!replicationName,
+    refetchInterval,
+  })
+}
+
+/**
+ * When each run in that history moved its mapping's watermark, dated out of polling history — see
+ * phase 88.
+ *
+ * A second query rather than fields on the run record, because the answer is derived on read and
+ * changes as `ChangeCheckHistory`'s retention window moves; the run itself is durable and does not.
+ * It shares the run history's cadence so the two halves of a row never disagree by a poll.
+ *
+ * **Takes the identical `filters` as `useRunHistory`, since phase 104** — the same object, not a
+ * copy assembled separately — so the two can never resolve to different pages of the same
+ * replication's history. Its key is nested under `runHistory`'s, which means every existing
+ * invalidation of the run list — a trigger, a cancel, a run completing on the hub — refreshes these
+ * timestamps too. That is what should happen: a pass that just ended is exactly the one whose new
+ * watermark is worth dating.
+ */
+export function useRunWatermarkTimes(
+  replicationName: string | undefined, filters: RunHistoryFilters, refetchInterval?: number,
+) {
+  return useQuery({
+    queryKey: [...keys.runWatermarkTimes(replicationName ?? ''), filters],
+    queryFn: () => api.runs.watermarkTimes(replicationName!, filters),
+    enabled: !!replicationName,
+    refetchInterval,
+  })
+}
+
+/**
+ * A run's completion is observed by useRunHub (SignalR + a tight REST poll), independently of
+ * useRunHistory's own interval-based polling — so by the time a run is known to be complete, the
+ * history list's periodic poll may not have landed on a fetch taken after the final TaskRuns row was
+ * written, leaving RowsRead/RowsWritten showing a stale (e.g. placeholder 0/0) snapshot until the
+ * next scheduled poll happens to fire. Call the returned function right when completion is observed
+ * to force an authoritative refetch instead of waiting on that timing.
+ */
+export function useInvalidateRunHistory(replicationName: string) {
+  const queryClient = useQueryClient()
+  return useCallback(
+    () => queryClient.invalidateQueries({ queryKey: keys.runHistory(replicationName) }),
+    [queryClient, replicationName],
+  )
+}
+
+export function useTriggerRun(replicationName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.runs.trigger(replicationName),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.runHistory(replicationName) }),
+  })
+}
+
+/**
+ * Queues a reload of one table mapping. Returns one RunId per segment — an Auto segment is expanded
+ * server-side, so a single submission can produce many independently-scheduled runs.
+ */
+export function useBulkLoad(replicationName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ mappingName, request }: { mappingName: string; request: BulkLoadRequest }) =>
+      api.runs.bulkLoad(replicationName, mappingName, request),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.runHistory(replicationName) }),
+  })
+}
+
+/** Phase 124's delete-diff sweep trigger — same shape as {@link useBulkLoad}. */
+export function useReconcileDeletes(replicationName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ mappingName, request }: { mappingName: string; request: ReconcileDeletesRequest }) =>
+      api.runs.reconcileDeletes(replicationName, mappingName, request),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.runHistory(replicationName) }),
+  })
+}
+
+/**
+ * Runs a segmenting strategy and returns everything it proposes.
+ *
+ * Enabled only once a strategy is actually picked. Safe to run on selection for a DuckDB strategy,
+ * which opens no connection at all; the other three reach a real database, which is why the form
+ * says so beside the picker before offering them.
+ */
+/**
+ * Runs a strategy that is still being written and hands back what it proposes — the editor's Test
+ * button (phase 61).
+ *
+ * A mutation rather than a query, even though it reads: it runs when somebody presses Test, and a
+ * query keyed on a half-typed SQL string would run against a real connection on every keystroke for
+ * the two connection-bound kinds.
+ */
+/**
+ * Runs the query currently in the source tab's editor and hands back what it returned.
+ *
+ * A mutation rather than a query, for the reason `useTestSegmentingStrategy` is one: it runs when
+ * somebody presses Preview. Keyed as a query on a half-typed SQL string, it would execute against a
+ * real system on every keystroke — which is the one thing a preview of arbitrary SQL must not do.
+ */
+export function usePreviewQuery() {
+  return useMutation({
+    mutationFn: ({ connectionName, query, maxRows, allowSubquery }: {
+      connectionName: string
+      query: string
+      maxRows?: number
+      allowSubquery?: boolean
+    }) => api.connections.queryPreview(connectionName, query, maxRows, allowSubquery),
+  })
+}
+
+export function useTestSegmentingStrategy(replicationName: string) {
+  return useMutation({
+    mutationFn: ({ mappingName, strategy, column }: {
+      mappingName: string; strategy: SegmentingStrategyConfig; column: string | null
+    }) =>
+      api.runs.previewUnsavedSegmenting(replicationName, mappingName, strategy, column),
+  })
+}
+
+export function useSegmentingPreview(
+  replicationName: string,
+  mappingName: string,
+  strategyName: string | null,
+  column: string | null,
+) {
+  return useQuery({
+    queryKey: [
+      'replications', replicationName, 'table-mappings', mappingName, 'segmenting', strategyName, column,
+    ] as const,
+    queryFn: () => api.runs.previewSegmenting(replicationName, mappingName, strategyName!, column),
+    enabled: Boolean(replicationName && mappingName && strategyName),
+    // A strategy that computes from "today" has to be re-run rather than served from cache — the
+    // whole reason its default is a reference and not a frozen list.
+    staleTime: 0,
+    gcTime: 0,
+  })
+}
+
+export function useCancelRun(replicationName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (runId: string) => api.runs.cancel(runId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.runHistory(replicationName) }),
+  })
+}
+
+/**
+ * Tests one connection, on demand.
+ *
+ * A mutation rather than a query on purpose: opening every configured database because a list
+ * rendered is a surprising thing for a console to do, and the result is a reading taken at a moment,
+ * not state to keep fresh. Nothing here polls.
+ */
+export function useTestConnection() {
+  return useMutation({ mutationFn: (name: string) => api.connections.test(name) })
+}
+
+/** Phase 109j item 4: the deep, connection-scoped check — a separate mutation from `useTestConnection`
+ * since it's slower (a real child process, a real scratch table) and needs DDL rights. */
+export function useValidateLibrary() {
+  return useMutation({ mutationFn: (name: string) => api.connections.validateLibrary(name) })
+}
+
+/** Which secret a connection resolves through. Fixed for a given name, so cached like capabilities. */
+export function useCredentialSource(connectionName: string | undefined) {
+  return useQuery({
+    queryKey: keys.credentialSource(connectionName ?? ''),
+    queryFn: () => api.connections.credentialSource(connectionName!),
+    enabled: !!connectionName,
+    staleTime: Infinity,
+  })
+}
+
+/** The global script registry. */
+export function useScripts() {
+  return useQuery({ queryKey: keys.scripts, queryFn: () => api.scripts.list() })
+}
+
+/** Which slots this build supports — from the API, not hardcoded here, the same way driver
+ * capabilities are. A slot added server-side appears without an SPA change. */
+export function useScriptSlots() {
+  return useQuery({ queryKey: keys.scriptSlots, queryFn: () => api.scripts.slots(), staleTime: Infinity })
+}
+
+export function useScript(name: string | undefined) {
+  return useQuery({
+    queryKey: keys.script(name ?? ''),
+    queryFn: () => api.scripts.get(name!),
+    enabled: !!name,
+  })
+}
+
+export function useUpsertScript() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, script }: { name: string; script: ScriptDefinition }) => api.scripts.upsert(name, script),
+    onSuccess: (_, { name }) => {
+      queryClient.invalidateQueries({ queryKey: keys.scripts })
+      queryClient.invalidateQueries({ queryKey: keys.script(name) })
+    },
+  })
+}
+
+/** Compiles without saving. A mutation because it is an action, and deliberately not cached — the
+ * answer is about the code in the editor right now. */
+export function useCompileScript() {
+  return useMutation({
+    mutationFn: ({ name, script }: { name: string; script: ScriptDefinition }) => api.scripts.compile(name, script),
+  })
+}
+
+export function useDeleteScript() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => api.scripts.delete(name),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.scripts }),
+  })
+}
+
+/** Both sides' provisioning plans for one table mapping — the Setup card's state badges and preview SQL. */
+/** What a pass would run. Not cached across mounts for long: it reflects the mapping as saved *and*
+ * the watermark as stored, both of which move. */
+export function useMappingPreview(replicationName: string | undefined, mappingName: string | undefined) {
+  return useQuery({
+    queryKey: keys.preview(replicationName ?? '', mappingName ?? ''),
+    queryFn: () => api.preview.get(replicationName!, mappingName!),
+    enabled: !!replicationName && !!mappingName,
+  })
+}
+
+/** Not a query: a test is an explicit action against sample — or real — data, and must never happen
+ * as a side effect of a refetch. Same shape as phase 19's connection test. */
+export function useTestScript() {
+  return useMutation({
+    mutationFn: ({ name, request }: { name: string; request: ScriptTestRequest }) =>
+      api.scripts.test(name, request),
+  })
+}
+
+/** Polled rather than pushed: a 24-hour aggregate is not something anyone watches change, and the
+ * case where someone is watching is a live run, which the run hub already covers. */
+export function useRunMetrics(replicationName: string | undefined, window: MetricsWindow) {
+  return useQuery({
+    queryKey: keys.metrics(replicationName ?? '', window),
+    queryFn: () => api.metrics.get(replicationName!, window),
+    enabled: !!replicationName,
+    refetchInterval: MONITORING_REFRESH_MS,
+  })
+}
+
+/**
+ * Every mapping's lag, and the range across them — see phase 86.
+ *
+ * `MONITORING_REFRESH_MS`, the same cadence `useRunMetrics` polls on — ten seconds since phase 88,
+ * thirty before it. Lag is still a figure somebody reads when they go looking rather than one they
+ * watch move; what changed is that the tab now shows when the next reading lands, and a wait of
+ * half a minute for a number somebody is standing in front of is longer than it needs to be.
+ *
+ * One query per replication, not one per mapping. The Monitoring tab and each row of the
+ * replications list share this key, so a list of ten replications is ten requests rather than ten
+ * times however many mappings each has.
+ */
+export function useReplicationLag(replicationName: string | undefined) {
+  return useQuery({
+    queryKey: keys.replicationLag(replicationName ?? ''),
+    queryFn: () => api.replications.lag(replicationName!),
+    enabled: !!replicationName,
+    refetchInterval: MONITORING_REFRESH_MS,
+  })
+}
+
+/**
+ * Recent bulk loads for the Monitoring screen's "Batch reload" card.
+ *
+ * Polls faster while one is running — its "rows copied" and segment counts only move as segments
+ * finish, so a couple of seconds is plenty to feel live, and once nothing is running it drops back to
+ * the tab's ordinary cadence so an idle replication isn't polled every two seconds forever.
+ */
+export function useRecentBulkLoads(replicationName: string | undefined) {
+  return useQuery({
+    queryKey: keys.bulkLoads(replicationName ?? ''),
+    queryFn: () => api.replications.bulkLoads(replicationName!),
+    enabled: !!replicationName,
+    refetchInterval: (query) =>
+      query.state.data?.some((b) => b.state === 'Running') ? 2_000 : MONITORING_REFRESH_MS,
+  })
+}
+
+/**
+ * A page of bulk-load history — filtered by mapping and keyset-paged server-side, since phase 139.
+ *
+ * **No `refetchInterval` at all** — unlike `useRunHistory`/`useRecentBulkLoads` beside it. This is a
+ * low-volume audit list of past batches, the same "static, human-reloaded" posture `PauseHistoryPanel`
+ * already takes; the live view of an in-flight bulk load stays `BulkLoadProgressCard`, unaffected by
+ * this hook or this screen.
+ */
+export function useBulkLoadHistory(replicationName: string | undefined, filters: BulkLoadHistoryFilters) {
+  return useQuery({
+    queryKey: [...keys.bulkLoadHistory(replicationName ?? ''), filters],
+    queryFn: () => api.replications.bulkLoadHistory(replicationName!, filters),
+    enabled: !!replicationName,
+  })
+}
+
+/**
+ * One mapping's resolved intent and hold — the Monitoring tab's per-row read (phase 102).
+ *
+ * Polled at the same cadence as the lag figures beside it: a hold an operator has not seen yet is
+ * exactly the case this tab exists to surface, and a screen that only refreshed on demand would show
+ * a stale "reading fine" over a table that has been held for an hour.
+ */
+export function useMappingReadState(replicationName: string | undefined, mappingName: string | undefined) {
+  return useQuery({
+    queryKey: keys.mappingReadState(replicationName ?? '', mappingName ?? ''),
+    queryFn: () => api.tableMappings.readState(replicationName!, mappingName!),
+    enabled: !!replicationName && !!mappingName,
+    refetchInterval: MONITORING_REFRESH_MS,
+  })
+}
+
+/**
+ * Sets a mapping's intent and hold together — the one call an operator recovering from a hold,
+ * changing what runs next, or pausing/resuming this one table makes. See phase 100's endpoint.
+ */
+export function useSetMappingReadState(replicationName: string, mappingName: string | undefined) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: SetMappingReadStateRequest) =>
+      api.tableMappings.setReadState(replicationName, mappingName!, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.mappingReadState(replicationName, mappingName ?? '') })
+      // Phase 131: a Paused-boundary crossing here writes a PauseEvents row too, over the same
+      // replication-level history a mapping-level pause now shares.
+      queryClient.invalidateQueries({ queryKey: keys.replicationPauseHistory(replicationName) })
+    },
+  })
+}
+
+/**
+ * Past results for one mapping, most recent first.
+ *
+ * Polled, because "Run checks" queues a run rather than performing one: the mutation succeeds the
+ * moment the work is enqueued, and the result arrives seconds later when a TaskRunner has done it.
+ * Invalidating on the mutation refetches too early and then never again, which leaves an operator
+ * looking at an unchanged screen wondering whether the button worked.
+ *
+ * Five seconds, not the metrics card's thirty: this is a screen somebody is watching immediately
+ * after pressing a button, which is exactly the case a 24-hour aggregate is not.
+ */
+export function useVerificationResults(replicationName: string, mappingName: string | undefined) {
+  return useQuery({
+    queryKey: keys.verificationResults(replicationName, mappingName ?? ''),
+    queryFn: () => api.verification.results(replicationName, mappingName!),
+    enabled: !!mappingName,
+    refetchInterval: 5_000,
+  })
+}
+
+/**
+ * One page of a result, read back out of the parquet the runner wrote.
+ *
+ * `placeholderData` keeps the previous page on screen while the next one loads, so paging through a
+ * large result does not blink the table away and back on every click.
+ */
+export function useVerificationResult(
+  replicationName: string,
+  id: number | undefined,
+  offset: number,
+  limit: number,
+  differingOnly: boolean,
+) {
+  return useQuery({
+    queryKey: [...keys.verificationResult(replicationName, id ?? 0), offset, limit, differingOnly] as const,
+    queryFn: () => api.verification.result(replicationName, id!, offset, limit, differingOnly),
+    enabled: !!id,
+    placeholderData: (previous) => previous,
+  })
+}
+
+/** Throws away one result — its index row and its file. */
+export function useDeleteVerificationResult(replicationName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.verification.deleteResult(replicationName, id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['replications', replicationName, 'verification-results'] }),
+  })
+}
+
+/** Running checks is an explicit action, like phase 41's script test and phase 19's connection test —
+ * never something that happens as a side effect of a refetch. */
+export function useRunVerification(replicationName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (mappingName: string) => api.verification.run(replicationName, mappingName),
+    onSuccess: () => queryClient.invalidateQueries({
+      queryKey: ['replications', replicationName, 'verification-results'],
+    }),
+  })
+}
+
+export function useProvisioning(replicationName: string | undefined, mappingName: string | undefined) {
+  return useQuery({
+    queryKey: keys.provisioning(replicationName ?? '', mappingName ?? ''),
+    queryFn: () => api.provisioning.get(replicationName!, mappingName!),
+    enabled: !!replicationName && !!mappingName,
+  })
+}
+
+/**
+ * What each source column would become on the target — the type the column mapping editor shows on
+ * every row before anyone overrides it.
+ *
+ * A separate query from `useProvisioning` rather than a field on the plan: the editor needs it while
+ * the operator is still choosing columns, which is exactly when there is no plan worth showing.
+ * Failures are silent by design (`retry: false`), since a source table that is not reachable yet is
+ * normal during setup and the editor degrades to showing no inferred type.
+ */
+export function useInferredColumnTypes(replicationName: string | undefined, mappingName: string | undefined) {
+  return useQuery({
+    queryKey: keys.inferredColumnTypes(replicationName ?? '', mappingName ?? ''),
+    queryFn: () => api.provisioning.inferredColumnTypes(replicationName!, mappingName!),
+    enabled: !!replicationName && !!mappingName,
+    retry: false,
+  })
+}
+
+/**
+ * What this mapping's natural key would be derived as — the mapping Pipeline tab's read path for the
+ * SCD Type 2 writer (phase 68).
+ *
+ * Same shape as `useInferredColumnTypes` beside it, and `retry: false` for the same reason: a source
+ * table that is not there yet 404s, which is normal during setup and not worth three attempts.
+ */
+export function useInferredNaturalKey(
+  replicationName: string | undefined, mappingName: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: keys.inferredNaturalKey(replicationName ?? '', mappingName ?? ''),
+    queryFn: () => api.provisioning.inferredNaturalKey(replicationName!, mappingName!),
+    enabled: enabled && !!replicationName && !!mappingName,
+    retry: false,
+  })
+}
+
+/** Re-plans and applies one provisioning action. A mutation, not folded into the query above: Apply
+ * is a deliberate, confirmed action against a live database, not something that should ever happen as
+ * a side effect of a refetch. */
+export function useApplyProvisioning(replicationName: string, mappingName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (action: string) => api.provisioning.apply(replicationName, mappingName, action),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.provisioning(replicationName, mappingName) }),
+  })
+}
+
+/** Every table mapping's provisioning for this replication, aggregated — phase 105. Computed on
+ * demand (not polled): the plan is a live read against every mapping's source and target, and is
+ * worth recomputing only when the operator asks — by opening the tab, or by Run refreshing it below. */
+export function useReplicationProvisioningPlan(replicationName: string | undefined) {
+  return useQuery({
+    queryKey: keys.replicationProvisioningPlan(replicationName ?? ''),
+    queryFn: () => api.provisioning.getReplicationPlan(replicationName!),
+    enabled: !!replicationName,
+  })
+}
+
+/** Applies the selected steps across every group at once, and refreshes the plan afterward — an id
+ * that succeeded or was skipped this time should not still show ticked next visit as though nothing
+ * happened. */
+export function useApplyReplicationProvisioningPlan(replicationName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (stepIds: string[]) => api.provisioning.applyReplicationPlan(replicationName, stepIds),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.replicationProvisioningPlan(replicationName) }),
+  })
+}

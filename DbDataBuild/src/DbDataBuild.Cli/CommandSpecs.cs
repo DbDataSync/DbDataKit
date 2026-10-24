@@ -1,47 +1,7 @@
 using DbDataBuild.Core;
+using DbDataKit.Cli;
 
 namespace DbDataBuild.Cli;
-
-/// <summary>Effect classes (DESIGN.md section 9.1). Printed in --help and in each run header.</summary>
-public enum EffectClass
-{
-    OfflineOnly,
-    RepoFilesOnly,
-    TargetReadOnly,
-    TargetWrites,
-    TargetDataWrites,
-    TrackingTablesOnly,
-}
-
-public static class EffectClasses
-{
-    public static string Describe(this EffectClass e) => e switch
-    {
-        EffectClass.OfflineOnly => "Offline only",
-        EffectClass.RepoFilesOnly => "Repo files only (no target connection)",
-        EffectClass.TargetReadOnly => "Target read-only",
-        EffectClass.TargetWrites => "Target writes (DDL and/or data, as the plan states)",
-        EffectClass.TargetDataWrites => "Target writes (data only)",
-        EffectClass.TrackingTablesOnly => "Tracking tables only",
-        _ => throw new ArgumentOutOfRangeException(nameof(e)),
-    };
-}
-
-/// <summary>
-/// One command. <paramref name="Name"/> is its whole path (`connection deploy`); <paramref name="Lane"/> is where it belongs in the life of a deployment (`inspect`, `deploy`, `refresh`, or empty for authoring and reference);
-/// <paramref name="Disposition"/> says what it reads and writes in one code (see docs/concepts.md): P is the project, C a connection, T its tracking tables, S its structure, D its data, `→` reads, `⇒` writes.
-/// </summary>
-public sealed record CommandSpec(string Name, EffectClass Effect, string Purpose, bool Implemented, string Lane = "", string Disposition = "")
-{
-    /// <summary>The words of the path: `connection deploy` is [connection, deploy].</summary>
-    public string[] Path => Name.Split(' ');
-
-    /// <summary>What a header says after the effect: the reads-and-writes code and the lane (`reads/writes: P⇒S  |  lane: deploy`).</summary>
-    public string Marks => $"reads/writes: {Disposition}" + (Lane.Length > 0 ? $"  |  lane: {Lane}" : "");
-
-    /// <summary>The name as one token, for file names, tool names and schema keys (`connection_deploy`).</summary>
-    public string Id => Name.Replace(' ', '_').Replace('-', '_');
-}
 
 /// <summary>The groups the commands sit under, with what each is for.</summary>
 public static class CommandGroups
@@ -52,6 +12,7 @@ public static class CommandGroups
         ["project model"] = "Create and update models",
         ["project show"] = "Read-only views of the project",
         ["project tests"] = "The project's tests",
+        ["project file"] = "Read and change single files of the project, confined to its tree and guarded by content hashes",
         ["connection"] = "Work on a database the project is built on",
         ["ui"] = "Interfaces: the terminal screens, the web page, the server for AI agents",
         ["help"] = "Reference: explain a diagnostic code, the support matrix, the dialects of read-only origins",
@@ -78,6 +39,11 @@ public static class CommandSpecs
         new("project show metadata", EffectClass.OfflineOnly, "Print everything the tool knows about the project and its models (use --format json)", true, "", "P→"),
         new("project show refresh", EffectClass.OfflineOnly, "Read the compiled refresh plans (offline): the plans of each connection, or one plan with its members in the order they run, the inputs each load takes and where each default comes from, what each load waits for (the dependency graph the loads file carries, with model kinds and depth), what was left out and the hashes", true, "", "P→"),
         new("project show plan", EffectClass.OfflineOnly, "Read plan files (offline, nothing applied): list a project's plans, or show one with its steps, risk, exact statements, report and what applying it would need to be allowed", true, "", "P→"),
+        new("project file list", EffectClass.OfflineOnly, "List the files of the project (or of a folder in it) with their size and content hash; the way a console or an agent sees the tree", true, "", "P→"),
+        new("project file read", EffectClass.OfflineOnly, "Print one text file of the project with its content hash (confined to the project tree)", true, "", "P→"),
+        new("project file write", EffectClass.RepoFilesOnly, "Write one text file of the project: --expect-hash names the version the change is based on and a different one is refused, --create is for a file that does not exist yet", true, "", "P⇒P"),
+        new("project file move", EffectClass.RepoFilesOnly, "Move or rename one file of the project; --expect-hash names the version moved, and a destination that exists is refused", true, "", "P⇒P"),
+        new("project file delete", EffectClass.RepoFilesOnly, "Delete one file of the project; --expect-hash names the version deleted", true, "", "P⇒P"),
         new("project agent-kit", EffectClass.RepoFilesOnly, "Install the skill and JSON Schemas an AI coding agent needs to work in a project (lists them unless --write)", true, "", "P⇒P"),
         new("connection inspect", EffectClass.TargetReadOnly, "Can the tool use this connection, and if not, why: whether each login is set, connects and as whom, what it may do, whether the tracking tables are ready, which schema names the models use exist", true, "inspect", "C→"),
         new("connection init", EffectClass.TrackingTablesOnly, "Create the tracking tables and their schema name (prints the script; --apply runs it)", true, "", "P⇒T"),

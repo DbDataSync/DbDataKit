@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 using System.Data.Common;
 using System.Diagnostics;
 using System.Threading.Channels;
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
@@ -470,9 +470,10 @@ public sealed class RunExecutor(
         }
         catch (ConnectivityException ex)
         {
-            Log(item.RunId, LogSeverity.Error, $"Run failed: {ex.Message}");
+            var shown = ex.Message;   // already the classified text, with the connection's name
+            Log(item.RunId, LogSeverity.Error, $"Run failed: {shown}");
             state.Flush();
-            state.CompleteRun(item.RunId, RunStatus.Failed, 0, 0, ex.Message, errorDetail: ex.ToString());
+            state.CompleteRun(item.RunId, RunStatus.Failed, 0, 0, shown, errorDetail: DriverFailures.Detail(ex));
             state.MarkFailed(item.Id);
         }
         catch (WorkQueueCollisionException ex)
@@ -508,9 +509,10 @@ public sealed class RunExecutor(
         // is the one exception that must reach ConsumeAsync, which stops rather than starting more.
         catch (Exception ex) when (ex is not StateOwnerUnavailableException)
         {
-            Log(item.RunId, LogSeverity.Error, $"Run failed: {ex.Message}");
+            var shown = DriverFailures.Describe(ex);
+            Log(item.RunId, LogSeverity.Error, $"Run failed: {shown}");
             state.Flush();
-            state.CompleteRun(item.RunId, RunStatus.Failed, 0, 0, ex.Message, errorDetail: ex.ToString());
+            state.CompleteRun(item.RunId, RunStatus.Failed, 0, 0, shown, errorDetail: DriverFailures.Detail(ex));
             state.MarkFailed(item.Id);
         }
         finally
@@ -596,7 +598,7 @@ public sealed class RunExecutor(
         catch (Exception ex) when (ex is DbException or InvalidOperationException)
         {
             Log(runId, LogSeverity.Warning,
-                $"Could not tell the source that position '{watermark}' is durable: {ex.Message} " +
+                $"Could not tell the source that position '{watermark}' is durable: {DriverFailures.Describe(ex)} " +
                 "The pass itself succeeded; the source keeps history it could have discarded.");
         }
     }
@@ -676,7 +678,7 @@ public sealed class RunExecutor(
                 {
                     // Reported and moved past. Five checks should give five answers, and one that
                     // cannot run is a fact about that check rather than about the run.
-                    Log(item.RunId, LogSeverity.Error, $"'{check.Name}' could not run: {ex.Message}");
+                    Log(item.RunId, LogSeverity.Error, $"'{check.Name}' could not run: {DriverFailures.Describe(ex)}");
                 }
             }
 
@@ -1524,7 +1526,7 @@ public sealed class RunExecutor(
         }
         catch (DbException ex)
         {
-            var message = $"'{mappingName}' hook '{label}' ({point}) failed: {ex.Message}";
+            var message = $"'{mappingName}' hook '{label}' ({point}) failed: {DriverFailures.Describe(ex)}";
             if (onError == HookErrorMode.Warn)
                 Log(runId, LogSeverity.Warning, message);
             else
@@ -1732,7 +1734,7 @@ public sealed class RunExecutor(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Log(runId, LogSeverity.Warning, $"'{mappingName}' ({scope}): the statements could not be listed — {ex.Message}");
+            Log(runId, LogSeverity.Warning, $"'{mappingName}' ({scope}): the statements could not be listed — {DriverFailures.Describe(ex)}");
         }
     }
 
@@ -1845,7 +1847,7 @@ public sealed class RunExecutor(
         catch (DbException ex)
         {
             connection.Dispose();
-            throw new ConnectivityException(config.Name, ex);
+            throw new ConnectivityException(config.Name, ex, config.DriverType);
         }
 
         return connection;
@@ -1863,7 +1865,7 @@ public sealed class RunExecutor(
         ?? throw new InvalidOperationException(
             $"The '{driver.DriverType}' driver does not name a SQL dialect, so scripts cannot generate SQL for it.");
 
-    private sealed class ConnectivityException(string connectionName, Exception inner)
-        : Exception($"Failed to open connection '{connectionName}': {inner.Message}", inner);
+    private sealed class ConnectivityException(string connectionName, Exception inner, string driverType)
+        : Exception($"Failed to open connection '{connectionName}': {DriverFailures.Describe(inner, driverType)}", inner);
 }
 

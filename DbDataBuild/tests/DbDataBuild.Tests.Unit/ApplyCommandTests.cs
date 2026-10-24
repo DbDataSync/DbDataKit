@@ -34,8 +34,8 @@ public class ApplyCommandTests
 
     private static readonly Dictionary<string, string?> BothLogins = new()
     {
-        ["DBDATABUILD_SQLSERVER_READ"] = "Server=127.0.0.1,1;User Id=r;Password=hunter2;Connect Timeout=1",
-        ["DBDATABUILD_SQLSERVER_WRITE"] = "Server=127.0.0.1,1;User Id=w;Password=hunter2;Connect Timeout=1",
+        ["DBDATA_BUILD_SQLSERVER_READ"] = "Server=127.0.0.1,1;User Id=r;Password=hunter2;Connect Timeout=1",
+        ["DBDATA_BUILD_SQLSERVER_WRITE"] = "Server=127.0.0.1,1;User Id=w;Password=hunter2;Connect Timeout=1",
     };
 
     [Fact]
@@ -83,14 +83,14 @@ public class ApplyCommandTests
     {
         var path = Write(PlanWith(Step("1", RiskClass.Safe)));
         var dir = Path.GetDirectoryName(path)!;
-        var readOnly = new Dictionary<string, string?> { ["DBDATABUILD_SQLSERVER_READ"] = BothLogins["DBDATABUILD_SQLSERVER_READ"] };
+        var readOnly = new Dictionary<string, string?> { ["DBDATA_BUILD_SQLSERVER_READ"] = BothLogins["DBDATA_BUILD_SQLSERVER_READ"] };
         var (exit, _, err) = Cli(readOnly.GetValueOrDefault, "connection", "deploy", "--apply-plan", path, "--project", dir);
         Assert.Equal(CliApp.ExitFindings, exit);
         Assert.Contains("DDB-501", err);
-        Assert.Contains("DBDATABUILD_SQLSERVER_WRITE", err);
+        Assert.Contains("DBDATA_BUILD_SQLSERVER_WRITE", err);
 
         var none = Cli(null, "connection", "deploy", "--apply-plan", path, "--project", dir, "--dry-run");
-        Assert.Contains("DBDATABUILD_SQLSERVER_READ", none.Err);        // even a dry run needs the read login: it verifies against the live target
+        Assert.Contains("DBDATA_BUILD_SQLSERVER_READ", none.Err);        // even a dry run needs the read login: it verifies against the live target
         Assert.DoesNotContain("WRITE", none.Err);
     }
 
@@ -104,7 +104,7 @@ public class ApplyCommandTests
             var (exit, _, err) = Cli(null, [.. command, "--project", dir]);
             Assert.Equal(CliApp.ExitFindings, exit);
             Assert.Contains("DDB-501", err);
-            Assert.Contains("DBDATABUILD_SQLSERVER_READ", err);
+            Assert.Contains("DBDATA_BUILD_SQLSERVER_READ", err);
         }
         Assert.False(Directory.Exists(Path.Combine(dir, "plans")));
     }

@@ -5,12 +5,12 @@ using System.Security.Cryptography.X509Certificates;
 using DbDataSync.Api.Auth;
 using DbDataSync.Certificates;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 
 namespace DbDataSync.Cli;
 
 /// <summary>
-/// <c>dbdatasync config cert …</c> — issuance, installation, binding, and renewal of the certificate Kestrel
+/// <c>dbdatasync cert …</c> — issuance, installation, binding, and renewal of the certificate Kestrel
 /// serves TLS with, entirely from the CLI. See the phase 82 doc's "Why the CLI, and why it must be
 /// self-sufficient": the admin screen is served over the connection the certificate secures, so
 /// bootstrapping it cannot depend on a browser reaching it first, the same reasoning phase 51 applied to
@@ -152,18 +152,18 @@ public static class CertCommand
     private static DbDataKit.Hosting.Cli.CertVerbs BuildVerbs()
     {
         var verbs = new DbDataKit.Hosting.Cli.CertVerbs();
-        verbs.Add("use-pem", "dbdatasync config cert use-pem --cert <path> --key <path> [--repo <path>]     (any OS)", (rest, _) => UsePem(rest));
-        verbs.Add("use-pfx", "dbdatasync config cert use-pfx --pfx <path> [--repo <path>]                    (any OS)", (rest, _) => UsePfx(rest));
-        verbs.Add("status", "dbdatasync config cert status [--account <account>]                            (any OS; --account is Windows-only)", (rest, _) => Status(rest));
-        verbs.Add("new-self-signed", "dbdatasync config cert new-self-signed [--file] [--days <n>] [--repo <path>]       (any OS; writes <repo>/tls/dbdatasync.pfx and points Kestrel at it — the default off Windows, --file asks for it on Windows too)", (rest, _) => NewSelfSignedVerb(rest));
-        verbs.Add("new-self-signed", "dbdatasync config cert new-self-signed [--store] --dns <names> [--days <n>] [--account <account>]  (Windows only; installs into the certificate store — the default there, and needs an elevated prompt)", (_, _) => 0);
-        verbs.Add("list", "dbdatasync config cert list [--location LocalMachine|CurrentUser]               (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? List(rest) : WindowsOnlyRefusal());
-        verbs.Add("enroll", "dbdatasync config cert enroll --dns <names> [--ca <config>] [--template <name>] [--account <account>]  (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? Enroll(rest) : WindowsOnlyRefusal());
-        verbs.Add("renew", "dbdatasync config cert renew [--ca <config>] [--template <name>] [--account <account>] [--days <n>]    (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? Renew(rest) : WindowsOnlyRefusal());
-        verbs.Add("retrieve", "dbdatasync config cert retrieve --request-id <id> [--account <account>]        (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? Retrieve(rest) : WindowsOnlyRefusal());
-        verbs.Add("templates", "dbdatasync config cert templates [--ca <config>]                                (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? Templates(rest) : WindowsOnlyRefusal());
-        verbs.Add("discover", "dbdatasync config cert discover [--repo <path>]                                 (Windows only; finds the CA and template, saves them when there is only one)", (rest, _) => OperatingSystem.IsWindows() ? Discover(rest) : WindowsOnlyRefusal());
-        verbs.Add("bind", "dbdatasync config cert bind --thumbprint <thumbprint> [--location LocalMachine|CurrentUser] [--allow-invalid|--no-allow-invalid]  (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? Bind(rest) : WindowsOnlyRefusal());
+        verbs.Add("use-pem", "dbdatasync cert use-pem --cert <path> --key <path> [--repo <path>]     (any OS)", (rest, _) => UsePem(rest));
+        verbs.Add("use-pfx", "dbdatasync cert use-pfx --pfx <path> [--repo <path>]                    (any OS)", (rest, _) => UsePfx(rest));
+        verbs.Add("status", "dbdatasync cert status [--account <account>]                            (any OS; --account is Windows-only)", (rest, _) => Status(rest));
+        verbs.Add("new-self-signed", "dbdatasync cert new-self-signed [--file] [--days <n>] [--repo <path>]       (any OS; writes <repo>/tls/dbdatasync.pfx and points Kestrel at it — the default off Windows, --file asks for it on Windows too)", (rest, _) => NewSelfSignedVerb(rest));
+        verbs.Add("new-self-signed", "dbdatasync cert new-self-signed [--store] --dns <names> [--days <n>] [--account <account>]  (Windows only; installs into the certificate store — the default there, and needs an elevated prompt)", (_, _) => 0);
+        verbs.Add("list", "dbdatasync cert list [--location LocalMachine|CurrentUser]               (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? List(rest) : WindowsOnlyRefusal());
+        verbs.Add("enroll", "dbdatasync cert enroll --dns <names> [--ca <config>] [--template <name>] [--account <account>]  (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? Enroll(rest) : WindowsOnlyRefusal());
+        verbs.Add("renew", "dbdatasync cert renew [--ca <config>] [--template <name>] [--account <account>] [--days <n>]    (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? Renew(rest) : WindowsOnlyRefusal());
+        verbs.Add("retrieve", "dbdatasync cert retrieve --request-id <id> [--account <account>]        (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? Retrieve(rest) : WindowsOnlyRefusal());
+        verbs.Add("templates", "dbdatasync cert templates [--ca <config>]                                (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? Templates(rest) : WindowsOnlyRefusal());
+        verbs.Add("discover", "dbdatasync cert discover [--repo <path>]                                 (Windows only; finds the CA and template, saves them when there is only one)", (rest, _) => OperatingSystem.IsWindows() ? Discover(rest) : WindowsOnlyRefusal());
+        verbs.Add("bind", "dbdatasync cert bind --thumbprint <thumbprint> [--location LocalMachine|CurrentUser] [--allow-invalid|--no-allow-invalid]  (Windows only)", (rest, _) => OperatingSystem.IsWindows() ? Bind(rest) : WindowsOnlyRefusal());
         return verbs;
     }
 
@@ -181,7 +181,7 @@ public static class CertCommand
     {
         Console.Error.WriteLine(
             "Certificate management beyond use-pem/use-pfx/status is Windows-only. On Linux/macOS, " +
-            "point Kestrel at a certificate file with `dbdatasync config cert use-pem`/`use-pfx`, or " +
+            "point Kestrel at a certificate file with `dbdatasync cert use-pem`/`use-pfx`, or " +
             "terminate TLS in front of the container with a reverse proxy.");
         return 1;
     }
@@ -203,7 +203,7 @@ public static class CertCommand
             return StatusForStoreCertificate(args, root);
 
         Console.WriteLine(
-            "No certificate is bound. Run 'dbdatasync config cert use-pem' or 'dbdatasync config cert use-pfx'.");
+            "No certificate is bound. Run 'dbdatasync cert use-pem' or 'dbdatasync cert use-pfx'.");
         return 0;
     }
 
@@ -241,8 +241,8 @@ public static class CertCommand
         if (bound.Subject is null)
         {
             Console.WriteLine(
-                "No certificate is bound. Run 'dbdatasync config cert new-self-signed' or 'dbdatasync config cert enroll', " +
-                "then 'dbdatasync config cert bind'.");
+                "No certificate is bound. Run 'dbdatasync cert new-self-signed' or 'dbdatasync cert enroll', " +
+                "then 'dbdatasync cert bind'.");
             return 0;
         }
 
@@ -418,7 +418,7 @@ public static class CertCommand
         var requestId = CliOptions.Read(args, "--request-id");
         if (requestId is null)
         {
-            Console.Error.WriteLine("Usage: dbdatasync config cert retrieve --request-id <id>");
+            Console.Error.WriteLine("Usage: dbdatasync cert retrieve --request-id <id>");
             return 1;
         }
 
@@ -469,7 +469,7 @@ public static class CertCommand
             if (!LibGit2Sharp.Repository.IsValid(root))
             {
                 Console.Error.WriteLine(
-                    $"No DbDataSync configuration at {root}, so nothing was saved. Run `dbdatasync setup` first, or pass --repo <path>.");
+                    $"No DbDataSync configuration at {root}, so nothing was saved. Run `dbdatasync server setup` first, or pass --repo <path>.");
                 return 1;
             }
 
@@ -507,7 +507,7 @@ public static class CertCommand
         if (result.Reason != TemplateListReason.Available)
         {
             Console.WriteLine($"Could not list templates ({result.Reason}): {result.Detail}");
-            Console.WriteLine("You can still pass --template with a known template name to 'dbdatasync config cert enroll'.");
+            Console.WriteLine("You can still pass --template with a known template name to 'dbdatasync cert enroll'.");
             return 0;
         }
 
@@ -545,7 +545,7 @@ public static class CertCommand
         var keyPath = CliOptions.Read(args, "--key");
         if (certPath is null || keyPath is null)
         {
-            Console.Error.WriteLine("Usage: dbdatasync config cert use-pem --cert <path> --key <path> [--repo <path>]");
+            Console.Error.WriteLine("Usage: dbdatasync cert use-pem --cert <path> --key <path> [--repo <path>]");
             return 1;
         }
 
@@ -574,7 +574,7 @@ public static class CertCommand
                 $"Could not load '{certPath}'/'{keyPath}': {ex.Message}\n" +
                 "An encrypted private key is not supported yet — decrypt it first (e.g. `openssl rsa " +
                 "-in key.pem -out key-decrypted.pem`), or use a Windows-store certificate via " +
-                "`dbdatasync config cert bind` instead.");
+                "`dbdatasync cert bind` instead.");
             return 1;
         }
 
@@ -601,7 +601,7 @@ public static class CertCommand
         var pfxPath = CliOptions.Read(args, "--pfx");
         if (pfxPath is null)
         {
-            Console.Error.WriteLine("Usage: dbdatasync config cert use-pfx --pfx <path> [--repo <path>]");
+            Console.Error.WriteLine("Usage: dbdatasync cert use-pfx --pfx <path> [--repo <path>]");
             return 1;
         }
 
@@ -622,7 +622,7 @@ public static class CertCommand
             Console.Error.WriteLine(
                 $"Could not load '{pfxPath}': {ex.Message}\n" +
                 "A password-protected PFX is not supported yet — export one with no password, or use " +
-                "a Windows-store certificate via `dbdatasync config cert bind` instead.");
+                "a Windows-store certificate via `dbdatasync cert bind` instead.");
             return 1;
         }
 
@@ -740,7 +740,7 @@ public static class CertCommand
         if (thumbprint is null)
         {
             Console.Error.WriteLine(
-                "Usage: dbdatasync config cert bind --thumbprint <thumbprint> [--location LocalMachine|CurrentUser] " +
+                "Usage: dbdatasync cert bind --thumbprint <thumbprint> [--location LocalMachine|CurrentUser] " +
                 "[--allow-invalid|--no-allow-invalid]");
             return 1;
         }
@@ -859,7 +859,7 @@ public static class CertCommand
             Console.Error.WriteLine(
                 "Both a CA and a template are needed. Pass --ca/--template, set " +
                 "DbDataSync:Certificates:CaConfig/Template in dbdatasync.config.yaml, or run " +
-                "'dbdatasync config cert discover' to find them.");
+                "'dbdatasync cert discover' to find them.");
             return (null, null);
         }
 
@@ -892,7 +892,7 @@ public static class CertCommand
         Console.WriteLine($"  DNS names   {string.Join(", ", info.DnsNames)}");
         Console.WriteLine($"  not after   {info.NotAfter:u}");
         Console.WriteLine();
-        Console.WriteLine($"  Run 'dbdatasync config cert bind --thumbprint {info.Thumbprint}' to put it into service.");
+        Console.WriteLine($"  Run 'dbdatasync cert bind --thumbprint {info.Thumbprint}' to put it into service.");
     }
 
     private static IReadOnlyList<string>? ReadDnsNames(string[] args)

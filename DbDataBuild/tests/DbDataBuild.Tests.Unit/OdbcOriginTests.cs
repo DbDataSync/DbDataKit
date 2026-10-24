@@ -46,14 +46,14 @@ public class OdbcOriginTests
     public void The_login_is_described_by_its_variable_and_user_and_never_by_its_value()
     {
         var cfg = ProjectConfigLoader.Load("connections:\n  legacy: { engine: readonly odbc }\n", "dbdatabuild.yml", [])!;
-        var (login, _) = LoginSettings.FromEnvironment(cfg.Connections["legacy"], Login.Read, v => v == "DBDATABUILD_LEGACY_READ" ? "Driver={PostgreSQL Unicode};Server=db.internal;UID=reader;PWD=hunter2" : null);
+        var (login, _) = LoginSettings.FromEnvironment(cfg.Connections["legacy"], Login.Read, v => v == "DBDATA_BUILD_LEGACY_READ" ? "Driver={PostgreSQL Unicode};Server=db.internal;UID=reader;PWD=hunter2" : null);
         Assert.Equal("odbc", login!.Engine);
         Assert.Equal("reader", login.User);
-        Assert.Equal("ODBC, reader (DBDATABUILD_LEGACY_READ)", login.Describe());
+        Assert.Equal("ODBC, reader (DBDATA_BUILD_LEGACY_READ)", login.Describe());
         Assert.DoesNotContain("hunter2", login.Describe());
         Assert.DoesNotContain("db.internal", login.Describe());
         var (dsn, _) = LoginSettings.FromEnvironment(cfg.Connections["legacy"], Login.Read, _ => "DSN=erp");
-        Assert.Equal("ODBC, the driver's own credentials (DBDATABUILD_LEGACY_READ)", dsn!.Describe());
+        Assert.Equal("ODBC, the driver's own credentials (DBDATA_BUILD_LEGACY_READ)", dsn!.Describe());
         // no write login exists for it, whichever way it is asked for
         Assert.Equal("DDB-455", LoginSettings.FromEnvironment(cfg.Connections["legacy"], Login.Write, _ => "x").Error!.Code);
     }
@@ -98,7 +98,9 @@ public class OdbcOriginTests
     {
         var source = new RecordingSource();
         var session = ReadSession.ForTesting(source, "odbc");
+        #pragma warning disable xUnit1031 // the test blocks on purpose
         session.QueryAsync("SELECT id FROM t WHERE a = ? AND (b = ? OR c = ?)", [new("a", DbType.String, "x"), new("b", DbType.String, "y"), new("a", DbType.String, "x")]).GetAwaiter().GetResult();
+        #pragma warning restore xUnit1031
         Assert.Equal(["x", "y", "x"], source.Last!.Select(p => p.Value).ToArray());
         Assert.Equal("ansi", session.Dialect.Name);
         Assert.Equal(DialectProfiles.Ansi.Catalog, session.Dialect.Catalog);
@@ -191,7 +193,7 @@ public class OdbcOriginTests
         Assert.Equal(0, Cli(["project", "create", "starter", dir]).Exit);
         var config = Path.Combine(dir, "dbdatabuild.yml");
         File.WriteAllText(config, "dialects:\n  blind: { extends: ansi, catalog: none }\n" + File.ReadAllText(config).Replace("connections:\n  sqlserver:", "connections:\n  legacy: { engine: readonly odbc blind }\n  sqlserver:"));
-        var r = Cli(["project", "import", "legacy", "src.*", "--project", dir], v => v == "DBDATABUILD_LEGACY_READ" ? "Driver={No Such ODBC Driver};PWD=secretpw" : null);
+        var r = Cli(["project", "import", "legacy", "src.*", "--project", dir], v => v == "DBDATA_BUILD_LEGACY_READ" ? "Driver={No Such ODBC Driver};PWD=secretpw" : null);
         Assert.Equal(1, r.Exit);
         Assert.Contains("`catalog: none`", r.Err);
         Assert.Contains("not guessed", r.Err);
@@ -258,15 +260,15 @@ public class OdbcOriginTests
     public void A_missing_driver_manager_is_named_as_such()
     {
         var manager = new DllNotFoundException("Unable to load shared library 'libodbc.so.2' at /secret/path");
-        var text = DriverFailure.Describe(manager);
+        var text = Failures.Describe(manager);
         Assert.Contains("ODBC driver manager is not installed", text);
         Assert.Contains("unixODBC", text);
         Assert.DoesNotContain("/secret/path", text);
         // it may arrive wrapped, as the type initializer of the provider
-        Assert.Equal(text, DriverFailure.Describe(new TypeInitializationException("System.Data.Odbc.OdbcEnvironment", manager)));
-        Assert.Equal(text, DriverFailure.Describe(new InvalidOperationException("outer", new TypeInitializationException("x", manager))));
-        Assert.Null(DriverFailure.Prerequisite(new InvalidOperationException("boom")));
-        Assert.Equal("InvalidOperationException", DriverFailure.Describe(new InvalidOperationException("password=hunter2")));
+        Assert.Equal(text, Failures.Describe(new TypeInitializationException("System.Data.Odbc.OdbcEnvironment", manager)));
+        Assert.Equal(text, Failures.Describe(new InvalidOperationException("outer", new TypeInitializationException("x", manager))));
+        Assert.Null(DbDataKit.Connections.Odbc.OdbcPrerequisite.Describe(new InvalidOperationException("boom")));
+        Assert.Equal("InvalidOperationException", Failures.Describe(new InvalidOperationException("password=hunter2")));
     }
 
     [Fact]
@@ -276,7 +278,7 @@ public class OdbcOriginTests
         const string secret = "ddb_no_such_data_source_qq";
         string text;
         try { using var c = new OdbcConnection($"DSN={secret};UID=reader;PWD=hunter2"); c.Open(); return; }
-        catch (Exception ex) { text = DriverFailure.Describe(ex); }
+        catch (Exception ex) { text = Failures.Describe(ex); }
         Assert.True(text.Contains("ODBC driver manager is not installed") || text.Contains("ODBC driver or data source named in the login was not found"), text);
         Assert.DoesNotContain(secret, text);
         Assert.DoesNotContain("hunter2", text);
@@ -290,7 +292,7 @@ public class OdbcOriginTests
         Assert.Equal(0, Cli(["project", "create", "starter", dir]).Exit);
         var config = Path.Combine(dir, "dbdatabuild.yml");
         File.WriteAllText(config, File.ReadAllText(config).Replace("connections:\n  sqlserver:", "connections:\n  legacy: { engine: readonly odbc }\n  sqlserver:"));
-        string? Env(string v) => v == "DBDATABUILD_LEGACY_READ" ? "Driver={Vendor Driver 9000};Server=db.internal;UID=reader;PWD=hunter2" : null;
+        string? Env(string v) => v == "DBDATA_BUILD_LEGACY_READ" ? "Driver={Vendor Driver 9000};Server=db.internal;UID=reader;PWD=hunter2" : null;
         var inspect = Cli(["connection", "inspect", "legacy", "--project", dir], Env);
         Assert.NotEqual(0, inspect.Exit);
         Assert.Contains("ODBC", inspect.Out);

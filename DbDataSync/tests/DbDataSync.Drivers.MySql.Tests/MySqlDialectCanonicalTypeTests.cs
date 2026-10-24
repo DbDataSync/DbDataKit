@@ -85,11 +85,11 @@ public sealed class MySqlDialectCanonicalTypeTests
     private static CanonicalType Simple(CanonicalTypeKind kind) => new(kind, null, null, null, false, false);
 
     [Fact]
-    public void RenderingBoolean_ProducesTinyint1_Faithfully()
+    public void RenderingBoolean_ProducesTinyint1_WithANoNativeBooleanNote()
     {
         var rendered = Dialect.RenderColumnType(Simple(CanonicalTypeKind.Boolean));
         Assert.Equal("tinyint(1)", rendered.Sql);
-        Assert.Null(rendered.Fidelity);
+        Assert.Contains("no native boolean", rendered.Fidelity);
     }
 
     [Fact]
@@ -111,12 +111,12 @@ public sealed class MySqlDialectCanonicalTypeTests
     }
 
     [Fact]
-    public void RenderingNvarcharMax_ProducesLongtext_WithANoLengthBoundNote()
+    public void RenderingNvarcharMax_ProducesLongtext_Faithfully()
     {
         var canonical = new CanonicalType(CanonicalTypeKind.String, null, null, null, true, true);
         var rendered = Dialect.RenderColumnType(canonical);
         Assert.Equal("longtext", rendered.Sql);
-        Assert.Contains("length bound", rendered.Fidelity);
+        Assert.Null(rendered.Fidelity);
     }
 
     [Fact]

@@ -10,27 +10,27 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Apache.Arrow.Adbc.Drivers.Apache" Version="0.23.0" />
+    <PackageReference Include="Apache.Arrow.Adbc.Drivers.Apache" />
     <!-- the in-process Flight SQL server of the origin tests (InProcessFlightSqlServer.cs); the client the tool uses comes with the Execution project -->
-    <PackageReference Include="Apache.Arrow.Flight.AspNetCore" Version="23.0.0" />
-    <PackageReference Include="JsonSchema.Net" Version="7.0.4" />
-    <PackageReference Include="DuckDB.NET.Data.Full" Version="1.5.6" />
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+    <PackageReference Include="Apache.Arrow.Flight.AspNetCore" />
+    <PackageReference Include="JsonSchema.Net" />
+    <PackageReference Include="DuckDB.NET.Data" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
     <!-- SqlClient 7.1.1 brings 9.0.18, which has advisories (GHSA-2fmv-rv2c-59x7, GHSA-846f-f764-76mx); a direct reference takes precedence until SqlClient moves -->
-    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-    <PackageReference Include="Npgsql" Version="10.0.3" />
-    <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.26.301" />
-    <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="coverlet.collector" Version="6.0.0">
+    <PackageReference Include="coverlet.collector">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Xunit.SkippableFact" Version="1.5.85" />
+    <PackageReference Include="Xunit.SkippableFact" />
   </ItemGroup>
 
   <ItemGroup>
@@ -47,4 +47,10 @@
   <ItemGroup>
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <Import Project="$(DbDataKitRoot)build/DuckDb.Native.targets" />
+
+  <ItemGroup>
+    <Using Include="DbDataKit.Cli" />
+  </ItemGroup>
+
 </Project>

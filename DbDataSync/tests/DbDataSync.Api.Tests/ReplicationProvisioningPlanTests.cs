@@ -1,10 +1,10 @@
 using System.Data;
 using System.Data.Common;
-using ClrKernel.Core.Secrets;
+using DbDataSync.Core.Secrets;
 using DbDataSync.Api.Auth;
 using DbDataSync.Api.Services;
 using DbDataSync.Core.Config;
-using DbDataSync.Core.Git;
+using DbDataKit.Config.Git;
 using DbDataSync.Core.Sql;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
@@ -374,7 +374,7 @@ public sealed class ReplicationProvisioningPlanTests : IDisposable
             OnExecute = commandText =>
             {
                 if (commandText.Contains("Orders"))
-                    throw new FakeDbException("permission denied");
+                    throw new FakeDbException("permission denied", "42501");
             },
         };
         var factory = new FakeConnectionFactory(
@@ -397,7 +397,8 @@ public sealed class ReplicationProvisioningPlanTests : IDisposable
 
         var ordersResult = Assert.Single(result.Steps, r => r.Id == ordersStep.Id);
         Assert.Equal(ProvisioningStepOutcome.Failed, ordersResult.Outcome);
-        Assert.Contains("permission denied", ordersResult.Error);
+        // the shared classifier's wording, not the server's (plan 13, A10)
+        Assert.StartsWith("The login does not have permission for this operation.", ordersResult.Error);
 
         var customersResult = Assert.Single(result.Steps, r => r.Id == customersStep.Id);
         Assert.Equal(ProvisioningStepOutcome.NotAttempted, customersResult.Outcome);
@@ -489,7 +490,7 @@ public sealed class ReplicationProvisioningPlanTests : IDisposable
     private ProvisioningService CreateServiceWithSideEffects(FakeConnectionFactory factory) =>
         new(_config, factory,
             new CurrentUser(
-                new HttpContextAccessor(), new AuthOptions(),
+                new HttpContextAccessor(), new AuthOptions { Product = SyncAuth.Product },
                 new PasskeyOptions { RelyingPartyId = "localhost", RelyingPartyName = "DbDataSync", Origins = new HashSet<string>() }),
             new MappingColumnReader(new FakeColumnCatalog()), new DriverRegistry());
 
@@ -660,5 +661,8 @@ public sealed class ReplicationProvisioningPlanTests : IDisposable
     /// concrete stand-in every fake command throws to simulate a least-privileged connection rejecting a
     /// statement, exactly as <c>ProvisioningService.RunStepsAsync</c>'s real <c>catch (DbException)</c>
     /// expects.</summary>
-    private sealed class FakeDbException(string message) : DbException(message);
+    private sealed class FakeDbException(string message, string? sqlState = null) : DbException(message)
+    {
+        public override string? SqlState { get; } = sqlState;
+    }
 }

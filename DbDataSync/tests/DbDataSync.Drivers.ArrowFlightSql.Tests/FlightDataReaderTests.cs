@@ -3,7 +3,7 @@ using Apache.Arrow.Compression;
 using Apache.Arrow.Ipc;
 using Apache.Arrow.Types;
 using Google.Protobuf;
-using static DbDataSync.Drivers.ArrowFlightSql.FlightDataReader;
+using static DbDataKit.Connections.FlightSql.FlightDataReader;
 
 namespace DbDataSync.Drivers.ArrowFlightSql.Tests;
 

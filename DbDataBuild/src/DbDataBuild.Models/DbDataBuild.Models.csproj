@@ -5,7 +5,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+    <PackageReference Include="YamlDotNet" />
+    <DbDataKitReference Include="Scheduling" />   <!-- the cron and time zone check for a plan's schedule; plan 13, M07 -->
+    <DbDataKitReference Include="Dialect" />   <!-- identifier quoting for the targets and built-in profiles; plan 13, B01 -->
   </ItemGroup>
 
   <PropertyGroup>

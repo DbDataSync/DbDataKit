@@ -130,7 +130,7 @@ internal static class ProjectUpdateCommand
                 facts = await session.ServerFactsAsync();
             }
             catch (GateRefusedException ex) { rows.Add(Skipped(connection, ex.Diagnostic.Found)); continue; }
-            catch (Exception ex) when (ex is not OperationCanceledException) { rows.Add(Skipped(connection, $"it could not be reached ({DriverFailure.Describe(ex)}), so its server was not asked; the committed dialect, if any, is kept")); continue; }
+            catch (Exception ex) when (ex is not OperationCanceledException) { rows.Add(Skipped(connection, $"it could not be reached ({Failures.Describe(ex)}), so its server was not asked; the committed dialect, if any, is kept")); continue; }
             var note = facts == null ? "the server does not implement GetSqlInfo, so it says nothing about itself" : facts.IsEmpty ? "the server answered GetSqlInfo with nothing the tool reads" : null;
             facts ??= ServerFacts.Nothing;
             var chosen = DialectDiscovery.Choose(facts, config.Dialects);

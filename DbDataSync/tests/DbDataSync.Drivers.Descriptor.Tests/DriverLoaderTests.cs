@@ -58,7 +58,7 @@ public sealed class DriverLoaderTests : IDisposable
         DriverLoader.LoadDescriptorDrivers(_repoRoot, libraryRegistry, driverRegistry, onError);
 
         Assert.NotNull(loggedException);
-        Assert.Contains("dbdatasync config library install", loggedException!.Message);
+        Assert.Contains("dbdatasync library install", loggedException!.Message);
         Assert.NotNull(loggedMessage);
         Assert.False(driverRegistry.TryGet("mysql.generic", out _));
     }

@@ -124,7 +124,7 @@ public sealed class ConfigValueCommandTests : IDisposable
             var (code, output) = await Run("set", "Notes:MarkdownRenderer", "rich", "--repo", elsewhere);
 
             Assert.Equal(1, code);
-            Assert.Contains("dbdatasync setup", output);
+            Assert.Contains("dbdatasync server setup", output);
             Assert.False(File.Exists(DbDataSyncConfigFile.PathIn(elsewhere)));
         }
         finally

@@ -92,7 +92,7 @@ SQL Server: dedicated read login plus `ApplicationIntent=ReadOnly` (routing only
 `default_transaction_read_only=on` (Build already does this); DuckDB: `access_mode=READ_ONLY`, `enable_external_access=false`,
 disable extension autoload/install, `lock_configuration=true` (Build's sandbox set, closes Proxy S-1 for DuckDB); ODBC:
 `SQL_ATTR_ACCESS_MODE=READ_ONLY` where the driver supports it, otherwise rely on the login. Combined with the Plan 05 classifier
-as defence in depth. Env-var login compatibility: `DBDATA_<APP>_<CONN>_<READ|WRITE>` and legacy `DBDATABUILD_*` via Plan 02.
+as defence in depth. Env-var login compatibility: `DBDATA_<APP>_<CONN>_<READ|WRITE>` and legacy `DBDATA_BUILD_*` via Plan 02.
 
 ### 3.6 Failure model
 `ConnectionFailure { Kind: Login|Network|Timeout|Tls|Permission|Syntax|Unsupported|Other, Code, Engine }` created from provider

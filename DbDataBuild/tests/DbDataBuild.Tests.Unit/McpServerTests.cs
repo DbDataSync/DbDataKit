@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using DbDataBuild.Cli;
 using DbDataBuild.Cli.Mcp;
+using McpServer = DbDataBuild.Cli.Mcp.McpServer; // the shared DbDataKit.Cli also has an McpServer (plan 13, C08)
 
 namespace DbDataBuild.Tests.Unit;
 
@@ -176,7 +177,9 @@ public class McpServerTests : IDisposable
         feed.Send(new JsonObject { ["jsonrpc"] = "2.0", ["method"] = "notifications/cancelled", ["params"] = new JsonObject { ["requestId"] = 7 } }.ToJsonString());
         feed.Send(Request("ping", id: 8).ToJsonString());
         feed.End();
+        #pragma warning disable xUnit1031 // the test blocks on purpose
         Assert.True(serving.Wait(TimeSpan.FromSeconds(15)));
+        #pragma warning restore xUnit1031
         Assert.True(host.Stopped);
         var replies = output.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => JsonNode.Parse(l)!).ToList();
         Assert.Equal([8], replies.Select(r => (int)r["id"]!));        // nothing for 7, an answer for 8
@@ -342,8 +345,12 @@ public class McpServerTests : IDisposable
             Assert.True((bool)r["structuredContent"]!["single_use"]!);
             Assert.Contains("Do not open it yourself", Text(r));
             using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+            #pragma warning disable xUnit1031 // the test blocks on purpose
             Assert.Equal(System.Net.HttpStatusCode.Redirect, http.GetAsync(url).GetAwaiter().GetResult().StatusCode);
+            #pragma warning restore xUnit1031
+            #pragma warning disable xUnit1031 // the test blocks on purpose
             Assert.Equal(System.Net.HttpStatusCode.Forbidden, http.GetAsync(url).GetAwaiter().GetResult().StatusCode);      // spent
+            #pragma warning restore xUnit1031
             var second = (string)Call(s, "show")["structuredContent"]!["url"]!;                                              // another link, the same server
             Assert.NotEqual(url, second);
             Assert.Equal(new Uri(url).Port, new Uri(second).Port);

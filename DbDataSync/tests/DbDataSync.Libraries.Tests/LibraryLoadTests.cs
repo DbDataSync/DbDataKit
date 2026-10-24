@@ -52,9 +52,10 @@ public sealed class LibraryLoadTests : IAsyncLifetime
         // so a comment explaining that pattern elsewhere is expected to name it too, the same way
         // DbDataSync.State.Tests.csproj's own comment on LibraryInstallFixture does.
         //
-        // Exactly two legitimate references, the same split every other built-in driver's package has
+        // The legitimate references, the same split every other built-in driver's package has
         // (e.g. Microsoft.Data.SqlClient in DbDataSync.Drivers.MsSql.csproj vs. DbDataSync.Api.Tests.csproj):
-        // the driver itself, ExcludeAssets="runtime" so the assembly still isn't physically shipped by it
+        // the driver itself, and the hosts that run it (the shared composer is compiled against the driver's
+        // types, plan 13 A09), all ExcludeAssets="runtime" so the assembly still isn't physically shipped by them
         // (loadable only through an installed library's armed resolver — BuiltInDriverLibraries, phase
         // 144); and that driver's own test project, which needs the real runtime assembly directly to
         // exercise it and carries no such exclusion.
@@ -68,14 +69,16 @@ public sealed class LibraryLoadTests : IAsyncLifetime
             var fileName = Path.GetFileName(path);
             referencingProjects.Add(fileName);
 
-            if (fileName == "DbDataSync.Drivers.MySql.csproj")
+            if (fileName != "DbDataSync.Drivers.MySql.Tests.csproj")
                 Assert.Contains("ExcludeAssets=\"runtime\"", content, StringComparison.Ordinal);
-            else
-                Assert.Equal("DbDataSync.Drivers.MySql.Tests.csproj", fileName);
         }
 
         Assert.Equal(
-            new HashSet<string> { "DbDataSync.Drivers.MySql.csproj", "DbDataSync.Drivers.MySql.Tests.csproj" },
+            new HashSet<string>
+            {
+                "DbDataSync.Drivers.MySql.csproj", "DbDataSync.Drivers.MySql.Tests.csproj",
+                "DbDataSync.Api.csproj", "DbDataSync.TaskRunner.csproj", "DbDataSync.Cli.csproj",
+            },
             referencingProjects.ToHashSet());
     }
 
@@ -94,6 +97,31 @@ public sealed class LibraryLoadTests : IAsyncLifetime
         var dlls = Directory.EnumerateFiles(libDir, "*.dll").Select(Path.GetFileName).ToList();
         Assert.Contains("MySqlConnector.dll", dlls);
         Assert.True(Directory.EnumerateFiles(libDir, "*.deps.json").Any());
+    }
+
+    /// <summary>
+    /// Plan 13 (K05): the `duckdb` catalog entry is the bare DuckDB.NET.Data package; the engine (DuckDB 2.0.0) is added from
+    /// the repository's pin, downloaded and hash-checked. Needs network access to NuGet and to the DuckDB release.
+    /// </summary>
+    [Fact]
+    public async Task GetFactory_OpensDuckDb_FromTheInstalledPackageAndThePinnedEngine()
+    {
+        var entry = KnownLibraries.TryGetById("duckdb")!;
+        await LibraryInstaller.InstallAsync(
+            _repoRoot, entry.Id, [new PackageRef(entry.PackageId, entry.PinnedVersion)], entry.FactoryType);
+
+        var libDir = LibraryPaths.LibDir(LibraryPaths.LibraryDir(_repoRoot, "duckdb"));
+        Assert.Contains(Directory.EnumerateFiles(libDir).Select(Path.GetFileName), n => n is "libduckdb.so" or "libduckdb.dylib" or "duckdb.dll");
+
+        var registry = new LibraryRegistry(_repoRoot).LoadAll();
+        var factory = registry.GetFactory("duckdb");
+        await using DbConnection connection = factory.CreateConnection()!;
+        connection.ConnectionString = "Data Source=:memory:";
+        await connection.OpenAsync();
+
+        var command = connection.CreateCommand();
+        command.CommandText = "SELECT version();";
+        Assert.Equal("v" + DuckDbEngine.PinnedVersion, (string?)await command.ExecuteScalarAsync());
     }
 
     [Fact]
@@ -167,7 +195,7 @@ public sealed class LibraryLoadTests : IAsyncLifetime
 
         var ex = Assert.Throws<InvalidOperationException>(() => registry.GetFactory("NotInstalled"));
 
-        Assert.Contains("dbdatasync config library install", ex.Message);
+        Assert.Contains("dbdatasync library install", ex.Message);
     }
 
     /// <summary>
@@ -219,7 +247,7 @@ public sealed class LibraryLoadTests : IAsyncLifetime
 
         var ex = Assert.Throws<InvalidOperationException>(() => registry.GetFactory("mysql-connector"));
 
-        Assert.Contains("dbdatasync config library install mysql-connector", ex.Message);
+        Assert.Contains("dbdatasync library install mysql-connector", ex.Message);
     }
 
     private static string FindRepoRoot()

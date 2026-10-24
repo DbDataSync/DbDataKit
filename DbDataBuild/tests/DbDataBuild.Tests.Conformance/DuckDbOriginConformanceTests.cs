@@ -42,7 +42,7 @@ public class DuckDbOriginConformanceTests
 
         public string? Env(string v) =>
             v == LoginSettings.VariableName(name, Login.Read) || v == LoginSettings.VariableName(name, Login.Write) ? destination.ConnectionString
-            : v == "DBDATABUILD_ANALYTICS_READ" ? (OriginReachable ? DbFile : Path.Combine(dir, "gone.duckdb")) : v == "DBDATABUILD_LAKE_READ" ? Lake : null;
+            : v == "DBDATA_BUILD_ANALYTICS_READ" ? (OriginReachable ? DbFile : Path.Combine(dir, "gone.duckdb")) : v == "DBDATA_BUILD_LAKE_READ" ? Lake : null;
 
         public (int Exit, string Out, string Err) Cli(params string[] args)
         {

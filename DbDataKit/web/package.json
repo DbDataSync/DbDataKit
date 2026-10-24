@@ -1,0 +1,9 @@
+{
+  "name": "dbdatakit-web",
+  "private": true,
+  "workspaces": [
+    "shell",
+    "admin",
+    "sync"
+  ]
+}

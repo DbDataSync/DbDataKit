@@ -44,7 +44,6 @@ hour
 if_fn
 ifnull
 in_null
-int_floor_div
 int_plus_date
 last_day
 length_nonbmp
@@ -56,8 +55,6 @@ median
 min_date
 min_int_null
 minute
-mod
-mod_by_zero
 mod_neg
 mod_neg2
 month

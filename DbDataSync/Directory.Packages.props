@@ -1,0 +1,33 @@
+<Project>
+  <!-- the third-party versions are in the root Directory.Packages.props -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Packages.props', '$(MSBuildThisFileDirectory)../'))" />
+  <ItemGroup>
+    <!-- the shared libraries Sync takes as packages when UseLocalDbDataKit is off (see Directory.Build.targets) -->
+    <PackageVersion Include="DbDataKit.Cli" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Hosting.Certificates" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Hosting.Certificates.Windows" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Hosting.Cli" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Hosting.Systemd" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Scheduling" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.State" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Web" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Config.Git" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Connections.Abstractions" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Connections" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Connections.SqlServer" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Connections.Postgres" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Connections.FlightSql" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Connections.MySql" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Connections.Oracle" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Metadata" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Metadata.Abstractions" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Odbc.Metadata" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Dialect" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Dialect.Abstractions" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Config.Yaml" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Secrets.Abstractions" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Secrets" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Secrets.Store" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Secrets.Windows" Version="$(DbDataKitVersion)" />
+  </ItemGroup>
+</Project>

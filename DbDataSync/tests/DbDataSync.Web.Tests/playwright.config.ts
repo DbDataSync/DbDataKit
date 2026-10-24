@@ -29,27 +29,35 @@ export const KNOWN_DRIVER_LIBRARY = 'MySqlConnector'
 // cleared before that process starts, since global-setup.ts runs *concurrently with*, not strictly
 // before, webServer (confirmed empirically: the API's own hosted services already touch the repo
 // root before global-setup's own code gets a turn to run).
-fs.rmSync(scratchRepoRoot, { recursive: true, force: true })
-fs.mkdirSync(scratchRepoRoot, { recursive: true })
+// Only in the process that starts the run: Playwright evaluates this file again in every worker it starts (and
+// restarts one after a failed test), and clearing the repo then would delete the encrypted secret store's key and
+// the state the API is using underneath it.
+const isWorker = process.env.TEST_WORKER_INDEX !== undefined
+if (!isWorker) {
+  fs.rmSync(scratchRepoRoot, { recursive: true, force: true })
+  fs.mkdirSync(scratchRepoRoot, { recursive: true })
+}
 
 // Phase 109i: the webServer entry below launches DbDataSync.Api.dll with `dotnet exec` directly, not
-// through `dbdatasync serve` — deliberately, per that entry's own comment, so killing it reliably
+// through `dbdatasync server run` — deliberately, per that entry's own comment, so killing it reliably
 // kills the real process rather than a `dotnet run` wrapper. That means this scratch repo never goes
 // through ServeCommand.EnsureDuckDbInstalledAsync, the one place a real deployment (always started via
-// `dbdatasync serve`, confirmed against this repo's own Dockerfile) gets DuckDB installed
+// `dbdatasync server run`, confirmed against this repo's own Dockerfile) gets DuckDB installed
 // automatically. Seeded here, synchronously, the same way the mysql-connector catalog id used to be
 // seeded before phase 120 made installing it a real, UI-testable feature — DuckDB has no equivalent
 // "install it" scenario any golden-path test exercises (unlike mysql-connector, nothing here is
-// testing the *install*, only relying on DuckDB already being present the way a `dbdatasync serve`
+// testing the *install*, only relying on DuckDB already being present the way a `dbdatasync server run`
 // deployment always would be), so there is no feature test this shortcut would be standing in for.
-// A real install (`dbdatasync config library install`), not a hand-rolled fixture — this repo's own
+// A real install (`dbdatasync library install`), not a hand-rolled fixture — this repo's own
 // precedent for anything that has to make a package genuinely loadable, not merely on record.
-execFileSync(
-  'dotnet',
-  ['exec', path.join(repoRoot, 'src/DbDataSync.Cli/bin/Debug/net10.0/DbDataSync.Cli.dll'),
-    'config', 'library', 'install', 'duckdb', '--version', '1.5.5', '--repo', scratchRepoRoot],
-  { stdio: 'inherit' },
-)
+if (!isWorker) {
+  execFileSync(
+    'dotnet',
+    ['exec', path.join(repoRoot, 'src/DbDataSync.Cli/bin/Debug/net10.0/DbDataSync.Cli.dll'),
+      'library', 'install', 'duckdb', '--version', '1.5.6', '--repo', scratchRepoRoot],
+    { stdio: 'inherit' },
+  )
+}
 
 // The password used for the real SQL Server test database (started via docker-compose.yml's mssql-source service —
 // see architecture/implementation/done/phase-003-mssql-driver.md). This sandbox has no OS keychain, so the
@@ -65,11 +73,10 @@ const authEnv = {
   DbDataSync__Auth__Network__Admin: 'loopback',
 }
 
-// Phase 93: DBDATASYNC_SECRET_* now, not the package's unconfigured "ClrKernel" default — the API's
-// SecretStore is constructed with "DbDataSync" as its prefix.
+// The environment variables the API's SecretStore falls back to when its encrypted store has no password for the connection.
 const secretEnv = {
-  DBDATASYNC_SECRET_DBDATASYNC_CONNECTION_PLAYWRIGHT_SRC: 'DbDataSync_Test_Pw1',
-  DBDATASYNC_SECRET_DBDATASYNC_CONNECTION_PLAYWRIGHT_TGT: 'DbDataSync_Test_Pw1',
+  DBDATA_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_SRC: 'DbDataSync_Test_Pw1',
+  DBDATA_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_TGT: 'DbDataSync_Test_Pw1',
 }
 
 export default defineConfig({
@@ -131,7 +138,7 @@ export default defineConfig({
       // though vite itself started and logged "ready" well within that window. Forcing the bind
       // address to match the probe's own address fixed it outright in manual testing.
       command: 'npm run dev -- --port 5173 --strictPort --host 127.0.0.1',
-      cwd: path.join(repoRoot, 'src/DbDataSync.Web'),
+      cwd: path.join(repoRoot, '..', 'DbDataKit', 'web', 'sync'),
       url: 'http://127.0.0.1:5173',
       reuseExistingServer: false,
       timeout: 30_000,

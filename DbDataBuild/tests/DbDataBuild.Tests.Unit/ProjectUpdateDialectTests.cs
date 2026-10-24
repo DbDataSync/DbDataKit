@@ -62,7 +62,7 @@ public class ProjectUpdateDialectTests : IDisposable
         Write("models/dst/events.yml", "name: dst.events\nkind: {copy: {from: src.events}}\n");
     }
 
-    private static string Env(string v) => v is "DBDATABUILD_PROXY_ERP_READ" or "DBDATABUILD_PROXY_FIXED_READ" ? "grpc://127.0.0.1:9;token=x" : v == "DBDATABUILD_FILES_READ" ? ":memory:" : "";
+    private static string Env(string v) => v is "DBDATA_BUILD_PROXY_ERP_READ" or "DBDATA_BUILD_PROXY_FIXED_READ" ? "grpc://127.0.0.1:9;token=x" : v == "DBDATA_BUILD_FILES_READ" ? ":memory:" : "";
 
     private (int Exit, JsonNode Doc, string Text, string Err) Update(FakeServer? server, Func<string, string?>? env = null, params string[] args)
     {
@@ -162,10 +162,10 @@ public class ProjectUpdateDialectTests : IDisposable
         Project();
         Update(new FakeServer(Postgres));
         var before = LockText;
-        var (exit, doc, text, _) = Update(null, v => v == "DBDATABUILD_FILES_READ" ? ":memory:" : null);
+        var (exit, doc, text, _) = Update(null, v => v == "DBDATA_BUILD_FILES_READ" ? ":memory:" : null);
         Assert.Equal(0, exit);
         Assert.Equal("skipped", (string)Row(doc, "proxy_erp")["status"]!);
-        Assert.Contains("DBDATABUILD_PROXY_ERP_READ", text);
+        Assert.Contains("DBDATA_BUILD_PROXY_ERP_READ", text);
         Assert.Equal(before, LockText);                                                            // what was committed stays
         ProjectUpdateCommand.TestOpener.Value = (_, _) => throw new TimeoutException("secret-host");
         try
