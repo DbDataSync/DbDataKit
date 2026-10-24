@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using DbDataBuild.Cli;
 using DbDataBuild.Cli.Mcp;
+using McpServer = DbDataBuild.Cli.Mcp.McpServer; // the shared DbDataKit.Cli also has an McpServer (plan 13, C08)
 
 namespace DbDataBuild.Tests.Unit;
 
