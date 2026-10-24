@@ -7,13 +7,13 @@ namespace DbDataKit.Metadata;
 /// Oracle through the <c>ALL_*</c> dictionary views. There is no catalog above the schema (the owner), so a table is <c>TableRef(null, owner, name)</c>, and names are
 /// matched as given: Oracle stores unquoted names in upper case, so callers pass <c>"HR"</c>, not <c>"hr"</c>. Native types are composed in the query
 /// (<c>VARCHAR2(50)</c>, <c>NUMBER(10,2)</c>, <c>RAW(16)</c>; <c>TIMESTAMP</c> already carries its precision). Needs 12c: identity columns come from
-/// <c>ALL_TAB_IDENTITY_COLS</c>, virtual (computed) columns from <c>VIRTUAL_COLUMN</c>, and Oracle-supplied schemas from <c>ALL_USERS.ORACLE_MAINTAINED</c>.
+/// <c>ALL_TAB_IDENTITY_COLS</c>, virtual (computed) columns from <c>ALL_TAB_COLS.VIRTUAL_COLUMN</c> (hidden columns excluded), and Oracle-supplied schemas from <c>ALL_USERS.ORACLE_MAINTAINED</c>.
 /// Works over any <see cref="DbConnection"/> whose provider binds <c>:p0</c> parameters in order (ODP.NET).
 /// </summary>
 /// <remarks>
 /// Column defaults and collations are not read: <c>DATA_DEFAULT</c> is a <c>LONG</c>, which ODP.NET returns empty unless the command opts in, and
 /// <c>COLLATION</c> exists only from 12.2. <c>ColumnInfo.DefaultExpr</c> and <c>Collation</c> are null. Oracle has no <c>ON UPDATE</c> rule, so foreign keys report
-/// <c>NO ACTION</c> for it. There is no read-only session to open, so the describe probe is the wrapped zero-row query.
+/// <c>NO ACTION</c> for it. A descending key part is stored by Oracle as a hidden <c>SYS_NC…$</c> expression column, so it is reported with no name (<c>&lt;expression&gt;</c>) and the descending flag. There is no read-only session to open, so the describe probe is the wrapped zero-row query.
 /// </remarks>
 public class OracleCatalogReader(DbConnection connection, ISqlDialect? dialect = null, CatalogReaderOptions? options = null)
     : InformationSchemaCatalogReader(connection, dialect ?? DialectCatalog.For(EngineId.Oracle), options)
@@ -47,7 +47,7 @@ public class OracleCatalogReader(DbConnection connection, ISqlDialect? dialect =
             + "CASE WHEN c.nullable = 'Y' THEN 1 ELSE 0 END, NULL, NULL, NULL, NULL, NULL, "
             + "CASE WHEN EXISTS (SELECT 1 FROM all_tab_identity_cols i WHERE i.owner = c.owner AND i.table_name = c.table_name AND i.column_name = c.column_name) THEN 1 ELSE 0 END, "
             + "CASE WHEN c.virtual_column = 'YES' THEN 1 ELSE 0 END "
-            + $"FROM all_tab_columns c WHERE {where} ORDER BY c.column_id", args);
+            + $"FROM all_tab_cols c WHERE c.hidden_column = 'NO' AND {where} ORDER BY c.column_id", args);
     }
 
     protected override (string Sql, object?[] Args)? PrimaryKeyQuery(TableRef t)
@@ -72,7 +72,7 @@ public class OracleCatalogReader(DbConnection connection, ISqlDialect? dialect =
     {
         var (where, args) = Where(t, "", "i.table_owner", "i.table_name");
         // The index behind the primary key is the key, not an index of its own.
-        return ("SELECT i.index_name, CASE WHEN i.uniqueness = 'UNIQUE' THEN 1 ELSE 0 END, ic.column_position, ic.column_name, CASE WHEN ic.descend = 'DESC' THEN 1 ELSE 0 END "
+        return ("SELECT i.index_name, CASE WHEN i.uniqueness = 'UNIQUE' THEN 1 ELSE 0 END, ic.column_position, CASE WHEN ic.column_name LIKE 'SYS_NC%$' THEN NULL ELSE ic.column_name END, CASE WHEN ic.descend = 'DESC' THEN 1 ELSE 0 END "
             + "FROM all_indexes i JOIN all_ind_columns ic ON ic.index_owner = i.owner AND ic.index_name = i.index_name "
             + "WHERE NOT EXISTS (SELECT 1 FROM all_constraints k WHERE k.owner = i.table_owner AND k.index_name = i.index_name AND k.constraint_type = 'P') "
             + $"AND {where} ORDER BY i.index_name, ic.column_position", args);

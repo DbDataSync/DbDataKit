@@ -108,7 +108,7 @@ public class OracleReaderTests
     [Fact]
     public async Task Columns_report_the_composed_type_identity_and_virtual_columns()
     {
-        var conn = new FakeDbConnection(cmd => cmd.Sql.Contains("FROM all_tab_columns", StringComparison.Ordinal)
+        var conn = new FakeDbConnection(cmd => cmd.Sql.Contains("FROM all_tab_cols", StringComparison.Ordinal)
             ? FakeResult.Rows(ColumnNames,
                 ["ID", 1, "NUMBER(10,0)", 0, null, null, null, null, null, 1, 0],
                 ["NAME", 2, "VARCHAR2(50)", 1, null, null, null, null, null, 0, 0],
@@ -131,7 +131,7 @@ public class OracleReaderTests
     [Fact]
     public async Task Queries_bind_owner_and_table_as_colon_parameters_in_order()
     {
-        var conn = new FakeDbConnection(cmd => cmd.Sql.Contains("FROM all_tab_columns", StringComparison.Ordinal)
+        var conn = new FakeDbConnection(cmd => cmd.Sql.Contains("FROM all_tab_cols", StringComparison.Ordinal)
             ? FakeResult.Rows(ColumnNames, ["ID", 1, "NUMBER", 0, null, null, null, null, null, 0, 0]) : null);
 
         await new OracleCatalogReader(conn).GetShapeAsync(new TableRef(null, "HR", "O'Brien; DROP TABLE x"));
@@ -150,7 +150,7 @@ public class OracleReaderTests
     {
         var conn = new FakeDbConnection(cmd =>
         {
-            if (cmd.Sql.Contains("FROM all_tab_columns", StringComparison.Ordinal)) return FakeResult.Rows(ColumnNames, ["ID", 1, "NUMBER", 0, null, null, null, null, null, 0, 0]);
+            if (cmd.Sql.Contains("FROM all_tab_cols", StringComparison.Ordinal)) return FakeResult.Rows(ColumnNames, ["ID", 1, "NUMBER", 0, null, null, null, null, null, 0, 0]);
             if (cmd.Sql.Contains("FROM all_indexes", StringComparison.Ordinal))
                 return FakeResult.Rows(["n", "u", "o", "c", "d"], ["IX_A", 1, 2, "Y", 1], ["IX_A", 1, 1, "X", 0]);
             if (cmd.Sql.Contains("constraint_type = 'P'", StringComparison.Ordinal)) return FakeResult.Rows(["n", "c", "p"], ["PK_O", "B", 2], ["PK_O", "A", 1]);
