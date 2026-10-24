@@ -1,4 +1,5 @@
 using System.Data.Common;
+using DbDataKit.Metadata;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
 using DbDataSync.Core.Sql;
@@ -6,10 +7,8 @@ using DbDataSync.Core.Sql;
 namespace DbDataSync.Drivers.MySql;
 
 /// <summary>
-/// Column metadata from <c>information_schema</c>, plus the one thing
-/// <see cref="InformationSchemaQueries"/> deliberately declines to answer: whether a column is
-/// generated. MySQL sets <c>information_schema.columns.extra</c> to <c>auto_increment</c> for one, so
-/// it is answered here exactly, the same shape <c>PostgresCatalog</c> uses for its own identity check.
+/// Column metadata through the shared <see cref="MySqlCatalogReader"/> (plan 13, A12): the full <c>column_type</c> (<c>int unsigned</c>, <c>varchar(50)</c>),
+/// <c>auto_increment</c> as identity and the primary key in key order.
 /// <para>
 /// <see cref="ListTablesAsync"/> is a full override, not a pass-through, for a reason specific to
 /// MySQL: <see cref="InformationSchemaQueries.ListTablesAsync"/> has no <c>table_schema</c> filter,
@@ -46,33 +45,7 @@ internal sealed class MySqlCatalog : ITableCatalog
         return results;
     }
 
-    public async Task<IReadOnlyList<ColumnMetadata>> GetColumnsAsync(
-        DbConnection connection, string schema, string table, CancellationToken cancellationToken)
-    {
-        var columns = await Shared.GetColumnsAsync(connection, schema, table, cancellationToken);
-        var autoIncrement = await GetAutoIncrementColumnsAsync(connection, schema, table, cancellationToken);
-
-        return autoIncrement.Count == 0
-            ? columns
-            : columns.Select(c => c with { IsIdentity = autoIncrement.Contains(c.Name) }).ToList();
-    }
-
-    private static async Task<HashSet<string>> GetAutoIncrementColumnsAsync(
-        DbConnection connection, string schema, string table, CancellationToken cancellationToken)
-    {
-        using var cmd = connection.CreateTimedCommand();
-        cmd.CommandText = """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema = @schema AND table_name = @table AND extra LIKE '%auto_increment%';
-            """;
-        cmd.AddParameter("@schema", schema);
-        cmd.AddParameter("@table", table);
-
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-            names.Add(reader.GetString(0));
-        return names;
-    }
+    public Task<IReadOnlyList<ColumnMetadata>> GetColumnsAsync(
+        DbConnection connection, string schema, string table, CancellationToken cancellationToken) =>
+        SharedCatalog.ColumnsAsync(new MySqlCatalogReader(connection, options: SharedCatalog.OptionsFor(connection)), schema, table, cancellationToken);
 }
