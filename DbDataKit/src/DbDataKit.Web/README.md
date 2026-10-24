@@ -13,6 +13,12 @@ Trust between a console and the servers it manages (plan 13, W12). So far: the t
 
 The pairing, the local channel, the role check per command and the audit are the next slices (T02 to T09).
 
+## Audit and authorship
+
+`ManagementIdentity.Entry(token, command, target, outcome, at)` makes the `AuditEntry` for a change (user and console from the token, never a value) and `IAuditLog` records it; `FileAuditLog` keeps JSON
+lines. `ManagementIdentity.CommitAuthor(token)` gives the name and address a configuration commit is authored by, so the history of a config repository says who changed what and through which
+console; `LocalAuthor` does the same for the local channel.
+
 ## Write version checks
 
 `WriteGuard` makes a management write name the version it was based on. `RunAsync(key, expectedVersion, currentVersion, write)` takes a per-key lock, reads the current version
