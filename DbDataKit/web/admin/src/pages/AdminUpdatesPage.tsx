@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { AdminTabs } from '../components/AdminTabs'
-import { AppShell } from '../components/AppShell'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { useIsAdmin } from '@dbdatakit/shell'
 import { ACTIVE_UPDATE_PHASES, useUpdateReleases, useUpdateStatus } from '../api/hooks'
 import type { UpdateChannel, UpdateCommands, UpdateHistoryEntry, UpdatePhase, UpdateRelease, UpdateStatus } from '../api/types'
+import { useAdminHost } from '../host'
 
 // A fixed last column, not `auto`: every row is its own grid, so an `auto` track is sized by that row's own button and
 // the header — which has none — would stop lining up with the rows.
@@ -46,6 +46,7 @@ function formatUtc(iso: string | null): string {
  * The commands are shown either way: `dbdatasync update --list` asks from the server's own shell.
  */
 export function AdminUpdatesPage() {
+  const { Frame } = useAdminHost()
   const isAdmin = useIsAdmin()
   const { data: status, error: statusError, isError: statusFailed } = useUpdateStatus()
   const [channel, setChannel] = useState<UpdateChannel | undefined>(undefined)
@@ -61,16 +62,16 @@ export function AdminUpdatesPage() {
 
   if (!isAdmin) {
     return (
-      <AppShell crumbs={[{ label: 'Admin' }]} tabs={<AdminTabs />}>
+      <Frame crumbs={[{ label: 'Admin' }]} tabs={<AdminTabs />}>
         <div className="pane">
           <div className="empty">This screen is for administrators.</div>
         </div>
-      </AppShell>
+      </Frame>
     )
   }
 
   return (
-    <AppShell crumbs={[{ label: 'Admin' }]} tabs={<AdminTabs />}>
+    <Frame crumbs={[{ label: 'Admin' }]} tabs={<AdminTabs />}>
       <div className="pane">
         <div className="page-head">
           <h1 className="page-title">Updates</h1>
@@ -174,7 +175,7 @@ export function AdminUpdatesPage() {
           />
         )}
       </div>
-    </AppShell>
+    </Frame>
   )
 }
 

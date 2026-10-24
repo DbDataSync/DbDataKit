@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { DriversTabs } from '../components/DriversTabs'
-import { AppShell } from '../components/AppShell'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { LibraryFindPanel } from '../components/LibraryFindPanel'
 import { RestartRequiredBanner } from '../components/RestartRequiredBanner'
 import { useIsAdmin } from '@dbdatakit/shell'
 import { useLibraries, useRemoveLibrary, useRestartRequired } from '../api/hooks'
 import type { LibrarySummary } from '../api/types'
+import { useAdminHost } from '../host'
 
 const COLUMNS = '1.2fr 1.7fr 1fr 1.3fr 1fr'
 
@@ -17,6 +17,7 @@ const COLUMNS = '1.2fr 1.7fr 1fr 1.3fr 1fr'
  * the driver-authoring form can embed the identical thing rather than a second copy.
  */
 export function LibrariesPage() {
+  const { Frame } = useAdminHost()
   const isAdmin = useIsAdmin()
   const { data: libraries, isLoading, error } = useLibraries()
   const { data: restartRequired } = useRestartRequired()
@@ -27,11 +28,11 @@ export function LibrariesPage() {
   // screen of affordances that would 403 the moment they were used.
   if (!isAdmin) {
     return (
-      <AppShell crumbs={[{ label: 'Drivers' }]} tabs={<DriversTabs />}>
+      <Frame crumbs={[{ label: 'Drivers' }]} tabs={<DriversTabs />}>
         <div className="pane">
           <div className="empty">This screen is for administrators.</div>
         </div>
-      </AppShell>
+      </Frame>
     )
   }
 
@@ -45,7 +46,7 @@ export function LibrariesPage() {
   }
 
   return (
-    <AppShell crumbs={[{ label: 'Drivers' }]} tabs={<DriversTabs />}>
+    <Frame crumbs={[{ label: 'Drivers' }]} tabs={<DriversTabs />}>
       <div className="pane">
         <div className="page-head">
           <h1 className="page-title">Libraries</h1>
@@ -71,7 +72,7 @@ export function LibrariesPage() {
 
         <LibraryFindPanel installedIds={new Set((libraries ?? []).map((l) => l.id))} />
       </div>
-    </AppShell>
+    </Frame>
   )
 }
 

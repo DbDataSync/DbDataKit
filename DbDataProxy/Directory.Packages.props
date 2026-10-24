@@ -34,5 +34,6 @@
     <PackageVersion Include="DbDataKit.Hosting.Children" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting.Cli" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Security.Acl" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.State" Version="$(DbDataKitVersion)" />
   </ItemGroup>
 </Project>

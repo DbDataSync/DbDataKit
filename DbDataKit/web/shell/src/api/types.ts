@@ -39,3 +39,9 @@ export interface NotificationFeed {
   unreadCount: number
   personalized: boolean
 }
+
+/** What every signed-in user may know about the running instance. A product's own `/api/about` may say more. */
+export interface AboutInfo {
+  /** This build's informational version. */
+  version: string | null
+}

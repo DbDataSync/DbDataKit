@@ -27,6 +27,8 @@ public sealed class ProxyFixture : IAsyncLifetime
     public string DuckDbPath { get; private set; } = "";
 
     /// <summary>A directory the <c>duck_lake</c> source is allowed to read files from (it holds lake.csv), and a file next to it that is not allowed.</summary>
+    /// <summary>The proxy's data directory (where it keeps its state database).</summary>
+    public string DataDirectory => _dir;
     public string LakeDirectory { get; private set; } = "";
     public string PrivateCsv { get; private set; } = "";
 

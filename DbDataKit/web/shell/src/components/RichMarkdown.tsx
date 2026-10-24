@@ -3,7 +3,6 @@ import ReactMarkdown, { type Components } from 'react-markdown'
 import { Link } from 'react-router-dom'
 import rehypeSlug from 'rehype-slug'
 import remarkGfm from 'remark-gfm'
-import { DOC_SLUGS } from './docPages'
 import { isSafeImageUrl, resolveDocImage, resolveLink } from './markdownLinks'
 
 /**
@@ -17,19 +16,20 @@ import { isSafeImageUrl, resolveDocImage, resolveLink } from './markdownLinks'
  * `react-markdown` does not police URL schemes on its own, so links and images go through `markdownLinks.ts`, which
  * `Markdown.tsx` shares; `urlTransform` is the identity so that policy is the only one, not two that could disagree.
  *
- * @param docLinks resolve `other-page.md#section` to the in-app docs route and `#section` to the heading on this page.
- * Off unless the caller is showing the shipped docs, so a document that is not one of them cannot link into the app.
+ * @param docSlugs the pages of the shipped docs: resolve `other-page.md#section` to the in-app docs route when it names one of them, and `#section` to the heading on this page.
+ * Absent unless the caller is showing the shipped docs, so a document that is not one of them cannot link into the app.
  * @param inlineImages load an image where it is written. Off for Notes (phase 161): every reader's browser would fetch
  * whatever address the author chose the moment the note rendered — a tracking and privacy question as well as a safety
  * one — so there an image shows as a link the reader may choose to follow.
  */
-export function RichMarkdown({ text, docLinks = false, inlineImages = true, testId }: {
+export function RichMarkdown({ text, docSlugs, inlineImages = true, testId }: {
   text: string
-  docLinks?: boolean
+  docSlugs?: readonly string[]
   inlineImages?: boolean
   testId?: string
 }) {
-  const slugs = docLinks ? DOC_SLUGS : undefined
+  const slugs = docSlugs
+  const docLinks = docSlugs !== undefined
 
   const components: Components = {
     a({ href, children }) {

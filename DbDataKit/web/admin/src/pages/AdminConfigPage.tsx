@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AdminTabs } from '../components/AdminTabs'
-import { AppShell } from '../components/AppShell'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { EditableValue } from '@dbdatakit/shell'
 import { RestartRequiredBanner } from '../components/RestartRequiredBanner'
@@ -9,6 +8,7 @@ import { CheckIcon, HelpIcon } from '../components/icons'
 import { useIsAdmin } from '@dbdatakit/shell'
 import { useAdminConfig, useRestartRequired, useSetAdminConfig, useSetAdminConfigSecret } from '../api/hooks'
 import type { AdminConfigEntry } from '../api/types'
+import { useAdminHost } from '../host'
 
 // Key, Source, Value, Running, Caution — Source sits right before Value (not last) since the two are
 // read together: "where did this come from" answers "can I trust it" before "what does it say". Caution
@@ -124,6 +124,7 @@ function ModeToggle({ value, options, onChange, disabled, testId }: {
  * took effect.
  */
 export function AdminConfigPage() {
+  const { Frame } = useAdminHost()
   const isAdmin = useIsAdmin()
   const { data: entries, isLoading, error } = useAdminConfig()
   const setValue = useSetAdminConfig()
@@ -139,11 +140,11 @@ export function AdminConfigPage() {
   // showing a Viewer a screen of edit controls that would 403 the moment they were used.
   if (!isAdmin) {
     return (
-      <AppShell crumbs={[{ label: 'Admin' }]} tabs={<AdminTabs />}>
+      <Frame crumbs={[{ label: 'Admin' }]} tabs={<AdminTabs />}>
         <div className="pane">
           <div className="empty">This screen is for administrators.</div>
         </div>
-      </AppShell>
+      </Frame>
     )
   }
 
@@ -168,7 +169,7 @@ export function AdminConfigPage() {
   }
 
   return (
-    <AppShell crumbs={[{ label: 'Admin' }]} tabs={<AdminTabs />}>
+    <Frame crumbs={[{ label: 'Admin' }]} tabs={<AdminTabs />}>
       <div className="pane">
         <div className="page-head">
           <h1 className="page-title">Configuration</h1>
@@ -220,7 +221,7 @@ export function AdminConfigPage() {
           ))}
         </div>
       </div>
-    </AppShell>
+    </Frame>
   )
 }
 

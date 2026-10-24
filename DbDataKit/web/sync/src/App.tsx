@@ -1,5 +1,7 @@
-import { DocsPage } from './pages/DocsPage'
 import { Navigate, Route, Routes } from 'react-router-dom'
+import {
+  AdminCertificatePage, AdminConfigPage, AdminUpdatesPage, DocsPage, DriverEditPage, DriversPage, FilesPage, LibrariesPage,
+} from '@dbdatakit/admin'
 import { useAuthStatus } from './api/hooks'
 import { SignInScreen } from '@dbdatakit/shell'
 import { InvitePage } from './pages/InvitePage'
@@ -8,13 +10,6 @@ import { ConnectionsPage } from './pages/ConnectionsPage'
 import { ReplicationsPage } from './pages/ReplicationsPage'
 import { ScriptEditPage } from './pages/ScriptEditPage'
 import { ScriptsPage } from './pages/ScriptsPage'
-import { AdminCertificatePage } from './pages/AdminCertificatePage'
-import { AdminConfigPage } from './pages/AdminConfigPage'
-import { DriverEditPage } from './pages/DriverEditPage'
-import { DriversPage } from './pages/DriversPage'
-import { FilesPage } from './pages/FilesPage'
-import { LibrariesPage } from './pages/LibrariesPage'
-import { AdminUpdatesPage } from './pages/AdminUpdatesPage'
 import { ReplicationDetailPage } from './pages/ReplicationDetailPage'
 import { HistoryTab, MappingsTab, MonitoringTab, OverviewTab } from './pages/replication-detail/tabs'
 import {

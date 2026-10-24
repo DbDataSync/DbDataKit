@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { DriversTabs } from '../components/DriversTabs'
-import { AppShell } from '../components/AppShell'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { FileUploadPanel } from '../components/FileUploadPanel'
 import { formatBytes } from '@dbdatakit/shell'
 import { useIsAdmin } from '@dbdatakit/shell'
 import { useFiles, useRemoveFile } from '../api/hooks'
 import type { FileSummary } from '../api/types'
+import { useAdminHost } from '../host'
 
 const COLUMNS = '2fr 1fr 1.4fr 1.4fr 1fr'
 
@@ -18,6 +18,7 @@ const COLUMNS = '2fr 1fr 1.4fr 1.4fr 1fr'
  * extracted so the driver-authoring form's own jar picker can embed the identical thing.
  */
 export function FilesPage() {
+  const { Frame } = useAdminHost()
   const isAdmin = useIsAdmin()
   const { data: files, isLoading, error } = useFiles()
   const remove = useRemoveFile()
@@ -25,11 +26,11 @@ export function FilesPage() {
 
   if (!isAdmin) {
     return (
-      <AppShell crumbs={[{ label: 'Drivers' }]} tabs={<DriversTabs />}>
+      <Frame crumbs={[{ label: 'Drivers' }]} tabs={<DriversTabs />}>
         <div className="pane">
           <div className="empty">This screen is for administrators.</div>
         </div>
-      </AppShell>
+      </Frame>
     )
   }
 
@@ -43,7 +44,7 @@ export function FilesPage() {
   }
 
   return (
-    <AppShell crumbs={[{ label: 'Drivers' }]} tabs={<DriversTabs />}>
+    <Frame crumbs={[{ label: 'Drivers' }]} tabs={<DriversTabs />}>
       <div className="pane">
         <div className="page-head">
           <h1 className="page-title">Files</h1>
@@ -70,7 +71,7 @@ export function FilesPage() {
           <FileUploadPanel />
         </div>
       </div>
-    </AppShell>
+    </Frame>
   )
 }
 

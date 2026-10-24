@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AdminTabs } from '../components/AdminTabs'
-import { AppShell } from '../components/AppShell'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { Field } from '@dbdatakit/shell'
 import { RestartRequiredBanner } from '../components/RestartRequiredBanner'
@@ -14,6 +13,7 @@ import type {
   BindingInfo, CertificateCandidate, CurrentCertificateInfo, KeyAccessInfo,
   KeyAccessState, PendingEnrollmentSummary, TemplateListResult,
 } from '../api/types'
+import { useAdminHost } from '../host'
 
 const KEY_ACCESS_DOT: Record<KeyAccessState, string> = { Ok: 'dot-ok', Warning: 'dot-warn', Unknown: 'dot-idle' }
 
@@ -36,6 +36,7 @@ type DialogKind = 'self-signed' | 'enroll' | 'bind'
  * cannot.
  */
 export function AdminCertificatePage() {
+  const { Frame } = useAdminHost()
   const isAdmin = useIsAdmin()
   const { data: status, isLoading, error } = useAdminCertificate()
   const [restartNeeded, setRestartNeeded] = useState(false)
@@ -54,11 +55,11 @@ export function AdminCertificatePage() {
 
   if (!isAdmin) {
     return (
-      <AppShell crumbs={[{ label: 'Admin' }]} tabs={<AdminTabs />}>
+      <Frame crumbs={[{ label: 'Admin' }]} tabs={<AdminTabs />}>
         <div className="pane">
           <div className="empty">This screen is for administrators.</div>
         </div>
-      </AppShell>
+      </Frame>
     )
   }
 
@@ -116,7 +117,7 @@ export function AdminCertificatePage() {
   }
 
   return (
-    <AppShell crumbs={[{ label: 'Admin' }]} tabs={<AdminTabs />}>
+    <Frame crumbs={[{ label: 'Admin' }]} tabs={<AdminTabs />}>
       <div className="pane">
         <div className="page-head">
           <h1 className="page-title">Certificate</h1>
@@ -201,7 +202,7 @@ export function AdminCertificatePage() {
           onSubmit={doBind}
         />
       )}
-    </AppShell>
+    </Frame>
   )
 }
 
