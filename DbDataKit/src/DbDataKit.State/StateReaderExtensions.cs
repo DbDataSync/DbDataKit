@@ -1,6 +1,6 @@
 using System.Data.Common;
 
-namespace DbDataSync.State;
+namespace DbDataKit.State;
 
 /// <summary>
 /// Reading numbers back, without caring which width the engine chose to store them at.

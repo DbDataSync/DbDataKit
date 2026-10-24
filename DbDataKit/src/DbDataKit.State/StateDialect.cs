@@ -1,24 +1,14 @@
 using System.Data.Common;
-using DbDataSync.Core.Sql;
 
-namespace DbDataSync.State;
+namespace DbDataKit.State;
 
 /// <summary>
 /// Everything the state store needs to know about the engine underneath it — see phase 63.
 /// <para>
-/// **Separate from <see cref="SqlDialect"/> rather than piled onto it, on that class's own
-/// instruction.** Its doc says plainly that anything differing *structurally* — "bulk loading, upsert
-/// syntax, identity handling" — belongs in an engine-specific implementation rather than in the
-/// dialect, and that if generalising something there would need a flag per engine, that is the signal
-/// it does not belong there. Upsert syntax, identity DDL and row limiting are exactly that list. So
-/// this composes a <see cref="SqlDialect"/> for the mechanical parts (quoting, parameter spelling) and
-/// owns the structural ones itself.
-/// </para>
-/// <para>
-/// It is also the honest scope: <see cref="SqlDialect"/> serves replication, where the schemas belong
-/// to somebody else and the type mapping has to be general. The state store's schema is fixed and
-/// internal — ten tables this project wrote — so what it needs is a much smaller and much more
-/// opinionated surface than a driver's.
+/// **Separate from the replication dialects (<c>DbDataKit.Dialect</c>)**, which serve schemas that belong to somebody
+/// else and map any column type. The state store's schema is fixed and internal — tables a product wrote — so what it
+/// needs is a much smaller and much more opinionated surface: upsert syntax, identity DDL, row limiting and the four
+/// type words the schema templates use.
 /// </para>
 /// </summary>
 public abstract class StateDialect
@@ -30,10 +20,6 @@ public abstract class StateDialect
 
     public abstract string Engine { get; }
 
-    /// <summary>The mechanical differences — quoting and parameter spelling — reused from the
-    /// replication side rather than restated here.</summary>
-    public abstract SqlDialect Sql { get; }
-
     public abstract DbConnection CreateConnection(string connectionString);
 
     /// <summary>
@@ -41,7 +27,7 @@ public abstract class StateDialect
     /// rewrites it, so the SQL in those files stays one readable string rather than an interpolation
     /// of dialect calls.
     /// </summary>
-    public string Parameter(string name) => Sql.ParameterReference(name);
+    public virtual string Parameter(string name) => $"@{name}";
 
     /// <summary>The name a parameter is *bound* under, which is not always how it is written — SQLite
     /// accepts the sigil, and the other two providers want it stripped or prefixed their own way.</summary>

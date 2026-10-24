@@ -1,7 +1,7 @@
+using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
-using DbDataSync.Libraries;
 
-namespace DbDataSync.State;
+namespace DbDataKit.State;
 
 /// <summary>
 /// Where a <see cref="StateDialect"/> is looked up by its <see cref="StateEngineIds"/>-style string id
@@ -19,16 +19,16 @@ namespace DbDataSync.State;
 /// </para>
 /// <para>
 /// **MsSql and Postgres are the one exception, since phase 109g.** Neither can be a stateless static
-/// singleton any more — each now needs an injected <see cref="LibraryRegistry"/> to resolve its
+/// singleton any more — each now needs an injected provider-factory resolver to resolve its
 /// connection (see <see cref="MsSqlStateDialect"/>'s doc comment) — so they cannot register themselves
 /// the moment this class is first touched, the way <see cref="SqliteStateDialect"/> still does.
 /// <see cref="RegisterLibraryBackedEngines"/> is the explicit call that takes their place: every
-/// <see cref="StateDatabase.FromOptions"/> caller already has (or builds) a <see cref="LibraryRegistry"/>
+/// <c>FromOptions</c> caller already has (or builds) a provider-factory resolver
 /// for its own repo root, and makes this call before anything downstream asks
 /// <see cref="StateDialect.For"/> for either id. Calling it more than once (a second
-/// <see cref="StateDatabase.FromOptions"/> call in the same process, or a test that opens more than one
+/// <c>FromOptions</c> call in the same process, or a test that opens more than one
 /// non-SQLite <see cref="StateDatabase"/>) is harmless — <see cref="Register"/> just replaces the same
-/// engine id, the same way re-running <see cref="LoadAll"/> would for a driver.
+/// engine id, the same way re-running <c>LoadAll</c> would for a driver.
 /// </para>
 /// <para>
 /// A custom dialect (a compiled plugin, 109h) still has a real extension point:
@@ -49,12 +49,12 @@ public sealed class StateDialectRegistry
     public void Register(StateDialect dialect) => _dialects[dialect.Engine] = dialect;
 
     /// <summary>Registers <see cref="MsSqlStateDialect"/> and <see cref="PostgresStateDialect"/> bound
-    /// to <paramref name="libraries"/> — see this class's own doc comment for why these two, alone among
+    /// to the factory resolver — see this class's own doc comment for why these two, alone among
     /// the built-ins, need an explicit call rather than registering themselves statically.</summary>
-    public void RegisterLibraryBackedEngines(LibraryRegistry libraries)
+    public void RegisterLibraryBackedEngines(Func<string, DbProviderFactory> factories)
     {
-        Register(new MsSqlStateDialect(libraries));
-        Register(new PostgresStateDialect(libraries));
+        Register(new MsSqlStateDialect(factories));
+        Register(new PostgresStateDialect(factories));
     }
 
     public StateDialect Get(string engine) =>

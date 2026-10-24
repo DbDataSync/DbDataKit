@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace DbDataSync.State;
+namespace DbDataKit.State;
 
 /// <param name="UserId">Set when this invite adds a credential to somebody who already exists, rather
 /// than creating a new user. That is how a Windows-authenticated person enrols a passkey for when they

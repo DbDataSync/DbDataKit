@@ -1,6 +1,6 @@
 using System.Data.Common;
 
-namespace DbDataSync.State;
+namespace DbDataKit.State;
 
 /// <summary>The two things a person can be allowed to do. Two, and no more — every additional role is
 /// a door that is hard to close once opened.</summary>
@@ -191,9 +191,8 @@ public sealed class UserStore(StateDatabase database)
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = connection.CreateCommand();
-            // The column name is one of two literals chosen above, never operator input.
-            cmd.CommandText = $"UPDATE Users SET {column} = $value WHERE Id = $id;";
+            // The column name is one of two literals chosen above, never operator input. Through Command, so the placeholders are the engine's.
+            using var cmd = database.Command(connection, $"UPDATE Users SET {column} = $value WHERE Id = $id;");
             cmd.Bind(database, "value", value);
             cmd.Bind(database, "id", userId);
             cmd.ExecuteNonQuery();

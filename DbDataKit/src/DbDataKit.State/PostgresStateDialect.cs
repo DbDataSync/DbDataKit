@@ -1,8 +1,6 @@
 using System.Data.Common;
-using DbDataSync.Core.Sql;
-using DbDataSync.Libraries;
 
-namespace DbDataSync.State;
+namespace DbDataKit.State;
 
 /// <summary>
 /// PostgreSQL as the state store.
@@ -18,21 +16,19 @@ namespace DbDataSync.State;
 /// </summary>
 public sealed class PostgresStateDialect : StateDialect
 {
-    /// <summary>The <see cref="KnownLibraries"/> catalog id this dialect resolves its connection
+    /// <summary>The library catalog id this dialect resolves its connection
     /// through.</summary>
     public const string LibraryId = "npgsql";
 
-    private readonly LibraryRegistry _libraries;
+    private readonly Func<string, DbProviderFactory> _factories;
 
-    public PostgresStateDialect(LibraryRegistry libraries) => _libraries = libraries;
+    public PostgresStateDialect(Func<string, DbProviderFactory> factories) => _factories = factories;
 
     public override string Engine => StateEngineIds.Postgres;
 
-    public override SqlDialect Sql => PostgresDialect.Instance;
-
     public override DbConnection CreateConnection(string connectionString)
     {
-        var connection = _libraries.GetFactory(LibraryId).CreateConnection()
+        var connection = _factories(LibraryId).CreateConnection()
             ?? throw new InvalidOperationException(
                 $"The '{LibraryId}' library's factory did not produce a connection.");
         connection.ConnectionString = connectionString;

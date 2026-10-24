@@ -90,6 +90,9 @@
     <ProjectReference Include="..\DbDataSync.Drivers.Descriptor\DbDataSync.Drivers.Descriptor.csproj" />
     <ProjectReference Include="..\DbDataSync.Libraries\DbDataSync.Libraries.csproj" />
     <ProjectReference Include="..\DbDataSync.State\DbDataSync.State.csproj" />
+    <!-- the shared state types come with the project reference; StateDatabase is Sync's own (plan 13, U04) -->
+    <Using Include="DbDataKit.State" />
+    <Using Include="DbDataSync.State.StateDatabase" Alias="StateDatabase" />
     <!-- Referenced so the worker lands in the same output directory as the host that spawns it,
          which is what ApiOptions' beside-the-assembly resolution then finds. -->
     <ProjectReference Include="..\DbDataSync.TaskRunner\DbDataSync.TaskRunner.csproj" />
