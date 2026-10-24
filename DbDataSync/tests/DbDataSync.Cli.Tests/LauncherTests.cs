@@ -43,8 +43,8 @@ public sealed class LauncherTests : IDisposable
             version.Output.Trim());
 
         var unknown = Run("no-such-command");
-        Assert.Equal(1, unknown.ExitCode);
-        Assert.Contains("Unknown command 'no-such-command'", unknown.Error);
+        Assert.Equal(2, unknown.ExitCode);
+        Assert.Contains("'no-such-command' is not a command", unknown.Error);
     }
 
     [NonWindowsFact]

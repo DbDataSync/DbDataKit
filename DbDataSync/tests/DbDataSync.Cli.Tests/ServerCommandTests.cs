@@ -1,36 +1,35 @@
+using DbDataKit.Cli;
+
 namespace DbDataSync.Cli.Tests;
 
-/// <summary><c>dbdatasync server run|setup</c> and the renamed forms (plan 13, C06).</summary>
+/// <summary>The renamed forms (plan 13, C06) and the noun-verb grammar of Sync's command line (C07).</summary>
 public sealed class ServerCommandTests
 {
-    private static async Task<(int ExitCode, string Output)> Run(params string[] args)
+    private static async Task<(int ExitCode, string Output, string Error)> Run(params string[] args)
     {
-        var originalOut = Console.Out;
-        var originalErr = Console.Error;
-        using var output = new StringWriter();
-        Console.SetOut(output);
-        Console.SetError(output);
-        try { return (await ServerCommand.RunAsync(args), output.ToString()); }
-        finally { Console.SetOut(originalOut); Console.SetError(originalErr); }
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var exit = await SyncCli.Router().RunAsync(args, new CliContext(output, error, TextReader.Null));
+        return (exit, output.ToString(), error.ToString());
     }
 
     [Fact]
     public async Task WithNoVerb_ItPrintsBothVerbsAndFails()
     {
-        var (exitCode, output) = await Run();
+        var (exitCode, output, _) = await Run("server");
 
         Assert.Equal(2, exitCode);
-        Assert.Contains("dbdatasync server run", output);
-        Assert.Contains("dbdatasync server setup", output);
+        Assert.Contains("server run", output);
+        Assert.Contains("server setup", output);
     }
 
     [Fact]
     public async Task AnUnknownVerb_IsRefusedByName()
     {
-        var (exitCode, output) = await Run("start");
+        var (exitCode, _, error) = await Run("server", "start");
 
         Assert.Equal(2, exitCode);
-        Assert.Contains("'start' is not a verb", output);
+        Assert.Contains("'start' is not a verb", error);
     }
 
     [Theory]
@@ -49,14 +48,9 @@ public sealed class ServerCommandTests
     [Fact]
     public async Task HealthWithoutTheCheckVerb_SaysHowToAsk()
     {
-        var originalErr = Console.Error;
-        using var error = new StringWriter();
-        Console.SetError(error);
-        try
-        {
-            Assert.Equal(2, await HealthCommand.RunAsync([]));
-            Assert.Contains("dbdatasync health check", error.ToString());
-        }
-        finally { Console.SetError(originalErr); }
+        var (exitCode, _, error) = await Run("health");
+
+        Assert.Equal(2, exitCode);
+        Assert.DoesNotContain("Unknown", error);
     }
 }

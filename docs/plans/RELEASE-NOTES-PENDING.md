@@ -26,6 +26,7 @@ to it in the pull request that makes the change; a release moves the entries int
   connection string or in the connection's properties; a PostgreSQL server without TLS needs `SSL Mode=Disable` (or `Require`, which encrypts without verifying). `Encrypt`, `SSL Mode` and `Root Certificate` in a
   connection string or in properties are still honoured. A connect timeout in properties still wins. Any other property the shared policy reserves (credentials, host and database keys, `Application Intent`,
   `Multi Subnet Failover`, `Options`, `Search Path`, command timeouts) is now refused with a message naming it; put it in the connection string instead. (A08)
+- **Sync commands accept `--format json`.** `server`, `service`, `cert`, `secret`, `library`, `driver`, `config` and `health` print one JSON document (`schema`, `command`, `exit_code`, `ok`, `data`, `messages`, `errors`); an unknown command now exits 2 with "'x' is not a command" (it was 1 with "Unknown command 'x'"). (C07)
 
 ## DbDataBuild
 
