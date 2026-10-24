@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Connections.Oracle</RootNamespace>
+    <PackageId>DbDataKit.Connections.Oracle</PackageId>
+    <Description>Oracle provider: OracleConnectionStringBuilder composer (EZ Connect, TCPS when encrypted) and ORA error-number failure mapping.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" />
+    <ProjectReference Include="..\DbDataKit.Connections\DbDataKit.Connections.csproj" />
+  </ItemGroup>
+</Project>

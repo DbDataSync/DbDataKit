@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Diagnostics;
+using DbDataKit.Connections.Oracle;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
@@ -58,63 +59,33 @@ public sealed class OracleDriver : IDriver, IConnectionTester, IDialectProvider,
         new Scd2Writer(OracleDialect.Instance, OracleCatalog.Instance),
     ];
 
+    /// <summary>The shared Oracle failure mapper (ORA numbers to kinds), for <see cref="DriverFailures"/>.</summary>
+    public static DbDataKit.Connections.IFailureMapper FailureMapper { get; } = new OracleFailureMapper();
+
     /// <summary>
-    /// <c>OracleConnectionStringBuilder</c> has no <c>Host</c>/<c>Port</c>/<c>Database</c> properties at
-    /// all — confirmed by reflection, not assumed: its only addressing surface is <c>DataSource</c>,
-    /// which carries an EZConnect string, a TNS alias, or (already fully settled by phase 31) a wallet
-    /// reference. Host-mode addressing is built here as an EZConnect string,
-    /// <c>host:port/database</c> — <see cref="ConnectionConfig.Database"/> supplies the service name,
-    /// resolving this phase's own open question about which of service-name-or-SID it means.
+    /// The shared composer builds the string (plan 13, A09). <c>OracleConnectionStringBuilder</c> has no <c>Host</c>/<c>Port</c>/<c>Database</c>
+    /// properties, so host-mode addressing is an EZConnect string, <c>host:port/database</c>, with <see cref="ConnectionConfig.Database"/> as the service
+    /// name; it is <c>tcps://</c> unless <c>Encrypt=false</c> is in <c>properties</c>. An operator's own connection string (a TNS alias, a descriptor, a
+    /// wallet reference) is the base and its data source is left alone.
     /// </summary>
     public DbConnection CreateConnection(ConnectionConfig connection, string? credential)
     {
-        var builder = new OracleConnectionStringBuilder();
-
-        if (!string.IsNullOrWhiteSpace(connection.ConnectionString))
-        {
-            builder.ConnectionString = connection.ConnectionString;
-        }
-        else
-        {
-            var database = connection.Database ?? throw new InvalidOperationException(
-                "Database (the Oracle service name) is required for host-mode addressing.");
-            var port = connection.Port ?? 1521;
-            builder.DataSource = $"{connection.Host}:{port}/{database}";
-        }
-
-        if (connection.ConnectTimeoutSeconds is int connectTimeout)
-            builder.ConnectionTimeout = connectTimeout;
-        else if (!ConnectionTimeouts.AddressCarriesOwnConnectTimeout(connection, "Connection Timeout"))
-            builder.ConnectionTimeout = ConnectionTimeouts.DefaultConnectSeconds;
-
-        if (connection.AuthMode == AuthMode.None)
-        {
-            // Whatever the address or the environment provides — a wallet (TnsAdmin-relative,
-            // per-DataSource TNS alias), a credential already in the connection string. DbDataSync
-            // adds nothing. Already fully settled by phase 31; nothing new here.
-        }
-        else if (connection.AuthMode == AuthMode.IntegratedAuth)
-        {
-            // Oracle.ManagedDataAccess.Core has no Windows Integrated Security support at all —
-            // confirmed by reflection: OracleConnectionStringBuilder carries no such property, unlike
-            // the classic Windows-only ODP.NET. There is no session-level equivalent to fall back to.
-            throw new InvalidOperationException(
-                "IntegratedAuth is not supported for Oracle by Oracle.ManagedDataAccess.Core (ODP.NET " +
-                "Core has no Windows Integrated Security). Use AuthMode.None with a wallet, or SqlAuth.");
-        }
-        else
-        {
-            builder.UserID = connection.UserId
-                ?? throw new InvalidOperationException("UserId is required for SqlAuth connections.");
-            builder.Password = credential
-                ?? throw new InvalidOperationException("A resolved credential is required for SqlAuth connections.");
-        }
-
-        foreach (var (key, value) in connection.Properties)
-            builder[key] = value;
-
-        return new OracleConnection(builder.ConnectionString).WithCommandTimeout(connection);
+        string connectionString = SharedConnection.Compose(connection, credential, Composition);
+        return new OracleConnection(connectionString).WithCommandTimeout(connection);
     }
+
+    private static readonly SharedConnectionOptions Composition = new()
+    {
+        Composer = new OracleComposer(),
+        ConnectTimeoutKeys = ["Connection Timeout", "Connect Timeout"],
+        // Oracle's builder has no TLS keys (TLS is the data source's scheme), so Sync's own two spellings, the ones SQL Server uses, are read here.
+        TlsKeys = ["Encrypt", "TrustServerCertificate"],
+        ReadTls = (written, tls) =>
+        {
+            if (written.TryGetValue("encrypt", out var encrypt) && encrypt.Equals("false", StringComparison.OrdinalIgnoreCase)) tls.Encrypt = false;
+            if (written.TryGetValue("trustservercertificate", out var trust) && trust.Equals("true", StringComparison.OrdinalIgnoreCase)) tls.Verify = false;
+        },
+    };
 
     /// <summary>
     /// Oracle has no real multi-database-per-connection concept to browse — a connection is already

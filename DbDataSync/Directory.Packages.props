@@ -14,6 +14,8 @@
     <PackageVersion Include="DbDataKit.Connections" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Connections.SqlServer" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Connections.Postgres" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Connections.MySql" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Connections.Oracle" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Metadata" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Metadata.Abstractions" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Odbc.Metadata" Version="$(DbDataKitVersion)" />

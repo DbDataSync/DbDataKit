@@ -16,7 +16,7 @@
          compiles against the reference assembly but does not ship the DLL) — see that project's
          identical comment. This test project needs its own, un-excluded, direct reference so a
          standalone `dotnet test` run here has a real local copy to actually connect with. -->
-    <PackageReference Include="Oracle.ManagedDataAccess.Core" VersionOverride="23.9.1" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" />
   </ItemGroup>
 
   <ItemGroup>

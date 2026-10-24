@@ -14,6 +14,8 @@
     <Project Path="src/DbDataKit.Connections.Libraries/DbDataKit.Connections.Libraries.csproj" />
     <Project Path="src/DbDataKit.Connections.Odbc/DbDataKit.Connections.Odbc.csproj" />
     <Project Path="src/DbDataKit.Connections.Postgres/DbDataKit.Connections.Postgres.csproj" />
+    <Project Path="src/DbDataKit.Connections.MySql/DbDataKit.Connections.MySql.csproj" />
+    <Project Path="src/DbDataKit.Connections.Oracle/DbDataKit.Connections.Oracle.csproj" />
     <Project Path="src/DbDataKit.Connections.SqlServer/DbDataKit.Connections.SqlServer.csproj" />
     <Project Path="src/DbDataKit.Connections/DbDataKit.Connections.csproj" />
     <Project Path="src/DbDataKit.Dialect.Abstractions/DbDataKit.Dialect.Abstractions.csproj" />
@@ -66,6 +68,8 @@
     <Project Path="tests/DbDataKit.Connections.Libraries.Tests/DbDataKit.Connections.Libraries.Tests.csproj" />
     <Project Path="tests/DbDataKit.Connections.Odbc.Tests/DbDataKit.Connections.Odbc.Tests.csproj" />
     <Project Path="tests/DbDataKit.Connections.Postgres.Tests/DbDataKit.Connections.Postgres.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Connections.MySql.Tests/DbDataKit.Connections.MySql.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Connections.Oracle.Tests/DbDataKit.Connections.Oracle.Tests.csproj" />
     <Project Path="tests/DbDataKit.Connections.SqlServer.Tests/DbDataKit.Connections.SqlServer.Tests.csproj" />
     <Project Path="tests/DbDataKit.Connections.Tests/DbDataKit.Connections.Tests.csproj" />
     <Project Path="tests/DbDataKit.Dialect.Abstractions.Tests/DbDataKit.Dialect.Abstractions.Tests.csproj" />

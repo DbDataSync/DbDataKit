@@ -7,11 +7,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- The shared SqlClient and Npgsql composers (plan 13, A08) bring their packages with runtime assets. A direct reference that
+    <!-- The shared SqlClient, Npgsql, MySqlConnector and ODP.NET composers (plan 13, A08, A09) bring their packages with runtime assets. A direct reference that
          excludes them wins over the transitive one, so the drivers still come from <repo>/libraries/ at first touch, as the driver
          projects' own comments describe. -->
     <PackageReference Include="Microsoft.Data.SqlClient" ExcludeAssets="runtime" />
     <PackageReference Include="Npgsql" ExcludeAssets="runtime" />
+    <PackageReference Include="MySqlConnector" ExcludeAssets="runtime" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <ItemGroup>

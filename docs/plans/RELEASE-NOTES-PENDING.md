@@ -31,6 +31,10 @@ to it in the pull request that makes the change; a release moves the entries int
   `The login was rejected. [sqlserver 18456]` or `The server could not be reached. [postgres 08006]`; a run's stored error detail is empty for a driver failure. The driver's own text, with
   secrets scrubbed, is written to the server log. Set `Diagnostics:DriverDetails` to `true` (environment `Diagnostics__DriverDetails=true`) to append it to the response and keep it in the run
   detail again. Sync's own validation messages are unchanged. (A10)
+- **MySQL, MariaDB and Oracle connections are verified and encrypted by default.** Like SQL Server and PostgreSQL before them, they are built by the shared composers. MySQL and MariaDB now use `SSL Mode=VerifyFull`
+  unless the connection string or `properties` name another `SSL Mode` (`None`, `Preferred`, `Required`, `VerifyCA`); `SSL CA` is the root certificate. An Oracle connection given as a host, port and service name is written as
+  `tcps://host:port/service`; put `Encrypt` = `false` in `properties` for a listener that has no TLS. A connection string is still the base and its own data source (an alias, a descriptor, a wallet) is not rewritten.
+  Credential, host, port, database and timeout keys in `properties` are refused with a message naming the key (Oracle's `Data Source` included). Failures from these engines now show the shared classified message. (A09)
 
 ## DbDataBuild
 

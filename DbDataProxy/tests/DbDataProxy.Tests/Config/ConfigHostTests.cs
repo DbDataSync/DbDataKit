@@ -401,6 +401,9 @@ public sealed class ConfigReloadTests
         using var monitor = new ProxyOptionsMonitor(root, ProxyConfig.LoadOrThrow(root).Value!, LoggerFactory.Create(_ => { }).CreateLogger("x"), guard);
 
         File.WriteAllText(file.Path, Json(9006));
+        // The polling watcher compares last-write times, and the two texts have the same length: on a file system with a coarse timestamp (a Windows runner) the edit can
+        // carry the same time as the file's creation and never be seen. Making the time differ makes the test about the watcher and not about the clock.
+        File.SetLastWriteTimeUtc(file.Path, DateTime.UtcNow.AddMinutes(1));
 
         Assert.True(Wait(() => monitor.CurrentValue.Listen.Port == 9006, seconds: 30), "the edit was not picked up");
     }
