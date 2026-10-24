@@ -24,7 +24,8 @@ public sealed class PostgresFailureTextTests : IDisposable
         var ex = await Assert.ThrowsAnyAsync<System.Data.Common.DbException>(() => connection.OpenAsync());
 
         var text = DriverFailures.Describe(ex, DriverIds.Postgres);
-        Assert.StartsWith("The server could not be reached. [postgres", text);
+        // a closed port is refused at once on Linux and silently dropped on a Windows runner: both are the network's failure
+        Assert.True(text.StartsWith("The server could not be reached. [postgres") || text.StartsWith("The operation timed out. [postgres"), text);
         Assert.DoesNotContain("TCP Provider", text);
         Assert.DoesNotContain("127.0.0.1", text);
     }

@@ -65,7 +65,8 @@ public static class DriverFailures
         if (failure.Kind == ConnectionFailureKind.Other && Innermost(exception) is DbException { SqlState: { Length: > 0 } state })
             failure = new ConnectionFailure(ConnectionFailureKind.Other, state, engine);
         string detail = Redaction.Redact(exception.ToString());
-        _log?.Invoke($"Database failure {failure.PublicMessage}: {detail}");
+        // logging must never turn a classified failure into a different one (a host that is shutting down has a disposed logger)
+        try { _log?.Invoke($"Database failure {failure.PublicMessage}: {detail}"); } catch (ObjectDisposedException) { } catch (AggregateException) { }
         return IncludeDetails ? failure.PublicMessage + " " + Redaction.Redact(Innermost(exception).Message) : failure.PublicMessage;
     }
 
