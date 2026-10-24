@@ -28,6 +28,9 @@
     <ProjectReference Include="..\DbDataSync.Drivers.Jdbc\DbDataSync.Drivers.Jdbc.csproj" />
     <ProjectReference Include="..\DbDataSync.Libraries\DbDataSync.Libraries.csproj" />
     <ProjectReference Include="..\DbDataSync.State\DbDataSync.State.csproj" />
+    <!-- the shared state types come with the project reference; StateDatabase is Sync's own (plan 13, U04) -->
+    <Using Include="DbDataKit.State" />
+    <Using Include="DbDataSync.State.StateDatabase" Alias="StateDatabase" />
     <ProjectReference Include="..\DbDataSync.Verification\DbDataSync.Verification.csproj" />
   </ItemGroup>
 

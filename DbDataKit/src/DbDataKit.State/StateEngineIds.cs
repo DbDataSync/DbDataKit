@@ -1,4 +1,4 @@
-namespace DbDataSync.State;
+namespace DbDataKit.State;
 
 /// <summary>
 /// The built-in state-store engine ids. <c>ApiOptions.StateEngine</c> (and every dialect's own

@@ -1,8 +1,6 @@
 using System.Data.Common;
-using DbDataSync.Core.Sql;
-using DbDataSync.Libraries;
 
-namespace DbDataSync.State;
+namespace DbDataKit.State;
 
 /// <summary>
 /// SQL Server as the state store.
@@ -14,8 +12,8 @@ namespace DbDataSync.State;
 /// <para>
 /// Phase 109g moved this off a hard <c>Microsoft.Data.SqlClient</c> package reference and onto the
 /// library layer, the same mechanism the driver side already used (phases 116-122) — a connection is
-/// resolved through an injected <see cref="LibraryRegistry"/> rather than <c>new SqlConnection(...)</c>,
-/// which is also why this is no longer a parameterless singleton: a <see cref="LibraryRegistry"/> is
+/// resolved through an injected provider-factory resolver rather than <c>new SqlConnection(...)</c>,
+/// which is also why this is no longer a parameterless singleton: a provider-factory resolver is
 /// per-process state (it knows which repo root's <c>libraries/</c> directory to trust), so it has to be
 /// handed in rather than conjured by a static <c>Instance</c>. See
 /// <see cref="StateDialectRegistry.RegisterLibraryBackedEngines"/> for where an instance of this class
@@ -31,19 +29,17 @@ public sealed class MsSqlStateDialect : StateDialect
     /// </summary>
     private const int MaxIndexableChars = 450;
 
-    /// <summary>The <see cref="KnownLibraries"/> catalog id this dialect resolves its connection
+    /// <summary>The library catalog id this dialect resolves its connection
     /// through — <c>dbdatasync library install microsoft-data-sqlclient</c> is what a deployment
-    /// missing it is told to run (see <see cref="LibraryRegistry.GetFactory"/>'s own message, surfaced
+    /// missing it is told to run (see resolver's own message, surfaced
     /// unmodified by <see cref="CreateConnection"/> below).</summary>
     public const string LibraryId = "microsoft-data-sqlclient";
 
-    private readonly LibraryRegistry _libraries;
+    private readonly Func<string, DbProviderFactory> _factories;
 
-    public MsSqlStateDialect(LibraryRegistry libraries) => _libraries = libraries;
+    public MsSqlStateDialect(Func<string, DbProviderFactory> factories) => _factories = factories;
 
     public override string Engine => StateEngineIds.MsSql;
-
-    public override SqlDialect Sql => MsSqlDialect.Instance;
 
     public override DbConnection CreateConnection(string connectionString)
     {
@@ -51,7 +47,7 @@ public sealed class MsSqlStateDialect : StateDialect
         // when the library isn't installed — deliberately not caught or re-wrapped here, so a deployment
         // on this engine with the library missing fails at startup with that exact message rather than a
         // generic "no factory registered" or a connection attempt that can't possibly succeed.
-        var connection = _libraries.GetFactory(LibraryId).CreateConnection()
+        var connection = _factories(LibraryId).CreateConnection()
             ?? throw new InvalidOperationException(
                 $"The '{LibraryId}' library's factory did not produce a connection.");
         connection.ConnectionString = connectionString;

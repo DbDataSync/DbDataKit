@@ -26,7 +26,7 @@ public sealed class MsSqlDriver : IDriver, IConnectionTester, IDialectProvider, 
 
     /// <summary>Phase 109j: the <c>KnownLibraries</c> id this driver's own <c>SqlBulkCopy</c>/
     /// <c>SqlDbType</c>/<c>SqlConnectionStringBuilder</c> usage depends on — the same id
-    /// <see cref="DbDataSync.State.MsSqlStateDialect.LibraryId"/> and
+    /// <see cref="DbDataKit.State.MsSqlStateDialect.LibraryId"/> and
     /// <c>DriverConnectionFactory.BuiltInDriverLibraryIds</c> already resolve this exact package
     /// through, restated here as a literal rather than a cross-project constant reference (this driver
     /// project does not otherwise depend on <c>DbDataSync.State</c>).</summary>

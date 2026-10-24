@@ -1,6 +1,6 @@
 using System.Data.Common;
 
-namespace DbDataSync.State;
+namespace DbDataKit.State;
 
 /// <param name="ExpiresAtUtc">When this stops being accepted. Sliding is deliberately not built:
 /// a session that renews itself on every request never ends for a browser left open.</param>

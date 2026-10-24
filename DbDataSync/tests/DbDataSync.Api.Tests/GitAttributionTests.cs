@@ -26,7 +26,7 @@ public sealed class GitAttributionTests(AuthenticatedApiFactory factory) : IClas
     [Fact]
     public async Task AConfigChange_IsCommittedAsWhoeverMadeIt()
     {
-        var (client, user) = await factory.SignedInWithUserAsync(DbDataSync.State.UserRole.Admin);
+        var (client, user) = await factory.SignedInWithUserAsync(DbDataKit.State.UserRole.Admin);
         var name = $"attributed-{Guid.NewGuid():N}";
 
         (await client.PutAsJsonAsync($"/api/replications/{name}", new ReplicationTaskConfig

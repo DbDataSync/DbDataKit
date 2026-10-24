@@ -16,9 +16,9 @@ public sealed class FixtureStateDialect : StateDialect
     private static readonly SqliteStateDialect Inner = SqliteStateDialect.Instance;
 
     public override string Engine => EngineId;
-    public override SqlDialect Sql => Inner.Sql;
     public override DbConnection CreateConnection(string connectionString) => Inner.CreateConnection(connectionString);
     public override string ParameterName(string name) => Inner.ParameterName(name);
+    public override string Parameter(string name) => Inner.Parameter(name);
     public override string Limit(string parameterName) => Inner.Limit(parameterName);
     public override string InsertOrIgnore(
         string table, string columns, string values, string? conflictTarget, string? conflictWhere = null) =>
