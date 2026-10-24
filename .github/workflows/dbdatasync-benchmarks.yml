@@ -1,0 +1,47 @@
+name: DbDataSync benchmarks
+
+# Manual only (plan 13, A13): the staging benchmark takes minutes and its numbers depend on the machine, so it is a measurement you ask for, not a gate.
+# It stages 200,000 rows of 20 columns through each of Sync's staging providers on the shared SQL Server and PostgreSQL (testenv/) and prints the table;
+# the summary and an artifact carry it. The committed baseline is DbDataSync/architecture/benchmarks/staging-baseline.md; compare only runs from the same kind of machine.
+on:
+  workflow_dispatch:
+    inputs:
+      rows:
+        description: Rows to stage
+        default: '200000'
+      columns:
+        description: Columns per row
+        default: '20'
+      repeat:
+        description: Runs per provider (the median is reported)
+        default: '3'
+
+permissions:
+  contents: read
+
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-product
+        with:
+          product: DbDataSync
+          duckdb: 'false'
+      - name: Start SQL Server and PostgreSQL (shared test engines)
+        run: testenv/testenv.sh up mssql postgres
+      - name: Point the benchmark at them
+        run: testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
+      - name: Staging benchmark
+        working-directory: DbDataSync
+        run: |
+          tools/benchmarks-staging --rows '${{ inputs.rows }}' --columns '${{ inputs.columns }}' --repeat '${{ inputs.repeat }}' | tee "$RUNNER_TEMP/staging-benchmark.txt"
+          { echo '```'; cat "$RUNNER_TEMP/staging-benchmark.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: staging-benchmark
+          path: ${{ runner.temp }}/staging-benchmark.txt
+      - name: Stop the shared engines
+        if: always()
+        run: testenv/testenv.sh down

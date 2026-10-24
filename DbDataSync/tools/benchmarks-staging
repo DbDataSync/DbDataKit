@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+# Launcher for tools/DbDataSync.Benchmarks.Staging. See `tools/benchmarks-staging --help`.
+# Built in Release: measurements from a Debug build would be meaningless.
+set -e
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(dirname "$script_dir")
+project="$repo_root/tools/DbDataSync.Benchmarks.Staging/DbDataSync.Benchmarks.Staging.csproj"
+
+dotnet build "$project" -c Release -v quiet --nologo >&2
+
+exec dotnet exec "$repo_root/tools/DbDataSync.Benchmarks.Staging/bin/Release/net10.0/DbDataSync.Benchmarks.Staging.dll" "$@"
