@@ -3,6 +3,7 @@
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Packages.props', '$(MSBuildThisFileDirectory)../'))" />
   <ItemGroup>
     <!-- the shared libraries Sync takes as packages when UseLocalDbDataKit is off (see Directory.Build.targets) -->
+    <PackageVersion Include="DbDataKit.Cli" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting.Certificates" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting.Certificates.Windows" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting.Cli" Version="$(DbDataKitVersion)" />
