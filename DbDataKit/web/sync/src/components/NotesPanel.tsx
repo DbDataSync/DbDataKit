@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { useAbout } from '../api/hooks'
-import { Markdown } from './Markdown'
-import { RichMarkdown } from './RichMarkdown'
+import type { AboutInfo } from '../api/types'
+import { Markdown, RichMarkdown, useAbout } from '@dbdatakit/shell'
 
 /**
  * A Markdown notes field — read by default, edited on request.
@@ -25,7 +24,7 @@ export function NotesPanel({ value, onChange, subject, testId = 'notes' }: {
   const text = value ?? ''
   // The deployment's choice, off unless an operator turned it on. Until it is known — and if it cannot be read — the small
   // renderer is used: the safe one is the default, not whatever happens to load first.
-  const { data: about } = useAbout()
+  const { data: about } = useAbout<AboutInfo>()
   const rich = about?.notesRichMarkdown === true
 
   return (

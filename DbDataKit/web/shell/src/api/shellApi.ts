@@ -1,8 +1,9 @@
-import type { AuthStatus, NotificationFeed } from './types'
+import type { AboutInfo, AuthStatus, NotificationFeed } from './types'
 import { request } from './http'
 
 /** The calls every product's console makes the same way: who am I, sign in and out, and the notification feed. */
 export const shellApi = {
+  about: <T extends AboutInfo = AboutInfo>() => request<T>('/api/about'),
   auth: {
     status: () => request<AuthStatus>('/api/auth/status'),
     /** Negotiates a Windows identity and mints a session. Windows deployments only — the endpoint

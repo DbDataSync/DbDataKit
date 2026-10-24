@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { DriversTabs } from '../components/DriversTabs'
-import { AppShell } from '../components/AppShell'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { RestartRequiredBanner } from '../components/RestartRequiredBanner'
 import { useIsAdmin } from '@dbdatakit/shell'
 import { useDrivers, useInstallDriverFromCatalog, useKnownDrivers, useRestartRequired } from '../api/hooks'
 import type { DriverCapabilitySummary, DriverSummary, KnownDriverSummary } from '../api/types'
+import { useAdminHost } from '../host'
 
 const COLUMNS = '1.1fr 1.6fr 0.9fr 1.1fr 1.6fr 0.6fr'
 
@@ -23,6 +23,7 @@ const SOURCE_LABEL: Record<DriverSummary['source'], string> = {
  * Libraries screen's non-curated path does.
  */
 export function DriversPage() {
+  const { Frame } = useAdminHost()
   const isAdmin = useIsAdmin()
   const { data: drivers, isLoading, error } = useDrivers()
   const { data: knownDrivers, error: knownError } = useKnownDrivers()
@@ -35,11 +36,11 @@ export function DriversPage() {
   // showing a Viewer a screen of "Add" affordances that would 403 the moment they were used.
   if (!isAdmin) {
     return (
-      <AppShell crumbs={[{ label: 'Drivers' }]} tabs={<DriversTabs />}>
+      <Frame crumbs={[{ label: 'Drivers' }]} tabs={<DriversTabs />}>
         <div className="pane">
           <div className="empty">This screen is for administrators.</div>
         </div>
-      </AppShell>
+      </Frame>
     )
   }
 
@@ -57,7 +58,7 @@ export function DriversPage() {
   const installedIds = new Set((drivers ?? []).map((d) => d.id))
 
   return (
-    <AppShell crumbs={[{ label: 'Drivers' }]} tabs={<DriversTabs />}>
+    <Frame crumbs={[{ label: 'Drivers' }]} tabs={<DriversTabs />}>
       <div className="pane">
         <div className="page-head">
           <h1 className="page-title">Drivers</h1>
@@ -108,7 +109,7 @@ export function DriversPage() {
           </div>
         </div>
       </div>
-    </AppShell>
+    </Frame>
   )
 }
 

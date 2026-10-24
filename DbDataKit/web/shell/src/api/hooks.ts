@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { shellApi } from './shellApi'
+import type { AboutInfo } from './types'
 
 const keys = {
+  about: ['about'] as const,
   notifications: ['notifications'] as const,
 }
 
@@ -58,4 +60,9 @@ export function useSignOut() {
     mutationFn: () => shellApi.auth.signOut(),
     onSuccess: () => queryClient.invalidateQueries(),
   })
+}
+
+/** What the running instance is. It cannot change while the page is open (a different version means a restart, and a restart reloads the page's data anyway), so it is fetched once. */
+export function useAbout<T extends AboutInfo = AboutInfo>() {
+  return useQuery({ queryKey: keys.about, queryFn: () => shellApi.about<T>(), staleTime: Infinity, retry: false })
 }

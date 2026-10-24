@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DOC_PAGES, DOC_SLUGS } from './docPages'
-import { resolveDocImage, resolveLink } from './markdownLinks'
+import { resolveDocImage, resolveLink } from '@dbdatakit/shell'
 
 // The repo's docs/, read at test time — the same files the build copies into the package.
 const sources = import.meta.glob('../../../../../DbDataSync/docs/*.md', { query: '?raw', import: 'default', eager: true }) as Record<string, string>

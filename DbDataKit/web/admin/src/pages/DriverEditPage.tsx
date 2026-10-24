@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { AppShell } from '../components/AppShell'
-import { CodeEditor } from '../components/CodeEditor'
 import { DriversTabs } from '../components/DriversTabs'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { Field } from '@dbdatakit/shell'
@@ -16,6 +14,7 @@ import {
   type Base, type JdbcConnectionStringKeysForm,
 } from './driverYamlAssembly'
 import type { DriverValidationResult } from '../api/types'
+import { useAdminHost } from '../host'
 
 interface FormState {
   id: string
@@ -62,6 +61,7 @@ const JDBC_DEFAULT_KEYS: Record<keyof JdbcConnectionStringKeysForm, string> = {
  * component, matching `ScriptEditPage`'s own new-vs-existing shape — `useParams` decides which.
  */
 export function DriverEditPage() {
+  const { Frame, CodeEditor } = useAdminHost()
   const { id: existingId } = useParams<{ id: string }>()
   const isNew = !existingId
   const navigate = useNavigate()
@@ -145,7 +145,7 @@ export function DriverEditPage() {
   const installedLibraryIds = new Set((libraries ?? []).map((l) => l.id))
 
   return (
-    <AppShell crumbs={[{ label: 'Drivers' }]} tabs={<DriversTabs />}>
+    <Frame crumbs={[{ label: 'Drivers' }]} tabs={<DriversTabs />}>
       <div className="pane">
         <div className="page-head">
           <h1 className="page-title">{isNew ? 'New driver' : `Edit ${existingId}`}</h1>
@@ -408,7 +408,7 @@ export function DriverEditPage() {
         </div>
         )}
       </div>
-    </AppShell>
+    </Frame>
   )
 }
 
