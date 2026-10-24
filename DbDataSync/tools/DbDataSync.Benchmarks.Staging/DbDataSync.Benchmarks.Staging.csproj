@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>DbDataSync.Benchmarks.Staging</RootNamespace>
+    <AssemblyName>DbDataSync.Benchmarks.Staging</AssemblyName>
+    <!-- Measurements taken from a Debug build would be worthless. -->
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The measuring and the synthetic wide table are the other benchmark tool's. -->
+    <Compile Include="..\DbDataSync.Benchmarks\Measurement.cs" Link="Measurement.cs" />
+    <Compile Include="..\DbDataSync.Benchmarks\BenchmarkSchema.cs" Link="BenchmarkSchema.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DbDataSync.Core\DbDataSync.Core.csproj" />
+    <ProjectReference Include="..\..\src\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\DbDataSync.Drivers.Generic\DbDataSync.Drivers.Generic.csproj" />
+    <ProjectReference Include="..\..\src\DbDataSync.Drivers.MsSql\DbDataSync.Drivers.MsSql.csproj" />
+    <ProjectReference Include="..\..\src\DbDataSync.Drivers.Postgres\DbDataSync.Drivers.Postgres.csproj" />
+    <!-- The drivers exclude their providers' runtime assets (Sync loads them from libraries/); the tool runs them directly. -->
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+</Project>

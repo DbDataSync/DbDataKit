@@ -200,6 +200,7 @@
   </Folder>
   <Folder Name="/DbDataSync/tools/">
     <Project Path="DbDataSync/tools/DbDataSync.Benchmarks/DbDataSync.Benchmarks.csproj" />
+    <Project Path="DbDataSync/tools/DbDataSync.Benchmarks.Staging/DbDataSync.Benchmarks.Staging.csproj" />
     <Project Path="DbDataSync/tools/DbDataSync.DevHarness/DbDataSync.DevHarness.csproj" />
   </Folder>
 </Solution>
