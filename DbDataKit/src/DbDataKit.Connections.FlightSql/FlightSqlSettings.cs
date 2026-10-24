@@ -1,7 +1,4 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
-
-namespace DbDataSync.Drivers.ArrowFlightSql;
+namespace DbDataKit.Connections.FlightSql;
 
 public enum FlightSqlAuthMethod
 {
@@ -28,9 +25,7 @@ public enum FlightSqlParameterMode
 }
 
 /// <summary>
-/// Everything a Flight SQL connection needs, read out of a <see cref="ConnectionConfig"/> and the
-/// already-resolved credential. The driver-specific settings live in <see cref="ConnectionConfig.Properties"/>
-/// (the persisted shape has no other place for them) under the keys below.
+/// Everything a Flight SQL connection needs. A product reads it out of its own connection settings, with the already-resolved credential; the property keys it may use are the constants below.
 /// </summary>
 public sealed record FlightSqlSettings(
     Uri Address,
@@ -58,68 +53,24 @@ public sealed record FlightSqlSettings(
     /// <summary>Call header a proxy reads to choose the codec for this call's results.</summary>
     public const string CompressionHeader = "x-compression";
 
-    public static FlightSqlSettings From(ConnectionConfig connection, string? credential)
-    {
-        var properties = connection.Properties;
-        var useTls = !properties.TryGetValue(UseTlsKey, out var tls) || !IsFalse(tls);
-
-        var auth = connection.AuthMode switch
-        {
-            AuthMode.SqlAuth => properties.TryGetValue(AuthMethodKey, out var method)
-                && Enum.TryParse<FlightSqlAuthMethod>(method, ignoreCase: true, out var parsed)
-                && parsed != FlightSqlAuthMethod.None
-                    ? parsed
-                    : FlightSqlAuthMethod.Basic,
-            AuthMode.IntegratedAuth => throw new NotSupportedException(
-                "Arrow Flight SQL has no integrated authentication. Choose SQL Auth (basic or bearer) or None."),
-            _ => FlightSqlAuthMethod.None,
-        };
-
-        if (auth == FlightSqlAuthMethod.Basic && string.IsNullOrEmpty(connection.UserId))
-            throw new InvalidOperationException("Basic authentication needs a user id.");
-        if (auth != FlightSqlAuthMethod.None && string.IsNullOrEmpty(credential))
-            throw new InvalidOperationException(
-                auth == FlightSqlAuthMethod.Bearer
-                    ? "Bearer authentication needs a token, and none is stored for this connection."
-                    : "Basic authentication needs a password, and none is stored for this connection.");
-
-        var mode = properties.TryGetValue(ParameterModeKey, out var pm)
-            && Enum.TryParse<FlightSqlParameterMode>(pm, ignoreCase: true, out var parsedMode)
-                ? parsedMode
-                : FlightSqlParameterMode.Prepared;
-
-        return new FlightSqlSettings(
-            ResolveAddress(connection, useTls),
-            auth,
-            auth == FlightSqlAuthMethod.Basic ? connection.UserId : null,
-            auth == FlightSqlAuthMethod.None ? null : credential,
-            properties.TryGetValue(SkipCertificateValidationKey, out var skip) && IsTrue(skip),
-            string.IsNullOrWhiteSpace(connection.Database) ? null : connection.Database,
-            Seconds(ConnectionTimeouts.ResolveConnectSeconds(connection)),
-            Seconds(ConnectionTimeouts.ResolveCommandSeconds(connection)),
-            mode,
-            Text(properties, DataSourceKey),
-            Text(properties, CompressionKey));
-    }
-
     /// <summary>
     /// Host and port, or a full URI. <c>grpc://</c> and <c>grpc+tcp://</c> are plain text and
     /// <c>grpc+tls://</c> is TLS — the spellings Flight SQL clients and servers print — alongside
     /// ordinary <c>http(s)://</c>. A bare <c>host:port</c> in the connection-string field takes its
     /// scheme from the TLS setting.
     /// </summary>
-    internal static Uri ResolveAddress(ConnectionConfig connection, bool useTls)
+    public static Uri ResolveAddress(string? connectionString, string? host, int? port, bool useTls)
     {
         var scheme = useTls ? "https" : "http";
 
         string text;
-        if (!string.IsNullOrWhiteSpace(connection.ConnectionString))
+        if (!string.IsNullOrWhiteSpace(connectionString))
         {
-            text = connection.ConnectionString.Trim();
+            text = connectionString.Trim();
         }
-        else if (!string.IsNullOrWhiteSpace(connection.Host))
+        else if (!string.IsNullOrWhiteSpace(host))
         {
-            text = connection.Port is { } port ? $"{connection.Host.Trim()}:{port}" : connection.Host.Trim();
+            text = port is { } p ? $"{host.Trim()}:{p}" : host.Trim();
         }
         else
         {
@@ -142,14 +93,14 @@ public sealed record FlightSqlSettings(
         };
     }
 
-    private static string? Text(IReadOnlyDictionary<string, string> properties, string key) =>
+    public static string? Text(IReadOnlyDictionary<string, string> properties, string key) =>
         properties.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
 
-    private static TimeSpan Seconds(int seconds) => seconds <= 0 ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(seconds);
+    public static TimeSpan Seconds(int seconds) => seconds <= 0 ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(seconds);
 
-    private static bool IsTrue(string value) =>
+    public static bool IsTrue(string value) =>
         value.Trim().ToLowerInvariant() is "true" or "1" or "yes" or "on";
 
-    private static bool IsFalse(string value) =>
+    public static bool IsFalse(string value) =>
         value.Trim().ToLowerInvariant() is "false" or "0" or "no" or "off";
 }

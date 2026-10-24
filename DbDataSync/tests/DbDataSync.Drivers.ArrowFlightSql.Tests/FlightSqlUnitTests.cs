@@ -408,7 +408,7 @@ public sealed class DialectTests
             {
                 Name = "c", DriverType = DriverIds.ArrowFlightSqlMsSql, AuthMode = AuthMode.None, Host = "h",
             }, null),
-            For(DriverIds.ArrowFlightSqlMsSql));
+            For(DriverIds.ArrowFlightSqlMsSql).RenderLiteral);
 
         await For(DriverIds.ArrowFlightSqlMsSql).UseDatabaseAsync(connection, "sales", default);
 

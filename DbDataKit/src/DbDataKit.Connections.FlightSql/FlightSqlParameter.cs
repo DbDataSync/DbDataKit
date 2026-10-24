@@ -3,7 +3,7 @@ using System.Data;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 
-namespace DbDataSync.Drivers.ArrowFlightSql;
+namespace DbDataKit.Connections.FlightSql;
 
 /// <summary>A command parameter: a name and a value. Input only — a source-only driver has nothing to
 /// return through one.</summary>

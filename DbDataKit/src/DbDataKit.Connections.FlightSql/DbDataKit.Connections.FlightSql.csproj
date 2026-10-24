@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Connections.FlightSql</RootNamespace>
+    <PackageId>DbDataKit.Connections.FlightSql</PackageId>
+    <Description>Arrow Flight SQL client as an ADO.NET connection, command and reader: handshake and bearer authentication, prepared or inline parameters, compressed record batches, and gRPC status failure mapping.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <PackageReference Include="Apache.Arrow.Flight.Sql" />
+    <!-- The LZ4 and Zstd codecs for Arrow's compressed record batches; the Flight client's own DoGet reads batches without a codec, so FlightDataReader reads DoGet itself and hands them to Arrow's stream reader. -->
+    <PackageReference Include="Apache.Arrow.Compression" />
+    <ProjectReference Include="..\DbDataKit.Connections\DbDataKit.Connections.csproj" />
+    <InternalsVisibleTo Include="DbDataSync.Drivers.ArrowFlightSql" />
+    <InternalsVisibleTo Include="DbDataSync.Drivers.ArrowFlightSql.Tests" />
+  </ItemGroup>
+</Project>

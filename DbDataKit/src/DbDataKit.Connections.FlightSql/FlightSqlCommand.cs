@@ -5,7 +5,7 @@ using Apache.Arrow.Flight;
 using Apache.Arrow.Flight.Sql;
 using Grpc.Core;
 
-namespace DbDataSync.Drivers.ArrowFlightSql;
+namespace DbDataKit.Connections.FlightSql;
 
 /// <summary>
 /// A read-only command: a query in, a streaming reader out. <see cref="ExecuteNonQuery"/> is not
@@ -163,7 +163,7 @@ public sealed class FlightSqlCommand : DbCommand
             _parameters.Items.First(p => FlightSqlParameterCollection.Matches(p.ParameterName, name));
 
         if (inline || _connection.ServerRefusesParameters || _connection.Settings.ParameterMode == FlightSqlParameterMode.Inline)
-            return (ParameterMarkers.Replace(CommandText, known, name => _connection.Dialect.RenderLiteral(Find(name).Value)), ordered);
+            return (ParameterMarkers.Replace(CommandText, known, name => _connection.RenderLiteral(Find(name).Value)), ordered);
 
         var sql = ParameterMarkers.Replace(CommandText, known, name =>
         {
