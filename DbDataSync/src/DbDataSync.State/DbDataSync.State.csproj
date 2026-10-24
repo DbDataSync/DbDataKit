@@ -11,6 +11,7 @@
   <ItemGroup>
     <DbDataKitReference Include="State" />   <!-- the engine, dialects and the identity and notification stores; plan 13, U04 -->
     <Using Include="DbDataKit.State" />
+    <Using Include="DbDataKit.Monitoring" />
   </ItemGroup>
 
   <ItemGroup>
