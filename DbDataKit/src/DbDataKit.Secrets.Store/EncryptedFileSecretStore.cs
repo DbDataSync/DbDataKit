@@ -194,10 +194,25 @@ public sealed partial class EncryptedFileSecretStore : ISecretStore, ISecretProv
         try
         {
             AclHelper.WriteAllBytesRestricted(temp, Encoding.UTF8.GetBytes(text), _identities);
-            File.Move(temp, FilePath, overwrite: true);
+            await ReplaceAsync(temp, ct);
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
-        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Renames the temp file over the store. On Windows that fails with "access denied" or a sharing violation while anything has the destination open (a reader mid-read,
+    /// an indexer, a virus scanner), so it is retried briefly; elsewhere a rename replaces the file whatever has it open and a failure is real.
+    /// </summary>
+    private async Task ReplaceAsync(string temp, CancellationToken ct)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { File.Move(temp, FilePath, overwrite: true); return; }
+            catch (Exception ex) when (OperatingSystem.IsWindows() && ex is IOException or UnauthorizedAccessException && attempt < 100)
+            {
+                await Task.Delay(20, ct);
+            }
+        }
     }
 
     // ---- the lock: one writer at a time, in this process and in any other ----
