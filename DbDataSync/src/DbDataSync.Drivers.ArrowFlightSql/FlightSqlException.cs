@@ -15,10 +15,14 @@ public sealed class FlightSqlException : DbException
 {
     public StatusCode StatusCode { get; }
 
-    public FlightSqlException(string message, StatusCode statusCode, Exception? inner = null)
+    /// <summary>True when the failure was the TLS handshake (gRPC reports it as Internal, with the cause only in the detail text).</summary>
+    public bool IsTls { get; }
+
+    public FlightSqlException(string message, StatusCode statusCode, Exception? inner = null, bool isTls = false)
         : base(message, inner)
     {
         StatusCode = statusCode;
+        IsTls = isTls;
     }
 
     /// <summary>
@@ -59,7 +63,8 @@ public sealed class FlightSqlException : DbException
             _ => "",
         };
 
-        return new FlightSqlException($"Flight SQL call failed — {ex.StatusCode}{hint}{detail}", ex.StatusCode, ex);
+        return new FlightSqlException($"Flight SQL call failed — {ex.StatusCode}{hint}{detail}", ex.StatusCode, ex,
+            isTls: ex.StatusCode is not (StatusCode.Unauthenticated or StatusCode.PermissionDenied or StatusCode.Unavailable) && IsTlsFailure(ex.Status.Detail));
     }
 
     private static bool IsTlsFailure(string detail) =>

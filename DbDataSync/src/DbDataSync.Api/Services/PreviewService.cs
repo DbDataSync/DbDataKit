@@ -177,7 +177,7 @@ public sealed class PreviewService(
         }
         catch (Exception ex) when (ex is DbException or InvalidOperationException)
         {
-            statements.Add(new PreviewStatement(stage, what, null, PreviewOrigin.BuiltIn, ex.Message));
+            statements.Add(new PreviewStatement(stage, what, null, PreviewOrigin.BuiltIn, DriverFailures.Describe(ex)));
         }
     }
 
@@ -225,7 +225,7 @@ public sealed class PreviewService(
         {
             problems.Add(
                 $"The column-expression script '{binding.ScriptName}' could not run, so the source read below " +
-                $"is shown without whatever it would have generated: {ex.Message}");
+                $"is shown without whatever it would have generated: {DriverFailures.Describe(ex)}");
             return mapping.ColumnMappings;
         }
     }
@@ -340,7 +340,7 @@ public sealed class PreviewService(
         }
         catch (Exception ex) when (ex is DbException or InvalidOperationException or ScriptExecutionException)
         {
-            problems.Add($"The {side} table's columns could not be read, so this preview may be incomplete: {ex.Message}");
+            problems.Add($"The {side} table's columns could not be read, so this preview may be incomplete: {DriverFailures.Describe(ex)}");
             return [];
         }
     }

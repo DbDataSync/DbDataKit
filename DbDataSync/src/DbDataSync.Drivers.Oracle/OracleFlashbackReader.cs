@@ -238,7 +238,7 @@ public sealed class OracleFlashbackReader(OracleDialect dialect)
             throw new InvalidOperationException(
                 "Could not read the current SCN via DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER(). This " +
                 "connection's user needs EXECUTE on DBMS_FLASHBACK — a grant Oracle does not hand out " +
-                $"by default. ({ex.Message})", ex);
+                $"by default. ({DriverFailures.Describe(ex, DriverIds.Oracle)})", ex);
         }
     }
 

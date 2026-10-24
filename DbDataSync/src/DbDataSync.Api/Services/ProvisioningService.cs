@@ -146,7 +146,7 @@ public sealed class ProvisioningService(
                 // The enterprise-normal path: a least-privileged connection cannot run ALTER
                 // DATABASE, and that permission error is the expected outcome, not a defect — it's
                 // surfaced intact rather than swallowed, and Copy exists for exactly this case.
-                results.Add(new ApplyStepResult(step.Title, false, ex.Message, Stopwatch.GetElapsedTime(started).TotalMilliseconds));
+                results.Add(new ApplyStepResult(step.Title, false, DriverFailures.Describe(ex), Stopwatch.GetElapsedTime(started).TotalMilliseconds));
                 break;
             }
         }
@@ -208,7 +208,7 @@ public sealed class ProvisioningService(
             }
             catch (ConfigValidationException ex)
             {
-                builder.Exclude(mappingName, null, ex.Message);
+                builder.Exclude(mappingName, null, DriverFailures.Describe(ex));
                 continue;
             }
 
@@ -245,7 +245,7 @@ public sealed class ProvisioningService(
                 // A source that cannot be read yet, a column mapping naming a column that is not there
                 // — real, mapping-specific reasons a plan cannot be computed. One bad mapping does not
                 // get to take the whole page down.
-                builder.Exclude(mappingName, null, ex.Message);
+                builder.Exclude(mappingName, null, DriverFailures.Describe(ex));
             }
         }
 
@@ -325,7 +325,7 @@ public sealed class ProvisioningService(
                 catch (DbException ex)
                 {
                     results.Add(new ReplicationProvisioningStepResult(
-                        step.Id, step.Title, ProvisioningStepOutcome.Failed, ex.Message, warning,
+                        step.Id, step.Title, ProvisioningStepOutcome.Failed, DriverFailures.Describe(ex), warning,
                         Stopwatch.GetElapsedTime(started).TotalMilliseconds));
                     stopped = true;
                 }
@@ -607,7 +607,7 @@ public sealed class ProvisioningService(
         }
         catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or FormatException)
         {
-            return new InferredColumnType(column.Name, column.NativeType, null, null, ex.Message);
+            return new InferredColumnType(column.Name, column.NativeType, null, null, DriverFailures.Describe(ex));
         }
     }
 

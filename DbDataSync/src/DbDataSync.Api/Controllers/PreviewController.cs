@@ -1,3 +1,4 @@
+using DbDataSync.Core.Sql;
 using DbDataSync.Api.Services;
 using DbDataSync.Core.Config;
 using DbDataSync.Api.Auth;
@@ -30,7 +31,7 @@ public sealed class PreviewController(PreviewService previewService) : Controlle
         }
         catch (ConfigValidationException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = DriverFailures.Describe(ex) });
         }
     }
 }

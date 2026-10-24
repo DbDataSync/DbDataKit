@@ -1,3 +1,4 @@
+using DbDataSync.Core.Sql;
 using DbDataSync.Api.Models;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
@@ -67,7 +68,7 @@ public sealed class ReconcileService(
             // A bad segment column, an undividable column type, a keyless source, or an unreachable
             // source are all the request being wrong or unrunnable — worth saying plainly rather than
             // enqueueing work guaranteed to fail once a worker claims it.
-            return TriggerResult.Invalid(ex.Message);
+            return TriggerResult.Invalid(DriverFailures.Describe(ex));
         }
 
         var kinds = new WorkItemKinds(ReaderKind, CacheKind, PipelineResolution.ReconcileWriterKind(task, mapping));
@@ -136,7 +137,7 @@ public sealed class ReconcileService(
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.Data.Common.DbException)
         {
-            return TriggerResult.Invalid(ex.Message);
+            return TriggerResult.Invalid(DriverFailures.Describe(ex));
         }
 
         var guard = PipelineResolution.Reconcile(task, mapping).DeleteGuard;

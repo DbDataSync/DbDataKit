@@ -269,7 +269,7 @@ public sealed class ArrowFlightSqlDriver : IDriver, IConnectionTester, IDialectP
         }
         catch (DbException ex)
         {
-            return new ConnectionTestResult(false, Stopwatch.GetElapsedTime(started), null, ex.Message);
+            return new ConnectionTestResult(false, Stopwatch.GetElapsedTime(started), null, DriverFailures.Describe(ex, DriverIds.ArrowFlightSql));
         }
     }
 
