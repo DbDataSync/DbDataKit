@@ -312,6 +312,7 @@ public static class DbDataSyncHost
         builder.Services.AddHostedService<SchedulerService>();
         builder.Services.AddHostedService<RunMonitorService>();
         builder.Services.AddHostedService<RunPruningService>();
+        builder.Services.AddSingleton(sp => new BootstrapInviteLocation(sp.GetRequiredService<ApiOptions>().RepoRoot));
         builder.Services.AddHostedService<BootstrapInvite>();
 
         // Windows-only, registered only there — the same gating this file already uses a few lines

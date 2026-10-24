@@ -1,10 +1,10 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
-using DbDataSync.State;
+using DbDataKit.State;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 
-namespace DbDataSync.Api.Auth;
+namespace DbDataKit.Web.Auth;
 
 /// <summary>
 /// Turns the session cookie into a principal.
@@ -29,11 +29,9 @@ public sealed class SessionAuthenticationHandler(
     AuthOptions authOptions)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
-    public const string SchemeName = "DbDataSyncSession";
-
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        var sessionId = Request.Cookies[AuthOptions.SessionCookie];
+        var sessionId = Request.Cookies[authOptions.CookieName];
         if (string.IsNullOrEmpty(sessionId))
             return Task.FromResult(NetworkFallback());
 
@@ -80,7 +78,7 @@ public sealed class SessionAuthenticationHandler(
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, user.Id),
-            new(CurrentUser.UserIdClaim, user.Id),
+            new(authOptions.Product.UserIdClaim, user.Id),
             new(ClaimTypes.Name, user.DisplayName),
             new(ClaimTypes.Role, user.Role.ToString()),
         };
@@ -89,7 +87,7 @@ public sealed class SessionAuthenticationHandler(
             claims.Add(new Claim(ClaimTypes.Email, user.Email));
 
         return new AuthenticationTicket(
-            new ClaimsPrincipal(new ClaimsIdentity(claims, SchemeName)), SchemeName);
+            new ClaimsPrincipal(new ClaimsIdentity(claims, Scheme.Name)), Scheme.Name);
     }
 
     /// <summary>
@@ -97,9 +95,9 @@ public sealed class SessionAuthenticationHandler(
     /// not by sign-in" means. Config commits fall back to the system identity, because attributing them
     /// to a person nobody identified would be a lie.
     /// </summary>
-    private static AuthenticationTicket Anonymous(UserRole role)
+    private AuthenticationTicket Anonymous(UserRole role)
     {
-        var identity = new ClaimsIdentity([new Claim(ClaimTypes.Role, role.ToString())], SchemeName);
-        return new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName);
+        var identity = new ClaimsIdentity([new Claim(ClaimTypes.Role, role.ToString())], Scheme.Name);
+        return new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name);
     }
 }

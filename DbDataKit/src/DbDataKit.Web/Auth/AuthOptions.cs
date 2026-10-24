@@ -1,4 +1,4 @@
-namespace DbDataSync.Api.Auth;
+namespace DbDataKit.Web.Auth;
 
 /// <summary>A recurring two-state config value — never a bare boolean in the file (phase 164): a mode
 /// name self-documents in <c>config get</c>/the Admin screen the way <c>true</c>/<c>false</c> never did,
@@ -16,12 +16,15 @@ public enum AdminNetworkTrust { Disabled, Loopback }
 public enum ViewerNetworkTrust { Disabled, Loopback, Remote }
 
 /// <summary>
-/// How this deployment decides who may use it, read from the <c>DbDataSync:Auth</c> configuration
-/// section.
+/// How this deployment decides who may use it, read from the product's <c>Auth</c> configuration section (<see cref="AuthProduct.Section"/>).
 /// </summary>
 public sealed class AuthOptions
 {
-    public const string SessionCookie = "dbdatasync.session";
+    /// <summary>The product whose sign-in this is.</summary>
+    public required AuthProduct Product { get; init; }
+
+    /// <summary>The name of the session cookie (<see cref="AuthProduct.SessionCookie"/>).</summary>
+    public string CookieName => Product.SessionCookie;
 
     /// <summary>
     /// Windows groups whose members are admins, and whose members are viewers.
@@ -58,13 +61,14 @@ public sealed class AuthOptions
     /// anywhere.</summary>
     public ViewerNetworkTrust NetworkViewer { get; init; } = ViewerNetworkTrust.Disabled;
 
-    public static AuthOptions FromConfiguration(IConfiguration configuration)
+    public static AuthOptions FromConfiguration(IConfiguration configuration, AuthProduct product)
     {
-        var windows = configuration.GetSection("DbDataSync:Auth:Windows");
-        var network = configuration.GetSection("DbDataSync:Auth:Network");
+        var windows = configuration.GetSection($"{product.Section}:Windows");
+        var network = configuration.GetSection($"{product.Section}:Network");
 
         return new AuthOptions
         {
+            Product = product,
             AdminGroup = windows["AdminGroup"],
             ViewerGroup = windows["ViewerGroup"],
             WindowsMode = ConfigEnum.Parse(windows["Mode"], FeatureMode.Enabled),
@@ -77,7 +81,7 @@ public sealed class AuthOptions
 /// <summary>Shared by every mode-string-backed setting (phase 164 replaced every bare boolean with one
 /// of these), so <c>enabled</c>/<c>disabled</c>/etc. parse identically everywhere rather than each
 /// options class rolling its own.</summary>
-internal static class ConfigEnum
+public static class ConfigEnum
 {
     public static TEnum Parse<TEnum>(string? value, TEnum fallback) where TEnum : struct, Enum =>
         Enum.TryParse<TEnum>(value, ignoreCase: true, out var parsed) ? parsed : fallback;

@@ -1,4 +1,4 @@
-namespace DbDataSync.Api.Auth;
+namespace DbDataKit.Web.Auth;
 
 /// <summary>
 /// What a request is allowed to do.

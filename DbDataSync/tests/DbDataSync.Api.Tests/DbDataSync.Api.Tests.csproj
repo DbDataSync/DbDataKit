@@ -50,6 +50,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\DbDataSync.Api\DbDataSync.Api.csproj" />
     <Using Include="DbDataKit.State" />
+    <Using Include="DbDataKit.Web.Auth" />
     <Using Include="DbDataKit.Monitoring" />   <!-- plan 13, U04 -->
     <Using Include="DbDataSync.State.StateDatabase" Alias="StateDatabase" />
     <!-- Reuses FixturePublisher (publishes tests/fixtures/DbDataSync.Drivers.LoaderTestFixture once)

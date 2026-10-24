@@ -490,7 +490,7 @@ public sealed class ReplicationProvisioningPlanTests : IDisposable
     private ProvisioningService CreateServiceWithSideEffects(FakeConnectionFactory factory) =>
         new(_config, factory,
             new CurrentUser(
-                new HttpContextAccessor(), new AuthOptions(),
+                new HttpContextAccessor(), new AuthOptions { Product = SyncAuth.Product },
                 new PasskeyOptions { RelyingPartyId = "localhost", RelyingPartyName = "DbDataSync", Origins = new HashSet<string>() }),
             new MappingColumnReader(new FakeColumnCatalog()), new DriverRegistry());
 
