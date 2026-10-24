@@ -3,8 +3,11 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { RichMarkdown } from './RichMarkdown'
 
+// The pages of the docs that shipped, as a product would pass them.
+const DOC_SLUGS = ['install', 'configuration', 'drivers-and-libraries', 'getting-started']
+
 function render(text: string, docLinks = false, inlineImages = true): string {
-  return renderToStaticMarkup(<MemoryRouter><RichMarkdown text={text} docLinks={docLinks} inlineImages={inlineImages} /></MemoryRouter>)
+  return renderToStaticMarkup(<MemoryRouter><RichMarkdown text={text} docSlugs={docLinks ? DOC_SLUGS : undefined} inlineImages={inlineImages} /></MemoryRouter>)
 }
 
 describe('RichMarkdown', () => {

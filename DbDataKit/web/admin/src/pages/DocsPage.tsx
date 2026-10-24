@@ -1,10 +1,8 @@
 import { useEffect } from 'react'
 import { Link, NavLink, useLocation, useParams } from 'react-router-dom'
-import { useAbout, useDocPage } from '../api/hooks'
-import { AppShell } from '../components/AppShell'
-import { DOC_PAGES } from '../components/docPages'
-import { ErrorBanner } from '@dbdatakit/shell'
-import { RichMarkdown } from '../components/RichMarkdown'
+import { useDocPage } from '../api/hooks'
+import { ErrorBanner, RichMarkdown, useAbout } from '@dbdatakit/shell'
+import { useAdminHost } from '../host'
 
 /**
  * The docs the build shipped (phase 160): `/docs` is the index, `/docs/:page` one page of it.
@@ -14,12 +12,13 @@ import { RichMarkdown } from '../components/RichMarkdown'
  * Readable by every role: unlike the Admin screens, there is nothing here to withhold.
  */
 export function DocsPage() {
+  const { Frame, docPages } = useAdminHost()
   const { page } = useParams()
-  const known = DOC_PAGES.find(p => p.slug === page)
+  const known = docPages.find(p => p.slug === page)
   const { data: about } = useAbout()
 
   return (
-    <AppShell crumbs={[{ label: 'Docs', to: page ? '/docs' : undefined }, ...(known ? [{ label: known.title }] : [])]}>
+    <Frame crumbs={[{ label: 'Docs', to: page ? '/docs' : undefined }, ...(known ? [{ label: known.title }] : [])]}>
       <div className="pane">
         <div className="page-head">
           {/* The document brings its own title (its first heading), so the header stays the section's — two of the same is noise. */}
@@ -31,7 +30,7 @@ export function DocsPage() {
 
         <div className="docs-layout">
           <nav className="docs-nav" aria-label="Documentation pages" data-testid="docs-nav">
-            {DOC_PAGES.map(p => (
+            {docPages.map(p => (
               <NavLink key={p.slug} to={`/docs/${p.slug}`} className={({ isActive }) => `docs-nav-item ${isActive ? 'active' : ''}`}>
                 {p.title}
               </NavLink>
@@ -45,11 +44,12 @@ export function DocsPage() {
           </div>
         </div>
       </div>
-    </AppShell>
+    </Frame>
   )
 }
 
 function DocsIndex() {
+  const { docPages } = useAdminHost()
   return (
     <div data-testid="docs-index">
       <p className="hint" style={{ marginTop: 0 }}>
@@ -57,7 +57,7 @@ function DocsIndex() {
         network and cannot describe a different release.
       </p>
       <ul className="docs-index-list">
-        {DOC_PAGES.map(p => (
+        {docPages.map(p => (
           <li key={p.slug}><Link to={`/docs/${p.slug}`}>{p.title}</Link></li>
         ))}
       </ul>
@@ -78,6 +78,7 @@ function NoSuchPage({ slug }: { slug: string }) {
 }
 
 function DocBody({ slug }: { slug: string }) {
+  const { docPages } = useAdminHost()
   const { data, error, isLoading } = useDocPage(slug)
   const { hash } = useLocation()
 
@@ -90,5 +91,5 @@ function DocBody({ slug }: { slug: string }) {
 
   if (isLoading) return <span className="hint">Loading…</span>
   if (error) return <ErrorBanner error={error} />
-  return <RichMarkdown text={data ?? ''} docLinks testId="docs-content" />
+  return <RichMarkdown text={data ?? ''} docSlugs={docPages.map(p => p.slug)} testId="docs-content" />
 }

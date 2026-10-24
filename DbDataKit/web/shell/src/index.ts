@@ -1,8 +1,8 @@
 // @dbdatakit/shell: what every product's console is made of. Imports nothing from any product (a test checks).
 export { ApiError, put, request } from './api/http'
 export { shellApi } from './api/shellApi'
-export { useAuthStatus, useMarkNotificationsSeen, useNotifications, useSignInWithWindows, useSignOut } from './api/hooks'
-export type { AuthStatus, NotificationFeed, NotificationRecord } from './api/types'
+export { useAbout, useAuthStatus, useMarkNotificationsSeen, useNotifications, useSignInWithWindows, useSignOut } from './api/hooks'
+export type { AboutInfo, AuthStatus, NotificationFeed, NotificationRecord } from './api/types'
 
 export { Shell } from './components/Shell'
 export type { Crumb, RailItem } from './components/Shell'
@@ -19,3 +19,6 @@ export { tabClass } from './components/tabClass'
 export { formatBytes } from './components/formatBytes'
 export { useIsAdmin } from './components/useIsAdmin'
 export { createCredential, getCredential, isSupported } from './components/webauthn'
+export { Markdown } from './components/Markdown'
+export { RichMarkdown } from './components/RichMarkdown'
+export { isSafeExternalUrl, isSafeImageUrl, resolveDocImage, resolveLink } from './components/markdownLinks'
