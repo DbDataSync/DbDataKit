@@ -1,3 +1,4 @@
+using DbDataSync.Core.Sql;
 using DbDataSync.Api.Models;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
@@ -66,7 +67,7 @@ public sealed class BulkLoadService(
             // rather than a live catalog call) a segment column the cache doesn't have are all the
             // request being wrong or unrunnable — not a server fault, and worth saying plainly rather
             // than enqueueing work that is guaranteed to fail once a worker claims it.
-            return TriggerResult.Invalid(ex.Message);
+            return TriggerResult.Invalid(DriverFailures.Describe(ex));
         }
 
         var kinds = new WorkItemKinds(request.ReaderKind, request.CacheKind, request.WriterKind);

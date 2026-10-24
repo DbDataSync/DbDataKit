@@ -10,6 +10,7 @@ using DbDataSync.Api.Services;
 using DbDataSync.Api.State;
 using DbDataSync.State.Remote;
 using DbDataSync.Core.Config;
+using DbDataSync.Core.Sql;
 using DbDataKit.Config.Git;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.ArrowFlightSql;
@@ -390,6 +391,13 @@ public static class DbDataSyncHost
                 .Build());
 
         var app = builder.Build();
+
+        // Driver failures are shown as their classified message (plan 13, A10); the driver's own text goes to the log, and into the
+        // response only with Diagnostics:DriverDetails on. The worker processes inherit the setting through the environment.
+        bool driverDetails = app.Configuration.GetValue<bool>("Diagnostics:DriverDetails");
+        if (driverDetails) Environment.SetEnvironmentVariable(DriverFailureSetup.DetailsVariable, "true");
+        DriverFailureSetup.Configure(driverDetails);
+        DriverFailures.SetLog(line => app.Logger.LogWarning("{Failure}", line));
 
         // A fresh process has, by construction, already picked up whatever the marker was recording.
         app.Services.GetRequiredService<RestartRequiredState>().Clear();

@@ -12,6 +12,10 @@ namespace DbDataSync.Drivers.ArrowFlightSql.Tests;
 /// </summary>
 public sealed class FlightSqlIntegrationTests
 {
+    // A failed test result carries the shared classifier's message (plan 13, A10), so the Flight mapper has to be registered.
+    public FlightSqlIntegrationTests() => DriverFailures.Configure(
+        [new(DriverFailures.EngineFor(DriverIds.ArrowFlightSql), new FlightSqlFailureMapper())], includeDetails: false);
+
     private static ConnectionConfig Config(
         TestServerHost server, AuthMode auth = AuthMode.None, string? user = null,
         Dictionary<string, string>? properties = null, string driver = DriverIds.ArrowFlightSql) => new()
@@ -224,6 +228,7 @@ public sealed class FlightSqlIntegrationTests
 
         // A failed test result, not an exception: a wrong credential is the failure an operator expects.
         Assert.False(test.Succeeded);
+        Assert.StartsWith("The login was rejected.", test.Error);
         Assert.Contains("Unauthenticated", test.Error);
         Assert.DoesNotContain("wrong-token", test.Error);
     }
@@ -238,7 +243,7 @@ public sealed class FlightSqlIntegrationTests
         var test = await driver.TestAsync(connection, CancellationToken.None);
 
         Assert.False(test.Succeeded);
-        Assert.Contains("Unauthenticated", test.Error);
+        Assert.StartsWith("The login was rejected.", test.Error);
     }
 
     // ---- Parameters ----
@@ -387,8 +392,7 @@ public sealed class FlightSqlIntegrationTests
         var test = await driver.TestAsync(connection, CancellationToken.None);
 
         Assert.False(test.Succeeded);
-        Assert.Contains("TLS failed", test.Error);
-        Assert.Contains("Skip certificate validation", test.Error);
+        Assert.StartsWith("A secure connection could not be established.", test.Error);
     }
 
     [Fact]

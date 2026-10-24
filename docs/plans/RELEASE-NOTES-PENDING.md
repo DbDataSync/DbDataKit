@@ -27,6 +27,10 @@ to it in the pull request that makes the change; a release moves the entries int
   connection string or in properties are still honoured. A connect timeout in properties still wins. Any other property the shared policy reserves (credentials, host and database keys, `Application Intent`,
   `Multi Subnet Failover`, `Options`, `Search Path`, command timeouts) is now refused with a message naming it; put it in the connection string instead. (A08)
 - **Sync commands accept `--format json`.** `server`, `service`, `cert`, `secret`, `library`, `driver`, `config` and `health` print one JSON document (`schema`, `command`, `exit_code`, `ok`, `data`, `messages`, `errors`); an unknown command now exits 2 with "'x' is not a command" (it was 1 with "Unknown command 'x'"). (C07)
+- **Database errors show a fixed message and the engine's code, not the driver's text.** A failed connection test, run, preview, provisioning step or reconcile now reports for example
+  `The login was rejected. [sqlserver 18456]` or `The server could not be reached. [postgres 08006]`; a run's stored error detail is empty for a driver failure. The driver's own text, with
+  secrets scrubbed, is written to the server log. Set `Diagnostics:DriverDetails` to `true` (environment `Diagnostics__DriverDetails=true`) to append it to the response and keep it in the run
+  detail again. Sync's own validation messages are unchanged. (A10)
 
 ## DbDataBuild
 

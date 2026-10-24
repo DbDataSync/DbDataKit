@@ -374,7 +374,7 @@ public sealed class ReplicationProvisioningPlanTests : IDisposable
             OnExecute = commandText =>
             {
                 if (commandText.Contains("Orders"))
-                    throw new FakeDbException("permission denied");
+                    throw new FakeDbException("permission denied", "42501");
             },
         };
         var factory = new FakeConnectionFactory(
@@ -397,7 +397,8 @@ public sealed class ReplicationProvisioningPlanTests : IDisposable
 
         var ordersResult = Assert.Single(result.Steps, r => r.Id == ordersStep.Id);
         Assert.Equal(ProvisioningStepOutcome.Failed, ordersResult.Outcome);
-        Assert.Contains("permission denied", ordersResult.Error);
+        // the shared classifier's wording, not the server's (plan 13, A10)
+        Assert.StartsWith("The login does not have permission for this operation.", ordersResult.Error);
 
         var customersResult = Assert.Single(result.Steps, r => r.Id == customersStep.Id);
         Assert.Equal(ProvisioningStepOutcome.NotAttempted, customersResult.Outcome);
@@ -660,5 +661,8 @@ public sealed class ReplicationProvisioningPlanTests : IDisposable
     /// concrete stand-in every fake command throws to simulate a least-privileged connection rejecting a
     /// statement, exactly as <c>ProvisioningService.RunStepsAsync</c>'s real <c>catch (DbException)</c>
     /// expects.</summary>
-    private sealed class FakeDbException(string message) : DbException(message);
+    private sealed class FakeDbException(string message, string? sqlState = null) : DbException(message)
+    {
+        public override string? SqlState { get; } = sqlState;
+    }
 }

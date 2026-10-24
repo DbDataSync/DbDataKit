@@ -43,6 +43,9 @@ public sealed class JdbcSqlException : DbException
 {
     public IReadOnlyList<JdbcSqlError> Errors { get; }
 
+    /// <summary>The first link's SQLSTATE, which is what the shared failure classifier reads.</summary>
+    public override string? SqlState => Errors.Count > 0 ? Errors[0].SqlState : null;
+
     public JdbcSqlException(IReadOnlyList<JdbcSqlError> errors)
         : base(Describe(errors))
     {

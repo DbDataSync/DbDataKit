@@ -50,7 +50,7 @@ public sealed class ConnectionDiagnosticsTests
     /// object — still gets its SQLState/ErrorCode/chained-message detail, built once at the JDBC-side
     /// translation site (<see cref="JdbcSqlException"/>'s own constructor) and just read back here.</summary>
     [Fact]
-    public void Describe_AJdbcSqlException_IncludesEveryChainedErrorsSqlStateAndErrorCode()
+    public void Describe_AJdbcSqlException_IsTheClassifiedMessageWithItsSqlState_NotTheServersText()
     {
         var chained = new JdbcSqlException([
             new JdbcSqlError("duplicate key value violates unique constraint", "23505", 0),
@@ -59,9 +59,10 @@ public sealed class ConnectionDiagnosticsTests
 
         var described = ConnectionDiagnostics.Describe(chained);
 
-        Assert.Contains("duplicate key value violates unique constraint", described);
-        Assert.Contains("Detail: Key (id)=(1) already exists.", described);
-        Assert.Contains("SQLState=23505", described);
+        // Plan 13, A10: a driver's own text never reaches the response; the SQLSTATE is the code.
+        Assert.DoesNotContain("duplicate key value", described);
+        Assert.DoesNotContain("already exists", described);
+        Assert.Contains("23505", described);
     }
 
     [Fact]

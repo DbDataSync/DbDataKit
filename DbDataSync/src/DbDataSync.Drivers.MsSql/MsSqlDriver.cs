@@ -73,6 +73,9 @@ public sealed class MsSqlDriver : IDriver, IConnectionTester, IDialectProvider, 
         new Scd2Writer(MsSqlDialect.Instance, MsSqlCatalog.Instance),
     ];
 
+    /// <summary>The shared SQL Server failure mapper (error numbers to kinds), for <see cref="DriverFailures"/>.</summary>
+    public static DbDataKit.Connections.IFailureMapper FailureMapper { get; } = new SqlServerFailureMapper();
+
     public DbConnection CreateConnection(ConnectionConfig connection, string? credential)
     {
         // The shared composer builds the string (plan 13, A08): the operator's own string is still the base and the credential goes on
@@ -198,7 +201,7 @@ public sealed class MsSqlDriver : IDriver, IConnectionTester, IDialectProvider, 
         catch (DbException ex)
         {
             // An unhealthy instance is an answer to the question, not a fault to propagate.
-            return new ConnectionTestResult(false, Stopwatch.GetElapsedTime(started), ServerVersion: null, ex.Message);
+            return new ConnectionTestResult(false, Stopwatch.GetElapsedTime(started), ServerVersion: null, DriverFailures.Describe(ex, DriverIds.MsSql));
         }
     }
 

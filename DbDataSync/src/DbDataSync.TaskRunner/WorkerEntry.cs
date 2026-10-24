@@ -1,3 +1,4 @@
+using DbDataSync.Core.Sql;
 using DbDataSync.Core.Secrets;
 using DbDataSync.Core.Config;
 using DbDataKit.Config.Git;
@@ -48,6 +49,18 @@ public static class WorkerEntry
         // process per the plan doc's "two composition roots" note, so it repeats this rather than sharing the
         // API's in-memory registry.
         var libraryRegistry = new LibraryRegistry(options.RepoRoot).LoadAll();
+
+        // A driver's failure is shown as its classified message; the API process hands the details setting down in the environment.
+        var failureMappers = new Dictionary<DbDataKit.Dialect.EngineId, DbDataKit.Connections.IFailureMapper>
+        {
+            [DbDataKit.Dialect.EngineId.SqlServer] = MsSqlDriver.FailureMapper,
+            [DbDataKit.Dialect.EngineId.Postgres] = PostgresDriver.FailureMapper,
+        };
+        foreach (var id in DriverIds.ArrowFlightSqlVariants)
+            failureMappers[DriverFailures.EngineFor(id)] = new DbDataSync.Drivers.ArrowFlightSql.FlightSqlFailureMapper();
+        DriverFailures.Configure(
+            failureMappers,
+            string.Equals(Environment.GetEnvironmentVariable("Diagnostics__DriverDetails"), "true", StringComparison.OrdinalIgnoreCase));
 
         var driverRegistry = new DriverRegistry();
         // The scripted reader is composed here rather than inside a driver, because it needs the script host

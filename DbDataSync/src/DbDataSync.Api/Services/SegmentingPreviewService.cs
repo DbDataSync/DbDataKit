@@ -1,3 +1,4 @@
+using DbDataSync.Core.Sql;
 using DbDataSync.Core.Config;
 using DbDataSync.Scripting;
 
@@ -112,7 +113,7 @@ public sealed class SegmentingPreviewService(
         {
             // A strategy whose SQL does not compile, or returns the wrong columns, or cannot reach its
             // side, is the configuration being wrong — worth saying in the form rather than as a 500.
-            return new SegmentingPreviewResult(null, ex.Message);
+            return new SegmentingPreviewResult(null, DriverFailures.Describe(ex));
         }
     }
 

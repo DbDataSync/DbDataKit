@@ -81,6 +81,9 @@ public sealed class PostgresDriver : IDriver, IConnectionTester, IDialectProvide
         new Scd2Writer(PostgresDialect.Instance, PostgresCatalog.Instance),
     ];
 
+    /// <summary>The shared PostgreSQL failure mapper (SQLSTATE to kinds), for <see cref="DriverFailures"/>.</summary>
+    public static DbDataKit.Connections.IFailureMapper FailureMapper { get; } = new PostgresFailureMapper();
+
     public DbConnection CreateConnection(ConnectionConfig connection, string? credential)
     {
         // The shared composer builds the string (plan 13, A08): the operator's own string is still the base and the credential goes on
@@ -184,7 +187,7 @@ public sealed class PostgresDriver : IDriver, IConnectionTester, IDialectProvide
         }
         catch (DbException ex)
         {
-            return new ConnectionTestResult(false, Stopwatch.GetElapsedTime(started), null, ex.Message);
+            return new ConnectionTestResult(false, Stopwatch.GetElapsedTime(started), null, DriverFailures.Describe(ex, DriverIds.Postgres));
         }
     }
 
