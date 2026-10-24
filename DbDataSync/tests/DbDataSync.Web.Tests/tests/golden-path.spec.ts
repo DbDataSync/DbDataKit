@@ -67,6 +67,11 @@ test.describe.serial('golden path: define, configure, and run a replication end-
       await page.getByTestId('connection-parameters-database').fill(DB_NAME)
       await page.getByTestId('connection-parameters-userId').fill('sa')
       await page.getByTestId('connection-parameters-password').fill(SA_PASSWORD)
+      // the test container's certificate is self-signed, and certificates are verified unless told otherwise
+      const tlsTable = page.getByTestId('connection-parameters-properties')
+      await tlsTable.getByPlaceholder('Custom properties name').fill('TrustServerCertificate')
+      await tlsTable.getByRole('button', { name: '+ Add' }).click()
+      await tlsTable.getByLabel('TrustServerCertificate value').fill('true')
       if (name === SRC_CONNECTION_NAME) await shot(page, '02-connection-form.png')
       await page.getByTestId('save-connection-button').click()
       await expect(page.getByTestId('connections-table')).toContainText(name)
