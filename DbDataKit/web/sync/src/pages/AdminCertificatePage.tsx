@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AdminTabs } from '../components/AdminTabs'
 import { AppShell } from '../components/AppShell'
-import { ErrorBanner } from '../components/ErrorBanner'
-import { Field } from '../components/Field'
+import { ErrorBanner } from '@dbdatakit/shell'
+import { Field } from '@dbdatakit/shell'
 import { RestartRequiredBanner } from '../components/RestartRequiredBanner'
-import { useIsAdmin } from '../components/useIsAdmin'
+import { useIsAdmin } from '@dbdatakit/shell'
 import {
   useAdminCertificate, useAdminCertificateCandidates, useBindCertificate,
   useCreateSelfSignedCertificate, useEnrollCertificate, useRetrieveCertificate,

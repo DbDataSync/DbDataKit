@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router-dom'
-import { ErrorBanner } from '../../components/ErrorBanner'
+import { ErrorBanner } from '@dbdatakit/shell'
 import { useVerificationResult } from '../../api/hooks'
 import type { VerificationResultPage as Page, VerificationResultRow, VerificationRowStatus } from '../../api/types'
 import type { MappingsOutletContext } from './TableMappingsPanel'

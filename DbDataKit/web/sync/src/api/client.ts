@@ -1,3 +1,4 @@
+import { ApiError, put, request, shellApi } from '@dbdatakit/shell'
 import type {
   AdminCertificateStatus,
   AdminConfigEntry,
@@ -69,7 +70,6 @@ import type {
   SetMappingReadStateRequest,
   ScriptSlotInfo,
   LogEntryRecord,
-  NotificationFeed,
   ReplicationTaskConfig,
   TableMappingConfig,
   TableMetadata,
@@ -79,44 +79,6 @@ import type {
   RunWatermarkTimes,
   TriggerResponse,
 } from './types'
-
-export class ApiError extends Error {
-  status: number
-
-  constructor(status: number, message: string) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-  }
-}
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    // The session is a cookie, and a cross-origin dev setup (Vite on 5173 proxying to the API) does
-    // not send one unless asked. Without this, signing in appears to do nothing.
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-  })
-
-  if (!response.ok) {
-    let message = response.statusText
-    try {
-      const body = await response.json()
-      message = body.error ?? body.title ?? message
-    } catch {
-      // No JSON body — fall back to the status text already captured.
-    }
-    throw new ApiError(response.status, message)
-  }
-
-  if (response.status === 204) return undefined as T
-  const text = await response.text()
-  return text ? (JSON.parse(text) as T) : (undefined as T)
-}
-
-const put = <T>(path: string, body: unknown) =>
-  request<T>(path, { method: 'PUT', body: JSON.stringify(body) })
 
 /**
  * The query string `runs` and `runs/watermark-times` both build from — one function rather than two
@@ -152,6 +114,8 @@ async function docPage(slug: string): Promise<string> {
     throw new ApiError(response.status, 'The server did not answer with a document.')
   return response.text()
 }
+
+export { ApiError }
 
 export const api = {
   about: () => request<AboutInfo>('/api/about'),
@@ -340,16 +304,7 @@ export const api = {
         { method: 'POST', body: JSON.stringify({ stepIds }) },
       ),
   },
-  auth: {
-    status: () => request<AuthStatus>('/api/auth/status'),
-    /** Negotiates a Windows identity and mints a session. Windows deployments only — the endpoint
-     * says so where it is not one. */
-    signInWithWindows: () => request<AuthStatus>('/api/auth/windows', { method: 'POST' }),
-    signOut: () => request<void>('/api/auth/sign-out', { method: 'POST' }),
-    beginPasskey: () => request<unknown>('/api/auth/passkey/begin', { method: 'POST' }),
-    completePasskey: (assertion: unknown) =>
-      request<AuthStatus>('/api/auth/passkey/complete', { method: 'POST', body: JSON.stringify(assertion) }),
-  },
+  auth: shellApi.auth,
   invites: {
     create: (role: string, forUserId?: string) =>
       request<{ url: string; expiresAtUtc: string; role: string }>('/api/invites', {
@@ -559,17 +514,7 @@ export const api = {
         { method: 'DELETE' },
       ),
   },
-  notifications: {
-    /** The whole feed by default. `sinceId` exists for a future notification centre that pages
-     * through it; the bell wants the latest and asks for all of it, which retention bounds. */
-    list: (sinceId?: number) =>
-      request<NotificationFeed>(`/api/notifications${sinceId ? `?sinceId=${sinceId}` : ''}`),
-    markSeen: (lastSeenNotificationId: number) =>
-      request<NotificationFeed>('/api/notifications/seen', {
-        method: 'POST',
-        body: JSON.stringify({ lastSeenNotificationId }),
-      }),
-  },
+  notifications: shellApi.notifications,
   runs: {
     trigger: (replicationName: string) =>
       request<TriggerResponse>(`/api/replications/${encodeURIComponent(replicationName)}/runs`, { method: 'POST' }),

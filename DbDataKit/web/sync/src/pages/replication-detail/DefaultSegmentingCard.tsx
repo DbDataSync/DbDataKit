@@ -1,4 +1,4 @@
-import { Field } from '../../components/Field'
+import { Field } from '@dbdatakit/shell'
 import type { BatchReloadSegment, SegmentingStrategyConfig } from '../../api/types'
 import { runsAgainstAConnection } from '../../api/types'
 

@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { DriversTabs } from '../components/DriversTabs'
 import { AppShell } from '../components/AppShell'
-import { ErrorBanner } from '../components/ErrorBanner'
+import { ErrorBanner } from '@dbdatakit/shell'
 import { LibraryFindPanel } from '../components/LibraryFindPanel'
 import { RestartRequiredBanner } from '../components/RestartRequiredBanner'
-import { useIsAdmin } from '../components/useIsAdmin'
+import { useIsAdmin } from '@dbdatakit/shell'
 import { useLibraries, useRemoveLibrary, useRestartRequired } from '../api/hooks'
 import type { LibrarySummary } from '../api/types'
 

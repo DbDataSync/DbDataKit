@@ -4,6 +4,7 @@
 FROM node:22-bookworm-slim AS web
 WORKDIR /src/DbDataKit/web
 COPY DbDataKit/web/package*.json ./
+COPY DbDataKit/web/shell/package.json ./shell/
 COPY DbDataKit/web/sync/package.json ./sync/
 RUN npm ci
 COPY DbDataKit/web/ ./

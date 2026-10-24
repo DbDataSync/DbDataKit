@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ErrorBanner } from '../../components/ErrorBanner'
+import { ErrorBanner } from '@dbdatakit/shell'
 import { useBulkLoadHistory, useTableMappings } from '../../api/hooks'
 import type { BulkLoadState } from '../../api/types'
 

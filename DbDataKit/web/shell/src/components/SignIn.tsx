@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { api } from '../api/client'
+import { shellApi } from '../api/shellApi'
 import { useAuthStatus, useSignInWithWindows, useSignOut } from '../api/hooks'
 import { ErrorBanner } from './ErrorBanner'
 import { getCredential, isSupported } from './webauthn'
@@ -22,9 +22,9 @@ export function SignInScreen() {
     setPasskeyBusy(true)
     setPasskeyError(null)
     try {
-      const options = await api.auth.beginPasskey()
+      const options = await shellApi.auth.beginPasskey()
       const assertion = await getCredential(options)
-      await api.auth.completePasskey(assertion)
+      await shellApi.auth.completePasskey(assertion)
       await queryClient.invalidateQueries()
     } catch (ex) {
       setPasskeyError(ex)

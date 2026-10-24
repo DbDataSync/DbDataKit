@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
-import { ErrorBanner } from '../components/ErrorBanner'
-import { Field } from '../components/Field'
-import { createCredential, isSupported } from '../components/webauthn'
+import { ErrorBanner } from '@dbdatakit/shell'
+import { Field } from '@dbdatakit/shell'
+import { createCredential, isSupported } from '@dbdatakit/shell'
 
 /**
  * Redeeming an invitation by enrolling a passkey.

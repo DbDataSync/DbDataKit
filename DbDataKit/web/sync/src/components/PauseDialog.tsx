@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Field } from './Field'
+import { Field } from '@dbdatakit/shell'
 
 /**
  * The popup the Paused toggle opens — in **both** directions.

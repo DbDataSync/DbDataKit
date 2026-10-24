@@ -1,7 +1,7 @@
 import { DocsPage } from './pages/DocsPage'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuthStatus } from './api/hooks'
-import { SignInScreen } from './components/SignIn'
+import { SignInScreen } from '@dbdatakit/shell'
 import { InvitePage } from './pages/InvitePage'
 import { ConnectionEditPage } from './pages/ConnectionEditPage'
 import { ConnectionsPage } from './pages/ConnectionsPage'

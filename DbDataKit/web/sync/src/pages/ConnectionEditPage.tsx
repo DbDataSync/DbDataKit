@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/AppShell'
-import { ErrorBanner } from '../components/ErrorBanner'
-import { Field } from '../components/Field'
+import { ErrorBanner } from '@dbdatakit/shell'
+import { Field } from '@dbdatakit/shell'
 import { ParameterForm } from '../components/ParameterForm'
 import {
   useCapabilities, useConnectionParameters, useConnections, useDeleteConnection, useDriverStatus, useDrivers,

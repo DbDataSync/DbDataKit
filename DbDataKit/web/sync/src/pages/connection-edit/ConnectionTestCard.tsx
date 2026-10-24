@@ -1,4 +1,4 @@
-import { Field } from '../../components/Field'
+import { Field } from '@dbdatakit/shell'
 import { PreviewGrid } from '../../components/PreviewGrid'
 import { useCredentialSource } from '../../api/hooks'
 import type { ConnectionTestReport, LibraryValidationReport } from '../../api/types'

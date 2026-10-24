@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ErrorBanner } from '../../components/ErrorBanner'
+import { ErrorBanner } from '@dbdatakit/shell'
 import { DiffViewer } from '../../components/DiffViewer'
 import {
   useReplicationCommitDiff,

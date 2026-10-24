@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { tabClass } from './tabClass'
+import { tabClass } from '@dbdatakit/shell'
 
 /**
  * The Admin area's own tab strip — Configuration (phase 81), Certificate (phase 83) and (phase 159)
