@@ -317,6 +317,12 @@ All protocols are **front ends to one query core**: a protocol adapter turns its
 semantic request (JSON or semantic SQL) or an MDX request, maps its authentication onto Proxy's identities, and returns rows. It never
 opens a connection, applies a limit or formats an error itself. Each adapter gets its own listener, off by default.
 
+**The adapters are shared code, not Proxy code** (owner direction, 2026-10-24). They live in `DbDataKit.Serving.*` (`.FlightSql`, the
+Flight SQL server Proxy has today, moved out of `DbDataProxy.Server`; `.PostgresWire`; `.Xmla`), written against a small interface the
+host implements: authenticate a caller to an identity, list what can be queried (tables or semantic members, through `DbDataKit.Metadata`),
+run a query under that identity's limits, and write if the host allows writes at all. Proxy is one host. **DbDataStore** (plan 15) is
+another: it serves its own entities over the same protocols without going through Proxy, so neither product carries the other's job.
+
 | Protocol | What it serves | Recommendation |
 | --- | --- | --- |
 | Flight SQL (today) | SQL pass-through, semantic JSON and semantic SQL | keep as the primary protocol |

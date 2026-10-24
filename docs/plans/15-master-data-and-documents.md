@@ -195,7 +195,7 @@ connection with a schema each.
 | 6 | Document storage | **decided**: always in a database |
 | 7 | Extraction results | **decided**: into a model entity by default, not the only destination |
 | 8 | Engine order | **decided**: SQL Server, PostgreSQL, SQLite, MariaDB, MySQL, Oracle, unless something comes up |
-| 9 | Where DbDataStore is hosted | **open, later**: its own server first (section 11); Proxy hosting it is an option to keep possible |
+| 9 | Where DbDataStore is served from | **decided direction**: its own server, hosting Proxy's protocols as shared code (section 11) |
 
 ## 10. Suggested order, once approved
 
@@ -211,20 +211,33 @@ After plan 13's M3 (the console manages all products) and with plan 14's semanti
 | M6 | Extraction on save into entities; fingerprint drift notifications |
 | M7 | Consumers: change events and the "on change" trigger for Sync and Build; Build import of entities; semantic dimensions, maps and calendars from entities |
 | M8 | Promotion of a query's temporary mapping tables into managed entities (section 7) |
+| M9 | `DbDataKit.Serving.FlightSql` out of Proxy (no behaviour change); DbDataStore serves reads of its entities over it; validated writes over it after that |
 
-## 11. Hosting: its own server, or Proxy
+## 11. Hosting: DbDataStore serves itself, with Proxy's protocols as shared code
 
-The owner may later want **DbDataProxy to host DbDataStore**, serving its queries and updates, and is open to another architecture if
-one fits better. The options:
+The owner may later want DbDataStore's queries and updates served over the same protocols as Proxy's. The options considered:
 
 | Option | For | Against |
 | --- | --- | --- |
-| **A. Its own server** (`dbdatastore server`), as planned above | one product, one purpose; Proxy stays read-only, which is a large part of its security case; DbDataStore can be installed alone | one more service to install where both are used |
-| **B. Proxy hosts DbDataStore** | one endpoint for reading and writing managed data; Proxy already has the identities, limits, protocols and the connections | Proxy gains a write path, which every Proxy install would then carry and every review of Proxy must cover |
-| **C. DbDataStore as libraries, hosted by either** | A first, B later, without rewriting | the discipline of keeping the logic out of the host |
+| A. Its own server; reads through Proxy | Proxy stays read-only | every DbDataStore install needs a Proxy to be read over Flight SQL, and two products to configure for one model |
+| B. Proxy hosts DbDataStore | one endpoint for reading and writing managed data | overloads Proxy's primary function (serving read-only queries) with a write path every Proxy install and review would carry |
+| **C. Proxy's protocols as shared code; DbDataStore hosts them itself** (owner's suggestion) | each product keeps one job; no product depends on the other to serve its data; one implementation of each protocol | the protocol libraries must stay free of either host's logic |
 
-**Recommendation: C, starting with A.** The model, validation, history, change requests, documents and extraction live in shared
-libraries (`DbDataKit.Store.*`), and `dbdatastore server` is a thin host, like the other servers. Reads of managed data go through Proxy
-from the start, because master data is ordinary tables on an ordinary data source. If Proxy later hosts DbDataStore, it hosts the same
-libraries and the write path stays theirs: Proxy's own query path stays read-only, writes are allowed only for DbDataStore entities and only
-through DbDataStore's validation, history and approval, under a separate role. Nothing in A should make B hard.
+**Decided direction: C.** The protocol front ends move into shared libraries (`DbDataKit.Serving.FlightSql`, `.PostgresWire`, later
+`.Xmla`; plan 14 R8), written against a host interface: authenticate a caller, describe what can be queried, run a query under the
+caller's limits, and accept writes only if the host implements them. Then:
+
+- **`dbdatastore server`** hosts Flight SQL (and Postgres wire when it exists) for **reads of its entities**, as-of reads of their history
+  included (`FOR SYSTEM_TIME AS OF` in the query text or an option, mapped to the history design of section 3), and WebDAV for documents.
+  Its management API (plan 13 W12) carries model, row and change-request operations.
+- **Writes over a protocol are DbDataStore's choice, behind its own write path.** Flight SQL's update and ingest commands (and Postgres
+  `INSERT`/`UPDATE` later) can be accepted for entities, translated into the same validated, versioned, audited writes (or change
+  requests) as the API's. A protocol never writes a table directly.
+- **Proxy stays read-only** and is not needed to read master data. It can still serve DbDataStore's tables as an ordinary read-only data
+  source when someone wants one endpoint for everything, and semantic queries (plan 14) still go through Proxy, reading DbDataStore entities
+  as dimensions, maps and calendars.
+- **The DbDataStore logic** (models, validation, history, change requests, documents, extraction) stays in its own libraries
+  (`DbDataKit.Store.*`) with a thin server, like the other products.
+
+What this changes elsewhere: moving the Flight SQL server out of `DbDataProxy.Server` into `DbDataKit.Serving.FlightSql` is a refactor of
+Proxy with no behaviour change (its tests and metadata goldens unchanged), and is the first step of plan 14 R8 either way.
