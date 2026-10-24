@@ -565,7 +565,9 @@ or containers on a shared network). Nothing in this design depends on which.
    when every console is gone, and monitoring, notifications and run history are pulled by the console. A server that a console cannot
    reach inbound (behind a firewall) is out of scope; a later option is the server dialling out to the console.
 2. **A server can be paired with several consoles** (for example a team console and an operations console, or a standby). Each pairing
-   is independent: its own key, its own role ceiling, revoked on its own.
+   is independent: its own key, its own role ceiling, revoked on its own. **The paired client is not always a console**: plan 14 R2a has a
+   Build server pair with a Proxy (ceiling role Publisher) to deploy managed data sources and semantic models, so pairing, tokens and
+   ceilings must not assume a console on the other end.
 3. **The server is the security boundary.** A console hides what a user may not do, but the server checks every call itself and never
    trusts the UI.
 

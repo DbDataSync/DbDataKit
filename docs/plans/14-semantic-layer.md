@@ -1,8 +1,8 @@
 # Plan 14: the semantic layer (Query Intent Specs) in the suite
 
 Status: **proposed for review** (2026-10-24), **revised with the owner's long-term direction** the same day: semantic models are
-developed as an extension of DbDataBuild, but **deploying and consuming them, with the connection details, is handed off to
-DbDataProxy** (R1, R2); connections, engines and metadata are normalized across the products (R5); a SQL query language over the JSON
+developed **and deployed** by DbDataBuild and **hosted** by DbDataProxy; a connection is managed once, in Build, and Build keeps the
+matching Proxy data source up to date (R1, R2; corrected after review: an earlier draft had Proxy deploying); connections, engines and metadata are normalized across the products (R5); a SQL query language over the JSON
 requests (R6); enough MDX for Excel PivotTables (R7); more serving protocols in Proxy, XMLA certainly (R8). The master data and document
 service is [plan 15](15-master-data-and-documents.md). **Not part of plan 13's work list** (`13a-suite-slices.md`): nothing here is to be
 implemented until the owner decides the questions in section 9. Reviewed: `DbDataSync/QueryIntentSpec` at `139bbf9` (specs in
@@ -66,17 +66,14 @@ The suite already covers the stages around a semantic layer, and lacks only that
   operator or a scheduled job"). Build already runs tests after a refresh and has a scheduler and monitoring coming (plan 13 W10): generate
   a project test per hierarchy level pair and per relationship (orphan keys), so a broken hierarchy is caught when the data changes, not
   when a query is wrong.
-- **Build packages it; Proxy deploys it** (owner direction). Build's job ends at a **semantic package**: the compiled model, its
-  physical layer per *Build connection*, the Build commit and the hash of the metadata it was compiled against. Build does not deploy it and
-  holds no serving connection details. Proxy deploys the package: it **binds** each Build connection the package names to one of its own
-  data sources (`dbdataproxy semantic deploy <package> --bind warehouse=erp_dw`, or from the console), checks the bound model against the
-  live catalog through `DbDataKit.Metadata` (every table and column there, types as declared), and only then serves it. Proxy keeps every
-  deployed version and can roll back. The connection details (servers, logins, secrets, TLS) live only in Proxy's data sources, where the
-  identities, limits and read-only rules already are.
-- **The package travels from one commit.** A package records the Build commit; Proxy refuses one compiled against metadata that differs
-  from what the bound data source shows (the tables changed since), and says which table. Build's deploy can hand the package on as a last
-  step (the Build server calls Proxy's management API through the console's pairing, plan 13 W12) so tables and semantic model move
-  together, but the deploy itself is always Proxy's.
+- **Build authors and deploys; Proxy hosts** (owner direction). `connection deploy` applies the tables, then deploys the semantic model
+  to the Proxy that serves that connection: a **semantic package** (the compiled model, its physical layer for that connection, the Build
+  commit and the hash of the metadata it was compiled against). Proxy checks the package against the live catalog through
+  `DbDataKit.Metadata` (every table and column there, types as declared), switches to it atomically, and keeps the earlier versions so a
+  deploy can be rolled back from Build. A package compiled against tables that differ from what the data source shows is refused, with the
+  table named, so the tables and the model they describe never disagree.
+- **One connection, managed once, in Build** (section R2a below). The user defines a connection where it is built, in the Build project;
+  the Proxy data source that serves it is created and kept in step by Build's deploy, never typed in a second time.
 - **Calendars are a Build model.** QIS calendars need a date table with level columns and prior-period counterpart columns. Ship a Build
   template or macro that builds that table (fiscal levels, 4-4-5 if asked, `*_prior_year` columns), so a calendar is a few lines in the
   semantic file instead of a hand-maintained table.
@@ -91,6 +88,31 @@ What Build needs for this (gaps found):
 | Measures | none (Build has no measures, by design) | stay in the semantic files; Build validates them, it does not own them |
 | Semantic files in the project schema | none | `schemas/semantic.schema.json`, the strict YAML loader, fuzz tests, `project show semantic` |
 | Metadata documents carry the physical name per connection | partly (`connections`, `files`) | the resolved table name per connection, for the generated `source:` |
+
+### R2a. One connection: a target for Build, a source for Proxy
+
+A warehouse is a **target** for Build (it writes tables there) and a **source** for Proxy (it reads them for clients). The user must not
+manage it in both places, so the connection has one owner and two views:
+
+- **Defined once, in the Build project**, as today (`connection/1`, plan 13 E03): engine, server, database, TLS, and Build's two logins,
+  read and write, kept apart as Build already keeps them. A `serve:` entry names the Proxy (an instance paired with Build, below) and the
+  data source name to use there.
+- **Build deploys the Proxy data source** together with the tables and the semantic package. What Proxy receives is the connection's
+  definition with **the read login only**: the write login never leaves Build. The read secret is sent once over the paired, TLS channel
+  and stored in Proxy's own secret store (plan 13 W13), as a secret typed into the console is. Proxy marks the data source as **managed
+  by** that Build project and connection.
+- **Ownership is split by concern.** The connection's fields (where it is, how to log in to read, TLS) belong to Build: in Proxy's console
+  module they are shown read-only, with a link to the Build project. The **serving policy** (`extensions.proxy`: concurrency limits, the
+  statement classifier, which client identities may use it, pass-through) belongs to Proxy and is edited there; Build's deploy never
+  touches it.
+- **An existing data source** that Proxy already has for the same server and database is not taken over silently: a deploy that finds one
+  stops and says so, and an administrator adopts it (`--adopt`), after which Build manages its connection fields.
+- **Server to server.** Plan 13 W12's rule is that a console calls a server and never the reverse. This adds one more kind of paired
+  client: **a Build server pairs with a Proxy** the same way a console does (a code from `dbdataproxy server pair`, entered on the Build
+  side), with a fixed ceiling role, **Publisher**, which can manage only the data sources and semantic models that this Build server
+  created. A Build CLI on a developer's machine pairs the same way, its key in the user's secret store. Plan 13's pairing must therefore not
+  assume that every client is a console (noted in plan 13 W12).
+- **Deploying from the console** is the same path: the console asks the Build server to deploy, and the Build server calls Proxy.
 
 ### R2. DbDataProxy serves semantic queries
 
@@ -158,8 +180,9 @@ code is shared already; what is missing is one place that says what the suite su
   Sync target, Build target, Build origin, Proxy source, semantic emitter, master data store (plan 15). Every product reads it instead of
   its own enum (Sync's `DriverType`, Build's `engine` keywords, Proxy's `Provider`, QIS's source `kind`), and the support tables in each
   product's README are generated from it, so a claim in a README is a fact in a file.
-- **One connection definition.** `connection/1` everywhere (plan 13 W8). A Build connection, a Proxy data source and a semantic package's
-  binding name the same kind of thing; the console can copy one into another (plan 13 E05).
+- **One connection definition.** `connection/1` everywhere (plan 13 W8). A connection Build writes to and Proxy serves is one
+  definition, owned by Build, with the Proxy data source deployed from it (R2a); the console's cross-server Connections view (plan 13 E05)
+  shows the pair as one connection.
 - **One metadata model.** `DbDataKit.Metadata` records (tables, columns, keys, foreign keys, indexes, server facts) are what Build's
   metadata documents, Proxy's Flight SQL catalog answers, the semantic physical layer and the master data service's entities (plan 15)
   are written from. Types are `Dialect.CanonicalType` everywhere, with one mapping to Arrow and one to the QIS descriptor types.
@@ -169,7 +192,8 @@ code is shared already; what is missing is one place that says what the suite su
 
 ### R6. A SQL language over the semantic requests
 
-**Recommendation: semantic SQL, a subset of DuckDB SQL with `MEASURE()`, translated to and from the JSON request.** No new grammar.
+**Decided (owner, 2026-10-24): semantic SQL, a subset of DuckDB SQL with `MEASURE()`, translated to and from the JSON request.** No new
+grammar.
 
 Prior art, and what each would mean here:
 
@@ -229,10 +253,20 @@ XMLA Connect is an open-source Excel client; there is no .NET XMLA server to reu
 - **An MDX parser for the subset**, producing the axes, the slicer and the sub-select filters, then one semantic request per cell set
   (dimensions from the axes' levels, `x_totals` from `DrilldownLevel`/`Hierarchize`, filters from slicers and sub-selects), then the
   QIS result reshaped into the cell set Excel expects. Anything outside the subset is an XMLA error with a clear message.
-- **Excel's own traffic is the specification.** Record the XMLA that Excel sends against a real SSAS Tabular model (QIS already has a
-  self-contained Tabular model and a Windows-runner plan for it, `qis/docs/ssas.md`) and SSAS's answers, for each PivotTable action
-  (add a field to rows, columns, values, filters; expand and collapse; sort; search members; refresh). Those become golden fixtures: the
-  same requests to Proxy must give cell sets Excel accepts and numbers equal to SSAS's.
+- **Excel's own traffic is the specification, catalogued once on a VM.** SSAS now runs in GitHub CI (the QueryIntentSpec work installs
+  it with a Chocolatey SQL Server package); Excel will not. So the cataloguing is a one-time job on a Windows VM with Excel (the owner can
+  set one up):
+  1. Proxy's XMLA listener is built first as a **recording forwarder**: it passes Excel's requests to SSAS unchanged and saves each
+     request and answer (with credentials removed).
+  2. A script of PivotTable actions is run by hand against the QIS Tabular model: add a field to rows, columns, values and filters; expand
+     and collapse; sort; filter by label and by value; search members; refresh; with one field and with several; with and without totals.
+     Repeated on each Excel available (Microsoft 365 current channel, and an LTSC build if one matters).
+  3. The recordings are golden fixtures. In CI, each recorded request goes to Proxy's XMLA endpoint *and* to SSAS (from Chocolatey), and
+     the two cell sets must agree.
+- **How often Excel changes its MDX is not known**, so nothing depends on it: the parser matches **MDX structure** (the parsed tree:
+  functions, sets, member references), not text, so spacing, property lists and order do not matter; and an MDX shape the translator does
+  not recognize is **refused with a clear XMLA error and logged** (the request's shape, with values removed), never answered approximately.
+  A new Excel that changes its queries shows up as those log entries, which are what to catalogue next, on the VM again.
 - **In order:** (1) `Discover` rowsets, so Excel lists the fields (`DISCOVER_PROPERTIES`, `DBSCHEMA_CATALOGS`, `MDSCHEMA_CUBES`,
   `_DIMENSIONS`, `_HIERARCHIES`, `_LEVELS`, `_MEASURES`, `_MEMBERS`, `_PROPERTIES`, `_SETS`); (2) rows, columns and values with
   subtotals and grand totals; (3) filters (slicer, sub-select), drill-down, sorting; (4) member search, named sets, measures Excel
@@ -336,14 +370,14 @@ After plan 13's M2 (the console with Sync, the command surface, the trust model)
 | Q3 | Build: semantic files in projects, compile-time validation, generated physical layer, references on built models | Q1, plan 13 B (Build on the shared libraries) |
 | Q4 | Build: generated hierarchy and relationship tests; the calendar template | Q3 |
 | Q5 | Proxy: semantic data source over Flight SQL (`CommandStatementQuery` with JSON, `DoAction`), combine in a child process, state in Proxy's store | Q2, plan 13 P (Proxy management), D18 |
-| Q6 | Build produces semantic packages; Proxy loads a package bound to its data sources | Q3, Q5 |
+| Q6 | Build produces semantic packages and deploys them, with the managed data source, to the paired Proxy (R2a) | Q3, Q5, plan 13 W12 (pairing a Build server) |
 | Q7 | Agent tools on the shared command surface; console semantic module (model browser, query explorer, views, promotion review) | Q5, plan 13 W4a, W5 |
 | Q8 | PostgreSQL emitter | Q2 |
 | Q9 | SSAS on Proxy (Windows), if the decision in section 5 item 8 says so | Q5 |
 | Q10 | The engine registry (R5): `engine/1` descriptors read by every product; generated support tables | plan 13 A/B (Connections adopted) |
 | Q11 | Semantic SQL (R6): the spec, the translator both ways, SQL forms of the fixtures | Q2 |
-| Q12 | Semantic packages and Proxy deploy (R1): bind, validate against the live catalog, versions and rollback | Q5, Q6 |
-| Q13 | XMLA and MDX for Excel (R7): recorded Excel traffic as fixtures, then Discover, axes and totals, filters and drill, search | Q5, a Windows runner with SSAS for the recordings |
+| Q12 | Hosting on Proxy (R1): validate a package against the live catalog, switch atomically, keep versions, rollback from Build; managed data sources read-only in Proxy's module | Q5, Q6 |
+| Q13 | XMLA and MDX for Excel (R7): the recording forwarder; the one-time catalogue on the VM; then Discover, axes and totals, filters and drill, search, each checked against SSAS in CI | Q5, the VM with Excel, SSAS in CI |
 | Q14 | Postgres wire for semantic SQL (R8), tool by tool | Q11 |
 
 ## 8. Risks
@@ -354,6 +388,8 @@ After plan 13's M2 (the console with Sync, the command surface, the trust model)
 | MDX scope creep: Excel is one client, but every MDX client is different | the subset is defined by recorded Excel traffic; other clients are out of scope until asked for |
 | Postgres-wire BI tools each introspect differently | one tool at a time, each with its own recorded fixtures; semantic SQL only |
 | A semantic package deployed against tables that changed | Proxy validates the package against the live catalog before serving it, and refuses with the table named (R1) |
+| A Build server's pairing is used to change Proxy beyond its own data sources | the Publisher ceiling: only the data sources and models that Build server created (R2a) |
+| The write login reaching Proxy | Build sends the read login only; a test asserts the deployed definition has no write login (R2a) |
 | A federated query exhausts Proxy's memory | child process, DuckDB limits, row caps, concurrency gates (R2) |
 | Wrong numbers from a semantic difference between the DuckDB stand-in and SQL Server | fixtures run on real SQL Server and PostgreSQL in CI; Build's string-semantics knowledge applied to the emitters |
 | One user's cached result reaches another | identity in every cache and saved-result key (section 5 item 4) |
@@ -370,7 +406,7 @@ After plan 13's M2 (the console with Sync, the command surface, the trust model)
 4. **SSAS:** a real source to support (on Proxy, Windows), or test stand-in only?
 5. **Ad hoc data and extraction:** in the first version on Proxy, or after governed queries work?
 6. **Names:** "semantic model" in the suite, "catalog" kept for database catalogs?
-7. **Semantic SQL:** the DuckDB subset with `MEASURE()` (Databricks' form, `AGGREGATE()` accepted), as recommended in R6?
-8. **Excel:** PivotTables over XMLA through MDX translated to semantic requests (R7), with recorded Excel traffic against SSAS as the
-   specification; is a Windows runner with SSAS available for the recordings?
+7. ~~Semantic SQL~~: **decided**, the DuckDB subset with `MEASURE()` (R6).
+8. ~~Excel~~: **decided**, PivotTables over XMLA, MDX translated to semantic requests, Excel's traffic catalogued once on a VM, SSAS in CI
+   as the oracle (R7).
 9. **Protocols:** XMLA with MDX first, Postgres wire after semantic SQL, Quack deferred until DuckDB publishes a server specification (R8)?

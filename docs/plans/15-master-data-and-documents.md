@@ -1,7 +1,7 @@
-# Plan 15: a master data and document service
+# Plan 15: DbDataStore, a master data and document service
 
-Status: **proposed for review** (2026-10-24), from the owner's long-term direction. **Not part of plan 13's work list.** Working name
-**DbDataMaster** (`dbdatamaster`), to be decided (section 9). Builds on plan 13 (the console, server shape, trust, shared libraries) and
+Status: **proposed for review** (2026-10-24), from the owner's long-term direction. **Not part of plan 13's work list.** Name
+**DbDataStore** (`dbdatastore`), chosen by the owner. Builds on plan 13 (the console, server shape, trust, shared libraries) and
 plan 14 (the semantic layer, extraction).
 
 ## 1. What it is for
@@ -18,7 +18,7 @@ The owner's goals:
 It fills the one gap left in the suite's flow: data that *people* own and change, rather than data replicated, built or queried.
 
 ```
-  people, agents ──► DbDataMaster ──► master data tables (SQL Server, PostgreSQL, SQLite, ...) ──► Sync, Build, Proxy, semantic queries
+  people, agents ──► DbDataStore ──► master data tables (SQL Server, PostgreSQL, SQLite, ...) ──► Sync, Build, Proxy, semantic queries
   Excel (WebDAV) ──► documents ──► extraction ──┘
 ```
 
@@ -89,12 +89,11 @@ entities:
 | Bulk writes (imports, extraction) | `DbDataKit.Transfer` writers (SQL Server bulk copy, PostgreSQL COPY), the write gate with its statement log | MySQL, Oracle, SQLite writers |
 | Engine registry | `engine/1` descriptors (plan 14 R5): "master data store" is one capability per engine | |
 
-**Structure changes.** The recommendation is to **extract the table-structure part of Build's planner into a shared package**
-(`DbDataKit.Schema`: declared shape against the live catalog, a change list with risk classes, a plan, apply through the write gate)
-and use it from both Build and this service. Adding an attribute or relaxing a rule is safe and applied directly; renaming or retyping an
-attribute is a planned change with a copy of the data; dropping one is destructive and needs approval. The alternative, a separate
-smaller planner in this service, duplicates the riskiest code in the suite. Deciding this needs a look at how separable Build's
-planner is (section 9).
+**Structure changes. Decided (owner): Build's table-structure planner moves into the shared code base** as `DbDataKit.Schema`
+(declared shape against the live catalog, a change list with risk classes, a plan, apply through the write gate), used by Build and by
+this service. Adding an attribute or relaxing a rule is safe and applied directly; renaming or retyping an attribute is a planned change
+with a copy of the data; dropping one is destructive and needs approval. The first step is reading how Build's planner separates the
+table structure from its SELECT-defined models, and moving that part with Build's own tests, so Build's behaviour is unchanged.
 
 **One database per model or one for many** is a deployment choice: a model names its connection, and several models can share one
 connection with a schema each.
@@ -127,11 +126,12 @@ connection with a schema each.
 | --- | --- | --- | --- |
 | Dav.AspNetCore.Server | open source | not documented | RFC 4918, ASP.NET Core, pluggable stores and lock managers (SQL Server, PostgreSQL, SQLite packages); last updated 2023 |
 | NWebDav.Server | open source | not documented | ASP.NET Core variant; 0.2.0 beta since 2024, little activity |
-| IT Hit WebDAV Server Engine | commercial | yes: its ASP.NET Core sample opens, edits and saves Office documents in place | the most direct route; a licence cost |
 
-  The recommendation is to **prototype with Dav.AspNetCore.Server against real Excel** (Windows and Mac) before deciding: Office's
-  WebDAV behaviour (lock tokens, `OPTIONS` and `PROPFIND` probing, authentication prompts) is where these servers fail, and only a
-  test with Excel shows it. If it falls short, IT Hit is the fallback. Either way the WebDAV listener is its own, off by default.
+  **Open source only** (owner decision: a commercial server is not an option). Prototype with **Dav.AspNetCore.Server** against real
+  Excel (Windows and Mac) on the same VM as plan 14's Excel catalogue; NWebDav is the second candidate. Office's WebDAV behaviour (lock
+  tokens, `OPTIONS` and `PROPFIND` probing, `MS-Author-Via`, authentication prompts) is where these servers fail, and only Excel shows
+  it. Where the library falls short, fix it in our fork or upstream rather than switching to a commercial engine; record what Excel sends,
+  as for XMLA, so the fixes have tests. The WebDAV listener is its own, off by default.
 - **Every save is a version.** A `PUT` (or an upload from the console) creates a new version; nothing is overwritten.
 
 ## 7. Extraction and consumption
@@ -172,11 +172,11 @@ connection with a schema each.
 
 ## 9. Questions for the owner
 
-1. **Name**: DbDataMaster (`dbdatamaster`), or another (DbDataHub, DbDataStore, DbDataModel)?
-2. **Structure changes**: extract Build's table-structure planner into `DbDataKit.Schema` for both (recommended), or a separate planner?
+1. ~~Name~~: **decided**, DbDataStore (`dbdatastore`).
+2. ~~Structure changes~~: **decided**, Build's planner moves into `DbDataKit.Schema`.
 3. **History**: service-managed history tables on every engine (recommended), or native temporal tables where the engine has them?
 4. **Approval**: per model, as in section 5, with agents' writes always change requests unless the owner allows otherwise?
-5. **WebDAV**: prototype with the open-source library against real Excel first, the commercial one as the fallback?
+5. ~~WebDAV~~: **decided**, open source only; Dav.AspNetCore.Server first.
 6. **Document storage**: the server's disk first, an object store (S3-compatible, Azure Blob) later?
 7. **Extraction results**: always into an entity of a model (recommended), or also as standalone tables?
 8. **Engine order**: SQL Server, PostgreSQL, SQLite first (the three the suite covers or nearly covers), then MariaDB, MySQL, Oracle?
@@ -191,6 +191,6 @@ After plan 13's M3 (the console manages all products) and with plan 14's semanti
 | M2 | Row writes with rules, history and audit; the console grid editor; agent tools as change requests |
 | M3 | `DbDataKit.Schema` from Build's planner; structure changes with plans and approval |
 | M4 | SQLite; then MariaDB and MySQL; then Oracle (with the shared providers, readers and writers they need) |
-| M5 | The document store with versions; WebDAV prototype with Excel; the decision on the library |
+| M5 | The document store with versions; WebDAV with Dav.AspNetCore.Server, tested against Excel on the VM |
 | M6 | Extraction on save into entities; fingerprint drift notifications |
 | M7 | Consumers: change events and the "on change" trigger for Sync and Build; Build import of entities; semantic dimensions, maps and calendars from entities |
