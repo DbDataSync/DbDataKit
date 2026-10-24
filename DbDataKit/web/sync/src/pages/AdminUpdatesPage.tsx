@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { AdminTabs } from '../components/AdminTabs'
 import { AppShell } from '../components/AppShell'
-import { ErrorBanner } from '../components/ErrorBanner'
-import { useIsAdmin } from '../components/useIsAdmin'
+import { ErrorBanner } from '@dbdatakit/shell'
+import { useIsAdmin } from '@dbdatakit/shell'
 import { ACTIVE_UPDATE_PHASES, useUpdateReleases, useUpdateStatus } from '../api/hooks'
 import type { UpdateChannel, UpdateCommands, UpdateHistoryEntry, UpdatePhase, UpdateRelease, UpdateStatus } from '../api/types'
 

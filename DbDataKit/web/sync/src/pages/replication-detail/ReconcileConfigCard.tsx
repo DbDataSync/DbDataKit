@@ -1,4 +1,4 @@
-import { Field } from '../../components/Field'
+import { Field } from '@dbdatakit/shell'
 import type { AfterChangeStrategy, DeleteGuard, ReconcileConfig, ScheduleMode } from '../../api/types'
 
 /**

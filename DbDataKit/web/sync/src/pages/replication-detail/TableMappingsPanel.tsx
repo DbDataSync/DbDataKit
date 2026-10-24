@@ -1,5 +1,5 @@
 import { Navigate, NavLink, Outlet, useLocation, useMatch, useNavigate, useOutletContext, useParams } from 'react-router-dom'
-import { ErrorBanner } from '../../components/ErrorBanner'
+import { ErrorBanner } from '@dbdatakit/shell'
 import { useTableMapping, useTableMappings } from '../../api/hooks'
 import { TableMappingForm } from './TableMappingForm'
 

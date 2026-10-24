@@ -1,5 +1,5 @@
 import { Link, useOutletContext, useParams } from 'react-router-dom'
-import { ErrorBanner } from '../../components/ErrorBanner'
+import { ErrorBanner } from '@dbdatakit/shell'
 import {
   useDeleteVerificationResult, useReplication, useRunVerification, useTableMapping,
   useUpsertTableMapping, useVerificationResults,
@@ -7,7 +7,7 @@ import {
 import { ChecksCard } from './ChecksCard'
 import type { VerificationCheckConfig } from '../../api/types'
 import type { MappingsOutletContext } from './TableMappingsPanel'
-import { SubTabs } from '../../components/SubTabs'
+import { SubTabs } from '@dbdatakit/shell'
 import { useMappingTabs } from './mappingTabs'
 import { SavedMappingHeading } from './SavedMappingHeading'
 

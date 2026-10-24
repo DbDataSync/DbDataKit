@@ -1243,6 +1243,52 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ui mcp"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_ui_mcp"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ui mcp"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_ui_mcp"
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -1371,6 +1417,10 @@
       "additionalProperties": false
     },
     "data_service_unit": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "data_ui_mcp": {
       "type": "object",
       "additionalProperties": false
     }

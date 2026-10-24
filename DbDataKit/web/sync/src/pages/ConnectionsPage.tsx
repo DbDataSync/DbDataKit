@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/AppShell'
-import { ErrorBanner } from '../components/ErrorBanner'
+import { ErrorBanner } from '@dbdatakit/shell'
 import { useConnections, useTestConnection } from '../api/hooks'
 import type { ConnectionTestReport } from '../api/types'
 

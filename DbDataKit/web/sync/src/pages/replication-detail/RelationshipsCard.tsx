@@ -1,4 +1,4 @@
-import { Field } from '../../components/Field'
+import { Field } from '@dbdatakit/shell'
 import { useColumns, useTables } from '../../api/hooks'
 import type { ColumnMetadata, RelationshipConfig, RelationshipJoinKey, ResolvedRef } from '../../api/types'
 

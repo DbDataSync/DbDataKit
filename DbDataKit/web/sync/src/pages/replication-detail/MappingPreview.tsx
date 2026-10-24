@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useOutletContext, useParams } from 'react-router-dom'
 import { CodeEditor } from '../../components/CodeEditor'
-import { ErrorBanner } from '../../components/ErrorBanner'
+import { ErrorBanner } from '@dbdatakit/shell'
 import { useMappingPreview } from '../../api/hooks'
 import type { PreviewOrigin, PreviewStatement } from '../../api/types'
 import type { MappingsOutletContext } from './TableMappingsPanel'
-import { SubTabs } from '../../components/SubTabs'
+import { SubTabs } from '@dbdatakit/shell'
 import { useMappingTabs } from './mappingTabs'
 import { SavedMappingHeading } from './SavedMappingHeading'
 

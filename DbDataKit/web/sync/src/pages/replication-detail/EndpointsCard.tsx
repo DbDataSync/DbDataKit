@@ -1,4 +1,4 @@
-import { Field } from '../../components/Field'
+import { Field } from '@dbdatakit/shell'
 import { EndpointSideCard, EndpointSidePair } from '../../components/EndpointSidePair'
 import { useConnections, useDatabases } from '../../api/hooks'
 import type { EndpointRef, TaskEndpoints } from '../../api/types'

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ErrorBanner } from './ErrorBanner'
+import { ErrorBanner } from '@dbdatakit/shell'
 import { useInstallLibrary, useKnownLibraries, useSearchLibraries } from '../api/hooks'
 import type { KnownLibrarySummary, LibrarySearchResult } from '../api/types'
 

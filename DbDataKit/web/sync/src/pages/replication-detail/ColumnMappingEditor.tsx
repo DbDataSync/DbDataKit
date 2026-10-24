@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useColumns, useInferredColumnTypes, useRelationshipColumns } from '../../api/hooks'
-import { EditableValue } from '../../components/EditableValue'
+import { EditableValue } from '@dbdatakit/shell'
 import type { ColumnMapping, ColumnMetadata, RelationshipConfig, ResolvedRef } from '../../api/types'
 
 interface Props {

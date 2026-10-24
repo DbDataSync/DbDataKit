@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Field } from '../../components/Field'
+import { Field } from '@dbdatakit/shell'
 import { CodeEditor } from '../../components/CodeEditor'
 
 /**

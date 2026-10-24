@@ -1,4 +1,4 @@
-import { ErrorBanner } from '../../components/ErrorBanner'
+import { ErrorBanner } from '@dbdatakit/shell'
 import { useReplicationPauseHistory } from '../../api/hooks'
 
 const COLUMNS = '1.3fr .9fr .7fr 2fr .9fr'

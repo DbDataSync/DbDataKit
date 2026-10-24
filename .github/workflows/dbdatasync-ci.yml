@@ -181,7 +181,9 @@ jobs:
         run: npm ci
       # Phase 160: the renderer's tests — what markup a document may and may not produce. Plain Node, no browser.
       - name: Test
-        run: npm test -w @dbdatakit/sync
+        run: |
+          npm test -w @dbdatakit/shell
+          npm test -w @dbdatakit/sync
       # Phase 162: the script that makes the package README's links absolute (tools/docs/nuget-readme.mjs), tested with
       # node's own runner — plain Node, nothing to install. Run from the product root (DbDataSync/), not this job's working directory.
       - name: Test the NuGet README rewriter

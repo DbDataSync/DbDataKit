@@ -1,70 +1,8 @@
 using System.Data.Common;
 
+using DbDataKit.Monitoring;
+
 namespace DbDataKit.State;
-
-/// <summary>What a notification is about. Stored as text, not as an enum ordinal, so an unknown value
-/// written by a newer build reads back as itself rather than as whichever kind happens to share its
-/// number.</summary>
-public static class NotificationKinds
-{
-    /// <summary>A run ended failed — phase 77.</summary>
-    public const string RunFailed = "RunFailed";
-
-    /// <summary>Somebody held a replication — phase 80. Pauses only; a resume is not news.</summary>
-    public const string ReplicationPaused = "ReplicationPaused";
-
-    /// <summary>A run failed because the source discarded the history its position pointed into —
-    /// phase 80. A run failure with a known fix, so it is its own kind rather than a
-    /// <see cref="RunFailed"/> row whose message happens to say so.</summary>
-    public const string PositionExpired = "PositionExpired";
-
-    /// <summary>A run failed because a reader, writer or staging provider needed a column's cached
-    /// shape and the mapping's metadata cache (phase 90) didn't have it — phase 91. Its own kind for
-    /// the same reason <see cref="PositionExpired"/> is: a known fix (Refresh metadata) that a feed
-    /// should be able to find without matching on prose.</summary>
-    public const string MetadataNotCached = "MetadataNotCached";
-
-    /// <summary>The bound Windows certificate is within its configured warning window of
-    /// <c>NotAfter</c> — phase 82, raised by <c>DbDataSync.Api.Services.CertificateExpiryService</c> at
-    /// most once a day.</summary>
-    public const string CertificateExpiring = "CertificateExpiring";
-
-    /// <summary>The bound Windows certificate is past <c>NotAfter</c> — phase 82. Its own kind rather
-    /// than a louder repeat of <see cref="CertificateExpiring"/>, the same way <see
-    /// cref="PositionExpired"/> is its own kind rather than a <see cref="RunFailed"/> in disguise: past
-    /// expiry is a different, worse state (the site is actively broken for every browser, not merely
-    /// approaching it) and a feed should be able to find those without matching on prose.</summary>
-    public const string CertificateExpired = "CertificateExpired";
-}
-
-/// <param name="Kind">One of <see cref="NotificationKinds"/> — but read as an open set: a row written
-/// by a newer build carries a kind this one has never heard of, and rendering it as its message is
-/// always better than dropping it.</param>
-/// <param name="TaskName">What the notification is about, where that is a replication. Null for a
-/// kind that is not about one.</param>
-public sealed record NotificationRecord(
-    long Id,
-    string Kind,
-    DateTimeOffset CreatedAtUtc,
-    string? TaskName,
-    string? MappingName,
-    Guid? RunId,
-    string Message);
-
-/// <param name="LastSeenNotificationId">Where this caller's cursor is, or null if it has never been
-/// advanced — and also null for every caller when the deployment does not authenticate, which
-/// <paramref name="Personalized"/> is what distinguishes.</param>
-/// <param name="Personalized">
-/// Whether the read state in this answer belongs to somebody. False when authentication is disabled
-/// and there is no user id to key a cursor to: every notification reads as unread, permanently, for
-/// everyone at that deployment. Said out loud in the payload because a badge that never clears is
-/// otherwise indistinguishable from one that is broken.
-/// </param>
-public sealed record NotificationFeed(
-    IReadOnlyList<NotificationRecord> Notifications,
-    long? LastSeenNotificationId,
-    int UnreadCount,
-    bool Personalized);
 
 /// <summary>
 /// The global notification feed and the per-user cursors into it — see phase 77.
@@ -82,7 +20,7 @@ public sealed record NotificationFeed(
 /// than either alone. <see cref="Insert"/> is the shared statement those call sites write through.
 /// </para>
 /// </summary>
-public sealed class NotificationStore(StateDatabase database)
+public sealed class NotificationStore(StateDatabase database) : INotificationFeed
 {
     /// <summary>
     /// Writes one notification on a connection somebody else owns, so it can join a transaction that
@@ -174,13 +112,13 @@ public sealed class NotificationStore(StateDatabase database)
     /// <summary>Where this user's cursor is. Null for a user who has never marked anything seen —
     /// which is not the same as a cursor at 0, since 0 would also be the answer for a user who
     /// acknowledged an empty feed.</summary>
-    public long? GetCursor(string userId) =>
+    public long? GetCursor(string readerId) =>
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
             using var cmd = database.Command(connection,
                 "SELECT LastSeenNotificationId FROM NotificationReadState WHERE UserId = $userId;");
-            cmd.Bind(database, "userId", userId);
+            cmd.Bind(database, "userId", readerId);
             using var reader = cmd.ExecuteReader();
             return reader.Read() ? reader.NullableInt64(0) : null;
         });
@@ -194,11 +132,11 @@ public sealed class NotificationStore(StateDatabase database)
     /// where the invariant can actually be enforced.
     /// </para>
     /// </summary>
-    public void MarkSeen(string userId, long lastSeenNotificationId)
+    public void MarkSeen(string readerId, long lastSeenNotificationId)
     {
         // Read before the write connection is opened, not inside it: nesting a second connection
         // inside an open one is how a SQLite writer deadlocks against its own reader.
-        var highWaterMark = Math.Max(lastSeenNotificationId, GetCursor(userId) ?? 0);
+        var highWaterMark = Math.Max(lastSeenNotificationId, GetCursor(readerId) ?? 0);
 
         database.Retry(() =>
         {
@@ -209,7 +147,7 @@ public sealed class NotificationStore(StateDatabase database)
                 "$userId, $lastSeen, $now",
                 "UserId",
                 "LastSeenNotificationId = EXCLUDED.LastSeenNotificationId, UpdatedAtUtc = EXCLUDED.UpdatedAtUtc"));
-            cmd.Bind(database, "userId", userId);
+            cmd.Bind(database, "userId", readerId);
             cmd.Bind(database, "lastSeen", highWaterMark);
             cmd.Bind(database, "now", DateTimeOffset.UtcNow.ToString("O"));
             cmd.ExecuteNonQuery();

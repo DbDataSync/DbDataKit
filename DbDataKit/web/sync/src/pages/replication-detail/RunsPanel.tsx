@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ErrorBanner } from '../../components/ErrorBanner'
+import { ErrorBanner } from '@dbdatakit/shell'
 import { RunDetailsDialog } from '../../components/RunDetailsDialog'
 import { RunKindBadge, StatusBadge } from '../../components/StatusBadge'
 import { BulkLoadForm } from './BulkLoadForm'
