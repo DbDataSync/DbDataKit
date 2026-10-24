@@ -1,6 +1,10 @@
 # Plan 14: the semantic layer (Query Intent Specs) in the suite
 
-Status: **proposed for review** (2026-10-24). **Not part of plan 13's work list** (`13a-suite-slices.md`): nothing here is to be
+Status: **proposed for review** (2026-10-24), **revised with the owner's long-term direction** the same day: semantic models are
+developed as an extension of DbDataBuild, but **deploying and consuming them, with the connection details, is handed off to
+DbDataProxy** (R1, R2); connections, engines and metadata are normalized across the products (R5); a SQL query language over the JSON
+requests (R6); enough MDX for Excel PivotTables (R7); more serving protocols in Proxy, XMLA certainly (R8). The master data and document
+service is [plan 15](15-master-data-and-documents.md). **Not part of plan 13's work list** (`13a-suite-slices.md`): nothing here is to be
 implemented until the owner decides the questions in section 9. Reviewed: `DbDataSync/QueryIntentSpec` at `139bbf9` (specs in
 `qis/docs/`, the C# engine in `qis/dotnet/`), against this repository at the head of `claude/monorepo-standardization-plan-2sq3l0`.
 
@@ -62,9 +66,17 @@ The suite already covers the stages around a semantic layer, and lacks only that
   operator or a scheduled job"). Build already runs tests after a refresh and has a scheduler and monitoring coming (plan 13 W10): generate
   a project test per hierarchy level pair and per relationship (orphan keys), so a broken hierarchy is caught when the data changes, not
   when a query is wrong.
-- **Deploy publishes it.** `connection deploy` / `connection publish` store the compiled semantic model (physical layer filled in for that
-  connection) with the project's other metadata, versioned with the deployed commit. The tables and their semantic model come from one
-  commit, so they cannot drift apart.
+- **Build packages it; Proxy deploys it** (owner direction). Build's job ends at a **semantic package**: the compiled model, its
+  physical layer per *Build connection*, the Build commit and the hash of the metadata it was compiled against. Build does not deploy it and
+  holds no serving connection details. Proxy deploys the package: it **binds** each Build connection the package names to one of its own
+  data sources (`dbdataproxy semantic deploy <package> --bind warehouse=erp_dw`, or from the console), checks the bound model against the
+  live catalog through `DbDataKit.Metadata` (every table and column there, types as declared), and only then serves it. Proxy keeps every
+  deployed version and can roll back. The connection details (servers, logins, secrets, TLS) live only in Proxy's data sources, where the
+  identities, limits and read-only rules already are.
+- **The package travels from one commit.** A package records the Build commit; Proxy refuses one compiled against metadata that differs
+  from what the bound data source shows (the tables changed since), and says which table. Build's deploy can hand the package on as a last
+  step (the Build server calls Proxy's management API through the console's pairing, plan 13 W12) so tables and semantic model move
+  together, but the deploy itself is always Proxy's.
 - **Calendars are a Build model.** QIS calendars need a date table with level columns and prior-period counterpart columns. Ship a Build
   template or macro that builds that table (fiscal levels, 4-4-5 if asked, `*_prior_year` columns), so a calendar is a few lines in the
   semantic file instead of a hand-maintained table.
@@ -86,14 +98,11 @@ What Build needs for this (gaps found):
   query a semantic request produces runs through the same composer, read-only session, statement classifier, concurrency limits,
   pass-through identity, secret references and failure model as a client's SQL. QIS's `SqlServerExecutor` (a raw connection string,
   driver text passed through) is replaced, not ported.
-- **A new request kind on the Flight SQL server.** A client sends a semantic request (JSON) and gets the combined result back as an
-  Arrow stream, with the QIS descriptor and the `remaining`/`warnings` part of the result contract in the stream's metadata. Two ways in,
-  in this order:
-  1. a Flight SQL `CommandStatementQuery` on a semantic data source (`x-datasource: semantic:<catalog>`) whose text is the JSON request,
-     plus a `DoAction` for completions, registrations (tables, bindings, value maps) and clarify flows. Any Flight SQL client (ADBC, the
-     JDBC driver, Python) can call it; nothing new is needed on the client.
-  2. later, a small SQL surface over the semantic model (`SELECT region, MEASURE(net_revenue) FROM sales_catalog GROUP BY region`), so BI
-     tools that only write SQL can use governed measures. This is a separate spec and a real cost; only if asked for.
+- **A new request kind on the Flight SQL server.** A client sends a semantic request and gets the combined result back as an Arrow
+  stream, with the QIS descriptor and the `remaining`/`warnings` part of the result contract in the stream's metadata: a Flight SQL
+  `CommandStatementQuery` on a semantic data source (`x-datasource: semantic:<model>`) whose text is either the JSON request or **semantic
+  SQL** (R6), plus a `DoAction` for completions, registrations (tables, bindings, value maps) and clarify flows. Any Flight SQL client
+  (ADBC, the JDBC driver, Python) can call it; nothing new is needed on the client. Other protocols (R8) are front ends to the same core.
 - **Metadata calls describe the model.** `GetTables`/`GetSqlInfo` on a semantic data source list cubes, dimensions and measures (with
   titles, synonyms and descriptions), so a client can browse the model the way it browses tables today.
 - **The combine engine runs in a child process** (`Hosting.Children`, plan 03), with DuckDB's `memory_limit` and `threads` set and the
@@ -138,6 +147,111 @@ storage for registrations and run records.
   `session` and `personal` are Proxy state per user; `shared` needs an owner's approval (the console's roles, W12); **`governed` means
   committed to the Build project** (a value map becomes a seed or a mapped table, a measure goes into `semantic/`), reviewed through the
   project's pull request or the Build server's merge (plan 13 D15). That gives versioning, history and review without a QIS-specific store.
+
+### R5. One set of connections, engines and metadata
+
+The owner's direction is to normalize as much as possible about connections, supported engines and metadata. With plan 13 most of the
+code is shared already; what is missing is one place that says what the suite supports.
+
+- **One engine registry.** `DbDataKit.Connections.Descriptor` (`engine/1` YAML descriptors, unused today) becomes the single list of
+  engines: id, dialect (`DbDataKit.Dialect`), provider, catalog reader (`DbDataKit.Metadata`), and **a capability per role**: Sync source,
+  Sync target, Build target, Build origin, Proxy source, semantic emitter, master data store (plan 15). Every product reads it instead of
+  its own enum (Sync's `DriverType`, Build's `engine` keywords, Proxy's `Provider`, QIS's source `kind`), and the support tables in each
+  product's README are generated from it, so a claim in a README is a fact in a file.
+- **One connection definition.** `connection/1` everywhere (plan 13 W8). A Build connection, a Proxy data source and a semantic package's
+  binding name the same kind of thing; the console can copy one into another (plan 13 E05).
+- **One metadata model.** `DbDataKit.Metadata` records (tables, columns, keys, foreign keys, indexes, server facts) are what Build's
+  metadata documents, Proxy's Flight SQL catalog answers, the semantic physical layer and the master data service's entities (plan 15)
+  are written from. Types are `Dialect.CanonicalType` everywhere, with one mapping to Arrow and one to the QIS descriptor types.
+- **Gaps this exposes.** SQLite, MariaDB (as distinct from MySQL) and Oracle are not equally covered: Sync has MySQL and Oracle drivers,
+  `DbDataKit` has no MySQL, Oracle or SQLite provider yet (plan 13 A09), Build targets neither. The registry makes the gaps visible
+  instead of fixing them; each is filled when a product needs it.
+
+### R6. A SQL language over the semantic requests
+
+**Recommendation: semantic SQL, a subset of DuckDB SQL with `MEASURE()`, translated to and from the JSON request.** No new grammar.
+
+Prior art, and what each would mean here:
+
+| Prior art | Query form | Fit |
+| --- | --- | --- |
+| Databricks metric views | `SELECT category, MEASURE(net_sales) FROM sales_metrics GROUP BY category`; `MEASURE(m) FILTER (WHERE ...)`; the aggregation comes from the view's YAML definition | **closest match**: plain SQL syntax, measures defined outside the query as ours are |
+| Cube SQL API | the same `MEASURE()` idea, served over the Postgres wire protocol so BI tools see a database | the protocol part is R8 |
+| Julian Hyde, "Measures in SQL" (SIGMOD 2024; Calcite; the `yardstick` DuckDB extension) | `expr AS MEASURE m` in a view, `AGGREGATE(m)` in a query, `AT (...)` to change the evaluation context | accept `AGGREGATE(m)` as a synonym; `AT` maps onto overrides and `prior_period`, later |
+| Snowflake semantic views | `FROM SEMANTIC_VIEW(v DIMENSIONS a, b METRICS m WHERE ...)` | maps one to one onto the JSON, but is its own grammar inside SQL; no |
+| Rill metrics SQL, Malloy, LookML | their own languages | a new language to learn and parse; no |
+
+Why a DuckDB subset:
+
+- **The parser exists.** QIS already validates DuckDB SQL with DuckDB's own parser (`json_serialize_sql`), and Build reads DuckDB's
+  serialized plans for a living. `MEASURE(x)` and `AGGREGATE(x)` parse as ordinary function calls, `FILTER (WHERE ...)` and named
+  arguments (`spread := 'blank'`) are DuckDB syntax, and `GROUP BY ROLLUP (...)` / `CUBE (...)` already express QIS totals. No grammar of
+  our own to design, document and fuzz.
+- **The semantics are a closed mapping.** Every accepted query is a JSON request; anything outside the subset is refused with a named
+  diagnostic (the QIS `unsupported` codes), never approximated.
+
+The mapping:
+
+| Semantic SQL | JSON request |
+| --- | --- |
+| `FROM <model>` (one semantic model; its cubes' members are its columns: `customers.region`) | the catalog |
+| a dimension in the select list and in `GROUP BY` (or `GROUP BY ALL`) | `dimensions` |
+| `MEASURE(orders.net_revenue)`, `AGGREGATE(...)` | `measures` |
+| `MEASURE(m) FILTER (WHERE status = 'Completed') AS completed` | a filtered measure |
+| `MEASURE(m, spread := 'blank')`, `MEASURE(m, rollup := {'dates.fiscal_month': 'avg'})` | overrides |
+| `WHERE` on dimensions; `HAVING` on measures | `filters` (dimension), filters on measures |
+| `GROUP BY ROLLUP (a, b)`, `GROUP BY CUBE (a, b)` | `x_totals` |
+| a closed set of window patterns over measures (`MEASURE(m) / SUM(MEASURE(m)) OVER (PARTITION BY ...)`, `RANK() OVER (...)`, running sums) | transforms (`pct_of_total`, `rank`, `running_total`) |
+| `QUALIFY rank <= 5` | `x_post_filters` |
+| `ORDER BY`, `LIMIT` (required, as in JSON) | `order`, `limit` |
+| an outer query over a semantic query used as a derived table | a **completion**: run in the sandboxed DuckDB over the result, as QIS completions are |
+| joins, set operations, subqueries in `WHERE` | refused (`unsupported`: `set_filter`, `custom_expression`) |
+
+And the reverse: every JSON request has **one canonical semantic SQL text**, shown in explain views, in run records and to agents. The
+conformance fixtures gain a SQL form, and the tests check that SQL to JSON to SQL is stable. Agents may write either; people mostly read SQL.
+
+The translator is part of `DbDataKit.Semantic` (R3), specified as a QIS document (`docs/semantic-sql.md` beside `query.md`).
+
+### R7. MDX, enough for Excel PivotTables
+
+**What Excel does.** A PivotTable on an OLAP source connects with the Analysis Services provider (MSOLAP) over **XMLA**, SOAP over
+HTTP(S): `Discover` requests for the schema rowsets, `Execute` requests carrying MDX, sessions, and multidimensional results (cell sets).
+Excel generates a **narrow, recognizable set of MDX shapes**: `NON EMPTY Hierarchize(AddCalculatedMembers(DrilldownLevel({...})))` on axes
+with `DIMENSION PROPERTIES PARENT_UNIQUE_NAME, ...`, filters as a sub-select (`FROM (SELECT ... ON 0 FROM [cube])`) or a `WHERE` slicer,
+drill-down and member searches. Prior art: Mondrian and its fork eMondrian (Java) serve Excel this way over any JDBC database, and
+XMLA Connect is an open-source Excel client; there is no .NET XMLA server to reuse.
+
+**Recommendation:** translate that MDX into semantic requests; do not build a general MDX engine.
+
+- **The semantic model already has what MDX needs**, or nearly: cubes (facts), dimensions, hierarchies with levels, members lists, sort
+  keys, measures with rollup rules (Excel's subtotals are QIS totals, `CUBE`-style for a matrix with both axes totalled). To add: an `All`
+  member and member unique names per hierarchy, measure groups, display folders and **format strings** on measures.
+- **An MDX parser for the subset**, producing the axes, the slicer and the sub-select filters, then one semantic request per cell set
+  (dimensions from the axes' levels, `x_totals` from `DrilldownLevel`/`Hierarchize`, filters from slicers and sub-selects), then the
+  QIS result reshaped into the cell set Excel expects. Anything outside the subset is an XMLA error with a clear message.
+- **Excel's own traffic is the specification.** Record the XMLA that Excel sends against a real SSAS Tabular model (QIS already has a
+  self-contained Tabular model and a Windows-runner plan for it, `qis/docs/ssas.md`) and SSAS's answers, for each PivotTable action
+  (add a field to rows, columns, values, filters; expand and collapse; sort; search members; refresh). Those become golden fixtures: the
+  same requests to Proxy must give cell sets Excel accepts and numbers equal to SSAS's.
+- **In order:** (1) `Discover` rowsets, so Excel lists the fields (`DISCOVER_PROPERTIES`, `DBSCHEMA_CATALOGS`, `MDSCHEMA_CUBES`,
+  `_DIMENSIONS`, `_HIERARCHIES`, `_LEVELS`, `_MEASURES`, `_MEMBERS`, `_PROPERTIES`, `_SETS`); (2) rows, columns and values with
+  subtotals and grand totals; (3) filters (slicer, sub-select), drill-down, sorting; (4) member search, named sets, measures Excel
+  calculates itself. Write-back, drill-through and user-defined calculated members are out of scope.
+- **Authentication** is what Excel can do over HTTP: Windows (Negotiate), which Proxy already validates, or Basic over TLS, resolved to
+  Proxy's client identities, so every PivotTable query carries a user like any other Proxy query.
+
+### R8. More serving protocols in Proxy
+
+All protocols are **front ends to one query core**: a protocol adapter turns its wire messages into a SQL pass-through query, a
+semantic request (JSON or semantic SQL) or an MDX request, maps its authentication onto Proxy's identities, and returns rows. It never
+opens a connection, applies a limit or formats an error itself. Each adapter gets its own listener, off by default.
+
+| Protocol | What it serves | Recommendation |
+| --- | --- | --- |
+| Flight SQL (today) | SQL pass-through, semantic JSON and semantic SQL | keep as the primary protocol |
+| **XMLA** (with R7) | MDX for Excel PivotTables, the semantic model as cubes | **build**, with R7: it is the only way Excel's PivotTables reach a non-Microsoft model |
+| **Postgres wire** (protocol v3) | semantic SQL to BI tools that speak Postgres (Tableau, Power BI's Postgres connector, Metabase, Superset, psql), as Cube's SQL API does | **build after semantic SQL works**. The protocol itself is small (simple and extended query, SCRAM-SHA-256, TLS); the long tail is **catalog emulation**: BI tools first query `pg_catalog` and `information_schema`, and each tool's introspection must be answered, tool by tool. Serve semantic SQL only, not pass-through: a Postgres client writing Postgres SQL against a SQL Server data source would be a dialect mismatch. There is no .NET Postgres server library; Npgsql is a client |
+| **Quack** (DuckDB 2.0's client-server protocol: `ATTACH 'quack:host'`, a shared token, request and response) | DuckDB clients | **wait.** DuckDB describes it as an RPC protocol between DuckDB processes that "supports the full DuckDB feature set"; a server in .NET would have to behave like DuckDB, and no third-party server specification or stability promise was found. Revisit when one exists; the cheaper route then may be a DuckDB child process serving Quack over views of semantic results, behind Proxy's identities |
 
 ## 4. What QIS duplicates
 
@@ -222,16 +336,24 @@ After plan 13's M2 (the console with Sync, the command surface, the trust model)
 | Q3 | Build: semantic files in projects, compile-time validation, generated physical layer, references on built models | Q1, plan 13 B (Build on the shared libraries) |
 | Q4 | Build: generated hierarchy and relationship tests; the calendar template | Q3 |
 | Q5 | Proxy: semantic data source over Flight SQL (`CommandStatementQuery` with JSON, `DoAction`), combine in a child process, state in Proxy's store | Q2, plan 13 P (Proxy management), D18 |
-| Q6 | Build deploy publishes the semantic model; Proxy loads it per connection | Q3, Q5 |
+| Q6 | Build produces semantic packages; Proxy loads a package bound to its data sources | Q3, Q5 |
 | Q7 | Agent tools on the shared command surface; console semantic module (model browser, query explorer, views, promotion review) | Q5, plan 13 W4a, W5 |
 | Q8 | PostgreSQL emitter | Q2 |
 | Q9 | SSAS on Proxy (Windows), if the decision in section 5 item 8 says so | Q5 |
+| Q10 | The engine registry (R5): `engine/1` descriptors read by every product; generated support tables | plan 13 A/B (Connections adopted) |
+| Q11 | Semantic SQL (R6): the spec, the translator both ways, SQL forms of the fixtures | Q2 |
+| Q12 | Semantic packages and Proxy deploy (R1): bind, validate against the live catalog, versions and rollback | Q5, Q6 |
+| Q13 | XMLA and MDX for Excel (R7): recorded Excel traffic as fixtures, then Discover, axes and totals, filters and drill, search | Q5, a Windows runner with SSAS for the recordings |
+| Q14 | Postgres wire for semantic SQL (R8), tool by tool | Q11 |
 
 ## 8. Risks
 
 | Risk | Mitigation |
 | --- | --- |
 | The QIS spec keeps moving while the suite depends on it | the spec versions itself (`spec_version`); the engine moves here only after level 5 settles; fixtures are the contract |
+| MDX scope creep: Excel is one client, but every MDX client is different | the subset is defined by recorded Excel traffic; other clients are out of scope until asked for |
+| Postgres-wire BI tools each introspect differently | one tool at a time, each with its own recorded fixtures; semantic SQL only |
+| A semantic package deployed against tables that changed | Proxy validates the package against the live catalog before serving it, and refuses with the table named (R1) |
 | A federated query exhausts Proxy's memory | child process, DuckDB limits, row caps, concurrency gates (R2) |
 | Wrong numbers from a semantic difference between the DuckDB stand-in and SQL Server | fixtures run on real SQL Server and PostgreSQL in CI; Build's string-semantics knowledge applied to the emitters |
 | One user's cached result reaches another | identity in every cache and saved-result key (section 5 item 4) |
@@ -248,3 +370,7 @@ After plan 13's M2 (the console with Sync, the command surface, the trust model)
 4. **SSAS:** a real source to support (on Proxy, Windows), or test stand-in only?
 5. **Ad hoc data and extraction:** in the first version on Proxy, or after governed queries work?
 6. **Names:** "semantic model" in the suite, "catalog" kept for database catalogs?
+7. **Semantic SQL:** the DuckDB subset with `MEASURE()` (Databricks' form, `AGGREGATE()` accepted), as recommended in R6?
+8. **Excel:** PivotTables over XMLA through MDX translated to semantic requests (R7), with recorded Excel traffic against SSAS as the
+   specification; is a Windows runner with SSAS available for the recordings?
+9. **Protocols:** XMLA with MDX first, Postgres wire after semantic SQL, Quack deferred until DuckDB publishes a server specification (R8)?
