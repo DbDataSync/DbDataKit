@@ -19,10 +19,11 @@ public sealed class BootstrapInviteTests(AuthenticatedApiFactory factory) : ICla
         new(users, invites,
             new AuthOptions
             {
+                Product = SyncAuth.Product,
                 AdminGroup = "g",
                 NetworkAdmin = networkAdminLoopback ? AdminNetworkTrust.Loopback : AdminNetworkTrust.Disabled,
             },
-            new ApiOptions { RepoRoot = root, StateDbPath = Path.Combine(root, "state.db"), TaskRunnerDllPath = "unused", CliDllPath = "unused" },
+            new BootstrapInviteLocation(root),
             NullLogger<BootstrapInvite>.Instance);
 
     /// <summary>Fresh state, so "are there users" means what it says rather than what the rest of the

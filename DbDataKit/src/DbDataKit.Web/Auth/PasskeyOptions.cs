@@ -1,6 +1,5 @@
-using DbDataSync.Api.Configuration;
 
-namespace DbDataSync.Api.Auth;
+namespace DbDataKit.Web.Auth;
 
 /// <summary>
 /// WebAuthn's relying-party settings — the origin passkeys are bound to.
@@ -48,31 +47,28 @@ public sealed class PasskeyOptions
     /// </summary>
     public required IReadOnlySet<string> Origins { get; init; }
 
-    /// <param name="apiOptions">Already resolved <see cref="ApiOptions.Url"/>/<see
-    /// cref="ApiOptions.AlternateUrls"/> — read from there rather than re-reading <c>IConfiguration</c>
-    /// directly, so there is one answer to "what is this deployment's own URL", not two resolutions of
-    /// the same setting that could disagree.</param>
-    public static PasskeyOptions FromConfiguration(IConfiguration configuration, ApiOptions apiOptions)
+    /// <param name="configuration">Where the product's <c>Auth:Passkeys</c> section is read from.</param>
+    /// <param name="product">Names the section and the default relying-party name.</param>
+    /// <param name="url">The deployment's own URL, already resolved by the product — read from there rather than re-reading <c>IConfiguration</c>
+    /// directly, so there is one answer to "what is this deployment's own URL", not two resolutions of the same setting that could disagree.</param>
+    /// <param name="alternateUrls">Other addresses the same deployment is reached at.</param>
+    /// <param name="originsWhenNothingConfigured">What a from-scratch development environment needs when nothing configures the URL at all (an https variant, and
+    /// the Vite dev server's own port), used only when <paramref name="alternateUrls"/> is empty, so a real deployment's origin list never gets localhost-only entries.</param>
+    public static PasskeyOptions FromConfiguration(
+        IConfiguration configuration, AuthProduct product, string url, IReadOnlyList<string> alternateUrls, IReadOnlyList<string> originsWhenNothingConfigured)
     {
-        var section = configuration.GetSection("DbDataSync:Auth:Passkeys");
+        var section = configuration.GetSection($"{product.Section}:Passkeys");
         var id = section["RelyingPartyId"];
 
-        var origins = new List<string> { apiOptions.Url };
-        origins.AddRange(apiOptions.AlternateUrls.Count > 0
-            ? apiOptions.AlternateUrls
-            // Nothing configures App:Url or App:AlternateUrls at all — a fresh clone or `dotnet run`
-            // with no dbdatasync.config.yaml yet (ApiOptions.Url is then its own DefaultUrl). Keeps
-            // exactly what a from-scratch dev environment already needs (an https variant, and the
-            // Vite dev server's own port) without baking localhost-only entries into a real
-            // deployment's origin list once App:Url is configured.
-            : apiOptions.Url == ApiOptions.DefaultUrl ? ["https://localhost:5080", "http://localhost:5173"] : []);
+        var origins = new List<string> { url };
+        origins.AddRange(alternateUrls.Count > 0 ? alternateUrls : originsWhenNothingConfigured);
 
         return new PasskeyOptions
         {
             // localhost is the only default that can be right without being told, and it is the one a
             // freshly installed tool actually runs at.
             RelyingPartyId = string.IsNullOrWhiteSpace(id) ? "localhost" : id,
-            RelyingPartyName = section["RelyingPartyName"] ?? "DbDataSync",
+            RelyingPartyName = section["RelyingPartyName"] ?? product.Name,
             Mode = ConfigEnum.Parse(section["Mode"], FeatureMode.Enabled),
             Origins = origins.ToHashSet(StringComparer.OrdinalIgnoreCase),
         };

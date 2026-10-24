@@ -1,8 +1,7 @@
-using DbDataSync.Api.Configuration;
-using DbDataSync.State;
+using DbDataKit.State;
 using Microsoft.Extensions.Hosting;
 
-namespace DbDataSync.Api.Auth;
+namespace DbDataKit.Web.Auth;
 
 /// <summary>
 /// The only way into a fresh install, printed on the console and written to
@@ -18,8 +17,11 @@ namespace DbDataSync.Api.Auth;
 /// removed the moment the first user exists, so it does not sit on disk as a standing way in.
 /// </para>
 /// </summary>
+/// <param name="Directory">Where <see cref="BootstrapInvite.FileName"/> is written.</param>
+public sealed record BootstrapInviteLocation(string Directory);
+
 public sealed class BootstrapInvite(
-    UserStore users, InviteStore invites, AuthOptions authOptions, ApiOptions apiOptions,
+    UserStore users, InviteStore invites, AuthOptions authOptions, BootstrapInviteLocation location,
     ILogger<BootstrapInvite> logger)
     : IHostedService
 {
@@ -32,7 +34,7 @@ public sealed class BootstrapInvite(
         if (authOptions.NetworkAdmin == AdminNetworkTrust.Loopback)
             return Task.CompletedTask;
 
-        var filePath = Path.Combine(apiOptions.RepoRoot, FileName);
+        var filePath = Path.Combine(location.Directory, FileName);
 
         if (users.Any())
         {
@@ -52,9 +54,10 @@ public sealed class BootstrapInvite(
         logger.LogWarning(
             "No users exist yet. Open this once to create the first administrator — it expires in {Hours} hours:\n" +
             "    /invite#{Code}\n" +
-            "Run `dbdatasync invite` to print a fresh one if this scrolls away.",
+            "Run `{Command}` to print a fresh one if this scrolls away.",
             (int)InviteStore.DefaultLifetime.TotalHours,
-            minted.Code);
+            minted.Code,
+            authOptions.Product.InviteCommand);
 
         // Best effort: a service running as an account with no write access to RepoRoot still has the
         // log line above, so this never blocks startup over a permissions problem it can't fix anyway.
@@ -65,7 +68,7 @@ public sealed class BootstrapInvite(
                 $"No users exist yet. Open this once to create the first administrator — it expires in " +
                 $"{(int)InviteStore.DefaultLifetime.TotalHours} hours:\n\n" +
                 $"    /invite#{minted.Code}\n\n" +
-                "Run `dbdatasync invite` to print a fresh one if this expires. This file is removed once " +
+                $"Run `{authOptions.Product.InviteCommand}` to print a fresh one if this expires. This file is removed once " +
                 "the first administrator signs up.\n");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

@@ -2,10 +2,12 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.Claims;
 using System.Security.Principal;
-using DbDataSync.State;
+using DbDataKit.State;
 
-namespace DbDataSync.Api.Auth;
+namespace DbDataKit.Web.Auth;
 
+/// <param name="Sid">The security identifier: the subject a user is keyed on.</param>
+/// <param name="Name">The account name, for display.</param>
 /// <param name="Role">Null when this identity is in neither configured group — which is "not a user
 /// here", not "a user with no permissions".</param>
 public sealed record WindowsIdentityResult(string Sid, string Name, UserRole? Role);

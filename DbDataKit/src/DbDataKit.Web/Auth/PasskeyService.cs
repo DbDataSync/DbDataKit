@@ -1,10 +1,10 @@
 using System.Text;
 using System.Text.Json;
-using DbDataSync.State;
+using DbDataKit.State;
 using Fido2NetLib;
 using Fido2NetLib.Objects;
 
-namespace DbDataSync.Api.Auth;
+namespace DbDataKit.Web.Auth;
 
 /// <summary>
 /// WebAuthn registration and assertion, on top of fido2-net-lib.

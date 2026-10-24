@@ -1,8 +1,8 @@
 using System.Security.Claims;
 using DbDataKit.Config.Git;
-using DbDataSync.State;
+using DbDataKit.State;
 
-namespace DbDataSync.Api.Auth;
+namespace DbDataKit.Web.Auth;
 
 /// <summary>
 /// Who is making this request, resolved per request from the signed-in principal.
@@ -15,9 +15,7 @@ namespace DbDataSync.Api.Auth;
 /// </summary>
 public sealed class CurrentUser(IHttpContextAccessor accessor, AuthOptions options, PasskeyOptions passkeys)
 {
-    public const string UserIdClaim = "dbdatasync:userId";
-
-    public string? Id => accessor.HttpContext?.User.FindFirst(UserIdClaim)?.Value;
+    public string? Id => accessor.HttpContext?.User.FindFirst(options.Product.UserIdClaim)?.Value;
 
     public string? Name => accessor.HttpContext?.User.Identity?.Name;
 
@@ -42,16 +40,12 @@ public sealed class CurrentUser(IHttpContextAccessor accessor, AuthOptions optio
             var principal = accessor.HttpContext?.User;
             var name = principal?.Identity?.Name;
             if (string.IsNullOrWhiteSpace(name))
-                return SystemAuthor;
+                return options.Product.SystemAuthor;
 
             var email = principal?.FindFirst(ClaimTypes.Email)?.Value;
-            return new GitAuthor(name, string.IsNullOrWhiteSpace(email) ? "dbdatasync@localhost" : email);
+            return new GitAuthor(name, string.IsNullOrWhiteSpace(email) ? options.Product.SystemAuthor.Email : email);
         }
     }
-
-    /// <summary>What a write is attributed to when nobody is signed in — an authentication-disabled
-    /// deployment, or the scheduler acting on its own.</summary>
-    public static GitAuthor SystemAuthor { get; } = new("DbDataSync", "dbdatasync@localhost");
 
     /// <summary>Whether this deployment authenticates at all, for a UI that has to decide whether to
     /// show a sign-in state or nothing.</summary>
