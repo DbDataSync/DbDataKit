@@ -6,7 +6,7 @@ lists rules its tests enforce.
 | Folder | What it is | Owns |
 | --- | --- | --- |
 | `DbDataKit/` | the shared libraries (`DbDataKit.*`, packages under `src/`, tests under `tests/`) | what two or more products need: config, connections, dialects, metadata, secrets, hosting, transfer |
-| `DbDataSync/` | replication tool: ASP.NET API, React UI (`src/DbDataSync.Web`), per-run TaskRunner | the replication engine, its drivers, its UI |
+| `DbDataSync/` | replication tool: ASP.NET API, React UI (`DbDataKit/web/sync`, an npm workspace), per-run TaskRunner | the replication engine, its drivers, its UI |
 | `DbDataProxy/` | Arrow Flight SQL proxy for relational databases | the Flight SQL server, its authentication, the 32-bit ODBC worker |
 | `DbDataBuild/` | CLI that builds tables and views from DuckDB-dialect SQL models | the model language, lowering, targets, plans |
 | `dist/` | install scripts, MSI and Scoop generation for every product | packaging |
