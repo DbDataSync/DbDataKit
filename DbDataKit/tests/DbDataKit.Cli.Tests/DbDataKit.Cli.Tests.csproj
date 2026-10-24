@@ -8,6 +8,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="JsonSchema.Net" />
     <ProjectReference Include="..\..\src\DbDataKit.Cli\DbDataKit.Cli.csproj" />
   </ItemGroup>
   <ItemGroup>

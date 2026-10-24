@@ -27,7 +27,10 @@ public static class HostingNouns
     ]);
 
     private static Verb Forward(string name, string summary, EffectClass effect, string usage, Func<string[], IConsole, int> execute) =>
-        new(name, summary, effect, usage, (args, context) => Task.FromResult(execute([name, .. args], new ContextConsole(context))));
+        new(name, summary, effect, usage, (args, context) => Task.FromResult(execute([name, .. args], new ContextConsole(context))), DataSchemas.None);
+
+    /// <summary>A console whose output goes to the context, so that it is captured in the JSON form.</summary>
+    public static IConsole ConsoleFor(CliContext context) => new ContextConsole(context);
 
     private sealed class ContextConsole(CliContext context) : IConsole
     {

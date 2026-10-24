@@ -42,6 +42,12 @@ earlier version (empty password) is re-encrypted in place on the first start, ke
 `Tls:CertificatePassword` set in the configuration is still honoured for the self-signed file; remove it to use the
 protected password. Manage the certificate with `DbDataProxy cert show|ensure|renew|check`.
 
+## JSON output
+
+Every command takes `--format json` and writes one document instead of text: `{ schema, command, tool_version, exit_code, ok, data, messages, errors }`. `data` is what the command found or did
+(its shape is the command's own, listed in `schemas/output.schema.json`), `messages` and `errors` are the lines the text form writes to standard output and standard error, and `exit_code` is the code text mode
+exits with (0 done, 1 the answer is no or it failed, 2 used wrongly). The schema is generated from the commands and a test fails when it is out of date (`UPDATE_GOLDEN=1` rewrites it).
+
 ## Service, containers and health
 
 ```
