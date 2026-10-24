@@ -1,3 +1,4 @@
+using DbDataKit.Metadata;
 using DbDataSync.Core.Sql;
 using System.Data.Common;
 using DbDataSync.Drivers.Abstractions;
@@ -14,57 +15,11 @@ namespace DbDataSync.Drivers.MsSql;
 /// </summary>
 internal static class MsSqlSchemaQueries
 {
-    public static async Task<IReadOnlyList<ColumnMetadata>> GetColumnsAsync(
-        DbConnection connection, string schema, string table, CancellationToken cancellationToken)
-    {
-        using var cmd = connection.CreateTimedCommand();
-        cmd.CommandText = """
-            SELECT c.name, ty.name AS TypeName, c.max_length, c.precision, c.scale, c.is_nullable,
-                   CASE WHEN pk.column_id IS NOT NULL THEN 1 ELSE 0 END AS IsPrimaryKey, c.is_identity,
-                   ISNULL(pk.key_ordinal, 0) AS KeyOrdinal
-            FROM sys.tables t
-            JOIN sys.schemas s ON t.schema_id = s.schema_id
-            JOIN sys.columns c ON c.object_id = t.object_id
-            JOIN sys.types ty ON c.user_type_id = ty.user_type_id
-            LEFT JOIN (
-                SELECT ic.object_id, ic.column_id, ic.key_ordinal
-                FROM sys.index_columns ic
-                JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id
-                WHERE i.is_primary_key = 1
-            ) pk ON pk.object_id = c.object_id AND pk.column_id = c.column_id
-            WHERE s.name = @schema AND t.name = @table
-            ORDER BY c.column_id;
-            """;
-        cmd.AddParameter("@schema", schema);
-        cmd.AddParameter("@table", table);
-
-        var results = new List<ColumnMetadata>();
-        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            var typeName = reader.GetString(1);
-            var maxLength = reader.GetInt16(2);
-            var precision = reader.GetByte(3);
-            var scale = reader.GetByte(4);
-            var isNullable = reader.GetBoolean(5);
-            var isPrimaryKey = reader.GetInt32(6) == 1;
-            var isIdentity = reader.GetBoolean(7);
-            var keyOrdinal = Convert.ToInt32(reader.GetValue(8));
-
-            results.Add(new ColumnMetadata(
-                reader.GetString(0),
-                FormatSqlType(typeName, maxLength, precision, scale),
-                isNullable,
-                isPrimaryKey,
-                isIdentity,
-                keyOrdinal));
-        }
-
-        if (results.Count == 0)
-            throw new InvalidOperationException($"Table '{schema}.{table}' was not found.");
-
-        return results;
-    }
+    /// <summary>The columns of one table, read by the shared SQL Server catalog reader (plan 13, A11): native types as DDL-ready text
+    /// ("nvarchar(50)", "decimal(18,2)"), identity from <c>sys.columns</c>, primary-key members in key order.</summary>
+    public static Task<IReadOnlyList<ColumnMetadata>> GetColumnsAsync(
+        DbConnection connection, string schema, string table, CancellationToken cancellationToken) =>
+        SharedCatalog.ColumnsAsync(new SqlServerCatalogReader(connection, options: SharedCatalog.OptionsFor(connection)), schema, table, cancellationToken);
 
     public static async Task<IReadOnlyList<string>> GetPrimaryKeyColumnsAsync(
         DbConnection connection, string schema, string table, CancellationToken cancellationToken)
@@ -79,32 +34,5 @@ internal static class MsSqlSchemaQueries
     {
         var paren = nativeType.IndexOf('(');
         return (paren < 0 ? nativeType : nativeType[..paren]).Trim().ToLowerInvariant();
-    }
-
-    /// <summary>Reconstructs a DDL-ready type spec (e.g. "nvarchar(50)", "decimal(18,2)") from the raw
-    /// sys.columns length/precision/scale — a bare type name alone would default nvarchar/varchar
-    /// columns to length 1 if used directly in a CREATE TABLE.</summary>
-    private static string FormatSqlType(string typeName, short maxLength, byte precision, byte scale)
-    {
-        switch (typeName.ToLowerInvariant())
-        {
-            case "nchar":
-            case "nvarchar":
-                return maxLength == -1 ? $"{typeName}(max)" : $"{typeName}({maxLength / 2})";
-            case "char":
-            case "varchar":
-            case "binary":
-            case "varbinary":
-                return maxLength == -1 ? $"{typeName}(max)" : $"{typeName}({maxLength})";
-            case "decimal":
-            case "numeric":
-                return $"{typeName}({precision},{scale})";
-            case "datetime2":
-            case "time":
-            case "datetimeoffset":
-                return $"{typeName}({scale})";
-            default:
-                return typeName;
-        }
     }
 }

@@ -1,4 +1,5 @@
 using System.Data.Common;
+using DbDataKit.Metadata;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
 using DbDataSync.Core.Sql;
@@ -30,13 +31,20 @@ internal sealed class PostgresCatalog : ITableCatalog
     public async Task<IReadOnlyList<ColumnMetadata>> GetColumnsAsync(
         DbConnection connection, string schema, string table, CancellationToken cancellationToken)
     {
-        var columns = await Shared.GetColumnsAsync(connection, schema, table, cancellationToken);
+        // Read by the shared PostgreSQL catalog reader (plan 13, A11), with the two rules Sync keeps for itself: only GENERATED ALWAYS is an
+        // identity here (the reader also counts serial and BY DEFAULT), and a type is its bare name (no timestamp precision, "array" for any array).
         var alwaysGenerated = await GetAlwaysGeneratedAsync(connection, schema, table, cancellationToken);
-
-        return alwaysGenerated.Count == 0
-            ? columns
-            : columns.Select(c => c with { IsIdentity = alwaysGenerated.Contains(c.Name) }).ToList();
+        return await SharedCatalog.ColumnsAsync(
+            new PostgresCatalogReader(connection, options: SharedCatalog.OptionsFor(connection)), schema, table, cancellationToken,
+            nativeType: c => NativeType(c.NativeType),
+            isIdentity: c => alwaysGenerated.Contains(c.Name));
     }
+
+    private static readonly System.Text.RegularExpressions.Regex Precision =
+        new(@"^(timestamp|time|interval)\(\d+\)", System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    internal static string NativeType(string formatted) =>
+        formatted.EndsWith("[]", StringComparison.Ordinal) ? "array" : Precision.Replace(formatted, "$1");
 
     private static async Task<HashSet<string>> GetAlwaysGeneratedAsync(
         DbConnection connection, string schema, string table, CancellationToken cancellationToken)
