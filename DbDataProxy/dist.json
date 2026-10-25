@@ -15,7 +15,7 @@
     "register": "service install --name {name}",
     "unregister": "service uninstall --name {name}"
   },
-  "notes": "Settings live in %ProgramData%\\DbDataProxy\\appsettings.json. Registering the Windows service needs an elevated prompt: dbdataproxy service install",
+  "notes": "Settings live in %ProgramData%\\DbDataProxy\\config (server.yaml, proxy/, connections/). Registering the Windows service needs an elevated prompt: dbdataproxy service install",
   "msi": {
     "upgradeCode": "B47E1D90-2A6C-4F83-8D15-C3E9A5B07F26"
   }

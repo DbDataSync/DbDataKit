@@ -1,0 +1,6 @@
+# Generate hashes with: dbdataproxy secret hash
+users:
+  - name: reporting
+    passwordHash: PBKDF2-SHA256$210000$...$...
+    dataSources: [erp, legacy]
+    defaultDataSource: erp

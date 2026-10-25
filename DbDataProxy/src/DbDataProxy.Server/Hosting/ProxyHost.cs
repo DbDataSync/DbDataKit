@@ -26,7 +26,7 @@ public static class ProxyHost
     public const string RegistrationName = "dbdataproxy";
 
     /// <summary>
-    /// The web application builder with the proxy's configuration sources (appsettings.json beside the executable, then the data directory's, DBPROXY_ environment variables, command line).
+    /// The web application builder with the proxy's configuration sources (the data directory's config folder, DBPROXY_ environment variables, command line).
     /// A configuration file that cannot be parsed surfaces as <see cref="ProxyConfigException"/>.
     /// </summary>
     public static WebApplicationBuilder CreateBuilder(string[] args)
@@ -40,8 +40,10 @@ public static class ProxyHost
                 // A Windows service starts in System32; settings and the worker are found relative to the executable.
                 ContentRootPath = AppContext.BaseDirectory,
             });
-            // The settings file lives in the data directory (Configuration/ProxyConfigFile.cs); one beside the executable is still read, below it.
-            ProxyConfigFile.AddDataDirectoryFile(builder.Configuration, ProxyConfigFile.ResolveDataDirectory(args), args);
+            // The settings live in the data directory's config folder (Configuration/ProxyConfigFile.cs). The file of earlier releases is refused.
+            var dataDirectory = ProxyConfigFile.ResolveDataDirectory(args);
+            if (ProxyConfigFile.LegacyFileMessage(dataDirectory) is { } legacy) throw new ProxyConfigException(legacy, []);
+            ProxyConfigFile.AddDataDirectory(builder.Configuration, dataDirectory, args);
         }
         catch (Exception ex) when (ex is InvalidDataException or FormatException)
         {

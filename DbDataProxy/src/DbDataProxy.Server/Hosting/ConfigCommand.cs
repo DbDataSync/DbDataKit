@@ -32,7 +32,7 @@ public static class ConfigCommand
         }
         if (verb is not ("check" or "show"))
         {
-            error.WriteLine("Usage: DbDataProxy config check [--file path] | config show [--origin] [--file path]");
+            error.WriteLine("Usage: DbDataProxy config check [--file <server.yaml or config directory>] | config show [--origin] [--file <...>]");
             return ProxyConfigException.ExitCode;
         }
         if (verb == "check" && origin)
@@ -72,12 +72,17 @@ public static class ConfigCommand
         return 0;
     }
 
+    /// <summary>Reads a configuration directory other than the installed one: the path of its <c>server.yaml</c>, or the directory itself.</summary>
     private static IConfigurationRoot FromFile(string path, List<string> args)
     {
         string full = Path.GetFullPath(path);
-        if (!File.Exists(full)) throw new FileNotFoundException($"The configuration file '{full}' was not found.");
+        if (full.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            throw new ProxyConfigException($"'{full}' is a JSON settings file, which is no longer read. Write the settings as server.yaml in a config directory (config.example/ beside the executable shows each file).", []);
+        string directory = Directory.Exists(full) ? full : Path.GetDirectoryName(full)!;
+        if (!Directory.Exists(directory) || (!Directory.Exists(full) && !File.Exists(full)))
+            throw new FileNotFoundException($"The configuration file '{full}' was not found.");
         return new ConfigurationBuilder()
-            .AddJsonFile(full, optional: false, reloadOnChange: false)
+            .Add(new ProxyConfigDirectorySource(directory))
             .AddCommandLine(args.ToArray())
             .Build();
     }

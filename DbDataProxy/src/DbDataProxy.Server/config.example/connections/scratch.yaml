@@ -1,0 +1,3 @@
+provider: duckdb
+connectionString: "Data Source=C:\\data\\scratch.duckdb"
+allowWrites: true

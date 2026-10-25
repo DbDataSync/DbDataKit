@@ -1,0 +1,34 @@
+# Copy this folder to <data directory>/config (%ProgramData%\DbDataProxy\config by default) and keep the parts you need.
+# Settings can also come from environment variables (DBPROXY_Proxy__Listen__Port=9000) or the command line (--Proxy:Listen:Port=9000).
+#
+# Configuration schema version (optional; absent means 1). 2 makes each data source's classifier default to "strict" instead of "warn".
+# Keys are case-insensitive. A misspelt or unknown key stops the service at startup with exit code 2
+# (check a folder with: dbdataproxy config check --file <this folder>).
+schemaVersion: 2
+
+# Secrets are references, not literals: env:NAME, file:PATH, secret:dbdata:proxy:..., dpapi:<base64> (see README, "Secrets").
+# A literal still works but logs a warning naming the key; true refuses to start with literal secrets.
+requireReferencedSecrets: false
+
+# Clients never see the database driver's own error text (it can name tables, servers and paths): they get the failure kind, the engine's
+# error number or SQLSTATE and a fixed sentence, e.g. "The login was rejected. [sqlserver 18456]". With true (default) the server log also
+# gets the driver text (secrets scrubbed); false logs only kind and code.
+logDriverErrors: true
+
+listen: { address: 0.0.0.0, port: 8815 }
+
+# selfSigned: a certificate is generated on first start (and renewed near expiry or when names change) in the data directory;
+# import the .cer written beside it into clients that need to trust it.
+# file: use your own PFX.  store: use a certificate from the certificate store.  none: plain HTTP/2 (local testing only - credentials travel in clear text).
+tls:
+  mode: selfSigned
+  hostnames: [proxy.example.com]
+  # mode: store, certificateThumbprint: <thumbprint>  (or certificateSubject: proxy.example.com; storeLocation: localMachine or currentUser)
+  # mode: file, certificatePath: C:\certs\proxy.pfx, certificatePassword: env:DBPROXY_PFX_PASSWORD
+  # The generated PFX gets a random password kept in a protected file beside it; leave certificatePassword unset.
+
+# hosting: { maxConcurrentRequests: 1000, drainSeconds: 30 }
+
+# mode: none | grpc (gRPC compression, gzip) | arrow (Arrow data compression: zstd or lz4 inside the Arrow stream; best ratio).
+# Clients can override per call with the "x-compression" header (none, gzip, zstd, lz4) unless disabled here.
+compression: { mode: arrow, codec: zstd, level: 3, allowClientOverride: true }
