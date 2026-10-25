@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <DbDataKitReference Include="Cli" />
+    <DbDataKitReference Include="Monitoring" />   <!-- the health rules (overdue, slow) every product shares; plan 13, M09 -->
     <DbDataKitReference Include="Web" />   <!-- the management API: pairing, tokens, roles; plan 13, R01 -->
     <DbDataKitReference Include="Hosting.Abstractions" />   <!-- the shared host: service and systemd modes, drain, /health and /version, limits; plan 13, R05 -->
     <DbDataKitReference Include="Hosting" />

@@ -4,6 +4,7 @@ using DbDataBuild.Execution;
 using DbDataBuild.Models;
 using DbDataBuild.Planning;
 using DbDataBuild.State;
+using DbDataKit.Monitoring;
 
 namespace DbDataBuild.Cli;
 
@@ -50,20 +51,39 @@ internal static class RefreshViews
     }
 
     /// <summary>Works out the health of a plan from its last run; the slowest load is read from the tracking tables only when the run was slow.</summary>
-    internal static async Task<PlanHealth> HealthAsync(ReadSession read, TrackingScope scope, EveryDuration? expected, AuditLog.PlanRun? last)
+    internal static async Task<PlanHealth> HealthAsync(ReadSession read, TrackingScope scope, EveryDuration? expected, AuditLog.PlanRun? last, TimeProvider? clock = null)
+    {
+        var health = Evaluate(expected, last, clock);
+        if (health.Slow && last != null && await AuditLog.SlowestLoadOfRunAsync(read, scope, last.Id) is { } load)
+            return health with { SlowestLoad = $"{load.Model}.{load.Membership}", SlowestMs = load.DurationMs };
+        return health;
+    }
+
+    /// <summary>
+    /// The rules, from the shared <see cref="HealthEvaluator"/> (plan 13, M09): the tracking tables supply the last run, and a plan is overdue or slow exactly as every product's jobs are. A run written as started and never
+    /// finished is a run still going: it makes the plan overdue only once it has been going longer than the span, and is never slow.
+    /// </summary>
+    internal static PlanHealth Evaluate(EveryDuration? expected, AuditLog.PlanRun? last, TimeProvider? clock = null)
     {
         if (expected == null) return PlanHealth.None;
-        var now = DateTime.UtcNow;
-        if (last == null) return new PlanHealth(expected.Text, Overdue: true, Slow: false, null, null, null, null);
-        var age = (long)(now - last.StartedUtc).TotalSeconds;
-        var took = (long)(last.LastUtc - last.StartedUtc).TotalSeconds;
-        var finished = last.Status != "started";
-        var slow = finished && took > expected.Seconds;
-        // a run that has not finished is overdue when it has been going on for the span: it is not keeping to its schedule either
-        var overdue = age > expected.Seconds && (finished || age > expected.Seconds);
-        string? slowest = null; long? slowestMs = null;
-        if (slow && await AuditLog.SlowestLoadOfRunAsync(read, scope, last.Id) is { } load) (slowest, slowestMs) = ($"{load.Model}.{load.Membership}", load.DurationMs);
-        return new PlanHealth(expected.Text, overdue, slow, took, slowest, slowestMs, age);
+        var now = (clock ?? TimeProvider.System).GetUtcNow();
+        var every = TimeSpan.FromSeconds(expected.Seconds);
+        var finished = last != null && last.Status != "started";
+        var record = last == null ? null : new RunRecord(
+            "plan", last.Id,
+            new DateTimeOffset(DateTime.SpecifyKind(last.StartedUtc, DateTimeKind.Utc)),
+            finished ? new DateTimeOffset(DateTime.SpecifyKind(last.LastUtc, DateTimeKind.Utc)) : null,
+            finished ? RunOutcome.Succeeded : RunOutcome.Running);
+        var findings = new HealthEvaluator(new FixedClock(now)).Evaluate(new JobExpectation("plan", ExpectedEvery: every), record).Findings;
+        bool Has(HealthRule rule) => findings.Any(f => f.Rule == rule);
+
+        if (last == null) return new PlanHealth(expected.Text, Overdue: Has(HealthRule.Overdue), Slow: false, null, null, null, null);
+        return new PlanHealth(expected.Text, Has(HealthRule.Overdue), Has(HealthRule.Slow), (long)(last.LastUtc - last.StartedUtc).TotalSeconds, null, null, (long)(now.UtcDateTime - last.StartedUtc).TotalSeconds);
+    }
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 
     private static string Span(long seconds) => seconds < 120 ? $"{seconds} s" : seconds < 7200 ? $"{seconds / 60} min" : seconds < 172800 ? $"{seconds / 3600} h" : $"{seconds / 86400} d";
