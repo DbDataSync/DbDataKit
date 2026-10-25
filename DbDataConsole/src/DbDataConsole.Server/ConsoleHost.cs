@@ -63,6 +63,7 @@ public static class ConsoleHost
         builder.Services.AddSingleton(sp => new ConsoleKeyStore(sp.GetRequiredService<EncryptedFileSecretStore>(), sp.GetRequiredService<EncryptedFileSecretStore>()));
         builder.Services.AddSingleton(_ => new InstanceRegistry(settings.InstancesPath));
         builder.Services.AddSingleton<ConsoleInstances>();
+        builder.Services.AddSingleton<ConsoleRelay>();
         configure?.Invoke(builder.Services);
 
         var app = builder.Build();
@@ -83,6 +84,7 @@ public static class ConsoleHost
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
+        app.MapRelay();
 
         // Deep links are the web app's routes, not this server's: /users has to return the app. An unmatched /api route is a 404, never the app.
         app.MapFallback(async context =>
