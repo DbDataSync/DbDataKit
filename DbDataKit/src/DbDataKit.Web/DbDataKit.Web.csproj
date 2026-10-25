@@ -9,6 +9,7 @@
     <Using Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="BouncyCastle.Cryptography" />
     <PackageReference Include="Fido2.AspNet" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Negotiate" />
     <ProjectReference Include="..\DbDataKit.Cli\DbDataKit.Cli.csproj" />
     <ProjectReference Include="..\DbDataKit.Config.Git\DbDataKit.Config.Git.csproj" />
     <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />

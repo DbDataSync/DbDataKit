@@ -92,6 +92,8 @@ public static class DbDataSyncHost
             // this the host starts perfectly and serves no API at all — "No action descriptors found"
             // in the log and a 404 on every route.
             .AddApplicationPart(typeof(DbDataSyncHost).Assembly)
+            // Sign-in, invitations and users are the shared ones (plan 13, U07): the same controllers the console serves.
+            .AddApplicationPart(typeof(DbDataKit.Web.Auth.Controllers.AuthController).Assembly)
             .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
         builder.Services.AddOpenApi();
         builder.Services.AddSignalR();

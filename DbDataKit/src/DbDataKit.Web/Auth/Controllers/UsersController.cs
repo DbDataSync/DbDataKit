@@ -1,7 +1,7 @@
-using DbDataSync.State;
+using DbDataKit.State;
 using Microsoft.AspNetCore.Mvc;
 
-namespace DbDataSync.Api.Controllers;
+namespace DbDataKit.Web.Auth.Controllers;
 
 public sealed record UserCredentialSummary(
     string Id, string Method, string? Label, DateTimeOffset CreatedAtUtc, DateTimeOffset? LastUsedAtUtc);

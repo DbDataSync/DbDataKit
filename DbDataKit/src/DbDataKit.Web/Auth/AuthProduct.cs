@@ -16,6 +16,11 @@ public sealed record AuthProduct(string Name)
     /// <summary>The name of the session cookie.</summary>
     public string SessionCookie => $"{Lower}.session";
 
+    /// <summary>The short-lived cookies that hold a passkey registration's and a passkey sign-in's challenge between the two calls.</summary>
+    public string PasskeyRegistrationCookie => $"{Lower}.passkey-registration";
+
+    public string PasskeyAssertionCookie => $"{Lower}.passkey-assertion";
+
     /// <summary>The authentication scheme the session handler is registered under.</summary>
     public string SchemeName => $"{Name}Session";
 

@@ -1,20 +1,22 @@
-using DbDataSync.Api.Auth;
-using DbDataSync.Api.Configuration;
-using DbDataSync.State;
+using DbDataKit.State;
 using Fido2NetLib;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace DbDataSync.Api.Controllers;
+namespace DbDataKit.Web.Auth.Controllers;
 
 public sealed record CreateInviteRequest(string Role, string? ForUserId);
 
+/// <param name="ExpiresAtUtc">When the invitation stops working.</param>
+/// <param name="Role">The role the person gets.</param>
 /// <param name="Url">Shown once, and never recoverable — the code is hashed the moment it is made.</param>
 public sealed record CreatedInvite(string Url, DateTimeOffset ExpiresAtUtc, string Role);
 
 public sealed record InviteSummary(
     string Id, string Role, string? UserId, DateTimeOffset CreatedAtUtc, DateTimeOffset ExpiresAtUtc);
 
+/// <param name="Code">The invitation's secret code, from the link.</param>
+/// <param name="Email">Optional, kept on the account.</param>
 /// <param name="DisplayName">Ignored when the invite names an existing user — that person already has
 /// a name, and letting an invite rename them would be a rename disguised as an enrolment.</param>
 public sealed record RedeemInviteRequest(string Code, string DisplayName, string? Email);
@@ -35,10 +37,11 @@ public sealed class InvitesController(
     SessionStore sessions,
     PasskeyService passkeys,
     CurrentUser currentUser,
-    ApiOptions apiOptions) : ControllerBase
+    AuthOptions authOptions,
+    BootstrapInviteLocation bootstrapLocation) : ControllerBase
 {
-    private const string RegistrationStateCookie = "dbdatasync.passkey-registration";
-    private const string AssertionStateCookie = "dbdatasync.passkey-assertion";
+    private string RegistrationStateCookie => authOptions.Product.PasskeyRegistrationCookie;
+    private string AssertionStateCookie => authOptions.Product.PasskeyAssertionCookie;
 
     [HttpPost]
     public ActionResult<CreatedInvite> Create([FromBody] CreateInviteRequest request)
@@ -192,7 +195,7 @@ public sealed class InvitesController(
     private void IssueSession(UserRecord user)
     {
         var session = sessions.Create(user.Id);
-        Response.Cookies.Append(AuthOptions.SessionCookie, session.Id, new CookieOptions
+        Response.Cookies.Append(authOptions.CookieName, session.Id, new CookieOptions
         {
             HttpOnly = true,
             SameSite = SameSiteMode.Strict,
@@ -216,7 +219,7 @@ public sealed class InvitesController(
     {
         try
         {
-            System.IO.File.Delete(Path.Combine(apiOptions.RepoRoot, BootstrapInvite.FileName));
+            System.IO.File.Delete(Path.Combine(bootstrapLocation.Directory, BootstrapInvite.FileName));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
