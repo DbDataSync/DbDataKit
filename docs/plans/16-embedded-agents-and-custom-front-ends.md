@@ -134,7 +134,7 @@ Connect provider**. **The spec needs design conversations with the owner**; the 
 5. **From app to data.** How the app host turns a signed-in app user into the tokens DbDataStore and Proxy accept (plan 13 W12), and how
    the manifest's scope narrows them.
 6. **Several consoles.** Plan 13 allows several consoles per server; an app needs one identity provider. Which console it is, and what a
-   second console means for an app's users. **Under discussion**: the options are in section 2b.
+   second console means for an app's users. **Decided**: one identity home per install (section 2b).
 
 ## 2a. Shared visuals and reports
 
@@ -217,7 +217,7 @@ spike fails.
 **The spike that decides it:** run a sample of real SSRS reports through `rdl-doctor`, and render the ones it accepts with data pushed from
 a semantic query, on Linux and Windows.
 
-## 2b. Identity with several consoles (under discussion)
+## 2b. Identity with several consoles
 
 **The tension.** Plan 13 W12 lets a server be paired with several consoles, and each console keeps its own users and role assignments.
 Apps (and the agents and report servers after them) need **one** answer to "who is this user and what may they do". With users per
@@ -231,7 +231,7 @@ console, the same person is two users in two consoles, and an app has no single 
 | B. An identity service of its own | a separate server (user directory, roles, OpenID Connect provider, Windows and Entra federation); every console, app host and agent signs users in through it | one directory, one provider, consoles become interchangeable views | one more service in every install, including the smallest; its uptime gates every sign-in |
 | **C. Identity as a shared component, hosted by one console by default** | the same component as B (`DbDataKit.Identity`), but it runs inside a console unless an install chooses to run it on its own. Each install has **exactly one identity home**; every other console, DbDataApps and the agents are relying parties of it through OpenID Connect | B's single answer without B's extra service in small installs; a large install moves it out without changing anything for consoles or apps | the console that hosts it is special; moving identity out later is an operation to document and test |
 
-**Recommendation: C**, the same pattern as the protocols (plan 15 section 11): shared code, a host chosen per install.
+**Decided (owner, 2026-10-25): C**, the same pattern as the protocols (plan 15 section 11): shared code, a host chosen per install. Carried into plan 13 (W8, W12, D20; slices U13 to U15).
 
 - **One identity home per install.** It holds users, groups, role assignments and the OpenID Connect provider, and federates Windows
   (Negotiate) and Entra ID. A standalone install has one console, which is the home; nothing changes for it.
@@ -246,10 +246,10 @@ console, the same person is two users in two consoles, and an app has no single 
 - **Running it on its own** (`dbdatakit identity run`, or a deployment option) is for installs that want sign-in independent of any one
   console, or high availability; the component, its data and its protocol are the same.
 
-**What it would change in plan 13**, if chosen: W12's rule "users are per console" becomes "users live in the install's identity home";
+**What it changes in plan 13:** W12's rule "users are per console" becomes "users live in the install's identity home";
 the console's user stores (U04, U05, already built as shared code) become the identity component's; T04 (console side of pairing), U07
-(the console host) and U10 (first run) gain the choice of "be the home" or "use a home". **Best decided before T03, T04, U07 and U10 are
-built**; T01, T02, U04 and U05 (done) need no change.
+(the console host) and U10 (first run) gain the choice of "be the home" or "use a home". T01, T02, T03 and U04, U05 (done) need no
+change; T04 (in progress) only takes the subject and roles from the home; new slices U13 to U15.
 
 ## 3. What earlier plans must keep possible
 
@@ -275,3 +275,4 @@ built**; T01, T02, U04 and U05 (done) need no change.
 | 6 | The app host's name | **decided** (for now): DbDataApps |
 | 7 | Visuals | **decided direction**: a shared feature (one view format, one renderer) for the console, apps, assistants and reports |
 | 8 | Reports | **decided first step**: our own report spec on the shared visuals, and SSRS and Power BI Report Server on a separate server, embedded in apps and reading the semantic models (plan 17); Majorsilence Reporting a documented option, FastReport a documented alternative |
+| 9 | Identity with several consoles | **decided**: one identity home per install, a shared component hosted by a console by default (section 2b) |
