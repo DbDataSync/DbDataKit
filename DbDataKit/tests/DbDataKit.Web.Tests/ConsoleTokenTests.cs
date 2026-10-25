@@ -12,9 +12,9 @@ internal sealed class TestClock : TimeProvider
     public void Advance(TimeSpan by) => Now += by;
 }
 
-internal sealed class Consoles(params PairedConsole[] list) : IPairedConsoles
+internal sealed class Consoles(params PairedClient[] list) : IPairedClients
 {
-    public PairedConsole? Find(string id) => list.FirstOrDefault(c => c.Id == id);
+    public PairedClient? Find(string id) => list.FirstOrDefault(c => c.Id == id);
 }
 
 public class ConsoleTokenTests
@@ -26,7 +26,7 @@ public class ConsoleTokenTests
     private (ConsoleTokenIssuer Issuer, ConsoleTokenValidator Validator, MemoryReplayCache Replay) Make(ServerRole ceiling = ServerRole.Admin | ServerRole.Author | ServerRole.Approver, string instance = Server)
     {
         var replay = new MemoryReplayCache(_clock);
-        var consoles = new Consoles(new PairedConsole(ConsoleId, "Operations", _key.PublicKey, ceiling));
+        var consoles = new Consoles(new PairedClient(ConsoleId, "Operations", _key.PublicKey, ceiling));
         return (new ConsoleTokenIssuer(ConsoleId, _key, _clock), new ConsoleTokenValidator(instance, consoles, replay, _clock), replay);
     }
 
@@ -67,7 +67,7 @@ public class ConsoleTokenTests
 
         Assert.True(result.Ok, result.Detail);
         var t = result.Token!;
-        Assert.Equal(ConsoleId, t.Console.Id);
+        Assert.Equal(ConsoleId, t.Client.Id);
         Assert.Equal("user-7", t.SubjectId);
         Assert.Equal("Ada Lovelace", t.SubjectName);
         Assert.False(t.IsConsole);
@@ -203,7 +203,7 @@ public class ConsoleTokenTests
     {
         var (issuer, _, replay) = Make();
         var token = issuer.Issue(Request());
-        var consoles = new Consoles(new PairedConsole(ConsoleId, "Operations", _key.PublicKey, ServerRole.Admin));
+        var consoles = new Consoles(new PairedClient(ConsoleId, "Operations", _key.PublicKey, ServerRole.Admin));
         var wrongServer = new ConsoleTokenValidator("another-instance", consoles, replay, _clock);
         Assert.Equal(TokenFailure.WrongAudience, wrongServer.Validate(token).Failure);
         Assert.Equal(0, replay.Count);                                                           // nothing was remembered

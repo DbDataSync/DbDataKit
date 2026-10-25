@@ -64,14 +64,14 @@ public sealed class FileAuditLog(string path) : IAuditLog
 public static class ManagementIdentity
 {
     public static AuditEntry Entry(ValidatedToken token, string command, string? target, string outcome, DateTimeOffset at) =>
-        new(at, token.Console.Id, token.Console.Name, token.SubjectId, token.SubjectName, token.IsConsole, command, target, outcome, token.TokenId);
+        new(at, token.Client.Id, token.Client.Name, token.SubjectId, token.SubjectName, token.IsConsole, command, target, outcome, token.TokenId);
 
     /// <summary>The user's name, and an address that names the user and the console and cannot be mistaken for a real mailbox (<c>user-7@console-a.console.invalid</c>).</summary>
     public static (string Name, string Email) CommitAuthor(ValidatedToken token)
     {
         var name = Clean(string.IsNullOrWhiteSpace(token.SubjectName) ? token.SubjectId : token.SubjectName!);
-        var via = token.IsConsole ? " (console " + Clean(token.Console.Name) + ")" : "";
-        return (name + via, $"{Address(token.SubjectId)}@{Address(token.Console.Id)}.console.invalid");
+        var via = token.IsConsole ? " (console " + Clean(token.Client.Name) + ")" : "";
+        return (name + via, $"{Address(token.SubjectId)}@{Address(token.Client.Id)}.console.invalid");
     }
 
     /// <summary>A change made on the server's own machine, through the local channel, by the operating system's user.</summary>
