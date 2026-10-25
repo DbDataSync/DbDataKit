@@ -12,7 +12,7 @@ public sealed class PairingFailedException(string message) : Exception(message);
 
 /// <summary>
 /// The client's half of pairing (plan 13, W12; <c>dbdatakit instance add</c> is this): it looks at the certificate the server presents, proves with the code that it holds it and that it saw that certificate,
-/// and accepts the answer only if the server proves the same. What it keeps is the certificate's fingerprint, which every later call pins (<see cref="Pinned(string)"/>): a self-signed certificate is fine, and so is a
+/// and accepts the answer only if the server proves the same. What it keeps is the certificate's fingerprint, which every later call pins (<see cref="Pinned(string, Action{int})"/>): a self-signed certificate is fine, and so is a
 /// renewed one only when it is paired again.
 /// </summary>
 public static class PairingClient
@@ -32,17 +32,18 @@ public static class PairingClient
 
         // 1. see the certificate (and which server this claims to be); nothing secret is sent
         string seen = "";
-        using (var probe = new HttpClient(Pinned(null, f => seen = f)) { Timeout = TimeSpan.FromSeconds(30) })
+        using (var probe = new HttpClient(PinnedSocket(null, f => seen = f)) { Timeout = TimeSpan.FromSeconds(30) })
         {
             Hello? hello;
             try { hello = await probe.GetFromJsonAsync<Hello>(endpoint, Json, ct); }
             catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException) { throw new PairingFailedException($"{url.Authority} did not answer as a DbDataKit server ({ex.GetType().Name})."); }
             if (hello?.InstanceId is null || seen.Length == 0) throw new PairingFailedException($"{url.Authority} did not answer as a DbDataKit server.");
+            if (ManagementApi.Incompatibility(hello.ApiVersion) is { } message) throw new IncompatibleServerException(message, hello.ApiVersion);
         }
 
         // 2. prove, over a connection that must present that same certificate
         var proof = PairingProof.ForRequest(key, self.Id, self.Key.PublicKey, kind, seen);
-        using var http = new HttpClient(Pinned(seen, null)) { Timeout = TimeSpan.FromSeconds(30) };
+        using var http = new HttpClient(Pinned(seen)) { Timeout = TimeSpan.FromSeconds(30) };
         HttpResponseMessage response;
         try
         {
@@ -64,10 +65,13 @@ public static class PairingClient
         }
     }
 
-    /// <summary>A handler for calls to a paired server: it accepts the certificate with this fingerprint and no other, whatever the certificate chains to.</summary>
-    public static HttpMessageHandler Pinned(string fingerprint) => Pinned(fingerprint, null);
+    /// <summary>
+    /// A handler for calls to a paired server: it accepts the certificate with this fingerprint and no other, whatever the certificate chains to, and refuses a response from a server whose management API
+    /// version is not one this client supports (<see cref="ManagementVersionHandler"/>).
+    /// </summary>
+    public static HttpMessageHandler Pinned(string fingerprint, Action<int>? observedVersion = null) => new ManagementVersionHandler(PinnedSocket(fingerprint, null), observed: observedVersion);
 
-    private static SocketsHttpHandler Pinned(string? fingerprint, Action<string>? observe) => new()
+    private static SocketsHttpHandler PinnedSocket(string? fingerprint, Action<string>? observe) => new()
     {
         SslOptions = new SslClientAuthenticationOptions
         {
