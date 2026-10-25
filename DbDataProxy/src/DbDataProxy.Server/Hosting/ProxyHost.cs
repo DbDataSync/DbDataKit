@@ -131,7 +131,7 @@ public static class ProxyHost
     private static void UseSharedHost(WebApplicationBuilder builder, ProxyOptions options, string[] args) =>
         builder.UseDbDataHost(host =>
         {
-            host.Product = ServiceName;
+            host.Product = "dbdataproxy";
             host.Version = Version;
             host.DrainTimeout = TimeSpan.FromSeconds(Math.Max(0, options.Hosting.DrainSeconds));
             host.Limits.MaxConcurrentRequests = Math.Max(1, options.Hosting.MaxConcurrentRequests);
