@@ -1,9 +1,9 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 import {
   AdminCertificatePage, AdminConfigPage, AdminUpdatesPage, DocsPage, DriverEditPage, DriversPage, FilesPage, InvitePage, LibrariesPage,
 } from '@dbdatakit/admin'
 import { useAuthStatus } from './api/hooks'
-import { SignInScreen } from '@dbdatakit/shell'
+import { SignInScreen, Navigate } from '@dbdatakit/shell'
 import { ConnectionEditPage } from './pages/ConnectionEditPage'
 import { ConnectionsPage } from './pages/ConnectionsPage'
 import { ReplicationsPage } from './pages/ReplicationsPage'
@@ -72,6 +72,11 @@ export default function App() {
 
   if (status && !status.authenticated) return <SignInScreen product="DbDataSync" />
 
+  return <SyncRoutes />
+}
+
+/** Every screen of the app, as routes, without the sign-in: a product's own page puts the sign-in in front of it, and the console puts its own. Mounted anywhere, because its links are made absolute by the shell. */
+export function SyncRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/replications" replace />} />

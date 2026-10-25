@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner, Field, useIsAdmin } from '@dbdatakit/shell'
 import { consoleApi, type InstanceSummary } from '../api'
+import { Link } from 'react-router-dom'
 import { ConsoleShell } from '../ConsoleShell'
 
 const COLUMNS = '1.4fr 1.4fr 1.8fr 2fr 1fr'
@@ -70,7 +71,12 @@ export function InstancesPage() {
                 <span className="mono">{instance.product ?? '—'} {instance.version ?? ''}</span>
                 <span data-testid="instance-status" data-tone={status.tone}>{status.text}</span>
                 <span className="mono">{instance.url}</span>
-                <button type="button" className="btn" disabled={forget.isPending} onClick={() => forget.mutate(instance.id)} data-testid="instance-forget-button">Forget</button>
+                <span className="row" style={{ gap: 8 }}>
+                  {instance.reachable && instance.product === 'dbdatasync' && (
+                    <Link to={`/servers/${instance.id}`} className="btn btn-primary" data-testid="instance-open-link">Open</Link>
+                  )}
+                  <button type="button" className="btn" disabled={forget.isPending} onClick={() => forget.mutate(instance.id)} data-testid="instance-forget-button">Forget</button>
+                </span>
               </div>
             )
           })}

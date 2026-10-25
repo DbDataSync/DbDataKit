@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { AppShell } from '../components/AppShell'
-import { ErrorBanner } from '@dbdatakit/shell'
+import { ErrorBanner, Link, useNavigate } from '@dbdatakit/shell'
 import { Field } from '@dbdatakit/shell'
 import { ParameterForm } from '../components/ParameterForm'
 import {

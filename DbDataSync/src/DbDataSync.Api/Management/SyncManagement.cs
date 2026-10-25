@@ -1,6 +1,7 @@
 using DbDataKit.Web.Trust;
 using DbDataSync.Api.Configuration;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +17,9 @@ public sealed class SyncManagement(string serverYaml, string? configuredFingerpr
 {
     public const string FileName = "server.yaml";
     public const string ConfiguredFingerprintKey = "DbDataSync:Management:CertificateFingerprint";
+
+    private static string ProgramVersion { get; } =
+        (System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(SyncManagement).Assembly)?.InformationalVersion ?? "0.0.0").Split('+')[0];
 
     public static string ServerYamlIn(string repoRoot) => Path.Combine(repoRoot, FileName);
 
@@ -61,6 +65,8 @@ public sealed class SyncManagement(string serverYaml, string? configuredFingerpr
         group.MapPairing(new PairingService(management.InstanceId,
             () => management.Certificate.Fingerprint ?? throw new InvalidOperationException("This server cannot read its own certificate yet. Pairing needs it to listen on https; behind a proxy that ends TLS, set " + ConfiguredFingerprintKey + "."),
             clients, management.Files.Codes()));
+        // What a console asks first: who this is and which version, the same document the other servers' shared host answers at /version.
+        group.MapGet("/version", () => Results.Json(new { product = "dbdatasync", version = ProgramVersion, ready = true }));
         group.MapKeyRotation(new KeyRotationService(management.InstanceId, clients, new MemoryReplayCache()));
     }
 }

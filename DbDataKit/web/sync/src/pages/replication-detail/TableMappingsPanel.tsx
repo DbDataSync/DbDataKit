@@ -1,5 +1,5 @@
-import { Navigate, NavLink, Outlet, useLocation, useMatch, useNavigate, useOutletContext, useParams } from 'react-router-dom'
-import { ErrorBanner } from '@dbdatakit/shell'
+import { Outlet, useLocation, useMatch, useOutletContext, useParams } from 'react-router-dom'
+import { ErrorBanner, Navigate, NavLink, useNavigate, useModule, usePathInModule } from '@dbdatakit/shell'
 import { useTableMapping, useTableMappings } from '../../api/hooks'
 import { TableMappingForm } from './TableMappingForm'
 
@@ -15,7 +15,8 @@ export function TableMappingsPanel({ replicationName }: { replicationName: strin
   const base = `/replications/${encodeURIComponent(replicationName)}/mappings`
   // Asked of the route rather than inferred from the absence of a mapping param: the index route has
   // no param either, and it is mid-redirect to the first mapping, not creating one.
-  const creating = useMatch(`${base}/new`) !== null
+  const { basePath } = useModule()
+  const creating = useMatch(`${basePath}${base}/new`) !== null
 
   return (
     <>
@@ -102,6 +103,7 @@ export function MappingEditorRoute() {
   const { mappingName } = useParams<{ mappingName: string }>()
   const navigate = useNavigate()
   const location = useLocation()
+  const pathInModule = usePathInModule(location.pathname)
 
   const { data: existing, isLoading } = useTableMapping(replicationName, mappingName)
   if (mappingName && isLoading) return <div className="empty">Loading…</div>
@@ -120,7 +122,7 @@ export function MappingEditorRoute() {
       onSaved={(savedName) => {
         const to = `${base}/${encodeURIComponent(savedName)}`
         const from = mappingName && `${base}/${encodeURIComponent(mappingName)}`
-        const tab = from && location.pathname.startsWith(from) ? location.pathname.slice(from.length) : ''
+        const tab = from && pathInModule.startsWith(from) ? pathInModule.slice(from.length) : ''
         navigate(`${to}${tab}`, { replace: true })
       }}
       onRemoved={() => navigate(base, { replace: true })}

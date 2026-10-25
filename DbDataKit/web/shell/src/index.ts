@@ -1,5 +1,7 @@
 // @dbdatakit/shell: what every product's console is made of. Imports nothing from any product (a test checks).
-export { ApiError, put, request } from './api/http'
+export { ApiError, apiUrl, put, request, setApiBase } from './api/http'
+export { Link, ModuleProvider, NavLink, Navigate, useModule, useNavigate, usePathInModule } from './module'
+export type { ModuleInfo } from './module'
 export { shellApi } from './api/shellApi'
 export { useAbout, useAuthStatus, useMarkNotificationsSeen, useNotifications, useSignInWithWindows, useSignOut } from './api/hooks'
 export type { AboutInfo, AuthStatus, CreatedInvite, NotificationFeed, NotificationRecord, UserCredentialSummary, UserSummary } from './api/types'

@@ -51,7 +51,9 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
 
         // The key this server knows: the current one, or the one a rotation is moving to if the server already has that.
         var identity = (instance.KeyFingerprint is { } fingerprint ? await keys.ForKeyAsync(fingerprint, context.RequestAborted) : null) ?? await keys.GetOrCreateAsync(context.RequestAborted);
-        var token = identity.Issuer().Issue(new ConsoleTokenRequest(instance.InstanceId, userId, current.Name, RolesOf(role)));
+        // What this person may do there is the lower of their role here and what the server lets this console grant; a server paired before the ceiling was recorded is asked for reading only.
+        var roles = ServerRoles.Lower(RolesOf(role), instance.Ceiling == ServerRole.None ? ServerRole.Viewer : instance.Ceiling);
+        var token = identity.Issuer().Issue(new ConsoleTokenRequest(instance.InstanceId, userId, current.Name, roles));
 
         using var request = new HttpRequestMessage(new HttpMethod(context.Request.Method), new Uri(instance.Url, path + context.Request.QueryString));
         request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, token);

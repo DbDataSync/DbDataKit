@@ -84,6 +84,19 @@ public sealed class ConsoleRelayTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task What_the_server_lets_the_console_grant_limits_what_an_administrator_holds_there()
+    {
+        // Pair again, this time as a server that lets this console grant reading only.
+        var instances = app.Services.GetRequiredService<ConsoleInstances>();
+        await instances.PairAsync(server.Url, server.NewCodeWith(DbDataKit.Web.Trust.ServerRole.Viewer), "Fake", default);
+        Assert.Equal(DbDataKit.Web.Trust.ServerRoles.Close(DbDataKit.Web.Trust.ServerRole.Viewer), instances.Registry.Find(Id)!.Ceiling);
+
+        var echo = JsonNode.Parse(await (await Send(HttpMethod.Get, $"/relay/{Id}/api/echo", admin)).Content.ReadAsStringAsync())!;
+        Assert.Equal(["viewer"], echo["roles"]!.AsArray().Select(r => (string)r!).ToList());
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send(HttpMethod.Get, $"/relay/{Id}/api/admin-only", admin)).StatusCode);
+    }
+
+    [Fact]
     public async Task A_body_and_its_type_are_forwarded_for_every_method()
     {
         foreach (var method in new[] { HttpMethod.Post, HttpMethod.Put })

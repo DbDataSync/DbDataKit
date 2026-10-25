@@ -1,7 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
-import { buildUrl, scratchDirectory } from '../playwright.config'
+import { buildUrl, scratchDirectory, syncUrl } from '../playwright.config'
 
 /** A browser-side authenticator that holds the passkeys, so the test can register one and sign in with it the way a person's device would. */
 async function addAuthenticator(context: BrowserContext, page: Page) {
@@ -88,4 +88,32 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
 
   await instance.getByTestId('instance-forget-button').click()
   await expect(page.getByTestId('instances-empty')).toBeVisible()
+
+  // A Sync server: paired, then its own screens open inside the console, under the server's address, through the relay.
+  await page.getByTestId('pair-url-input').fill(syncUrl)
+  await page.getByTestId('pair-code-input').fill(fs.readFileSync(path.join(scratchDirectory, 'sync-pairing-code.txt'), 'utf8').trim())
+  await page.getByTestId('pair-name-input').fill('Sync one')
+  await page.getByTestId('pair-button').click()
+  const sync = page.getByTestId('instance-row-Sync one')
+  await expect(sync.getByTestId('instance-status')).toHaveText('Ready')
+  await expect(sync).toContainText('dbdatasync')
+  await sync.getByTestId('instance-open-link').click()
+
+  // Its replications screen (an empty list, from the Sync server, as the person who is signed in here) under /servers/<id>/replications.
+  await expect(page).toHaveURL(/\/servers\/sync-[0-9a-f]+\/replications$/)
+  await expect(page.getByTestId('rail-replications')).toBeVisible()
+  await expect(page.getByText('No replications yet.').first()).toBeVisible()
+  // Its links stay inside the console's address for this server, and a reload of a deep link returns to the same screen.
+  await page.getByTestId('rail-connections').click()
+  await expect(page).toHaveURL(/\/servers\/sync-[0-9a-f]+\/connections$/)
+  await page.reload()
+  await expect(page).toHaveURL(/\/servers\/sync-[0-9a-f]+\/connections$/)
+  await expect(page.getByTestId('rail-connections')).toBeVisible()
+  // An administrator opens the server's own configuration through the relay.
+  await page.getByTestId('rail-admin').click()
+  await expect(page).toHaveURL(/\/servers\/sync-[0-9a-f]+\/admin\/config$/)
+  await expect(page.getByTestId('admin-config-table')).toBeVisible()
+  // The way back to the console's list of servers.
+  await page.getByTestId('rail-home-link').click()
+  await expect(page.getByTestId('instances-page')).toBeVisible()
 })

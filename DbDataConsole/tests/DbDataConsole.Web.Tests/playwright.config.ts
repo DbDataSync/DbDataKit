@@ -29,6 +29,22 @@ if (!isWorker) {
   fs.writeFileSync(path.join(scratchDirectory, 'build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
+// A Sync server too, for the console to host its screens: a real one, https with a certificate exported from the SDK's development certificate (a server must present a certificate to be paired
+// with), a pairing code that lets the console grant admin, and a repository of its own.
+export const syncDirectory = path.join(os.tmpdir(), 'dbdatakit-console-e2e-sync')
+export const syncPort = 8483
+export const syncUrl = `https://localhost:${syncPort}`
+const syncDll = path.join(repoRoot, 'DbDataSync/src/DbDataSync.Cli/bin/Debug/net10.0/DbDataSync.Cli.dll')
+const syncCertificate = path.join(os.tmpdir(), 'dbdatakit-console-e2e-sync.pfx')
+const syncCertificatePassword = 'console-e2e'
+if (!isWorker) {
+  fs.rmSync(syncDirectory, { recursive: true, force: true })
+  fs.mkdirSync(syncDirectory, { recursive: true })
+  execFileSync('dotnet', ['dev-certs', 'https', '--export-path', syncCertificate, '--password', syncCertificatePassword, '--format', 'Pfx'], { stdio: 'inherit' })
+  const made = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--repo', syncDirectory, '--max-role', 'admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'sync-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
+}
+
 // A passkey is bound to the host name and the port it was made on, and the server builds its list of allowed origins from the address it is told to listen on,
 // so the address is fixed here and the test opens exactly that.
 const port = 8481
@@ -70,6 +86,19 @@ export default defineConfig({
       timeout: 60_000,
       stdout: 'pipe',
       stderr: 'pipe',
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(syncDll), 'server', 'run', '--repo', JSON.stringify(syncDirectory), '--url', syncUrl].join(' '),
+      url: `${syncUrl}/api/health`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 90_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: {
+        Kestrel__Certificates__Default__Path: syncCertificate,
+        Kestrel__Certificates__Default__Password: syncCertificatePassword,
+      },
     },
   ],
 })

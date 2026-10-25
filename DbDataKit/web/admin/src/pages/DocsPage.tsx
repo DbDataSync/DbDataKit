@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
-import { Link, NavLink, useLocation, useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
 import { useDocPage } from '../api/hooks'
-import { ErrorBanner, RichMarkdown, useAbout } from '@dbdatakit/shell'
+import { ErrorBanner, RichMarkdown, useAbout, Link, NavLink } from '@dbdatakit/shell'
 import { useAdminHost } from '../host'
 
 /**
