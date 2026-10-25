@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+DbDataBuild/native/
+DbDataBuild/publish/
+DbDataBuild/artifacts/
+.git/
+.vs/
+DbDataSync/
+DbDataProxy/
+**/node_modules/

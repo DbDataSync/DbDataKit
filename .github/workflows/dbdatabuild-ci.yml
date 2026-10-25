@@ -41,6 +41,38 @@ jobs:
     with:
       paths: '^(DbDataBuild/|DbDataKit/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatabuild-|_)|actions/setup-product))'
 
+  # The server's container image (plan 13, L02): it builds, starts, goes healthy through its own health check, and the commands the README tells a person to run inside it work.
+  image:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the image
+        run: docker build -f DbDataBuild/Dockerfile -t dbdatabuild:ci .
+      - name: Start it and wait for its health check
+        run: |
+          docker run -d --name ddb -p 8470:8470 dbdatabuild:ci
+          for i in $(seq 1 40); do
+            status="$(docker inspect -f '{{.State.Health.Status}}' ddb)"
+            [ "$status" = healthy ] && break
+            sleep 3
+          done
+          docker logs ddb
+          [ "$status" = healthy ] || { echo "the container is $status, not healthy" >&2; exit 1; }
+      - name: Pair, add a login and answer a call
+        run: |
+          docker exec ddb dbdatabuild server pair --max-role viewer | grep -q "Pairing code:"
+          printf 'secret' | docker exec -i ddb dbdatabuild secret set dbdata:build:connection:warehouse:read --stdin
+          docker exec ddb dbdatabuild secret list | grep -q "dbdata:build:connection:warehouse:read"
+          test "$(curl -sk -o /dev/null -w '%{http_code}' https://localhost:8470/api/v1/projects)" = 401
+          curl -skf https://localhost:8470/version | grep -q '"product":"dbdatabuild"'
+          test "$(docker exec ddb id -u)" != 0
+
   unit:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
