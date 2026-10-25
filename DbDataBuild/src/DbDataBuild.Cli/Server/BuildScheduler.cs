@@ -41,29 +41,12 @@ internal static class RefreshJobs
     }
 }
 
-/// <summary>What the scheduler remembers about one job between ticks and restarts.</summary>
-/// <param name="HandledUpTo">Scheduled times up to here are dealt with (see <see cref="ScheduleDecision.HandledUpTo"/>).</param>
-/// <param name="LastStarted">When the last run began.</param>
-/// <param name="LastExit">The last run's exit code, or null while it has not ended or never ran.</param>
-internal sealed record JobState(DateTimeOffset? HandledUpTo, DateTimeOffset? LastStarted, int? LastExit);
-
-/// <summary>The scheduler's own table in the server's state database; the queue's tables come from <see cref="WorkQueueSchema.Queue"/>.</summary>
+/// <summary>The server's state database: the shared queue and the shared per-job record.</summary>
 internal static class BuildSchedulerSchema
 {
     public const string Service = "dbdatabuild";
 
-    public static StateSchema Schema => new([WorkQueueSchema.Queue,
-        """
-        -- What the scheduler remembers per job (project and connection/plan): up to when scheduled times are dealt with, when the last run began and how it ended.
-        CREATE TABLE ScheduleJobs (
-            Project {{key}} NOT NULL,
-            Job {{key}} NOT NULL,
-            HandledUpToUtc {{text}} NULL,
-            LastStartedUtc {{text}} NULL,
-            LastExit {{int}} NULL,
-            PRIMARY KEY (Project, Job)
-        );
-        """]);
+    public static StateSchema Schema => new([WorkQueueSchema.Queue, JobStateSchema.Table]);
 
     public static StateDatabase Open(string serverDirectory) => new(Path.Combine(serverDirectory, "state.db"), Schema);
 }
@@ -82,6 +65,7 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
     /// <summary>How long a claimed run stays claimed without a heartbeat; a run beats three times in it, so only a worker that died loses its run.</summary>
     public static readonly TimeSpan DefaultLease = TimeSpan.FromMinutes(10);
 
+    private readonly JobStateStore _jobs = new(database, BuildSchedulerSchema.Service);
     private readonly WorkQueueStore _queue = new(database, BuildSchedulerSchema.Service, clock) { LeaseDuration = lease ?? DefaultLease };
     public const string Kind = "refresh";
 
@@ -97,15 +81,15 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
             if (!Directory.Exists(root)) continue;
             foreach (var job in RefreshJobs.Discover(root, p => log($"Project '{project.Id}': {p}")))
             {
-                var state = GetState(project.Id, job);
+                var state = _jobs.Get(project.Id, job.Subject);
                 if (state?.HandledUpTo is null)
                 {
-                    SaveHandled(project.Id, job, now);
+                    _jobs.SaveHandled(project.Id, job.Subject, now);
                     continue;
                 }
 
                 var decision = ScheduleEvaluator.Evaluate(job.Schedule, state.HandledUpTo, now);
-                if (decision.HandledUpTo != state.HandledUpTo) SaveHandled(project.Id, job, decision.HandledUpTo ?? now);
+                if (decision.HandledUpTo != state.HandledUpTo) _jobs.SaveHandled(project.Id, job.Subject, decision.HandledUpTo ?? now);
                 if (!decision.Due) continue;
                 _queue.Enqueue(project.Id, Kind, job.Subject, lane: Kind);
                 queued.Add((project.Id, job));
@@ -129,7 +113,7 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
         var parts = item.Subject.Split('/', 2);
         var started = clock.GetUtcNow();
         _queue.MarkRunning(item.Id);
-        SaveStarted(project.Id, item.Subject, started);
+        _jobs.SaveStarted(project.Id, item.Subject, started);
         using var beating = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var heartbeat = Task.Run(async () =>
         {
@@ -164,7 +148,7 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
             _queue.MarkFailed(item.Id);
             log($"Project '{project.Id}', {item.Subject}: the scheduled run ended with exit code {exit}.");
         }
-        SaveExit(project.Id, item.Subject, exit);
+        _jobs.SaveExit(project.Id, item.Subject, exit);
     }
 
     /// <summary>The scheduled plans of a project with the next time each is due and how its last run went.</summary>
@@ -173,46 +157,8 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
         var root = projects.RootOf(project);
         if (!Directory.Exists(root)) return [];
         var now = clock.GetUtcNow();
-        return [.. RefreshJobs.Discover(root).Select(j => (j, (DateTimeOffset?)ScheduleEvaluator.NextAfter(j.Schedule, now), GetState(project.Id, j)))];
+        return [.. RefreshJobs.Discover(root).Select(j => (j, (DateTimeOffset?)ScheduleEvaluator.NextAfter(j.Schedule, now), _jobs.Get(project.Id, j.Subject)))];
     }
-
-    // ---- the per-job record ----
-
-    private JobState? GetState(string project, ScheduledJob job) =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "SELECT HandledUpToUtc, LastStartedUtc, LastExit FROM ScheduleJobs WHERE Project = $project AND Job = $job;");
-            cmd.Bind(database, "project", project);
-            cmd.Bind(database, "job", job.Subject);
-            using var reader = cmd.ExecuteReader();
-            if (!reader.Read()) return null;
-            static DateTimeOffset? When(System.Data.Common.DbDataReader r, int i) => r.IsDBNull(i) ? null : DateTimeOffset.Parse(r.GetString(i), System.Globalization.CultureInfo.InvariantCulture);
-            return new JobState(When(reader, 0), When(reader, 1), reader.IsDBNull(2) ? null : Convert.ToInt32(reader.GetValue(2)));
-        });
-
-    private void SaveHandled(string project, ScheduledJob job, DateTimeOffset handledUpTo) => Upsert(project, job.Subject, "HandledUpToUtc", handledUpTo.ToString("O"));
-
-    private void SaveStarted(string project, string job, DateTimeOffset started) => Upsert(project, job, "LastStartedUtc", started.ToString("O"));
-
-    private void SaveExit(string project, string job, int exit) => Upsert(project, job, "LastExit", exit);
-
-    private void Upsert(string project, string job, string column, object value) =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using (var insert = database.Command(connection, database.Dialect.InsertOrIgnore("ScheduleJobs", "Project, Job", "$project, $job", "Project, Job")))
-            {
-                insert.Bind(database, "project", project);
-                insert.Bind(database, "job", job);
-                insert.ExecuteNonQuery();
-            }
-            using var update = database.Command(connection, $"UPDATE ScheduleJobs SET {column} = $value WHERE Project = $project AND Job = $job;");
-            update.Bind(database, "value", value);
-            update.Bind(database, "project", project);
-            update.Bind(database, "job", job);
-            update.ExecuteNonQuery();
-        });
 }
 
 /// <summary>Drives a <see cref="BuildScheduler"/> for as long as the server runs: a tick every few seconds, and up to <c>maxRuns</c> plans running at once.</summary>

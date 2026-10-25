@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataBuild.Cli.Mcp;
 using DbDataBuild.Tui.Model;
+using DbDataKit.Scheduling;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
