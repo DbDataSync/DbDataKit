@@ -305,6 +305,9 @@ public static class DbDataSyncHost
         // never grouped one way for the skip decision and another for the figure reported about it —
         // see phase 85.
         builder.Services.AddSingleton<ReaderLagService>();
+        // Sync's runs and lag as the shared monitoring model (plan 13, M06), for the health rules of DbDataKit.Monitoring.
+        builder.Services.AddSingleton<IRunHistory>(sp => new SyncRunHistory(sp.GetRequiredService<TaskRunStore>(),
+            job => ReplicationLagReading.For(sp.GetRequiredService<ReaderLagService>(), sp.GetRequiredService<ConfigRepository>(), job)));
 
         // Dating a run's stored watermarks reads the same polling history through the same
         // resolution, for the same reason — see phase 88.
