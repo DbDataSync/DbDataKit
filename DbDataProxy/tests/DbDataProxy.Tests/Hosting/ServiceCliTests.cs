@@ -86,7 +86,7 @@ public sealed class ServiceCliTests
         var rig = new Rig();
         Assert.Equal(0, rig.Run("install"));
         Assert.Equal([DataDir], rig.SettingsFiles);
-        Assert.Contains("appsettings.json", rig.Out);
+        Assert.Contains("server.yaml", rig.Out);
 
         var dry = new Rig();
         Assert.Equal(0, dry.Run("install", "--dry-run"));

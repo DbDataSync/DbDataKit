@@ -157,7 +157,7 @@ public static class ServiceCli
         if (rc == 0 && verb == "install" && !forwarded.Contains("--dry-run"))
         {
             env.EnsureSettingsFile?.Invoke(dataDirectory);
-            console.Out.WriteLine($"Settings: {ProxyConfigFile.PathIn(dataDirectory)} (appsettings.example.json beside {env.BinaryPath} shows every option). Then run: dbdataproxy service start --name {name}");
+            console.Out.WriteLine($"Settings: {ProxyConfigFile.PathIn(dataDirectory)} (config.example/ beside {env.BinaryPath} shows every option). Then run: dbdataproxy service start --name {name}");
             console.Out.WriteLine("Open the listening port in the Windows firewall if clients connect from other machines.");
         }
 
@@ -178,7 +178,7 @@ public static class ServiceCli
             new LayoutEntry(LayoutRole.InstallRoot, installDirectory, new AclSpec(false, [admin, system, Svc(AccessRights.ReadExecute)]),
                 "Binaries; the service can read and run them but not change them."),
             new LayoutEntry(LayoutRole.Data, dataDirectory, new AclSpec(true, [admin, system, Svc(AccessRights.Modify)]),
-                "Settings (appsettings.json), the generated TLS certificate and its protected password; Users have no access."),
+                "Settings (config/), the generated TLS certificate and its protected password; Users have no access."),
         ]);
 
         return new ServiceCommandContext
@@ -345,13 +345,11 @@ public static class ServiceCli
 /// <summary>Reads the proxy's own settings the way the host does, for commands that run without starting it.</summary>
 public static class ProxyConfiguration
 {
-    public static ProxyOptions LoadOptions(string? baseDirectory = null, string? dataDirectory = null)
+    public static ProxyOptions LoadOptions(string? dataDirectory = null)
     {
-        // The same layers as the host: the file beside the executable, then the data directory's, then the environment.
+        // The same layers as the host: the data directory's config folder, then the environment.
         var configuration = new ConfigurationBuilder()
-            .SetBasePath(baseDirectory ?? AppContext.BaseDirectory)
-            .AddJsonFile(ProxyConfigFile.FileName, optional: true)
-            .AddJsonFile(ProxyConfigFile.PathIn(dataDirectory ?? ProxyConfigFile.ResolveDataDirectory()), optional: true)
+            .Add(new ProxyConfigDirectorySource(ProxyConfigFile.DirectoryIn(dataDirectory ?? ProxyConfigFile.ResolveDataDirectory())))
             .AddEnvironmentVariables("DBPROXY_")
             .Build();
         return configuration.GetSection(ProxyOptions.SectionName).Get<ProxyOptions>() ?? new ProxyOptions();

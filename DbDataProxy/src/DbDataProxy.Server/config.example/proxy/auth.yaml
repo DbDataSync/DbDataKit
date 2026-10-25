@@ -1,0 +1,10 @@
+# How clients prove who they are. The local users are in users.yaml.
+sessionIdleMinutes: 30
+sessionMaxHours: 12
+allowPassThrough: true
+
+# JWT with a shared HMAC key:
+# jwt:
+#   signingKey: file:C:\secrets\jwt.key
+#   audience: api://dbproxy
+#   mappings: [ ... ]

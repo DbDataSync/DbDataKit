@@ -303,6 +303,8 @@ public static class ProxyConfig
                 if (!provider.TryGet(key, out var value)) continue;
                 switch (provider)
                 {
+                    case ProxyConfigDirectoryProvider directory:
+                        return DirectoryOrigin(directory, key);
                     case FileConfigurationProvider file:
                         return FileOrigin(file);
                     case EnvironmentVariablesConfigurationProvider:
@@ -329,6 +331,11 @@ public static class ProxyConfig
             }
             return flat;
         }
+
+        private Origin DirectoryOrigin(ProxyConfigDirectoryProvider provider, string key) =>
+            new(provider.Origins.TryGetValue(key, out var o) ? o.File : "configuration", _directoryIndex ??= FileIndex.FromOrigins(provider.Origins));
+
+        private FileIndex? _directoryIndex;
 
         private Origin FileOrigin(FileConfigurationProvider provider)
         {
@@ -372,6 +379,13 @@ public static class ProxyConfig
             return index;
         }
 
+        public static FileIndex FromOrigins(IReadOnlyDictionary<string, ProxyKeyOrigin> origins)
+        {
+            var index = new FileIndex();
+            foreach (var (path, o) in origins) index._paths[path] = (o.KeyLine, o.KeyColumn, o.ValueLine, o.ValueColumn);
+            return index;
+        }
+
         public (int, int, int, int)? Find(string path) => _paths.TryGetValue(path, out var p) ? p : null;
 
         private void Walk(YamlNode node, string path)
@@ -410,6 +424,7 @@ public sealed class ProxyConfigLoadGuard
     public static ProxyConfigLoadGuard Install(IConfigurationBuilder builder)
     {
         var guard = new ProxyConfigLoadGuard();
+        foreach (var source in builder.Sources.OfType<ProxyConfigDirectorySource>()) source.Guard = guard;
         foreach (var source in builder.Sources.OfType<FileConfigurationSource>())
         {
             var previous = source.OnLoadException;
@@ -422,6 +437,9 @@ public sealed class ProxyConfigLoadGuard
         }
         return guard;
     }
+
+    /// <summary>Records a failed reload (the configuration directory's provider calls this).</summary>
+    public void Report(string failure) => _failure = failure;
 
     /// <summary>The failure recorded since the last call (and clears it), or null.</summary>
     public string? TakeFailure() => Interlocked.Exchange(ref _failure, null);

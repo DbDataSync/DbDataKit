@@ -1,0 +1,6 @@
+# A DuckDB source without allowWrites runs in a sandbox: the file is opened READ_ONLY, queries cannot read other files, ATTACH, COPY ... TO,
+# INSTALL or LOAD, and the settings are locked. allowedDirectories is the one exception, for a source that deliberately serves a folder
+# of files (absolute paths; nothing else opens).
+provider: duckdb
+connectionString: "Data Source=C:\\data\\lake.duckdb"
+allowedDirectories: ['C:\data\parquet']
