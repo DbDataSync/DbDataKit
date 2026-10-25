@@ -8,7 +8,7 @@ namespace DbDataKit.Web.Trust;
 /// The file's bytes are compared on every read, so a change made by another process is seen on the next call and the file is parsed only when it changed. Edits are surgical (the rest of the file, comments
 /// and all, is untouched) and run under a lock other processes honour.
 /// </summary>
-internal sealed class YamlListFile(string path, string key)
+public sealed class YamlListFile(string path, string key)
 {
     private readonly object _gate = new();
     private byte[]? _seen;
