@@ -23,6 +23,8 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 13a | [Suite slices](13a-suite-slices.md) | Plan 13 | About 150 small pull requests with a test each, grouped into milestones, each naming the decision it waits on |
 | 14 | [Semantic layer](14-semantic-layer.md) | QueryIntentSpec at `139bbf9`, Build metadata, Proxy | Proposal for review (not in 13a): semantic models authored and deployed by Build and hosted by Proxy, one connection managed in Build, one engine registry, semantic SQL, MDX for Excel over XMLA, more protocols |
 | 15 | [DbDataStore: master data and documents](15-master-data-and-documents.md) | Owner's direction, plans 13 and 14 | Proposal for review (not in 13a): user- and agent-defined models on SQL engines, documents with WebDAV, extraction, consumed by Sync, Build and semantic queries |
+| 16 | [Embedded agents and apps](16-embedded-agents-and-custom-front-ends.md) | Owner's backlog, plans 13 to 15 | Backlog (not scheduled): agents in the console on OpenAI, Anthropic and Microsoft Foundry, every action approved by the user; a standalone app host with DbDataStore data, Vega-Lite dashboards, reports and assistants; Windows, OpenID Connect and Entra sign-in |
+| 17 | [Report servers on the semantic models](17-report-servers-on-semantic-models.md) | Plans 14 and 16, Power BI Report Server's supported sources | Documented scenarios (not in 13a), decided per route later: published views, result feeds for many tools, ODBC, Postgres wire with a compatibility layer kept apart from semantic SQL, MDX only via the Excel work |
 
 ## Dependency graph
 

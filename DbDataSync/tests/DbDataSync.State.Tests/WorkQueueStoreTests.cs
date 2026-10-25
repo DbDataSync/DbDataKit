@@ -396,4 +396,39 @@ public sealed class WorkQueueStoreTests : IDisposable
 
         Assert.Equal(["crm-sync"], _queue.GetTasksWithInFlightWork());
     }
+
+    [Fact]
+    public void SegmentsEnqueuedToRunTogether_AreBothClaimable()
+    {
+        _queue.Enqueue("crm-sync", RunKind.BulkLoad, "orders", segmentLabel: "seg-1", segments: SegmentOrder.Together);
+        _queue.Enqueue("crm-sync", RunKind.BulkLoad, "orders", segmentLabel: "seg-2", segments: SegmentOrder.Together);
+
+        Assert.NotNull(_queue.TryClaimNext("crm-sync", "worker-1"));
+        Assert.NotNull(_queue.TryClaimNext("crm-sync", "worker-2"));
+    }
+
+    [Fact]
+    public void SegmentsOfDifferentMappings_AreNotHeldBackByOneAtATime()
+    {
+        _queue.Enqueue("crm-sync", RunKind.BulkLoad, "orders", segmentLabel: "seg-1");
+        _queue.Enqueue("crm-sync", RunKind.BulkLoad, "customers", segmentLabel: "seg-1");
+
+        Assert.NotNull(_queue.TryClaimNext("crm-sync", "worker-1"));
+        Assert.NotNull(_queue.TryClaimNext("crm-sync", "worker-2"));
+    }
+
+    [Fact]
+    public void WhatTheWorkerNeeds_TravelsWithTheItem()
+    {
+        _queue.Enqueue(
+            "crm-sync", RunKind.ReconcileDeletes, "orders", segmentLabel: "seg-1", segmentJson: """{"from":1}""",
+            kinds: new WorkItemKinds("reader", "cache", "writer"), deleteGuardJson: """{"max":5}""");
+
+        var item = _queue.TryClaimNext("crm-sync", "worker-1")!;
+
+        Assert.Equal("""{"from":1}""", item.SegmentJson);
+        Assert.Equal(new WorkItemKinds("reader", "cache", "writer"), item.Kinds);
+        Assert.Equal("""{"max":5}""", item.DeleteGuardJson);
+        Assert.Equal("seg-1", item.SegmentLabel);
+    }
 }

@@ -1,5 +1,3 @@
-using System.Data.Common;
-
 namespace DbDataSync.State;
 
 /// <summary>
@@ -11,42 +9,15 @@ namespace DbDataSync.State;
 /// </summary>
 public sealed class RunLockStore(StateDatabase database)
 {
+    // The lock itself is the shared one (plan 13, M03); Sync's names map onto it as the work queue's do: the replication owns it, the kind is the run kind, the mapping is the subject.
+    private readonly DbDataKit.Scheduling.RunLockStore _locks = new(database, WorkQueueStore.Service);
+
     public bool TryAcquire(string taskName, RunKind runKind, string mappingName, Guid runId) =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, database.Dialect.InsertOrIgnore(
-                "RunLocks",
-                "TaskName, RunKind, MappingName, RunId, AcquiredAtUtc",
-                "$task, $kind, $mapping, $runId, $now",
-                "TaskName, RunKind, MappingName"));
-            cmd.Bind(database, "task", taskName);
-            cmd.Bind(database, "kind", runKind.ToString());
-            cmd.Bind(database, "mapping", mappingName);
-            cmd.Bind(database, "runId", runId.ToString());
-            cmd.Bind(database, "now", DateTimeOffset.UtcNow.ToString("O"));
-            return cmd.ExecuteNonQuery() == 1;
-        });
+        _locks.TryAcquire(taskName, runKind.ToString(), mappingName, runId);
 
     public void Release(string taskName, RunKind runKind, string mappingName) =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "DELETE FROM RunLocks WHERE TaskName = $task AND RunKind = $kind AND MappingName = $mapping;");
-            cmd.Bind(database, "task", taskName);
-            cmd.Bind(database, "kind", runKind.ToString());
-            cmd.Bind(database, "mapping", mappingName);
-            cmd.ExecuteNonQuery();
-        });
+        _locks.Release(taskName, runKind.ToString(), mappingName);
 
     public bool IsLocked(string taskName, RunKind runKind, string mappingName) =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "SELECT COUNT(*) FROM RunLocks WHERE TaskName = $task AND RunKind = $kind AND MappingName = $mapping;");
-            cmd.Bind(database, "task", taskName);
-            cmd.Bind(database, "kind", runKind.ToString());
-            cmd.Bind(database, "mapping", mappingName);
-            return Convert.ToInt64(cmd.ExecuteScalar()) > 0;
-        });
+        _locks.IsLocked(taskName, runKind.ToString(), mappingName);
 }

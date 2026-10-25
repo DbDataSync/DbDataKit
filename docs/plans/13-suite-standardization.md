@@ -442,9 +442,11 @@ Each product server keeps its own definitions (it must run without the console a
    projects keep their own connection files (they are committed by the author).
 2. **One secret syntax and resolver** (`env:`, `file:`, `secret:`, `dpapi:`) in every product.
 3. **One identity model and implementation.** Users (passkeys, Windows) with roles: Admin, Operator, Viewer, Author (W11) and Approver
-   (Build plans). **Users live in the consoles**, the only place people sign in. Product servers have no user accounts: they accept a
-   paired console's token for their management API, which names the user and their roles, so each server still enforces roles and records
-   who did what (W12). Proxy's client identities (its Flight users,
+   (Build plans). **Users live in the install's identity home** (decided 2026-10-25, plan 16 section 2b): one identity component per
+   install, hosted by a console by default, holding users, groups, role assignments and an OpenID Connect provider; every other console
+   signs people in through it and holds no users. Product servers have no user accounts: they accept a paired console's token for their
+   management API, which names the user (the home's stable user id) and their roles, so each server still enforces roles and records who
+   did what (W12). Proxy's client identities (its Flight users,
    Windows accounts, JWT mappings) stay Proxy's data-plane auth. One PBKDF2 hasher (plan 10 C3).
 4. **One config layout**, git-tracked with auto-commit and the history UI (Sync's `GitCommitService` becomes `DbDataKit.Config.Git`), the
    same in every product's data directory:
@@ -617,8 +619,12 @@ authorized when it starts and runs to the end under that user.
   a write against a stale version is refused with the current one, never merged silently.
 - **Audit.** The server records the console id and the user for every change: in its audit log, and as the author of the git commit in
   its config directory (`user name <console name>`). A Build plan approval records the approver and the console.
-- **Users are per console.** Consoles do not share users or role assignments with each other; the same person can have different roles
-  in two consoles, bounded on each server by that console's ceiling. Single sign-on across consoles is out of scope.
+- **Users live in one identity home per install** (decided 2026-10-25, plan 16 section 2b; this replaces "users are per console").
+  The home is a shared component (`DbDataKit.Identity`: users, groups, role assignments, an OpenID Connect provider, later Windows and
+  Entra ID federation), hosted by one console by default, or run on its own (`dbdatakit identity run`) where an install wants sign-in
+  independent of any console. Every other console is an OpenID Connect client of the home and keeps only its own settings (the servers it
+  shows, its ceiling on each). So the same person is the same user in every console, roles are assigned once (per server, per Build
+  project, per app), audit names agree, and a console's **ceiling** from its pairing still bounds what any user can do through it.
 - **Notifications** are kept on the server; each console tracks what it has read.
 
 **Server-to-server clients.** Some servers must change another server as part of their own work. The first case is plan 14 R2a: a
@@ -655,7 +661,8 @@ typed into a console is sent once to the server, which stores it in its own secr
 restricted by the OS to administrators, root or the service's group. Work on the machine never needs a console, and nothing of it is on
 the network. `server pair` and `server unpair` work this way.
 
-**Consoles' own sign-in** is Sync's today, moved into the console: passkeys, Windows sign-in, invites, sessions, HTTPS, `PlainHttpProtection`.
+**Sign-in** is Sync's today (passkeys, Windows sign-in, invites, sessions, HTTPS, `PlainHttpProtection`), moved into the identity home;
+a console that is not the home signs users in through the home's OpenID Connect provider and keeps a session of its own.
 
 **Shared code.** All of it is in `DbDataKit.Web` (token issuing in the console; validation, ceilings, replay check and the role check in
 each server) and `DbDataKit.Hosting` (the local channel, pairing codes), so the four hosts behave the same.
@@ -762,6 +769,7 @@ decision any more.
 | D12 | How the Build server runs commands | **decided (accepted):** **child processes**: one per command for runs and deploys, and one long-lived child per authoring workspace (W11) so feedback is fast; isolation from the native library either way |
 | D13 | Where a Build schedule lives: only in the project (committed with the refresh plan), or also added by an operator at the server | **decided (accepted):** **project first** (fits Build's "everything is a file" rule and its review of plans); an operator can pause or run now from the console, but adding a schedule is a commit. Revisit if operators need schedules a project author should not own |
 | D14 | How servers trust their clients | **decided:** a client (console, server or CLI) calls a server, never the reverse, and a server never calls a console; a server can be paired with several clients, each with its own key and role ceiling; short-lived signed tokens per call naming a person; ownership-scoped ceilings (Publisher) for server clients; the server enforces roles; the local CLI over a named pipe or Unix socket (W12) |
+| D20 | Where users live when an install has several consoles | **decided** (owner, 2026-10-25): one identity home per install, a shared component hosted by a console by default or run on its own; other consoles, DbDataApps and agents are OpenID Connect clients of it (plan 16 section 2b; W8, W12) |
 | D15 | Where authoring merges | **decided (accepted):** push to the project's git remote and open a pull request when a remote is configured; otherwise merge into the deploy branch inside the Build server, recorded with the author's identity |
 | D16 | How the browser reaches product servers | **decided (accepted):** **the console's back-end relays every call** (the browser talks only to the console): servers stay off the browser's network, pinned self-signed certificates work, no CORS, and live updates (Sync's SignalR run hub) are relayed by the console. The other option, browsers calling servers directly with tokens, is rejected |
 | D17 | Version compatibility between a console and its servers | **decided (accepted):** products release on their own (D4), so a console and a server can differ in version. The management API carries its own integer version, reported at pairing and on every call; a console supports its own API version and the one before, and shows a clear "upgrade this server / this console" message otherwise |

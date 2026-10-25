@@ -57,26 +57,28 @@ public sealed class WorkQueueStore(StateDatabase database, string service, TimeP
     /// <param name="payloadJson">What the product needs to run it, opaque here.</param>
     /// <param name="priority">Higher is claimed first.</param>
     /// <param name="availableAt">Not claimable before this time; now when omitted.</param>
+    /// <param name="alsoWrite">Run in the same transaction as the insert, with the new run id and only when the item was added: for the caller's run record, which must exist exactly when the item does.</param>
     public Guid Enqueue(
         string owner, string kind, string subject, string part = NoPart, string resource = "", string lane = "",
-        string? payloadJson = null, int priority = 0, DateTimeOffset? availableAt = null) =>
-        EnqueueCore(owner, kind, subject, part, resource, lane, payloadJson, priority, availableAt, throwOnCollision: false);
+        string? payloadJson = null, int priority = 0, DateTimeOffset? availableAt = null, Action<DbConnection, DbTransaction, Guid>? alsoWrite = null) =>
+        EnqueueCore(owner, kind, subject, part, resource, lane, payloadJson, priority, availableAt, alsoWrite, throwOnCollision: false);
 
     /// <summary>Like <see cref="Enqueue"/>, except that finding the same work in flight throws <see cref="WorkQueueCollisionException"/>: for a request that is not the same thing as whatever is already running.</summary>
     public Guid EnqueueOrThrow(
         string owner, string kind, string subject, string part = NoPart, string resource = "", string lane = "",
-        string? payloadJson = null, int priority = 0, DateTimeOffset? availableAt = null) =>
-        EnqueueCore(owner, kind, subject, part, resource, lane, payloadJson, priority, availableAt, throwOnCollision: true);
+        string? payloadJson = null, int priority = 0, DateTimeOffset? availableAt = null, Action<DbConnection, DbTransaction, Guid>? alsoWrite = null) =>
+        EnqueueCore(owner, kind, subject, part, resource, lane, payloadJson, priority, availableAt, alsoWrite, throwOnCollision: true);
 
     private Guid EnqueueCore(
         string owner, string kind, string subject, string part, string resource, string lane,
-        string? payloadJson, int priority, DateTimeOffset? availableAt, bool throwOnCollision) =>
+        string? payloadJson, int priority, DateTimeOffset? availableAt, Action<DbConnection, DbTransaction, Guid>? alsoWrite, bool throwOnCollision) =>
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
+            using var transaction = connection.BeginTransaction();
             var runId = Guid.NewGuid();
             var now = Now();
-            using (var cmd = database.Command(connection, database.Dialect.InsertOrIgnore(
+            using (var cmd = database.Command(connection, transaction, database.Dialect.InsertOrIgnore(
                 "WorkQueue",
                 "Service, Owner, Kind, Subject, Part, Resource, Lane, RunId, Status, Priority, PayloadJson, EnqueuedAtUtc, AvailableAtUtc",
                 "$service, $owner, $kind, $subject, $part, $resource, $lane, $runId, 'Pending', $priority, $payload, $now, $available",
@@ -96,9 +98,14 @@ public sealed class WorkQueueStore(StateDatabase database, string service, TimeP
                 cmd.Bind(database, "now", now);
                 cmd.Bind(database, "available", (availableAt ?? _time.GetUtcNow()).ToString("O"));
                 if (cmd.ExecuteNonQuery() == 1)
+                {
+                    alsoWrite?.Invoke(connection, transaction, runId);
+                    transaction.Commit();
                     return runId;
+                }
             }
 
+            transaction.Rollback();
             if (throwOnCollision)
                 throw new WorkQueueCollisionException(owner, kind, subject, part);
 
@@ -123,7 +130,10 @@ public sealed class WorkQueueStore(StateDatabase database, string service, TimeP
     /// <param name="lane">Only claim from this lane, or from any when null.</param>
     /// <param name="maxRunningInLane">The most items of one lane that may be claimed or running for the owner at once; no limit when null.</param>
     /// <param name="runId">Test-only: claim this run rather than whatever is next.</param>
-    public WorkItem? TryClaimNext(string owner, string workerId, string? lane = null, int? maxRunningInLane = null, Guid? runId = null)
+    /// <param name="alsoWrite">Run in the same transaction as the claim, with the item and the claim time, and only when this claimer won it: for the caller's run record, which must never show a claim the queue does not.</param>
+    public WorkItem? TryClaimNext(
+        string owner, string workerId, string? lane = null, int? maxRunningInLane = null, Guid? runId = null,
+        Action<DbConnection, DbTransaction, WorkItem, DateTimeOffset>? alsoWrite = null)
     {
         for (var attempt = 0; attempt < 5; attempt++)
         {
@@ -167,7 +177,8 @@ public sealed class WorkQueueStore(StateDatabase database, string service, TimeP
             var claimed = database.Retry(() =>
             {
                 using var connection = database.OpenConnection();
-                using var cmd = database.Command(connection, """
+                using var transaction = connection.BeginTransaction();
+                using var cmd = database.Command(connection, transaction, """
                     UPDATE WorkQueue SET Status = 'Claimed', ClaimedAtUtc = $now, ClaimedBy = $worker, LeaseExpiresUtc = $lease
                     WHERE Id = $id AND Status = 'Pending';
                     """);
@@ -176,7 +187,15 @@ public sealed class WorkQueueStore(StateDatabase database, string service, TimeP
                 cmd.Bind(database, "worker", workerId);
                 cmd.Bind(database, "lease", (now + LeaseDuration).ToString("O"));
                 cmd.Bind(database, "id", candidate.Id);
-                return cmd.ExecuteNonQuery() == 1;
+                if (cmd.ExecuteNonQuery() != 1)
+                {
+                    transaction.Rollback();
+                    return false;
+                }
+
+                alsoWrite?.Invoke(connection, transaction, candidate with { Status = WorkItemStatus.Claimed }, now);
+                transaction.Commit();
+                return true;
             });
 
             if (claimed)
