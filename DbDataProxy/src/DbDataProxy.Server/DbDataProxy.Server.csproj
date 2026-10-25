@@ -35,5 +35,8 @@
     <DbDataKitReference Include="State" />   <!-- the proxy's state database; plan 13, P02 -->
     <ProjectReference Include="..\DbDataProxy.Core\DbDataProxy.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="config.example\**" LinkBase="config.example" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
   <Import Project="$(DbDataKitRoot)build/DuckDb.Native.targets" />
 </Project>

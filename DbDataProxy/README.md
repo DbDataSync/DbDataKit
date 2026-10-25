@@ -21,7 +21,7 @@ Flight SQL client ──gRPC/TLS──▶ DbDataProxy (x64) ──▶ SQL Server
 ./build/publish.ps1                 # -> artifacts/publish/win-x64 (dbdataproxy.exe + worker\)
 cd artifacts/publish/win-x64
 ./dbdataproxy.exe secret hash       # prompts (or reads standard input); paste the hash into the settings file
-# edit %ProgramData%\DbDataProxy\appsettings.json (see appsettings.example.json), then:
+# edit %ProgramData%\DbDataProxy\config\server.yaml (see config.example\), then:
 ./dbdataproxy.exe server run         # run in a console (there is no default command)
 ./dbdataproxy.exe service install   # or register the Windows service (elevated prompt), then: dbdataproxy service start
 ./dbdataproxy.exe query run --insecure --user me --password ... --datasource erp --sql "SELECT 1"
@@ -136,18 +136,30 @@ elevation) and `-Repo`; Scoop works too: `scoop install https://github.com/DbDat
 
 ## Configuration
 
-Settings are one JSON file, `appsettings.json` in the data directory: `%ProgramData%\DbDataProxy` by default (`Proxy:DataDirectory`,
-`--data-dir` on `service install`; on Linux `/var/lib/dbdataproxy`). `service install` creates it with only `"SchemaVersion": 2` if there is
-none. Defaults are in the code, not in a shipped file, and `appsettings.example.json` beside the executable documents every option. Layers,
-lowest first: an `appsettings.json` beside the executable (optional: for a portable run from a folder, or a container that mounts one), the
-data directory's file, `DBPROXY_` environment variables (`DBPROXY_Proxy__Listen__Port=9000`), the command line (`--Proxy:Listen:Port=9000`).
-`DataDirectory` itself comes from the command line, the environment or the default, never from a file, since the file lives in it. Users,
-data sources, compression and auth settings reload without a restart; the listener and certificate need one.
+Settings are YAML files in the `config` folder of the data directory: `%ProgramData%\DbDataProxy\config` by default (`Proxy:DataDirectory`,
+`--data-dir` on `service install`; on Linux `/var/lib/dbdataproxy/config`), a folder a git repository can track:
+
+```
+config/
+  server.yaml            listen, tls, secrets, compression, hosting, worker, logging switches, schemaVersion
+  proxy/auth.yaml        sessions, lockout, pass-through, JWT and its mappings
+  proxy/users.yaml       the local client users (a `users:` list)
+  connections/<name>.yaml  one data source per file; the file name is the data source name
+```
+
+`service install` creates `server.yaml` with only `schemaVersion: 2` if there is none. Defaults are in the code, not in a shipped file, and
+`config.example/` beside the executable has one example of each file with every option. Keys are camelCase in the files (matched ignoring case).
+Layers, lowest first: the files, `DBPROXY_` environment variables (`DBPROXY_Proxy__Listen__Port=9000`), the command line (`--Proxy:Listen:Port=9000`).
+`DataDirectory` itself comes from the command line, the environment or the default, never from a file, since the files live in it. Users, data sources,
+compression and auth settings reload without a restart; the listener and certificate need one.
+
+**An `appsettings.json` from an earlier release is refused**, not read and not converted: the server stops with exit code 2 and a message that names the file
+(in the data directory, its `config` folder, or beside the executable) and where its settings go now. Move the `Proxy` section's keys into the files above
+(`DataSources` entries into `connections/`, `Users` into `proxy/users.yaml`, `Auth` into `proxy/auth.yaml`, the rest into `server.yaml`), then delete the old file.
 
 ### Validation, schema version and the config commands
 
-The configuration stays JSON (`appsettings.json`, section `Proxy`, PascalCase keys, the same environment and command
-line overrides). It is read through the shared `DbDataKit.Config` strict binder, so a typo is no longer ignored:
+The configuration is the files above, with the same environment and command line overrides as before. It is read through the shared `DbDataKit.Config` strict binder, so a typo is no longer ignored:
 
 * **Strict at startup.** An unknown key (`Proxy:Listen:Prot`), a value of the wrong type, a number out of range, a
   user that names an undefined data source, `Tls.Mode` `File` without `CertificatePath`, `Bitness` `x86` with a
@@ -159,22 +171,22 @@ line overrides). It is read through the shared `DbDataKit.Config` strict binder,
 * **Case-insensitive, unchanged keys.** Keys are matched ignoring case, exactly as before, so every existing file and
   override (`DBPROXY_Proxy__Listen__Port`, `Proxy__Tls__Mode`, `--Proxy:Listen:Port=9000`) keeps working, booleans may
   still be written `True`. The example and the starter file are checked by the test suite.
-* **Reloads keep the last good configuration.** An edit of `appsettings.json` that is invalid (syntax error, unknown key,
+* **Reloads keep the last good configuration.** An edit of a configuration file that is invalid (syntax error, unknown key,
   failed validation) is rejected with an error in the log naming the problems, and the running service keeps using the last
   good configuration; it never crashes on a bad edit. A later valid edit is picked up.
-* **Forward compatibility, explicitly.** `"AllowUnknownKeys": true` (or `--allow-unknown-keys` for `config check`) turns
+* **Forward compatibility, explicitly.** `allowUnknownKeys: true` (or `--allow-unknown-keys` for `config check`) turns
   unknown keys into warnings, for example while rolling a file back to an older release. The default is strict.
 * **`SchemaVersion`** (optional, inside `Proxy`; absent means 1). Version 2 changes defaults only: a data source without
   its own `Classifier` is `strict` instead of `warn`. Files without `SchemaVersion` keep every old default, so upgrading
   changes nothing; a startup warning lists the read-only sources that still rely on the old default. The example and the
-  file `service install` writes use `"SchemaVersion": 2` (new installs get the strict default). Moving v1 to v2 is a
+  file `service install` writes use `schemaVersion: 2` (new installs get the strict default). Moving v1 to v2 is a
   documented no-op (`ProxyConfigMigrations`: no key changes) other than that default: set `Classifier` on each source, then
-  add `"SchemaVersion": 2`. A file with a newer version than the release understands is refused with an upgrade message.
+  add `schemaVersion: 2`. A file with a newer version than the release understands is refused with an upgrade message.
   Future renames ship as additional migrations in the shared migration framework (see `MigrationTests`); `config migrate`
-  is not provided because the shared migration engine edits YAML documents and cannot rewrite `appsettings.json` in place yet.
+  is not provided; the files are YAML now, so the shared migration engine can rewrite them when a migration is needed.
 
 ```
-DbDataProxy config check [--file path]        validate (exit 0 valid, 2 invalid); warnings are printed to stderr
+DbDataProxy config check [--file path]        validate a config folder (or the path of its server.yaml; default: the installed one); exit 0 valid, 2 invalid
 DbDataProxy config show [--origin] [--file p] effective values; --origin adds file:line, env:NAME, cli:args or "default"
 ```
 
@@ -230,12 +242,12 @@ a deny-listed word outside strings, comments and quoted identifiers (`OPENROWSET
 | `Classifier` | Effect |
 |---|---|
 | `warn` (default without `SchemaVersion`, so existing configuration behaves as before) | A statement that would be refused is logged as a warning and still runs |
-| `strict` (default from `"SchemaVersion": 2`, i.e. new installs) | The statement is refused with gRPC `PermissionDenied` |
+| `strict` (default from `schemaVersion: 2`, i.e. new installs) | The statement is refused with gRPC `PermissionDenied` |
 | `off` | No check |
 
 The check is lexical and refuses some harmless SQL (an unquoted column named like a deny-listed word: quote it). It is
 defence in depth, not a security boundary; the database login is. Sources with `AllowWrites` are not checked on the
-query path. Upgrade path: stay on `warn` (no `SchemaVersion`) for a release, check the log for would-be refusals, then set `"SchemaVersion": 2` (or `"Classifier": "strict"` per source).
+query path. Upgrade path: stay on `warn` (no `SchemaVersion`) for a release, check the log for would-be refusals, then set `schemaVersion: 2` (or `classifier: strict` per source).
 
 Types map to Arrow as: integers/floats/bool directly (`tinyint` → UInt8), `decimal` → Decimal128 (precision/scale
 from the provider, default 38/9 when unknown), `date` → Date32, `datetime/datetime2` → Timestamp(µs),
@@ -299,7 +311,7 @@ No command prints a secret's value. The old per-secret DPAPI files (`secrets\dbd
 Where they work: a data source `ConnectionString` (the whole string, or just the value of a password key:
 `Server=SQL01;User Id=proxy_reader;Password=env:ERP_DB_PASSWORD`), `Proxy:Tls:CertificatePassword` and
 `Proxy:Auth:Jwt:SigningKey`. References are resolved each time the setting is used, from the current settings, so a rotated
-secret (and a reloaded `appsettings.json`) takes effect without keeping old values around. A reference that cannot be
+secret (and a reloaded configuration file) takes effect without keeping old values around. A reference that cannot be
 resolved fails that data source with a message naming the reference (never a value) and is logged.
 
 Literals still work, but the proxy logs a one-time warning naming the config key (never the value), e.g.

@@ -87,19 +87,23 @@ public sealed class ShippedFilesTests
     [Fact]
     public void The_starter_settings_file_install_writes_validates_with_schema_2()
     {
-        var load = ConfigTestSupport.LoadJson(ProxyConfigFile.Starter);
+        using var config = TempConfig.Create(("server.yaml", ProxyConfigFile.Starter));
+        var load = LoadDirectory(config.Directory);
         Assert.True(load.Ok, ConfigTestSupport.Format(load));
         Assert.Equal(2, load.Value!.SchemaVersion);
         Assert.Empty(load.Diagnostics);
     }
 
+    private static ProxyConfigLoad LoadDirectory(string directory) =>
+        ProxyConfig.Load(new ConfigurationBuilder().Add(new ProxyConfigDirectorySource(directory)).Build());
+
     [Fact]
-    public void Shipped_example_validates_comments_trailing_commas_and_all()
+    public void Shipped_example_directory_validates_file_by_file()
     {
         // The example is written for the Windows service (C:\data\parquet, ...), and the shared absolute-path check rejects a
         // Windows path elsewhere. Windows validates it; the starter settings file is validated on every platform above.
         Assert.SkipUnless(OperatingSystem.IsWindows(), "The shipped example uses Windows paths");
-        var load = ConfigTestSupport.LoadFile(Shipped("appsettings.example.json"));
+        var load = LoadDirectory(Shipped("config.example"));
         Assert.True(load.Ok, ConfigTestSupport.Format(load));
         var o = load.Value!;
         Assert.Equal(2, o.SchemaVersion);
@@ -110,6 +114,22 @@ public sealed class ShippedFilesTests
         Assert.Equal([@"C:\data\parquet"], o.DataSources["lake"].AllowedDirectories);
         Assert.Equal(@"Data Source=C:\data\scratch.duckdb", o.DataSources["scratch"].ConnectionString);
         Assert.Equal("reporting", Assert.Single(o.Users).Name);
+        Assert.Equal(30, o.Auth.SessionIdleMinutes);
+    }
+
+    [Fact]
+    public void Shipped_example_directory_reads_on_every_platform_and_names_its_files()
+    {
+        // Off Windows the path check rejects the example's Windows paths; those are the only errors it may have.
+        var load = LoadDirectory(Shipped("config.example"));
+        Assert.All(load.Diagnostics.Where(d => d.Severity == ConfigSeverity.Error), d => Assert.EndsWith("lake.yaml", d.Path));
+        Assert.NotNull(load.Value);
+        Assert.Equal(["erp", "lake", "legacy", "scratch", "warehouse"], load.Value!.DataSources.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal("reporting", Assert.Single(load.Value.Users).Name);
+        Assert.Equal(30, load.Value.Auth.SessionIdleMinutes);
+        Assert.Equal(@"Data Source=C:\data\scratch.duckdb", load.Value.DataSources["scratch"].ConnectionString);
+        Assert.Equal([@"C:\data\parquet"], load.Value.DataSources["lake"].AllowedDirectories);
+        Assert.Equal(["proxy.example.com"], load.Value.Tls.Hostnames);
     }
 
     [Fact]

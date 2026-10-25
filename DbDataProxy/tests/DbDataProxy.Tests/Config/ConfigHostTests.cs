@@ -16,7 +16,7 @@ public sealed class ConfigStartupTests
     public async Task Environment_overrides_keep_working_with_and_without_the_DBPROXY_prefix()
     {
         Directory.CreateDirectory(DataDir);
-        File.WriteAllText(ProxyConfigFile.PathIn(DataDir), ProxyConfigFile.Starter);
+        ProxyConfigFile.EnsureStarter(DataDir);
         using var env = new EnvScope(
             ("DBPROXY_Proxy__Listen__Port", "0"),            // prefixed, as documented
             ("Proxy__Tls__Mode", "None"),                    // the stock unprefixed spelling
@@ -36,11 +36,15 @@ public sealed class ConfigStartupTests
     {
         string dir = Path.Combine(Path.GetTempPath(), "dbproxy-cfg-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
-        if (settings is not null) File.WriteAllText(ProxyConfigFile.PathIn(dir), settings);
+        if (settings is not null)
+        {
+            Directory.CreateDirectory(ProxyConfigFile.DirectoryIn(dir));
+            File.WriteAllText(ProxyConfigFile.PathIn(dir), settings);
+        }
         return dir;
     }
 
-    private const string FileSettings = """{ "Proxy": { "SchemaVersion": 2, "Listen": { "Address": "127.0.0.1", "Port": 1234 }, "Tls": { "Mode": "None" } } }""";
+    private const string FileSettings = "schemaVersion: 2\nlisten: { address: 127.0.0.1, port: 1234 }\ntls: { mode: none }\n";
 
     [Fact]
     public async Task The_data_directory_file_supplies_settings_and_the_command_line_overrides_it()
@@ -74,7 +78,7 @@ public sealed class ConfigStartupTests
     [Fact]
     public async Task A_missing_or_empty_settings_file_leaves_the_code_defaults()
     {
-        foreach (string? settings in new string?[] { null, "{}" })
+        foreach (string? settings in new string?[] { null, "# no settings\n" })
         {
             string dir = NewDataDirectory(settings);
             await using var app = ProxyHost.Build([$"--Proxy:DataDirectory={dir}", "--Proxy:Listen:Port=0", "--Proxy:Tls:Mode=None"]);
@@ -86,22 +90,59 @@ public sealed class ConfigStartupTests
     }
 
     [Fact]
-    public void A_settings_file_that_is_not_json_stops_startup()
+    public void A_settings_file_that_is_not_valid_YAML_stops_startup_naming_the_file_and_line()
     {
-        string dir = NewDataDirectory("{ this is not json");
+        string dir = NewDataDirectory("listen:\n  port: [1\n");
         var ex = Assert.Throws<ProxyConfigException>(() => ProxyHost.Build([$"--Proxy:DataDirectory={dir}"]));
-        Assert.Contains("appsettings.json", ex.Message);
+        Assert.Contains("server.yaml", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("data")]
+    [InlineData("config")]
+    public void An_appsettings_json_from_an_earlier_release_is_refused_naming_the_file_and_what_replaces_it(string where)
+    {
+        string dir = NewDataDirectory(null);
+        string folder = where == "data" ? dir : ProxyConfigFile.DirectoryIn(dir);
+        Directory.CreateDirectory(folder);
+        string old = Path.Combine(folder, "appsettings.json");
+        File.WriteAllText(old, """{ "Proxy": { "Listen": { "Port": 1234 } } }""");
+
+        var ex = Assert.Throws<ProxyConfigException>(() => ProxyHost.Build([$"--Proxy:DataDirectory={dir}", "--Proxy:Listen:Port=0", "--Proxy:Tls:Mode=None"]));
+        Assert.Contains(old, ex.Message);
+        Assert.Contains("server.yaml", ex.Message);
+        Assert.Contains("no longer read", ex.Message);
     }
 
     [Fact]
-    public void The_file_beside_the_executable_is_the_lowest_layer()
+    public async Task Startup_without_an_appsettings_json_is_unaffected_and_the_file_beside_the_executable_is_not_read()
     {
-        string beside = NewDataDirectory("""{ "Proxy": { "Listen": { "Address": "10.0.0.1", "Port": 1111 }, "Compression": { "Mode": "None" } } }""");
-        string data = NewDataDirectory("""{ "Proxy": { "Listen": { "Port": 2222 } } }""");
-        var o = ProxyConfiguration.LoadOptions(beside, data);
-        Assert.Equal(2222, o.Listen.Port);                 // the data directory's file overrides
-        Assert.Equal("10.0.0.1", o.Listen.Address);        // the other file still supplies what the first leaves alone
-        Assert.Equal(CompressionMode.None, o.Compression.Mode);
+        string dir = NewDataDirectory(FileSettings);
+        await using var app = ProxyHost.Build([$"--Proxy:DataDirectory={dir}", "--Proxy:Listen:Port=0"]);
+        Assert.Equal(TlsMode.None, app.Services.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue.Tls.Mode);
+        Assert.Null(ProxyConfigFile.LegacyFileMessage(dir, baseDirectory: dir));
+    }
+
+    [Fact]
+    public void The_layout_is_one_server_file_an_auth_file_a_users_file_and_a_data_source_per_connections_file()
+    {
+        string dir = NewDataDirectory("listen: { port: 2222 }\n");
+        string config = ProxyConfigFile.DirectoryIn(dir);
+        Directory.CreateDirectory(Path.Combine(config, "proxy"));
+        Directory.CreateDirectory(Path.Combine(config, "connections"));
+        File.WriteAllText(Path.Combine(config, "proxy", "auth.yaml"), "sessionIdleMinutes: 5\nallowPassThrough: false\n");
+        File.WriteAllText(Path.Combine(config, "proxy", "users.yaml"), "users:\n  - name: bob\n    passwordHash: PBKDF2-SHA256$1$a$b\n    dataSources: [erp]\n");
+        File.WriteAllText(Path.Combine(config, "connections", "erp.yaml"), "provider: sqlserver\nconnectionString: Server=x;Password=env:ERP_PW\nclassifier: off\n");
+        File.WriteAllText(Path.Combine(config, "connections", "notes.txt"), "not a data source");
+
+        var o = ProxyConfiguration.LoadOptions(dir);
+        Assert.Equal(2222, o.Listen.Port);
+        Assert.Equal(5, o.Auth.SessionIdleMinutes);
+        Assert.False(o.Auth.AllowPassThrough);
+        Assert.Equal("bob", Assert.Single(o.Users).Name);
+        var erp = Assert.Single(o.DataSources);
+        Assert.Equal("erp", erp.Key);
+        Assert.Equal(ClassifierMode.Off, erp.Value.Classifier);
     }
 
     [Fact]
@@ -111,9 +152,9 @@ public sealed class ConfigStartupTests
         Assert.True(ProxyConfigFile.EnsureStarter(dir));
         Assert.Equal(ProxyConfigFile.Starter, File.ReadAllText(ProxyConfigFile.PathIn(dir)));
 
-        File.WriteAllText(ProxyConfigFile.PathIn(dir), "{ \"Proxy\": { \"Listen\": { \"Port\": 9 } } }");
+        File.WriteAllText(ProxyConfigFile.PathIn(dir), "listen: { port: 9 }\n");
         Assert.False(ProxyConfigFile.EnsureStarter(dir));
-        Assert.Contains("\"Port\": 9", File.ReadAllText(ProxyConfigFile.PathIn(dir)));
+        Assert.Contains("port: 9", File.ReadAllText(ProxyConfigFile.PathIn(dir)));
     }
 
     [Fact]
@@ -186,6 +227,7 @@ public sealed class ConfigStartupTests
     }
 }
 
+
 public sealed class ConfigCommandTests
 {
     private static (int Code, string Out, string Err) Run(params string[] args)
@@ -197,22 +239,27 @@ public sealed class ConfigCommandTests
     }
 
     [Fact]
-    public void Check_returns_0_for_a_valid_file_and_2_for_each_kind_of_invalid_one()
+    public void Check_returns_0_for_a_valid_directory_and_2_for_each_kind_of_invalid_one()
     {
-        var ok = Run("check", "--file", Path.Combine(ConfigTestSupport.GoldenDirectory, "valid-schema-2-all-sections.json"));
-        Assert.Equal(0, ok.Code);
-        Assert.Contains("valid (schema version 2)", ok.Out);
+        using var ok = TempConfig.Create(("server.yaml", "schemaVersion: 2\nlisten: { port: 9000 }\n"));
+        var valid = Run("check", "--file", ok.Directory);
+        Assert.Equal(0, valid.Code);
+        Assert.Contains("valid (schema version 2)", valid.Out);
+        Assert.Equal(0, Run("check", "--file", ok.ServerYaml).Code);   // the path of server.yaml names its directory
 
-        var bad = Run("check", "--file", Path.Combine(ConfigTestSupport.GoldenDirectory, "invalid-unknown-key.json"));
+        using var unknown = TempConfig.Create(("server.yaml", "listen: { prot: 9000 }\n"));
+        var bad = Run("check", "--file", unknown.Directory);
         Assert.Equal(2, bad.Code);
         Assert.Contains("Did you mean `Port`?", bad.Err);
+        Assert.Contains("server.yaml:1", bad.Err);
 
-        using var broken = TempFile.Create("{ \"Proxy\": { \"Listen\": ");
-        var syntax = Run("check", "--file", broken.Path);
+        using var broken = TempConfig.Create(("server.yaml", "listen:\n  port: [1\n"));
+        var syntax = Run("check", "--file", broken.Directory);
         Assert.Equal(2, syntax.Code);
         Assert.Contains("could not be read", syntax.Err);
+        Assert.Contains("server.yaml", syntax.Err);
 
-        var missing = Run("check", "--file", Path.Combine(broken.DirectoryPath, "nope.json"));
+        var missing = Run("check", "--file", Path.Combine(ok.Directory, "nope.yaml"));
         Assert.Equal(2, missing.Code);
         Assert.Contains("was not found", missing.Err);
 
@@ -221,10 +268,41 @@ public sealed class ConfigCommandTests
     }
 
     [Fact]
+    public void A_JSON_file_is_refused_with_a_message_not_read()
+    {
+        using var old = TempFile.Create("""{ "Proxy": { "Listen": { "Port": 9000 } } }""");
+        var r = Run("check", "--file", old.Path);
+        Assert.Equal(2, r.Code);
+        Assert.Contains("no longer read", r.Err);
+        Assert.Contains("server.yaml", r.Err);
+    }
+
+    [Fact]
+    public void A_mistake_in_a_connections_file_names_that_file_and_line()
+    {
+        using var c = TempConfig.Create(("connections/erp.yaml", "provider: sqlserver\nconnectionString: Server=x\nbatchSize: 0\n"));
+        var r = Run("check", "--file", c.Directory);
+        Assert.Equal(2, r.Code);
+        Assert.Contains("Proxy:DataSources:erp:BatchSize", r.Err);
+        Assert.Contains(Path.Combine("connections", "erp.yaml") + ":3", r.Err);
+    }
+
+    [Fact]
+    public void A_file_that_is_not_a_mapping_and_a_users_file_with_other_keys_are_errors_with_positions()
+    {
+        using var c = TempConfig.Create(("server.yaml", "- a\n- b\n"), ("proxy/users.yaml", "users: []\nothers: 1\n"));
+        var r = Run("check", "--file", c.Directory);
+        Assert.Equal(2, r.Code);
+        Assert.Contains("must be a mapping", r.Err);
+        Assert.Contains("`others` is not a key of this file", r.Err);
+        Assert.Contains(Path.Combine("proxy", "users.yaml") + ":2", r.Err);
+    }
+
+    [Fact]
     public void Check_prints_warnings_but_still_succeeds()
     {
-        using var f = TempFile.Create("""{ "Proxy": { "DataSources": { "ro": { "Provider": "duckdb", "ConnectionString": "x" } } } }""");
-        var r = Run("check", "--file", f.Path);
+        using var c = TempConfig.Create(("connections/ro.yaml", "provider: duckdb\nconnectionString: x\n"));
+        var r = Run("check", "--file", c.Directory);
         Assert.Equal(0, r.Code);
         Assert.Contains("warning", r.Err);
         Assert.Contains("ro", r.Err);
@@ -233,9 +311,9 @@ public sealed class ConfigCommandTests
     [Fact]
     public void Check_can_allow_unknown_keys_for_forward_compatibility()
     {
-        using var f = TempFile.Create("""{ "Proxy": { "FromTheFuture": 1 } }""");
-        Assert.Equal(2, Run("check", "--file", f.Path).Code);
-        Assert.Equal(0, Run("check", "--file", f.Path, "--allow-unknown-keys").Code);
+        using var c = TempConfig.Create(("server.yaml", "fromTheFuture: 1\n"));
+        Assert.Equal(2, Run("check", "--file", c.Directory).Code);
+        Assert.Equal(0, Run("check", "--file", c.Directory, "--allow-unknown-keys").Code);
     }
 
     [Fact]
@@ -244,28 +322,19 @@ public sealed class ConfigCommandTests
         const string literalPassword = "Lit3ralPw-8841";
         const string signingKey = "c2lnbmluZy1rZXktbGl0ZXJhbA==";
         const string hash = "PBKDF2-SHA256$210000$salt$hashvalue";
-        using var f = TempFile.Create($$"""
-            {
-              "Proxy": {
-                "SchemaVersion": 2,
-                "Listen": { "Port": 9100 },
-                "Tls": { "Mode": "File", "CertificatePath": "c.pfx", "CertificatePassword": "env:PFX_PW" },
-                "Auth": { "Jwt": { "SigningKey": "{{signingKey}}", "Audience": "a", "Mappings": [ { "Claim": "c", "Value": "v", "DataSources": ["*"] } ] } },
-                "DataSources": {
-                  "a": { "Provider": "sqlserver", "ConnectionString": "Server=s;User Id=u;Password={{literalPassword}};Encrypt=True" },
-                  "b": { "Provider": "sqlserver", "ConnectionString": "Server=s;User Id=u;Password=env:B_PW" },
-                  "c": { "Provider": "sqlserver", "ConnectionString": "secret:dbdata:proxy:c" }
-                },
-                "Users": [ { "Name": "u", "PasswordHash": "{{hash}}", "DataSources": ["a"] } ]
-              }
-            }
-            """);
+        using var c = TempConfig.Create(
+            ("server.yaml", "schemaVersion: 2\nlisten: { port: 9100 }\ntls: { mode: file, certificatePath: c.pfx, certificatePassword: 'env:PFX_PW' }\n"),
+            ("proxy/auth.yaml", $"jwt:\n  signingKey: {signingKey}\n  audience: a\n  mappings: [ {{ claim: c, value: v, dataSources: ['*'] }} ]\n"),
+            ("proxy/users.yaml", $"users:\n  - name: u\n    passwordHash: '{hash}'\n    dataSources: [a]\n"),
+            ("connections/a.yaml", $"provider: sqlserver\nconnectionString: 'Server=s;User Id=u;Password={literalPassword};Encrypt=True'\n"),
+            ("connections/b.yaml", "provider: sqlserver\nconnectionString: 'Server=s;User Id=u;Password=env:B_PW'\n"),
+            ("connections/c.yaml", "provider: sqlserver\nconnectionString: 'secret:dbdata:proxy:c'\n"));
 
-        var r = Run("show", "--origin", "--file", f.Path);
+        var r = Run("show", "--origin", "--file", c.Directory);
         Assert.Equal(0, r.Code);
         string text = r.Out;
 
-        Assert.Contains($"Listen.Port = 9100   ({f.Path}:4)", text);
+        Assert.Contains($"Listen.Port = 9100   ({c.Path("server.yaml")}:2)", text);
         Assert.Contains("Listen.Address = 0.0.0.0   (default)", text);
         Assert.Contains("SchemaVersion = 2", text);
 
@@ -280,12 +349,17 @@ public sealed class ConfigCommandTests
         Assert.Contains("DataSources.a.ConnectionString = Server=s;User Id=u;Password=***;Encrypt=True", text);
         Assert.Contains("Password=env:B_PW", text);
         Assert.Contains("DataSources.c.ConnectionString = secret:dbdata:proxy:c", text);
+        Assert.Contains($"({c.Path(Path.Combine("connections", "a.yaml"))}:2)", text);
     }
 
     [Fact]
     public void Show_without_origin_prints_env_style_keys()
     {
-        var r = Run("show", "--file", Path.Combine(ConfigTestSupport.GoldenDirectory, "valid-lowercase-keys-and-comments.json"));
+        using var c = TempConfig.Create(
+            ("server.yaml", "listen: { address: 127.0.0.1, port: 9000 }\ntls: { mode: none }\n"),
+            ("proxy/users.yaml", "users:\n  - name: bob\n    passwordHash: PBKDF2-SHA256$1$a$b\n    dataSources: [ERP]\n    defaultDataSource: erp\n"),
+            ("connections/erp.yaml", "provider: SqlServer\nconnectionString: Server=x;Database=y;Password=env:ERP_PW\n"));
+        var r = Run("show", "--file", c.Directory);
         Assert.Equal(0, r.Code);
         Assert.Contains("Proxy:Listen:Port = 9000", r.Out);
         Assert.Contains("Proxy:DataSources:erp:Provider = SqlServer", r.Out);
@@ -294,9 +368,10 @@ public sealed class ConfigCommandTests
     }
 
     [Fact]
-    public void Show_of_an_invalid_file_fails_with_2()
+    public void Show_of_an_invalid_directory_fails_with_2()
     {
-        var r = Run("show", "--file", Path.Combine(ConfigTestSupport.GoldenDirectory, "invalid-port-range.json"));
+        using var c = TempConfig.Create(("server.yaml", "listen: { port: 70000 }\n"));
+        var r = Run("show", "--file", c.Directory);
         Assert.Equal(2, r.Code);
         Assert.Empty(r.Out);
     }
@@ -305,33 +380,29 @@ public sealed class ConfigCommandTests
 /// <summary>Reloads through <see cref="ProxyOptionsMonitor"/>: a bad edit keeps the last good configuration and never crashes the service.</summary>
 public sealed class ConfigReloadTests
 {
-    private static string Json(int port, string extra = "") => $$"""{ "Proxy": { "Listen": { "Port": {{port}} }{{extra}} } }""";
+    private static string Server(int port, string extra = "") => $"listen: {{ port: {port} }}\n{extra}";
 
-    private static bool Wait(Func<bool> condition, int seconds = 20)
+    // The edits are applied by reading the directory again (ReloadNow), not by waiting for the operating system to report a file change: what these tests pin is what the
+    // monitor does with a reload (validate it, keep the last good one, say why). The file watcher only calls ReloadNow after a change settles.
+    private static (ConfigurationRoot Root, ProxyConfigDirectoryProvider Provider, ProxyOptionsMonitor Monitor, CaptureLoggerProvider Capture, IDisposable Loggers) Open(TempConfig config)
     {
-        var until = DateTime.UtcNow.AddSeconds(seconds);
-        while (DateTime.UtcNow < until)
-        {
-            if (condition()) return true;
-            Thread.Sleep(50);
-        }
-        return condition();
+        var capture = new CaptureLoggerProvider();
+        var loggers = LoggerFactory.Create(b => b.AddProvider(capture));
+        var builder = new ConfigurationBuilder().Add(new ProxyConfigDirectorySource(config.Directory));
+        var guard = ProxyConfigLoadGuard.Install(builder);
+        var root = (ConfigurationRoot)builder.Build();
+        var provider = root.Providers.OfType<ProxyConfigDirectoryProvider>().Single();
+        var monitor = new ProxyOptionsMonitor(root, ProxyConfig.LoadOrThrow(root).Value!, loggers.CreateLogger("DbDataProxy.Config"), guard);
+        return (root, provider, monitor, capture, loggers);
     }
 
-    // The edits are applied by calling Reload, not by waiting for the operating system to report a file change: what these tests pin is what the monitor does with a
-    // reload (validate it, keep the last good one, say why), which is the same code the file watcher triggers. The watcher is the framework's; one test below drives
-    // it through the provider's polling watcher, which does not depend on the operating system's delivery of change events.
     [Fact]
     public void An_invalid_reload_keeps_serving_the_last_good_configuration()
     {
-        using var file = TempFile.Create(Json(9001));
-        var capture = new CaptureLoggerProvider();
-        using var loggers = LoggerFactory.Create(b => b.AddProvider(capture));
-
-        var builder = new ConfigurationBuilder().AddJsonFile(file.Path, optional: false, reloadOnChange: false);
-        var guard = ProxyConfigLoadGuard.Install(builder);
-        var root = builder.Build();
-        using var monitor = new ProxyOptionsMonitor(root, ProxyConfig.LoadOrThrow(root).Value!, loggers.CreateLogger("DbDataProxy.Config"), guard);
+        using var config = TempConfig.Create(("server.yaml", Server(9001)));
+        var (_, provider, monitor, capture, loggers) = Open(config);
+        using var _l = loggers;
+        using var _m = monitor;
         int changes = 0;
         using var _ = monitor.OnChange((_, _) => Interlocked.Increment(ref changes));
         Assert.Equal(9001, monitor.CurrentValue.Listen.Port);
@@ -339,16 +410,16 @@ public sealed class ConfigReloadTests
         int Rejections() => capture.Lines.Count(l => l.Level == LogLevel.Error);
 
         // a valid edit is picked up
-        File.WriteAllText(file.Path, Json(9002));
-        root.Reload();
-        Assert.True(Wait(() => monitor.CurrentValue.Listen.Port == 9002), "valid change not applied");
-        Assert.True(Wait(() => changes >= 1));
+        config.Write("server.yaml", Server(9002));
+        provider.ReloadNow();
+        Assert.Equal(9002, monitor.CurrentValue.Listen.Port);
+        Assert.Equal(1, changes);
 
-        // semantically invalid edit (TLS file mode without a path, unknown key): rejected, last good stays
+        // semantically invalid edit (TLS file mode without a path): rejected, last good stays
         int before = Rejections();
-        File.WriteAllText(file.Path, Json(9003, """, "Tls": { "Mode": "File" }"""));
-        root.Reload();
-        Assert.True(Wait(() => Rejections() > before), "invalid change not reported");
+        config.Write("server.yaml", Server(9003, "tls: { mode: file }\n"));
+        provider.ReloadNow();
+        Assert.True(Rejections() > before, "invalid change not reported");
         Assert.Equal(9002, monitor.CurrentValue.Listen.Port);
         var line = capture.Lines.Last(l => l.Level == LogLevel.Error).Text;
         Assert.Contains("last good configuration stays in effect", line);
@@ -356,55 +427,44 @@ public sealed class ConfigReloadTests
 
         // a misspelt key is rejected too
         before = Rejections();
-        File.WriteAllText(file.Path, Json(9003, """, "Bogus": 1"""));
-        root.Reload();
-        Assert.True(Wait(() => Rejections() > before), "unknown key not reported");
+        config.Write("server.yaml", Server(9003, "bogus: 1\n"));
+        provider.ReloadNow();
+        Assert.True(Rejections() > before, "unknown key not reported");
         Assert.Equal(9002, monitor.CurrentValue.Listen.Port);
-        Assert.Contains("Proxy:Bogus", capture.Lines.Last(l => l.Level == LogLevel.Error).Text);
+        Assert.Contains("Proxy:bogus", capture.Lines.Last(l => l.Level == LogLevel.Error).Text, StringComparison.OrdinalIgnoreCase);
 
-        // syntactically broken edit: also rejected (and the process is still alive to assert it)
+        // a file that does not parse: also rejected, naming the file, and the last good data stays
         before = Rejections();
-        File.WriteAllText(file.Path, "{ \"Proxy\": { \"Listen\": { \"Port\": ");
-        root.Reload();
-        Assert.True(Wait(() => Rejections() > before), "broken file not reported");
+        config.Write("server.yaml", "listen:\n  port: [1\n");
+        provider.ReloadNow();
+        Assert.True(Rejections() > before, "broken file not reported");
         Assert.Equal(9002, monitor.CurrentValue.Listen.Port);
+        Assert.Contains("server.yaml", capture.Lines.Last(l => l.Level == LogLevel.Error).Text);
 
         // fixing the file recovers
-        File.WriteAllText(file.Path, Json(9004));
-        root.Reload();
-        Assert.True(Wait(() => monitor.CurrentValue.Listen.Port == 9004), "recovery not applied");
+        config.Write("server.yaml", Server(9004));
+        provider.ReloadNow();
+        Assert.Equal(9004, monitor.CurrentValue.Listen.Port);
     }
 
     [Fact]
-    public void A_reload_that_only_adds_warnings_is_applied()
+    public void A_reload_that_only_adds_warnings_is_applied_and_a_new_data_source_needs_no_restart()
     {
-        using var file = TempFile.Create(Json(9001));
-        var builder = new ConfigurationBuilder().AddJsonFile(file.Path, optional: false, reloadOnChange: false);
-        var guard = ProxyConfigLoadGuard.Install(builder);
-        var root = builder.Build();
-        using var monitor = new ProxyOptionsMonitor(root, ProxyConfig.LoadOrThrow(root).Value!, LoggerFactory.Create(_ => { }).CreateLogger("x"), guard);
+        using var config = TempConfig.Create(("server.yaml", Server(9001)));
+        var (_, provider, monitor, _, loggers) = Open(config);
+        using var _l = loggers;
+        using var _m = monitor;
 
-        File.WriteAllText(file.Path, Json(9005, """, "Users": [ { "Name": "nobody", "PasswordHash": "h" } ]"""));   // warning: no data sources
-        root.Reload();
-        Assert.True(Wait(() => monitor.CurrentValue.Listen.Port == 9005));
+        config.Write("proxy/users.yaml", "users:\n  - name: nobody\n    passwordHash: h\n");   // warning: no data sources
+        provider.ReloadNow();
         Assert.Single(monitor.CurrentValue.Users);
-    }
 
-    [Fact]
-    public void A_file_edit_is_picked_up_through_the_providers_polling_watcher()
-    {
-        using var file = TempFile.Create(Json(9001));
-        using var files = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(file.DirectoryPath) { UsePollingFileWatcher = true, UseActivePolling = true };
-        var builder = new ConfigurationBuilder().AddJsonFile(files, System.IO.Path.GetFileName(file.Path), optional: false, reloadOnChange: true);
-        var guard = ProxyConfigLoadGuard.Install(builder);
-        var root = builder.Build();
-        using var monitor = new ProxyOptionsMonitor(root, ProxyConfig.LoadOrThrow(root).Value!, LoggerFactory.Create(_ => { }).CreateLogger("x"), guard);
+        config.Write("connections/new.yaml", "provider: duckdb\nconnectionString: x\nallowWrites: true\n");
+        provider.ReloadNow();
+        Assert.True(monitor.CurrentValue.DataSources.ContainsKey("NEW"));   // lookups stay case-insensitive
 
-        File.WriteAllText(file.Path, Json(9006));
-        // The polling watcher compares last-write times, and the two texts have the same length: on a file system with a coarse timestamp (a Windows runner) the edit can
-        // carry the same time as the file's creation and never be seen. Making the time differ makes the test about the watcher and not about the clock.
-        File.SetLastWriteTimeUtc(file.Path, DateTime.UtcNow.AddMinutes(1));
-
-        Assert.True(Wait(() => monitor.CurrentValue.Listen.Port == 9006, seconds: 30), "the edit was not picked up");
+        File.Delete(config.Path("connections/new.yaml"));
+        provider.ReloadNow();
+        Assert.Empty(monitor.CurrentValue.DataSources);
     }
 }

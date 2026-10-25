@@ -1,0 +1,6 @@
+# Callers' own database credentials (the username/password they authenticate with) are used to connect.
+provider: odbc
+passThrough: true
+# No TLS keys: the secure default applies (encrypt, verify the certificate). The credentials the caller sends replace any user/password here,
+# and any integrated-security keys (Trusted_Connection, Authentication=...) are removed before they are injected.
+connectionString: "Driver={ODBC Driver 18 for SQL Server};Server=SQL02;Database=Dw"

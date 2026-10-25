@@ -1,6 +1,6 @@
 # Arrow Flight SQL proxy for Linux containers.
 #   docker build -f DbDataProxy/Dockerfile -t dbdataproxy .      (run from the repository root: the build needs DbDataKit/ too)
-#   docker run -p 8815:8815 -v ./dbproxy-data:/data dbdataproxy     (/data holds appsettings.json and the generated certificate)
+#   docker run -p 8815:8815 -v ./dbproxy-data:/data dbdataproxy     (/data holds config/ and the generated certificate)
 # ODBC sources need drivers installed in the image (see the commented example below); the 32-bit worker is
 # Windows-only, so "Bitness": "x86" data sources are not available in containers.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build

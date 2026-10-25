@@ -29,6 +29,34 @@ internal static class ConfigTestSupport
     public static string Format(ProxyConfigLoad load) => ProxyConfig.Format(load.Diagnostics);
 }
 
+/// <summary>A temporary configuration directory (<c>server.yaml</c>, <c>proxy/</c>, <c>connections/</c>) written from literal text.</summary>
+internal sealed class TempConfig : IDisposable
+{
+    private readonly TempFile _holder = TempFile.Create("", "placeholder");
+
+    public string Directory => _holder.DirectoryPath;
+
+    public string ServerYaml => Path("server.yaml");
+
+    public string Path(string relative) => System.IO.Path.Combine(Directory, relative);
+
+    public static TempConfig Create(params (string Name, string Content)[] files)
+    {
+        var config = new TempConfig();
+        foreach (var (name, content) in files) config.Write(name, content);
+        return config;
+    }
+
+    public void Write(string relative, string content)
+    {
+        var path = Path(relative);
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, content);
+    }
+
+    public void Dispose() => _holder.Dispose();
+}
+
 internal sealed class TempFile : IDisposable
 {
     private readonly string _dir = System.IO.Directory.CreateTempSubdirectory("dbproxy-config-").FullName;

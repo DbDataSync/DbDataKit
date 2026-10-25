@@ -52,6 +52,8 @@ to it in the pull request that makes the change; a release moves the entries int
 
 ## DbDataProxy
 
+- **Proxy's settings are YAML files, and `appsettings.json` is refused.** The settings are in the `config` folder of the data directory: `server.yaml`, `proxy/auth.yaml`, `proxy/users.yaml` and one `connections/<name>.yaml` per data source (keys in camelCase; `config.example/` beside the executable shows each file). An `appsettings.json` in the data directory, its `config` folder or beside the executable stops the server (exit 2) with a message that names it; nothing is converted, so move the `Proxy` section's keys into the new files and delete the old one. Environment variables and the command line override as before. `config check|show --file` takes a config folder or the path of its `server.yaml`. (P01)
+
 - **Parameterised queries work from the Apache .NET Flight SQL client.** A prepared-statement handle was random binary data, which that client turns into a string and back, so the proxy no longer recognised it and answered `NotFound: Unknown or closed prepared statement`. Handles are now 32 hexadecimal characters; clients need no change. (A18)
 - **The executables are lower case.** `DbDataProxy.exe` is `dbdataproxy.exe` and the 32-bit worker `DbDataProxy.Worker.exe` is `dbdataproxy-worker.exe` (`worker\dbdataproxy-worker.exe`); the Docker image runs `dbdataproxy.dll`. The
   Windows service is registered as `dbdataproxy` by default (the service control manager ignores case, so `service install` updates an existing registration in place, and its virtual account is the same one).
