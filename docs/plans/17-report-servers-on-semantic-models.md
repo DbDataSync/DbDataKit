@@ -1,8 +1,9 @@
 # Plan 17: SSRS and Power BI Report Server on the semantic models
 
-Status: **proposed** (2026-10-25), a small plan from the owner's direction: the first reporting step is our own visual format plus SSRS
-and Power BI Report Server on a separate server (plan 16 section 2a). This plan is how those report servers **pull data from the
-semantic models** (plan 14) served by DbDataProxy. **Not part of plan 13's work list.**
+Status: **documented scenarios** (2026-10-25, reviewed by the owner the same day): the routes are written down so that what to build
+can be decided when the time comes; section 2a has the owner's assessment of each. From the owner's direction: the first reporting step
+is our own visual format plus SSRS and Power BI Report Server on a separate server (plan 16 section 2a). This plan is how those report
+servers **pull data from the semantic models** (plan 14) served by DbDataProxy. **Not part of plan 13's work list.**
 
 ## 1. What the report servers can read
 
@@ -38,7 +39,21 @@ Kerberos.
 | R5 | **XMLA**: MDX (plan 14 R7) and, for Power BI's live connection, DAX | Analysis Services data source (MDX) | SQL Server Analysis Services live connection (DAX) | **yes** | MDX: large (shared with Excel); DAX: very large |
 | R6 | A **custom data extension** for Reporting Services (a .NET Framework assembly installed on the report server) | the extension | none (Power BI reports cannot use it) | **yes** | medium, plus an install on every report server |
 
+## 2a. The owner's assessment
+
+| # | Assessment (2026-10-25) |
+| --- | --- |
+| R1 | **Mostly there already**: Build builds views today, so a view a report server reads is an ordinary Build model. What R1 would add is only writing that view's query in semantic SQL. A good recommendation, little to build |
+| R2 | **Worth it beyond report servers**: a stable URL that returns a semantic query's result serves many tools (Excel's Power Query, Python, scripts, any web client), not only SSRS and Power BI |
+| R3 | Kept as described (verifying a third-party driver) |
+| R4 | **The most power and utility**, and a natural extension of semantic SQL, **provided it does not weaken the semantic SQL spec** (see R4 below: the compatibility layer is separate from the spec) |
+| R5 | **Only for SSRS with MDX, and only with what the Excel MDX work already gives**: no SSRS-specific MDX work, and no DAX |
+| R6 | **Dropped**: too specific (one product's extension point, nothing for Power BI or other tools) |
+
 ### R1. Published semantic views (Build)
+
+- **Today's Build already covers the plain case**: a view model is a SELECT over Build's tables, deployed with them, and a report server
+  reads it as any SQL Server view. The addition below is only for writing that SELECT in semantic SQL.
 
 - A Build project names semantic queries to publish (`semantic/published/*.sql`, in semantic SQL, plan 14 R6). `project compile` checks
   that each has **one source** (no federation) and a fixed set of dimensions; Build lowers it to the target's SQL (it is a query over
@@ -60,6 +75,8 @@ Kerberos.
 - **Sign-in** is Windows (Negotiate) or Basic over TLS, mapped to Proxy's client identities, so each feed request is a Proxy query with its
   limits, audit and failure model. A feed is read-only and is defined through Proxy's management API (and the console).
 - This is the quickest route to **live, federated** semantic results in both kinds of report, with nothing installed on the report server.
+- **Not only for report servers** (owner): the same feeds serve Excel's Power Query (`Web.Contents`), Python and R, command-line tools and
+  any web client, so a feed is a general way to hand a governed result to a tool that cannot speak Flight SQL.
 
 ### R3. ODBC through the Arrow Flight SQL ODBC driver
 
@@ -80,19 +97,30 @@ Kerberos.
   numbers whatever aggregate Power BI asked for, and an aggregate that contradicts the measure (summing a ratio) is refused with a message.
 - The work is Power BI's SQL: its query shapes and its catalog questions, recorded from Power BI Desktop against a real PostgreSQL first,
   then answered by Proxy (the same cataloguing approach as Excel and MDX).
+- **The semantic SQL spec is not weakened** (owner's condition). The flat views and the reading of `SUM(measure_column)` as a measure are
+  a **compatibility layer** in front of the spec, not part of it:
+  - semantic SQL keeps its own strict form (`MEASURE()`, model-anchored names, `LIMIT` required, everything else refused by name);
+  - the compatibility layer translates a tool's SQL into a strict semantic request, and a tool query it cannot translate into one is
+    refused with a message, never answered approximately;
+  - the layer's rules (which aggregates a measure accepts, how a flat name maps back to a member) are written in its own document,
+    versioned on their own, with their own fixtures recorded per tool; a rule needed by one tool never becomes a rule of semantic SQL;
+  - every translated query is shown, in the result's provenance and in Proxy's log, as the canonical semantic SQL it became, so what a
+    tool asked for and what was answered can always be compared.
 
 ### R5. XMLA, MDX and DAX
 
 - **MDX** comes with Excel's work (plan 14 R7). SSRS's Analysis Services data source sends the MDX its query designer writes, which is a
-  different set of shapes from Excel's: catalogued the same way, on the same VM, against the SSAS that already runs in CI.
-- **Power BI's live connection sends DAX**, for multidimensional models as well as tabular. Translating DAX to semantic requests is a large
-  project of its own; it is listed so the decision is explicit, not planned.
+  different set of shapes from Excel's. **Owner's scope:** SSRS with MDX is supported only as far as the Excel MDX work already reaches; an
+  SSRS query the translator does not recognize is refused with a message like any other unknown MDX, and no SSRS-specific MDX work is planned.
+  A one-time look at what SSRS's query designer sends (on the Excel VM) is enough to say which SSRS reports work.
+- **Power BI's live connection sends DAX**, for multidimensional models as well as tabular. **Not planned** (owner): translating DAX is a
+  large project of its own, and R4 gives Power BI live (DirectQuery) access through semantic SQL instead.
 
-### R6. A custom data extension
+### R6. A custom data extension (dropped)
 
 A Reporting Services data processing extension (`IDbConnection`, `IDbCommand` and the rest, .NET Framework) that sends semantic SQL to
-Proxy. It gives the most control (a query designer, parameters, identity), but it is code installed on every report server and it does
-nothing for Power BI reports. Kept as a fallback if R3's driver does not hold up.
+Proxy. **Dropped by the owner as too specific**: code installed on every report server, for one product, and nothing for Power BI
+reports or other tools. Recorded so the option is not looked at again without a new reason.
 
 ## 3. Identity
 
@@ -102,13 +130,18 @@ nothing for Power BI reports. Kept as a fallback if R3's driver does not hold up
   constrained delegation** (the report server's service account allowed to delegate to Proxy's service principal). R1 gets it from SQL
   Server's own row-level security; R2 to R5 from Proxy's Windows validation. This is part of the sign-in design conversation (plan 16).
 
-## 4. Recommended order
+## 4. When the time comes
 
-1. **R1**, published semantic views: the smallest change, every mode of both servers, and it reuses Build's lowering.
-2. **R2**, result feeds: live and federated semantic results for both kinds of report, nothing installed on the report server.
-3. **R3**, the ODBC driver: verify it against Proxy; if it works, semantic SQL is usable directly in report queries.
-4. **R4** after Proxy's Postgres wire, for Power BI DirectQuery on the semantic models.
-5. **R5**: MDX with Excel's work; DAX only if Power BI live connections are needed.
+Nothing here is scheduled; the routes are documented so the choice can be made then. As things stand:
+
+| Route | Standing |
+| --- | --- |
+| R1 | available today as plain Build views; semantic SQL as a view's query is a small addition, whenever semantic SQL exists |
+| R2 | a strong candidate: small, live and federated, and useful to many tools besides report servers |
+| R3 | verification of a third-party driver; can be tried whenever Proxy serves semantic SQL over Flight SQL |
+| R4 | the most valuable, after Proxy's Postgres wire (plan 14 R8), on the condition that the compatibility layer stays separate from the semantic SQL spec |
+| R5 | MDX only, and only what the Excel work gives; DAX not planned |
+| R6 | dropped |
 
 ## 5. Testing
 
@@ -119,6 +152,6 @@ nothing for Power BI reports. Kept as a fallback if R3's driver does not hold up
 
 ## 6. Questions for the owner
 
-1. The order in section 4: R1 and R2 first?
+1. ~~Order~~: no order now; decided per route when the time comes (section 4).
 2. Is per-user data (Kerberos delegation) needed in the first version, or are stored credentials enough to start?
-3. Power BI live connections (DAX): wanted at some point, or never?
+3. ~~Power BI live connections (DAX)~~: not planned; R4 is the live route for Power BI.
