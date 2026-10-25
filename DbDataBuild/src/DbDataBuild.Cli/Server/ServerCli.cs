@@ -1,6 +1,7 @@
 using DbDataBuild.Core;
 using DbDataBuild.Tui.Model;
 using DbDataKit.Cli;
+using DbDataKit.Config.Git;
 using DbDataKit.Secrets;
 using DbDataKit.Secrets.Cli;
 using DbDataKit.Secrets.Store;
@@ -30,7 +31,7 @@ internal static class ServerCli
 
     private static NounRouter Router(string[] invocation) => new("dbdatabuild",
     [
-        ServerNoun.Create(RunServerAsync).With(PairingVerbs.Create(args => new PairingFiles(Path.Combine(DirectoryOf(args), "server.yaml")))),
+        ServerNoun.Create(RunServerAsync).With([.. PairingVerbs.Create(args => new PairingFiles(Path.Combine(DirectoryOf(args), "server.yaml"))), new Verb("project", "The projects this server hosts: add, remove, list, pull", EffectClass.RepoFilesOnly, ProjectUsage, ProjectAsync, DataSchemas.None)]),
         // the store is opened (and its key made on first use) only for the secret verbs
         .. invocation is ["secret", ..] ? new[] { SecretVerbs(invocation) } : Array.Empty<Noun>(),
     ], ProductInfo.Version);
@@ -59,17 +60,10 @@ internal static class ServerCli
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "project", "repo", "listen" });
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "listen" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
         {
-            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--project <folder>] [--repo <server directory>] [--listen https://<address>:<port>]");
-            return CliExit.Usage;
-        }
-
-        var project = Path.GetFullPath(parsed.Get("project") ?? ".");
-        if (!Directory.Exists(project))
-        {
-            await context.Error.WriteLineAsync($"The project folder '{project}' does not exist.");
+            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>]. Projects are added with 'server project add'.");
             return CliExit.Usage;
         }
 
@@ -79,18 +73,122 @@ internal static class ServerCli
             return CliExit.Usage;
         }
 
-        var settings = new BuildServerSettings(project, DirectoryOf(args), listen);
+        var settings = new BuildServerSettings(DirectoryOf(args), listen);
         Directory.CreateDirectory(settings.Directory);
+        var projects = new ProjectsFile(settings.Directory);
+        foreach (var problem in projects.Problems) await context.Error.WriteLineAsync(problem);
+        foreach (var project in projects.All().Where(p => p.IsRemote))
+        {
+            // a remote project is brought up to date as the server starts; one that cannot be reached is served as it was last seen, or not at all if it was never cloned
+            try { projects.Pull(project); }
+            catch (GitRemoteException ex) { await context.Error.WriteLineAsync($"Project '{project.Id}': {ex.Message}"); }
+        }
+
         var host = new TuiCommand.CliHost(Environment.GetEnvironmentVariable);
         var secrets = ServerSecrets.Open(settings.Directory);
         var runner = new ChildProcessCommandRunner(logins: token => ServerSecrets.LoginsAsync(secrets, token));
-        var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, BuildManagementApi.ReadOnlySurface(project, host.Commands), line => context.Error.WriteLine(line));
-        await context.Out.WriteLineAsync($"Serving '{settings.ProjectId}' on {listen} (instance {BuildServer.InstanceId(settings.ServerYaml)}). Pair a client with: dbdatabuild server pair");
+        var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, projects, host.Commands, line => context.Error.WriteLine(line));
         await app.StartAsync(context.Cancellation);
+        await context.Out.WriteLineAsync($"Serving {projects.All().Count} project(s) on {listen} (instance {BuildServer.InstanceId(settings.ServerYaml)}). Pair a client with: dbdatabuild server pair");
         try { await Task.Delay(Timeout.Infinite, context.Cancellation); }
         catch (OperationCanceledException) { /* asked to stop */ }
         await app.StopAsync(CancellationToken.None);
         return CliExit.Ok;
+    }
+
+    private const string ProjectUsage = "add <id> (--path <folder> | --git <address> [--branch <name>]) | remove <id> | list | pull <id>   [--repo <server directory>]";
+
+    /// <summary><c>server project add|remove|list|pull</c>: the projects this server hosts. A running server notices a change on its next call, so none of these needs it stopped.</summary>
+    private static async Task<int> ProjectAsync(string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "path", "git", "branch" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count == 0)
+        {
+            await context.Error.WriteLineAsync($"Usage: server project {ProjectUsage}");
+            return CliExit.Usage;
+        }
+
+        var projects = new ProjectsFile(DirectoryOf(args));
+        var (action, id) = (parsed.Words[0], parsed.Words.Count > 1 ? parsed.Words[1] : null);
+        switch (action)
+        {
+            case "list" when parsed.Words.Count == 1:
+                foreach (var problem in projects.Problems) await context.Error.WriteLineAsync(problem);
+                if (projects.All().Count == 0) await context.Out.WriteLineAsync("No project is hosted. Add one with 'server project add'.");
+                foreach (var p in projects.All())
+                    await context.Out.WriteLineAsync($"{p.Id,-20} {(p.IsRemote ? $"git {p.Git}" + (p.Branch is not null ? $" ({p.Branch})" : "") : $"path {p.Path}")}");
+                context.Data["projects"] = projects.All().Select(p => new Dictionary<string, object?> { ["id"] = p.Id, ["path"] = p.Path, ["git"] = p.Git, ["branch"] = p.Branch }).ToList();
+                return CliExit.Ok;
+
+            case "add" when id is not null && parsed.Words.Count == 2:
+                try
+                {
+                    var path = parsed.Get("path") is { } given ? Path.GetFullPath(given) : null;
+                    var project = new HostedProject(id, path, parsed.Get("git"), parsed.Get("branch"));
+                    if (project.Branch is not null && !project.IsRemote) throw new ArgumentException("--branch goes with --git.");
+                    projects.Add(project);
+                    if (project.IsRemote)
+                    {
+                        // cloned now, so a bad address or branch is the answer to this command and not to the first call
+                        try
+                        {
+                            var pulled = projects.Pull(project)!;
+                            await context.Out.WriteLineAsync($"Cloned '{id}' at {pulled.Head[..Math.Min(8, pulled.Head.Length)]} ({pulled.Branch}).");
+                        }
+                        catch (GitRemoteException ex)
+                        {
+                            projects.Remove(id);
+                            await context.Error.WriteLineAsync(ex.Message);
+                            return CliExit.Failure;
+                        }
+                    }
+                    else await context.Out.WriteLineAsync($"Hosting '{id}' from {path}.");
+                    context.Data["added"] = id;
+                    return CliExit.Ok;
+                }
+                catch (ArgumentException ex)
+                {
+                    await context.Error.WriteLineAsync(ex.Message);
+                    return CliExit.Usage;
+                }
+
+            case "remove" when id is not null && parsed.Words.Count == 2:
+                if (!projects.Remove(id))
+                {
+                    await context.Error.WriteLineAsync($"No project '{id}' is hosted.");
+                    return CliExit.Failure;
+                }
+                await context.Out.WriteLineAsync($"'{id}' is no longer served. Its files are untouched.");
+                context.Data["removed"] = id;
+                return CliExit.Ok;
+
+            case "pull" when id is not null && parsed.Words.Count == 2:
+                if (projects.Find(id) is not { } found)
+                {
+                    await context.Error.WriteLineAsync($"No project '{id}' is hosted.");
+                    return CliExit.Failure;
+                }
+                if (!found.IsRemote)
+                {
+                    await context.Out.WriteLineAsync($"'{id}' is a folder on this machine; there is nothing to pull.");
+                    return CliExit.Ok;
+                }
+                try
+                {
+                    var pulled = projects.Pull(found)!;
+                    await context.Out.WriteLineAsync($"'{id}' is at {pulled.Head[..Math.Min(8, pulled.Head.Length)]} ({pulled.Branch}).");
+                    return CliExit.Ok;
+                }
+                catch (GitRemoteException ex)
+                {
+                    await context.Error.WriteLineAsync(ex.Message);
+                    return CliExit.Failure;
+                }
+
+            default:
+                await context.Error.WriteLineAsync($"Usage: server project {ProjectUsage}");
+                return CliExit.Usage;
+        }
     }
 
     /// <summary>Where a secret's value is read from: the context's standard input when it is redirected (or not the process's own), a hidden prompt on the terminal otherwise.</summary>

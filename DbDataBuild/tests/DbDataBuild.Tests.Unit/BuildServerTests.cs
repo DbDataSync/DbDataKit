@@ -21,6 +21,7 @@ public sealed class BuildServerTests : IAsyncLifetime
     private HttpClient http = null!;
     private PairedServer paired = null!;
     private string instanceId = null!;
+    private ProjectsFile projects = null!;
 
     private sealed class Fake : IProjectCommandRunner
     {
@@ -35,16 +36,18 @@ public sealed class BuildServerTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         Assert.Equal(0, CliApp.Run(["project", "create", "starter", project, "--format", "json"], new StringWriter(), new StringWriter()));
-        await Start(new ChildProcessCommandRunner(), host => BuildManagementApi.ReadOnlySurface(project, host.Commands));
+        await Start(new ChildProcessCommandRunner());
     }
 
-    private async Task Start(IProjectCommandRunner runner, Func<TuiCommand.CliHost, DbDataBuild.Cli.Mcp.ToolSurface> surface, ServerRole ceiling = ServerRole.Viewer)
+    private async Task Start(IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, DbDataBuild.Cli.Mcp.ToolSurface>? surface = null, ServerRole ceiling = ServerRole.Viewer)
     {
         if (app is not null) { await app.StopAsync(); await app.DisposeAsync(); http.Dispose(); }
         Directory.CreateDirectory(serverDir);
-        var settings = new BuildServerSettings(project, serverDir, new Uri("https://127.0.0.1:0"));
+        var settings = new BuildServerSettings(serverDir, new Uri("https://127.0.0.1:0"));
         var certificate = BuildServer.Certificate(serverDir);
-        app = BuildServer.Build(settings, certificate, runner, surface(new TuiCommand.CliHost(_ => null)), log.Add);
+        projects = new ProjectsFile(serverDir);
+        projects.Add(new HostedProject(Path.GetFileName(project), project, null, null));
+        app = BuildServer.Build(settings, certificate, runner, projects, new TuiCommand.CliHost(_ => null).Commands, log.Add, surface);
         await app.StartAsync();
         var url = new Uri(app.Urls.First());
         instanceId = BuildServer.InstanceId(settings.ServerYaml);
@@ -126,7 +129,7 @@ public sealed class BuildServerTests : IAsyncLifetime
     public async Task What_is_not_offered_or_not_valid_is_refused_before_anything_runs()
     {
         var fake = new Fake();
-        await Start(fake, host => BuildManagementApi.ReadOnlySurface(project, host.Commands));
+        await Start(fake);
         var id = Path.GetFileName(project);
 
         Assert.Equal(HttpStatusCode.NotFound, (await Send(HttpMethod.Post, $"/api/v1/projects/{id}/commands/connection_refresh", "{}", Token())).StatusCode);
@@ -142,7 +145,7 @@ public sealed class BuildServerTests : IAsyncLifetime
     {
         // A server that offers a command which writes target data (refresh): the effect class sets the role it needs, and the console's ceiling limits the token.
         var fake = new Fake();
-        await Start(fake, host => new DbDataBuild.Cli.Mcp.ToolSurface(project, host.Commands.Where(c => c.Name == "connection refresh")), ServerRole.Operator);
+        await Start(fake, (root, all) => new DbDataBuild.Cli.Mcp.ToolSurface(root, all.Where(c => c.Name == "connection refresh")), ServerRole.Operator);
         var id = Path.GetFileName(project);
 
         var viewer = await Send(HttpMethod.Post, $"/api/v1/projects/{id}/commands/connection_refresh", "{}", Token(ServerRole.Viewer));
@@ -174,9 +177,9 @@ public sealed class BuildServerTests : IAsyncLifetime
         Assert.Contains("Pairing code:", o.ToString());
 
         var err = new StringWriter();
-        Assert.Equal(2, await ServerCli.RunAsync(["server", "run", "--project", Path.Combine(dir, "missing"), "--repo", dir], new StringWriter(), err, TextReader.Null));
-        Assert.Contains("does not exist", err.ToString());
-        Assert.Equal(2, await ServerCli.RunAsync(["server", "run", "--project", project, "--repo", dir, "--listen", "http://127.0.0.1:1"], new StringWriter(), err, TextReader.Null));
+        Assert.Equal(2, await ServerCli.RunAsync(["server", "run", "--repo", dir, "--listen", "http://127.0.0.1:1"], new StringWriter(), err, TextReader.Null));
+        Assert.Equal(2, await ServerCli.RunAsync(["server", "run", "--project", project, "--repo", dir], new StringWriter(), err, TextReader.Null));
+        Assert.Contains("server project add", err.ToString());
 
         var clients = new StringWriter();
         Assert.Equal(0, await ServerCli.RunAsync(["server", "clients", "--repo", dir], clients, new StringWriter(), TextReader.Null));

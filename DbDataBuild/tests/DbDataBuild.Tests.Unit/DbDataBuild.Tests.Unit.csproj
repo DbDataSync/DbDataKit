@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="JsonSchema.Net" />
+    <PackageReference Include="LibGit2Sharp" />   <!-- a remote project for the server tests; plan 13, R02 -->
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio">

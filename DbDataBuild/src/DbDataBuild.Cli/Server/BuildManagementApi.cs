@@ -27,8 +27,10 @@ internal static class BuildManagementApi
 
     /// <param name="projects">The projects served, read again on every call so one added or removed is served or gone at once.</param>
     /// <param name="commands">All the commands there are; each project is offered the read-only ones.</param>
-    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner)
+    /// <param name="surfaceFor">Which of them a project is offered and how their inputs are checked; the read-only rules unless a test or a later slice says otherwise.</param>
+    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null)
     {
+        surfaceFor ??= ReadOnlySurface;
         var specs = CommandSpecs.All.ToDictionary(s => s.Name);
 
         app.MapGet("/api/v1/projects", () => Results.Json(new
@@ -40,7 +42,7 @@ internal static class BuildManagementApi
         {
             if (projects.Find(project) is not { } hosted) return Results.NotFound();
             var projectId = hosted.Id;
-            var surface = ReadOnlySurface(projects.RootOf(hosted), commands);
+            var surface = surfaceFor(projects.RootOf(hosted), commands);
             var token = context.ManagementToken();
             return Results.Json(new
             {
@@ -63,7 +65,7 @@ internal static class BuildManagementApi
             var projectRoot = projects.RootOf(hosted);
             if (!Directory.Exists(projectRoot))
                 return Results.Json(new { error = $"The project '{projectId}' has no working copy on this server yet. Run: dbdatabuild server project pull {projectId}" }, statusCode: StatusCodes.Status409Conflict);
-            var surface = ReadOnlySurface(projectRoot, commands);
+            var surface = surfaceFor(projectRoot, commands);
             if (!surface.Tools.TryGetValue(tool, out var command) || !specs.TryGetValue(command.Name, out var spec))
                 return Results.Json(new { error = $"`{tool}` is not a command this server runs." }, statusCode: StatusCodes.Status404NotFound);
 
