@@ -25,7 +25,7 @@ public sealed record ManagementResult(int Status, JsonNode Body)
 /// </list>
 /// A secret is never part of an answer: the settings are shown the way <c>config show</c> shows them, and the sentinel test puts a value in every place a secret can be and looks for it in every answer.
 /// </summary>
-public sealed class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null, ProxyActivity? activity = null, ProxyCertificate? certificate = null)
+public sealed partial class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null, ProxyActivity? activity = null, ProxyCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null)
 {
     public const string Prefix = "/api/v1";
 
@@ -44,7 +44,12 @@ public sealed class ProxyManagement(IConfigurationRoot configuration, string con
                 return caller.Holds(ServerRole.Admin) ? ManagementResult.Ok(Config()) : Denied(ServerRole.Admin);
             case ("POST", Prefix + "/config/validate"):
                 return caller.Holds(ServerRole.Admin) ? Validate(body) : Denied(ServerRole.Admin);
+            case ("GET", Prefix + "/config/history"):
+                return caller.Holds(ServerRole.Admin) ? History(int.TryParse(query["limit"], out var limit) ? Math.Clamp(limit, 1, 200) : 50) : Denied(ServerRole.Admin);
         }
+
+        if (method == "GET" && route.StartsWith(Prefix + "/config/history/", StringComparison.Ordinal))
+            return caller.Holds(ServerRole.Admin) ? Commit(route[(Prefix + "/config/history/").Length..]) : Denied(ServerRole.Admin);
 
         if (route == Prefix + "/data-sources" || route.StartsWith(Prefix + "/data-sources/", StringComparison.Ordinal))
         {
@@ -60,11 +65,11 @@ public sealed class ProxyManagement(IConfigurationRoot configuration, string con
             return await identities.HandleAsync(method, route[(Prefix.Length + 1)..].Split('/'), body, query["expected_version"], caller, cancellationToken);
         }
         var first = route.Length > Prefix.Length ? route[(Prefix.Length + 1)..].Split('/') : [];
-        if (first.Length > 0 && first[0] is "sessions" or "queries" or "limits" or "throttle" or "notifications")
+        if (first.Length > 0 && first[0] is "overview" or "sessions" or "queries" or "limits" or "throttle" or "notifications")
         {
             if (activity is null) return ManagementResult.Problem(404, "There is no such call.");
             // the feed is what a monitoring view reads, so a viewer may; the rest of what the proxy is doing is for an administrator
-            var needed = first[0] == "notifications" ? ServerRole.Viewer : ServerRole.Admin;
+            var needed = first[0] is "notifications" or "overview" ? ServerRole.Viewer : ServerRole.Admin;
             if (!caller.Holds(needed)) return Denied(needed);
             return activity.Handle(method, first, query["client"], query["user"], caller, long.TryParse(query["since_id"], out var since) ? since : null);
         }
@@ -79,7 +84,43 @@ public sealed class ProxyManagement(IConfigurationRoot configuration, string con
 
     private static ManagementResult Denied(ServerRole needed) => ManagementResult.Problem(403, $"This call needs the {needed.ToString().ToLowerInvariant()} role.");
 
-    internal const string CandidatePrefix = "";
+    // ---- history ----
+
+    private ManagementResult History(int limit)
+    {
+        if (git is null) return ManagementResult.Ok(new JsonObject { ["commits"] = new JsonArray() });
+        return ManagementResult.Ok(new JsonObject
+        {
+            ["commits"] = new JsonArray([.. git.GetHistory("", limit).Select(c => (JsonNode)new JsonObject
+            {
+                ["sha"] = c.Sha, ["message"] = c.Message, ["author"] = c.AuthorName, ["email"] = c.AuthorEmail, ["when"] = c.WhenUtc,
+            })]),
+        });
+    }
+
+    private ManagementResult Commit(string sha)
+    {
+        if (git is null || sha.Length < 7 || !sha.All(char.IsAsciiHexDigit)) return ManagementResult.Problem(404, "There is no such commit.");
+        try
+        {
+            var diff = git.GetCommitDiff("", sha);
+            return ManagementResult.Ok(new JsonObject
+            {
+                ["sha"] = diff.Sha, ["message"] = diff.Message, ["truncated"] = diff.Truncated,
+                ["changes"] = new JsonArray([.. diff.Changes.Select(c => (JsonNode)new JsonObject
+                {
+                    ["path"] = c.Path, ["kind"] = c.Kind.ToString().ToLowerInvariant(), ["before"] = c.Before is null ? null : Redact(c.Before), ["after"] = c.After is null ? null : Redact(c.After),
+                })]),
+            });
+        }
+        catch (DbDataKit.Config.Git.GitCommitNotFoundException) { return ManagementResult.Problem(404, "There is no such commit."); }
+    }
+
+    /// <summary>A password hash, a signing key and a certificate password are not shown, in a diff any more than anywhere else: the line says that the value is there, and that it changed.</summary>
+    internal static string Redact(string text) => SecretLine().Replace(text, "${key}${sep}********");
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"(?<key>\b(?:passwordHash|signingKey|certificatePassword)\b)(?<sep>\s*:\s*)(?:'[^']*'|""[^""]*""|[^,}\r\n]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex SecretLine();
 
     private JsonObject About() => new() { ["product"] = "dbdataproxy", ["version"] = version, ["instance_id"] = instanceId, ["api_version"] = ManagementApi.Version };
 

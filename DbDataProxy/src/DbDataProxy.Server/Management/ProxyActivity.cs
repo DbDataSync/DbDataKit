@@ -11,7 +11,7 @@ namespace DbDataProxy.Server.Management;
 /// and the login throttle (and a way to let a locked-out client try again). Nothing here is a secret: a session is named by the front of its token's hash, which is not a token, and a statement's text is shown only when the proxy
 /// is set to log SQL.
 /// </summary>
-public sealed class ProxyActivity(SessionStore sessions, ActiveQueries queries, QueryLimits limits, LoginThrottle throttle, Func<ProxyOptions> options, IAuditLog audit, DbDataKit.Monitoring.INotificationFeed? notifications = null, TimeProvider? clock = null)
+public sealed class ProxyActivity(SessionStore sessions, ActiveQueries queries, QueryLimits limits, LoginThrottle throttle, Func<ProxyOptions> options, IAuditLog audit, DbDataKit.Monitoring.INotificationFeed? notifications = null, RecentFailures? failures = null, string instanceId = "", string version = "", TimeProvider? clock = null)
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
@@ -19,6 +19,7 @@ public sealed class ProxyActivity(SessionStore sessions, ActiveQueries queries, 
     {
         switch (rest)
         {
+            case ["overview"] when method == "GET": return ManagementResult.Ok(Overview());
             case ["sessions"] when method == "GET": return ManagementResult.Ok(Sessions());
             case ["sessions", var id] when method == "DELETE":
             {
@@ -54,6 +55,28 @@ public sealed class ProxyActivity(SessionStore sessions, ActiveQueries queries, 
             ["id"] = n.Id, ["kind"] = n.Kind, ["created"] = n.CreatedAtUtc, ["message"] = n.Message,
         })]),
     };
+
+    private readonly DateTimeOffset _started = (clock ?? TimeProvider.System).GetUtcNow();
+
+    /// <summary>Everything a first screen needs in one call: who this is, how long it has been up, and how busy and how troubled it is.</summary>
+    private JsonObject Overview()
+    {
+        var o = options();
+        var now = _clock.GetUtcNow();
+        var gates = limits.Gates.Values;
+        return new JsonObject
+        {
+            ["product"] = "dbdataproxy", ["version"] = version, ["instance_id"] = instanceId,
+            ["started"] = _started, ["uptime_seconds"] = (long)(now - _started).TotalSeconds,
+            ["listen"] = $"{o.Listen.Address}:{o.Listen.Port}",
+            ["data_sources"] = o.DataSources.Count, ["users"] = o.Users.Count(u => u.AuthType == UserAuthType.Password), ["windows_accounts"] = o.Users.Count(u => u.AuthType == UserAuthType.Windows),
+            ["pass_through"] = o.Auth.AllowPassThrough, ["jwt"] = o.Auth.Jwt.Enabled,
+            ["sessions"] = sessions.List().Count, ["running_queries"] = queries.List().Count,
+            ["waiting_for_a_slot"] = gates.Sum(g => g.Waiting), ["refused_for_want_of_a_slot_total"] = gates.Sum(g => g.Timeouts),
+            ["locked_out_clients"] = throttle.List().Count(t => t.LockedUntil is not null),
+            ["failures_last_hour"] = failures?.Newest(200).Count(f => now - f.At <= TimeSpan.FromHours(1)) ?? 0,
+        };
+    }
 
     private JsonObject Sessions() => new()
     {

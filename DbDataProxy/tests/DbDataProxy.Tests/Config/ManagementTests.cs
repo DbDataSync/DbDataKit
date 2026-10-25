@@ -347,10 +347,10 @@ public sealed partial class ManagementTests : IAsyncLifetime
         await CallAsync(server, HttpMethod.Delete, $"/api/v1/data-sources/scratch?expected_version={version}", ServerRole.Admin);
 
         var history = new GitCommitService(ConfigDirectory).GetHistory("connections", 10);
-        Assert.Equal(["Remove data source scratch", "Add data source scratch"], history.Select(c => c.Message).ToList());
+        Assert.Equal(["Remove data source scratch", "Add data source scratch", "Configuration as found"], history.Select(c => c.Message).ToList());
         // the person, and an address that names them and the console and cannot be mistaken for a mailbox
-        Assert.All(history, c => Assert.Equal("Ada", c.AuthorName));
-        Assert.All(history, c => Assert.Equal($"ada@{console.Id}.console.invalid", c.AuthorEmail));
+        Assert.All(history.Take(2), c => Assert.Equal("Ada", c.AuthorName));
+        Assert.All(history.Take(2), c => Assert.Equal($"ada@{console.Id}.console.invalid", c.AuthorEmail));
 
         var audit = File.ReadAllLines(Path.Combine(dataDirectory, "management-audit.log")).Select(l => JsonNode.Parse(l)!).ToList();
         Assert.Equal(["created", "removed"], audit.Select(a => (string)a["outcome"]!).ToList());

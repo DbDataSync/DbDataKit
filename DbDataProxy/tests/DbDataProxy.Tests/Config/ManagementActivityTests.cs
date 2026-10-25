@@ -304,3 +304,62 @@ public sealed partial class ManagementTests
         Assert.DoesNotContain("secrets_table", refusal.ToJsonString());      // the rule, never the statement
     }
 }
+
+/// <summary>The overview and the history of the configuration (plan 13, P08 and P09).</summary>
+public sealed partial class ManagementTests
+{
+    [Fact]
+    public async Task The_overview_says_what_this_is_and_how_busy_and_how_troubled_it_is_in_one_call_for_a_viewer()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        var overview = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Get, "/api/v1/overview", ServerRole.Viewer)).Content.ReadAsStringAsync())!;
+        Assert.Equal("dbdataproxy", (string)overview["product"]!);
+        Assert.Equal(server.InstanceId, (string)overview["instance_id"]!);
+        Assert.Equal(1, (int)overview["data_sources"]!);
+        Assert.Equal(1, (int)overview["users"]!);
+        Assert.True((bool)overview["jwt"]!);
+        Assert.Equal(0, (int)overview["sessions"]!);
+        Assert.Equal(0, (int)overview["running_queries"]!);
+        Assert.True((long)overview["uptime_seconds"]! >= 0);
+        Assert.DoesNotContain(Sentinel, overview.ToJsonString());
+
+        app.Services.GetRequiredService<SessionStore>().Issue(new ProxyPrincipal("alice", "password", ["*"]));
+        using var running = app.Services.GetRequiredService<ActiveQueries>().Begin("alice", "erp", "query", null, CancellationToken.None);
+        var busy = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Get, "/api/v1/overview", ServerRole.Viewer)).Content.ReadAsStringAsync())!;
+        Assert.Equal(1, (int)busy["sessions"]!);
+        Assert.Equal(1, (int)busy["running_queries"]!);
+    }
+
+    [Fact]
+    public async Task The_history_starts_with_the_configuration_as_found_each_change_is_a_commit_and_a_diff_shows_both_sides_without_a_hash_or_a_key()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        Write("connections/scratch.yaml", Scratch("scratch"));
+        await CallAsync(server, HttpMethod.Put, "/api/v1/users/carol", ServerRole.Admin, UserBody("a password", ["*"]));
+
+        var commits = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Get, "/api/v1/config/history", ServerRole.Admin)).Content.ReadAsStringAsync())!["commits"]!.AsArray();
+        Assert.Equal(["Add user carol", "Configuration as found"], commits.Select(c => (string)c!["message"]!).ToList());
+        Assert.Equal("Ada", (string)commits[0]!["author"]!);
+
+        // the first commit holds the files as they were found, with the secrets in them masked
+        var initial = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Get, $"/api/v1/config/history/{(string)commits[1]!["sha"]!}", ServerRole.Admin)).Content.ReadAsStringAsync())!;
+        var users = initial["changes"]!.AsArray().Single(c => ((string)c!["path"]!).EndsWith("users.yaml"))!;
+        Assert.Equal("added", (string)users["kind"]!);
+        Assert.Contains("passwordHash: ********", (string)users["after"]!);
+        Assert.DoesNotContain(Sentinel, initial.ToJsonString());
+
+        // the change adds an entry; the hash of the new password is not in the diff either
+        var change = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Get, $"/api/v1/config/history/{(string)commits[0]!["sha"]!}", ServerRole.Admin)).Content.ReadAsStringAsync())!;
+        var modified = change["changes"]!.AsArray().Single()!;
+        Assert.Equal("modified", (string)modified["kind"]!);
+        Assert.DoesNotContain("PBKDF2", change.ToJsonString());
+        Assert.Contains("carol", (string)modified["after"]!);
+        Assert.DoesNotContain("carol", (string)modified["before"]!);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await CallAsync(server, HttpMethod.Get, "/api/v1/config/history/0000000", ServerRole.Admin)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await CallAsync(server, HttpMethod.Get, "/api/v1/config/history/not-a-sha", ServerRole.Admin)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(server, HttpMethod.Get, "/api/v1/config/history", ServerRole.Viewer)).StatusCode);
+    }
+}
