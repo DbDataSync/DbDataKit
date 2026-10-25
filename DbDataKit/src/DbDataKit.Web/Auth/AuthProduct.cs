@@ -6,7 +6,9 @@ namespace DbDataKit.Web.Auth;
 /// Which product's sign-in this is. Everything that has to be told apart between products on the same machine derives from the name, so two products never share a
 /// cookie, a configuration section or a claim: <c>DbDataSync</c> reads <c>DbDataSync:Auth</c> and sets the cookie <c>dbdatasync.session</c>.
 /// </summary>
-public sealed record AuthProduct(string Name)
+/// <param name="Name">The product's name; the cookie, scheme, section and claim derive from it.</param>
+/// <param name="InviteCommandText">The command that prints a fresh invitation when it is not <c>&lt;name&gt; invite</c> (the console's is <c>dbdatakit user invite</c>).</param>
+public sealed record AuthProduct(string Name, string? InviteCommandText = null)
 {
     private string Lower => Name.ToLowerInvariant();
 
@@ -28,7 +30,7 @@ public sealed record AuthProduct(string Name)
     public string UserIdClaim => $"{Lower}:userId";
 
     /// <summary>The command that prints a fresh first-run invitation.</summary>
-    public string InviteCommand => $"{Lower} invite";
+    public string InviteCommand => InviteCommandText ?? $"{Lower} invite";
 
     /// <summary>What a change is attributed to when nobody is signed in: an unauthenticated deployment, or the server acting on its own.</summary>
     public GitAuthor SystemAuthor { get; } = new(Name, $"{Name.ToLowerInvariant()}@localhost");

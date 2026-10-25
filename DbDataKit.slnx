@@ -22,6 +22,12 @@
     <Project Path="DbDataBuild/tests/DbDataBuild.Tests.Conformance/DbDataBuild.Tests.Conformance.csproj" />
     <Project Path="DbDataBuild/tests/DbDataBuild.Tests.Unit/DbDataBuild.Tests.Unit.csproj" />
   </Folder>
+  <Folder Name="/DbDataConsole/src/">
+    <Project Path="DbDataConsole/src/DbDataConsole.Server/DbDataConsole.Server.csproj" />
+  </Folder>
+  <Folder Name="/DbDataConsole/tests/">
+    <Project Path="DbDataConsole/tests/DbDataConsole.Tests/DbDataConsole.Tests.csproj" />
+  </Folder>
   <Folder Name="/DbDataKit/benchmarks/">
     <Project Path="DbDataKit/benchmarks/DbDataKit.Transfer.Benchmarks/DbDataKit.Transfer.Benchmarks.csproj" />
   </Folder>

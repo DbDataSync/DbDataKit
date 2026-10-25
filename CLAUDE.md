@@ -1,6 +1,6 @@
 # Working in the DbDataKit repository
 
-One repository, three products and the libraries they share. Read the product's own docs before changing it; `DbDataBuild/CLAUDE.md`
+One repository, four products and the libraries they share. Read the product's own docs before changing it; `DbDataBuild/CLAUDE.md`
 lists rules its tests enforce.
 
 | Folder | What it is | Owns |
@@ -8,6 +8,7 @@ lists rules its tests enforce.
 | `DbDataKit/` | the shared libraries (`DbDataKit.*`, packages under `src/`, tests under `tests/`) | what two or more products need: config, connections, dialects, metadata, secrets, hosting, transfer |
 | `DbDataSync/` | replication tool: ASP.NET API, React UI (`DbDataKit/web/sync`, an npm workspace), per-run TaskRunner | the replication engine, its drivers, its UI |
 | `DbDataProxy/` | Arrow Flight SQL proxy for relational databases | the Flight SQL server, its authentication, the 32-bit ODBC worker |
+| `DbDataConsole/` | the `dbdatakit` console host: sign-in, users, invitations (the web app and the servers it manages arrive slice by slice, plan 13 section U) | the console's host and its command line |
 | `DbDataBuild/` | CLI that builds tables and views from DuckDB-dialect SQL models | the model language, lowering, targets, plans |
 | `dist/` | install scripts, MSI and Scoop generation for every product | packaging |
 | `testenv/` | SQL Server and PostgreSQL containers shared by the suites | test engines |
@@ -38,7 +39,7 @@ python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solutio
 
 Per product, from its folder: `dotnet build`, then the suites below. Run the suites a change can affect; CI runs the rest on the pull request.
 
-- **DbDataKit, DbDataProxy** (xunit v3, MTP): `dotnet test --project tests/<Name>`. If the test host cannot start (`Handshake failures`),
+- **DbDataKit, DbDataProxy, DbDataConsole** (xunit v3, MTP): `dotnet test --project tests/<Name>`. If the test host cannot start (`Handshake failures`),
   run the built executable: `tests/<Name>/bin/Debug/net10.0/<Name>`; `-class` and `-method` select tests.
 - **DbDataSync**: `dotnet test --filter "Category!=Integration"` (add `DbDataSync.slnf`); `Category=Integration` needs the engines.
 - **DbDataBuild**: `scripts/fetch-native.sh` once, then `dotnet test tests/DbDataBuild.Tests.Unit`. The conformance suite needs engines.

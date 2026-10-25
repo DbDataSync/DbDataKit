@@ -1,0 +1,16 @@
+<Project>
+  <!-- the settings shared by every product -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!-- Monorepo layout: DbDataConsole/ and DbDataKit/ (the shared libraries) are sibling folders at the repository root. -->
+    <DbDataKitRoot Condition="'$(DbDataKitRoot)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', 'DbDataKit'))</DbDataKitRoot>
+    <DbDataKitRoot>$([MSBuild]::EnsureTrailingSlash('$(DbDataKitRoot)'))</DbDataKitRoot>
+    <UseLocalDbDataKit Condition="'$(UseLocalDbDataKit)' == '' and Exists('$(DbDataKitRoot)src')">true</UseLocalDbDataKit>
+  </PropertyGroup>
+</Project>

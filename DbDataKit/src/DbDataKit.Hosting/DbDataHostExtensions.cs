@@ -80,29 +80,29 @@ public static class DbDataHostExtensions
         return app;
     }
 
-    /// <summary>Maps <c>/health</c>, <c>/health/live</c>, <c>/health/ready</c> and <c>/version</c>.</summary>
+    /// <summary>Maps <c>/health/live</c>, <c>/health</c>, <c>/health/ready</c> and <c>/version</c>. They answer without a token or a session, whatever policy the host closes everything else with.</summary>
     public static IEndpointRouteBuilder MapDbDataEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/health/live", () => Results.Json(new { live = true })).DisableRequestTimeout();
+        endpoints.MapGet("/health/live", () => Results.Json(new { live = true })).DisableRequestTimeout().AllowAnonymous();
 
         endpoints.MapGet("/health", async (HttpContext ctx) =>
         {
             var report = await Evaluate(ctx);
             return Results.Json(report, statusCode: report.Ready ? 200 : 503);
-        });
+        }).AllowAnonymous();
 
         endpoints.MapGet("/health/ready", async (HttpContext ctx) =>
         {
             var report = await Evaluate(ctx);
             return Results.Json(report, statusCode: report.Ready ? 200 : 503);
-        });
+        }).AllowAnonymous();
 
         endpoints.MapGet("/version", async (HttpContext ctx) =>
         {
             var report = await Evaluate(ctx);
             var info = ctx.RequestServices.GetRequiredService<DbDataHostOptions>().ToVersionInfo(report.Ready);
             return Results.Json(info);
-        });
+        }).AllowAnonymous();
 
         return endpoints;
     }
