@@ -19,6 +19,12 @@
   <ItemGroup>
     <DbDataKitReference Include="Cli" />
     <DbDataKitReference Include="Web" />   <!-- the management API: pairing, tokens, roles; plan 13, R01 -->
+    <DbDataKitReference Include="Hosting.Abstractions" />   <!-- the shared host: service and systemd modes, drain, /health and /version, limits; plan 13, R05 -->
+    <DbDataKitReference Include="Hosting" />
+    <DbDataKitReference Include="Hosting.Cli" />
+    <DbDataKitReference Include="Hosting.WindowsService" />
+    <DbDataKitReference Include="Hosting.Systemd" />
+    <DbDataKitReference Include="Security.Acl" />
     <DbDataKitReference Include="Hosting.Certificates" />
     <DbDataKitReference Include="Secrets.Abstractions" />   <!-- the server's secret store and the logins it hands each command; plan 13, R04 -->
     <DbDataKitReference Include="Secrets" />

@@ -1409,3 +1409,9 @@ Operator decision: correlated subqueries are a hard requirement.
 - **Built**: `dbdatabuild server project add|remove|list|pull`. A project is a folder on this machine (`--path`) or a remote repository (`--git` and optionally `--branch`) the server clones into `projects/<id>` of its directory and brings up to the remote's branch on `pull` and at start. The list is `build/projects.yaml` in the server's directory, read again whenever it changes, so a running server serves a new project and drops a removed one on the next call. The management API lists the projects and runs each command in its own project's folder; a remote project that was never cloned answers 409 and names the command that fixes it. `server run` no longer takes `--project`.
 - **Tests**: `BuildServerProjectsTests` (8): two projects with their own commands, add and remove while running, clone and pull of a real repository, a project never cloned, invalid entries skipped and named, refusals with reasons, the verbs, and a failed `add` leaving nothing behind. `GitRemoteTests` (5, shared).
 - **Not done**: a remote that needs credentials; pulling before each scheduled run (M08).
+
+## 186. The Build server as a service, on the shared host (plan 13, R05)
+
+- **Built**: `dbdatabuild service install|uninstall|status|start|stop|restart|doctor|unit`, the shared verbs (new: `unit` in the shared noun). The service `DbDataBuild` runs `server run --repo <data directory>`. The server uses `UseDbDataHost`, so it runs as a Windows service or under systemd, drains on stop and answers `/health`, `/health/ready` and `/version` without a token; `server run` runs on the host's own lifetime.
+- **Tests**: `BuildServiceTests` (5) against the in-memory service manager and the unit text; `BuildServerTests` health and version.
+- **Not done**: a run on a real Windows service manager; `--password-secret`.
