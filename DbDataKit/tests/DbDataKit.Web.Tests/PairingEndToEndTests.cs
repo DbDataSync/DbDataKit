@@ -21,14 +21,15 @@ internal sealed class TestServer : IAsyncDisposable
     private readonly WebApplication _app;
 
     public Uri Url { get; }
+    public string Id { get; }
     public string Fingerprint { get; }
     public string Directory { get; }
     public PairedClientsFile Clients { get; }
     public PairingCodes Codes { get; }
 
-    private TestServer(WebApplication app, Uri url, string fingerprint, string directory)
+    private TestServer(WebApplication app, Uri url, string fingerprint, string directory, string id)
     {
-        (_app, Url, Fingerprint, Directory) = (app, url, fingerprint, directory);
+        (_app, Url, Fingerprint, Directory, Id) = (app, url, fingerprint, directory, id);
         Clients = new PairedClientsFile(Path.Combine(directory, "server.yaml"));
         Codes = new PairingCodes(Path.Combine(directory, "pairing-codes.json"));
     }
@@ -45,7 +46,7 @@ internal sealed class TestServer : IAsyncDisposable
         return X509CertificateLoader.LoadPkcs12(made.Export(X509ContentType.Pfx), null); // Windows wants a key it can hand to Schannel
     }
 
-    public static async Task<TestServer> StartAsync(Action<WebApplication, TestServer>? map = null, X509Certificate2? certificate = null)
+    public static async Task<TestServer> StartAsync(Action<WebApplication, TestServer>? map = null, X509Certificate2? certificate = null, string instanceId = InstanceId)
     {
         var directory = System.IO.Directory.CreateTempSubdirectory("pairing-e2e").FullName;
         certificate ??= SelfSigned();
@@ -55,12 +56,16 @@ internal sealed class TestServer : IAsyncDisposable
         var app = builder.Build();
         app.UseManagementApiVersion();
         var fingerprint = PairingProof.CertificateFingerprint(certificate);
-        var holder = new TestServer(app, new Uri("https://127.0.0.1:1"), fingerprint, directory);
-        if (map is null) app.MapPairing(new PairingService(InstanceId, fingerprint, holder.Clients, holder.Codes));
+        var holder = new TestServer(app, new Uri("https://127.0.0.1:1"), fingerprint, directory, instanceId);
+        if (map is null)
+        {
+            app.MapPairing(new PairingService(instanceId, fingerprint, holder.Clients, holder.Codes));
+            app.MapKeyRotation(new KeyRotationService(instanceId, holder.Clients, new MemoryReplayCache()));
+        }
         else map(app, holder);
         await app.StartAsync();
         var url = new Uri(app.Urls.First());
-        return new TestServer(app, url, fingerprint, directory);
+        return new TestServer(app, url, fingerprint, directory, instanceId);
     }
 
     public async ValueTask DisposeAsync()

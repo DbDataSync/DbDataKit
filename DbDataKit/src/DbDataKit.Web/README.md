@@ -30,6 +30,12 @@ A client is a console, another server or a command line (`ClientKind`); the serv
 
 `ManagementApi.Version` is the integer version of the management API (plan 13, D17). A server says it at pairing and in the `X-DbData-Api-Version` header of every response (`UseManagementApiVersion()`); a client supports its own version and the one before (`ManagementApi.Supports`), and `ManagementVersionHandler` (what `PairingClient.Pinned` returns) states the client's version on every request and refuses the response of a server outside that range, or one that reports none, with `IncompatibleServerException` and a message that says which side to upgrade. Pairing checks it before it sends anything.
 
+## Key rotation
+
+A client replaces its signing key without pairing again. `KeyRotationRequest` carries the new public key signed by the old key (it is the paired client asking) and by the new one (it holds what it registers), over the server's instance id, the client's id, a time and a nonce; `KeyRotationService` (the server, `MapKeyRotation`) checks both signatures, the minute either side of now and that the nonce is new, and replaces the key and nothing else. Old tokens fail on the next call, new ones pass. Asking again for the key already on record, signed by it, succeeds and changes nothing, so a console that did not hear the answer can retry.
+
+`ConsoleKeyRotation.RunAsync(keys, registry)` is the console's side: `ConsoleKeyStore.BeginRotationAsync` makes the new key and keeps it beside the current one, each server is asked to take it, `InstanceRegistry.SetKey` records which key each server has (so the console signs for each server with the key that server knows, `ForKeyAsync`), and only when every server has the new key does `PromoteNextAsync` make it the current one. A server that could not be reached stays on the old key, which keeps working for it; running the rotation again continues.
+
 The role check per command and the audit are in `ManagementAuthorization` and `ManagementIdentity`; the key rotation, the version rule and the server-to-server kind are the next slices (T07, T09, T10).
 
 ## Audit and authorship
