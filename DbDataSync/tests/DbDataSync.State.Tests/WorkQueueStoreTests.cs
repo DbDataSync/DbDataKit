@@ -1,3 +1,5 @@
+using DbDataSync.Core.Config;
+
 namespace DbDataSync.State.Tests;
 
 public sealed class WorkQueueStoreTests : IDisposable

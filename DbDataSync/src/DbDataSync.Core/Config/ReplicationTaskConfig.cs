@@ -100,6 +100,12 @@ public sealed class ReplicationTaskConfig
     public ReadIntent? DefaultReadIntent { get; set; }
 
     /// <summary>
+    /// Whether the segments of a reload of a mapping of this replication's tables take turns or run together; null inherits (the target connection's). Chosen per reload when it is requested; this is only what is used
+    /// when the request does not say. See <see cref="SegmentOrderResolution"/>.
+    /// </summary>
+    public SegmentOrder? SegmentOrder { get; set; }
+
+    /// <summary>
     /// Whatever whoever owns this replication needs the next person to know. Markdown, git-tracked and
     /// diffed like every other field here — see phase 64.
     /// <para>

@@ -24,6 +24,10 @@ public sealed class BulkLoadRequest
 
     public string? WriterKind { get; set; }
 
+    /// <summary>Whether this reload's segments take turns or run together. Null uses the default from the mapping, the replication or the target connection
+    /// (<see cref="DbDataSync.Core.Config.SegmentOrderResolution"/>).</summary>
+    public DbDataSync.Core.Config.SegmentOrder? SegmentOrder { get; set; }
+
     /// <summary>
     /// An array from the outset even though the first SPA pass submits exactly one, so that
     /// multi-segment submission doesn't need a breaking change later — and so the shape matches the

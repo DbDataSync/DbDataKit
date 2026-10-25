@@ -77,7 +77,7 @@ public sealed class BulkLoadService(
         var batchId = Guid.NewGuid().ToString("N");
         var runIds = await CreateBatchAndEnqueueAsync(
             task, mapping, replicationName, mappingName, batchId, segments, kinds,
-            throwOnCollision: false, cancellationToken);
+            throwOnCollision: false, request.SegmentOrder, cancellationToken);
 
         var ensureResult = supervisor.EnsureWorkerRunning(replicationName);
         return ensureResult.Outcome == TriggerOutcome.FailedToStart ? ensureResult : TriggerResult.Started(runIds);
@@ -123,7 +123,7 @@ public sealed class BulkLoadService(
         // LocalRunnerState.RequestInitialLoad, lets this propagate rather than catching it.
         await CreateBatchAndEnqueueAsync(
             task, mapping, replicationName, mappingName, batchId, segments, WorkItemKinds.FromConfig,
-            throwOnCollision: true, cancellationToken);
+            throwOnCollision: true, requestedOrder: null, cancellationToken);
 
         supervisor.EnsureWorkerRunning(replicationName);
     }
@@ -145,7 +145,7 @@ public sealed class BulkLoadService(
         var batchId = Guid.NewGuid().ToString("N");
         await CreateBatchAndEnqueueAsync(
             task, mapping, replicationName, mappingName, batchId, segments, WorkItemKinds.FromConfig,
-            throwOnCollision: false, cancellationToken);
+            throwOnCollision: false, requestedOrder: null, cancellationToken);
 
         supervisor.EnsureWorkerRunning(replicationName);
         return batchId;
@@ -161,11 +161,14 @@ public sealed class BulkLoadService(
     /// with other in-flight work for the same mapping+segment is a different caller's request, not this
     /// one's own — see <see cref="WorkQueueStore.EnqueueOrThrow"/>. False for the operator-facing path,
     /// where two requests for the same segment really are the same thing and should collapse.</param>
+    /// <param name="requestedOrder">Whether the segments take turns or run together, when the request said; otherwise the default from
+    /// the mapping, the replication or the target connection (plan 13, M03).</param>
     private async Task<IReadOnlyList<Guid>> CreateBatchAndEnqueueAsync(
         ReplicationTaskConfig task, TableMappingConfig mapping, string replicationName, string mappingName,
         string batchId, IReadOnlyList<BatchReloadSegment> segments, WorkItemKinds kinds,
-        bool throwOnCollision, CancellationToken cancellationToken)
+        bool throwOnCollision, SegmentOrder? requestedOrder, CancellationToken cancellationToken)
     {
+        var order = SegmentOrderResolution.Resolve(requestedOrder, TargetConnection(task, mapping), task, mapping);
         var (estimatedRows, estimateCaveat) = await EstimateRowsAsync(task, mapping, cancellationToken);
         batchStore.CreateBatch(batchId, replicationName, mappingName, segments.Count, estimatedRows, estimateCaveat);
 
@@ -184,10 +187,10 @@ public sealed class BulkLoadService(
                 var runId = throwOnCollision
                     ? workQueueStore.EnqueueOrThrow(
                         replicationName, RunKind.BulkLoad, mappingName, segment.Describe(),
-                        SegmentSerializer.Serialize(segment), kinds, batchId)
+                        SegmentSerializer.Serialize(segment), kinds, batchId, segments: order)
                     : workQueueStore.Enqueue(
                         replicationName, RunKind.BulkLoad, mappingName, segment.Describe(),
-                        SegmentSerializer.Serialize(segment), kinds, batchId);
+                        SegmentSerializer.Serialize(segment), kinds, batchId, segments: order);
                 runIds.Add(runId);
             }
         }
@@ -208,6 +211,22 @@ public sealed class BulkLoadService(
         }
 
         return runIds;
+    }
+
+    /// <summary>The connection the mapping writes to, for the segment-order default it may carry; null when the mapping has no target or the connection cannot be read, in
+    /// which case the levels above it decide.</summary>
+    private ConnectionConfig? TargetConnection(ReplicationTaskConfig task, TableMappingConfig mapping)
+    {
+        try
+        {
+            return mapping.Targets.Count == 0
+                ? null
+                : configRepository.LoadConnection(EndpointResolution.ResolveTarget(task, mapping.Targets[0]).ConnectionName);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Text.Json;
+using DbDataSync.Core.Config;
 
 namespace DbDataSync.State;
 
@@ -291,15 +292,4 @@ public sealed class WorkQueueStore(StateDatabase database)
             new WorkItemKinds(payload?.ReaderKind, payload?.CacheKind, payload?.WriterKind),
             payload?.DeleteGuardJson);
     }
-}
-
-/// <summary>Whether the segments of one kind of work on one mapping take turns or may run together (plan 13, M03). A choice made when the work is queued; a replication, a
-/// connection or a table sets the default through the usual inheritance.</summary>
-public enum SegmentOrder
-{
-    /// <summary>One segment at a time, as Sync has always run them.</summary>
-    OneAtATime,
-
-    /// <summary>Segments run together, as far as the lane's capacity allows.</summary>
-    Together,
 }
