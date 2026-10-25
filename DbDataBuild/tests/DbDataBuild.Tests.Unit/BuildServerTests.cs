@@ -185,4 +185,15 @@ public sealed class BuildServerTests : IAsyncLifetime
         Assert.Equal(0, await ServerCli.RunAsync(["server", "clients", "--repo", dir], clients, new StringWriter(), TextReader.Null));
         Assert.Contains("No client is paired", clients.ToString());
     }
+
+    [Fact]
+    public async Task Health_and_version_answer_without_a_token_and_name_the_product()
+    {
+        var health = await Send(HttpMethod.Get, "/health");
+        Assert.Equal(HttpStatusCode.OK, health.StatusCode);
+
+        var version = JsonNode.Parse(await (await Send(HttpMethod.Get, "/version")).Content.ReadAsStringAsync())!;
+        Assert.Equal("dbdatabuild", (string)version["product"]!);
+        Assert.Equal(DbDataBuild.Core.ProductInfo.Version, (string)version["version"]!);
+    }
 }

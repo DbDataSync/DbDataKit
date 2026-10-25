@@ -16,7 +16,7 @@ namespace DbDataBuild.Cli.Server;
 /// </summary>
 internal static class ServerCli
 {
-    public static bool Handles(string[] args) => args.Length > 0 && args[0] is "server" or "secret";
+    public static bool Handles(string[] args) => args.Length > 0 && args[0] is "server" or "secret" or "service";
 
     public static async Task<int> RunAsync(string[] args, TextWriter output, TextWriter error, TextReader input)
     {
@@ -34,6 +34,7 @@ internal static class ServerCli
         ServerNoun.Create(RunServerAsync).With([.. PairingVerbs.Create(args => new PairingFiles(Path.Combine(DirectoryOf(args), "server.yaml"))), new Verb("project", "The projects this server hosts: add, remove, list, pull", EffectClass.RepoFilesOnly, ProjectUsage, ProjectAsync, DataSchemas.None)]),
         // the store is opened (and its key made on first use) only for the secret verbs
         .. invocation is ["secret", ..] ? new[] { SecretVerbs(invocation) } : Array.Empty<Noun>(),
+        .. invocation is ["service", ..] ? new[] { BuildService.Noun(BuildServiceEnvironment.Real()) } : Array.Empty<Noun>(),
     ], ProductInfo.Version);
 
     /// <summary>The shared <c>secret</c> verbs over the server's own store (<c>dbdatabuild secret ...</c>, with <c>--repo</c> as for the pairing verbs). The value of a secret comes from a hidden prompt or standard input, never an argument.</summary>
@@ -54,7 +55,8 @@ internal static class ServerCli
 
     private static string DirectoryOf(string[] args)
     {
-        var i = Array.IndexOf(args, "--repo");
+        // the last one wins, so an option given to the service command after the registered default overrides it
+        var i = Array.LastIndexOf(args, "--repo");
         return Path.GetFullPath(i >= 0 && i + 1 < args.Length ? args[i + 1] : BuildServerSettings.DefaultDirectory());
     }
 
@@ -88,11 +90,9 @@ internal static class ServerCli
         var secrets = ServerSecrets.Open(settings.Directory);
         var runner = new ChildProcessCommandRunner(logins: token => ServerSecrets.LoginsAsync(secrets, token));
         var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, projects, host.Commands, line => context.Error.WriteLine(line));
-        await app.StartAsync(context.Cancellation);
         await context.Out.WriteLineAsync($"Serving {projects.All().Count} project(s) on {listen} (instance {BuildServer.InstanceId(settings.ServerYaml)}). Pair a client with: dbdatabuild server pair");
-        try { await Task.Delay(Timeout.Infinite, context.Cancellation); }
-        catch (OperationCanceledException) { /* asked to stop */ }
-        await app.StopAsync(CancellationToken.None);
+        // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
+        await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);
         return CliExit.Ok;
     }
 

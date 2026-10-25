@@ -52,7 +52,7 @@ public sealed class HostingNounTests
     {
         var (noun, _) = ServiceNoun();
 
-        Assert.Equal(["install", "uninstall", "status", "start", "stop", "restart", "doctor"], noun.Verbs.Select(v => v.Name));
+        Assert.Equal(["install", "uninstall", "status", "start", "stop", "restart", "doctor", "unit"], noun.Verbs.Select(v => v.Name));
     }
 
     [Fact]

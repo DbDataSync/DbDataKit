@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
 using DbDataBuild.Cli.Mcp;
+using DbDataKit.Hosting;
 using DbDataKit.Hosting.Certificates;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
@@ -76,6 +77,14 @@ internal static class BuildServer
 
         var builder = WebApplication.CreateSlimBuilder();
         builder.Logging.ClearProviders();
+        // service and systemd modes, draining on stop, /health and /version, request limits: the host every DbData server shares
+        builder.UseDbDataHost(host =>
+        {
+            host.Product = "dbdatabuild";
+            host.ServiceName = BuildService.RegistrationName;
+            host.Version = DbDataBuild.Core.ProductInfo.Version;
+            host.Limits.RequestTimeout = TimeSpan.FromHours(1);    // a command may run for half an hour (ChildProcessCommandRunner)
+        });
         var address = settings.Listen.HostNameType == UriHostNameType.Dns && settings.Listen.Host != "localhost"
             ? IPAddress.Any
             : settings.Listen.Host == "localhost" ? IPAddress.Loopback : IPAddress.Parse(settings.Listen.Host);
@@ -83,6 +92,8 @@ internal static class BuildServer
 
         var app = builder.Build();
         app.UseManagementApiVersion();
+        app.UseDbDataPipeline();
+        app.MapDbDataEndpoints();
         app.MapPairing(new PairingService(instanceId, fingerprint, clients, files.Codes()));
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new MemoryReplayCache()));
         app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache()), refused => log($"A call was refused ({refused.Failure}): {refused.Detail}"));
