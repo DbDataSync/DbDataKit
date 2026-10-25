@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json.Serialization;
 using DbDataKit.Hosting;
+using Microsoft.AspNetCore.DataProtection;
 using DbDataKit.Hosting.Certificates;
 using DbDataKit.State;
 using DbDataKit.Web.Auth;
@@ -45,6 +46,14 @@ public static class ConsoleHost
         });
         builder.WebHost.ConfigureKestrel(o => o.Listen(AddressOf(settings.Listen), settings.Listen.Port, listen => listen.UseHttps(certificate)));
 
+        // A passkey belongs to a host name; unless the configuration says otherwise it is the one people open the console at.
+        var relyingParty = $"{Auth.Section}:Passkeys:RelyingPartyId";
+        if (string.IsNullOrWhiteSpace(builder.Configuration[relyingParty]))
+            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { [relyingParty] = settings.Public.Host });
+
+        // The framework's key ring is kept with the rest of what the console owns, so a container that is replaced does not lose it and the log does not warn about it.
+        builder.Services.AddDataProtection().SetApplicationName("dbdatakit-console").PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(settings.Directory, "dataprotection")));
+
         builder.Services.AddControllers()
             // controller discovery starts from the entry assembly, which is not always this one (the tests): name the one that holds the sign-in controllers
             .AddApplicationPart(typeof(AuthController).Assembly)
@@ -53,7 +62,7 @@ public static class ConsoleHost
         builder.Services.AddSingleton(sp => new NotificationStore(sp.GetRequiredService<StateDatabase>()));
         builder.Services.AddSessionAuth(Auth,
             sp => sp.GetRequiredService<StateDatabase>(),
-            sp => PasskeyOptions.FromConfiguration(sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(), Auth, settings.Listen.GetLeftPart(UriPartial.Authority), [], []),
+            sp => PasskeyOptions.FromConfiguration(sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(), Auth, settings.Public.GetLeftPart(UriPartial.Authority), [], []),
             _ => settings.Directory);
         configure?.Invoke(builder.Services);
 
