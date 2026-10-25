@@ -33,10 +33,11 @@ public sealed class ConsoleKeyStore(ISecretStore store, ISecretProvider provider
     /// <summary>Replaces the key and keeps the id.</summary>
     public Task WriteAsync(ConsoleIdentity identity, CancellationToken ct = default) => WriteAsync(Name, identity, ct);
 
-    private Task WriteAsync(SecretName name, ConsoleIdentity identity, CancellationToken ct)
+    // awaited inside the using: the value is disposed when this method returns, and a store that yields before it seals the value would find it gone
+    private async Task WriteAsync(SecretName name, ConsoleIdentity identity, CancellationToken ct)
     {
         using var value = SecretValue.From(identity.Id + ":" + Base64Url.Encode(identity.Key.ExportSeed()));
-        return store.SetAsync(name, value, ct);
+        await store.SetAsync(name, value, ct);
     }
 
     /// <summary>The key a rotation is moving to, if one is under way.</summary>

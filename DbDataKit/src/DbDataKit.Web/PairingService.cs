@@ -15,14 +15,27 @@ public sealed record PairingOutcome(PairedClient? Client, string InstanceId, str
 /// The server's half of the pairing exchange (plan 13, W12, steps 3 and 4): checks the code, then records the client with the ceiling the code carried. Pairing a client id that is already paired
 /// replaces its entry (the client has a new key); nothing else about an existing pairing changes without <c>unpair</c>.
 /// </summary>
-public sealed partial class PairingService(string instanceId, string certificateFingerprint, PairedClientsFile clients, PairingCodes codes, TimeProvider? clock = null)
+public sealed partial class PairingService(string instanceId, Func<string> certificate, PairedClientsFile clients, PairingCodes codes, TimeProvider? clock = null)
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
+
+    /// <summary>A service for a server whose certificate fingerprint is known.</summary>
+    /// <param name="instanceId">The server's instance id.</param>
+    /// <param name="certificateFingerprint">The fingerprint of the certificate this server presents, which pairing binds to.</param>
+    /// <param name="clients">The paired clients.</param>
+    /// <param name="codes">The pairing codes waiting to be used.</param>
+    /// <param name="clock">The time source.</param>
+    public PairingService(string instanceId, string certificateFingerprint, PairedClientsFile clients, PairingCodes codes, TimeProvider? clock = null)
+        : this(instanceId, () => certificateFingerprint, clients, codes, clock)
+    {
+    }
 
     public string InstanceId => instanceId;
 
     public PairingOutcome Pair(PairingRequest request)
     {
+        // read when the pairing happens, not when the service is made: a server that learns its own certificate after it has started (by asking itself) pairs as soon as it knows
+        var certificateFingerprint = certificate();
         PairingOutcome Refuse(string why) => new(null, instanceId, certificateFingerprint, why);
 
         // The shape is checked before the code is spent, so a malformed request does not use up a good code.

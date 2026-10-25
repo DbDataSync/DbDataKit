@@ -1,6 +1,26 @@
 {
   "tools": [
     {
+      "name": "server_clients",
+      "description": "The paired clients: kind, name, id, key fingerprint, ceiling, when paired. [Offline only] Usage: server clients [--repo <path>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
       "name": "service_status",
       "description": "Whether the service is installed and running. [Offline only] Usage: service status",
       "inputSchema": {

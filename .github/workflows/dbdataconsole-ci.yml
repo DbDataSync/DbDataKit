@@ -29,7 +29,7 @@ jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataConsole/|DbDataKit/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataconsole-|_)|actions/setup-product))'
+      paths: '^(DbDataConsole/|DbDataKit/|DbDataBuild/|DbDataSync/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataconsole-|_)|actions/setup-product))'
 
   # The host, its sign-in and its command line run on both systems; the Windows service registration is only exercised here against fakes.
   test:
@@ -50,7 +50,8 @@ jobs:
       - run: dotnet build DbDataConsole.slnf -c Release
       - run: dotnet test --project tests/DbDataConsole.Tests -c Release --no-build --minimum-expected-tests 10
 
-  # The web app in a real browser against a real console: the first-run invitation, a passkey made in a virtual authenticator, signing out and back in with it, the users list.
+  # The web app in a real browser against a real console: the first-run invitation, a passkey made in a virtual authenticator, signing out and back in with it, the users list,
+  # and pairing a real Build server.
   playwright:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
@@ -62,7 +63,7 @@ jobs:
         with:
           product: DbDataConsole
           global-json: DbDataConsole/global.json
-          duckdb: 'false'
+          # the Build server the browser test pairs with links the pinned DuckDB engine
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -72,6 +73,16 @@ jobs:
           npm ci
           npm run build -w @dbdatakit/console
       - run: dotnet build DbDataConsole.slnf -c Debug
+      # A real Build server for the console to pair with (the pairing, the version and the health the console shows are its own).
+      - name: Build a Build server
+        working-directory: DbDataBuild
+        run: |
+          scripts/fetch-native.sh
+          dotnet build src/DbDataBuild.Cli -c Debug
+      # A real Sync server, for the console to host its screens.
+      - name: Build a Sync server
+        working-directory: DbDataSync
+        run: dotnet build src/DbDataSync.Cli -c Debug
       - name: Install the browser
         working-directory: DbDataConsole/tests/DbDataConsole.Web.Tests
         run: |

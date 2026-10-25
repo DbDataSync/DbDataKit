@@ -5,9 +5,11 @@ using System.Text.Json.Serialization;
 using DbDataKit.Hosting;
 using Microsoft.AspNetCore.DataProtection;
 using DbDataKit.Hosting.Certificates;
+using DbDataKit.Secrets.Store;
 using DbDataKit.State;
 using DbDataKit.Web.Auth;
 using DbDataKit.Web.Auth.Controllers;
+using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -57,6 +59,7 @@ public static class ConsoleHost
         builder.Services.AddControllers()
             // controller discovery starts from the entry assembly, which is not always this one (the tests): name the one that holds the sign-in controllers
             .AddApplicationPart(typeof(AuthController).Assembly)
+            .AddApplicationPart(typeof(ConsoleHost).Assembly)
             .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
         builder.Services.AddSingleton(_ => ConsoleState.Open(settings.Directory));
         builder.Services.AddSingleton(sp => new NotificationStore(sp.GetRequiredService<StateDatabase>()));
@@ -64,6 +67,12 @@ public static class ConsoleHost
             sp => sp.GetRequiredService<StateDatabase>(),
             sp => PasskeyOptions.FromConfiguration(sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(), Auth, settings.Public.GetLeftPart(UriPartial.Authority), [], []),
             _ => settings.Directory);
+        // the servers this console manages, and the key it signs for them with
+        builder.Services.AddSingleton(_ => ConsoleSecrets.Open(settings.Directory));
+        builder.Services.AddSingleton(sp => new ConsoleKeyStore(sp.GetRequiredService<EncryptedFileSecretStore>(), sp.GetRequiredService<EncryptedFileSecretStore>()));
+        builder.Services.AddSingleton(_ => new InstanceRegistry(settings.InstancesPath));
+        builder.Services.AddSingleton<ConsoleInstances>();
+        builder.Services.AddSingleton<ConsoleRelay>();
         configure?.Invoke(builder.Services);
 
         var app = builder.Build();
@@ -84,6 +93,7 @@ public static class ConsoleHost
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
+        app.MapRelay();
 
         // Deep links are the web app's routes, not this server's: /users has to return the app. An unmatched /api route is a 404, never the app.
         app.MapFallback(async context =>

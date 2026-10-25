@@ -1,5 +1,5 @@
-import { Link, useOutletContext, useParams } from 'react-router-dom'
-import { ErrorBanner } from '@dbdatakit/shell'
+import { useOutletContext, useParams } from 'react-router-dom'
+import { ErrorBanner, Link } from '@dbdatakit/shell'
 import {
   useDeleteVerificationResult, useReplication, useRunVerification, useTableMapping,
   useUpsertTableMapping, useVerificationResults,

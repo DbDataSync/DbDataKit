@@ -1,6 +1,5 @@
-import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/AppShell'
-import { ErrorBanner } from '@dbdatakit/shell'
+import { ErrorBanner, useNavigate } from '@dbdatakit/shell'
 import { useScripts } from '../api/hooks'
 import type { ScriptUsage } from '../api/types'
 

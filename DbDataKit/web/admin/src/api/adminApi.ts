@@ -1,4 +1,4 @@
-import { ApiError, put, request } from '@dbdatakit/shell'
+import { ApiError, apiUrl, put, request } from '@dbdatakit/shell'
 import type {
   AdminCertificateStatus,
   AdminConfigEntry,
@@ -117,7 +117,7 @@ export const adminApi = {
     upload: async (files: FileList | File[]): Promise<UploadResult[]> => {
       const form = new FormData()
       for (const file of files) form.append('files', file)
-      const response = await fetch('/api/files', { method: 'POST', credentials: 'same-origin', body: form })
+      const response = await fetch(apiUrl('/api/files'), { method: 'POST', credentials: 'same-origin', body: form })
       if (!response.ok) {
         let message = response.statusText
         try {

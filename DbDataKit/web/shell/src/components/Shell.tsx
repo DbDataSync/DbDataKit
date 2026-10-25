@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink as RouterNavLink } from 'react-router-dom'
+import { NavLink, useModule } from '../module'
 import { NotificationBell } from './NotificationBell'
 import { SignedInAs } from './SignIn'
 import { useIsAdmin } from './useIsAdmin'
@@ -36,11 +37,18 @@ export function Shell({ brand, mark, rail, crumbs, tabs, actions, children }: {
   children: ReactNode
 }) {
   const isAdmin = useIsAdmin()
+  const { home } = useModule()
 
   return (
     <>
       <nav className="rail">
         <div className="rail-mark">{mark}</div>
+        {/* Inside the console, the way back to it comes first; its link is not under the module's base. */}
+        {home && (
+          <RouterNavLink to={home.to} end className="rail-item" title={home.title} data-testid="rail-home-link">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M15 6l-6 6 6 6" /></svg>
+          </RouterNavLink>
+        )}
         {rail.filter(item => !item.adminOnly || isAdmin).map(item => item.inert || !item.to ? (
           <span key={item.title} className="rail-item" style={{ color: 'var(--ink-faint)', cursor: 'default' }} title={item.title}>
             {item.icon}

@@ -32,7 +32,7 @@ public sealed class SyncCliTests
     [Fact]
     public async Task TheCheckedInMcpToolListIsCurrent()
     {
-        var server = new McpServer(SyncCli.Router(), new McpOptions(new HashSet<string>(["secret set", "secret remove", "library validate"])), SyncCli.Program, "0");
+        var server = new McpServer(SyncCli.Router(), new McpOptions(new HashSet<string>(["secret set", "secret remove", "library validate", "server pair", "server unpair"])), SyncCli.Program, "0");
         var reply = (await server.HandleAsync(System.Text.Json.Nodes.JsonNode.Parse("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}""")!)).Single();
         string actual = reply["result"]!.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }).Replace("\r\n", "\n") + "\n";
         if (Environment.GetEnvironmentVariable("UPDATE_GOLDEN") == "1") File.WriteAllText(McpToolsPath(), actual);
