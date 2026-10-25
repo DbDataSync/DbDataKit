@@ -63,7 +63,7 @@ jobs:
         with:
           product: DbDataConsole
           global-json: DbDataConsole/global.json
-          duckdb: 'false'
+          # the Build server the browser test pairs with links the pinned DuckDB engine
       - uses: actions/setup-node@v7
         with:
           node-version: 24
