@@ -20,6 +20,12 @@
     <DbDataKitReference Include="Cli" />
     <DbDataKitReference Include="Web" />   <!-- the management API: pairing, tokens, roles; plan 13, R01 -->
     <DbDataKitReference Include="Hosting.Certificates" />
+    <DbDataKitReference Include="Secrets.Abstractions" />   <!-- the server's secret store and the logins it hands each command; plan 13, R04 -->
+    <DbDataKitReference Include="Secrets" />
+    <DbDataKitReference Include="Secrets.Store" />
+    <DbDataKitReference Include="Secrets.Cli" />
+    <DbDataKitReference Include="Secrets.Windows" />
+    <DbDataKitReference Include="Connections.Abstractions" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="System.CommandLine" />
   </ItemGroup>
