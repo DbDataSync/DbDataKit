@@ -25,7 +25,7 @@ public sealed record ManagementResult(int Status, JsonNode Body)
 /// </list>
 /// A secret is never part of an answer: the settings are shown the way <c>config show</c> shows them, and the sentinel test puts a value in every place a secret can be and looks for it in every answer.
 /// </summary>
-public sealed class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null)
+public sealed class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null)
 {
     public const string Prefix = "/api/v1";
 
@@ -52,6 +52,12 @@ public sealed class ProxyManagement(IConfigurationRoot configuration, string con
             if (!caller.Holds(ServerRole.Admin)) return Denied(ServerRole.Admin);
             var rest = route.Length > (Prefix + "/data-sources").Length ? route[(Prefix + "/data-sources/").Length..].Split('/') : [];
             return await dataSources.HandleAsync(method, rest, body, query["expected_version"], caller, cancellationToken);
+        }
+        if (route is Prefix + "/identities" or Prefix + "/auth" || route.StartsWith(Prefix + "/users/", StringComparison.Ordinal))
+        {
+            if (identities is null) return ManagementResult.Problem(404, "There is no such call.");
+            if (!caller.Holds(ServerRole.Admin)) return Denied(ServerRole.Admin);
+            return await identities.HandleAsync(method, route[(Prefix.Length + 1)..].Split('/'), body, query["expected_version"], caller, cancellationToken);
         }
         return ManagementResult.Problem(404, "There is no such call.");
     }

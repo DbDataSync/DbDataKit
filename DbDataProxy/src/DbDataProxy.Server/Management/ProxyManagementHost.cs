@@ -81,8 +81,10 @@ public static class ProxyManagementHost
         // the data sources need the management object's validation, and it needs them to route to: made in two steps
         ProxyDataSources? dataSources = null;
         var management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version);
-        dataSources = new ProxyDataSources(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<DataSourceCatalog>(), new FileAuditLog(Path.Combine(dataDirectory, "management-audit.log")), git);
-        management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version, dataSources);
+        var audit = new FileAuditLog(Path.Combine(dataDirectory, "management-audit.log"));   // one for every kind of change: appends go through its lock
+        dataSources = new ProxyDataSources(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit, git);
+        var identities = new ProxyIdentities(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, audit, git);
+        management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version, dataSources, identities);
         var validator = new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache());
         var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management");
 

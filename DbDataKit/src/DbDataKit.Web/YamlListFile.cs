@@ -4,11 +4,11 @@ using DbDataKit.Config.Yaml;
 namespace DbDataKit.Web.Trust;
 
 /// <summary>
-/// A list of flow mappings under one key of a small YAML file (<c>pairedClients</c> in a server's <c>server.yaml</c>, <c>instances</c> in a console's <c>instances.yaml</c>), one entry per line, each with an <c>id</c>.
+/// A list of flow mappings under one key of a small YAML file (<c>pairedClients</c> in a server's <c>server.yaml</c>, <c>instances</c> in a console's <c>instances.yaml</c>), one entry per line, each with an <c>id</c> (or the field the list is keyed by).
 /// The file's bytes are compared on every read, so a change made by another process is seen on the next call and the file is parsed only when it changed. Edits are surgical (the rest of the file, comments
 /// and all, is untouched) and run under a lock other processes honour.
 /// </summary>
-public sealed class YamlListFile(string path, string key)
+public sealed class YamlListFile(string path, string key, string idField = "id")
 {
     private readonly object _gate = new();
     private byte[]? _seen;
@@ -23,14 +23,7 @@ public sealed class YamlListFile(string path, string key)
     public IReadOnlyList<YamlMapping> Entries() { Load(); return _entries; }
 
     /// <summary>Adds the entry, or replaces the one with the same id.</summary>
-    public void Upsert(string id, string flowMapping) =>
-        Edit(text =>
-        {
-            var at = IndexOf(text, id);
-            if (at >= 0) text = Apply(YamlEditor.Remove(text, $"{key}[{at}]", Path));
-            if (!HasKey(text)) return text.TrimEnd('\r', '\n') + NewLine(text) + key + ":" + NewLine(text) + "  - " + flowMapping + NewLine(text);
-            return Apply(YamlEditor.Insert(text, key, YamlValue.Raw(flowMapping), file: Path));
-        });
+    public void Upsert(string id, string flowMapping) => Edit(text => UpsertText(text, key, idField, id, flowMapping, Path));
 
     /// <summary>Removes the entry with this id; false when there was none.</summary>
     public bool Remove(string id)
@@ -38,12 +31,27 @@ public sealed class YamlListFile(string path, string key)
         var removed = false;
         Edit(text =>
         {
-            var at = IndexOf(text, id);
-            if (at < 0) return text;
-            removed = true;
-            return Apply(YamlEditor.Remove(text, $"{key}[{at}]", Path));
+            var changed = RemoveText(text, key, idField, id, Path);
+            removed = changed != text;
+            return changed;
         });
         return removed;
+    }
+
+    /// <summary>The text with the entry added, or replacing the one whose <paramref name="idField"/> is <paramref name="id"/>: the same edit <see cref="Upsert"/> makes to a file, on text, for a caller that wants to look at the result before it writes it.</summary>
+    public static string UpsertText(string text, string key, string idField, string id, string flowMapping, string file = "")
+    {
+        var at = IndexOf(text, key, idField, id, file);
+        if (at >= 0) text = Apply(YamlEditor.Remove(text, $"{key}[{at}]", file));
+        if (!HasKey(text, key)) return text.TrimEnd('\r', '\n') + (text.Length == 0 ? "" : NewLine(text)) + key + ":" + NewLine(text) + "  - " + flowMapping + NewLine(text);
+        return Apply(YamlEditor.Insert(text, key, YamlValue.Raw(flowMapping), file: file));
+    }
+
+    /// <summary>The text without the entry (unchanged when there is none).</summary>
+    public static string RemoveText(string text, string key, string idField, string id, string file = "")
+    {
+        var at = IndexOf(text, key, idField, id, file);
+        return at < 0 ? text : Apply(YamlEditor.Remove(text, $"{key}[{at}]", file));
     }
 
     private static string Apply(EditResult result) =>
@@ -51,13 +59,13 @@ public sealed class YamlListFile(string path, string key)
 
     private static string NewLine(string text) => text.Contains("\r\n") ? "\r\n" : "\n";
 
-    private bool HasKey(string text) => StrictYamlReader.Read(text, "", []) is YamlMapping map && map.Get(key) is not null;
+    private static bool HasKey(string text, string key) => StrictYamlReader.Read(text, "", []) is YamlMapping map && map.Get(key) is not null;
 
-    private int IndexOf(string text, string id)
+    private static int IndexOf(string text, string key, string idField, string id, string file)
     {
-        if (StrictYamlReader.Read(text, Path, []) is not YamlMapping map || map.Get(key) is not YamlSequence list) return -1;
+        if (StrictYamlReader.Read(text, file, []) is not YamlMapping map || map.Get(key) is not YamlSequence list) return -1;
         for (var i = 0; i < list.Items.Count; i++)
-            if (list.Items[i] is YamlMapping item && item.Get("id") is YamlScalar scalar && scalar.Value == id) return i;
+            if (list.Items[i] is YamlMapping item && item.Get(idField) is YamlScalar scalar && scalar.Value == id) return i;
         return -1;
     }
 
