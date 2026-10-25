@@ -18,6 +18,9 @@
 
   <ItemGroup>
     <DbDataKitReference Include="Cli" />
+    <DbDataKitReference Include="Web" />   <!-- the management API: pairing, tokens, roles; plan 13, R01 -->
+    <DbDataKitReference Include="Hosting.Certificates" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="System.CommandLine" />
   </ItemGroup>
 

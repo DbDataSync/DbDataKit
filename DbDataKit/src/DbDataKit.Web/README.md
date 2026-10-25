@@ -38,6 +38,10 @@ A client replaces its signing key without pairing again. `KeyRotationRequest` ca
 
 The role check per command and the audit are in `ManagementAuthorization` and `ManagementIdentity`; the key rotation, the version rule and the server-to-server kind are the next slices (T07, T09, T10).
 
+## Authenticating calls (`ManagementAuthentication`)
+
+`UseManagementAuthentication(validator, refused)` puts the token check in front of every request under `/api/`: the token is read from the `X-DbData-Token` header and validated by `ConsoleTokenValidator`, and the validated token is on the request for the endpoint (`context.ManagementToken()`), which decides what the caller may do with `ManagementAuthorization`. A refused call is a `401` with no body; `refused` hears why, for the server's log. Pairing and key rotation are outside the prefix because a client that is not paired yet has no token. The first server to use it is the Build server (R01).
+
 ## Audit and authorship
 
 `ManagementIdentity.Entry(token, command, target, outcome, at)` makes the `AuditEntry` for a change (user and console from the token, never a value) and `IAuditLog` records it; `FileAuditLog` keeps JSON
