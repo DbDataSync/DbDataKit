@@ -8,6 +8,9 @@ namespace DbDataBuild.Cli.Server;
 internal interface IProjectCommandRunner
 {
     Task<CommandResult> RunAsync(IReadOnlyList<string> argv, string projectRoot, CancellationToken cancellationToken);
+
+    /// <summary>Runs the command for a person (<paramref name="actor"/>, see <see cref="Actor"/>), who is then the one the tracking tables name. A runner that has no use for the name ignores it.</summary>
+    Task<CommandResult> RunAsync(IReadOnlyList<string> argv, string projectRoot, string? actor, CancellationToken cancellationToken) => RunAsync(argv, projectRoot, cancellationToken);
 }
 
 /// <summary>
@@ -15,6 +18,9 @@ internal interface IProjectCommandRunner
 /// <para>
 /// The child gets the server's environment plus the logins <paramref name="logins"/> supplies (the server's stored secrets as the <c>DBDATA_BUILD_&lt;CONNECTION&gt;_&lt;READ|WRITE&gt;</c> variables, see <see cref="ServerSecrets"/>), read afresh for every command
 /// so a secret set while the server runs applies to the next command. A login from the store replaces a variable of the same name the server was started with.
+/// </para>
+/// <para>
+/// A command run for a person gets <see cref="Actor.Variable"/> with their name and the console's, so the tracking tables name them; without one the variable is removed. The child's input is closed, so nothing waits for an answer.
 /// </para>
 /// </summary>
 internal sealed class ChildProcessCommandRunner(TimeSpan? timeout = null, int maxParallel = 4, Func<CancellationToken, Task<IReadOnlyDictionary<string, string>>>? logins = null) : IProjectCommandRunner
@@ -26,7 +32,9 @@ internal sealed class ChildProcessCommandRunner(TimeSpan? timeout = null, int ma
 
     private readonly SemaphoreSlim _slots = new(maxParallel, maxParallel);
 
-    public async Task<CommandResult> RunAsync(IReadOnlyList<string> argv, string projectRoot, CancellationToken cancellationToken)
+    public Task<CommandResult> RunAsync(IReadOnlyList<string> argv, string projectRoot, CancellationToken cancellationToken) => RunAsync(argv, projectRoot, null, cancellationToken);
+
+    public async Task<CommandResult> RunAsync(IReadOnlyList<string> argv, string projectRoot, string? actor, CancellationToken cancellationToken)
     {
         await _slots.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -37,6 +45,7 @@ internal sealed class ChildProcessCommandRunner(TimeSpan? timeout = null, int ma
                 WorkingDirectory = projectRoot,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                RedirectStandardInput = true, // a command that would ask a question reads the end of its input, never the server's
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8,
                 UseShellExecute = false,
@@ -45,12 +54,15 @@ internal sealed class ChildProcessCommandRunner(TimeSpan? timeout = null, int ma
             if (logins is not null)
                 foreach (var (name, value) in await logins(cancellationToken).ConfigureAwait(false))
                     start.Environment[name] = value;
+            if (actor is { Length: > 0 }) start.Environment[Actor.Variable] = actor;
+            else start.Environment.Remove(Actor.Variable);
             foreach (var a in prefix) start.ArgumentList.Add(a);
             foreach (var a in argv) start.ArgumentList.Add(a);
             start.ArgumentList.Add("--format");
             start.ArgumentList.Add("json");
 
             using var process = Process.Start(start) ?? throw new InvalidOperationException("The command process did not start.");
+            process.StandardInput.Close();
             var output = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
             var error = process.StandardError.ReadToEndAsync(CancellationToken.None);
             using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
