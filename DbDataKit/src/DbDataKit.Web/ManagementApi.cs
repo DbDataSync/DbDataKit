@@ -10,6 +10,7 @@ public static class ManagementApi
 {
     public const int Version = 1;
     public const string PairingPath = "/management/v1/pairing";
+    public const string RotationPath = "/management/v1/pairing/rotate";
     public const string VersionHeader = "X-DbData-Api-Version";
 
     /// <summary>The oldest server version a client of version <paramref name="own"/> works with: its own and the one before.</summary>
