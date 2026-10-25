@@ -46,7 +46,7 @@ so the internal and external agents can do the same things, and a feature an age
 ### Where it runs
 
 The agent runtime is a shared library (`DbDataKit.Agents`): the provider abstraction, the tool binding to command specs, confirmation,
-transcripts and limits. **The console hosts it** for its own chat; **DbDataStore hosts it** for custom front ends (section 2); keys and
+transcripts and limits. **The console hosts it** for its own chat; **the app host hosts it** for app assistants (section 2); keys and
 model calls stay on the server, never in the browser. **Tests** run against recorded model responses, so CI needs no model API.
 
 ## 2. Apps
