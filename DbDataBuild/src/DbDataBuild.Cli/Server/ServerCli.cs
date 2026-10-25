@@ -16,7 +16,7 @@ namespace DbDataBuild.Cli.Server;
 /// </summary>
 internal static class ServerCli
 {
-    public static bool Handles(string[] args) => args.Length > 0 && args[0] is "server" or "secret" or "service";
+    public static bool Handles(string[] args) => args.Length > 0 && args[0] is "server" or "secret" or "service" or "health";
 
     public static async Task<int> RunAsync(string[] args, TextWriter output, TextWriter error, TextReader input)
     {
@@ -34,6 +34,7 @@ internal static class ServerCli
         ServerNoun.Create(RunServerAsync).With([.. PairingVerbs.Create(args => new PairingFiles(Path.Combine(DirectoryOf(args), "server.yaml"))), new Verb("project", "The projects this server hosts: add, remove, list, pull", EffectClass.RepoFilesOnly, ProjectUsage, ProjectAsync, DataSchemas.None)]),
         // the store is opened (and its key made on first use) only for the secret verbs
         .. invocation is ["secret", ..] ? new[] { SecretVerbs(invocation) } : Array.Empty<Noun>(),
+        .. invocation is ["health", ..] ? new[] { HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl) } : Array.Empty<Noun>(),
         .. invocation is ["service", ..] ? new[] { BuildService.Noun(BuildServiceEnvironment.Real()) } : Array.Empty<Noun>(),
     ], ProductInfo.Version);
 
@@ -46,6 +47,18 @@ internal static class ServerCli
             SecretNoun.Create(cli, context => SecretNoun.Captured(context, new InputConsole(context.In))).Verbs
                 .Select(v => v with { Run = (args, context) => v.Run(WithoutRepo(args), context) }).ToList());
     }
+
+    /// <summary>Where <c>health check</c> asks by default: the server's own address, as a container sees it.</summary>
+    public const string HealthUrl = "https://localhost:8470/health/live";
+
+    /// <summary>
+    /// The server's certificate is self-signed, so a probe of its own address cannot validate it; it is accepted for a loopback address only, where the answer is the server on this machine and nothing the probe
+    /// reads is repeated (<see cref="HttpHealthProbe"/> reads a status code and no body). Any other address is validated as usual.
+    /// </summary>
+    private static HttpClient LoopbackTolerantClient() => new(new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = (request, _, _, errors) => errors == System.Net.Security.SslPolicyErrors.None || request.RequestUri is { IsLoopback: true },
+    });
 
     private static string[] WithoutRepo(string[] args)
     {

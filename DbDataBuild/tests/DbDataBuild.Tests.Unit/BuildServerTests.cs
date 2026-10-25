@@ -196,4 +196,22 @@ public sealed class BuildServerTests : IAsyncLifetime
         Assert.Equal("dbdatabuild", (string)version["product"]!);
         Assert.Equal(DbDataBuild.Core.ProductInfo.Version, (string)version["version"]!);
     }
+
+    [Fact]
+    public async Task The_health_check_verb_accepts_the_servers_own_certificate_and_says_when_nothing_answers()
+    {
+        var url = app.Urls.First().TrimEnd('/');
+        var (o, e) = (new StringWriter(), new StringWriter());
+
+        Assert.Equal(0, await ServerCli.RunAsync(["health", "check", "--url", url + "/health/live"], o, e, TextReader.Null));
+        Assert.Equal(1, await ServerCli.RunAsync(["health", "check", "--url", "https://127.0.0.1:1/health/live", "--timeout", "2"], o, e, TextReader.Null));
+    }
+
+    [Fact]
+    public void The_servers_directory_comes_from_the_variable_when_there_is_no_option()
+    {
+        Assert.Equal("/data", BuildServerSettings.DefaultDirectory(name => name == BuildServerSettings.DirectoryVariable ? "/data" : null));
+        Assert.EndsWith(Path.Combine("dbdatabuild", "server"), BuildServerSettings.DefaultDirectory(_ => null));
+        Assert.EndsWith(Path.Combine("dbdatabuild", "server"), BuildServerSettings.DefaultDirectory(_ => ""));
+    }
 }

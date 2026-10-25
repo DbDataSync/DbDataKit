@@ -21,7 +21,14 @@ internal sealed record BuildServerSettings(string Directory, Uri Listen)
     public string ServerYaml => Path.Combine(Directory, "server.yaml");
 
 
-    public static string DefaultDirectory() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dbdatabuild", "server");
+    /// <summary>The variable that names the server's directory for every command (a container sets it once, so <c>docker exec</c> reaches the same files the server uses).</summary>
+    public const string DirectoryVariable = "DBDATABUILD_SERVER_DIR";
+
+    /// <summary>What <c>--repo</c> defaults to: <see cref="DirectoryVariable"/>, else a folder under the user's local application data.</summary>
+    public static string DefaultDirectory(Func<string, string?>? environment = null) =>
+        (environment ?? Environment.GetEnvironmentVariable)(DirectoryVariable) is { Length: > 0 } named
+            ? named
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dbdatabuild", "server");
 }
 
 /// <summary>

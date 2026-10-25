@@ -1415,3 +1415,8 @@ Operator decision: correlated subqueries are a hard requirement.
 - **Built**: `dbdatabuild service install|uninstall|status|start|stop|restart|doctor|unit`, the shared verbs (new: `unit` in the shared noun). The service `DbDataBuild` runs `server run --repo <data directory>`. The server uses `UseDbDataHost`, so it runs as a Windows service or under systemd, drains on stop and answers `/health`, `/health/ready` and `/version` without a token; `server run` runs on the host's own lifetime.
 - **Tests**: `BuildServiceTests` (5) against the in-memory service manager and the unit text; `BuildServerTests` health and version.
 - **Not done**: a run on a real Windows service manager; `--password-secret`.
+
+## 187. The Build server image (plan 13, L02)
+
+- **Built**: `DbDataBuild/Dockerfile` and its `.dockerignore`; build from the repository root: `docker build -f DbDataBuild/Dockerfile -t dbdatabuild .`. The server's directory is `/data` (`DBDATABUILD_SERVER_DIR`, also the default of `--repo` outside containers). `dbdatabuild health check [--url ...]` is the image's health check (the shared `health` noun; the server's self-signed certificate is accepted for loopback addresses only). The CI workflow has an `image` job.
+- **Verified**: built and run locally: healthy, non-root, pairing and secrets through `docker exec`. Not verified: arm64, publishing.
