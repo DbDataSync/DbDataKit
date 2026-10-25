@@ -20,6 +20,11 @@ export function setApiBase(base: string) {
   apiBase = base.replace(/\/+$/, '')
 }
 
+/** The base now in effect; a module being left puts back the base it found, but only if nobody has set another since. */
+export function currentApiBase() {
+  return apiBase
+}
+
 const HOST_OWN = ['/api/auth', '/api/notifications']
 
 export function apiUrl(path: string): string {

@@ -25,7 +25,13 @@ const buildDll = path.join(repoRoot, 'DbDataBuild/src/DbDataBuild.Cli/bin/Debug/
 if (!isWorker) {
   fs.rmSync(buildDirectory, { recursive: true, force: true })
   fs.mkdirSync(buildDirectory, { recursive: true })
-  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', buildDirectory, '--max-role', 'viewer'], { encoding: 'utf8' })
+  // a project for the server to host: the starter template, in a folder of its own
+  const project = path.join(os.tmpdir(), 'dbdatakit-console-e2e-project')
+  fs.rmSync(project, { recursive: true, force: true })
+  execFileSync('dotnet', ['exec', buildDll, 'project', 'create', 'starter', project], { stdio: 'ignore' })
+  execFileSync('dotnet', ['exec', buildDll, 'server', 'project', 'add', 'starter', '--path', project, '--repo', buildDirectory], { stdio: 'ignore' })
+  // the console may grant viewer, author and operator there, which is what its administrators will hold
+  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', buildDirectory, '--max-role', 'viewer,author,operator'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 

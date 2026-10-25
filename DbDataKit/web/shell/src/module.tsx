@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, type ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   Link as RouterLink,
@@ -11,7 +11,7 @@ import {
   type NavigateProps,
   type To,
 } from 'react-router-dom'
-import { setApiBase } from './api/http'
+import { currentApiBase, setApiBase } from './api/http'
 
 /** Where a product's app is mounted and which server it talks to (plan 13, U08). Standalone it is mounted at the root and talks to its own server. */
 export interface ModuleInfo {
@@ -40,10 +40,14 @@ function cacheFor(key: string) {
 
 /**
  * Mounts a product's app inside a host (plan 13, U08): its links keep working under `basePath`, its `/api` calls go to `apiBase`, and it has a cache of its own for this server.
- * The API base is set while rendering, before any child can ask for data; only one module is on screen at a time.
+ * The API base is set while rendering, before any child can ask for data, and put back when the module is left; only one module is on screen at a time.
  */
 export function ModuleProvider({ info, children }: { info: ModuleInfo; children: ReactNode }) {
   setApiBase(info.apiBase)
+  // Leaving the module gives the host its own API back: what the host asks for next is the host's, not this server's.
+  useEffect(() => () => {
+    if (currentApiBase() === info.apiBase.replace(/\/+$/, '')) setApiBase('')
+  }, [info.apiBase])
   return (
     <ModuleContext.Provider value={info}>
       <QueryClientProvider client={cacheFor(info.apiBase)}>{children}</QueryClientProvider>

@@ -1,5 +1,5 @@
 // @dbdatakit/shell: what every product's console is made of. Imports nothing from any product (a test checks).
-export { ApiError, apiUrl, put, request, setApiBase } from './api/http'
+export { ApiError, apiUrl, currentApiBase, put, request, setApiBase } from './api/http'
 export { Link, ModuleProvider, NavLink, Navigate, useModule, useNavigate, usePathInModule } from './module'
 export type { ModuleInfo } from './module'
 export { shellApi } from './api/shellApi'
