@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink } from '../module'
 
 export interface SubTab {
   /** The path segment relative to the section's base. `null` is the index tab — the section's own

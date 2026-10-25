@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { AdminTabs } from '../components/AdminTabs'
-import { ErrorBanner } from '@dbdatakit/shell'
+import { ErrorBanner, Link } from '@dbdatakit/shell'
 import { Field } from '@dbdatakit/shell'
 import { RestartRequiredBanner } from '../components/RestartRequiredBanner'
 import { useIsAdmin } from '@dbdatakit/shell'

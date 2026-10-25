@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Field } from '@dbdatakit/shell'
+import { Field, Link } from '@dbdatakit/shell'
 import { INTENT_INFO } from '../pages/replication-detail/readIntent'
 import type { ReadHold, ReadIntent } from '../api/types'
 

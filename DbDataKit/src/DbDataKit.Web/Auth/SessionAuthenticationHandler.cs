@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using DbDataKit.State;
+using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 
@@ -26,11 +27,16 @@ public sealed class SessionAuthenticationHandler(
     UrlEncoder encoder,
     SessionStore sessions,
     UserStore users,
-    AuthOptions authOptions)
+    AuthOptions authOptions,
+    ConsoleTokenValidator? tokens = null)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        // A console's call carries a signed token naming the person (plan 13, U08), and no cookie: the server that is managed from a console has no users of its own, and the roles are the token's.
+        if (tokens is not null && Request.Headers[ManagementAuthentication.TokenHeader].FirstOrDefault() is { Length: > 0 } token)
+            return Task.FromResult(FromToken(tokens.Validate(token)));
+
         var sessionId = Request.Cookies[authOptions.CookieName];
         if (string.IsNullOrEmpty(sessionId))
             return Task.FromResult(NetworkFallback());
@@ -71,6 +77,28 @@ public sealed class SessionAuthenticationHandler(
         }
 
         return AuthenticateResult.NoResult();
+    }
+
+    /// <summary>
+    /// The token's person as a principal: the product's two roles from the roles the token holds here (the lower of the person's and the console's ceiling): an administrator where it holds admin, a viewer where it holds
+    /// anything that reads. A token that holds none is not a way in. The reason a token is refused is not given to the caller.
+    /// </summary>
+    private AuthenticateResult FromToken(TokenResult result)
+    {
+        if (!result.Ok) return AuthenticateResult.Fail("The token is not valid.");
+        var held = ManagementAuthorization.Effective(result.Token!);
+        var role = ServerRoles.Allows(held, ServerRole.Admin) ? UserRole.Admin : ServerRoles.Allows(held, ServerRole.Viewer) ? UserRole.Viewer : (UserRole?)null;
+        if (role is null) return AuthenticateResult.Fail("The token holds no role here.");
+
+        var token = result.Token!;
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, token.SubjectId),
+            new(authOptions.Product.UserIdClaim, token.SubjectId),
+            new(ClaimTypes.Name, string.IsNullOrWhiteSpace(token.SubjectName) ? token.SubjectId : token.SubjectName),
+            new(ClaimTypes.Role, role.Value.ToString()),
+        };
+        return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(new ClaimsIdentity(claims, Scheme.Name)), Scheme.Name));
     }
 
     private AuthenticationTicket Ticket(UserRecord user)

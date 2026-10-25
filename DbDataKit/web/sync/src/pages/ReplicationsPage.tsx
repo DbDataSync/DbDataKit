@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/AppShell'
-import { ErrorBanner } from '@dbdatakit/shell'
+import { ErrorBanner, useNavigate } from '@dbdatakit/shell'
 import { Field } from '@dbdatakit/shell'
 import {
   useConnections,

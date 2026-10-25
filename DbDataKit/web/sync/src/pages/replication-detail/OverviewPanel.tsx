@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { ErrorBanner } from '@dbdatakit/shell'
-import { Link, Outlet, useOutletContext } from 'react-router-dom'
+import { ErrorBanner, Link } from '@dbdatakit/shell'
+import { Outlet, useOutletContext } from 'react-router-dom'
 import { Field } from '@dbdatakit/shell'
 import { KeyValueTable } from '@dbdatakit/shell'
 import { ParameterForm } from '../../components/ParameterForm'

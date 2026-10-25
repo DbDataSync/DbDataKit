@@ -39,19 +39,8 @@ internal sealed record BuildServerSettings(string Directory, Uri Listen)
 /// </summary>
 internal static class BuildServer
 {
-    private static readonly Regex InstanceLine = new(@"^instanceId:\s*(?<id>\S+)\s*$", RegexOptions.Multiline);
-
     /// <summary>The server's instance id, made and written to <c>server.yaml</c> the first time and read from it after.</summary>
-    public static string InstanceId(string serverYaml)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(serverYaml))!);
-        if (File.Exists(serverYaml) && InstanceLine.Match(File.ReadAllText(serverYaml)) is { Success: true } found) return found.Groups["id"].Value;
-
-        var id = "build-" + Guid.NewGuid().ToString("N");
-        var existing = File.Exists(serverYaml) ? File.ReadAllText(serverYaml) : "";
-        File.WriteAllText(serverYaml, $"# This server's identity and the clients paired with it. 'dbdatabuild server clients' lists them; 'server unpair' removes one.\ninstanceId: {id}\n" + existing);
-        return id;
-    }
+    public static string InstanceId(string serverYaml) => ServerIdentity.InstanceId(serverYaml, "build", "dbdatabuild server");
 
     public static X509Certificate2 Certificate(string directory) => DirectoryCertificate.Load(directory);
 

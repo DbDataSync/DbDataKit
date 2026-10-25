@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ErrorBanner } from '@dbdatakit/shell'
+import { ErrorBanner, Link } from '@dbdatakit/shell'
 import { useApplyReplicationProvisioningPlan, useReplicationProvisioningPlan } from '../../api/hooks'
 import type {
   ReplicationProvisioningGroup, ReplicationProvisioningPlan, ReplicationProvisioningStep,

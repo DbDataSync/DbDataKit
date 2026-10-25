@@ -3,6 +3,8 @@ import { InvitePage, UsersPage } from '@dbdatakit/admin'
 import { SignInScreen, useAuthStatus } from '@dbdatakit/shell'
 import { PRODUCT } from './ConsoleShell'
 import { HomePage } from './pages/HomePage'
+import { InstancesPage } from './pages/InstancesPage'
+import { ServerModule } from './pages/ServerModule'
 
 export default function App() {
   const { data: status, isLoading } = useAuthStatus()
@@ -20,6 +22,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
+      <Route path="/instances" element={<InstancesPage />} />
+      <Route path="/servers/:instance/*" element={<ServerModule />} />
       <Route path="/users" element={<UsersPage />} />
       <Route path="*" element={<HomePage />} />
     </Routes>

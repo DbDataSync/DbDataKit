@@ -10,8 +10,25 @@ export class ApiError extends Error {
   }
 }
 
+let apiBase = ''
+
+/**
+ * Where this app's `/api/...` calls go. A product's own app calls its own server (`''`); a module hosted by the console calls the server it manages through the console's relay
+ * (`/relay/<server>`). The sign-in and notification calls always go to the host the app is served by, whatever the base: who is signed in is the console's answer, not a managed server's.
+ */
+export function setApiBase(base: string) {
+  apiBase = base.replace(/\/+$/, '')
+}
+
+const HOST_OWN = ['/api/auth', '/api/notifications']
+
+export function apiUrl(path: string): string {
+  if (!apiBase || !path.startsWith('/api/') || HOST_OWN.some((own) => path === own || path.startsWith(own + '/') || path.startsWith(own + '?'))) return path
+  return apiBase + path
+}
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     ...init,
     // The session is a cookie, and a cross-origin dev setup (Vite on 5173 proxying to the API) does
     // not send one unless asked. Without this, signing in appears to do nothing.

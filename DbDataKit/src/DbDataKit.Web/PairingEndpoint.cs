@@ -39,7 +39,9 @@ public static class PairingEndpoint
                 return Results.Json(new { error = "the request needs a client kind of console, server or cli" }, Json, statusCode: 400);
 
             var publicKey = body.PublicKey is { } encoded ? Base64Url.Decode(encoded) : null;
-            var outcome = service.Pair(new PairingRequest(body.Proof, body.ClientId, body.Name, kind, publicKey));
+            PairingOutcome outcome;
+            try { outcome = service.Pair(new PairingRequest(body.Proof, body.ClientId, body.Name, kind, publicKey)); }
+            catch (InvalidOperationException ex) { return Results.Json(new { error = ex.Message }, Json, statusCode: StatusCodes.Status503ServiceUnavailable); }   // the server cannot yet say which certificate it presents
             if (!outcome.Ok)
             {
                 http.RequestServices.GetService<ILoggerFactory>()?.CreateLogger("DbDataKit.Web.Pairing").LogWarning("A pairing was refused: {Reason}", outcome.Refusal);

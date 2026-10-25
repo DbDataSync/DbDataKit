@@ -17,7 +17,11 @@
     <DbDataKitReference Include="Hosting.Certificates" />
     <DbDataKitReference Include="Security.Acl" />
     <DbDataKitReference Include="State" />   <!-- the users, sessions and invitations -->
-    <DbDataKitReference Include="Web" />   <!-- sign-in, passkeys, invitations, users: the controllers the console serves -->
+    <DbDataKitReference Include="Web" />
+    <DbDataKitReference Include="Secrets.Abstractions" />   <!-- the key the console signs for its servers with -->
+    <DbDataKitReference Include="Secrets" />
+    <DbDataKitReference Include="Secrets.Store" />
+    <DbDataKitReference Include="Secrets.Windows" />   <!-- sign-in, passkeys, invitations, users: the controllers the console serves -->
   </ItemGroup>
 
   <!--

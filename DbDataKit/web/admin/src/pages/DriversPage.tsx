@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { DriversTabs } from '../components/DriversTabs'
-import { ErrorBanner } from '@dbdatakit/shell'
+import { ErrorBanner, Link } from '@dbdatakit/shell'
 import { RestartRequiredBanner } from '../components/RestartRequiredBanner'
 import { useIsAdmin } from '@dbdatakit/shell'
 import { useDrivers, useInstallDriverFromCatalog, useKnownDrivers, useRestartRequired } from '../api/hooks'

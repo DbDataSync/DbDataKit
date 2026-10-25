@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
-import { Link } from 'react-router-dom'
+import { Link } from '../module'
 import rehypeSlug from 'rehype-slug'
 import remarkGfm from 'remark-gfm'
 import { isSafeImageUrl, resolveDocImage, resolveLink } from './markdownLinks'
