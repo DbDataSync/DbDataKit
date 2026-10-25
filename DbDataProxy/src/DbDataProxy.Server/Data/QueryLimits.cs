@@ -16,6 +16,9 @@ public sealed class QueryLimits
 {
     private readonly ConcurrentDictionary<string, (string Signature, ConcurrencyGate Gate)> _gates = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>The gates now in use, by data source name: what the management API reports.</summary>
+    public IReadOnlyDictionary<string, ConcurrencyGate> Gates => _gates.ToDictionary(g => g.Key, g => g.Value.Gate, StringComparer.OrdinalIgnoreCase);
+
     /// <summary>The gate for a data source, or null when it has no limits.</summary>
     public ConcurrencyGate? For(string name, DataSourceOptions options)
     {

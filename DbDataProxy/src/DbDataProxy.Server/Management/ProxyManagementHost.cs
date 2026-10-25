@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using DbDataKit.Config.Git;
 using DbDataKit.Hosting.Local;
 using DbDataKit.Web.Trust;
+using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Configuration;
 using DbDataProxy.Server.Data;
 using DbDataProxy.Server.Hosting;
@@ -84,7 +85,9 @@ public static class ProxyManagementHost
         var audit = new FileAuditLog(Path.Combine(dataDirectory, "management-audit.log"));   // one for every kind of change: appends go through its lock
         dataSources = new ProxyDataSources(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit, git);
         var identities = new ProxyIdentities(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, audit, git);
-        management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version, dataSources, identities);
+        var activity = new ProxyActivity(app.Services.GetRequiredService<SessionStore>(), app.Services.GetRequiredService<ActiveQueries>(), app.Services.GetRequiredService<QueryLimits>(),
+            app.Services.GetRequiredService<LoginThrottle>(), () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, audit);
+        management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version, dataSources, identities, activity);
         var validator = new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache());
         var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management");
 

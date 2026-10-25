@@ -19,7 +19,7 @@ namespace DbDataProxy.Tests.Config;
 
 /// <summary>The Proxy's management API (plan 13, P03): its own listener, pairing, the token and the roles, the effective configuration without a secret in it, validation of a candidate, the local channel.</summary>
 [Collection(ProcessStateCollection.Name)]
-public sealed class ManagementTests : IAsyncLifetime
+public sealed partial class ManagementTests : IAsyncLifetime
 {
     private const string Sentinel = "SENTINEL-6f1c-do-not-leak";
     private readonly string dataDirectory = Path.Combine(Path.GetTempPath(), "dbproxy-mgmt-" + Guid.NewGuid().ToString("N")[..8]);

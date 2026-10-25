@@ -25,7 +25,7 @@ public sealed record ManagementResult(int Status, JsonNode Body)
 /// </list>
 /// A secret is never part of an answer: the settings are shown the way <c>config show</c> shows them, and the sentinel test puts a value in every place a secret can be and looks for it in every answer.
 /// </summary>
-public sealed class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null)
+public sealed class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null, ProxyActivity? activity = null)
 {
     public const string Prefix = "/api/v1";
 
@@ -58,6 +58,13 @@ public sealed class ProxyManagement(IConfigurationRoot configuration, string con
             if (identities is null) return ManagementResult.Problem(404, "There is no such call.");
             if (!caller.Holds(ServerRole.Admin)) return Denied(ServerRole.Admin);
             return await identities.HandleAsync(method, route[(Prefix.Length + 1)..].Split('/'), body, query["expected_version"], caller, cancellationToken);
+        }
+        var first = route.Length > Prefix.Length ? route[(Prefix.Length + 1)..].Split('/') : [];
+        if (first.Length > 0 && first[0] is "sessions" or "queries" or "limits" or "throttle")
+        {
+            if (activity is null) return ManagementResult.Problem(404, "There is no such call.");
+            if (!caller.Holds(ServerRole.Admin)) return Denied(ServerRole.Admin);
+            return activity.Handle(method, first, query["client"], query["user"], caller);
         }
         return ManagementResult.Problem(404, "There is no such call.");
     }

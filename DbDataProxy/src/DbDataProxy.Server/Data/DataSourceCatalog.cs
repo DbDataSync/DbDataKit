@@ -30,7 +30,8 @@ public sealed class DataSourceCatalog(
     SecretsRuntime? secrets = null,
     QueryLimits? limits = null,
     ILoggerFactory? loggerFactory = null,
-    IRedactor? redactor = null)
+    IRedactor? redactor = null,
+    ActiveQueries? activeQueries = null)
 {
     private readonly ConcurrentDictionary<string, IDbProvider> _sandboxProviders = new(StringComparer.Ordinal);
     private readonly IFailureSink? _sink = loggerFactory is null ? null : new LoggingFailureSink(loggerFactory.CreateLogger("DbDataProxy.Data"));
@@ -103,6 +104,8 @@ public sealed class DataSourceCatalog(
 
         var executor = CreateExecutor(name, source, connection, connectionString);
         if (limits?.For(name, source) is { } gate) executor = new LimitedExecutor(executor, gate, principal.Name, name);
+        // outermost: a query that is cancelled by an administrator also stops waiting for a slot
+        if (activeQueries is not null) executor = new TrackedExecutor(executor, activeQueries, principal.Name, name, options.CurrentValue.LogSql);
         return new ResolvedDataSource(name, source, executor);
     }
 

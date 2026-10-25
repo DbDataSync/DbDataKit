@@ -42,6 +42,25 @@ public sealed class SessionStore(IOptionsMonitor<ProxyOptions> options, TimeProv
 
     public void Revoke(string token) => _sessions.TryRemove(Key(token), out _);
 
+    /// <summary>A session as the management API shows it. The id is the front of the token's hash, enough to name the session and useless as a token.</summary>
+    public sealed record SessionInfo(string Id, string User, string Method, IReadOnlyCollection<string> DataSources, DateTimeOffset LastUsed, DateTimeOffset ExpiresAt);
+
+    public IReadOnlyList<SessionInfo> List()
+    {
+        var now = time.GetUtcNow();
+        var idle = TimeSpan.FromMinutes(options.CurrentValue.Auth.SessionIdleMinutes);
+        return [.. _sessions.Where(e => now < e.Value.ExpiresAt && now - e.Value.LastUsed <= idle)
+            .Select(e => new SessionInfo(e.Key[..16].ToLowerInvariant(), e.Value.Principal.Name, e.Value.Principal.Method, e.Value.Principal.DataSources, e.Value.LastUsed, e.Value.ExpiresAt))
+            .OrderBy(s => s.User, StringComparer.OrdinalIgnoreCase).ThenBy(s => s.Id, StringComparer.Ordinal)];
+    }
+
+    /// <summary>Ends the session with this id (<see cref="SessionInfo.Id"/>); false when there is none.</summary>
+    public bool RevokeById(string id)
+    {
+        var matches = _sessions.Keys.Where(k => k.StartsWith(id, StringComparison.OrdinalIgnoreCase)).ToList();
+        return id.Length >= 8 && matches.Count == 1 && _sessions.TryRemove(matches[0], out _);
+    }
+
     /// <summary>Drops expired sessions; called periodically.</summary>
     public int Sweep()
     {

@@ -44,6 +44,21 @@ public sealed class LoginThrottle(IOptionsMonitor<ProxyOptions> options, TimePro
         }
     }
 
+    /// <summary>A client and user the throttle is holding against: failures in the window, and when the lockout ends (null while only counting).</summary>
+    public sealed record ThrottleInfo(string Client, string User, int Failures, DateTimeOffset? LockedUntil);
+
+    public IReadOnlyList<ThrottleInfo> List()
+    {
+        var now = time.GetUtcNow();
+        var result = new List<ThrottleInfo>();
+        foreach (var ((client, user), state) in _states)
+            lock (state) result.Add(new ThrottleInfo(client, user, state.Failures, state.LockedUntil > now ? state.LockedUntil : null));
+        return [.. result.OrderBy(t => t.User, StringComparer.Ordinal).ThenBy(t => t.Client, StringComparer.Ordinal)];
+    }
+
+    /// <summary>Lets a locked-out client try again now.</summary>
+    public bool Clear(string client, string user) => _states.TryRemove(Key(client, user), out _);
+
     public void RecordSuccess(string client, string user) => _states.TryRemove(Key(client, user), out _);
 
     public void Sweep()
