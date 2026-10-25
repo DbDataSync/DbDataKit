@@ -17,7 +17,7 @@ namespace DbDataSync.Api.Tests;
 public sealed class AuthorizationCoverageTests
 {
     private static IEnumerable<(Type Controller, MethodInfo Action)> Endpoints() =>
-        typeof(AuthController).Assembly.GetTypes()
+        new[] { typeof(DbDataSync.Api.Controllers.ReplicationsController).Assembly, typeof(DbDataKit.Web.Auth.Controllers.AuthController).Assembly }.SelectMany(a => a.GetTypes())
             .Where(t => typeof(ControllerBase).IsAssignableFrom(t) && !t.IsAbstract)
             .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
                 .Where(m => m.GetCustomAttributes<HttpMethodAttribute>().Any())

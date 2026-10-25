@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <AssemblyName>dbdatakit</AssemblyName>
+    <Description>The dbdatakit console: the one web interface for the DbData servers (plan 13, U07).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
+    <DbDataKitReference Include="Cli" />   <!-- the shared noun-verb grammar -->
+    <DbDataKitReference Include="Config.Git" />
+    <DbDataKitReference Include="Config.Yaml" />
+    <DbDataKitReference Include="Hosting.Abstractions" />   <!-- the shared host: service and systemd modes, drain, /health and /version -->
+    <DbDataKitReference Include="Hosting" />
+    <DbDataKitReference Include="Hosting.Cli" />
+    <DbDataKitReference Include="Hosting.WindowsService" />
+    <DbDataKitReference Include="Hosting.Systemd" />
+    <DbDataKitReference Include="Hosting.Certificates" />
+    <DbDataKitReference Include="Security.Acl" />
+    <DbDataKitReference Include="State" />   <!-- the users, sessions and invitations -->
+    <DbDataKitReference Include="Web" />   <!-- sign-in, passkeys, invitations, users: the controllers the console serves -->
+  </ItemGroup>
+
+  <!--
+    The web app is built into wwwroot on publish, which makes the console one artifact. Publish only, and skippable: the test suites run the built app from
+    DbDataKit/web/console/dist, and making `dotnet build` shell out to npm would put a node install between a developer and a unit test.
+  -->
+  <PropertyGroup>
+    <SkipWebBuild Condition="'$(SkipWebBuild)' == ''">false</SkipWebBuild>
+    <WebProjectDir>$(MSBuildProjectDirectory)/../../../DbDataKit/web</WebProjectDir>
+  </PropertyGroup>
+
+  <Target Name="BuildWebApp" BeforeTargets="PrepareForPublish" Condition="'$(SkipWebBuild)' != 'true'">
+    <Message Importance="high" Text="Building the web app in $(WebProjectDir)" />
+    <Exec Command="npm ci" WorkingDirectory="$(WebProjectDir)" />
+    <Exec Command="npm run build -w @dbdatakit/console" WorkingDirectory="$(WebProjectDir)" />
+    <ItemGroup>
+      <WebAppOutput Include="$(WebProjectDir)/console/dist/**/*" />
+      <ResolvedFileToPublish Include="@(WebAppOutput)">
+        <RelativePath>wwwroot/%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+</Project>

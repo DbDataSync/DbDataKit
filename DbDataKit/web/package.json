@@ -4,6 +4,7 @@
   "workspaces": [
     "shell",
     "admin",
-    "sync"
+    "sync",
+    "console"
   ]
 }

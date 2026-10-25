@@ -53,27 +53,7 @@ internal static class BuildServer
         return id;
     }
 
-    public static X509Certificate2 Certificate(string directory)
-    {
-        var passwordFile = Path.Combine(directory, "tls-pfx-password");
-        var provider = new CertificateProvider(
-            new DelegateSecretSource((_, generate) =>
-            {
-                if (File.Exists(passwordFile)) return File.ReadAllText(passwordFile).Trim();
-                var made = generate();
-                File.WriteAllText(passwordFile, made);
-                Restrict(passwordFile);
-                return made;
-            }),
-            restrictFileAccess: Restrict);
-        var options = new CertificateOptions { Mode = CertificateMode.SelfSigned, Path = Path.Combine(directory, "tls.pfx") };
-        return provider.LoadAsync(options).GetAwaiter().GetResult();
-    }
-
-    private static void Restrict(string path)
-    {
-        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-    }
+    public static X509Certificate2 Certificate(string directory) => DirectoryCertificate.Load(directory);
 
     public static WebApplication Build(BuildServerSettings settings, X509Certificate2 certificate, IProjectCommandRunner runner, ProjectsFile projects, IReadOnlyList<DbDataBuild.Tui.Model.CommandInfo> commands, Action<string> log, Func<string, IReadOnlyList<DbDataBuild.Tui.Model.CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null)
     {

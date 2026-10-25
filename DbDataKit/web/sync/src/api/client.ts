@@ -29,8 +29,6 @@ import type {
   ReplicationLag,
   InferredColumnType,
   InferredNaturalKey,
-  AuthStatus,
-  UserSummary,
   ProvisioningPlanReport,
   ReplicationProvisioningPlan,
   ReplicationProvisioningApplyResult,
@@ -273,35 +271,8 @@ export const api = {
       ),
   },
   auth: shellApi.auth,
-  invites: {
-    create: (role: string, forUserId?: string) =>
-      request<{ url: string; expiresAtUtc: string; role: string }>('/api/invites', {
-        method: 'POST',
-        body: JSON.stringify({ role, forUserId: forUserId ?? null }),
-      }),
-    check: (code: string) => request<{ valid: boolean }>(`/api/invites/check?code=${encodeURIComponent(code)}`),
-    beginRegistration: (code: string, displayName: string, email: string | null) =>
-      request<unknown>('/api/invites/begin-registration', {
-        method: 'POST',
-        body: JSON.stringify({ code, displayName, email }),
-      }),
-    completeRegistration: (code: string, displayName: string, email: string | null, attestation: unknown) =>
-      request<AuthStatus>(
-        `/api/invites/complete-registration?code=${encodeURIComponent(code)}` +
-          `&displayName=${encodeURIComponent(displayName)}&email=${encodeURIComponent(email ?? '')}`,
-        { method: 'POST', body: JSON.stringify(attestation) },
-      ),
-  },
-  users: {
-    list: () => request<UserSummary[]>('/api/users'),
-    update: (id: string, changes: { role?: string; enabled?: boolean }) =>
-      put<UserSummary>(`/api/users/${encodeURIComponent(id)}`, changes),
-    removeCredential: (id: string, credentialId: string) =>
-      request<void>(
-        `/api/users/${encodeURIComponent(id)}/credentials/${encodeURIComponent(credentialId)}`,
-        { method: 'DELETE' },
-      ),
-  },
+  invites: shellApi.invites,
+  users: shellApi.users,
   preview: {
     get: (replicationName: string, mappingName: string) =>
       request<PreviewReport>(

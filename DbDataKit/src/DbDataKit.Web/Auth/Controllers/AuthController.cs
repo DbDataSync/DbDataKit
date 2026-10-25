@@ -1,12 +1,15 @@
-using DbDataSync.Api.Auth;
-using DbDataSync.State;
+using DbDataKit.State;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace DbDataSync.Api.Controllers;
+namespace DbDataKit.Web.Auth.Controllers;
 
+/// <param name="Authenticated">Whether the caller is signed in (a user, or a network-trust grant that has a role but no user id).</param>
+/// <param name="UserId">The signed-in user's id; null for a network-trust grant.</param>
+/// <param name="DisplayName">The signed-in user's name.</param>
+/// <param name="Role">The caller's role, or null.</param>
 /// <param name="Methods">Which sign-in methods this deployment offers, so the sign-in screen shows the
 /// ones that exist rather than every one that was ever built.</param>
 public sealed record AuthStatus(
@@ -89,7 +92,7 @@ public sealed class AuthController(
 
         var user = WindowsSignIn.Upsert(users, identity, role);
         if (!user.Enabled)
-            return StatusCode(403, new { error = $"'{user.DisplayName}' is disabled in DbDataSync." });
+            return StatusCode(403, new { error = $"'{user.DisplayName}' is disabled in {options.Product.Name}." });
 
         IssueSession(user);
         return Ok(new AuthStatus(true, user.Id, user.DisplayName, user.Role.ToString(), ["windows"]));
@@ -97,12 +100,12 @@ public sealed class AuthController(
 
     [HttpPost("sign-out")]
     [AllowAnonymous]
-    public IActionResult SignOutOfDbDataSync()
+    public IActionResult SignOutOfProduct()
     {
-        if (Request.Cookies[AuthOptions.SessionCookie] is { } sessionId)
+        if (Request.Cookies[options.CookieName] is { } sessionId)
             sessions.Delete(sessionId);
 
-        Response.Cookies.Delete(AuthOptions.SessionCookie);
+        Response.Cookies.Delete(options.CookieName);
         return NoContent();
     }
 
@@ -110,7 +113,7 @@ public sealed class AuthController(
     {
         var session = sessions.Create(user.Id);
 
-        Response.Cookies.Append(AuthOptions.SessionCookie, session.Id, new CookieOptions
+        Response.Cookies.Append(options.CookieName, session.Id, new CookieOptions
         {
             HttpOnly = true,
             SameSite = SameSiteMode.Strict,

@@ -1409,23 +1409,6 @@ export interface ReplicationLag {
   rangeIncludesEstimates: boolean
 }
 
-export interface UserCredentialSummary {
-  id: string
-  method: string
-  label: string | null
-  createdAtUtc: string
-  lastUsedAtUtc: string | null
-}
-
-export interface UserSummary {
-  id: string
-  displayName: string
-  email: string | null
-  role: string
-  enabled: boolean
-  credentials: UserCredentialSummary[]
-}
-
 // The Certificates section of the Admin screen (phase 83) — a second door onto the operations
 // phase 82's `dbdatasync cert …` already exposes. See src/DbDataSync.Api/Services/AdminCertificateService.cs.
 

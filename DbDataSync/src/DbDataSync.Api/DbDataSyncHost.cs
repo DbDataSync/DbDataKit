@@ -92,6 +92,8 @@ public static class DbDataSyncHost
             // this the host starts perfectly and serves no API at all — "No action descriptors found"
             // in the log and a 404 on every route.
             .AddApplicationPart(typeof(DbDataSyncHost).Assembly)
+            // Sign-in, invitations and users are the shared ones (plan 13, U07): the same controllers the console serves.
+            .AddApplicationPart(typeof(DbDataKit.Web.Auth.Controllers.AuthController).Assembly)
             .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
         builder.Services.AddOpenApi();
         builder.Services.AddSignalR();
@@ -107,17 +109,13 @@ public static class DbDataSyncHost
         // Per request, from whoever is signed in — which is what makes the config history in the
         // Version Control tab able to answer "who", and is the reason this feature is worth more than
         // access control. Falls back to a system identity where genuinely nobody is signed in.
-        builder.Services.AddHttpContextAccessor();
-        builder.Services.AddSingleton(sp => AuthOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
-
-        // A singleton that reads IHttpContextAccessor per call, rather than a scoped GitAuthor.
-        // Registering the author itself as scoped looked tidier and made every singleton that writes
-        // config — ProvisioningService among them — fail to construct: a singleton cannot hold a
-        // per-request value, and the accessor exists precisely so it does not have to.
-        builder.Services.AddSingleton<CurrentUser>();
-        builder.Services.AddSingleton(sp =>
-            PasskeyOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>(), sp.GetRequiredService<ApiOptions>()));
-        builder.Services.AddSingleton<PasskeyService>();
+        // Sign-in is the shared one (DbDataKit.Web.Auth, plan 13 U07): options, current user, passkeys, the user, session and invitation stores,
+        // the first-run invitation, the session scheme and the policies. The current user is a singleton that reads IHttpContextAccessor per call,
+        // rather than a scoped GitAuthor: a scoped one made every singleton that writes config fail to construct.
+        var authentication = builder.Services.AddSessionAuth(SyncAuth.Product,
+            sp => sp.GetRequiredService<StateDatabase>(),
+            sp => PasskeyOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>(), sp.GetRequiredService<ApiOptions>()),
+            sp => sp.GetRequiredService<ApiOptions>().RepoRoot);
         builder.Services.AddSingleton(sp => CertificateOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
 
         builder.Services.AddSingleton(sp => SecretStore.Open(sp.GetRequiredService<ApiOptions>().RepoRoot));
@@ -166,9 +164,6 @@ public static class DbDataSyncHost
         builder.Services.AddSingleton(sp => new RunMetricsStore(sp.GetRequiredService<StateDatabase>()));
         builder.Services.AddSingleton(sp => new BulkLoadBatchStore(sp.GetRequiredService<StateDatabase>()));
         builder.Services.AddSingleton(sp => new VerificationResultStore(sp.GetRequiredService<StateDatabase>()));
-        builder.Services.AddSingleton(sp => new UserStore(sp.GetRequiredService<StateDatabase>()));
-        builder.Services.AddSingleton(sp => new SessionStore(sp.GetRequiredService<StateDatabase>()));
-        builder.Services.AddSingleton(sp => new InviteStore(sp.GetRequiredService<StateDatabase>()));
         builder.Services.AddSingleton(sp => new ChangeWatermarkStore(sp.GetRequiredService<StateDatabase>()));
         builder.Services.AddSingleton(sp => new ChangeCheckStore(sp.GetRequiredService<StateDatabase>()));
         builder.Services.AddSingleton(sp => new NotificationStore(sp.GetRequiredService<StateDatabase>()));
@@ -315,8 +310,6 @@ public static class DbDataSyncHost
         builder.Services.AddHostedService<SchedulerService>();
         builder.Services.AddHostedService<RunMonitorService>();
         builder.Services.AddHostedService<RunPruningService>();
-        builder.Services.AddSingleton(sp => new BootstrapInviteLocation(sp.GetRequiredService<ApiOptions>().RepoRoot));
-        builder.Services.AddHostedService<BootstrapInvite>();
 
         // Windows-only, registered only there — the same gating this file already uses a few lines
         // down for Negotiate authentication, not a new idiom. Certificate management is Windows-only
@@ -346,14 +339,7 @@ public static class DbDataSyncHost
                 builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["Kestrel:Certificates:Default:Password"] = pfxPassword });
         }
 
-        // One scheme for every request — controllers and the hub alike — so there is one answer to
-        // "who is this". Negotiate is registered alongside it and used by exactly one endpoint, which
-        // trades a Windows identity for a session.
-        var authentication = builder.Services
-            .AddAuthentication(SessionAuthenticationHandler.SchemeName)
-            .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(
-                SessionAuthenticationHandler.SchemeName, _ => { });
-
+        // Negotiate is registered alongside the session scheme and used by exactly one endpoint, which trades a Windows identity for a session.
         // Also gated on WindowsEnabled (phase 164: mode enabled *and* a group actually configured) —
         // found necessary by a real failure, not a hypothetical: with no group configured,
         // AddNegotiate() was still being registered on every Windows host (this check used to be purely
@@ -381,18 +367,6 @@ public static class DbDataSyncHost
         {
             authentication.AddNegotiate();
         }
-
-        builder.Services.AddAuthorizationBuilder()
-            .AddPolicy(Policies.Admin, policy => policy.RequireRole(nameof(UserRole.Admin)))
-            // An admin is a viewer too. Stating it here rather than putting both roles on every read
-            // endpoint keeps the attribute on a controller meaning what it says.
-            .AddPolicy(Policies.Viewer, policy => policy.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Viewer)))
-            // Anything unmarked is closed. An endpoint added later is admin-only by omission rather
-            // than open by omission, which is the whole reason to state a fallback at all.
-            .SetFallbackPolicy(new AuthorizationPolicyBuilder()
-                .RequireAuthenticatedUser()
-                .RequireRole(nameof(UserRole.Admin))
-                .Build());
 
         var app = builder.Build();
 

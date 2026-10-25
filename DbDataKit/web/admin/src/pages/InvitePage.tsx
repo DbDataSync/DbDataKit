@@ -1,9 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '../api/client'
-import { ErrorBanner } from '@dbdatakit/shell'
-import { Field } from '@dbdatakit/shell'
-import { createCredential, isSupported } from '@dbdatakit/shell'
+import { ErrorBanner, Field, createCredential, isSupported, shellApi } from '@dbdatakit/shell'
 
 /**
  * Redeeming an invitation by enrolling a passkey.
@@ -11,8 +8,10 @@ import { createCredential, isSupported } from '@dbdatakit/shell'
  * **The code lives in the URL fragment**, which browsers do not send to a server — so it never lands
  * in an access log between the person who sent it and the person who opens it. Read here and posted
  * deliberately.
+ *
+ * Reachable without a session — that is the entire point of an invitation — so a product routes to it before it asks who is signed in.
  */
-export function InvitePage() {
+export function InvitePage({ product }: { product: string }) {
   const queryClient = useQueryClient()
   const [code] = useState(() => window.location.hash.replace(/^#/, ''))
   const [displayName, setDisplayName] = useState('')
@@ -24,7 +23,7 @@ export function InvitePage() {
   // came back, and an effect would render once claiming nothing before correcting itself.
   const check = useQuery({
     queryKey: ['invite', code] as const,
-    queryFn: () => api.invites.check(code),
+    queryFn: () => shellApi.invites.check(code),
     enabled: code !== '',
     retry: false,
   })
@@ -35,9 +34,9 @@ export function InvitePage() {
     setBusy(true)
     setError(null)
     try {
-      const options = await api.invites.beginRegistration(code, displayName, email || null)
+      const options = await shellApi.invites.beginRegistration(code, displayName, email || null)
       const attestation = await createCredential(options)
-      await api.invites.completeRegistration(code, displayName, email || null, attestation)
+      await shellApi.invites.completeRegistration(code, displayName, email || null, attestation)
       // Signed in as of that call. Everything on screen was fetched as nobody.
       await queryClient.invalidateQueries()
       window.location.href = '/'
@@ -51,7 +50,7 @@ export function InvitePage() {
   return (
     <div className="pane" data-testid="invite-page">
       <div className="card" style={{ maxWidth: 460, margin: '10vh auto' }}>
-        <div className="card-head"><span className="card-title">Join DbDataSync</span></div>
+        <div className="card-head"><span className="card-title">Join {product}</span></div>
         <div className="card-body">
           <ErrorBanner error={error} />
 

@@ -45,3 +45,28 @@ export interface AboutInfo {
   /** This build's informational version. */
   version: string | null
 }
+
+/** One way a person can sign in, as the users list shows it. */
+export interface UserCredentialSummary {
+  id: string
+  method: string
+  label: string | null
+  createdAtUtc: string
+  lastUsedAtUtc: string | null
+}
+
+export interface UserSummary {
+  id: string
+  displayName: string
+  email: string | null
+  role: string
+  enabled: boolean
+  credentials: UserCredentialSummary[]
+}
+
+/** An invitation as it is made: the link is shown once and never recoverable (the code is hashed the moment it is made). */
+export interface CreatedInvite {
+  url: string
+  expiresAtUtc: string
+  role: string
+}

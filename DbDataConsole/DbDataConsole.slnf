@@ -1,0 +1,9 @@
+{
+  "solution": {
+    "path": "../DbDataKit.slnx",
+    "projects": [
+      "DbDataConsole/src/DbDataConsole.Server/DbDataConsole.Server.csproj",
+      "DbDataConsole/tests/DbDataConsole.Tests/DbDataConsole.Tests.csproj"
+    ]
+  }
+}
