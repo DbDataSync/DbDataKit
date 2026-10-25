@@ -144,8 +144,10 @@ config/
   server.yaml            listen, tls, secrets, compression, hosting, worker, logging switches, schemaVersion
   proxy/auth.yaml        sessions, lockout, pass-through, JWT and its mappings
   proxy/users.yaml       the local client users (a `users:` list)
-  connections/<name>.yaml  one data source per file; the file name is the data source name
+  connections/<name>.yaml  one data source per file, in the shared connection format (connection/1); the file name is the data source name
 ```
+
+A data source is the same file a Sync or Build connection is (`schema: connection/1`): `engine` (`sqlserver`, `odbc` or `duckdb`), `connection_string` (or `address` for SQL Server, or a whole-string `connection_string_secret`), the login as `auth: { mode: sql, user: ..., password_secret: env:NAME }` (a reference, never the password; a plaintext credential in the connection string is refused), `tls`, `timeouts: { command_s: ... }`, and what only the proxy has under `extensions.proxy` (`pass_through`, `bitness`, `classifier`, `allow_writes`, `metadata`, `allowed_directories`, the limits, `batch_size`, `compression`; snake_case keys). A source that cannot write connects with the read login and one that can with the write login. A data source file of earlier releases (no `schema:`) is refused with a message naming it.
 
 `service install` creates `server.yaml` with only `schemaVersion: 2` if there is none. Defaults are in the code, not in a shipped file, and
 `config.example/` beside the executable has one example of each file with every option. Keys are camelCase in the files (matched ignoring case).

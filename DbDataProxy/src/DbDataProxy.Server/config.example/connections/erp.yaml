@@ -1,16 +1,22 @@
-# The data source "erp" (the file name is the name). Clients choose a data source with the "x-datasource" header; they never send connection strings.
-provider: sqlserver
-# SQL Server sources encrypt and verify the server certificate by default. TrustServerCertificate=True below is an EXPLICIT opt-out, kept
-# only as a demonstration: the setting is honoured as written, and the service logs one warning naming this source at every start.
-# Prefer a trusted certificate on the server and no TrustServerCertificate/Encrypt keys at all.
-connectionString: "Server=SQL01;Database=Erp;User Id=proxy_reader;Password=env:ERP_DB_PASSWORD;Encrypt=True;TrustServerCertificate=True"
-commandTimeoutSeconds: 300
-# Optional limits, off by default (0): queries running at once on this source, and per user. A streaming result counts until it is read
-# or discarded. Requests wait up to acquireTimeoutSeconds for a slot and are then refused with ResourceExhausted.
-maxConcurrentQueries: 20
-maxConcurrentQueriesPerUser: 4
-acquireTimeoutSeconds: 30
-# Statement text check on this read-only source (allowWrites false): "strict" (default from schemaVersion 2) refuses statements that are not a
-# single SELECT or that use OPENROWSET, xp_*, COPY, ATTACH, read_csv, ... with PermissionDenied; "warn" (the default without schemaVersion) only logs
-# them; "off" skips the check. Defence in depth only: also give the source a read-only database login.
-classifier: strict
+# The data source "erp" (the file name is the name), in the shared connection format. Clients choose a data source with the "x-datasource" header; they never send connection strings.
+schema: connection/1
+name: erp
+engine: sqlserver
+address: { host: SQL01, database: Erp }
+# The login is a user and a reference to the password, never the password: env:NAME, file:PATH, secret:..., dpapi:... (see README, "Secrets").
+auth: { mode: sql, user: proxy_reader, password_secret: 'env:ERP_DB_PASSWORD' }
+# SQL Server sources encrypt and verify the server certificate by default. This is an EXPLICIT opt-out, kept only as a demonstration: the setting is honoured as written,
+# and the service logs one warning naming this source at every start. Prefer a trusted certificate on the server and no tls section at all.
+tls: { trust_server_certificate: true }
+timeouts: { command_s: 300 }
+extensions:
+  proxy:
+    # Optional limits, off by default (0): queries running at once on this source, and per user. A streaming result counts until it is read
+    # or discarded. Requests wait up to acquire_timeout_seconds for a slot and are then refused with ResourceExhausted.
+    max_concurrent_queries: 20
+    max_concurrent_queries_per_user: 4
+    acquire_timeout_seconds: 30
+    # Statement text check on this read-only source (allow_writes false): "strict" (default from schemaVersion 2) refuses statements that are not a
+    # single SELECT or that use OPENROWSET, xp_*, COPY, ATTACH, read_csv, ... with PermissionDenied; "warn" (the default without schemaVersion) only logs
+    # them; "off" skips the check. Defence in depth only: also give the source a read-only database login.
+    classifier: strict

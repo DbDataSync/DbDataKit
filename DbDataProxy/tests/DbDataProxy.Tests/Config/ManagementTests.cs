@@ -33,6 +33,8 @@ public sealed class ManagementTests : IAsyncLifetime
         return port;
     }
 
+    private static readonly string BadBatch = Conn.Yaml("erp", proxy: ["batch_size: 0"]);
+
     private string ConfigDirectory => ProxyConfigFile.DirectoryIn(dataDirectory);
 
     private void Write(string name, string text)
@@ -51,7 +53,7 @@ public sealed class ManagementTests : IAsyncLifetime
         Write("server.yaml", $"schemaVersion: 2\ntls: {{ mode: selfSigned, certificatePassword: {Sentinel}-tls }}\n");
         Write("proxy/auth.yaml", $"jwt:\n  signingKey: {Sentinel}-jwt\n  audience: api://x\n  mappings: [ {{ claim: c, value: v, dataSources: ['*'] }} ]\n");
         Write("proxy/users.yaml", $"users:\n  - name: bob\n    passwordHash: {Sentinel}-hash\n    dataSources: [erp]\n");
-        Write("connections/erp.yaml", $"provider: sqlserver\nconnectionString: 'Server=s;User Id=u;Password={Sentinel}-db;Encrypt=True'\n");
+        Write("connections/erp.yaml", Conn.Yaml("erp", connectionString: "Server=s;Encrypt=True", auth: "auth: { mode: sql, user: u, password_secret: 'env:ERP_DB_PASSWORD' }"));
         var args = new List<string>
         {
             $"--Proxy:DataDirectory={dataDirectory}", "--Proxy:Listen:Address=127.0.0.1", "--Proxy:Listen:Port=0",
@@ -111,7 +113,7 @@ public sealed class ManagementTests : IAsyncLifetime
         Assert.True((int)values["Tls.Mode"]!["line"]! > 0);
         Assert.Equal("********", (string)values["Tls.CertificatePassword"]!["value"]!);
         Assert.True((bool)values["Tls.CertificatePassword"]!["secret"]!);
-        Assert.Equal("Server=s;User Id=u;Password=***;Encrypt=True", (string)values["DataSources.erp.ConnectionString"]!["value"]!);
+        Assert.Equal("Server=s;Encrypt=True;User Id=u;Password=env:ERP_DB_PASSWORD", (string)values["DataSources.erp.ConnectionString"]!["value"]!);
     }
 
     [Fact]
@@ -126,7 +128,7 @@ public sealed class ManagementTests : IAsyncLifetime
             await (await CallAsync(server, HttpMethod.Post, "/api/v1/config/validate", ServerRole.Admin, "{}")).Content.ReadAsStringAsync(),
             // a candidate that is wrong in a way that quotes its own text: the secret in the file is not in the message about it
             await (await CallAsync(server, HttpMethod.Post, "/api/v1/config/validate", ServerRole.Admin,
-                JsonSerializer(new { files = new Dictionary<string, string> { ["connections/erp.yaml"] = $"provider: nonsense\nconnectionString: 'Server=s;Password={Sentinel}-cand'\nbatchSize: 0\n" } }))).Content.ReadAsStringAsync(),
+                JsonSerializer(new { files = new Dictionary<string, string> { ["connections/erp.yaml"] = Conn.Yaml("erp", connectionString: $"Server=s;Password={Sentinel}-cand", proxy: ["batch_size: 0"]) } }))).Content.ReadAsStringAsync(),
             await (await CallAsync(server, HttpMethod.Get, "/api/v1/nothing", ServerRole.Admin)).Content.ReadAsStringAsync(),
         };
         Assert.All(answers, a => Assert.DoesNotContain(Sentinel, a));
@@ -148,15 +150,15 @@ public sealed class ManagementTests : IAsyncLifetime
         var before = File.ReadAllText(Path.Combine(ConfigDirectory, "server.yaml"));
 
         var good = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Post, "/api/v1/config/validate", ServerRole.Admin,
-            JsonSerializer(new { files = new Dictionary<string, string> { ["connections/new.yaml"] = "provider: duckdb\nconnectionString: 'Data Source=:memory:'\nallowWrites: true\n" } }))).Content.ReadAsStringAsync())!;
+            JsonSerializer(new { files = new Dictionary<string, string> { ["connections/new.yaml"] = Conn.Yaml("new", "duckdb", "Data Source=:memory:", proxy: ["allow_writes: true"]) } }))).Content.ReadAsStringAsync())!;
         Assert.True((bool)good["valid"]!);
 
         var bad = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Post, "/api/v1/config/validate", ServerRole.Admin,
-            JsonSerializer(new { files = new Dictionary<string, string> { ["connections/erp.yaml"] = "provider: sqlserver\nconnectionString: Server=s\nbatchSize: 0\n" } }))).Content.ReadAsStringAsync())!;
+            JsonSerializer(new { files = new Dictionary<string, string> { ["connections/erp.yaml"] = BadBatch } }))).Content.ReadAsStringAsync())!;
         Assert.False((bool)bad["valid"]!);
         var diagnostic = bad["diagnostics"]!.AsArray().Single(d => ((string?)d!["key"])?.EndsWith("BatchSize") == true)!;
         Assert.EndsWith("erp.yaml", (string)diagnostic["file"]!);
-        Assert.Equal(3, (int)diagnostic["line"]!);
+        Assert.Equal(Conn.LineOf(BadBatch, "batch_size"), (int)diagnostic["line"]!);
 
         var unparsable = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Post, "/api/v1/config/validate", ServerRole.Admin,
             JsonSerializer(new { files = new Dictionary<string, string> { ["server.yaml"] = "listen:\n  port: [1\n" } }))).Content.ReadAsStringAsync())!;
