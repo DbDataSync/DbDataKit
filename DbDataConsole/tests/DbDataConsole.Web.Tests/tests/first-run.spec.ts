@@ -1,7 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
-import { scratchDirectory } from '../playwright.config'
+import { buildUrl, scratchDirectory } from '../playwright.config'
 
 /** A browser-side authenticator that holds the passkeys, so the test can register one and sign in with it the way a person's device would. */
 async function addAuthenticator(context: BrowserContext, page: Page) {
@@ -18,8 +18,8 @@ function firstRunCode() {
 }
 
 // One story, in order: the person who installed the console redeems the first-run invitation, is signed in as the administrator, signs out and back in with the same
-// passkey, sees themselves in the users list, and makes an invitation for someone else. A test per step would each need the one before it.
-test('first run: invitation, passkey, sign-in, users', async ({ page, context }) => {
+// passkey, sees themselves in the users list, makes an invitation for someone else, and pairs a Build server with the code made on it. A test per step would each need the one before it.
+test('first run: invitation, passkey, sign-in, users, servers', async ({ page, context }) => {
   await addAuthenticator(context, page)
 
   // Nobody is signed in: the app asks them to.
@@ -66,4 +66,26 @@ test('first run: invitation, passkey, sign-in, users', async ({ page, context })
   // An invitation for someone else: a link, shown once.
   await page.getByTestId('invite-create-button').click()
   await expect(page.getByTestId('invite-link')).toHaveValue(/\/invite#.+/)
+
+  // Servers: none yet; pair a real Build server with the code made on it, see it answer, forget it.
+  await page.getByTestId('rail-instances').click()
+  await expect(page.getByTestId('instances-empty')).toBeVisible()
+
+  // A wrong code is refused in words and nothing is paired.
+  await page.getByTestId('pair-url-input').fill(buildUrl)
+  await page.getByTestId('pair-code-input').fill('AAAAA-BBBBB-CCCCC-DDDDD')
+  await page.getByTestId('pair-button').click()
+  await expect(page.getByText('did not accept the code')).toBeVisible()
+  await expect(page.getByTestId('instances-empty')).toBeVisible()
+
+  await page.getByTestId('pair-code-input').fill(fs.readFileSync(path.join(scratchDirectory, 'build-pairing-code.txt'), 'utf8').trim())
+  await page.getByTestId('pair-name-input').fill('Build one')
+  await page.getByTestId('pair-button').click()
+  const instance = page.getByTestId('instance-row-Build one')
+  await expect(instance).toBeVisible()
+  await expect(instance.getByTestId('instance-status')).toHaveText('Ready')
+  await expect(instance).toContainText('dbdatabuild')
+
+  await instance.getByTestId('instance-forget-button').click()
+  await expect(page.getByTestId('instances-empty')).toBeVisible()
 })

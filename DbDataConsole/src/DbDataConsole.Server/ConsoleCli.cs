@@ -2,6 +2,7 @@ using System.Net.Http;
 using DbDataKit.Cli;
 using DbDataKit.Hosting.Cli;
 using DbDataKit.State;
+using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
 
 namespace DbDataConsole.Server;
@@ -24,6 +25,7 @@ public static class ConsoleCli
     public static NounRouter Router(Func<string, string?>? environment = null) => new(Program,
     [
         ServerNoun.Create((args, context) => RunServerAsync(args, context, environment)),
+        InstanceNoun(environment),
         UserNoun(environment),
         ConsoleService.Noun(ConsoleServiceEnvironment.Real()),
         HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl),
@@ -59,6 +61,119 @@ public static class ConsoleCli
         // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
         await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);
         return CliExit.Ok;
+    }
+
+    // ---- instance ----
+
+    private static (ConsoleInstances Instances, ConsoleKeyStore Keys, InstanceRegistry Registry) OpenInstances(CliArgs parsed, Func<string, string?>? environment)
+    {
+        var directory = DirectoryOf(parsed, environment);
+        Directory.CreateDirectory(directory);
+        var store = ConsoleSecrets.Open(directory, environment);
+        var keys = new ConsoleKeyStore(store, store);
+        var registry = new InstanceRegistry(Path.Combine(directory, "instances.yaml"));
+        return (new ConsoleInstances(registry, keys), keys, registry);
+    }
+
+    private static Noun InstanceNoun(Func<string, string?>? environment) => new("instance", "The servers this console manages",
+    [
+        new Verb("add", "Pair this console with a server, using the single-use code its administrator made with 'server pair'", EffectClass.RepoFilesOnly, "<https address> --code <code> [--name <label>] [--repo <console directory>]",
+            (args, context) => InstanceAddAsync(args, context, environment),
+            DataSchemas.Object([("id", DataSchemas.String), ("name", DataSchemas.String), ("url", DataSchemas.String), ("fingerprint", DataSchemas.String)], "id", "name", "url", "fingerprint")),
+        new Verb("list", "The servers: name, address, product, version, and whether each answers (--offline reads only the list)", EffectClass.OfflineOnly, "[--offline] [--repo <console directory>]",
+            (args, context) => InstanceListAsync(args, context, environment),
+            DataSchemas.Object([("instances", DataSchemas.ListOf(DataSchemas.Object(
+                [("id", DataSchemas.String), ("name", DataSchemas.String), ("url", DataSchemas.String), ("fingerprint", DataSchemas.String), ("reachable", DataSchemas.Boolean), ("ready", DataSchemas.Boolean), ("product", DataSchemas.String), ("version", DataSchemas.String), ("problem", DataSchemas.String)],
+                "id", "name", "url", "fingerprint")))], "instances")),
+        new Verb("remove", "Forget a server (it still lists this console as paired until its administrator runs 'server unpair' there)", EffectClass.RepoFilesOnly, "<id or name> [--repo <console directory>]",
+            (args, context) => InstanceRemoveAsync(args, context, environment), DataSchemas.Object([("removed", DataSchemas.String)], "removed")),
+        new Verb("rotate-key", "Move to a new signing key on every server without pairing again; run it again if a server could not be reached", EffectClass.RepoFilesOnly, "[--repo <console directory>]",
+            (args, context) => InstanceRotateAsync(args, context, environment),
+            DataSchemas.Object([("rotated", DataSchemas.ListOf(DataSchemas.String)), ("pending", DataSchemas.ListOf(DataSchemas.String))], "rotated", "pending")),
+    ]);
+
+    private static async Task<int> InstanceAddAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "code", "name" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1 || parsed.Get("code") is not { Length: > 0 } code)
+        {
+            await context.Error.WriteLineAsync("Usage: instance add <https address> --code <code> [--name <label>] [--repo <console directory>]");
+            return CliExit.Usage;
+        }
+        if (!Uri.TryCreate(parsed.Words[0], UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps)
+        {
+            await context.Error.WriteLineAsync("The address is an https address, such as https://build.example:8470.");
+            return CliExit.Usage;
+        }
+        var (instances, _, _) = OpenInstances(parsed, environment);
+        try
+        {
+            var paired = await instances.PairAsync(url, code, parsed.Get("name"), context.Cancellation);
+            await context.Out.WriteLineAsync($"Paired with {paired.Name} ({paired.InstanceId}) at {paired.Url}. Its certificate is pinned: {paired.CertificateFingerprint}");
+            context.Data["id"] = paired.InstanceId;
+            context.Data["name"] = paired.Name;
+            context.Data["url"] = paired.Url.AbsoluteUri;
+            context.Data["fingerprint"] = paired.CertificateFingerprint;
+            return CliExit.Ok;
+        }
+        catch (Exception ex) when (ex is PairingFailedException or IncompatibleServerException)
+        {
+            await context.Error.WriteLineAsync(ex.Message);
+            return CliExit.Failure;
+        }
+    }
+
+    private static async Task<int> InstanceListAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string> { "offline" }, new HashSet<string> { "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync("Usage: instance list [--offline] [--repo <console directory>]"); return CliExit.Usage; }
+        var (instances, _, registry) = OpenInstances(parsed, environment);
+        foreach (var problem in registry.Problems) await context.Error.WriteLineAsync(problem);
+        var all = parsed.Has("offline")
+            ? instances.All().Select(i => new InstanceStatus(i, false, null, null, null, i.ApiVersion, null)).ToList()
+            : (await instances.StatusOfAllAsync(context.Cancellation)).ToList();
+        if (all.Count == 0) await context.Out.WriteLineAsync("No server is paired. Pair one with: instance add <https address> --code <code>");
+        foreach (var s in all)
+        {
+            var state = parsed.Has("offline") ? "" : s.Reachable ? (s.Ready == true ? "  ready" : "  not ready") : $"  unreachable: {s.Problem}";
+            await context.Out.WriteLineAsync($"{s.Instance.Name}  {s.Instance.Url}  {s.Product ?? "?"} {s.Version ?? ""}{state}  id {s.Instance.InstanceId}");
+        }
+        context.Data["instances"] = all.Select(s => new Dictionary<string, object?>
+        {
+            ["id"] = s.Instance.InstanceId, ["name"] = s.Instance.Name, ["url"] = s.Instance.Url.AbsoluteUri, ["fingerprint"] = s.Instance.CertificateFingerprint,
+            ["reachable"] = parsed.Has("offline") ? null : s.Reachable, ["ready"] = s.Ready, ["product"] = s.Product, ["version"] = s.Version, ["problem"] = s.Problem,
+        }).ToList();
+        return CliExit.Ok;
+    }
+
+    private static async Task<int> InstanceRemoveAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1) { await context.Error.WriteLineAsync("Usage: instance remove <id or name> [--repo <console directory>]"); return CliExit.Usage; }
+        var (instances, _, registry) = OpenInstances(parsed, environment);
+        var found = registry.Find(parsed.Words[0]);
+        if (found is null || !instances.Remove(found.InstanceId))
+        {
+            await context.Error.WriteLineAsync($"No server is called '{parsed.Words[0]}'. 'instance list' shows them.");
+            return CliExit.Failure;
+        }
+        await context.Out.WriteLineAsync($"Forgot {found.Name} ({found.InstanceId}). It still lists this console as paired until its administrator runs 'server unpair' there.");
+        context.Data["removed"] = found.InstanceId;
+        return CliExit.Ok;
+    }
+
+    private static async Task<int> InstanceRotateAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync("Usage: instance rotate-key [--repo <console directory>]"); return CliExit.Usage; }
+        var (_, keys, registry) = OpenInstances(parsed, environment);
+        var reports = await ConsoleKeyRotation.RunAsync(keys, registry, null, context.Cancellation);
+        foreach (var r in reports) await context.Out.WriteLineAsync($"{r.Instance.Name}: {(r.Rotated ? "now signed for with the new key" : "still on the old key: " + r.Problem)}");
+        var pending = reports.Where(r => !r.Rotated).Select(r => r.Instance.Name).ToList();
+        context.Data["rotated"] = reports.Where(r => r.Rotated).Select(r => r.Instance.Name).ToList();
+        context.Data["pending"] = pending;
+        await context.Out.WriteLineAsync(pending.Count == 0 ? "The new key is the console's key." : "Run 'instance rotate-key' again when those servers can be reached; the old key keeps working for them.");
+        return pending.Count == 0 ? CliExit.Ok : CliExit.Failure;
     }
 
     // ---- user ----
