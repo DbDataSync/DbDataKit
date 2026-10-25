@@ -49,3 +49,34 @@ jobs:
           global-json: DbDataConsole/global.json
       - run: dotnet build DbDataConsole.slnf -c Release
       - run: dotnet test --project tests/DbDataConsole.Tests -c Release --no-build --minimum-expected-tests 10
+
+  # The web app in a real browser against a real console: the first-run invitation, a passkey made in a virtual authenticator, signing out and back in with it, the users list.
+  playwright:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-product
+        with:
+          product: DbDataConsole
+          global-json: DbDataConsole/global.json
+          duckdb: 'false'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Build the web app
+        working-directory: DbDataKit/web
+        run: |
+          npm ci
+          npm run build -w @dbdatakit/console
+      - run: dotnet build DbDataConsole.slnf -c Debug
+      - name: Install the browser
+        working-directory: DbDataConsole/tests/DbDataConsole.Web.Tests
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run the browser tests
+        working-directory: DbDataConsole/tests/DbDataConsole.Web.Tests
+        run: npx playwright test

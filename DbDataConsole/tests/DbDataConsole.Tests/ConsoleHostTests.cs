@@ -70,6 +70,23 @@ public sealed class ConsoleHostTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_passkey_options_are_spelt_the_way_a_browser_needs_them_whatever_enum_converter_the_host_has()
+    {
+        var code = File.ReadAllText(Path.Combine(directory, "FIRST-RUN.txt")).Split("/invite#")[1].Split('\n')[0].Trim();
+        var begun = await http.PostAsJsonAsync("/api/invites/begin-registration", new { code, displayName = "Ada", email = (string?)null });
+        Assert.Equal(HttpStatusCode.OK, begun.StatusCode);
+        var options = JsonNode.Parse(await begun.Content.ReadAsStringAsync())!;
+        // WebAuthn spells these "public-key" and "none"; a host-wide string-enum converter spelt them with the C# names, and navigator.credentials.create refused the options.
+        Assert.Equal("public-key", (string)options["pubKeyCredParams"]![0]!["type"]!);
+        Assert.Equal("none", (string)options["attestation"]!);
+        Assert.NotNull(options["challenge"]);
+
+        var assertion = await http.PostAsync("/api/auth/passkey/begin", null);
+        Assert.Equal(HttpStatusCode.OK, assertion.StatusCode);
+        Assert.NotNull(JsonNode.Parse(await assertion.Content.ReadAsStringAsync())!["challenge"]);
+    }
+
+    [Fact]
     public async Task Who_am_I_is_open_and_says_how_to_sign_in_and_everything_else_is_closed()
     {
         var status = JsonNode.Parse(await http.GetStringAsync("/api/auth/status"))!;

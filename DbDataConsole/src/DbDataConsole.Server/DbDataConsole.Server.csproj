@@ -19,4 +19,26 @@
     <DbDataKitReference Include="State" />   <!-- the users, sessions and invitations -->
     <DbDataKitReference Include="Web" />   <!-- sign-in, passkeys, invitations, users: the controllers the console serves -->
   </ItemGroup>
+
+  <!--
+    The web app is built into wwwroot on publish, which makes the console one artifact. Publish only, and skippable: the test suites run the built app from
+    DbDataKit/web/console/dist, and making `dotnet build` shell out to npm would put a node install between a developer and a unit test.
+  -->
+  <PropertyGroup>
+    <SkipWebBuild Condition="'$(SkipWebBuild)' == ''">false</SkipWebBuild>
+    <WebProjectDir>$(MSBuildProjectDirectory)/../../../DbDataKit/web</WebProjectDir>
+  </PropertyGroup>
+
+  <Target Name="BuildWebApp" BeforeTargets="PrepareForPublish" Condition="'$(SkipWebBuild)' != 'true'">
+    <Message Importance="high" Text="Building the web app in $(WebProjectDir)" />
+    <Exec Command="npm ci" WorkingDirectory="$(WebProjectDir)" />
+    <Exec Command="npm run build -w @dbdatakit/console" WorkingDirectory="$(WebProjectDir)" />
+    <ItemGroup>
+      <WebAppOutput Include="$(WebProjectDir)/console/dist/**/*" />
+      <ResolvedFileToPublish Include="@(WebAppOutput)">
+        <RelativePath>wwwroot/%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 </Project>

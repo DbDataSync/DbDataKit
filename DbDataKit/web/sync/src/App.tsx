@@ -1,10 +1,9 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import {
-  AdminCertificatePage, AdminConfigPage, AdminUpdatesPage, DocsPage, DriverEditPage, DriversPage, FilesPage, LibrariesPage,
+  AdminCertificatePage, AdminConfigPage, AdminUpdatesPage, DocsPage, DriverEditPage, DriversPage, FilesPage, InvitePage, LibrariesPage,
 } from '@dbdatakit/admin'
 import { useAuthStatus } from './api/hooks'
 import { SignInScreen } from '@dbdatakit/shell'
-import { InvitePage } from './pages/InvitePage'
 import { ConnectionEditPage } from './pages/ConnectionEditPage'
 import { ConnectionsPage } from './pages/ConnectionsPage'
 import { ReplicationsPage } from './pages/ReplicationsPage'
@@ -69,9 +68,9 @@ export default function App() {
 
   // Redemption is reachable without a session — that is the entire point of an invitation, and
   // routing it behind the sign-in screen would be a door locked from the inside.
-  if (window.location.pathname === '/invite') return <InvitePage />
+  if (window.location.pathname === '/invite') return <InvitePage product="DbDataSync" />
 
-  if (status && !status.authenticated) return <SignInScreen />
+  if (status && !status.authenticated) return <SignInScreen product="DbDataSync" />
 
   return (
     <Routes>

@@ -2,7 +2,7 @@
 export { ApiError, put, request } from './api/http'
 export { shellApi } from './api/shellApi'
 export { useAbout, useAuthStatus, useMarkNotificationsSeen, useNotifications, useSignInWithWindows, useSignOut } from './api/hooks'
-export type { AboutInfo, AuthStatus, NotificationFeed, NotificationRecord } from './api/types'
+export type { AboutInfo, AuthStatus, CreatedInvite, NotificationFeed, NotificationRecord, UserCredentialSummary, UserSummary } from './api/types'
 
 export { Shell } from './components/Shell'
 export type { Crumb, RailItem } from './components/Shell'

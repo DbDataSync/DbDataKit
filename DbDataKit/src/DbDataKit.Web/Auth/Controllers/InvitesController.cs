@@ -1,4 +1,5 @@
 using DbDataKit.State;
+using System.Text.Json;
 using Fido2NetLib;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -89,13 +90,13 @@ public sealed class InvitesController(
         if (string.IsNullOrWhiteSpace(displayName))
             return BadRequest(new { error = "A name is required." });
 
-        var (options, state) = passkeys.BeginRegistration(invite.UserId ?? Guid.NewGuid().ToString("N"), displayName);
+        var (_, state) = passkeys.BeginRegistration(invite.UserId ?? Guid.NewGuid().ToString("N"), displayName);
 
         // Held in a short-lived cookie rather than round-tripped through the client: a challenge the
         // caller supplies is a challenge they can choose, and then the response they send answers a
         // question they asked themselves.
         StoreState(RegistrationStateCookie, state);
-        return Ok(options);
+        return Json(state);
     }
 
     [AllowAnonymous]
@@ -104,9 +105,11 @@ public sealed class InvitesController(
         [FromQuery] string code,
         [FromQuery] string displayName,
         [FromQuery] string? email,
-        [FromBody] AuthenticatorAttestationRawResponse response,
         CancellationToken cancellationToken)
     {
+        if (await ReadBody<AuthenticatorAttestationRawResponse>(cancellationToken) is not { } response)
+            return BadRequest(new { error = "The body is the browser's attestation, as JSON." });
+
         if (!passkeys.Enabled)
             return BadRequest(new { error = "Passkeys are turned off on this deployment." });
 
@@ -156,16 +159,18 @@ public sealed class InvitesController(
         if (!passkeys.Enabled)
             return BadRequest(new { error = "Passkeys are turned off on this deployment." });
 
-        var (options, state) = passkeys.BeginAssertion();
+        var (_, state) = passkeys.BeginAssertion();
         StoreState(AssertionStateCookie, state);
-        return Ok(options);
+        return Json(state);
     }
 
     [AllowAnonymous]
     [HttpPost("~/api/auth/passkey/complete")]
-    public async Task<IActionResult> CompleteAssertion(
-        [FromBody] AuthenticatorAssertionRawResponse response, CancellationToken cancellationToken)
+    public async Task<IActionResult> CompleteAssertion(CancellationToken cancellationToken)
     {
+        if (await ReadBody<AuthenticatorAssertionRawResponse>(cancellationToken) is not { } response)
+            return BadRequest(new { error = "The body is the browser's assertion, as JSON." });
+
         if (!passkeys.Enabled)
             return BadRequest(new { error = "Passkeys are turned off on this deployment." });
 
@@ -180,6 +185,20 @@ public sealed class InvitesController(
         IssueSession(user);
 
         return Ok(new AuthStatus(true, user.Id, user.DisplayName, user.Role.ToString(), ["passkey"]));
+    }
+
+    /// <summary>
+    /// The options the browser needs are the JSON the passkey library itself wrote (<c>state</c>): its enums are spelt the way WebAuthn spells them (<c>public-key</c>, <c>none</c>), which a host-wide
+    /// <c>JsonStringEnumConverter</c> would override with the C# names. What the browser sends back is read with the library's own converters for the same reason.
+    /// </summary>
+    private ContentResult Json(string json) => Content(json, "application/json");
+
+    private static readonly JsonSerializerOptions BodyOptions = new(JsonSerializerDefaults.Web);
+
+    private async Task<T?> ReadBody<T>(CancellationToken cancellationToken) where T : class
+    {
+        try { return await JsonSerializer.DeserializeAsync<T>(Request.Body, BodyOptions, cancellationToken); }
+        catch (JsonException) { return null; }
     }
 
     private void StoreState(string name, string state) =>

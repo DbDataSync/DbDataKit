@@ -11,7 +11,7 @@ import { getCredential, isSupported } from './webauthn'
  * The sign-in screen offers the methods this deployment actually configured, which the server says —
  * a screen offering Windows authentication on a Linux host would be a button that cannot work.
  */
-export function SignInScreen() {
+export function SignInScreen({ product }: { product: string }) {
   const { data: status } = useAuthStatus()
   const signIn = useSignInWithWindows()
   const queryClient = useQueryClient()
@@ -36,7 +36,7 @@ export function SignInScreen() {
   return (
     <div className="pane" data-testid="sign-in-screen">
       <div className="card" style={{ maxWidth: 460, margin: '10vh auto' }}>
-        <div className="card-head"><span className="card-title">Sign in to DbDataSync</span></div>
+        <div className="card-head"><span className="card-title">Sign in to {product}</span></div>
         <div className="card-body">
           <ErrorBanner error={signIn.error ?? passkeyError} />
 
