@@ -6,6 +6,7 @@
     "admin",
     "sync",
     "build",
+    "proxy",
     "console"
   ]
 }
