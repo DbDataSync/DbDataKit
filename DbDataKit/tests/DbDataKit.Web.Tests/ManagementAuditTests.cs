@@ -17,7 +17,7 @@ public sealed class ManagementAuditTests : IDisposable
     }
 
     private static ValidatedToken Token(string? userName = "Ada", bool byConsole = true) =>
-        new(new PairedConsole("console-a", "Operations", new byte[32], ServerRole.Admin), "user-7", userName, byConsole, ServerRole.Author,
+        new(new PairedClient("console-a", "Operations", new byte[32], ServerRole.Admin), "user-7", userName, byConsole, ServerRole.Author,
             new Dictionary<string, ServerRole>(), "token-0001", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch.AddMinutes(5));
 
     [Fact]

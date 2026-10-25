@@ -41,7 +41,7 @@ public static class ManagementAuthorization
     {
         var held = token.Roles;
         if (project is not null && token.Projects.TryGetValue(project, out var inProject)) held |= inProject;
-        return ServerRoles.Lower(held, token.Console.Ceiling);
+        return ServerRoles.Lower(held, token.Client.Ceiling);
     }
 
     public static AuthorizationDecision Authorize(ValidatedToken token, ServerRole needed, string? project = null)

@@ -11,6 +11,8 @@
     <PackageReference Include="Fido2.AspNet" />
     <ProjectReference Include="..\DbDataKit.Cli\DbDataKit.Cli.csproj" />
     <ProjectReference Include="..\DbDataKit.Config.Git\DbDataKit.Config.Git.csproj" />
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
     <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
   </ItemGroup>
 </Project>

@@ -9,7 +9,7 @@ public class ManagementAuthorizationTests
     private const ServerRole Everything = ServerRole.Viewer | ServerRole.Operator | ServerRole.Author | ServerRole.Approver | ServerRole.Admin;
 
     private static ValidatedToken Token(ServerRole roles, ServerRole ceiling = Everything, IReadOnlyDictionary<string, ServerRole>? projects = null) =>
-        new(new PairedConsole("console-a", "Operations", new byte[32], ceiling), "user-7", "Ada", false, roles, projects ?? new Dictionary<string, ServerRole>(),
+        new(new PairedClient("console-a", "Operations", new byte[32], ceiling), "user-7", "Ada", false, roles, projects ?? new Dictionary<string, ServerRole>(),
             "token-0001", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch.AddMinutes(5));
 
     private static CommandSpec Command(EffectClass effect) => new("x y", effect, "", true);
