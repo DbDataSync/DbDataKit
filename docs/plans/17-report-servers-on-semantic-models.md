@@ -124,11 +124,42 @@ reports or other tools. Recorded so the option is not looked at again without a 
 
 ## 3. Identity
 
-- **Stored credentials** (a Proxy client identity per report server, or per report) are the simple start: every route supports user and
-  password. Every viewer of a report then sees the same rows.
-- **Per-user data** needs the viewer's identity at Proxy: Windows authentication from the report server to Proxy with **Kerberos
-  constrained delegation** (the report server's service account allowed to delegate to Proxy's service principal). R1 gets it from SQL
-  Server's own row-level security; R2 to R5 from Proxy's Windows validation. This is part of the sign-in design conversation (plan 16).
+**Decided (owner, 2026-10-25): stored credentials to start.** A report server (or a report) signs in to Proxy as one Proxy client
+identity with a user name and password, which every route supports. Every viewer of a report then sees the same rows; the client
+identity's permissions on Proxy (which semantic models, which data sources) are what limits the report. Per-user data through Kerberos is
+documented below for later review.
+
+### For later review: per-user data through Kerberos
+
+To show each viewer only their own rows, Proxy must know who is viewing, not only which report server is asking. On Windows networks that
+means Kerberos delegation from the report server to Proxy. What it would take, and where it does not reach:
+
+- **Delegation.** The report server's service account is allowed to delegate to Proxy's service principal: Kerberos constrained
+  delegation on the report server's account, or resource-based constrained delegation on Proxy's (often easier to administer, because it
+  is set on the account being reached). Proxy's listeners get service principal names (`HTTP/proxy.example.com` for the HTTP listeners).
+  SSRS and Power BI Report Server data sources use "Windows integrated security".
+- **What Proxy does with the identity.** The Windows identity becomes a Proxy client identity through Proxy's existing Windows validation,
+  with roles from Active Directory groups. From there, two choices:
+  - **Rules in the semantic layer**: Proxy queries the databases with its own login and adds the viewer's row filters before planning
+    (plan 14's row-level security, which is not designed yet). One place for the rules, no second delegation.
+  - **Delegating again to the database** (pass-through, a second hop): the database applies its own row-level security. Needs a second
+    delegation set up (Proxy's account to each SQL Server) and only works where the database understands Windows logins.
+- **Where it reaches, route by route:**
+
+| Route | Per-user through Kerberos |
+| --- | --- |
+| R1 (Build views on SQL Server) | yes, without Proxy: the report server delegates to SQL Server and SQL Server's row-level security applies (DirectQuery and paginated reports) |
+| R2 (result feeds) | yes: Windows (Negotiate) authentication over HTTP/1.1 on the feeds listener |
+| R3 (Flight SQL ODBC driver) | **not as it stands**: Flight SQL runs over HTTP/2 (gRPC), where Windows Negotiate authentication is not available in ASP.NET Core's Kestrel; the driver signs in with a user and password or a token |
+| R4 (Postgres wire) | **not for Power BI**: Power BI Report Server's refresh supports only a user and password for PostgreSQL, and its DirectQuery sign-in table has no PostgreSQL entry; other Postgres clients could use GSSAPI later |
+| R5 (XMLA, MDX) | yes: Analysis Services sources support Windows and integrated authentication, and XMLA runs over HTTP/1.1 |
+
+- **Caching.** Once results differ per viewer, every cache and saved result must be keyed by the viewer's identity as well (plan 14
+  section 5, item 4), or one viewer's rows reach another.
+- **Testing** needs an Active Directory lab: a domain controller, the report server and Proxy as domain members, service principal names
+  and the delegation configured, on the Windows VM or a set of them. Nothing of it runs on hosted CI runners.
+- **Decisions for that review**: rules in the semantic layer or delegation to the database; constrained or resource-based delegation;
+  which routes need per-user data at all (R1 and R2 cover most reports).
 
 ## 4. When the time comes
 
@@ -153,5 +184,5 @@ Nothing here is scheduled; the routes are documented so the choice can be made t
 ## 6. Questions for the owner
 
 1. ~~Order~~: no order now; decided per route when the time comes (section 4).
-2. Is per-user data (Kerberos delegation) needed in the first version, or are stored credentials enough to start?
+2. ~~Per-user data~~: **decided**, stored credentials to start; Kerberos delegation documented for later review (section 3).
 3. ~~Power BI live connections (DAX)~~: not planned; R4 is the live route for Power BI.
