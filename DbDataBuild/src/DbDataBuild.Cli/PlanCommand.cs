@@ -153,7 +153,7 @@ internal static class PlanCommand
                 var runId = Guid.NewGuid();
                 using var log = new FileStatementLog(Path.Combine(root, InitCommand.StatementLogDir), "store-plan", runId);
                 await using var gate = await MutationGate.OpenAsync(tracking.Write, spec.Name, StatementKind.Tracking, log, runId);
-                await AuditLog.StorePlanAsync(gate, tracking.Scope, "plan:store", plan.Id, PlanDocument.ContentHash(plan), text, tracking.Write.User ?? Environment.UserName);
+                await AuditLog.StorePlanAsync(gate, tracking.Scope, "plan:store", plan.Id, PlanDocument.ContentHash(plan), text, Actor.Of(env, tracking.Write.User ?? Environment.UserName));
             }).GetAwaiter().GetResult();
         }
         catch (GateRefusedException ex) { error.Diag(ex.Diagnostic); return CliApp.ExitFindings; }

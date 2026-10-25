@@ -75,16 +75,22 @@ internal static class ServerCli
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string> { "scheduler" }, new HashSet<string> { "repo", "listen" });
+        var parsed = CliArgs.Parse(args, new HashSet<string> { "scheduler", "read-only" }, new HashSet<string> { "repo", "listen" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
         {
-            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--scheduler]. Projects are added with 'server project add'.");
+            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--scheduler] [--read-only]. Projects are added with 'server project add'.");
             return CliExit.Usage;
         }
 
         if (!Uri.TryCreate(parsed.Get("listen") ?? BuildServerSettings.DefaultListen, UriKind.Absolute, out var listen) || listen.Scheme != Uri.UriSchemeHttps)
         {
             await context.Error.WriteLineAsync("--listen is an https address, such as https://127.0.0.1:8470.");
+            return CliExit.Usage;
+        }
+
+        if (parsed.Has("read-only") && parsed.Has("scheduler"))
+        {
+            await context.Error.WriteLineAsync("--read-only offers only the commands that change nothing, and --scheduler runs refresh plans that write data; choose one.");
             return CliExit.Usage;
         }
 
@@ -106,7 +112,7 @@ internal static class ServerCli
         BuildScheduler? scheduler = parsed.Has("scheduler")
             ? new BuildScheduler(projects, runner, BuildSchedulerSchema.Open(settings.Directory), TimeProvider.System, line => context.Error.WriteLine(line))
             : null;
-        var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, projects, host.Commands, line => context.Error.WriteLine(line), scheduler: scheduler);
+        var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, projects, host.Commands, line => context.Error.WriteLine(line), parsed.Has("read-only") ? BuildManagementApi.ReadOnlySurface : null, scheduler);
         await context.Out.WriteLineAsync($"Serving {projects.All().Count} project(s) on {listen} (instance {BuildServer.InstanceId(settings.ServerYaml)}){(scheduler is null ? "" : ", running scheduled refresh plans")}. Pair a client with: dbdatabuild server pair");
         // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
         await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);

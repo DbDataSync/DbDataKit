@@ -1432,3 +1432,10 @@ Operator decision: correlated subqueries are a hard requirement.
 - **Built**: `server run --scheduler` (off unless asked). Plans with a `schedule:` in the compiled files of a hosted project are queued when due and run as `connection refresh <connection> <plan>` in a child process; the schedule's state and the queue are in `state.db` in the server's directory. A first sighting is never run; missed times run once. `GET /api/v1/projects/{project}/schedule`.
 - **Tests**: `BuildSchedulerTests` (9).
 - **Not done**: pause from the console, notifications of failures, pulling a remote project first, retention.
+
+## 190. The Build server runs write commands for the person who called (plan 13, R03)
+
+- **Built**: the management API offers every command except `ui terminal|mcp|web`. The role a call needs is its effect class's, as before (viewer reads, author changes files, operator refreshes data, approver applies a plan, admin changes the tracking tables); `server run --read-only` offers only the read-only commands. The child process gets `DBDATABUILD_ACTOR` ("Ada via Main console") and the command records it as `applied_by`, `invoker`, the acknowledging user and the storing user of a kept plan (`Actor.Of`); a child run without a person has the variable removed. The child's input is closed.
+- **Tests**: `BuildServerTests` (offers with roles, read-only, viewer refused and approver applies with the actor, ceiling); conformance `A_plan_applied_for_a_person_names_that_person_in_the_events_and_the_ddl_log` on SQL Server and PostgreSQL.
+- **Not done**: separate approver and console columns, an approve step apart from applying, a rule that the author of a plan cannot apply it (all for the security review).
+

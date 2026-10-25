@@ -32,6 +32,15 @@ public partial class ApplyConformanceTests
             return (exit, o.ToString(), e.ToString());
         }
 
+        /// <summary>A command the Build server runs for a person (plan 13, R03): the server gives the child that person's name in <see cref="Actor.Variable"/>.</summary>
+        public (int Exit, string Out, string Err) CliAs(string actor, params string[] args)
+        {
+            var o = new StringWriter();
+            var e = new StringWriter();
+            var exit = CliApp.Run([.. args, "--project", dir], o, e, environment: v => v == Actor.Variable ? actor : Env(v));
+            return (exit, o.ToString(), e.ToString());
+        }
+
         /// <summary>A command with a person at the keyboard: <paramref name="reply"/> is what they type when asked.</summary>
         public (int Exit, string Out, string Err) CliAsking(string reply, params string[] args)
         {
@@ -263,6 +272,31 @@ public partial class ApplyConformanceTests
             var logs = Directory.GetFiles(Path.Combine(run.Dir, ".dbdatabuild", "statement-log"), "*.jsonl");
             Assert.NotEmpty(logs);
             Assert.DoesNotContain(logs.SelectMany(File.ReadAllLines), l => l.Contains("Password") || l.Contains("ddbconf") || l.Contains("Ddb!Conf"));
+        }
+        finally { if (Directory.Exists(run.Dir)) Directory.Delete(run.Dir, true); }
+    }
+
+    [SkippableTheory, MemberData(nameof(Engines))]
+    public async Task A_plan_applied_for_a_person_names_that_person_in_the_events_and_the_ddl_log(string name)
+    {
+        var run = await SetUp(name);
+        await using var engine = run.Engine;
+        try
+        {
+            const string person = "Ada via Main console";
+            Ok(run.Cli("connection", "init", "--apply"), "init");
+            Ok(run.Cli("project", "compile"), "render");
+            var plan = run.Cli("connection", "deploy", "--write-plan");
+            Ok(plan, "plan");
+            Ok(run.CliAs(person, "connection", "deploy", "--apply-plan", run.PlanFile(plan.Out)), "apply for a person");
+
+            // the tracking tables name the person and the console they came through, not the account the process runs as
+            var events = run.Q("dbdatabuild") + "." + run.Q("migration_log");
+            Assert.True(await CountAsync(run, events, run.Q("applied_by") + " = '" + person + "'") > 0);
+            Assert.Equal(0, await CountAsync(run, events, run.Q("applied_by") + " <> '" + person + "'"));
+            var ddl = run.Q("dbdatabuild") + "." + run.Q("ddl_log");
+            Assert.True(await CountAsync(run, ddl, run.Q("invoker") + " = '" + person + "'") > 0);
+            Assert.Equal(0, await CountAsync(run, ddl, run.Q("invoker") + " <> '" + person + "'"));
         }
         finally { if (Directory.Exists(run.Dir)) Directory.Delete(run.Dir, true); }
     }
