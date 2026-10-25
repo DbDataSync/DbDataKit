@@ -178,6 +178,7 @@ public static class ProxyHost
         });
         services.AddSingleton<QueryLimits>();
         services.AddSingleton<ActiveQueries>();
+        services.AddSingleton<RecentFailures>();
         if (OperatingSystem.IsWindows())
         {
             services.AddSingleton<WorkerProcessHost>();

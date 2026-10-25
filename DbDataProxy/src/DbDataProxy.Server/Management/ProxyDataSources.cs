@@ -159,7 +159,7 @@ public sealed partial class ProxyDataSources(
             // the fixed sentence for the kind of failure, and the engine's own code; the driver's text is in the server log only
             return ManagementResult.Ok(new JsonObject
             {
-                ["ok"] = false, ["message"] = ex.Failure.PublicMessage, ["kind"] = ex.Failure.Kind.ToString(), ["code"] = ex.Failure.Code?.ToString(), ["engine"] = ex.Failure.Engine?.ToString(),
+                ["ok"] = false, ["message"] = ex.Failure.PublicMessage, ["kind"] = ex.Failure.Kind.ToString(), ["code"] = ex.Failure.Code?.ToString(), ["engine"] = ex.Failure.Engine?.Value,
                 ["elapsed_ms"] = (long)_clock.GetElapsedTime(started).TotalMilliseconds,
             });
         }

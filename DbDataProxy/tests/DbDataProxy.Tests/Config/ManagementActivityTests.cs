@@ -169,3 +169,67 @@ public sealed partial class ManagementTests
         Assert.Contains(audit, a => (string)a["command"]! == "throttle clear" && (string)a["outcome"]! == "cleared" && (string)a["userId"]! == "ada");
     }
 }
+
+/// <summary>The server certificate and the recent failures (plan 13, P07).</summary>
+public sealed partial class ManagementTests
+{
+    [Fact]
+    public async Task The_certificate_is_described_without_its_key_and_the_recent_failures_are_the_kind_and_code_a_client_was_told()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        var holder = app.Services.GetRequiredService<DbDataProxy.Server.Tls.TlsCertificateHolder>();
+
+        var certificate = await GetJson(server, "/api/v1/certificate");
+        Assert.Equal("selfsigned", (string)certificate["mode"]!);
+        Assert.True((bool)certificate["present"]!);
+        Assert.True((bool)certificate["self_signed"]!);
+        Assert.Equal(holder.Current!.Thumbprint, (string)certificate["thumbprint"]!);
+        Assert.True((int)certificate["days_left"]! > 30);
+        Assert.False((bool)certificate["needs_renewal"]!);
+        Assert.Contains("localhost", certificate["names"]!.AsArray().Select(n => (string)n!));
+        Assert.DoesNotContain("PRIVATE", certificate.ToJsonString());
+
+        var sink = app.Services.GetRequiredService<RecentFailures>();
+        sink.Failed("erp", new DbDataKit.Connections.ConnectionFailure(DbDataKit.Connections.ConnectionFailureKind.Login, "18456", new DbDataKit.Dialect.EngineId("sqlserver"), raw: $"Login failed for user 'sa'. {Sentinel}"));
+        sink.Failed("lake", new DbDataKit.Connections.ConnectionFailure(DbDataKit.Connections.ConnectionFailureKind.Network, null, new DbDataKit.Dialect.EngineId("duckdb")));
+        var failures = (await GetJson(server, "/api/v1/failures"))["failures"]!.AsArray();
+        Assert.Equal(["lake", "erp"], failures.Select(f => (string)f!["data_source"]!).ToList());     // newest first
+        Assert.Equal("The login was rejected. [sqlserver 18456]", (string)failures[1]!["message"]!);
+        Assert.Equal("Login", (string)failures[1]!["kind"]!);
+        Assert.Equal("18456", (string)failures[1]!["code"]!);
+        Assert.DoesNotContain(Sentinel, failures.ToJsonString());                                       // the driver's text stays in the log
+        Assert.DoesNotContain("Login failed for user", failures.ToJsonString());
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(server, HttpMethod.Get, "/api/v1/certificate", ServerRole.Viewer)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(server, HttpMethod.Get, "/api/v1/failures", ServerRole.Viewer)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Renewing_a_self_signed_certificate_asks_first_puts_the_new_one_in_use_at_once_and_the_console_that_pinned_the_old_one_has_to_pair_again()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        var holder = app.Services.GetRequiredService<DbDataProxy.Server.Tls.TlsCertificateHolder>();
+        var oldThumbprint = holder.Current!.Thumbprint;
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(server, HttpMethod.Post, "/api/v1/certificate/renew", ServerRole.Admin)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(server, HttpMethod.Post, "/api/v1/certificate/renew", ServerRole.Admin, "{\"confirm\": false}")).StatusCode);
+        Assert.Equal(oldThumbprint, holder.Current!.Thumbprint);
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(server, HttpMethod.Post, "/api/v1/certificate/renew", ServerRole.Viewer, "{\"confirm\": true}")).StatusCode);
+
+        var renewed = await CallAsync(server, HttpMethod.Post, "/api/v1/certificate/renew", ServerRole.Admin, "{\"confirm\": true}");
+        Assert.Equal(HttpStatusCode.OK, renewed.StatusCode);
+        var body = JsonNode.Parse(await renewed.Content.ReadAsStringAsync())!;
+        Assert.True((bool)body["renewed"]!);
+        Assert.Contains("paired again", (string)body["warning"]!);
+        Assert.NotEqual(oldThumbprint, holder.Current!.Thumbprint);
+        Assert.Equal(holder.Current.Thumbprint, (string)body["thumbprint"]!);
+
+        // the old pin no longer matches what the server presents; pairing again, with the new certificate, works
+        await Assert.ThrowsAnyAsync<HttpRequestException>(() => CallAsync(server, HttpMethod.Get, "/api/v1/about", ServerRole.Viewer));
+        var again = await PairAsync();
+        Assert.NotEqual(server.CertificateFingerprint, again.CertificateFingerprint);
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(again, HttpMethod.Get, "/api/v1/about", ServerRole.Viewer)).StatusCode);
+    }
+}

@@ -31,10 +31,12 @@ public sealed class DataSourceCatalog(
     QueryLimits? limits = null,
     ILoggerFactory? loggerFactory = null,
     IRedactor? redactor = null,
-    ActiveQueries? activeQueries = null)
+    ActiveQueries? activeQueries = null,
+    RecentFailures? recentFailures = null)
 {
     private readonly ConcurrentDictionary<string, IDbProvider> _sandboxProviders = new(StringComparer.Ordinal);
-    private readonly IFailureSink? _sink = loggerFactory is null ? null : new LoggingFailureSink(loggerFactory.CreateLogger("DbDataProxy.Data"));
+    private readonly IFailureSink? _sink = loggerFactory is null && recentFailures is null ? null
+        : new FailureSinks(loggerFactory is null ? null : new LoggingFailureSink(loggerFactory.CreateLogger("DbDataProxy.Data")), recentFailures);
 
     /// <summary>
     /// The provider for a data source. A DuckDB source with <c>AllowedDirectories</c> gets its own provider whose sandbox lets queries read those
