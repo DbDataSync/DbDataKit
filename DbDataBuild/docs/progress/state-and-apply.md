@@ -1403,3 +1403,9 @@ Operator decision: correlated subqueries are a hard requirement.
 - **Decided**: the secrets belong to the server, so projects served by one server share the logins of connections with the same name.
 - **Tests**: `BuildServerSecretsTests` (5), including a real child process: `connection status` reports DDB-501 for the read variable with no secret or with only a write secret, and finds the login once the read secret is stored.
 - **Not done**: a console screen that sends a login to the server once (plan 13, W8).
+
+## 185. The Build server hosts several projects, local or remote (plan 13, R02)
+
+- **Built**: `dbdatabuild server project add|remove|list|pull`. A project is a folder on this machine (`--path`) or a remote repository (`--git` and optionally `--branch`) the server clones into `projects/<id>` of its directory and brings up to the remote's branch on `pull` and at start. The list is `build/projects.yaml` in the server's directory, read again whenever it changes, so a running server serves a new project and drops a removed one on the next call. The management API lists the projects and runs each command in its own project's folder; a remote project that was never cloned answers 409 and names the command that fixes it. `server run` no longer takes `--project`.
+- **Tests**: `BuildServerProjectsTests` (8): two projects with their own commands, add and remove while running, clone and pull of a real repository, a project never cloned, invalid entries skipped and named, refusals with reasons, the verbs, and a failed `add` leaving nothing behind. `GitRemoteTests` (5, shared).
+- **Not done**: a remote that needs credentials; pulling before each scheduled run (M08).

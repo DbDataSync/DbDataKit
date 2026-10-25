@@ -10,18 +10,15 @@ using Microsoft.Extensions.Logging;
 
 namespace DbDataBuild.Cli.Server;
 
-/// <summary>Where a Build server keeps what is its own, and the project it serves.</summary>
-/// <param name="ProjectRoot">The project served.</param>
-/// <param name="Directory">The server's directory: <c>server.yaml</c> (its instance id and the clients paired with it), the pairing codes, its certificate.</param>
+/// <summary>Where a Build server keeps what is its own.</summary>
+/// <param name="Directory">The server's directory: <c>server.yaml</c> (its instance id and the clients paired with it), the pairing codes, its certificate, the secrets, <c>build/projects.yaml</c> (the projects it hosts) and the working copies of remote ones.</param>
 /// <param name="Listen">The address it listens on; HTTPS, and a name or address of this machine.</param>
-internal sealed record BuildServerSettings(string ProjectRoot, string Directory, Uri Listen)
+internal sealed record BuildServerSettings(string Directory, Uri Listen)
 {
     public const string DefaultListen = "https://127.0.0.1:8470";
 
     public string ServerYaml => Path.Combine(Directory, "server.yaml");
 
-    /// <summary>The project's id in the management API: its folder's name.</summary>
-    public string ProjectId => Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(ProjectRoot))) is { Length: > 0 } name ? name : "project";
 
     public static string DefaultDirectory() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dbdatabuild", "server");
 }
@@ -69,7 +66,7 @@ internal static class BuildServer
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 
-    public static WebApplication Build(BuildServerSettings settings, X509Certificate2 certificate, IProjectCommandRunner runner, ToolSurface surface, Action<string> log)
+    public static WebApplication Build(BuildServerSettings settings, X509Certificate2 certificate, IProjectCommandRunner runner, ProjectsFile projects, IReadOnlyList<DbDataBuild.Tui.Model.CommandInfo> commands, Action<string> log, Func<string, IReadOnlyList<DbDataBuild.Tui.Model.CommandInfo>, ToolSurface>? surfaceFor = null)
     {
         if (settings.Listen.Scheme != Uri.UriSchemeHttps) throw new ArgumentException("A Build server listens on HTTPS only.", nameof(settings));
         var instanceId = InstanceId(settings.ServerYaml);
@@ -89,7 +86,7 @@ internal static class BuildServer
         app.MapPairing(new PairingService(instanceId, fingerprint, clients, files.Codes()));
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new MemoryReplayCache()));
         app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache()), refused => log($"A call was refused ({refused.Failure}): {refused.Detail}"));
-        BuildManagementApi.Map(app, settings.ProjectId, settings.ProjectRoot, surface, runner);
+        BuildManagementApi.Map(app, projects, commands, runner, surfaceFor);
         return app;
     }
 }

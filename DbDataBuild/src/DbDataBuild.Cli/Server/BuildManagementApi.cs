@@ -25,15 +25,24 @@ internal static class BuildManagementApi
     public static ToolSurface ReadOnlySurface(string projectRoot, IEnumerable<CommandInfo> all) =>
         new(projectRoot, all.Where(c => c.Impact == Impact.None), withholdWriteFlags: true);
 
-    public static void Map(IEndpointRouteBuilder app, string projectId, string projectRoot, ToolSurface surface, IProjectCommandRunner runner)
+    /// <param name="projects">The projects served, read again on every call so one added or removed is served or gone at once.</param>
+    /// <param name="commands">All the commands there are; each project is offered the read-only ones.</param>
+    /// <param name="surfaceFor">Which of them a project is offered and how their inputs are checked; the read-only rules unless a test or a later slice says otherwise.</param>
+    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null)
     {
+        surfaceFor ??= ReadOnlySurface;
         var specs = CommandSpecs.All.ToDictionary(s => s.Name);
 
-        app.MapGet("/api/v1/projects", () => Results.Json(new { projects = new[] { new { id = projectId, name = projectId } } }));
+        app.MapGet("/api/v1/projects", () => Results.Json(new
+        {
+            projects = projects.All().Select(p => new { id = p.Id, name = p.Id, source = p.IsRemote ? "git" : "path", branch = p.Branch }),
+        }));
 
         app.MapGet("/api/v1/projects/{project}/commands", (string project, HttpContext context) =>
         {
-            if (project != projectId) return Results.NotFound();
+            if (projects.Find(project) is not { } hosted) return Results.NotFound();
+            var projectId = hosted.Id;
+            var surface = surfaceFor(projects.RootOf(hosted), commands);
             var token = context.ManagementToken();
             return Results.Json(new
             {
@@ -51,7 +60,12 @@ internal static class BuildManagementApi
 
         app.MapPost("/api/v1/projects/{project}/commands/{tool}", async (string project, string tool, HttpContext context) =>
         {
-            if (project != projectId) return Results.NotFound();
+            if (projects.Find(project) is not { } hosted) return Results.NotFound();
+            var projectId = hosted.Id;
+            var projectRoot = projects.RootOf(hosted);
+            if (!Directory.Exists(projectRoot))
+                return Results.Json(new { error = $"The project '{projectId}' has no working copy on this server yet. Run: dbdatabuild server project pull {projectId}" }, statusCode: StatusCodes.Status409Conflict);
+            var surface = surfaceFor(projectRoot, commands);
             if (!surface.Tools.TryGetValue(tool, out var command) || !specs.TryGetValue(command.Name, out var spec))
                 return Results.Json(new { error = $"`{tool}` is not a command this server runs." }, statusCode: StatusCodes.Status404NotFound);
 
