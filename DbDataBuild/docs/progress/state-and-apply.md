@@ -1420,3 +1420,9 @@ Operator decision: correlated subqueries are a hard requirement.
 
 - **Built**: `DbDataBuild/Dockerfile` and its `.dockerignore`; build from the repository root: `docker build -f DbDataBuild/Dockerfile -t dbdatabuild .`. The server's directory is `/data` (`DBDATABUILD_SERVER_DIR`, also the default of `--repo` outside containers). `dbdatabuild health check [--url ...]` is the image's health check (the shared `health` noun; the server's self-signed certificate is accepted for loopback addresses only). The CI workflow has an `image` job.
 - **Verified**: built and run locally: healthy, non-root, pairing and secrets through `docker exec`. Not verified: arm64, publishing.
+
+## 188. Plan health from the shared rules (plan 13, M09)
+
+- **Changed**: `RefreshViews.HealthAsync` uses the shared `HealthEvaluator` (`DbDataKit.Monitoring`) for overdue and slow; the output is the same. A run is compared by exact time, where it used to be by whole seconds, so the boundary can differ by under a second.
+- **Tests**: `PlanHealthTests` (7), on a fake clock. The conformance rules tests in `RefreshRulesConformanceTests` run in CI.
+- **Not done**: reporting `max_runtime` and failed runs as findings.
