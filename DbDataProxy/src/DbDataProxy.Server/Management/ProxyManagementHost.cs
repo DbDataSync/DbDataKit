@@ -86,7 +86,8 @@ public static class ProxyManagementHost
         dataSources = new ProxyDataSources(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit, git);
         var identities = new ProxyIdentities(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, audit, git);
         var activity = new ProxyActivity(app.Services.GetRequiredService<SessionStore>(), app.Services.GetRequiredService<ActiveQueries>(), app.Services.GetRequiredService<QueryLimits>(),
-            app.Services.GetRequiredService<LoginThrottle>(), () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, audit);
+            app.Services.GetRequiredService<LoginThrottle>(), () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, audit,
+            app.Services.GetRequiredService<DbDataKit.State.NotificationStore>());
         var certificate = new ProxyCertificate(holder, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, dataDirectory, app.Services.GetRequiredService<RecentFailures>(), audit);
         management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version, dataSources, identities, activity, certificate);
         var validator = new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache());

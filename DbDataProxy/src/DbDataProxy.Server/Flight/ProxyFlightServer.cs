@@ -26,7 +26,8 @@ public sealed partial class ProxyFlightServer(
     PreparedStatementStore prepared,
     ChainedCredentialValidator credentialValidator,
     SessionStore sessions,
-    IOptionsMonitor<ProxyOptions> options) : FlightSqlServer(loggerFactory)
+    IOptionsMonitor<ProxyOptions> options,
+    ProxyEvents? events = null) : FlightSqlServer(loggerFactory)
 {
     public const string DataSourceHeader = "x-datasource";
 
@@ -113,6 +114,8 @@ public sealed partial class ProxyFlightServer(
         if (source.Options.Classifier == ClassifierMode.Strict)
         {
             _log.LogWarning("Refused statement by {User} on read-only source {Source}: {Reason}", principal.Name, source.Name, decision.Reason);
+            events?.Raise(DbDataKit.Monitoring.NotificationKinds.StatementRefused, $"{principal.Name}@{source.Name}",
+                $"A statement by '{principal.Name}' was refused on read-only data source '{source.Name}': {decision.Reason}.");
             throw new RpcException(new Status(StatusCode.PermissionDenied, $"Data source '{source.Name}' is read-only and the statement was refused: {decision.Reason}."));
         }
         _log.LogWarning("Statement by {User} on read-only source {Source} would be refused with Classifier=Strict: {Reason}", principal.Name, source.Name, decision.Reason);

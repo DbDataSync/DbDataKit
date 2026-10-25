@@ -233,3 +233,74 @@ public sealed partial class ManagementTests
         Assert.Equal(HttpStatusCode.OK, (await CallAsync(again, HttpMethod.Get, "/api/v1/about", ServerRole.Viewer)).StatusCode);
     }
 }
+
+/// <summary>The proxy tells the notification feed what a monitoring view should show (plan 13, P10).</summary>
+public sealed partial class ManagementTests
+{
+    private async Task<IReadOnlyList<JsonNode>> NotificationsAsync(PairedServer server, ServerRole role = ServerRole.Viewer, long? since = null) =>
+        JsonNode.Parse(await (await CallAsync(server, HttpMethod.Get, "/api/v1/notifications" + (since is null ? "" : $"?since_id={since}"), role)).Content.ReadAsStringAsync())!["notifications"]!.AsArray().Select(n => n!).ToList();
+
+    [Fact]
+    public async Task A_lockout_after_failed_logins_is_one_notification_naming_the_user_and_the_client_and_a_retry_does_not_repeat_it()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        var throttle = app.Services.GetRequiredService<LoginThrottle>();
+        Assert.Empty(await NotificationsAsync(server));
+
+        var max = Options.CurrentValue.Auth.MaxFailedLogins;
+        for (var i = 0; i < max + 3; i++) throttle.RecordFailure("10.0.0.7", "mallory");   // past the limit: still one lockout
+        var feed = await NotificationsAsync(server);
+        var lockout = Assert.Single(feed);
+        Assert.Equal("LoginLockedOut", (string)lockout["kind"]!);
+        Assert.Contains("'mallory'", (string)lockout["message"]!);
+        Assert.Contains("10.0.0.7", (string)lockout["message"]!);
+
+        // lifted and locked again within the quiet period: the same event, not a second one
+        throttle.Clear("10.0.0.7", "mallory");
+        for (var i = 0; i < max; i++) throttle.RecordFailure("10.0.0.7", "mallory");
+        Assert.Single(await NotificationsAsync(server));
+        // another client is another subject
+        for (var i = 0; i < max; i++) throttle.RecordFailure("10.0.0.8", "mallory");
+        Assert.Equal(2, (await NotificationsAsync(server)).Count);
+
+        // a console reads from where it left off
+        var newest = (long)feed[0]["id"]!;
+        Assert.Single(await NotificationsAsync(server, since: newest));
+    }
+
+    [Fact]
+    public async Task A_data_source_that_turns_a_caller_away_and_a_statement_refused_on_a_read_only_source_are_notifications_without_the_statement()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        var events = app.Services.GetRequiredService<ProxyEvents>();
+
+        // a gate with one slot, held; a second caller is refused at once (the wait is one millisecond)
+        var gate = new DbDataKit.Connections.ConcurrencyGate(1, null, TimeSpan.FromMilliseconds(1));
+        using var held = await gate.EnterAsync("alice");
+        var executor = new LimitedExecutor(new BlockedExecutor(), gate, "bob", "erp",
+            (source, user) => events.Raise(DbDataKit.Monitoring.NotificationKinds.LimitReached, source, $"Data source '{source}' turned a caller away ('{user}'): every slot is in use."));
+        var ex = await Assert.ThrowsAsync<RpcException>(() => executor.ExecuteQueryAsync(new QueryRequest("SELECT 1"), CancellationToken.None));
+        Assert.Equal(StatusCode.ResourceExhausted, ex.StatusCode);
+        await Assert.ThrowsAsync<RpcException>(() => executor.ExecuteQueryAsync(new QueryRequest("SELECT 1"), CancellationToken.None));   // and again: one notification
+
+        // a strict read-only source refuses a write
+        Write("connections/ro.yaml", Conn.Yaml("ro", "duckdb", "Data Source=:memory:", proxy: ["classifier: strict"]));
+        ((Microsoft.Extensions.Configuration.IConfigurationRoot)app.Configuration).Providers.OfType<DbDataProxy.Server.Configuration.ProxyConfigDirectoryProvider>().Single().ReloadNow();
+        var flight = ActivatorUtilities.CreateInstance<DbDataProxy.Server.Flight.ProxyFlightServer>(app.Services);
+        var principal = new ProxyPrincipal("carol", "password", ["*"]);
+        var resolved = app.Services.GetRequiredService<DataSourceCatalog>().Resolve(principal, "ro");
+        var refused = Assert.Throws<RpcException>(() => flight.EnforceReadOnlyText("DROP TABLE secrets_table", principal, resolved));
+        Assert.Equal(StatusCode.PermissionDenied, refused.StatusCode);
+
+        var feed = await NotificationsAsync(server);
+        Assert.Equal(["LimitReached", "StatementRefused"], feed.Select(n => (string)n["kind"]!).Order(StringComparer.Ordinal).ToList());
+        var limit = feed.Single(n => (string)n["kind"]! == "LimitReached");
+        Assert.Contains("'bob'", (string)limit["message"]!);
+        var refusal = feed.Single(n => (string)n["kind"]! == "StatementRefused");
+        Assert.Contains("'carol'", (string)refusal["message"]!);
+        Assert.Contains("'ro'", (string)refusal["message"]!);
+        Assert.DoesNotContain("secrets_table", refusal.ToJsonString());      // the rule, never the statement
+    }
+}

@@ -208,6 +208,7 @@ public static class ProxyHost
         builder.Services.AddSingleton(holder);
         builder.Services.AddSingleton(_ => DbDataProxy.Server.State.ProxyState.Open(dataDirectory));
         builder.Services.AddSingleton(sp => new DbDataKit.State.NotificationStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
+        builder.Services.AddSingleton<ProxyEvents>();
         builder.Services.AddHostedService<DbDataProxy.Server.State.ProxyStateStartup>();
         builder.Services.AddSingleton<IReadinessProbe>(new CertificateReadinessProbe(() => holder.Current, CertificateProvider.RenewBeforeDays));
         builder.Services.AddHostedService(sp => new CertificateRotationService(

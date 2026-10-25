@@ -44,13 +44,14 @@ public sealed class QueryLimits
 /// (read to the end, or discarded by the pending-query sweeper). A caller that cannot get a slot within the acquire timeout is refused with
 /// ResourceExhausted.
 /// </summary>
-public sealed class LimitedExecutor(IQueryExecutor inner, ConcurrencyGate gate, string user, string source) : IQueryExecutor, IMetadataProvider
+public sealed class LimitedExecutor(IQueryExecutor inner, ConcurrencyGate gate, string user, string source, Action<string, string>? refused = null) : IQueryExecutor, IMetadataProvider
 {
     private async ValueTask<GateTicket> EnterAsync(CancellationToken cancellationToken)
     {
         try { return await gate.EnterAsync(user, cancellationToken).ConfigureAwait(false); }
         catch (PoolAcquireTimeoutException)
         {
+            refused?.Invoke(source, user);
             throw new RpcException(new Status(StatusCode.ResourceExhausted,
                 $"Data source '{source}' is busy: too many queries are running. Try again shortly."));
         }

@@ -60,11 +60,13 @@ public sealed class ProxyManagement(IConfigurationRoot configuration, string con
             return await identities.HandleAsync(method, route[(Prefix.Length + 1)..].Split('/'), body, query["expected_version"], caller, cancellationToken);
         }
         var first = route.Length > Prefix.Length ? route[(Prefix.Length + 1)..].Split('/') : [];
-        if (first.Length > 0 && first[0] is "sessions" or "queries" or "limits" or "throttle")
+        if (first.Length > 0 && first[0] is "sessions" or "queries" or "limits" or "throttle" or "notifications")
         {
             if (activity is null) return ManagementResult.Problem(404, "There is no such call.");
-            if (!caller.Holds(ServerRole.Admin)) return Denied(ServerRole.Admin);
-            return activity.Handle(method, first, query["client"], query["user"], caller);
+            // the feed is what a monitoring view reads, so a viewer may; the rest of what the proxy is doing is for an administrator
+            var needed = first[0] == "notifications" ? ServerRole.Viewer : ServerRole.Admin;
+            if (!caller.Holds(needed)) return Denied(needed);
+            return activity.Handle(method, first, query["client"], query["user"], caller, long.TryParse(query["since_id"], out var since) ? since : null);
         }
         if (first.Length > 0 && first[0] is "certificate" or "failures")
         {

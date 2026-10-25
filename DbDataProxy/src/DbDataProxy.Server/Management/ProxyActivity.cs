@@ -11,11 +11,11 @@ namespace DbDataProxy.Server.Management;
 /// and the login throttle (and a way to let a locked-out client try again). Nothing here is a secret: a session is named by the front of its token's hash, which is not a token, and a statement's text is shown only when the proxy
 /// is set to log SQL.
 /// </summary>
-public sealed class ProxyActivity(SessionStore sessions, ActiveQueries queries, QueryLimits limits, LoginThrottle throttle, Func<ProxyOptions> options, IAuditLog audit, TimeProvider? clock = null)
+public sealed class ProxyActivity(SessionStore sessions, ActiveQueries queries, QueryLimits limits, LoginThrottle throttle, Func<ProxyOptions> options, IAuditLog audit, DbDataKit.Monitoring.INotificationFeed? notifications = null, TimeProvider? clock = null)
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
-    public ManagementResult Handle(string method, string[] rest, string? client, string? user, ManagementCaller caller)
+    public ManagementResult Handle(string method, string[] rest, string? client, string? user, ManagementCaller caller, long? sinceId = null)
     {
         switch (rest)
         {
@@ -34,6 +34,8 @@ public sealed class ProxyActivity(SessionStore sessions, ActiveQueries queries, 
                 return cancelled ? ManagementResult.Ok(new JsonObject { ["id"] = id, ["cancelled"] = true }) : ManagementResult.Problem(404, "There is no such running query; it may have ended.");
             }
             case ["limits"] when method == "GET": return ManagementResult.Ok(Limits());
+            case ["notifications"] when method == "GET":
+                return notifications is null ? ManagementResult.Problem(404, "There is no such call.") : ManagementResult.Ok(Notifications(sinceId));
             case ["throttle"] when method == "DELETE":
             {
                 if (string.IsNullOrWhiteSpace(client) || string.IsNullOrWhiteSpace(user)) return ManagementResult.Problem(400, "Name the client and the user: ?client=...&user=...");
@@ -44,6 +46,14 @@ public sealed class ProxyActivity(SessionStore sessions, ActiveQueries queries, 
             default: return ManagementResult.Problem(404, "There is no such call.");
         }
     }
+
+    private JsonObject Notifications(long? sinceId) => new()
+    {
+        ["notifications"] = new JsonArray([.. notifications!.List(sinceId).Select(n => (JsonNode)new JsonObject
+        {
+            ["id"] = n.Id, ["kind"] = n.Kind, ["created"] = n.CreatedAtUtc, ["message"] = n.Message,
+        })]),
+    };
 
     private JsonObject Sessions() => new()
     {

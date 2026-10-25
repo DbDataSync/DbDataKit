@@ -40,6 +40,9 @@
     <ProjectReference Include="..\DbDataProxy.Core\DbDataProxy.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="DbDataProxy.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="config.example\**" LinkBase="config.example" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <Import Project="$(DbDataKitRoot)build/DuckDb.Native.targets" />
