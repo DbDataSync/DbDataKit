@@ -26,6 +26,10 @@ A client is a console, another server or a command line (`ClientKind`); the serv
 * `PairingClient.PairAsync(url, code, identity, kind, name)`: looks at the certificate, proves, checks the server's proof, and returns a `PairedServer` (instance id, certificate fingerprint to pin, API version, ceiling). `PairingClient.Pinned(fingerprint)` is the handler for every later call: it accepts that certificate and no other, whatever it chains to. A server's renewed certificate needs pairing again.
 * `ConsoleKeyStore` keeps the console's id and signing seed in the secret store (`dbdata:kit:console:signing-key`); a damaged entry is reported, never replaced. `InstanceRegistry` is the console's `instances.yaml` (id, name, url, certificate fingerprint, API version); an entry without a pin, or over plain HTTP, is not trusted.
 
+## Management API version
+
+`ManagementApi.Version` is the integer version of the management API (plan 13, D17). A server says it at pairing and in the `X-DbData-Api-Version` header of every response (`UseManagementApiVersion()`); a client supports its own version and the one before (`ManagementApi.Supports`), and `ManagementVersionHandler` (what `PairingClient.Pinned` returns) states the client's version on every request and refuses the response of a server outside that range, or one that reports none, with `IncompatibleServerException` and a message that says which side to upgrade. Pairing checks it before it sends anything.
+
 The role check per command and the audit are in `ManagementAuthorization` and `ManagementIdentity`; the key rotation, the version rule and the server-to-server kind are the next slices (T07, T09, T10).
 
 ## Audit and authorship

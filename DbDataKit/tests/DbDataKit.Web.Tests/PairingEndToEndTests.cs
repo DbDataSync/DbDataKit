@@ -53,6 +53,7 @@ internal sealed class TestServer : IAsyncDisposable
         builder.Logging.ClearProviders();
         builder.WebHost.ConfigureKestrel(o => o.Listen(IPAddress.Loopback, 0, listen => listen.UseHttps(certificate)));
         var app = builder.Build();
+        app.UseManagementApiVersion();
         var fingerprint = PairingProof.CertificateFingerprint(certificate);
         var holder = new TestServer(app, new Uri("https://127.0.0.1:1"), fingerprint, directory);
         if (map is null) app.MapPairing(new PairingService(InstanceId, fingerprint, holder.Clients, holder.Codes));
