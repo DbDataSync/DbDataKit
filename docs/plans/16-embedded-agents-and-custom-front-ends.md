@@ -68,7 +68,7 @@ MCP, and the internal agent has the same tools.
 
 ### Where apps run
 
-A standalone app host (working name **DbDataApps**, to be decided), the same shape as the other products: a server with a management API,
+A standalone app host, **DbDataApps** (`dbdataapps`; the owner's name for now), the same shape as the other products: a server with a management API,
 paired with consoles (plan 13 W12), its own CLI on the shared nouns. It holds no data of its own beyond the apps' definitions and
 versions; it **reaches data as a client** of the servers that own it:
 
@@ -122,8 +122,9 @@ its routes, the roles it needs, and for a code app its content security policy.
 **Decided direction (owner):** Windows authentication, OpenID Connect, and Microsoft Entra ID, with **the console acting as an OpenID
 Connect provider**. **The spec needs design conversations with the owner**; the topics to settle:
 
-1. **Who the users are.** Console users only, or app end users who are not console users (a team that fills in a form and never administers
-   anything)? Where those users and their roles live if not in a console.
+1. ~~Who the users are~~: **decided (owner)**: app users are **console users who administer nothing**: they sign in like any console
+   user, hold app roles only, and never see the console's administration. Open with it: whether identity stays inside the console or
+   becomes a component of its own (topic 6 and section 2b).
 2. **The console as provider.** Which flows (authorization code with PKCE for browser apps; client credentials for server clients?),
    token lifetimes, consent, and how an app registers as a client of the console.
 3. **Federation.** Entra ID and other OpenID Connect providers signing in to the console (the console then issues its own tokens to apps),
@@ -133,7 +134,7 @@ Connect provider**. **The spec needs design conversations with the owner**; the 
 5. **From app to data.** How the app host turns a signed-in app user into the tokens DbDataStore and Proxy accept (plan 13 W12), and how
    the manifest's scope narrows them.
 6. **Several consoles.** Plan 13 allows several consoles per server; an app needs one identity provider. Which console it is, and what a
-   second console means for an app's users.
+   second console means for an app's users. **Under discussion**: the options are in section 2b.
 
 ## 2a. Shared visuals and reports
 
@@ -216,6 +217,40 @@ spike fails.
 **The spike that decides it:** run a sample of real SSRS reports through `rdl-doctor`, and render the ones it accepts with data pushed from
 a semantic query, on Linux and Windows.
 
+## 2b. Identity with several consoles (under discussion)
+
+**The tension.** Plan 13 W12 lets a server be paired with several consoles, and each console keeps its own users and role assignments.
+Apps (and the agents and report servers after them) need **one** answer to "who is this user and what may they do". With users per
+console, the same person is two users in two consoles, and an app has no single provider to trust.
+
+**The owner's concern:** not too much complexity, but not an architecture so rigid that several consoles become confusing to reconcile.
+
+| Option | What it is | For | Against |
+| --- | --- | --- | --- |
+| A. Users per console (plan 13 as written) | each console its own directory and provider | nothing new | the tension above: two directories to reconcile, apps cannot pick a provider, audit names differ per console |
+| B. An identity service of its own | a separate server (user directory, roles, OpenID Connect provider, Windows and Entra federation); every console, app host and agent signs users in through it | one directory, one provider, consoles become interchangeable views | one more service in every install, including the smallest; its uptime gates every sign-in |
+| **C. Identity as a shared component, hosted by one console by default** | the same component as B (`DbDataKit.Identity`), but it runs inside a console unless an install chooses to run it on its own. Each install has **exactly one identity home**; every other console, DbDataApps and the agents are relying parties of it through OpenID Connect | B's single answer without B's extra service in small installs; a large install moves it out without changing anything for consoles or apps | the console that hosts it is special; moving identity out later is an operation to document and test |
+
+**Recommendation: C**, the same pattern as the protocols (plan 15 section 11): shared code, a host chosen per install.
+
+- **One identity home per install.** It holds users, groups, role assignments and the OpenID Connect provider, and federates Windows
+  (Negotiate) and Entra ID. A standalone install has one console, which is the home; nothing changes for it.
+- **Other consoles hold no users.** A second console signs people in through the home (it is an OpenID Connect client of it) and keeps
+  only its own settings (which servers it shows, its ceiling on each server). The same person is the same user everywhere, and audit
+  names agree.
+- **Roles are assigned once, at the home**, scoped as plan 13 W12 has them (per server, per Build project; app roles per app). A console
+  still has a **ceiling** per server from its pairing, so an operations console can stay read-only whatever a user's roles are.
+- **Tokens to servers are unchanged in shape** (plan 13 T01): a console still signs them, but the subject is the home's stable user id,
+  and the roles come from the home. App users (decided: console users who administer nothing) are ordinary users of the home with app
+  roles only.
+- **Running it on its own** (`dbdatakit identity run`, or a deployment option) is for installs that want sign-in independent of any one
+  console, or high availability; the component, its data and its protocol are the same.
+
+**What it would change in plan 13**, if chosen: W12's rule "users are per console" becomes "users live in the install's identity home";
+the console's user stores (U04, U05, already built as shared code) become the identity component's; T04 (console side of pairing), U07
+(the console host) and U10 (first run) gain the choice of "be the home" or "use a home". **Best decided before T03, T04, U07 and U10 are
+built**; T01, T02, U04 and U05 (done) need no change.
+
 ## 3. What earlier plans must keep possible
 
 | Plan | Keep possible |
@@ -237,6 +272,6 @@ a semantic query, on Linux and Windows.
 | 3 | Sign-in | **decided direction**: Windows, OpenID Connect, Entra ID; the console as an OpenID Connect provider; **spec to be designed with the owner** (section 2) |
 | 4 | Provider abstraction | **decided** (for now): `Microsoft.Extensions.AI`'s `IChatClient`, proven against OpenAI, Foundry, Anthropic and a local model (Ollama) first |
 | 5 | Code apps | **decided**: at the same time as declarative apps, or before them |
-| 6 | The app host's name | open: DbDataApps is a working name |
+| 6 | The app host's name | **decided** (for now): DbDataApps |
 | 7 | Visuals | **decided direction**: a shared feature (one view format, one renderer) for the console, apps, assistants and reports |
 | 8 | Reports | **decided first step**: our own report spec on the shared visuals, and SSRS and Power BI Report Server on a separate server, embedded in apps and reading the semantic models (plan 17); Majorsilence Reporting a documented option, FastReport a documented alternative |
