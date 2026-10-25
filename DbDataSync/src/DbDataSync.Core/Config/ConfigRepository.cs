@@ -71,6 +71,7 @@ public sealed class ConfigRepository
             CredentialSecretRef = secretRef,
             ConnectTimeoutSeconds = input.ConnectTimeoutSeconds,
             CommandTimeoutSeconds = input.CommandTimeoutSeconds,
+            SegmentOrder = input.SegmentOrder,
             Properties = input.Properties,
             Scripts = input.Scripts,
             Hooks = input.Hooks,

@@ -296,6 +296,12 @@ public sealed class TableMappingConfig
     public ReadIntent? DefaultReadIntent { get; set; }
 
     /// <summary>
+    /// Whether the segments of a reload of a mapping of this table take turns or run together; null inherits (the replication's, then the target connection's). Chosen per reload when it is requested; this is only what is used
+    /// when the request does not say. See <see cref="SegmentOrderResolution"/>.
+    /// </summary>
+    public SegmentOrder? SegmentOrder { get; set; }
+
+    /// <summary>
     /// This mapping's own reader, in place of the replication's. Null — the normal case — inherits
     /// <see cref="ChangeProcessingConfig.Reader"/> entirely.
     /// <para>

@@ -127,6 +127,12 @@ public sealed class ConnectionConfig
     public int? ConnectTimeoutSeconds { get; set; }
 
     /// <summary>
+    /// Whether the segments of a reload of a mapping written to this connection take turns or run together; null inherits (the application default, one at a time). Chosen per reload when it is requested; this is only what is used
+    /// when the request does not say. See <see cref="SegmentOrderResolution"/>.
+    /// </summary>
+    public SegmentOrder? SegmentOrder { get; set; }
+
+    /// <summary>
     /// How long any one command against this connection may run, in seconds. Same shape as
     /// <see cref="ConnectTimeoutSeconds"/> — <c>null</c> is the default
     /// (<see cref="ConnectionTimeouts.DefaultCommandSeconds"/>), <c>0</c> is unlimited.
@@ -185,6 +191,9 @@ public sealed class ConnectionInput
 
     /// <inheritdoc cref="ConnectionConfig.CommandTimeoutSeconds"/>
     public int? CommandTimeoutSeconds { get; set; }
+
+    /// <inheritdoc cref="ConnectionConfig.SegmentOrder"/>
+    public SegmentOrder? SegmentOrder { get; set; }
 
     public Dictionary<string, string> Properties { get; set; } = new();
 
