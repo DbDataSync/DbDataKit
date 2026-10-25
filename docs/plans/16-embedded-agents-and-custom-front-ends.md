@@ -23,9 +23,19 @@ so the internal and external agents can do the same things, and a feature an age
 
 ### Model providers
 
-- **One provider abstraction**, with implementations for the OpenAI API, the Anthropic API, Microsoft Foundry, and any OpenAI-compatible
-  endpoint (local models). Candidate: `Microsoft.Extensions.AI`'s `IChatClient`, which several providers implement; check each provider's
-  support for tool calls and streaming before choosing it.
+- **One provider abstraction: `Microsoft.Extensions.AI`'s `IChatClient`** (owner decision, for now), as long as it covers the four
+  provider kinds the owner needs. Microsoft's Agent Framework documentation lists `IChatClient` implementations for OpenAI, Azure OpenAI,
+  Microsoft Foundry, Anthropic, Ollama and Foundry Local, with function tools supported for each:
+
+| Provider | Package (to be pinned when built) | Notes |
+| --- | --- | --- |
+| OpenAI | `Microsoft.Extensions.AI.OpenAI` over the OpenAI SDK | |
+| Microsoft Foundry | the Azure OpenAI and Foundry SDKs | Foundry hosts OpenAI models and models from other providers; which a deployment uses is configuration |
+| Anthropic | the official Anthropic C# SDK (its `IChatClient` support has been described as beta: check when built) | a community adapter exists as a fallback |
+| Local models | OllamaSharp (Ollama), Foundry Local | |
+
+  The first slice of this work proves tool calls and streaming against each of the four with the same test, before anything is built on
+  the abstraction.
 - **Configured by an administrator**, not by each user: which providers and models are allowed, their endpoints and keys (secret
   references, plan 13 W13), per-user and per-console limits on use and cost, and which provider a deployment must use (Foundry for an
   organization that requires its data to stay in its tenant).
@@ -66,11 +76,17 @@ versions; it **reaches data as a client** of the servers that own it:
 | --- | --- | --- |
 | Data views and forms over managed data | DbDataStore's API (reads, validated writes, change requests) | DbDataStore: storage, validation, history, permissions |
 | Dashboards and visuals | semantic queries and semantic SQL on Proxy (plan 14); the presentation specs (matrix grids, Vega-Lite) | Proxy and the semantic model |
-| Reports | the same queries, laid out as a document (sections, tables, charts, parameters), exported to PDF | Proxy, DbDataStore |
+| Reports | section 2a | Proxy, DbDataStore, or a report server |
 | Agent assistants | the agent runtime (section 1), scoped to the app's objects | the user's identity and approvals |
 
 The app host calls DbDataStore and Proxy **as a paired server client** (plan 13 W12, "Server-to-server clients"), with tokens naming the
 signed-in user, so DbDataStore's and Proxy's rules apply exactly as they do to anyone else.
+
+### Code apps first
+
+**Decided (owner):** code apps come at the same time as declarative apps, or before them. The first version is the code-app path (the
+bundle, the manifest, the scoped token, the sandbox, the typed clients, deploy through MCP); declarative views are built on the same
+host and clients, and can be the same components a code app uses, so they come cheaply after it.
 
 ### The principle: the app is untrusted UI
 
@@ -119,6 +135,42 @@ Connect provider**. **The spec needs design conversations with the owner**; the 
 6. **Several consoles.** Plan 13 allows several consoles per server; an app needs one identity provider. Which console it is, and what a
    second console means for an app's users.
 
+## 2a. Shared visuals and reports
+
+### Visuals are a shared feature
+
+Agent assistants must be able to show a chart or a table as part of their help, in the console's chat and in apps, so visuals are not an
+app feature but a **shared one**, used by the console, apps, assistants and reports alike:
+
+- **One view format**: QIS's presentation view documents (plan 14: matrix grids and a Vega-Lite subset over a result), extended where
+  dashboards need more. A view always names a **result** (a semantic query, a DbDataStore read) and never carries a computation of its own,
+  as QIS already requires; totals come from the result.
+- **One renderer**, a front-end package (`@dbdatakit/visuals`: Vega-Lite through `vega-embed`, the matrix grid, a table), used by the
+  console, by apps and by the chat panel of an assistant. An assistant's answer can contain a view document; the chat renders it inline,
+  and the user can open it as a query in the console or pin it to a dashboard.
+- **Safe by construction**: views are data validated against a schema; the Vega-Lite subset allows inline data only (no URLs, no data
+  loaded by the spec itself) and no custom expressions beyond the subset, so a view an agent writes cannot fetch anything or run code.
+- **Rendering outside a browser** (a PDF report, an image in a transcript): through a headless browser on the server (Chromium, already
+  used by the suite's UI tests) or a Vega-Lite-to-SVG converter; to decide when reports are built.
+
+### Reports
+
+The owner wants to look at open-source reporting engines, and at embedding SSRS or Power BI Report Server reports. What was found:
+
+| Option | What it is | Fit |
+| --- | --- | --- |
+| **A report spec of our own** on the shared visuals | a declarative document: parameters, sections, text, tables and matrices, Vega-Lite charts, each over a semantic query or a DbDataStore read; rendered to HTML, and to PDF through the headless browser | **recommended first**: agents can write it, it uses the same views as dashboards and assistants, and nothing new is licensed or hosted |
+| **FastReport Open Source** (MIT; .NET Core and .NET 10 supported, actively released) | a banded report engine with sub-reports and a script engine, a desktop designer | the candidate for **pixel-perfect, banded** documents (invoices, statements, printed lists) if the report spec is not enough; it does **not** read RDL (only the commercial edition does) |
+| **RDL on .NET Core** | no Microsoft-supported ReportViewer or RDLC engine exists for .NET Core; `ReportViewerCore.NETCore` is an unofficial build of the SSRS engine, decompiled and recompiled, not maintained for years | **not recommended**: a licence and maintenance risk |
+| **Embedding SSRS and Power BI Report Server reports** | the report server stays where it is; an app shows its reports by URL (`rs:Embed=true` for the viewer, `rs:Format=PDF` and others for exports), and the Report Server REST API (`/reports/api/v2.0`) lists reports, folders and parameters | **recommended as an integration** for organizations that have a report server: a "report server" source in an app, with the catalogue read through the REST API |
+| Hosting SSRS reports ourselves on .NET | no solution found that runs RDL on .NET Core besides the unofficial port above | not an option for now |
+
+**Embedding a report server: the hard part is sign-in.** Community reports show the iframe still prompting for the report server's
+credentials, and Power BI's cloud embedding APIs do not apply to the on-premises Report Server. The workable paths are Windows
+authentication end to end (the browser signs in to the report server directly with the user's Windows identity, on an intranet) or the
+app host as a reverse proxy using Kerberos constrained delegation to the report server. Both need a test environment with a report server;
+this belongs to the sign-in design conversation (section 2).
+
 ## 3. What earlier plans must keep possible
 
 | Plan | Keep possible |
@@ -128,7 +180,8 @@ Connect provider**. **The spec needs design conversations with the owner**; the 
 | 13 W13 (secrets) | provider keys as secret references |
 | 13 W5 (web) | the shared components publishable outside the console |
 | 15 (DbDataStore) | its API is the only write path; models generate OpenAPI; it accepts a paired app host as a server client |
-| 14 (semantic layer) | the presentation specs (matrix, Vega-Lite) usable outside the console; semantic queries callable by a paired server client |
+| 14 (semantic layer) | the presentation specs (matrix, Vega-Lite) usable outside the console, as the one view format (section 2a); semantic queries callable by a paired server client |
+| 13 W5 (web) | the renderer of views as its own package (`@dbdatakit/visuals`), not code inside a console page |
 
 ## 4. Decisions and open questions
 
@@ -137,6 +190,8 @@ Connect provider**. **The spec needs design conversations with the owner**; the 
 | 1 | Agent actions | **decided** (to be refined later): every action is generated by the agent and approved by the user as it happens, then run under the user's identity |
 | 2 | Apps | **decided direction**: a standalone feature (an app host of its own), with DbDataStore data views and editing, Vega-Lite dashboards, reports and agent assistants |
 | 3 | Sign-in | **decided direction**: Windows, OpenID Connect, Entra ID; the console as an OpenID Connect provider; **spec to be designed with the owner** (section 2) |
-| 4 | Provider abstraction | open: `Microsoft.Extensions.AI` (checked against each provider), or our own |
-| 5 | Code apps | open: from the start, or declarative apps first |
+| 4 | Provider abstraction | **decided** (for now): `Microsoft.Extensions.AI`'s `IChatClient`, proven against OpenAI, Foundry, Anthropic and a local model (Ollama) first |
+| 5 | Code apps | **decided**: at the same time as declarative apps, or before them |
 | 6 | The app host's name | open: DbDataApps is a working name |
+| 7 | Visuals | **decided direction**: a shared feature (one view format, one renderer) for the console, apps, assistants and reports |
+| 8 | Reports | open: a report spec of our own first (recommended), FastReport Open Source for banded documents if needed, SSRS and Power BI Report Server embedded as an integration; to be looked into further |
