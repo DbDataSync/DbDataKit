@@ -162,8 +162,32 @@ The owner wants to look at open-source reporting engines, and at embedding SSRS 
 | **A report spec of our own** on the shared visuals | a declarative document: parameters, sections, text, tables and matrices, Vega-Lite charts, each over a semantic query or a DbDataStore read; rendered to HTML, and to PDF through the headless browser | **recommended first**: agents can write it, it uses the same views as dashboards and assistants, and nothing new is licensed or hosted |
 | **FastReport Open Source** (MIT; .NET Core and .NET 10 supported, actively released) | a banded report engine with sub-reports and a script engine, a desktop designer | the candidate for **pixel-perfect, banded** documents (invoices, statements, printed lists) if the report spec is not enough; it does **not** read RDL (only the commercial edition does) |
 | **RDL on .NET Core** | no Microsoft-supported ReportViewer or RDLC engine exists for .NET Core; `ReportViewerCore.NETCore` is an unofficial build of the SSRS engine, decompiled and recompiled, not maintained for years | **not recommended**: a licence and maintenance risk |
+| **Majorsilence Reporting** (github.com/majorsilence/Reporting; formerly My-FyiReporting; Apache 2.0, some parts MIT/Apache/BSD; .NET 8 and 10; Linux, macOS, Windows through SkiaSharp; reviewed at `24c6580`, 2026-10-23) | an RDL engine of its own (not Microsoft's code): RDL 2005 natively, RDL 2008/2010/2016 normalized to it for static tables; renders PDF, HTML, MHTML, Word (RTF), Excel (xlsx), CSV, XML, TIFF; an ASP.NET Core viewer API and a Blazor web designer; an MCP server (render, inspect, lint, scaffold); a compatibility linter (`rdl-doctor`) | **the candidate for RDL reports without a report server** (section 2a below), ahead of FastReport, after a spike against real reports |
 | **Embedding SSRS and Power BI Report Server reports** | the report server stays where it is; an app shows its reports by URL (`rs:Embed=true` for the viewer, `rs:Format=PDF` and others for exports), and the Report Server REST API (`/reports/api/v2.0`) lists reports, folders and parameters | **recommended as an integration** for organizations that have a report server: a "report server" source in an app, with the catalogue read through the REST API |
 | Hosting SSRS reports ourselves on .NET | no solution found that runs RDL on .NET Core besides the unofficial port above | not an option for now |
+
+**Majorsilence Reporting, in more detail.** What fits: RDL that SSRS users know; an active, permissively licensed .NET 10 project that runs
+on Linux; the export formats people ask for; a web designer and viewer; an MCP server and a linter that suit agents. What to watch:
+
+- **RDL coverage is partial.** The engine models RDL 2005. Newer reports are rewritten to it only for a Tablix with static columns (a
+  plain table); a Tablix with dynamic columns (a matrix), nested hierarchies on both axes, gauges, indicators, sparklines, maps and the
+  `Lookup` functions are refused (loudly, through the linter) rather than rendered. Reports from a current SSRS estate need checking with
+  `rdl-doctor` before anything is promised.
+- **Data comes from us, not from its providers.** It has its own data-provider strings and connection strings in the report. Used here,
+  reports get their rows pushed in (`DataSet.SetData`) from a semantic query or a DbDataStore read made under the user's identity, so the
+  suite's connections, limits, permissions and audit apply; its own providers stay off.
+- **Embedded code stays off.** A report's `<Code>` (VB) runs only if a compiler is registered (it is off by default on .NET), and the
+  `<Classes>` and `<CodeModules>` extensions load .NET types; all three are refused for reports from users or agents. The expression
+  language itself needs a review for reflection before reports from agents are rendered.
+- **Its charts are not our visuals.** RDL charts render through its own chart code, not the shared Vega-Lite views; a report that needs
+  the suite's charts uses the report spec of our own, or embeds a rendered view as an image.
+- **A large dependency.** About 237,000 lines, and its own UI framework (Majorsilence.Forms) underneath; development comes in bursts
+  ("nothing happens for weeks or months", its own README). Pinned versions, our own tests over the reports we rely on, and the willingness to
+  fix things upstream are the price.
+- **The web designer is Blazor**, the console is React: it would be embedded (its own page or a frame), not merged into the console.
+
+Recommended next step: a spike that runs a sample of real SSRS reports through `rdl-doctor` and renders the ones it accepts, with data
+pushed from a semantic query, on Linux and Windows.
 
 **Embedding a report server: the hard part is sign-in.** Community reports show the iframe still prompting for the report server's
 credentials, and Power BI's cloud embedding APIs do not apply to the on-premises Report Server. The workable paths are Windows
@@ -194,4 +218,4 @@ this belongs to the sign-in design conversation (section 2).
 | 5 | Code apps | **decided**: at the same time as declarative apps, or before them |
 | 6 | The app host's name | open: DbDataApps is a working name |
 | 7 | Visuals | **decided direction**: a shared feature (one view format, one renderer) for the console, apps, assistants and reports |
-| 8 | Reports | open: a report spec of our own first (recommended), FastReport Open Source for banded documents if needed, SSRS and Power BI Report Server embedded as an integration; to be looked into further |
+| 8 | Reports | open: a report spec of our own for reports built on the shared visuals; **Majorsilence Reporting for RDL reports** (after a spike with real reports), FastReport Open Source as the alternative for banded documents; SSRS and Power BI Report Server embedded as an integration |
