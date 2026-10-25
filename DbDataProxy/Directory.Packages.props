@@ -35,5 +35,7 @@
     <PackageVersion Include="DbDataKit.Hosting.Cli" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Security.Acl" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.State" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Web" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Hosting.Local" Version="$(DbDataKitVersion)" />
   </ItemGroup>
 </Project>

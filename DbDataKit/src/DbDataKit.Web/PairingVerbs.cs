@@ -3,11 +3,12 @@ using DbDataKit.Cli;
 namespace DbDataKit.Web.Trust;
 
 /// <summary>Where a server keeps what pairing needs; the product says, the verbs do the rest.</summary>
-/// <param name="ServerYaml">The server's <c>server.yaml</c>; the pairing codes wait in <c>pairing-codes.json</c> beside it.</param>
-public sealed record PairingFiles(string ServerYaml)
+/// <param name="ServerYaml">The server's <c>server.yaml</c>.</param>
+/// <param name="CodesFile">Where the pairing codes wait; <c>pairing-codes.json</c> beside <paramref name="ServerYaml"/> unless a server keeps its settings in a folder under version control and its codes elsewhere.</param>
+public sealed record PairingFiles(string ServerYaml, string? CodesFile = null)
 {
     public PairedClientsFile Clients() => new(ServerYaml);
-    public PairingCodes Codes() => new(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(ServerYaml))!, "pairing-codes.json"));
+    public PairingCodes Codes() => new(CodesFile ?? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(ServerYaml))!, "pairing-codes.json"));
 }
 
 /// <summary>

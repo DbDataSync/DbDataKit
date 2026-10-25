@@ -157,6 +157,15 @@ compression and auth settings reload without a restart; the listener and certifi
 (in the data directory, its `config` folder, or beside the executable) and where its settings go now. Move the `Proxy` section's keys into the files above
 (`DataSources` entries into `connections/`, `Users` into `proxy/users.yaml`, `Auth` into `proxy/auth.yaml`, the rest into `server.yaml`), then delete the old file.
 
+### The management API
+
+A console manages a proxy through an API on a listener of its own (`management:` in `server.yaml`; off unless `enabled: true`): https on `management.port` (8816, the loopback address unless `management.address` says otherwise), never the Flight port.
+The two are kept apart by the connection they arrive on, not by number: a management path on the Flight port is a 404, and the management port answers only its own paths and the shared `/health` and `/version`.
+
+* **Pairing** is the one every DbData server has: `dbdataproxy server pair [--max-role ...]` prints a single-use code, a console pairs with it over https and pins this proxy's certificate, `server clients` lists the paired clients and `server unpair <client>` removes one. They are recorded in `server.yaml` (`instanceId`, `pairedClients`); the codes wait in the data directory, not in the folder under version control. `--repo` names the data directory.
+* **Calls** carry the console's short-lived signed token (`X-DbData-Token`), and each call needs a role: `GET /api/v1/about` (viewer), `GET /api/v1/config` (admin: every effective setting with the file and line, environment variable or default it came from, secrets masked, and what the validator says) and `POST /api/v1/config/validate` (admin: `{"files": {"connections/erp.yaml": "..."}}` says whether the configuration would be valid with those files in place of the current ones; nothing is written). No answer contains a secret: a test writes a marker into every place a secret can be set and looks for it in every answer.
+* **The local channel** (`management.localChannel: true`) answers the command line on this machine over a named pipe (Windows; SYSTEM and Administrators) or a Unix socket (the service's account), as an administrator, with messages `{"method":"GET","path":"/api/v1/config"}`.
+
 ### Validation, schema version and the config commands
 
 The configuration is the files above, with the same environment and command line overrides as before. It is read through the shared `DbDataKit.Config` strict binder, so a typo is no longer ignored:

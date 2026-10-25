@@ -8,6 +8,7 @@ using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Configuration;
 using DbDataProxy.Server.Data;
 using DbDataProxy.Server.Flight;
+using DbDataProxy.Server.Management;
 using DbDataProxy.Server.Secrets;
 using DbDataProxy.Server.Tls;
 using Grpc.Net.Compression;
@@ -103,7 +104,10 @@ public static class ProxyHost
         ConnectionStartupChecks.WarnAboutTlsOptOuts(
             app.Services.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue, app.Services.GetRequiredService<SecretsRuntime>(),
             app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Connections"));
+        // The management API has a listener of its own (plan 13, P03); the guard keeps it off the Flight port and the Flight RPCs off it.
+        ProxyManagementHost.Guard(app);
         app.UseDbDataPipeline();
+        ProxyManagementHost.Map(app, options, ResolveDataDirectory(options), app.Services.GetRequiredService<TlsCertificateHolder>(), configRoot);
         app.MapDbDataEndpoints();
         app.MapFlightEndpoint();
         app.MapGet("/", () => "DbDataProxy Arrow Flight SQL endpoint. Connect with a Flight SQL client.");
@@ -231,6 +235,7 @@ public static class ProxyHost
                     https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
                 });
             });
+            ProxyManagementHost.Listen(kestrel, options, holder);
         });
     }
 

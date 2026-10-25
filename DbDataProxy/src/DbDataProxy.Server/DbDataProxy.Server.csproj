@@ -33,6 +33,8 @@
     <DbDataKitReference Include="Hosting.Cli" />
     <DbDataKitReference Include="Security.Acl" />
     <DbDataKitReference Include="State" />   <!-- the proxy's state database; plan 13, P02 -->
+    <DbDataKitReference Include="Web" />   <!-- the management API: pairing, tokens, roles; plan 13, P03 -->
+    <DbDataKitReference Include="Hosting.Local" />   <!-- the local channel for the command line on this machine -->
     <ProjectReference Include="..\DbDataProxy.Core\DbDataProxy.Core.csproj" />
   </ItemGroup>
   <ItemGroup>

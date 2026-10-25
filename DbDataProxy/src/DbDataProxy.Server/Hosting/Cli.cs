@@ -1,4 +1,5 @@
 using DbDataKit.Cli;
+using DbDataKit.Web.Trust;
 using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Configuration;
 
@@ -17,7 +18,7 @@ public static class Cli
     public static Task<int> RunAsync(string[] args, CliContext context) => Router().RunAsync(args, context);
 
     /// <summary>What <c>ui mcp</c> never offers: secrets (they read standard input, which is the protocol's channel) and queries (they return rows; an agent works without data).</summary>
-    private static readonly string[] NotForAgents = ["secret", "query"];
+    private static readonly string[] NotForAgents = ["secret", "query", "server pair", "server unpair"];
 
     public static NounRouter Router()
     {
@@ -28,7 +29,7 @@ public static class Cli
 
     private static NounRouter Build(Func<NounRouter> self) => new(Program,
     [
-        ServerNoun.Create(RunServerAsync),
+        ServerNoun.Create(RunServerAsync).With([.. PairingVerbs.Create(PairingFilesOf)]),
         ServiceNoun(),
         CertNoun(),
         SecretNoun(),
@@ -37,6 +38,17 @@ public static class Cli
         HealthNoun(),
         UiNoun.Create(self, Program, ProxyHost.Version, NotForAgents),
     ], ProxyHost.Version);
+
+    /// <summary>
+    /// Where the pairing verbs look: the proxy's <c>server.yaml</c> in the configuration folder of its data directory, and the pairing codes in the data directory itself (not in the folder a person keeps under version control).
+    /// <c>--repo</c> names the data directory, as it names the server's directory in the other products.
+    /// </summary>
+    private static PairingFiles PairingFilesOf(string[] args)
+    {
+        var at = Array.LastIndexOf(args, "--repo");
+        var dataDirectory = at >= 0 && at + 1 < args.Length ? Path.GetFullPath(args[at + 1]) : ProxyConfigFile.ResolveDataDirectory();
+        return new PairingFiles(ProxyConfigFile.PathIn(dataDirectory), Path.Combine(dataDirectory, "pairing-codes.json"));
+    }
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context)
     {
