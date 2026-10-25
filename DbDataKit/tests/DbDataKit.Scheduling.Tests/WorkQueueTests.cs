@@ -306,4 +306,26 @@ public sealed class WorkQueueTests : IDisposable
         Assert.Equal(first, claimed!.RunId);
         Assert.Equal(_clock.GetUtcNow(), claimedAt);
     }
+
+    [Theory, MemberData(nameof(Engines))]
+    public void A_schedulers_job_record_is_kept_per_service_owner_and_job(string engine)
+    {
+        var database = _engines.Open(engine, new StateSchema([WorkQueueSchema.Queue, JobStateSchema.Table]));
+        var jobs = new JobStateStore(database, Sync);
+        var other = new JobStateStore(database, "dbdatabuild");
+        var at = new DateTimeOffset(2026, 10, 25, 12, 15, 0, TimeSpan.Zero);
+
+        Assert.Null(jobs.Get("sales", "sqlserver/hourly"));
+
+        jobs.SaveHandled("sales", "sqlserver/hourly", at);
+        jobs.SaveStarted("sales", "sqlserver/hourly", at.AddSeconds(1));
+        jobs.SaveExit("sales", "sqlserver/hourly", 3);
+        jobs.SaveHandled("sales", "sqlserver/hourly", at.AddHours(1));       // a later save replaces only its own column
+
+        var state = jobs.Get("sales", "sqlserver/hourly")!;
+        Assert.Equal(new JobState(at.AddHours(1), at.AddSeconds(1), 3), state);
+        Assert.Null(jobs.Get("sales", "sqlserver/daily"));
+        Assert.Null(jobs.Get("other", "sqlserver/hourly"));
+        Assert.Null(other.Get("sales", "sqlserver/hourly"));
+    }
 }

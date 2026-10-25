@@ -75,10 +75,10 @@ internal static class ServerCli
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "listen" });
+        var parsed = CliArgs.Parse(args, new HashSet<string> { "scheduler" }, new HashSet<string> { "repo", "listen" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
         {
-            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>]. Projects are added with 'server project add'.");
+            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--scheduler]. Projects are added with 'server project add'.");
             return CliExit.Usage;
         }
 
@@ -102,8 +102,12 @@ internal static class ServerCli
         var host = new TuiCommand.CliHost(Environment.GetEnvironmentVariable);
         var secrets = ServerSecrets.Open(settings.Directory);
         var runner = new ChildProcessCommandRunner(logins: token => ServerSecrets.LoginsAsync(secrets, token));
-        var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, projects, host.Commands, line => context.Error.WriteLine(line));
-        await context.Out.WriteLineAsync($"Serving {projects.All().Count} project(s) on {listen} (instance {BuildServer.InstanceId(settings.ServerYaml)}). Pair a client with: dbdatabuild server pair");
+        // running plans on their schedules is opt-in: a server that was only meant to answer reads never writes a target by itself
+        BuildScheduler? scheduler = parsed.Has("scheduler")
+            ? new BuildScheduler(projects, runner, BuildSchedulerSchema.Open(settings.Directory), TimeProvider.System, line => context.Error.WriteLine(line))
+            : null;
+        var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, projects, host.Commands, line => context.Error.WriteLine(line), scheduler: scheduler);
+        await context.Out.WriteLineAsync($"Serving {projects.All().Count} project(s) on {listen} (instance {BuildServer.InstanceId(settings.ServerYaml)}){(scheduler is null ? "" : ", running scheduled refresh plans")}. Pair a client with: dbdatabuild server pair");
         // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
         await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);
         return CliExit.Ok;

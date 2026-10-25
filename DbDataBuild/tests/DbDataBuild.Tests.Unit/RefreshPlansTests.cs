@@ -21,7 +21,7 @@ public class RefreshPlansTests
     private const string SummaryYaml = "name: marts.summary\nkind: full\ngrain: [event_id]\ncolumns:\n  - {name: event_id, type: BIGINT, nullable: false}\n";
     private const string SummarySql = "SELECT event_id FROM marts.fct_events\n";
 
-    private static string Project(string fctRefresh, string configExtra = "", string? summaryRefresh = null, string? folderFile = null)
+    internal static string Project(string fctRefresh, string configExtra = "", string? summaryRefresh = null, string? folderFile = null)
     {
         var dir = NewProjectDir();
         void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); File.WriteAllText(p, text); }
@@ -35,7 +35,7 @@ public class RefreshPlansTests
         return dir;
     }
 
-    private static (int Exit, string Out, string Err) Compile(string dir) => RenderFiles("--write", "--project", dir);
+    internal static (int Exit, string Out, string Err) Compile(string dir) => RenderFiles("--write", "--project", dir);
 
     private static (RefreshPlanFile Plan, LoadsFile Loads) Read(string dir, string plan)
     {

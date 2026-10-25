@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataBuild.Cli.Mcp;
 using DbDataBuild.Tui.Model;
+using DbDataKit.Scheduling;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -28,7 +29,7 @@ internal static class BuildManagementApi
     /// <param name="projects">The projects served, read again on every call so one added or removed is served or gone at once.</param>
     /// <param name="commands">All the commands there are; each project is offered the read-only ones.</param>
     /// <param name="surfaceFor">Which of them a project is offered and how their inputs are checked; the read-only rules unless a test or a later slice says otherwise.</param>
-    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null)
+    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null)
     {
         surfaceFor ??= ReadOnlySurface;
         var specs = CommandSpecs.All.ToDictionary(s => s.Name);
@@ -54,6 +55,30 @@ internal static class BuildManagementApi
                     effect = c.Effect,
                     role = specs.TryGetValue(c.Name, out var spec) ? ManagementAuthorization.RoleFor(spec.Effect).ToString().ToLowerInvariant() : null,
                     allowed = specs.TryGetValue(c.Name, out var s) && ManagementAuthorization.Authorize(token, s, projectId).Allowed,
+                }),
+            });
+        });
+
+        // the scheduled plans of a project, whether or not this server runs them (the scheduler is opt-in): their schedule, the next time each is due and how the last run went
+        app.MapGet("/api/v1/projects/{project}/schedule", (string project) =>
+        {
+            if (projects.Find(project) is not { } hosted) return Results.NotFound();
+            var now = TimeProvider.System.GetUtcNow();
+            var jobs = scheduler is not null
+                ? scheduler.Jobs(hosted)
+                : [.. RefreshJobs.Discover(projects.RootOf(hosted)).Select(j => (j, (DateTimeOffset?)DbDataKit.Scheduling.ScheduleEvaluator.NextAfter(j.Schedule, now), (JobState?)null))];
+            return Results.Json(new
+            {
+                enabled = scheduler is not null,
+                jobs = jobs.Select(j => new
+                {
+                    connection = j.Job.Connection,
+                    plan = j.Job.Plan,
+                    schedule = j.Job.Schedule.Cron,
+                    time_zone = j.Job.Schedule.TimeZoneId,
+                    next_due = j.NextDue,
+                    last_started = j.State?.LastStarted,
+                    last_exit = j.State?.LastExit,
                 }),
             });
         });
