@@ -11,8 +11,7 @@ internal interface IProjectCommandRunner
 }
 
 /// <summary>
-/// Starts this same executable as a child with the command's arguments and <c>--format json</c>, and reads its standard output and error. When the running program is not <c>dbdatabuild</c> itself (the test host, <c>dotnet</c>
-/// running the assembly) it runs the assembly with <c>dotnet exec</c> instead, like Sync's workers. A command that runs longer than <c>timeout</c> is killed with its children and reports exit 124.
+/// Starts this same executable as a child with the command's arguments and <c>--format json</c>, and reads its standard output and error. When the running program is not <c>dbdatabuild</c> itself (a test host, <c>dotnet</c> running the assembly) it runs the assembly with <c>dotnet exec</c> instead, like Sync's workers. A command that runs longer than <c>timeout</c> is killed with its children and reports exit 124.
 /// <para>
 /// The child gets the server's environment as it is. Mapping a project's secret references into it is R04.
 /// </para>
@@ -72,11 +71,14 @@ internal sealed class ChildProcessCommandRunner(TimeSpan? timeout = null, int ma
         }
     }
 
+    /// <summary>This executable when it is <c>dbdatabuild</c> itself; otherwise the program is a host running the assembly (<c>dotnet</c>, or a test host such as <c>testhost.exe</c>), so the assembly is run with <c>dotnet exec</c>.</summary>
     private static (string File, string[] Prefix) Executable()
     {
         var running = Environment.ProcessPath ?? throw new InvalidOperationException("The path of the running program is not known.");
-        return string.Equals(Path.GetFileNameWithoutExtension(running), "dotnet", StringComparison.OrdinalIgnoreCase)
-            ? (running, ["exec", Path.Combine(AppContext.BaseDirectory, "dbdatabuild.dll")])
-            : (running, []);
+        if (string.Equals(Path.GetFileNameWithoutExtension(running), "dbdatabuild", StringComparison.OrdinalIgnoreCase)) return (running, []);
+        var dotnet = string.Equals(Path.GetFileNameWithoutExtension(running), "dotnet", StringComparison.OrdinalIgnoreCase)
+            ? running
+            : Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") is { Length: > 0 } host ? host : "dotnet";
+        return (dotnet, ["exec", Path.Combine(AppContext.BaseDirectory, "dbdatabuild.dll")]);
     }
 }
