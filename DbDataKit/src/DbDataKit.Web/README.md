@@ -38,6 +38,10 @@ A client replaces its signing key without pairing again. `KeyRotationRequest` ca
 
 The role check per command and the audit are in `ManagementAuthorization` and `ManagementIdentity`; the key rotation, the version rule and the server-to-server kind are the next slices (T07, T09, T10).
 
+## Publishers and owner scope (`OwnerScope`)
+
+A server client that publishes into a server (a Build server creating Proxy data sources) holds `ServerRole.Publisher`, whose ceiling is set at pairing (`server pair --max-role publisher`). `OwnerScope.Authorize(token, action, object)` is the rule the called server applies on every call: a Publisher may create (the object is then stamped `managed_by: <client id>`, `OwnerScope.Stamp`) and may change or delete only objects carrying its own id; an object made by hand, one that belongs to another client and the server's own policy (`ManagedObject.IsServerPolicy`) are refused with a reason for the log. An Admin is not limited by owner. Taking an object over (`--adopt`) is `OwnerScope.AuthorizeAdopt`: a person's act with the admin role, never a server client's.
+
 ## Authenticating calls (`ManagementAuthentication`)
 
 `UseManagementAuthentication(validator, refused)` puts the token check in front of every request under `/api/`: the token is read from the `X-DbData-Token` header and validated by `ConsoleTokenValidator`, and the validated token is on the request for the endpoint (`context.ManagementToken()`), which decides what the caller may do with `ManagementAuthorization`. A refused call is a `401` with no body; `refused` hears why, for the server's log. Pairing and key rotation are outside the prefix because a client that is not paired yet has no token. The first server to use it is the Build server (R01).
