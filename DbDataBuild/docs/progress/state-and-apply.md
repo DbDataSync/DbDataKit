@@ -1426,3 +1426,9 @@ Operator decision: correlated subqueries are a hard requirement.
 - **Changed**: `RefreshViews.HealthAsync` uses the shared `HealthEvaluator` (`DbDataKit.Monitoring`) for overdue and slow; the output is the same. A run is compared by exact time, where it used to be by whole seconds, so the boundary can differ by under a second.
 - **Tests**: `PlanHealthTests` (7), on a fake clock. The conformance rules tests in `RefreshRulesConformanceTests` run in CI.
 - **Not done**: reporting `max_runtime` and failed runs as findings.
+
+## 189. The Build server runs scheduled refresh plans (plan 13, M08)
+
+- **Built**: `server run --scheduler` (off unless asked). Plans with a `schedule:` in the compiled files of a hosted project are queued when due and run as `connection refresh <connection> <plan>` in a child process; the schedule's state and the queue are in `state.db` in the server's directory. A first sighting is never run; missed times run once. `GET /api/v1/projects/{project}/schedule`.
+- **Tests**: `BuildSchedulerTests` (9).
+- **Not done**: pause from the console, notifications of failures, pulling a remote project first, retention.
