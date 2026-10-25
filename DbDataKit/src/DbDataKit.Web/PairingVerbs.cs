@@ -41,7 +41,7 @@ public static class PairingVerbs
         var ceiling = ServerRole.Admin;
         if (parsed.Get("max-role") is { } roles && (!ServerRoles.TryParse(roles.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries), out ceiling) || ceiling == ServerRole.None))
         {
-            context.Error.WriteLine($"'{roles}' is not a list of roles (viewer, operator, author, approver, admin).");
+            context.Error.WriteLine($"'{roles}' is not a list of roles (viewer, operator, author, approver, admin, publisher).");
             return CliExit.Usage;
         }
         var lifetime = PairingCodes.DefaultLifetime;

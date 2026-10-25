@@ -2,7 +2,7 @@ namespace DbDataKit.Web.Trust;
 
 /// <summary>
 /// What a user may do on a server (plan 13, W12). A role is a set, not a ladder: <see cref="Author"/> and <see cref="Approver"/> are about a Build project's files and plans and neither
-/// contains the other, nor <see cref="Admin"/>. What a role implies is in <see cref="ServerRoles.Close"/>.
+/// contains the other, nor <see cref="Admin"/>; <see cref="Publisher"/> is for another server publishing into this one and stands alone. What a role implies is in <see cref="ServerRoles.Close"/>.
 /// </summary>
 [Flags]
 public enum ServerRole
@@ -18,6 +18,8 @@ public enum ServerRole
     Approver = 8,
     /// <summary>Configuration changes: connections, data sources, replications, schedules, certificates.</summary>
     Admin = 16,
+    /// <summary>Creating objects on a server, such as data sources, and changing or deleting only the ones this client created (server clients, <see cref="OwnerScope"/>). It reads nothing else, and implies no other role.</summary>
+    Publisher = 32,
 }
 
 public static class ServerRoles
