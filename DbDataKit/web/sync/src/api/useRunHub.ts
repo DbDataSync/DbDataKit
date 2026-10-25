@@ -1,5 +1,6 @@
 import * as signalR from '@microsoft/signalr'
 import { useEffect, useRef, useState } from 'react'
+import { apiUrl } from '@dbdatakit/shell'
 import { ApiError, api } from './client'
 import type { LogSeverity, RunStatus } from './types'
 
@@ -55,7 +56,7 @@ export function useRunHub(runId: string | undefined) {
       setLogLines((prev) => [...prev, ...fresh].sort((a, b) => a.id - b.id));
     };
 
-    const connection = new signalR.HubConnectionBuilder().withUrl('/hubs/run').withAutomaticReconnect().build();
+    const connection = new signalR.HubConnectionBuilder().withUrl(apiUrl('/hubs/run')).withAutomaticReconnect().build();
     connectionRef.current = connection;
 
     connection.on('logLine', (entry: LiveLogLine) => mergeLogs([entry]));

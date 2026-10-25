@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import * as signalR from '@microsoft/signalr'
 import { useOutletContext } from 'react-router-dom'
-import { ErrorBanner, useNavigate } from '@dbdatakit/shell'
+import { apiUrl, ErrorBanner, useNavigate } from '@dbdatakit/shell'
 import { useBulkCreateMappings, useReplication, useTableMappingDetails, useTables } from '../../api/hooks'
 import type { BulkCreateNote, BulkCreateProgress } from '../../api/types'
 import type { MappingsOutletContext } from './TableMappingsPanel'
@@ -222,7 +222,7 @@ export function MappingsOverview() {
  * in-progress state.
  */
 async function joinBatch(batchId: string, onProgress: (p: BulkCreateProgress) => void) {
-  const connection = new signalR.HubConnectionBuilder().withUrl('/hubs/run').build()
+  const connection = new signalR.HubConnectionBuilder().withUrl(apiUrl('/hubs/run')).build()
   connection.on('bulkMappingProgress', (p: BulkCreateProgress) => onProgress(p))
   try {
     await connection.start()
