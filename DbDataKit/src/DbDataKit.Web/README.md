@@ -17,10 +17,16 @@ A client is a console, another server or a command line (`ClientKind`); the serv
 
 * `PairedClientsFile` reads the list (the file's bytes are compared on every `Find`, so an `unpair` made by the command line takes effect on the server's next call) and edits it surgically (comments and the rest of the file stay). An entry that is not valid is skipped and named in `Problems`, never trusted. Edits take a lock between processes.
 * `PairingCodes`: `server pair` makes a code (20 characters, 100 bits, shown once; only its hash is kept in `pairing-codes.json` next to `server.yaml`). It works once, expires (10 minutes by default), and five wrong codes in a row cancel every code waiting.
-* `PairingService.Pair(request)`: checks the shape of the request, then spends the code and adds the client with the ceiling the code carried. Pairing an id again replaces its entry (a new key). The outcome carries the server's instance id and certificate fingerprint for the client to pin. The HTTPS endpoint that calls it comes with the console side (T04).
+* `PairingService.Pair(request)`: checks the shape of the request, then spends the code and adds the client with the ceiling the code carried. Pairing an id again replaces its entry (a new key). The outcome carries the server's instance id and certificate fingerprint for the client to pin. The HTTPS endpoint that calls it is `PairingEndpoint.MapPairing` (`GET` says which server and API version; `POST` pairs; a refusal is a `403` that does not say why).
 * `PairingVerbs.Create(files)`: `pair [--max-role <roles>] [--name <label>] [--minutes <n>]`, `clients`, `unpair <client>` for a product's `server` noun (`Noun.With`). `--max-role` defaults to admin.
 
-The role check per command and the audit are in `ManagementAuthorization` and `ManagementIdentity`; the console side and the rest are the next slices (T04 to T11).
+## Pairing (client side)
+
+* **The code never crosses the wire.** Both ends hold a key made from the code (the hash the server keeps). The client's proof (`PairingProof.ForRequest`) covers its id, public key, kind and the fingerprint of the certificate it saw; the server's (`ForResponse`) covers its instance id, its certificate and the client. Someone who terminates TLS with their own certificate cannot make either, so the client pins the server it meant to and the server pairs the client that holds the code.
+* `PairingClient.PairAsync(url, code, identity, kind, name)`: looks at the certificate, proves, checks the server's proof, and returns a `PairedServer` (instance id, certificate fingerprint to pin, API version, ceiling). `PairingClient.Pinned(fingerprint)` is the handler for every later call: it accepts that certificate and no other, whatever it chains to. A server's renewed certificate needs pairing again.
+* `ConsoleKeyStore` keeps the console's id and signing seed in the secret store (`dbdata:kit:console:signing-key`); a damaged entry is reported, never replaced. `InstanceRegistry` is the console's `instances.yaml` (id, name, url, certificate fingerprint, API version); an entry without a pin, or over plain HTTP, is not trusted.
+
+The role check per command and the audit are in `ManagementAuthorization` and `ManagementIdentity`; the key rotation, the version rule and the server-to-server kind are the next slices (T07, T09, T10).
 
 ## Audit and authorship
 

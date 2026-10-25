@@ -5,7 +5,10 @@ using System.Text.Json;
 namespace DbDataKit.Web.Trust;
 
 /// <summary>What redeeming a code gives the pairing: the most the new client may grant here, and the label the administrator chose for it.</summary>
-public sealed record PairingGrant(ServerRole Ceiling, string? Label);
+/// <param name="Ceiling">The most a client paired with this code may grant here.</param>
+/// <param name="Label">The name the administrator gave the pairing, if any.</param>
+/// <param name="Key">The key the exchange's proofs are made with (see <see cref="PairingProof"/>); null when the code was redeemed as text.</param>
+public sealed record PairingGrant(ServerRole Ceiling, string? Label, byte[]? Key = null);
 
 /// <summary>A code just made. It is shown once; only its hash is kept.</summary>
 public sealed record PairingCode(string Code, DateTimeOffset ExpiresAt);
@@ -71,6 +74,35 @@ public sealed class PairingCodes(string path, TimeProvider? clock = null)
         });
         return grant;
     }
+
+    /// <summary>
+    /// Spends the code that <paramref name="proves"/> accepts, given each waiting code's key. This is how a client redeems over the wire: it never sends the code, only a proof made with it
+    /// (<see cref="PairingProof"/>), so someone watching the exchange learns nothing they can use. Counts against <see cref="MaxFailures"/> like a wrong code.
+    /// </summary>
+    public PairingGrant? RedeemProof(Func<byte[], bool> proves)
+    {
+        PairingGrant? grant = null;
+        Update(doc =>
+        {
+            var hit = doc.Codes.FirstOrDefault(c => proves(Convert.FromHexString(c.Hash)));
+            if (hit is null)
+            {
+                if (++doc.Failures >= MaxFailures)
+                {
+                    doc.Codes.Clear();
+                    doc.Failures = 0;
+                }
+                return;
+            }
+            doc.Codes.Remove(hit);
+            doc.Failures = 0;
+            grant = new PairingGrant((ServerRole)hit.Ceiling, hit.Label, Convert.FromHexString(hit.Hash));
+        });
+        return grant;
+    }
+
+    /// <summary>The key a code makes proofs with: the hash the server keeps of it, so the server can check a proof without keeping the code.</summary>
+    public static byte[]? KeyFor(string? code) => Normalize(code) is { } normal ? Convert.FromHexString(Hash(normal)) : null;
 
     /// <summary>How many codes are waiting (unexpired, unused).</summary>
     public int Pending()

@@ -6,7 +6,7 @@ namespace DbDataKit.Web.Tests;
 
 public sealed class PairingTests : IDisposable
 {
-    private const string Instance = "server-instance-1";
+    private const string Instance = "server-instance-1", Fingerprint = "ab12cd34ef56ab12";
     private readonly string _dir = Directory.CreateTempSubdirectory("pairing").FullName;
     private readonly TestClock _clock = new();
     private string ServerYaml => Path.Combine(_dir, "server.yaml");
@@ -15,10 +15,14 @@ public sealed class PairingTests : IDisposable
 
     private PairingCodes Codes() => new(Path.Combine(_dir, "pairing-codes.json"), _clock);
     private PairedClientsFile Clients() => new(ServerYaml, _clock);
-    private PairingService Service() => new(Instance, "ab12cd34ef56ab12", Clients(), Codes(), _clock);
+    private PairingService Service() => new(Instance, Fingerprint, Clients(), Codes(), _clock);
 
     private static PairingRequest Request(string? code, ConsoleSigningKey key, string id = "console-a", ClientKind kind = ClientKind.Console, string? name = "Operations") =>
-        new(code, id, name, kind, key.PublicKey);
+        new(Proof(code, id, key.PublicKey, kind), id, name, kind, key.PublicKey);
+
+    /// <summary>What a client sends instead of the code.</summary>
+    private static string? Proof(string? code, string id, byte[] publicKey, ClientKind kind) =>
+        PairingCodes.KeyFor(code) is { } k ? PairingProof.ForRequest(k, id, publicKey, kind, Fingerprint) : "not a proof";
 
     // ---- the code ----
 
@@ -160,8 +164,8 @@ public sealed class PairingTests : IDisposable
         var codes = Codes();
         var code = codes.Create(ServerRole.Viewer).Code;
         Assert.False(Service().Pair(Request(code, ConsoleSigningKey.Generate(), id: id)).Ok);
-        Assert.False(Service().Pair(new PairingRequest(code, "console-a", "x", ClientKind.Console, new byte[5])).Ok);
-        Assert.False(Service().Pair(new PairingRequest(code, "console-a", "x", (ClientKind)9, ConsoleSigningKey.Generate().PublicKey)).Ok);
+        Assert.False(Service().Pair(new PairingRequest(Proof(code, "console-a", new byte[5], ClientKind.Console), "console-a", "x", ClientKind.Console, new byte[5])).Ok);
+        Assert.False(Service().Pair(new PairingRequest(Proof(code, "console-a", ConsoleSigningKey.Generate().PublicKey, ClientKind.Console), "console-a", "x", (ClientKind)9, ConsoleSigningKey.Generate().PublicKey)).Ok);
         Assert.Equal(1, codes.Pending());
     }
 
@@ -205,7 +209,7 @@ public sealed class PairingTests : IDisposable
     {
         var keys = Enumerable.Range(0, 8).Select(_ => ConsoleSigningKey.Generate()).ToArray();
         var codes = keys.Select(_ => Codes().Create(ServerRole.Viewer).Code).ToArray();
-        Parallel.For(0, keys.Length, i => Assert.True(new PairingService(Instance, "x", new PairedClientsFile(ServerYaml), Codes(), _clock).Pair(Request(codes[i], keys[i], id: "c" + i)).Ok));
+        Parallel.For(0, keys.Length, i => Assert.True(new PairingService(Instance, Fingerprint, new PairedClientsFile(ServerYaml), Codes(), _clock).Pair(Request(codes[i], keys[i], id: "c" + i)).Ok));
         Assert.Equal(8, Clients().All().Count);
     }
 
@@ -319,7 +323,7 @@ public sealed class PairingTests : IDisposable
         Assert.Contains(code, run.Out);
         Assert.Equal(["viewer", "operator"], ((IReadOnlyList<string>)run.Context.Data["max_role"]!).Order().Reverse());
 
-        var outcome = new PairingService(Instance, "x", Clients(), Codes()).Pair(Request(code, ConsoleSigningKey.Generate()));
+        var outcome = new PairingService(Instance, Fingerprint, Clients(), Codes()).Pair(Request(code, ConsoleSigningKey.Generate()));
         Assert.True(outcome.Ok);
         Assert.Equal("ops", outcome.Client!.Name);
     }
