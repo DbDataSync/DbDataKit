@@ -25,29 +25,40 @@ public sealed record ManagementResult(int Status, JsonNode Body)
 /// </list>
 /// A secret is never part of an answer: the settings are shown the way <c>config show</c> shows them, and the sentinel test puts a value in every place a secret can be and looks for it in every answer.
 /// </summary>
-public sealed class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version)
+public sealed class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null)
 {
     public const string Prefix = "/api/v1";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public ManagementResult Handle(string method, string path, string? body, Func<ServerRole, bool> holds)
+    public async Task<ManagementResult> HandleAsync(string method, string path, string? body, ManagementCaller caller, CancellationToken cancellationToken = default)
     {
         var route = path.Split('?')[0].TrimEnd('/');
-        switch ((method.ToUpperInvariant(), route))
+        var query = path.Contains('?') ? System.Web.HttpUtility.ParseQueryString(path[(path.IndexOf('?') + 1)..]) : new System.Collections.Specialized.NameValueCollection();
+        method = method.ToUpperInvariant();
+        switch ((method, route))
         {
             case ("GET", Prefix + "/about"):
-                return holds(ServerRole.Viewer) ? ManagementResult.Ok(About()) : Denied(ServerRole.Viewer);
+                return caller.Holds(ServerRole.Viewer) ? ManagementResult.Ok(About()) : Denied(ServerRole.Viewer);
             case ("GET", Prefix + "/config"):
-                return holds(ServerRole.Admin) ? ManagementResult.Ok(Config()) : Denied(ServerRole.Admin);
+                return caller.Holds(ServerRole.Admin) ? ManagementResult.Ok(Config()) : Denied(ServerRole.Admin);
             case ("POST", Prefix + "/config/validate"):
-                return holds(ServerRole.Admin) ? Validate(body) : Denied(ServerRole.Admin);
-            default:
-                return ManagementResult.Problem(404, "There is no such call.");
+                return caller.Holds(ServerRole.Admin) ? Validate(body) : Denied(ServerRole.Admin);
         }
+
+        if (route == Prefix + "/data-sources" || route.StartsWith(Prefix + "/data-sources/", StringComparison.Ordinal))
+        {
+            if (dataSources is null) return ManagementResult.Problem(404, "There is no such call.");
+            if (!caller.Holds(ServerRole.Admin)) return Denied(ServerRole.Admin);
+            var rest = route.Length > (Prefix + "/data-sources").Length ? route[(Prefix + "/data-sources/").Length..].Split('/') : [];
+            return await dataSources.HandleAsync(method, rest, body, query["expected_version"], caller, cancellationToken);
+        }
+        return ManagementResult.Problem(404, "There is no such call.");
     }
 
     private static ManagementResult Denied(ServerRole needed) => ManagementResult.Problem(403, $"This call needs the {needed.ToString().ToLowerInvariant()} role.");
+
+    internal const string CandidatePrefix = "";
 
     private JsonObject About() => new() { ["product"] = "dbdataproxy", ["version"] = version, ["instance_id"] = instanceId, ["api_version"] = ManagementApi.Version };
 
@@ -70,11 +81,24 @@ public sealed class ProxyManagement(IConfigurationRoot configuration, string con
 
     private ManagementResult Validate(string? body)
     {
-        ValidateRequest? request;
-        try { request = string.IsNullOrWhiteSpace(body) ? new ValidateRequest(new()) : JsonSerializer.Deserialize<ValidateRequest>(body, Json); }
-        catch (JsonException) { return ManagementResult.Problem(400, "The body is a JSON object: {\"files\": {\"server.yaml\": \"...\"}}."); }
-        var files = request?.Files ?? new();
+        var files = ParseFiles(body, out var problem);
+        return problem is not null ? ManagementResult.Problem(400, problem) : ValidateFiles(files!);
+    }
 
+    private static Dictionary<string, string>? ParseFiles(string? body, out string? problem)
+    {
+        problem = null;
+        try
+        {
+            var request = string.IsNullOrWhiteSpace(body) ? new ValidateRequest(new()) : JsonSerializer.Deserialize<ValidateRequest>(body, Json);
+            return request?.Files ?? new();
+        }
+        catch (JsonException) { problem = "The body is a JSON object: {\"files\": {\"server.yaml\": \"...\"}}."; return null; }
+    }
+
+    /// <summary>Whether the configuration would be valid with these files (layout names, relative to the configuration folder) in place of the current ones. Nothing is written.</summary>
+    public ManagementResult ValidateFiles(IReadOnlyDictionary<string, string> files)
+    {
         // Only the files of the layout, and only inside it: a name that leaves the folder, or is not one of the layout's, is refused before anything is written even to the scratch copy.
         foreach (var name in files.Keys)
             if (!IsLayoutFile(name)) return ManagementResult.Problem(400, $"'{name}' is not a file of the configuration (server.yaml, proxy/auth.yaml, proxy/users.yaml, connections/<name>.yaml).");

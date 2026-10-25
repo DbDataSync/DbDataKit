@@ -18,6 +18,7 @@
     <PackageVersion Include="DbDataKit.Dialect" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Config.Yaml" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Config" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Config.Git" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Config.Hosting" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Config.Testing" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Secrets.Abstractions" Version="$(DbDataKitVersion)" />

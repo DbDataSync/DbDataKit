@@ -3,9 +3,13 @@ using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json.Nodes;
+using DbDataKit.Config.Git;
 using DbDataKit.Hosting.Local;
 using DbDataKit.Web.Trust;
+using DbDataProxy.Data;
+using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Configuration;
+using DbDataProxy.Server.Data;
 using DbDataProxy.Server.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
@@ -243,5 +247,152 @@ public sealed class ManagementTests : IAsyncLifetime
         using var same = TempConfig.Create(("server.yaml", "listen: { address: 127.0.0.1, port: 8816 }\nmanagement: { enabled: true, port: 8816 }\n"));
         var clash = ProxyConfig.Load(new ConfigurationBuilder().Add(new ProxyConfigDirectorySource(same.Directory)).Build());
         Assert.Contains(clash.Diagnostics, d => d.KeyPath == "Management.Port");
+    }
+
+    // ---- data sources (P04) ----
+
+    private static string Scratch(string name) => Conn.Yaml(name, "duckdb", "Data Source=:memory:", proxy: ["allow_writes: true"]);
+
+    private static string Put(string text, string? expected) => JsonSerializer(new { text, expected_version = expected });
+
+    private IOptionsMonitor<ProxyOptions> Options => app.Services.GetRequiredService<IOptionsMonitor<ProxyOptions>>();
+
+    private static readonly ProxyPrincipal Anyone = new("test", "test", ["*"]);
+
+    [Fact]
+    public async Task A_data_source_is_created_read_listed_and_in_use_at_once_and_a_change_and_a_removal_are_applied_without_a_restart()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        var catalog = app.Services.GetRequiredService<DataSourceCatalog>();
+        Assert.Throws<Grpc.Core.RpcException>(() => catalog.Resolve(Anyone, "scratch"));   // before
+
+        var created = await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/scratch", ServerRole.Admin, Put(Scratch("scratch"), null));
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        var version = (string)JsonNode.Parse(await created.Content.ReadAsStringAsync())!["version"]!;
+        Assert.True(Options.CurrentValue.DataSources.ContainsKey("scratch"));              // applied: no restart, no wait for a file watcher
+        await using (var result = await catalog.Resolve(Anyone, "scratch").Executor.ExecuteQueryAsync(new QueryRequest("SELECT 42 AS answer"), CancellationToken.None))
+            Assert.Single(result.Schema.FieldsList);                                         // after: it answers a query
+
+        var listed = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Get, "/api/v1/data-sources", ServerRole.Admin)).Content.ReadAsStringAsync())!["data_sources"]!.AsArray();
+        Assert.Contains(listed, d => (string)d!["name"]! == "scratch" && (string)d["engine"]! == "duckdb" && (bool)d["valid"]!);
+        var read = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Get, "/api/v1/data-sources/scratch", ServerRole.Admin)).Content.ReadAsStringAsync())!;
+        Assert.Equal(version, (string)read["version"]!);
+        Assert.Equal(Scratch("scratch"), (string)read["text"]!);
+
+        // a change, based on the version just read
+        var changed = Conn.Yaml("scratch", "duckdb", "Data Source=:memory:", proxy: ["allow_writes: true", "batch_size: 500"]);
+        var second = await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/scratch", ServerRole.Admin, Put(changed, version));
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        Assert.Equal(500, Options.CurrentValue.DataSources["scratch"].BatchSize);
+        var newVersion = (string)JsonNode.Parse(await second.Content.ReadAsStringAsync())!["version"]!;
+
+        // removed, and gone from use
+        var removed = await CallAsync(server, HttpMethod.Delete, $"/api/v1/data-sources/scratch?expected_version={newVersion}", ServerRole.Admin);
+        Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
+        Assert.False(File.Exists(Path.Combine(ConfigDirectory, "connections", "scratch.yaml")));
+        Assert.Throws<Grpc.Core.RpcException>(() => catalog.Resolve(Anyone, "scratch"));
+        Assert.Equal(HttpStatusCode.NotFound, (await CallAsync(server, HttpMethod.Delete, "/api/v1/data-sources/scratch", ServerRole.Admin)).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_write_based_on_an_old_version_is_refused_with_the_current_one_and_nothing_is_overwritten()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        var first = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/scratch", ServerRole.Admin, Put(Scratch("scratch"), null))).Content.ReadAsStringAsync())!;
+        var version = (string)first["version"]!;
+
+        // creating what exists, and changing from a version that is not the current one
+        var again = await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/scratch", ServerRole.Admin, Put(Scratch("scratch"), null));
+        Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+        Assert.Equal(version, (string)JsonNode.Parse(await again.Content.ReadAsStringAsync())!["current_version"]!);
+        var old = await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/scratch", ServerRole.Admin, Put(Conn.Yaml("scratch", "duckdb", "Data Source=:memory:", proxy: ["batch_size: 7"]), "0000"));
+        Assert.Equal(HttpStatusCode.Conflict, old.StatusCode);
+        Assert.Equal(Scratch("scratch"), File.ReadAllText(Path.Combine(ConfigDirectory, "connections", "scratch.yaml")));
+        Assert.Equal(HttpStatusCode.Conflict, (await CallAsync(server, HttpMethod.Delete, "/api/v1/data-sources/scratch?expected_version=0000", ServerRole.Admin)).StatusCode);
+        Assert.True(File.Exists(Path.Combine(ConfigDirectory, "connections", "scratch.yaml")));
+    }
+
+    [Fact]
+    public async Task A_data_source_that_would_make_the_configuration_invalid_is_refused_with_the_reasons_and_nothing_is_written()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        var bad = Conn.Yaml("bad", proxy: ["batch_size: 0"]);
+        var refused = await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/bad", ServerRole.Admin, Put(bad, null));
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        var body = JsonNode.Parse(await refused.Content.ReadAsStringAsync())!;
+        Assert.False((bool)body["valid"]!);
+        Assert.Contains(body["diagnostics"]!.AsArray(), d => ((string?)d!["key"])?.EndsWith("BatchSize") == true && (int)d["line"]! == Conn.LineOf(bad, "batch_size"));
+        Assert.False(File.Exists(Path.Combine(ConfigDirectory, "connections", "bad.yaml")));
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/bad", ServerRole.Admin, Put(Conn.Yaml("bad", connectionString: "Server=s;Password=hunter2"), null))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/..%2Fescape", ServerRole.Admin, Put(Scratch("x"), null))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/scratch", ServerRole.Admin, "not json")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/scratch", ServerRole.Viewer, Put(Scratch("scratch"), null))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(server, HttpMethod.Get, "/api/v1/data-sources", ServerRole.Viewer)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Every_change_is_a_commit_by_the_person_through_their_console_and_a_line_in_the_audit_with_no_content()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/scratch", ServerRole.Admin, Put(Scratch("scratch"), null));
+        var version = (string)JsonNode.Parse(await (await CallAsync(server, HttpMethod.Get, "/api/v1/data-sources/scratch", ServerRole.Admin)).Content.ReadAsStringAsync())!["version"]!;
+        await CallAsync(server, HttpMethod.Delete, $"/api/v1/data-sources/scratch?expected_version={version}", ServerRole.Admin);
+
+        var history = new GitCommitService(ConfigDirectory).GetHistory("connections", 10);
+        Assert.Equal(["Remove data source scratch", "Add data source scratch"], history.Select(c => c.Message).ToList());
+        // the person, and an address that names them and the console and cannot be mistaken for a mailbox
+        Assert.All(history, c => Assert.Equal("Ada", c.AuthorName));
+        Assert.All(history, c => Assert.Equal($"ada@{console.Id}.console.invalid", c.AuthorEmail));
+
+        var audit = File.ReadAllLines(Path.Combine(dataDirectory, "management-audit.log")).Select(l => JsonNode.Parse(l)!).ToList();
+        Assert.Equal(["created", "removed"], audit.Select(a => (string)a["outcome"]!).ToList());
+        Assert.All(audit, a => { Assert.Equal("scratch", (string)a["target"]!); Assert.Equal("ada", (string)a["userId"]!); });
+        Assert.DoesNotContain("duckdb", string.Join("\n", File.ReadAllLines(Path.Combine(dataDirectory, "management-audit.log"))));
+    }
+
+    [Fact]
+    public async Task A_data_source_is_tested_by_connecting_and_the_failure_is_a_kind_and_a_code_never_the_drivers_text()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/scratch", ServerRole.Admin, Put(Scratch("scratch"), null));
+        var ok = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Post, "/api/v1/data-sources/scratch/test", ServerRole.Admin)).Content.ReadAsStringAsync())!;
+        Assert.True((bool)ok["ok"]!);
+
+        await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/nowhere", ServerRole.Admin,
+            Put(Conn.Yaml("nowhere", connectionString: "Server=127.0.0.1,1;Database=d;Connect Timeout=3", auth: "auth: { mode: sql, user: u, password_secret: 'env:NOWHERE_PW' }"), null));
+        using (new EnvScope(("NOWHERE_PW", "pw")))
+        {
+            var failed = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Post, "/api/v1/data-sources/nowhere/test", ServerRole.Admin)).Content.ReadAsStringAsync())!;
+            Assert.False((bool)failed["ok"]!);
+            Assert.False(string.IsNullOrWhiteSpace((string)failed["message"]!));
+            Assert.DoesNotContain("127.0.0.1", (string)failed["message"]!);
+        }
+
+        await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/their-own", ServerRole.Admin, Put(Conn.Yaml("their-own", "odbc", "Driver={X};Server=s", proxy: ["pass_through: true"]), null));
+        var passThrough = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Post, "/api/v1/data-sources/their-own/test", ServerRole.Admin)).Content.ReadAsStringAsync())!;
+        Assert.False((bool)passThrough["ok"]!);
+        Assert.Contains("database credentials", (string)passThrough["message"]!);
+        Assert.Equal(HttpStatusCode.NotFound, (await CallAsync(server, HttpMethod.Post, "/api/v1/data-sources/none/test", ServerRole.Admin)).StatusCode);
+    }
+
+    [Fact]
+    public async Task The_local_channel_changes_data_sources_as_the_operating_system_user()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The Unix socket's folder is chosen here");
+        var socketDirectory = Path.Combine(dataDirectory, "run");
+        await StartAsync(localChannel: true, localDirectory: socketDirectory);
+        await using var client = await LocalChannelClient.ConnectAsync(new LocalChannelOptions("dbdataproxy") { Directory = socketDirectory });
+
+        var message = System.Text.Json.JsonSerializer.Serialize(new { method = "PUT", path = "/api/v1/data-sources/scratch", body = Put(Scratch("scratch"), null) });
+        var answer = JsonNode.Parse(await client.SendAsync(Encoding.UTF8.GetBytes(message)))!;
+        Assert.Equal(200, (int)answer["status"]!);
+        Assert.True(Options.CurrentValue.DataSources.ContainsKey("scratch"));
+        Assert.EndsWith("@local.invalid", new GitCommitService(ConfigDirectory).GetHistory("connections", 1)[0].AuthorEmail);
     }
 }

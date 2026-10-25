@@ -2,9 +2,11 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DbDataKit.Config.Git;
 using DbDataKit.Hosting.Local;
 using DbDataKit.Web.Trust;
 using DbDataProxy.Server.Configuration;
+using DbDataProxy.Server.Data;
 using DbDataProxy.Server.Hosting;
 using DbDataProxy.Server.Tls;
 using Microsoft.AspNetCore.Connections;
@@ -73,7 +75,14 @@ public static class ProxyManagementHost
         // the pairing codes wait in the data directory, not in the configuration folder a person keeps under version control
         var files = new PairingFiles(serverYaml, Path.Combine(dataDirectory, "pairing-codes.json"));
         var clients = files.Clients();
-        var management = new ProxyManagement(configuration, ProxyConfigFile.DirectoryIn(dataDirectory), instanceId, ProxyHost.Version);
+        var configDirectory = ProxyConfigFile.DirectoryIn(dataDirectory);
+        var provider = configuration.Providers.OfType<ProxyConfigDirectoryProvider>().Single();
+        var git = new GitCommitService(configDirectory);
+        // the data sources need the management object's validation, and it needs them to route to: made in two steps
+        ProxyDataSources? dataSources = null;
+        var management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version);
+        dataSources = new ProxyDataSources(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<DataSourceCatalog>(), new FileAuditLog(Path.Combine(dataDirectory, "management-audit.log")), git);
+        management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version, dataSources);
         var validator = new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache());
         var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management");
 
@@ -84,18 +93,18 @@ public static class ProxyManagementHost
             clients, files.Codes()));
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new MemoryReplayCache()));
 
-        app.MapMethods($"{ProxyManagement.Prefix}/{{**rest}}", ["GET", "POST"], async (HttpContext context) =>
+        app.MapMethods($"{ProxyManagement.Prefix}/{{**rest}}", ["GET", "POST", "PUT", "DELETE"], async (HttpContext context) =>
         {
-            var token = context.ManagementToken();
+            var caller = new ManagementCaller(context.ManagementToken());
             using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
-            var body = context.Request.Method == HttpMethods.Post ? await reader.ReadToEndAsync(context.RequestAborted) : null;
-            var result = management.Handle(context.Request.Method, context.Request.Path.Value!, body, role => ManagementAuthorization.Authorize(token, role).Allowed);
+            var body = context.Request.Method is "POST" or "PUT" ? await reader.ReadToEndAsync(context.RequestAborted) : null;
+            var result = await management.HandleAsync(context.Request.Method, context.Request.Path.Value! + context.Request.QueryString, body, caller, context.RequestAborted);
             return Results.Json(result.Body, statusCode: result.Status);
         });
 
         if (options.Management.LocalChannel)
         {
-            var channel = new LocalChannelServer(new LocalChannelOptions("dbdataproxy") { Directory = string.IsNullOrWhiteSpace(options.Management.LocalChannelDirectory) ? null : options.Management.LocalChannelDirectory }, (request, ct) => Task.FromResult(HandleLocal(management, request)));
+            var channel = new LocalChannelServer(new LocalChannelOptions("dbdataproxy") { Directory = string.IsNullOrWhiteSpace(options.Management.LocalChannelDirectory) ? null : options.Management.LocalChannelDirectory }, (request, ct) => HandleLocalAsync(management, request, ct));
             channel.Start();
             app.Lifetime.ApplicationStopping.Register(() => channel.DisposeAsync().AsTask().GetAwaiter().GetResult());
             log.LogInformation("The local channel is {Endpoint}.", channel.Endpoint);
@@ -104,12 +113,12 @@ public static class ProxyManagementHost
     }
 
     /// <summary>A local-channel message is <c>{"method":"GET","path":"/api/v1/config","body":"..."}</c>; the answer is <c>{"status":200,"body":{...}}</c>. The operating system decided who could connect, so the caller holds every role.</summary>
-    internal static byte[] HandleLocal(ProxyManagement management, byte[] request)
+    internal static async Task<byte[]> HandleLocalAsync(ProxyManagement management, byte[] request, CancellationToken cancellationToken)
     {
         try
         {
             var message = JsonNode.Parse(request)?.AsObject();
-            var result = management.Handle((string?)message?["method"] ?? "GET", (string?)message?["path"] ?? "", (string?)message?["body"], _ => true);
+            var result = await management.HandleAsync((string?)message?["method"] ?? "GET", (string?)message?["path"] ?? "", (string?)message?["body"], ManagementCaller.Local(Environment.UserName), cancellationToken);
             return JsonSerializer.SerializeToUtf8Bytes(new JsonObject { ["status"] = result.Status, ["body"] = result.Body });
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
