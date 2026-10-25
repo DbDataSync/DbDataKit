@@ -240,7 +240,7 @@ internal static class ApplyCommand
                 return OriginVerdict.Fine;
             };
         }
-        var options = new ApplyOptions(dryRun, allowRisky, allowDestructive.ToHashSet(StringComparer.Ordinal), audit == AuditLevel.Minimal ? null : commit, dirty, audit == AuditLevel.Minimal ? "" : write?.User ?? Environment.UserName, stopRequested,
+        var options = new ApplyOptions(dryRun, allowRisky, allowDestructive.ToHashSet(StringComparer.Ordinal), audit == AuditLevel.Minimal ? null : commit, dirty, audit == AuditLevel.Minimal ? "" : Actor.Of(env, write?.User ?? Environment.UserName), stopRequested,
             (name, token) => originLogins.TryGetValue(name, out var login) ? (mode.Limits ?? SessionLimits.None).OpenAsync(name, () => ReadSession.OpenAsync(login, token), token) : throw new InvalidOperationException($"no read login for connection {name}"),
             Lane: mode.Refresh ? "refresh" : "deploy", ProjectHash: mode.Refresh ? null : plan.ProjectHash, PlanHash: mode.PlanHash, Refresh: mode.Refresh, RecordShapes: mode.RecordShapes, RecordText: audit == AuditLevel.Full, Run: mode.Run, Execution: mode.Execution,
             InputPins: mode.InputPins, ApproveMoved: mode.ApproveMoved, Timezone: config.TimezoneOf(plan.Connection), Clock: RefreshCommand.Now, Parallel: mode.Parallel, CheckOrigin: checkOrigin);

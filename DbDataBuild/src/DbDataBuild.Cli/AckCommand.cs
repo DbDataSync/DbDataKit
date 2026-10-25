@@ -58,10 +58,10 @@ internal static class AckCommand
                 foreach (var e in open)
                 {
                     var parts = e.AckKey!.Split('|');
-                    await AuditLog.AcknowledgeAsync(historyGate, scope, "ack", parts[1], parts[0], parts[2], write.User ?? Environment.UserName, reason!);
+                    await AuditLog.AcknowledgeAsync(historyGate, scope, "ack", parts[1], parts[0], parts[2], Actor.Of(env, write.User ?? Environment.UserName), reason!);
                 }
-                output.Payload("acknowledged", open.Select(e => new { kind = "history", subject = name, key = e.AckKey, by = write.User ?? Environment.UserName, reason }).ToList());
-                output.WriteLine($"Recorded: {open.Count} acknowledgement(s) for {name} by {write.User ?? Environment.UserName}. The report still shows the history, marked as accepted, and no longer lists it as needing attention.");
+                output.Payload("acknowledged", open.Select(e => new { kind = "history", subject = name, key = e.AckKey, by = Actor.Of(env, write.User ?? Environment.UserName), reason }).ToList());
+                output.WriteLine($"Recorded: {open.Count} acknowledgement(s) for {name} by {Actor.Of(env, write.User ?? Environment.UserName)}. The report still shows the history, marked as accepted, and no longer lists it as needing attention.");
                 return CliApp.ExitOk;
             }
 
@@ -101,9 +101,9 @@ internal static class AckCommand
             var runId = Guid.NewGuid();
             using var log = new FileStatementLog(Path.Combine(root, InitCommand.StatementLogDir), spec.Name, runId);
             await using var gate = await MutationGate.OpenAsync(write, spec.Name, StatementKind.Tracking, log, runId);
-            await AuditLog.AcknowledgeAsync(gate, scope, "ack", name, code, detail, write.User ?? Environment.UserName, reason!);
-            output.Payload("acknowledged", new[] { new { kind, subject = name, key = $"{code}|{name}|{detail}", by = write.User ?? Environment.UserName, reason } });
-            output.WriteLine($"Recorded: {code} on {name} for hash {detail[..Math.Min(12, detail.Length)]} acknowledged by {write.User ?? Environment.UserName}. The next plan will accept exactly this change.");
+            await AuditLog.AcknowledgeAsync(gate, scope, "ack", name, code, detail, Actor.Of(env, write.User ?? Environment.UserName), reason!);
+            output.Payload("acknowledged", new[] { new { kind, subject = name, key = $"{code}|{name}|{detail}", by = Actor.Of(env, write.User ?? Environment.UserName), reason } });
+            output.WriteLine($"Recorded: {code} on {name} for hash {detail[..Math.Min(12, detail.Length)]} acknowledged by {Actor.Of(env, write.User ?? Environment.UserName)}. The next plan will accept exactly this change.");
             output.Next("connection deploy --write-plan");
             return CliApp.ExitOk;
         }).GetAwaiter().GetResult();

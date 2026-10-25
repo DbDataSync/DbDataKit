@@ -26,9 +26,12 @@ public sealed class BuildServerTests : IAsyncLifetime
     private sealed class Fake : IProjectCommandRunner
     {
         public List<IReadOnlyList<string>> Calls { get; } = [];
-        public Task<CommandResult> RunAsync(IReadOnlyList<string> argv, string projectRoot, CancellationToken cancellationToken)
+        public List<string?> Actors { get; } = [];
+        public Task<CommandResult> RunAsync(IReadOnlyList<string> argv, string projectRoot, CancellationToken cancellationToken) => RunAsync(argv, projectRoot, null, cancellationToken);
+        public Task<CommandResult> RunAsync(IReadOnlyList<string> argv, string projectRoot, string? actor, CancellationToken cancellationToken)
         {
             Calls.Add(argv);
+            Actors.Add(actor);
             return Task.FromResult(new CommandResult(0, """{"command":"fake","ok":true}""", ""));
         }
     }
@@ -115,14 +118,34 @@ public sealed class BuildServerTests : IAsyncLifetime
         Assert.Equal(id, (string)projects["projects"]![0]!["id"]!);
 
         var commands = JsonNode.Parse(await (await Send(HttpMethod.Get, $"/api/v1/projects/{id}/commands", token: Token())).Content.ReadAsStringAsync())!["commands"]!.AsArray();
+        var byName = commands.ToDictionary(c => (string)c!["name"]!, c => c!);
+        Assert.Contains("project show graph", byName.Keys);
+        Assert.Equal("viewer", (string)byName["project show graph"]["role"]!);
+        Assert.Equal("operator", (string)byName["connection refresh"]["role"]!);
+        Assert.Equal("approver", (string)byName["connection deploy"]["role"]!);
+        Assert.Equal("admin", (string)byName["connection init"]["role"]!);
+        Assert.Equal("author", (string)byName["project compile"]["role"]!);
+        Assert.DoesNotContain(byName.Keys, n => n.StartsWith("ui ", StringComparison.Ordinal));
+
+        // a viewer may run what reads and is told which of the others it may not
+        Assert.True((bool)byName["project show graph"]["allowed"]!);
+        Assert.False((bool)byName["connection deploy"]["allowed"]!);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await Send(HttpMethod.Get, "/api/v1/projects/other/commands", token: Token())).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_read_only_server_offers_only_what_changes_nothing()
+    {
+        await Start(new Fake(), DbDataBuild.Cli.Server.BuildManagementApi.ReadOnlySurface);
+        var id = Path.GetFileName(project);
+        var commands = JsonNode.Parse(await (await Send(HttpMethod.Get, $"/api/v1/projects/{id}/commands", token: Token())).Content.ReadAsStringAsync())!["commands"]!.AsArray();
         var names = commands.Select(c => (string)c!["name"]!).ToList();
         Assert.Contains("connection status", names);
-        Assert.Contains("project show graph", names);
         Assert.DoesNotContain("connection refresh", names);
         Assert.DoesNotContain("project seed", names);
         Assert.All(commands, c => Assert.Equal("viewer", (string)c!["role"]!));
-
-        Assert.Equal(HttpStatusCode.NotFound, (await Send(HttpMethod.Get, "/api/v1/projects/other/commands", token: Token())).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Send(HttpMethod.Post, $"/api/v1/projects/{id}/commands/connection_refresh", "{}", Token())).StatusCode);
     }
 
     [Fact]
@@ -132,20 +155,57 @@ public sealed class BuildServerTests : IAsyncLifetime
         await Start(fake);
         var id = Path.GetFileName(project);
 
-        Assert.Equal(HttpStatusCode.NotFound, (await Send(HttpMethod.Post, $"/api/v1/projects/{id}/commands/connection_refresh", "{}", Token())).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Send(HttpMethod.Post, $"/api/v1/projects/{id}/commands/ui_web", "{}", Token())).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Send(HttpMethod.Post, $"/api/v1/projects/{id}/commands/nonsense", "{}", Token())).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await Send(HttpMethod.Post, $"/api/v1/projects/other/commands/project_show_graph", "{}", Token())).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await Send(HttpMethod.Post, $"/api/v1/projects/{id}/commands/project_show_graph", """{"bogus":1}""", Token())).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await Send(HttpMethod.Post, $"/api/v1/projects/{id}/commands/project_show_graph", "[1]", Token())).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await Send(HttpMethod.Post, $"/api/v1/projects/{id}/commands/connection_compare", """{"show_values":true}""", Token())).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Send(HttpMethod.Post, $"/api/v1/projects/{id}/commands/project_file_read", """{"path":"../outside.txt"}""", Token())).StatusCode);
+        Assert.Empty(fake.Calls);
+    }
+
+    [Fact]
+    public async Task A_viewer_is_refused_and_an_approver_applies_and_the_command_is_run_for_that_person()
+    {
+        var fake = new Fake();
+        await Start(fake, ceiling: ServerRole.Approver | ServerRole.Author | ServerRole.Operator);
+        var id = Path.GetFileName(project);
+        const string apply = "connection_deploy";
+
+        var viewer = await Send(HttpMethod.Post, $"/api/v1/projects/{id}/commands/{apply}", "{}", Token(ServerRole.Viewer));
+        Assert.Equal(HttpStatusCode.Forbidden, viewer.StatusCode);
+        Assert.Contains("approver", await viewer.Content.ReadAsStringAsync());
+        var author = await Send(HttpMethod.Post, $"/api/v1/projects/{id}/commands/{apply}", "{}", Token(ServerRole.Author | ServerRole.Operator));
+        Assert.Equal(HttpStatusCode.Forbidden, author.StatusCode);
+        Assert.Empty(fake.Calls);
+
+        var approver = await Send(HttpMethod.Post, $"/api/v1/projects/{id}/commands/{apply}", """{"apply_plan":"plans/x.plan.yml"}""", Token(ServerRole.Approver));
+        Assert.Equal(HttpStatusCode.OK, approver.StatusCode);
+        Assert.Equal(["connection", "deploy"], fake.Calls[0].Take(2));
+        Assert.Contains("--apply-plan", fake.Calls[0]);
+        // the person, and the console they came through: what the tracking tables name as the one who applied the plan
+        Assert.Equal("Ada via test console", Assert.Single(fake.Actors));
+    }
+
+    [Fact]
+    public async Task A_console_ceiling_limits_a_token_that_holds_more()
+    {
+        var fake = new Fake();
+        await Start(fake, ceiling: ServerRole.Operator);
+        var id = Path.GetFileName(project);
+
+        // the token claims the approver role, but the console was paired as an operator at most
+        var refused = await Send(HttpMethod.Post, $"/api/v1/projects/{id}/commands/connection_deploy", "{}", Token(ServerRole.Approver));
+        Assert.True(refused.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized);
         Assert.Empty(fake.Calls);
     }
 
     [Fact]
     public async Task A_command_needing_more_than_the_caller_has_is_refused_with_the_role_it_needs()
     {
-        // A server that offers a command which writes target data (refresh): the effect class sets the role it needs, and the console's ceiling limits the token.
         var fake = new Fake();
-        await Start(fake, (root, all) => new DbDataBuild.Cli.Mcp.ToolSurface(root, all.Where(c => c.Name == "connection refresh")), ServerRole.Operator);
+        await Start(fake, ceiling: ServerRole.Operator);
         var id = Path.GetFileName(project);
 
         var viewer = await Send(HttpMethod.Post, $"/api/v1/projects/{id}/commands/connection_refresh", "{}", Token(ServerRole.Viewer));
