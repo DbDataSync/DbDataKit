@@ -283,4 +283,27 @@ public sealed class WorkQueueTests : IDisposable
         Assert.False(locks.IsLocked("o", "Primary", "dbo.Orders"));
         Assert.True(locks.TryAcquire("o", "Primary", "dbo.Orders", Guid.NewGuid()));
     }
+
+    [Theory, MemberData(nameof(Engines))]
+    public void The_callers_write_is_in_the_enqueue_and_in_the_claim_and_a_failure_undoes_both(string engine)
+    {
+        var database = Open(engine);
+        var queue = Queue(database);
+        var written = new List<Guid>();
+
+        var first = queue.Enqueue("o", "Primary", "s", alsoWrite: (_, _, runId) => written.Add(runId));
+        queue.Enqueue("o", "Primary", "s", alsoWrite: (_, _, runId) => written.Add(runId));
+        Assert.Equal([first], written);
+
+        Assert.Throws<InvalidOperationException>(() => queue.Enqueue("o", "Primary", "t", alsoWrite: (_, _, _) => throw new InvalidOperationException("no")));
+        Assert.False(queue.HasInFlight("o", "Primary", "t"));
+
+        var claimedAt = default(DateTimeOffset);
+        Assert.Throws<InvalidOperationException>(() => queue.TryClaimNext("o", "w1", alsoWrite: (_, _, _, _) => throw new InvalidOperationException("no")));
+        Assert.Empty(queue.OwnersWithHeldWork());
+
+        var claimed = queue.TryClaimNext("o", "w1", alsoWrite: (_, _, item, at) => { Assert.Equal(first, item.RunId); claimedAt = at; });
+        Assert.Equal(first, claimed!.RunId);
+        Assert.Equal(_clock.GetUtcNow(), claimedAt);
+    }
 }

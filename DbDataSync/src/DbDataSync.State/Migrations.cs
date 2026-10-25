@@ -23,7 +23,7 @@ namespace DbDataSync.State;
 /// </summary>
 internal static class Migrations
 {
-    private static readonly string[] Templates =
+    internal static readonly string[] Templates =
     [
         """
         CREATE TABLE Tasks (
@@ -641,6 +641,24 @@ internal static class Migrations
         -- spawned that worker, and stops only this item instead of everything the process is doing.
         ALTER TABLE WorkQueue {{addcolumn}} CancelRequestedUtc {{text}} NULL;
         """,
+
+        """
+        -- Plan 13, M03: the work queue and the run lock become the shared ones (DbDataKit.Scheduling), whose rows say which service, owner, kind,
+        -- subject and part they are for, with Sync's own extras (the segment, the reader, cache and writer kinds, the delete guard) in a payload.
+        --
+        -- The old tables are dropped, not converted. Nothing in them is history: a row is work waiting or running, and run history is in TaskRuns.
+        -- What was waiting is marked Cancelled below and the scheduler queues the next pass itself; a bulk load that was waiting has to be asked for
+        -- again, and its run says so. Work that was running keeps its TaskRuns row, which the API's startup reconciliation settles as it does
+        -- after any restart.
+        DROP TABLE WorkQueue;
+        DROP TABLE RunLocks;
+
+        UPDATE TaskRuns
+        SET Status = 'Cancelled', EndedAtUtc = EnqueuedAtUtc,
+            ErrorSummary = 'Cancelled when the work queue was upgraded; ask for it again.'
+        WHERE Status = 'Queued';
+
+        """ + "\n" + DbDataKit.Scheduling.WorkQueueSchema.Queue,
     ];
 
     /// <summary>The schema, for <see cref="StateDatabase"/> to apply.</summary>

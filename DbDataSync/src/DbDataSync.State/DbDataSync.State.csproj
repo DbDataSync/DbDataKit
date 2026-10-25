@@ -9,6 +9,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <DbDataKitReference Include="Scheduling" />   <!-- the work queue and the run lock; plan 13, M03 -->
     <DbDataKitReference Include="State" />   <!-- the engine, dialects and the identity and notification stores; plan 13, U04 -->
     <Using Include="DbDataKit.State" />
     <Using Include="DbDataKit.Monitoring" />
@@ -22,6 +23,10 @@
          microsoft-data-sqlclient`/`npgsql` once instead (see StateDatabase.FromOptions and this
          project's retrospective phase doc). -->
     <PackageReference Include="Microsoft.Data.Sqlite" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DbDataSync.State.Tests" />   <!-- the upgrade test applies the schema up to a chosen script -->
   </ItemGroup>
 
   <PropertyGroup>
