@@ -1,4 +1,6 @@
 using DbDataKit.Cli;
+using DbDataKit.Web.Trust;
+using DbDataSync.Api.Management;
 
 namespace DbDataSync.Cli;
 
@@ -16,7 +18,7 @@ public static class SyncCli
     public static readonly IReadOnlySet<string> Legacy = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "tool", "update", "launcher", "invite", "internal", "version" };
 
     /// <summary>What <c>ui mcp</c> never offers: nothing that sets a secret or loads an installed library, and nothing that is long-running or interactive (<see cref="McpOptions.Always"/>).</summary>
-    private static readonly string[] NotForAgents = ["secret set", "secret remove", "library validate"];
+    private static readonly string[] NotForAgents = ["secret set", "secret remove", "library validate", "server pair", "server unpair"];
 
     public static NounRouter Router(string version = "0")
     {
@@ -31,7 +33,7 @@ public static class SyncCli
         [
             Forward("run", "Start the API, the scheduler and the web console in one foreground process (what the service runs)", EffectClass.OfflineOnly, "[--repo <path>] [--state-db <path>] [--url <url>]", ServeCommand.RunAsync),
             Forward("setup", "The interactive first-run walk-through, or a review screen for an existing install", EffectClass.RepoFilesOnly, "[--repo <path>]", SetupCommand.RunAsync),
-        ]),
+        ]).With([.. PairingVerbs.Create(args => new PairingFiles(SyncManagement.ServerYamlIn(DbDataSyncRoot.Resolve(args))))]),
         new Noun("service", "Registration of 'server run' with Windows or systemd",
         [
             Forward("install", "Register the service (run it again to update it); needs elevation", EffectClass.TargetWrites, "[--repo <path>] [--url <url>] [--account <account>] [--password-stdin]", a => Task.FromResult(ServiceCommand.Run(["install", .. a]))),

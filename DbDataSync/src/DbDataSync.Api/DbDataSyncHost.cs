@@ -3,6 +3,7 @@ using DbDataSync.Core.Secrets;
 using DbDataSync.Api.Configuration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication;
+using DbDataKit.Web.Trust;
 using DbDataSync.Api.Auth;
 using DbDataSync.Api.Hubs;
 using DbDataSync.Certificates;
@@ -112,6 +113,7 @@ public static class DbDataSyncHost
         // Sign-in is the shared one (DbDataKit.Web.Auth, plan 13 U07): options, current user, passkeys, the user, session and invitation stores,
         // the first-run invitation, the session scheme and the policies. The current user is a singleton that reads IHttpContextAccessor per call,
         // rather than a scoped GitAuthor: a scoped one made every singleton that writes config fail to construct.
+        DbDataSync.Api.Management.SyncManagement.AddServices(builder.Services);
         var authentication = builder.Services.AddSessionAuth(SyncAuth.Product,
             sp => sp.GetRequiredService<StateDatabase>(),
             sp => PasskeyOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>(), sp.GetRequiredService<ApiOptions>()),
@@ -417,11 +419,17 @@ public static class DbDataSyncHost
         // after UseAuthorization, these answered 401 to `/` itself, so a default deployment (authentication on) could
         // not serve its own sign-in screen. What is in wwwroot is the app's code and the docs the build shipped, the
         // same text that is public on GitHub; the data is behind /api, which stays closed.
+        // The management API version on every answer, so a console can tell what it is talking to (plan 13, T09).
+        app.UseManagementApiVersion();
+
         app.UseDefaultFiles();
         app.UseStaticFiles();
 
         app.UseAuthentication();
         app.UseAuthorization();
+
+        // Managed from a console (plan 13, U08): pairing, outside the sign-in.
+        DbDataSync.Api.Management.SyncManagement.Map(app);
 
         app.MapControllers();
         app.MapHub<RunHub>("/hubs/run");
