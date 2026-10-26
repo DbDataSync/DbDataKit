@@ -5,18 +5,13 @@ All four are clients of the same command layer (`--format json` documents). None
 | | Start it with | What it is for |
 |---|---|---|
 | Terminal | `dbdatabuild ui terminal` | choose, plan and run commands interactively |
-| Web page | `dbdatabuild ui web --project <dir>` | a person reads: health, lineage, models and their lowered and rendered scripts, plans (and answers their questions), sample data, table diff, tests, the support matrix; with `--allow-apply`, applies a plan they confirmed |
+| Console | `dbdatabuild server run --project <dir>`, with a console paired to it | a person works in a browser: projects, models, graph, check, status, deploy plans (review, dry run, approve, apply), compare, sample data |
 | MCP server | `dbdatabuild ui mcp --project <dir>` | an AI agent works in the project: the commands as tools, the skill and schemas as resources, workflows as prompts |
 | MCP app | the same `ui mcp` server, in a host that supports MCP Apps | the web page inside the conversation: the person sees and decides, the model cannot press the buttons |
 
-## Web page
+## Console
 
-```
-dbdatabuild ui web --project my-project            # prints http://127.0.0.1:<port>/?token=...  open it
-dbdatabuild ui web --project my-project --allow-apply
-```
-
-It listens on the loopback address only; every request needs the token printed at start. Without `--allow-apply` it can read, plan and compare, not apply. With it, applying needs the write login (`DBDATA_BUILD_<CONNECTION>_WRITE`) in the environment of `dbdatabuild ui web`, every allowance named in the page, and the plan's target typed back. The page reads the target with `DBDATA_BUILD_<CONNECTION>_READ` (plan, table diff). Details: `DESIGN.md` 9.7.
+The command `dbdatabuild ui web` is gone (plan 13, R09). Run `dbdatabuild server run --project .` (it listens on the loopback address by default), pair it with a DbDataKit console on the same machine, and open the project there. Applying a plan needs the `approver` role the console grants through the pairing, and the person who applies is recorded as the approver. The page the MCP server's `show` tool opens is still served by the MCP server, and goes with the MCP server's move to the shared surface.
 
 ## MCP server
 

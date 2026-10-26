@@ -50,7 +50,6 @@ dbdatabuild connection refresh                     # the routine loads (usually 
 dbdatabuild connection monitor                     # what was applied and loaded, and what needs attention
 dbdatabuild connection compare marts.fct_orders --against-schema dev   # compare two tables of one connection (counts only; --show-values to see rows)
 dbdatabuild ui terminal                            # the same, interactively
-dbdatabuild ui web                                 # the same in a browser, read-only unless --allow-apply (lineage, plans, compare, sample data)
 dbdatabuild ui mcp                                 # the commands as tools for an AI agent (Claude Desktop, VS Code); also an MCP app
 ```
 

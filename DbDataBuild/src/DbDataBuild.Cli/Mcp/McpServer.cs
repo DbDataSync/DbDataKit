@@ -49,7 +49,7 @@ internal sealed class McpServer
         this.input = input;
         this.output = output;
         this.host = host;
-        surface = new ToolSurface(projectRoot, host.Commands.Where(c => c.Name is not ("ui terminal" or "ui mcp" or "ui web") && (allowWrites || c.Impact is Impact.None or Impact.RepoFiles || c.Name == DeployCommandName)), withholdWriteFlagsFor: allowWrites ? null : [DeployCommandName]);
+        surface = new ToolSurface(projectRoot, host.Commands.Where(c => c.Name is not ("ui terminal" or "ui mcp") && (allowWrites || c.Impact is Impact.None or Impact.RepoFiles || c.Name == DeployCommandName)), withholdWriteFlagsFor: allowWrites ? null : [DeployCommandName]);
     }
 
     public IReadOnlyCollection<string> ToolNames => tools.Keys.ToList();
@@ -224,7 +224,7 @@ internal sealed class McpServer
         }
         catch (Exception ex) when (ex is System.Net.HttpListenerException or InvalidOperationException)
         {
-            return Failure("The page could not be started on this machine. The person can run `dbdatabuild ui web --project <project>` in a terminal instead.");
+            return Failure("The page could not be started on this machine. The person can use the project in the console instead.");
         }
         var url = pageServer.NewLink(screen);
         var text = $"Give the person this link, once, and say it works once, for ten minutes, in a browser on the machine this server runs on: {url}\nDo not open it yourself (it would become your session, not theirs). It shows the {screen} screen; the other screens are in the page's menu. For another link, call `show` again.";

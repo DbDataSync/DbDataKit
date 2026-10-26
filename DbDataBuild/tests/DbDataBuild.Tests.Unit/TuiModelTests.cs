@@ -22,8 +22,8 @@ public class TuiModelTests
     public void Every_option_and_argument_of_every_command_is_in_the_catalog()
     {
         var root = Root();
-        Assert.Equal(CommandSpecs.All.Where(c => c.Name is not ("ui terminal" or "ui mcp" or "ui web")).Select(c => c.Name).Order(), Catalog.Select(c => c.Name).Order());
-        foreach (var spec in CommandSpecs.All.Where(c => c.Name is not ("ui terminal" or "ui mcp" or "ui web")))
+        Assert.Equal(CommandSpecs.All.Where(c => c.Name is not ("ui terminal" or "ui mcp")).Select(c => c.Name).Order(), Catalog.Select(c => c.Name).Order());
+        foreach (var spec in CommandSpecs.All.Where(c => c.Name is not ("ui terminal" or "ui mcp")))
         {
             var cmd = CliApp.Find(root, spec.Name)!;
             var info = Catalog.Single(c => c.Name == spec.Name);

@@ -46,6 +46,7 @@ to it in the pull request that makes the change; a release moves the entries int
 
 ## DbDataBuild
 
+- **`dbdatabuild ui web` is gone.** The DbDataKit console replaces it: run `dbdatabuild server run --project .` (loopback by default), pair a console with it and open the project there. Scripts that started `ui web` fail with an unknown command. The MCP server's `show` tool still serves its page. (R09)
 - **Login variables are `DBDATA_BUILD_<CONNECTION>_<READ|WRITE>`.** The old `DBDATABUILD_*` names are not read, and the
   `secret:dbdata:build:connection:...` fallback is gone. A connection name with characters other than letters and digits has underscores in
   its variable (`my-dw` is `DBDATA_BUILD_MY_DW_READ`). A connection with no variable set is DDB-501, naming the variable. (B02)

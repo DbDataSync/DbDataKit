@@ -55,7 +55,6 @@ public static class CommandSpecs
         new("connection seed", EffectClass.TargetWrites, "Create the seeded tables (the mapped models) on a connection and fill them from the seeds (prints what it would do unless --apply)", true, "", "P⇒S"),
         new("connection publish", EffectClass.TrackingTablesOnly, "Store the project and model metadata as JSON in the connection for introspection", true, "", "P⇒T"),
         new("ui terminal", EffectClass.OfflineOnly, "Interactive terminal interface: choose, plan and run operations (each action it runs declares its own effect)", true, "", "—"),
-        new("ui web", EffectClass.OfflineOnly, "Web interface on this machine's loopback address: project health, lineage, models and their rendered scripts, tests, the support matrix (it runs only commands that read, unless started with --allow-apply)", true, "", "—"),
         new("ui mcp", EffectClass.OfflineOnly, "Model Context Protocol server on standard input and output: the commands as tools for an AI agent, the agent kit as resources (each tool it offers declares its own effect; commands that change a connection are offered only with --allow-writes)", true, "", "—"),
         new("help code", EffectClass.OfflineOnly, "Long-form explanation of a diagnostic code", true, "", "—"),
         new("help matrix", EffectClass.OfflineOnly, "Print the support matrix and portability report", true, "", "—"),
