@@ -1,11 +1,12 @@
 import { request } from '@dbdatakit/shell'
-import type { BuildProject, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
+import type { BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
 
 const project = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}`
 
 /** Runs one command of a project on the server and returns what it answered. A command that reads is run as a viewer; the server decides what the person may run. */
-function run<T>(id: string, tool: string, inputs: Record<string, unknown> = {}) {
-  return request<CommandAnswer<T>>(`${project(id)}/commands/${tool}`, { method: 'POST', body: JSON.stringify(inputs) })
+function run<T>(id: string, tool: string, inputs: Record<string, unknown> = {}, workspace?: string) {
+  const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
+  return request<CommandAnswer<T>>(`${project(id)}/commands/${tool}${query}`, { method: 'POST', body: JSON.stringify(inputs) })
 }
 
 export const buildApi = {
@@ -39,6 +40,17 @@ export const buildApi = {
       ...(o.againstConnection ? { against_connection: o.againstConnection } : {}),
       ...(o.key && o.key.length > 0 ? { key: o.key } : {}),
     }),
+  /** The drafts of a project (W02): a git worktree per person and name, where editing happens. */
+  workspaces: (id: string) => request<{ workspaces: Workspace[] }>(`${project(id)}/workspaces`).then((r) => r.workspaces),
+  makeWorkspace: (id: string, name: string) => request<Workspace>(`${project(id)}/workspaces`, { method: 'POST', body: JSON.stringify({ name }) }),
+  abandonWorkspace: (id: string, workspace: string) => request<void>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}`, { method: 'DELETE' }),
+  /** The files of a workspace, with their hashes. */
+  files: (id: string, workspace: string) => run<{ files: ProjectFile[] }>(id, 'project_file_list', {}, workspace),
+  readFile: (id: string, workspace: string, path: string) => run<FileContent>(id, 'project_file_read', { path }, workspace),
+  /** Writes a file on the version it was read at; a different current version is refused. */
+  writeFile: (id: string, workspace: string, path: string, content: string, hash: string) => run<{ path: string; hash: string }>(id, 'project_file_write', { path, content, expect_hash: hash }, workspace),
+  /** Compiles the workspace without writing rendered files: what the compiler finds in the draft. */
+  checkDraft: (id: string, workspace: string) => run<CompileSummary>(id, 'project_compile', { check: true }, workspace),
   /** Runs the models on generated rows, offline: what they would produce. */
   sample: (id: string, rows?: number) => run<SampleResult>(id, 'project_sample', rows ? { rows } : {}),
 }

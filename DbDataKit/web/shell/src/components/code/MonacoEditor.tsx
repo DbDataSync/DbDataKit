@@ -72,11 +72,11 @@ export default function MonacoEditor({
     const model = editor.current?.getModel()
     if (!model) return
 
-    monaco.editor.setModelMarkers(model, 'dbdatasync', diagnostics.map((d) => {
+    monaco.editor.setModelMarkers(model, 'dbdatakit', diagnostics.map((d) => {
       const line = d.line > 0 ? d.line : NO_POSITION.line
       const column = d.line > 0 && d.column > 0 ? d.column : NO_POSITION.column
       return {
-        severity: monaco.MarkerSeverity.Error,
+        severity: d.severity === 'warning' ? monaco.MarkerSeverity.Warning : d.severity === 'info' ? monaco.MarkerSeverity.Info : monaco.MarkerSeverity.Error,
         message: d.message,
         startLineNumber: line,
         startColumn: column,

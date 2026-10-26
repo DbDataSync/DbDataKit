@@ -29,6 +29,9 @@ if (!isWorker) {
   const project = path.join(os.tmpdir(), 'dbdatakit-console-e2e-project')
   fs.rmSync(project, { recursive: true, force: true })
   execFileSync('dotnet', ['exec', buildDll, 'project', 'create', 'starter', project], { stdio: 'ignore' })
+  // a git repository, which is what a workspace (a worktree of it) is made from
+  for (const args of [['init', '-q'], ['add', '-A'], ['commit', '-qm', 'The starter project']])
+    execFileSync('git', ['-c', 'user.name=console-e2e', '-c', 'user.email=e2e@example.invalid', ...args], { cwd: project, stdio: 'ignore' })
   execFileSync('dotnet', ['exec', buildDll, 'server', 'project', 'add', 'starter', '--path', project, '--repo', buildDirectory], { stdio: 'ignore' })
   // the console may grant every role there, which is what its administrators will hold
   const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', buildDirectory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })

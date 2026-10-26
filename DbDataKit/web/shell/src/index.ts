@@ -24,3 +24,7 @@ export { createCredential, getCredential, isSupported } from './components/webau
 export { Markdown } from './components/Markdown'
 export { RichMarkdown } from './components/RichMarkdown'
 export { isSafeExternalUrl, isSafeImageUrl, resolveDocImage, resolveLink } from './components/markdownLinks'
+export { CodeEditor } from './components/CodeEditor'
+export type { CodeEditorProps, EditorDiagnostic } from './components/CodeEditor'
+export { DiffViewer } from './components/DiffViewer'
+export type { DiffViewerProps } from './components/DiffViewer'
