@@ -57,6 +57,17 @@ jobs:
     if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # A PostgreSQL for the deploy the browser test approves in the console.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: e2e
+          POSTGRES_DB: warehouse
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-product
@@ -95,6 +106,8 @@ jobs:
       - name: Run the browser tests
         working-directory: DbDataConsole/tests/DbDataConsole.Web.Tests
         run: npx playwright test
+        env:
+          DBDATA_E2E_PG: Host=127.0.0.1;Port=5432;Username=postgres;Password=e2e;Database=warehouse
 
   # The image the console is delivered as: it builds, becomes healthy, serves its web app, and does not run as root.
   image:

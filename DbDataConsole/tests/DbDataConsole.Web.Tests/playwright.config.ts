@@ -30,9 +30,35 @@ if (!isWorker) {
   fs.rmSync(project, { recursive: true, force: true })
   execFileSync('dotnet', ['exec', buildDll, 'project', 'create', 'starter', project], { stdio: 'ignore' })
   execFileSync('dotnet', ['exec', buildDll, 'server', 'project', 'add', 'starter', '--path', project, '--repo', buildDirectory], { stdio: 'ignore' })
-  // the console may grant viewer, author and operator there, which is what its administrators will hold
-  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', buildDirectory, '--max-role', 'viewer,author,operator'], { encoding: 'utf8' })
+  // the console may grant every role there, which is what its administrators will hold
+  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', buildDirectory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
+}
+
+// A project for the deploy test, when there is a PostgreSQL to deploy to (`DBDATA_E2E_PG`, an Npgsql connection string to an empty database; CI starts one): the starter template set up for PostgreSQL, compiled and committed
+// (a deploy applies from a clean working tree), with the tracking tables made and the raw tables seeded. The Build server gets the logins as the variables its commands read.
+export const warehouseConnection = process.env.DBDATA_E2E_PG
+if (!isWorker && warehouseConnection) {
+  execFileSync(process.execPath, [path.join(__dirname, 'pgReset.cjs')], { stdio: 'inherit' })
+  const project = path.join(os.tmpdir(), 'dbdatakit-console-e2e-warehouse')
+  fs.rmSync(project, { recursive: true, force: true })
+  execFileSync('dotnet', ['exec', buildDll, 'project', 'create', 'starter', project], { stdio: 'ignore' })
+  const file = path.join(project, 'dbdatabuild.yml')
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8')
+    .replace('defaults: {connections: [sqlserver]}', 'defaults: {connections: [postgres]}')
+    .replace('  sqlserver: {title', '  postgres: {title')
+    .replace('tracking: { connection: sqlserver }', 'tracking: { connection: postgres }')
+    .replace('trailing_space: ignored', 'trailing_space: significant')
+    .replace('default: { duckdb: NFC, sqlserver: Latin1_General_100_CS_AS }', 'default: { duckdb: NFC, postgres: C }'))
+  const logins = { ...process.env, DBDATA_BUILD_POSTGRES_READ: warehouseConnection, DBDATA_BUILD_POSTGRES_WRITE: warehouseConnection }
+  execFileSync('dotnet', ['exec', buildDll, 'project', 'compile'], { cwd: project, stdio: 'ignore' })
+  execFileSync('dotnet', ['exec', buildDll, 'connection', 'init', 'postgres', '--apply'], { cwd: project, env: logins, stdio: 'ignore' })
+  execFileSync('dotnet', ['exec', buildDll, 'connection', 'seed', 'postgres', '--apply'], { cwd: project, env: logins, stdio: 'ignore' })   // the raw tables the models read
+  const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=console-e2e', '-c', 'user.email=e2e@example.invalid', ...args], { cwd: project, stdio: 'ignore' })
+  git('init', '-q')
+  git('add', '-A')
+  git('commit', '-qm', 'The warehouse project')
+  execFileSync('dotnet', ['exec', buildDll, 'server', 'project', 'add', 'warehouse', '--path', project, '--repo', buildDirectory], { stdio: 'ignore' })
 }
 
 // A Sync server too, for the console to host its screens: a real one, https with a certificate exported from the SDK's development certificate (a server must present a certificate to be paired
@@ -111,6 +137,7 @@ export default defineConfig({
       timeout: 60_000,
       stdout: 'pipe',
       stderr: 'pipe',
+      env: warehouseConnection ? { DBDATA_BUILD_POSTGRES_READ: warehouseConnection, DBDATA_BUILD_POSTGRES_WRITE: warehouseConnection } : {},
     },
     {
       command: ['dotnet', 'exec', JSON.stringify(proxyDll), 'server', 'run',

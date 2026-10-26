@@ -1,9 +1,10 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { CheckTab, GraphTab, ModelsTab, ProjectPage } from './pages/ProjectPage'
+import { PlansTab, SampleTab, StatusTab } from './pages/DeployTabs'
 import { ProjectsPage } from './pages/ProjectsPage'
 
 /**
- * The Build screens as a module of a host (plan 13, R07): the projects a server hosts, and for each its models, their graph and a check. The host has already signed the person in and puts a
+ * The Build screens as a module of a host (plan 13, R07): the projects a server hosts, and for each its models, their graph, a check, and where a connection stands, its deploy plans and a sample run. The host has already signed the person in and puts a
  * `ModuleProvider` around this that says where it is mounted and which server it talks to.
  */
 export function BuildModule() {
@@ -14,6 +15,9 @@ export function BuildModule() {
         <Route index element={<ModelsTab />} />
         <Route path="graph" element={<GraphTab />} />
         <Route path="check" element={<CheckTab />} />
+        <Route path="status" element={<StatusTab />} />
+        <Route path="plans" element={<PlansTab />} />
+        <Route path="sample" element={<SampleTab />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

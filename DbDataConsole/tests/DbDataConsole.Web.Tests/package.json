@@ -7,6 +7,7 @@
     "test": "playwright test"
   },
   "devDependencies": {
-    "@playwright/test": "^1.48.0"
+    "@playwright/test": "^1.48.0",
+    "pg": "^8.13.1"
   }
 }
