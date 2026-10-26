@@ -74,7 +74,7 @@ public sealed class ManagementTests : IAsyncLifetime
     public async ValueTask DisposeAsync()
     {
         if (app is not null) { await app.StopAsync(); await app.DisposeAsync(); }
-        try { Directory.Delete(dataDirectory, true); } catch (IOException) { }
+        TestFolder.Delete(dataDirectory);
     }
 
     private Uri ManagementUrl => new($"https://127.0.0.1:{managementPort}");
