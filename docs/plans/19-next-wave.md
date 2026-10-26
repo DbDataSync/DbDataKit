@@ -121,7 +121,7 @@ Plan 13a's remaining slices are lanes of their own, already in flight; this plan
 | Z02 | `model/1`: schema, validation, the file format and its refusal of unknown versions | | M | schema and validation tests; a bad file fails naming the file |
 | Z03 | Storage for new models on SQL Server and PostgreSQL (create only) through `DbDataKit.Schema` | Z01, Z02, H03 | M | a fixture model creates its tables on both engines |
 | Z04 | Row writes with rules and audit | Z03 | M | write tests: a rule violation is refused with the rule's name; every write audited |
-| Z05 | History: versioned and effective-dated, native temporal tables or app-managed, behind one conformance suite | Z04 | M | the history suite passes for both designs on both engines |
+| Z05 | History: versioned and effective-dated, native temporal tables or app-managed, behind one conformance suite; the design leaves room for a draft layer per channel or preview (plan 21) | Z04 | M | the history suite passes for both designs on both engines |
 | Z06 | Console grid editor module | Z04, 13a U08 | M | Playwright: edit rows of an entity, a rule violation shown |
 | Z07 | Agent tools as change requests (every agent action approved by the user as it happens) | Z04, 13a C01 | S | command tests; an agent's write waits for approval (test) |
 
