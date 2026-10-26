@@ -1,3 +1,7 @@
-provider: duckdb
-connectionString: "Data Source=C:\\data\\scratch.duckdb"
-allowWrites: true
+schema: connection/1
+name: scratch
+engine: duckdb
+connection_string: "Data Source=C:\\data\\scratch.duckdb"
+extensions:
+  proxy:
+    allow_writes: true

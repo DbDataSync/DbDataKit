@@ -132,7 +132,7 @@ public sealed class ConfigStartupTests
         Directory.CreateDirectory(Path.Combine(config, "connections"));
         File.WriteAllText(Path.Combine(config, "proxy", "auth.yaml"), "sessionIdleMinutes: 5\nallowPassThrough: false\n");
         File.WriteAllText(Path.Combine(config, "proxy", "users.yaml"), "users:\n  - name: bob\n    passwordHash: PBKDF2-SHA256$1$a$b\n    dataSources: [erp]\n");
-        File.WriteAllText(Path.Combine(config, "connections", "erp.yaml"), "provider: sqlserver\nconnectionString: Server=x;Password=env:ERP_PW\nclassifier: off\n");
+        File.WriteAllText(Path.Combine(config, "connections", "erp.yaml"), Conn.Yaml("erp", connectionString: "Server=x", auth: "auth: { mode: sql, user: u, password_secret: env:ERP_PW }", proxy: ["classifier: off"]));
         File.WriteAllText(Path.Combine(config, "connections", "notes.txt"), "not a data source");
 
         var o = ProxyConfiguration.LoadOptions(dir);
@@ -143,6 +143,8 @@ public sealed class ConfigStartupTests
         var erp = Assert.Single(o.DataSources);
         Assert.Equal("erp", erp.Key);
         Assert.Equal(ClassifierMode.Off, erp.Value.Classifier);
+        Assert.Equal("sqlserver", erp.Value.Provider);
+        Assert.Equal("Server=x;User Id=u;Password=env:ERP_PW", erp.Value.ConnectionString);
     }
 
     [Fact]
@@ -280,11 +282,12 @@ public sealed class ConfigCommandTests
     [Fact]
     public void A_mistake_in_a_connections_file_names_that_file_and_line()
     {
-        using var c = TempConfig.Create(("connections/erp.yaml", "provider: sqlserver\nconnectionString: Server=x\nbatchSize: 0\n"));
+        var erp = Conn.Yaml("erp", proxy: ["batch_size: 0"]);
+        using var c = TempConfig.Create(("connections/erp.yaml", erp));
         var r = Run("check", "--file", c.Directory);
         Assert.Equal(2, r.Code);
         Assert.Contains("Proxy:DataSources:erp:BatchSize", r.Err);
-        Assert.Contains(Path.Combine("connections", "erp.yaml") + ":3", r.Err);
+        Assert.Contains(Path.Combine("connections", "erp.yaml") + ":" + Conn.LineOf(erp, "batch_size"), r.Err);
     }
 
     [Fact]
@@ -301,7 +304,7 @@ public sealed class ConfigCommandTests
     [Fact]
     public void Check_prints_warnings_but_still_succeeds()
     {
-        using var c = TempConfig.Create(("connections/ro.yaml", "provider: duckdb\nconnectionString: x\n"));
+        using var c = TempConfig.Create(("connections/ro.yaml", Conn.Yaml("ro", "duckdb", "Data Source=x.duckdb")));
         var r = Run("check", "--file", c.Directory);
         Assert.Equal(0, r.Code);
         Assert.Contains("warning", r.Err);
@@ -319,16 +322,15 @@ public sealed class ConfigCommandTests
     [Fact]
     public void Show_origin_lists_effective_values_with_file_line_or_default_and_masks_secrets()
     {
-        const string literalPassword = "Lit3ralPw-8841";
         const string signingKey = "c2lnbmluZy1rZXktbGl0ZXJhbA==";
         const string hash = "PBKDF2-SHA256$210000$salt$hashvalue";
         using var c = TempConfig.Create(
             ("server.yaml", "schemaVersion: 2\nlisten: { port: 9100 }\ntls: { mode: file, certificatePath: c.pfx, certificatePassword: 'env:PFX_PW' }\n"),
             ("proxy/auth.yaml", $"jwt:\n  signingKey: {signingKey}\n  audience: a\n  mappings: [ {{ claim: c, value: v, dataSources: ['*'] }} ]\n"),
             ("proxy/users.yaml", $"users:\n  - name: u\n    passwordHash: '{hash}'\n    dataSources: [a]\n"),
-            ("connections/a.yaml", $"provider: sqlserver\nconnectionString: 'Server=s;User Id=u;Password={literalPassword};Encrypt=True'\n"),
-            ("connections/b.yaml", "provider: sqlserver\nconnectionString: 'Server=s;User Id=u;Password=env:B_PW'\n"),
-            ("connections/c.yaml", "provider: sqlserver\nconnectionString: 'secret:dbdata:proxy:c'\n"));
+            ("connections/a.yaml", Conn.Yaml("a", connectionString: "Server=s;Encrypt=True", auth: "auth: { mode: sql, user: u, password_secret: 'env:A_PW' }")),
+            ("connections/b.yaml", Conn.Yaml("b", connectionString: "Server=s", auth: "auth: { mode: sql, user: u, password_secret: 'env:B_PW' }")),
+            ("connections/c.yaml", Conn.Yaml("c", connectionString: null, extra: "connection_string_secret: 'secret:dbdata:proxy:c'")));
 
         var r = Run("show", "--origin", "--file", c.Directory);
         Assert.Equal(0, r.Code);
@@ -338,7 +340,7 @@ public sealed class ConfigCommandTests
         Assert.Contains("Listen.Address = 0.0.0.0   (default)", text);
         Assert.Contains("SchemaVersion = 2", text);
 
-        foreach (var secret in new[] { literalPassword, signingKey, hash })
+        foreach (var secret in new[] { signingKey, hash })
         {
             Assert.DoesNotContain(secret, text);
             Assert.DoesNotContain(secret, r.Err);
@@ -346,10 +348,10 @@ public sealed class ConfigCommandTests
         Assert.Contains("Auth.Jwt.SigningKey = ********", text);
         Assert.Contains("Users[0].PasswordHash = ********", text);
         Assert.Contains("Tls.CertificatePassword = env:PFX_PW", text);                      // a reference is not secret
-        Assert.Contains("DataSources.a.ConnectionString = Server=s;User Id=u;Password=***;Encrypt=True", text);
+        Assert.Contains("DataSources.a.ConnectionString = Server=s;Encrypt=True;User Id=u;Password=env:A_PW", text);   // a reference is shown as it is: it is not the secret
         Assert.Contains("Password=env:B_PW", text);
         Assert.Contains("DataSources.c.ConnectionString = secret:dbdata:proxy:c", text);
-        Assert.Contains($"({c.Path(Path.Combine("connections", "a.yaml"))}:2)", text);
+        Assert.Contains($"({c.Path(Path.Combine("connections", "a.yaml"))}:4)", text);
     }
 
     [Fact]
@@ -358,11 +360,11 @@ public sealed class ConfigCommandTests
         using var c = TempConfig.Create(
             ("server.yaml", "listen: { address: 127.0.0.1, port: 9000 }\ntls: { mode: none }\n"),
             ("proxy/users.yaml", "users:\n  - name: bob\n    passwordHash: PBKDF2-SHA256$1$a$b\n    dataSources: [ERP]\n    defaultDataSource: erp\n"),
-            ("connections/erp.yaml", "provider: SqlServer\nconnectionString: Server=x;Database=y;Password=env:ERP_PW\n"));
+            ("connections/erp.yaml", Conn.Yaml("erp", connectionString: "Server=x;Database=y", auth: "auth: { mode: sql, user: u, password_secret: 'env:ERP_PW' }")));
         var r = Run("show", "--file", c.Directory);
         Assert.Equal(0, r.Code);
         Assert.Contains("Proxy:Listen:Port = 9000", r.Out);
-        Assert.Contains("Proxy:DataSources:erp:Provider = SqlServer", r.Out);
+        Assert.Contains("Proxy:DataSources:erp:Provider = sqlserver", r.Out);
         Assert.Contains("Proxy:Users:0:Name = bob", r.Out);
         Assert.DoesNotContain("(", r.Out);
     }
@@ -459,7 +461,7 @@ public sealed class ConfigReloadTests
         provider.ReloadNow();
         Assert.Single(monitor.CurrentValue.Users);
 
-        config.Write("connections/new.yaml", "provider: duckdb\nconnectionString: x\nallowWrites: true\n");
+        config.Write("connections/new.yaml", Conn.Yaml("new", "duckdb", "Data Source=x.duckdb", proxy: ["allow_writes: true"]));
         provider.ReloadNow();
         Assert.True(monitor.CurrentValue.DataSources.ContainsKey("NEW"));   // lookups stay case-insensitive
 

@@ -70,7 +70,7 @@ public sealed class CliGrammarTests
     {
         var router = Cli.Router();
 
-        Assert.Equal(["run"], router.Nouns.Single(n => n.Name == "server").Verbs.Select(v => v.Name));
+        Assert.Equal(["run", "pair", "clients", "unpair"], router.Nouns.Single(n => n.Name == "server").Verbs.Select(v => v.Name));
         Assert.Contains("hash", router.Nouns.Single(n => n.Name == "secret").Verbs.Select(v => v.Name));
         Assert.Contains("protect", router.Nouns.Single(n => n.Name == "secret").Verbs.Select(v => v.Name));
         Assert.Equal(["run"], router.Nouns.Single(n => n.Name == "query").Verbs.Select(v => v.Name));
@@ -113,7 +113,7 @@ public sealed class CliGrammarTests
     [Fact]
     public async Task The_checked_in_mcp_tool_list_is_current()
     {
-        var server = new DbDataKit.Cli.McpServer(Cli.Router(), new DbDataKit.Cli.McpOptions(new HashSet<string>(["secret", "query"])), Cli.Program, "0");
+        var server = new DbDataKit.Cli.McpServer(Cli.Router(), new DbDataKit.Cli.McpOptions(new HashSet<string>(["secret", "query", "server pair", "server unpair"])), Cli.Program, "0");
         var reply = (await server.HandleAsync(System.Text.Json.Nodes.JsonNode.Parse("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}""")!)).Single();
         string actual = reply["result"]!.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }).Replace("\r\n", "\n") + "\n";
         if (Environment.GetEnvironmentVariable("UPDATE_GOLDEN") == "1") File.WriteAllText(McpToolsPath(), actual);

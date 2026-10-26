@@ -53,11 +53,15 @@ public sealed class ProxyConfigDirectoryProvider : ConfigurationProvider, IDispo
     /// <summary>The file and position of every flattened key, for the origin shown in diagnostics.</summary>
     public IReadOnlyDictionary<string, ProxyKeyOrigin> Origins { get; private set; } = new Dictionary<string, ProxyKeyOrigin>(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>What the files said that is not an error (a certificate check turned off in a data source, say); <see cref="ProxyConfig.Load"/> reports them with the rest.</summary>
+    public IReadOnlyList<ConfigDiagnostic> Warnings { get; private set; } = [];
+
     public override void Load()
     {
-        var (data, origins) = Read(_source.Directory);
+        var (data, origins, warnings) = Read(_source.Directory);
         Data = data;
         Origins = origins;
+        Warnings = warnings;
     }
 
     /// <summary>Reads the directory again now and tells the options monitor; the file watcher calls this after a change settles.</summary>
@@ -65,9 +69,10 @@ public sealed class ProxyConfigDirectoryProvider : ConfigurationProvider, IDispo
     {
         try
         {
-            var (data, origins) = Read(_source.Directory);
+            var (data, origins, warnings) = Read(_source.Directory);
             Data = data;
             Origins = origins;
+            Warnings = warnings;
         }
         catch (InvalidDataException ex)
         {
@@ -77,11 +82,12 @@ public sealed class ProxyConfigDirectoryProvider : ConfigurationProvider, IDispo
     }
 
     /// <summary>Reads every file of the layout. Throws one <see cref="InvalidDataException"/> listing every problem, each with file and line.</summary>
-    internal static (Dictionary<string, string?> Data, Dictionary<string, ProxyKeyOrigin> Origins) Read(string directory)
+    internal static (Dictionary<string, string?> Data, Dictionary<string, ProxyKeyOrigin> Origins, List<ConfigDiagnostic> Warnings) Read(string directory)
     {
         var data = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var origins = new Dictionary<string, ProxyKeyOrigin>(StringComparer.OrdinalIgnoreCase);
         var diags = new List<ConfigDiagnostic>();
+        var warnings = new List<ConfigDiagnostic>();
         string section = ProxyOptions.SectionName;
 
         void Add(string path, string prefix, Func<YamlMapping, YamlNode?>? select = null)
@@ -113,10 +119,21 @@ public sealed class ProxyConfigDirectoryProvider : ConfigurationProvider, IDispo
         var connections = Path.Combine(directory, "connections");
         if (System.IO.Directory.Exists(connections))
             foreach (var file in System.IO.Directory.EnumerateFiles(connections, "*.yaml").OrderBy(f => f, StringComparer.Ordinal))
-                Add(file, $"{section}:DataSources:{Path.GetFileNameWithoutExtension(file)}");
+            {
+                string text;
+                using (var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                using (var sr = new StreamReader(fs)) text = sr.ReadToEnd();
+                var before = diags.Count;
+                ProxyConnectionFile.Read(file, Path.GetFileNameWithoutExtension(file), text, diags, (key, value, node) =>
+                {
+                    data[key] = value;
+                    origins[key] = new ProxyKeyOrigin(file, node?.Line ?? 1, node?.Column ?? 1, node?.Line ?? 1, node?.Column ?? 1);
+                });
+                warnings.AddRange(diags.Skip(before).Where(d => d.Severity != ConfigSeverity.Error));
+            }
 
         if (diags.HasErrors()) throw new InvalidDataException(ConfigException.Format(diags));
-        return (data, origins);
+        return (data, origins, warnings);
     }
 
     private static void Flatten(YamlNode node, string prefix, string file, Dictionary<string, string?> data, Dictionary<string, ProxyKeyOrigin> origins)

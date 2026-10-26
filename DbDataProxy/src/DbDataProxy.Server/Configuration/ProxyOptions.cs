@@ -43,6 +43,18 @@ public sealed class ProxyOptions
     [ConfigIgnore]
     public int SchemaVersion { get; set; } = 1;
 
+    /// <summary>
+    /// This server's identity for the consoles that manage it (plan 13, P03): made the first time <c>server pair</c> runs and written to <c>server.yaml</c>; every token a console sends names it as its audience.
+    /// Not something to edit.
+    /// </summary>
+    public string? InstanceId { get; set; }
+
+    /// <summary>The consoles and servers paired with this one, written by <c>server pair</c> and removed by <c>server unpair</c>; one line each in <c>server.yaml</c>. Not something to edit by hand.</summary>
+    public List<PairedClientOptions> PairedClients { get; set; } = [];
+
+    /// <summary>The management API a console uses (plan 13, P03): off unless asked for.</summary>
+    public ManagementOptions Management { get; set; } = new();
+
     public ListenOptions Listen { get; set; } = new();
     public TlsOptions Tls { get; set; } = new();
 
@@ -58,6 +70,40 @@ public sealed class ProxyOptions
 
     /// <summary>Local user accounts (hashed passwords) and the data sources they may use.</summary>
     public List<UserOptions> Users { get; set; } = [];
+}
+
+/// <summary>A client paired with this server, as <c>server.yaml</c> keeps it (see <c>PairedClientsFile</c>).</summary>
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class PairedClientOptions
+{
+    public string Id { get; set; } = "";
+    public string? Name { get; set; }
+    public string? Kind { get; set; }
+    public string? PublicKey { get; set; }
+    public List<string> Ceiling { get; set; } = [];
+    public string? Paired { get; set; }
+}
+
+/// <summary>
+/// The management API (plan 13, P03): HTTPS on a port of its own, never the Flight port, with the pairing every product has and the console's signed token on every call; and, if asked for, a local channel for the
+/// command line on this machine. Off unless <see cref="Enabled"/>: a proxy nobody manages from a console opens nothing new.
+/// </summary>
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class ManagementOptions
+{
+    public bool Enabled { get; set; }
+
+    /// <summary>Where it listens. The loopback address by default: a console on another machine needs an address that is reachable, chosen on purpose.</summary>
+    public string Address { get; set; } = "127.0.0.1";
+
+    [ConfigKey(Min = 1, Max = 65535)]
+    public int Port { get; set; } = 8816;
+
+    /// <summary>The local channel for <c>dbdataproxy config show</c> and the like on this machine: a named pipe on Windows and a Unix socket elsewhere, reachable only by the service's account and administrators. Off by default.</summary>
+    public bool LocalChannel { get; set; }
+
+    /// <summary>Unix only: the folder that holds the local channel's socket. Empty: the platform's runtime folder for this account.</summary>
+    public string? LocalChannelDirectory { get; set; }
 }
 
 [ConfigSchema(Naming = KeyNaming.Verbatim)]

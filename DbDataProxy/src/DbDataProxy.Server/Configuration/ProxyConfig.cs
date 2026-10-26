@@ -97,6 +97,7 @@ public static class ProxyConfig
         var bound = new ConfigBinder(Catalog, tree.FileOf).Bind<ProxyOptions>(root, section);
         var value = bound.Value;
         diags.AddRange(bound.Diagnostics);
+        foreach (var provider in configuration.Providers.OfType<ProxyConfigDirectoryProvider>()) diags.AddRange(provider.Warnings);
 
         if (value is not null)
         {

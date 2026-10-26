@@ -32,3 +32,8 @@ tls:
 # mode: none | grpc (gRPC compression, gzip) | arrow (Arrow data compression: zstd or lz4 inside the Arrow stream; best ratio).
 # Clients can override per call with the "x-compression" header (none, gzip, zstd, lz4) unless disabled here.
 compression: { mode: arrow, codec: zstd, level: 3, allowClientOverride: true }
+
+# The management API a console uses (off unless asked for): https on a port of its own, never the Flight port, with the pairing every DbData server has.
+# Pair a console with:  dbdataproxy server pair   (it prints a single-use code); list and remove pairings with  server clients  and  server unpair.
+# The localChannel is for the command line on this machine only: a named pipe (Windows) or a Unix socket reachable by the service's account and administrators.
+# management: { enabled: true, address: 127.0.0.1, port: 8816, localChannel: false }

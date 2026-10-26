@@ -21,6 +21,7 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
     public void Validate(ProxyOptions o, IConfigValidationContext cx)
     {
         ValidateListenAndTls(o, cx);
+        ValidateManagement(o, cx);
         ValidateCompression(o.Compression, "Compression", cx);
         ValidateDataSources(o, cx);
         ValidateUsers(o, cx);
@@ -39,6 +40,17 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
             cx.Warning("SchemaVersion", $"Schema version {o.SchemaVersion}: the statement `Classifier` of {string.Join(", ", sourcesWithoutClassifier)} defaults to warn. " +
                 $"Schema version {ProxyConfig.LatestSchemaVersion} defaults it to strict.",
                 $"Set `Classifier` on each data source, then set `SchemaVersion` to {ProxyConfig.LatestSchemaVersion}.");
+    }
+
+    private static void ValidateManagement(ProxyOptions o, IConfigValidationContext cx)
+    {
+        if (!o.Management.Enabled) return;
+        if (!IPAddress.TryParse(o.Management.Address, out _))
+            cx.Error("Management.Address", $"`Address` is `{o.Management.Address}`, which is not an IP address.", "Use an IP address such as 127.0.0.1 or 0.0.0.0.");
+        if (o.Tls.Mode == TlsMode.None)
+            cx.Error("Management.Enabled", "The management API is https only, and `Tls.Mode` is None.", "Use SelfSigned, File or Store, or leave the management API off.");
+        if (o.Management.Port == o.Listen.Port && o.Listen.Port != 0)
+            cx.Error("Management.Port", "The management API has its own port; it is the Flight port here.", $"Choose another port than {o.Listen.Port}.");
     }
 
     private static void ValidateListenAndTls(ProxyOptions o, IConfigValidationContext cx)

@@ -834,6 +834,98 @@
       "if": {
         "properties": {
           "command": {
+            "const": "server clients"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_server_clients"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "server clients"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_server_clients_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "server pair"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_server_pair"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "server pair"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_server_pair_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "server run"
           },
           "ok": {
@@ -872,6 +964,52 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/data_server_run"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "server unpair"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_server_unpair"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "server unpair"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_server_unpair_partial"
           }
         }
       }
@@ -1384,9 +1522,160 @@
       "type": "object",
       "additionalProperties": false
     },
+    "data_server_clients": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clients": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "fingerprint": {
+                "type": "string"
+              },
+              "ceiling": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "paired": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "name",
+              "id",
+              "fingerprint",
+              "ceiling"
+            ]
+          }
+        }
+      },
+      "required": [
+        "clients"
+      ]
+    },
+    "data_server_clients_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clients": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "fingerprint": {
+                "type": "string"
+              },
+              "ceiling": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "paired": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "name",
+              "id",
+              "fingerprint",
+              "ceiling"
+            ]
+          }
+        }
+      }
+    },
+    "data_server_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "expires": {
+          "type": "string"
+        },
+        "max_role": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "code",
+        "expires",
+        "max_role"
+      ]
+    },
+    "data_server_pair_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "expires": {
+          "type": "string"
+        },
+        "max_role": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "data_server_run": {
       "type": "object",
       "additionalProperties": false
+    },
+    "data_server_unpair": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "unpaired": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "unpaired"
+      ]
+    },
+    "data_server_unpair_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "unpaired": {
+          "type": "string"
+        }
+      }
     },
     "data_service_doctor": {
       "type": "object",

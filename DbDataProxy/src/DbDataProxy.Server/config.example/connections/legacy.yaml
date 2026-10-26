@@ -1,5 +1,9 @@
 # 32-bit ODBC drivers run in the bundled 32-bit worker process.
-provider: odbc
-bitness: x86
-connectionString: "Driver={Some 32-bit Driver};Dsn=Legacy;"
-compression: { mode: arrow, codec: lz4 }
+schema: connection/1
+name: legacy
+engine: odbc
+connection_string: "Driver={Some 32-bit Driver};Dsn=Legacy;"
+extensions:
+  proxy:
+    bitness: x86
+    compression: { mode: arrow, codec: lz4 }

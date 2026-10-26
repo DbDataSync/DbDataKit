@@ -144,8 +144,10 @@ config/
   server.yaml            listen, tls, secrets, compression, hosting, worker, logging switches, schemaVersion
   proxy/auth.yaml        sessions, lockout, pass-through, JWT and its mappings
   proxy/users.yaml       the local client users (a `users:` list)
-  connections/<name>.yaml  one data source per file; the file name is the data source name
+  connections/<name>.yaml  one data source per file, in the shared connection format (connection/1); the file name is the data source name
 ```
+
+A data source is the same file a Sync or Build connection is (`schema: connection/1`): `engine` (`sqlserver`, `odbc` or `duckdb`), `connection_string` (or `address` for SQL Server, or a whole-string `connection_string_secret`), the login as `auth: { mode: sql, user: ..., password_secret: env:NAME }` (a reference, never the password; a plaintext credential in the connection string is refused), `tls`, `timeouts: { command_s: ... }`, and what only the proxy has under `extensions.proxy` (`pass_through`, `bitness`, `classifier`, `allow_writes`, `metadata`, `allowed_directories`, the limits, `batch_size`, `compression`; snake_case keys). A source that cannot write connects with the read login and one that can with the write login. A data source file of earlier releases (no `schema:`) is refused with a message naming it.
 
 `service install` creates `server.yaml` with only `schemaVersion: 2` if there is none. Defaults are in the code, not in a shipped file, and
 `config.example/` beside the executable has one example of each file with every option. Keys are camelCase in the files (matched ignoring case).
@@ -156,6 +158,16 @@ compression and auth settings reload without a restart; the listener and certifi
 **An `appsettings.json` from an earlier release is refused**, not read and not converted: the server stops with exit code 2 and a message that names the file
 (in the data directory, its `config` folder, or beside the executable) and where its settings go now. Move the `Proxy` section's keys into the files above
 (`DataSources` entries into `connections/`, `Users` into `proxy/users.yaml`, `Auth` into `proxy/auth.yaml`, the rest into `server.yaml`), then delete the old file.
+
+### The management API
+
+A console manages a proxy through an API on a listener of its own (`management:` in `server.yaml`; off unless `enabled: true`): https on `management.port` (8816, the loopback address unless `management.address` says otherwise), never the Flight port.
+The two are kept apart by the connection they arrive on, not by number: a management path on the Flight port is a 404, and the management port answers only its own paths and the shared `/health` and `/version`.
+
+* **Pairing** is the one every DbData server has: `dbdataproxy server pair [--max-role ...]` prints a single-use code, a console pairs with it over https and pins this proxy's certificate, `server clients` lists the paired clients and `server unpair <client>` removes one. They are recorded in `server.yaml` (`instanceId`, `pairedClients`); the codes wait in the data directory, not in the folder under version control. `--repo` names the data directory.
+* **Calls** carry the console's short-lived signed token (`X-DbData-Token`), and each call needs a role: `GET /api/v1/about` (viewer), `GET /api/v1/config` (admin: every effective setting with the file and line, environment variable or default it came from, secrets masked, and what the validator says) and `POST /api/v1/config/validate` (admin: `{"files": {"connections/erp.yaml": "..."}}` says whether the configuration would be valid with those files in place of the current ones; nothing is written). No answer contains a secret: a test writes a marker into every place a secret can be set and looks for it in every answer.
+* **Data sources** (admin): `GET /api/v1/data-sources` lists the files of `connections/` with their version (a hash of the text), `GET .../{name}` reads one, `PUT .../{name}` with `{"text": "schema: connection/1 ...", "expected_version": "<hash>" or null to create}` writes one, `DELETE .../{name}?expected_version=<hash>` removes one, `POST .../{name}/test` connects and runs `SELECT 1`. A write is validated with the rest of the configuration as it would be once written, and refused with the diagnostics (nothing is written) if that would make it invalid; a write based on a version that is not the current one is a 409 with the current version; a write is applied at once (no restart: the next query uses it), committed to the configuration folder's git history as the person who made it, and noted in `management-audit.log` (who, which console, what, the outcome; never content). A failed test answers with the failure kind and code, never the driver's text.
+* **The local channel** (`management.localChannel: true`) answers the command line on this machine over a named pipe (Windows; SYSTEM and Administrators) or a Unix socket (the service's account), as an administrator, with messages `{"method":"GET","path":"/api/v1/config"}`.
 
 ### Validation, schema version and the config commands
 

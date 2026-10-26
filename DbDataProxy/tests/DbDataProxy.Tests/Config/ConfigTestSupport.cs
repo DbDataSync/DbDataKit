@@ -29,7 +29,42 @@ internal static class ConfigTestSupport
     public static string Format(ProxyConfigLoad load) => ProxyConfig.Format(load.Diagnostics);
 }
 
+/// <summary>A data source as a <c>connection/1</c> file (plan 13, E02), written the way the proxy's own example is.</summary>
+internal static class Conn
+{
+    /// <param name="connectionString">The connection string (no credential), or null to leave it out.</param>
+    /// <param name="auth">The <c>auth:</c> line(s), such as <c>auth: { mode: sql, user: u, password_secret: env:PW }</c>.</param>
+    /// <param name="proxy">Lines for <c>extensions.proxy</c>, each already a <c>key: value</c> (no indentation).</param>
+    public static string Yaml(string name, string engine = "sqlserver", string? connectionString = "Server=s;Database=d", string? auth = null, string[]? proxy = null, string? extra = null)
+    {
+        var text = $"schema: connection/1\nname: {name}\nengine: {engine}\n";
+        if (connectionString is not null) text += $"connection_string: '{connectionString}'\n";
+        if (auth is not null) text += auth + "\n";
+        if (extra is not null) text += extra + "\n";
+        if (proxy is { Length: > 0 }) text += "extensions:\n  proxy:\n" + string.Join("", proxy.Select(l => "    " + l + "\n"));
+        return text;
+    }
+
+    /// <summary>The line (1-based) a key is on in a file written by <see cref="Yaml"/>.</summary>
+    public static int LineOf(string text, string key) => Array.FindIndex(text.Split('\n'), l => l.TrimStart().StartsWith(key + ":", StringComparison.Ordinal)) + 1;
+}
+
 /// <summary>A temporary configuration directory (<c>server.yaml</c>, <c>proxy/</c>, <c>connections/</c>) written from literal text.</summary>
+internal static class TestFolder
+{
+    /// <summary>Deletes a folder a test made. A git repository's object files are read-only, which Windows will not delete until the attribute is cleared.</summary>
+    public static void Delete(string path)
+    {
+        try
+        {
+            foreach (var file in System.IO.Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal);
+            System.IO.Directory.Delete(path, true);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+}
+
 internal sealed class TempConfig : IDisposable
 {
     private readonly TempFile _holder = TempFile.Create("", "placeholder");
