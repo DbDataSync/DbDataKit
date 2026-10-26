@@ -215,6 +215,11 @@ After plan 13's M3 (the console manages all products) and with plan 14's semanti
 
 ## 11. Hosting: DbDataStore serves itself, with Proxy's protocols as shared code
 
+**Superseded (owner, 2026-10-26) by [plan 20](20-serving-layer.md):** every end-user endpoint moves into one serving layer in the
+Proxy code base. DbDataStore's reads, writes, documents and WebDAV are served there (its `store` and `webdav` modules), through the
+`DbDataKit.Store.*` libraries. DbDataStore's own server keeps models and structure changes. The text below is the earlier decision, kept
+for its reasoning.
+
 The owner may later want DbDataStore's queries and updates served over the same protocols as Proxy's. The options considered:
 
 | Option | For | Against |
