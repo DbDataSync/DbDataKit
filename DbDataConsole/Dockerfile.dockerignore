@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+.git/
+.vs/
+DbDataSync/
+DbDataProxy/
+DbDataBuild/
+**/node_modules/
+**/dist/
+DbDataConsole/tests/

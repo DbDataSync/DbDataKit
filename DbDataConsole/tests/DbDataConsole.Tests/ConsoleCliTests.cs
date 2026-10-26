@@ -76,6 +76,20 @@ public sealed class ConsoleCliTests : IDisposable
     }
 
     [Fact]
+    public void People_open_the_console_at_the_public_address_which_defaults_to_the_listen_address_or_localhost_where_that_is_every_address()
+    {
+        Assert.Equal("https://console.example:8480/", new ConsoleSettings(directory, new Uri("https://console.example:8480")).Public.AbsoluteUri);
+        Assert.Equal("https://localhost:8480/", new ConsoleSettings(directory, new Uri("https://0.0.0.0:8480")).Public.AbsoluteUri);
+        Assert.Equal("https://console.example/", new ConsoleSettings(directory, new Uri("https://0.0.0.0:8480"), new Uri("https://console.example")).Public.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task A_public_address_that_is_not_https_is_refused()
+    {
+        Assert.Equal(2, (await Run("server", "run", "--repo", directory, "--public-url", "http://console.example")).Exit);
+    }
+
+    [Fact]
     public async Task The_directory_comes_from_the_variable_when_there_is_no_option()
     {
         Assert.Equal(directory, ConsoleSettings.DefaultDirectory(v => v == ConsoleSettings.DirectoryVariable ? directory : null));
