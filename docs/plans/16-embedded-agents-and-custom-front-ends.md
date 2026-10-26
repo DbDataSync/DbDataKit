@@ -68,7 +68,7 @@ MCP, and the internal agent has the same tools.
 
 ### Where apps run
 
-**Amended (2026-10-26) by [plan 20](20-serving-layer.md):** the app host is proposed as the `apps` module of the serving layer, which
+**Amended (owner, 2026-10-26) by [plan 20](20-serving-layer.md):** the app host is the `apps` module of the serving layer, which
 calls DbDataStore and the semantic layer in process as the signed-in user. The standalone-host text below is the earlier design.
 
 A standalone app host, **DbDataApps** (`dbdataapps`; the owner's name for now), the same shape as the other products: a server with a management API,

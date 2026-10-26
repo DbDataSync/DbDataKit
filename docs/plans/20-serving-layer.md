@@ -1,6 +1,6 @@
 # Plan 20: one serving layer for every end-user endpoint
 
-Status: **direction decided by the owner (2026-10-26)**. The details marked *assumed* are proposals waiting for review (section 8). This plan
+Status: **decided by the owner (2026-10-26)**, including the details section 8 lists. This plan
 changes parts of plans 13, 14, 15, 16, 17 and 19; section 7 lists each change.
 
 ## 1. The decision
@@ -61,8 +61,8 @@ server (a *serving group*, section 6).
 | `feeds` | result feeds for report servers and tools (plan 17 R2) | later |
 | `store` | DbDataStore entities: reads (as of a date), validated writes, change requests, over Flight SQL and an HTTP API | plan 15, moved here |
 | `webdav` | DbDataStore documents, with extraction on save | plan 15 section 6, moved here |
-| `apps` | the DbDataApps host: app front ends and their API | plan 16 section 2, moved here (*assumed*) |
-| `mcp` | the agents' MCP endpoint, acting as the signed-in user with approvals | plan 16 section 1 (*assumed*) |
+| `apps` | the DbDataApps host: app front ends and their API | plan 16 section 2, moved here |
+| `mcp` | the agents' MCP endpoint, acting as the signed-in user with approvals | plan 16 section 1 |
 | `identity` | sign-in, the OpenID Connect provider (authorize, token, discovery, signing keys), Windows and Entra federation | plan 16 section 2b, moved here (section 6) |
 
 ## 5. What keeps working when a back-end is down
@@ -104,21 +104,23 @@ server (a *serving group*, section 6).
 | 14 R1, R8 | hosting on Proxy; protocol adapters as shared code | unchanged in substance: R1 becomes the general publish model (principle 1), and the adapters are this layer's modules |
 | 15 section 11 | decision C: DbDataStore serves itself | **superseded**: DbDataStore's server keeps models and structure; reads, writes, documents and WebDAV are the serving layer's `store` and `webdav` modules; option B's objection (a write path in Proxy) is answered by principle 2, since the write path is DbDataStore's own libraries, only hosted here |
 | 15 M9 | DbDataStore serves its entities over Flight SQL | the serving layer's `store` module does |
-| 16 section 2 | DbDataApps as a standalone host and a paired client of DbDataStore and Proxy | the `apps` module of the serving layer; it calls the `store` and `semantic` modules in process, under the signed-in user (*assumed*) |
+| 16 section 2 | DbDataApps as a standalone host and a paired client of DbDataStore and Proxy | the `apps` module of the serving layer; it calls the `store` and `semantic` modules in process, under the signed-in user |
 | 16 section 2b | the home hosted by a console | hosted by the serving layer (section 6) |
 | 17 R2, R4 | feeds and Postgres wire on Proxy | the `feeds` and `pgwire` modules |
 | 18 | Proxy's run lineage per table | unchanged, per serving group |
 | 19 lanes N, J3, Z | Serving libraries extracted from Proxy; DbDataStore self-hosts | N unchanged (it extracts the modules' code); J3 unchanged; Z builds `DbDataKit.Store.*` as libraries the serving layer hosts, and Z06 (the console grid editor) calls the `store` module |
 | `docs/suite-data-flow.md` | Proxy and DbDataStore both serve | redrawn with the serving layer as the single edge |
 
-## 8. Questions for the owner
+## 8. Decisions
 
-1. The `apps` and `mcp` modules: are they in the serving layer (*assumed* above, since they are end-user endpoints), or separate?
-2. Extraction on save: does it run in the serving layer, where the document arrives (*assumed*)? The extraction definitions come from
-   DbDataStore's server.
-3. Approval of a data change request: is it a runtime action in the serving layer (*assumed*), the same as the write itself? Approval
-   of a *structure* change stays in DbDataStore's server.
-4. The rename (DbDataServer, DbDataHost or another): decided later, as a clean break of the command and package names when it happens.
+All confirmed by the owner on 2026-10-26:
+
+1. The `apps` and `mcp` modules are part of the serving layer.
+2. Extraction on save runs in the serving layer, where the document arrives. The extraction definitions come from DbDataStore's server.
+3. Approving a data change request is a runtime action in the serving layer, the same as the write itself. Approving a *structure*
+   change stays in DbDataStore's server.
+4. The rename (DbDataServer, DbDataHost or another) is decided later. When it happens, the command and package names change as a clean
+   break.
 
 ## 9. Slices
 
