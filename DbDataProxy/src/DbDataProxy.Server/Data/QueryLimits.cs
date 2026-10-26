@@ -16,6 +16,9 @@ public sealed class QueryLimits
 {
     private readonly ConcurrentDictionary<string, (string Signature, ConcurrencyGate Gate)> _gates = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>The gates now in use, by data source name: what the management API reports.</summary>
+    public IReadOnlyDictionary<string, ConcurrencyGate> Gates => _gates.ToDictionary(g => g.Key, g => g.Value.Gate, StringComparer.OrdinalIgnoreCase);
+
     /// <summary>The gate for a data source, or null when it has no limits.</summary>
     public ConcurrencyGate? For(string name, DataSourceOptions options)
     {
@@ -41,13 +44,14 @@ public sealed class QueryLimits
 /// (read to the end, or discarded by the pending-query sweeper). A caller that cannot get a slot within the acquire timeout is refused with
 /// ResourceExhausted.
 /// </summary>
-public sealed class LimitedExecutor(IQueryExecutor inner, ConcurrencyGate gate, string user, string source) : IQueryExecutor, IMetadataProvider
+public sealed class LimitedExecutor(IQueryExecutor inner, ConcurrencyGate gate, string user, string source, Action<string, string>? refused = null) : IQueryExecutor, IMetadataProvider
 {
     private async ValueTask<GateTicket> EnterAsync(CancellationToken cancellationToken)
     {
         try { return await gate.EnterAsync(user, cancellationToken).ConfigureAwait(false); }
         catch (PoolAcquireTimeoutException)
         {
+            refused?.Invoke(source, user);
             throw new RpcException(new Status(StatusCode.ResourceExhausted,
                 $"Data source '{source}' is busy: too many queries are running. Try again shortly."));
         }

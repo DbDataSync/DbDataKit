@@ -2,11 +2,14 @@
 
 export class ApiError extends Error {
   status: number
+  /** What the server sent with the refusal, when it was JSON: a refused write carries the diagnostics that say why. */
+  body: unknown
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, body?: unknown) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.body = body
   }
 }
 
@@ -43,13 +46,15 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     let message = response.statusText
+    let parsed: unknown
     try {
       const body = await response.json()
+      parsed = body
       message = body.error ?? body.title ?? message
     } catch {
       // No JSON body — fall back to the status text already captured.
     }
-    throw new ApiError(response.status, message)
+    throw new ApiError(response.status, message, parsed)
   }
 
   if (response.status === 204) return undefined as T

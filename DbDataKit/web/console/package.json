@@ -13,6 +13,7 @@
   "dependencies": {
     "@dbdatakit/admin": "*",
     "@dbdatakit/build": "*",
+    "@dbdatakit/proxy": "*",
     "@dbdatakit/shell": "*",
     "@dbdatakit/sync": "*",
     "@tanstack/react-query": "^5.102.4",

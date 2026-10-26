@@ -29,7 +29,7 @@ jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataConsole/|DbDataKit/|DbDataBuild/|DbDataSync/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataconsole-|_)|actions/setup-product))'
+      paths: '^(DbDataConsole/|DbDataKit/|DbDataBuild/|DbDataSync/|DbDataProxy/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataconsole-|_)|actions/setup-product))'
 
   # The host, its sign-in and its command line run on both systems; the Windows service registration is only exercised here against fakes.
   test:
@@ -83,6 +83,10 @@ jobs:
       - name: Build a Sync server
         working-directory: DbDataSync
         run: dotnet build src/DbDataSync.Cli -c Debug
+      # A real Proxy, with its management listener on.
+      - name: Build a Proxy
+        working-directory: DbDataProxy
+        run: dotnet build src/DbDataProxy.Server -c Debug
       - name: Install the browser
         working-directory: DbDataConsole/tests/DbDataConsole.Web.Tests
         run: |

@@ -19,7 +19,7 @@ namespace DbDataProxy.Tests.Config;
 
 /// <summary>The Proxy's management API (plan 13, P03): its own listener, pairing, the token and the roles, the effective configuration without a secret in it, validation of a candidate, the local channel.</summary>
 [Collection(ProcessStateCollection.Name)]
-public sealed class ManagementTests : IAsyncLifetime
+public sealed partial class ManagementTests : IAsyncLifetime
 {
     private const string Sentinel = "SENTINEL-6f1c-do-not-leak";
     private readonly string dataDirectory = Path.Combine(Path.GetTempPath(), "dbproxy-mgmt-" + Guid.NewGuid().ToString("N")[..8]);
@@ -134,8 +134,11 @@ public sealed class ManagementTests : IAsyncLifetime
             await (await CallAsync(server, HttpMethod.Post, "/api/v1/config/validate", ServerRole.Admin,
                 JsonSerializer(new { files = new Dictionary<string, string> { ["connections/erp.yaml"] = Conn.Yaml("erp", connectionString: $"Server=s;Password={Sentinel}-cand", proxy: ["batch_size: 0"]) } }))).Content.ReadAsStringAsync(),
             await (await CallAsync(server, HttpMethod.Get, "/api/v1/nothing", ServerRole.Admin)).Content.ReadAsStringAsync(),
+            await (await CallAsync(server, HttpMethod.Get, "/api/v1/identities", ServerRole.Admin)).Content.ReadAsStringAsync(),
+            await (await CallAsync(server, HttpMethod.Get, "/api/v1/data-sources", ServerRole.Admin)).Content.ReadAsStringAsync(),
         };
         Assert.All(answers, a => Assert.DoesNotContain(Sentinel, a));
+        Assert.Contains("\"has_signing_key\":true", answers[^2].Replace(" ", ""));
         // and the secrets really are in the files being read (otherwise the test proves nothing)
         Assert.Contains(Sentinel, File.ReadAllText(Path.Combine(ConfigDirectory, "proxy", "auth.yaml")));
     }
@@ -344,10 +347,10 @@ public sealed class ManagementTests : IAsyncLifetime
         await CallAsync(server, HttpMethod.Delete, $"/api/v1/data-sources/scratch?expected_version={version}", ServerRole.Admin);
 
         var history = new GitCommitService(ConfigDirectory).GetHistory("connections", 10);
-        Assert.Equal(["Remove data source scratch", "Add data source scratch"], history.Select(c => c.Message).ToList());
+        Assert.Equal(["Remove data source scratch", "Add data source scratch", "Configuration as found"], history.Select(c => c.Message).ToList());
         // the person, and an address that names them and the console and cannot be mistaken for a mailbox
-        Assert.All(history, c => Assert.Equal("Ada", c.AuthorName));
-        Assert.All(history, c => Assert.Equal($"ada@{console.Id}.console.invalid", c.AuthorEmail));
+        Assert.All(history.Take(2), c => Assert.Equal("Ada", c.AuthorName));
+        Assert.All(history.Take(2), c => Assert.Equal($"ada@{console.Id}.console.invalid", c.AuthorEmail));
 
         var audit = File.ReadAllLines(Path.Combine(dataDirectory, "management-audit.log")).Select(l => JsonNode.Parse(l)!).ToList();
         Assert.Equal(["created", "removed"], audit.Select(a => (string)a["outcome"]!).ToList());
@@ -394,5 +397,149 @@ public sealed class ManagementTests : IAsyncLifetime
         Assert.Equal(200, (int)answer["status"]!);
         Assert.True(Options.CurrentValue.DataSources.ContainsKey("scratch"));
         Assert.EndsWith("@local.invalid", new GitCommitService(ConfigDirectory).GetHistory("connections", 1)[0].AuthorEmail);
+    }
+
+    // ---- client identities (P05) ----
+
+    private static string UserBody(string? password, string[] sources, string? expected = null, string authType = "password", string? defaultSource = null) =>
+        JsonSerializer(new Dictionary<string, object?> { ["auth_type"] = authType, ["password"] = password, ["data_sources"] = sources, ["default_data_source"] = defaultSource, ["expected_version"] = expected });
+
+    private async Task<JsonNode> IdentitiesAsync(PairedServer server) =>
+        JsonNode.Parse(await (await CallAsync(server, HttpMethod.Get, "/api/v1/identities", ServerRole.Admin)).Content.ReadAsStringAsync())!;
+
+    [Fact]
+    public async Task A_user_is_created_with_a_password_that_is_hashed_here_and_never_returned_and_can_sign_in_at_once()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        const string password = "correct horse battery staple";
+        Write("connections/scratch.yaml", Scratch("scratch"));
+
+        var created = await CallAsync(server, HttpMethod.Put, "/api/v1/users/carol", ServerRole.Admin, UserBody(password, ["scratch"], defaultSource: "scratch"));
+        var createdText = await created.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        Assert.DoesNotContain(password, createdText);
+        Assert.DoesNotContain("PBKDF2", createdText);
+
+        // only the hash is in the file, and the user is in effect without a restart
+        var file = File.ReadAllText(Path.Combine(ConfigDirectory, "proxy", "users.yaml"));
+        Assert.DoesNotContain(password, file);
+        Assert.Contains("PBKDF2-SHA256$", file);
+        var carol = Options.CurrentValue.Users.Single(u => u.Name == "carol");
+        Assert.True(PasswordHasher.Verify(password, carol.PasswordHash!));
+        Assert.Equal(["scratch"], carol.DataSources);
+
+        // the view says there is a password and shows no hash; the entry that was there before is untouched
+        var view = await IdentitiesAsync(server);
+        var shown = view["users"]!.AsArray().Single(u => (string)u!["name"]! == "carol")!;
+        Assert.True((bool)shown["has_password"]!);
+        Assert.Equal("scratch", (string)shown["default_data_source"]!);
+        Assert.DoesNotContain("PBKDF2", view.ToJsonString());
+        Assert.DoesNotContain(Sentinel, view.ToJsonString());
+        Assert.Contains(view["users"]!.AsArray(), u => (string)u!["name"]! == "bob");
+    }
+
+    [Fact]
+    public async Task A_change_without_a_password_keeps_the_hash_a_new_password_replaces_it_a_stale_change_is_refused_and_a_user_is_removed()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        Write("connections/scratch.yaml", Scratch("scratch"));
+        var first = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Put, "/api/v1/users/carol", ServerRole.Admin, UserBody("one", ["scratch"]))).Content.ReadAsStringAsync())!;
+        var hashOne = Options.CurrentValue.Users.Single(u => u.Name == "carol").PasswordHash;
+        var v1 = (string)first["version"]!;
+
+        var narrowed = await CallAsync(server, HttpMethod.Put, "/api/v1/users/carol", ServerRole.Admin, UserBody(null, ["scratch", "erp"], v1));
+        Assert.Equal(HttpStatusCode.OK, narrowed.StatusCode);
+        Assert.Equal(hashOne, Options.CurrentValue.Users.Single(u => u.Name == "carol").PasswordHash);
+        Assert.Equal(["scratch", "erp"], Options.CurrentValue.Users.Single(u => u.Name == "carol").DataSources);
+        var v2 = (string)JsonNode.Parse(await narrowed.Content.ReadAsStringAsync())!["version"]!;
+
+        // based on the version before the last change: refused, with the current one
+        var stale = await CallAsync(server, HttpMethod.Put, "/api/v1/users/carol", ServerRole.Admin, UserBody("two", ["scratch"], v1));
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Equal(v2, (string)JsonNode.Parse(await stale.Content.ReadAsStringAsync())!["current_version"]!);
+        Assert.Equal(hashOne, Options.CurrentValue.Users.Single(u => u.Name == "carol").PasswordHash);
+
+        var replaced = await CallAsync(server, HttpMethod.Put, "/api/v1/users/carol", ServerRole.Admin, UserBody("two", ["scratch"], v2));
+        Assert.Equal(HttpStatusCode.OK, replaced.StatusCode);
+        var hashTwo = Options.CurrentValue.Users.Single(u => u.Name == "carol").PasswordHash!;
+        Assert.NotEqual(hashOne, hashTwo);
+        Assert.True(PasswordHasher.Verify("two", hashTwo));
+
+        var v3 = (string)JsonNode.Parse(await replaced.Content.ReadAsStringAsync())!["version"]!;
+        Assert.Equal(HttpStatusCode.Conflict, (await CallAsync(server, HttpMethod.Delete, "/api/v1/users/carol?expected_version=0000", ServerRole.Admin)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(server, HttpMethod.Delete, $"/api/v1/users/carol?expected_version={v3}", ServerRole.Admin)).StatusCode);
+        Assert.DoesNotContain(Options.CurrentValue.Users, u => u.Name == "carol");
+        Assert.Contains(Options.CurrentValue.Users, u => u.Name == "bob");   // the entry written by hand is still there
+        Assert.Equal(HttpStatusCode.NotFound, (await CallAsync(server, HttpMethod.Delete, "/api/v1/users/carol", ServerRole.Admin)).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_windows_account_has_no_password_and_a_user_that_would_make_the_configuration_invalid_is_refused_with_the_reasons()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        Write("connections/scratch.yaml", Scratch("scratch"));
+
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(server, HttpMethod.Put, "/api/v1/users/ACME%5Cdana", ServerRole.Admin, UserBody(null, ["scratch"], authType: "windows"))).StatusCode);
+        var view = await IdentitiesAsync(server);
+        var windows = Assert.Single(view["windows_accounts"]!.AsArray())!;
+        Assert.Equal("ACME\\dana", (string)windows["name"]!);
+        Assert.False((bool)windows["has_password"]!);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(server, HttpMethod.Put, "/api/v1/users/ACME%5Ceve", ServerRole.Admin, UserBody("pw", ["scratch"], authType: "windows"))).StatusCode);
+
+        // a data source that does not exist, a password user without a password, a bad name, a bad type
+        var unknown = await CallAsync(server, HttpMethod.Put, "/api/v1/users/frank", ServerRole.Admin, UserBody("pw", ["nowhere"]));
+        Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
+        Assert.Contains("nowhere", await unknown.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(server, HttpMethod.Put, "/api/v1/users/frank", ServerRole.Admin, UserBody(null, ["scratch"]))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(server, HttpMethod.Put, "/api/v1/users/bad%20name", ServerRole.Admin, UserBody("pw", ["scratch"]))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(server, HttpMethod.Put, "/api/v1/users/frank", ServerRole.Admin, UserBody("pw", ["scratch"], authType: "kerberos"))).StatusCode);
+        Assert.DoesNotContain(Options.CurrentValue.Users, u => u.Name == "frank");
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(server, HttpMethod.Put, "/api/v1/users/frank", ServerRole.Viewer, UserBody("pw", ["scratch"]))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(server, HttpMethod.Get, "/api/v1/identities", ServerRole.Viewer)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Pass_through_is_switched_in_auth_yaml_without_disturbing_the_rest_of_the_file()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        var before = File.ReadAllText(Path.Combine(ConfigDirectory, "proxy", "auth.yaml"));
+        Write("proxy/auth.yaml", "# who may sign in\n" + before);
+        var view = await IdentitiesAsync(server);
+        Assert.True((bool)view["pass_through"]!);
+
+        // a change names the version of the file it read, as every write does
+        Assert.Equal(HttpStatusCode.Conflict, (await CallAsync(server, HttpMethod.Put, "/api/v1/auth", ServerRole.Admin, JsonSerializer(new { allow_pass_through = false }))).StatusCode);
+        var off = await CallAsync(server, HttpMethod.Put, "/api/v1/auth", ServerRole.Admin, JsonSerializer(new { allow_pass_through = false, expected_version = (string)view["auth_version"]! }));
+        Assert.Equal(HttpStatusCode.OK, off.StatusCode);
+        Assert.False(Options.CurrentValue.Auth.AllowPassThrough);
+        var after = File.ReadAllText(Path.Combine(ConfigDirectory, "proxy", "auth.yaml"));
+        Assert.StartsWith("# who may sign in", after);                                  // comments survive
+        Assert.Contains($"{Sentinel}-jwt", after);                                       // the rest of the file is as it was
+        Assert.False((bool)(await IdentitiesAsync(server))["pass_through"]!);
+
+        var version = (string)JsonNode.Parse(await off.Content.ReadAsStringAsync())!["auth_version"]!;
+        Assert.Equal(HttpStatusCode.Conflict, (await CallAsync(server, HttpMethod.Put, "/api/v1/auth", ServerRole.Admin, JsonSerializer(new { allow_pass_through = true, expected_version = "0000" }))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(server, HttpMethod.Put, "/api/v1/auth", ServerRole.Admin, JsonSerializer(new { allow_pass_through = true, expected_version = version }))).StatusCode);
+        Assert.True(Options.CurrentValue.Auth.AllowPassThrough);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(server, HttpMethod.Put, "/api/v1/auth", ServerRole.Admin, "{}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task The_view_shows_the_jwt_settings_and_mappings_as_in_effect_and_only_whether_there_is_a_signing_key()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        var jwt = (await IdentitiesAsync(server))["jwt"]!;
+        Assert.True((bool)jwt["enabled"]!);
+        Assert.True((bool)jwt["has_signing_key"]!);
+        Assert.Equal("api://x", (string)jwt["audience"]!);
+        var mapping = Assert.Single(jwt["mappings"]!.AsArray())!;
+        Assert.Equal("c", (string)mapping["claim"]!);
+        Assert.Equal(["*"], mapping["data_sources"]!.AsArray().Select(d => (string)d!).ToList());
+        Assert.DoesNotContain(Sentinel, jwt.ToJsonString());
     }
 }

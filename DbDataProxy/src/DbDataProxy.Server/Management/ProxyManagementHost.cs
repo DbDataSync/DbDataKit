@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using DbDataKit.Config.Git;
 using DbDataKit.Hosting.Local;
 using DbDataKit.Web.Trust;
+using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Configuration;
 using DbDataProxy.Server.Data;
 using DbDataProxy.Server.Hosting;
@@ -78,11 +79,20 @@ public static class ProxyManagementHost
         var configDirectory = ProxyConfigFile.DirectoryIn(dataDirectory);
         var provider = configuration.Providers.OfType<ProxyConfigDirectoryProvider>().Single();
         var git = new GitCommitService(configDirectory);
+        // The history starts with the configuration as it was found, so the first change made through the API reads as a change to something.
+        if (git.GetHistory("", 1).Count == 0 && Directory.EnumerateFiles(configDirectory, "*.yaml", SearchOption.AllDirectories).ToList() is { Count: > 0 } found)
+            git.CommitChanges(found, "Configuration as found", new GitAuthor("dbdataproxy", "dbdataproxy@local.invalid"));
         // the data sources need the management object's validation, and it needs them to route to: made in two steps
         ProxyDataSources? dataSources = null;
         var management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version);
-        dataSources = new ProxyDataSources(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<DataSourceCatalog>(), new FileAuditLog(Path.Combine(dataDirectory, "management-audit.log")), git);
-        management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version, dataSources);
+        var audit = new FileAuditLog(Path.Combine(dataDirectory, "management-audit.log"));   // one for every kind of change: appends go through its lock
+        dataSources = new ProxyDataSources(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit, git);
+        var identities = new ProxyIdentities(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, audit, git);
+        var activity = new ProxyActivity(app.Services.GetRequiredService<SessionStore>(), app.Services.GetRequiredService<ActiveQueries>(), app.Services.GetRequiredService<QueryLimits>(),
+            app.Services.GetRequiredService<LoginThrottle>(), () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, audit,
+            app.Services.GetRequiredService<DbDataKit.State.NotificationStore>(), app.Services.GetRequiredService<RecentFailures>(), instanceId, ProxyHost.Version);
+        var certificate = new ProxyCertificate(holder, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, dataDirectory, app.Services.GetRequiredService<RecentFailures>(), audit);
+        management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version, dataSources, identities, activity, certificate, git);
         var validator = new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache());
         var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management");
 

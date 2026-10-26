@@ -1,7 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
-import { buildUrl, scratchDirectory, syncUrl } from '../playwright.config'
+import { buildUrl, proxyUrl, scratchDirectory, syncUrl } from '../playwright.config'
 
 /** A browser-side authenticator that holds the passkeys, so the test can register one and sign in with it the way a person's device would. */
 async function addAuthenticator(context: BrowserContext, page: Page) {
@@ -135,4 +135,40 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   // The way back to the console's list of servers.
   await page.getByTestId('rail-home-link').click()
   await expect(page.getByTestId('instances-page')).toBeVisible()
+
+  // A Proxy: its screens open inside the console too. The overview, the data source it was started with, a user made here, the certificate and the history of its configuration.
+  await page.getByTestId('pair-url-input').fill(proxyUrl)
+  await page.getByTestId('pair-code-input').fill(fs.readFileSync(path.join(scratchDirectory, 'proxy-pairing-code.txt'), 'utf8').trim())
+  await page.getByTestId('pair-name-input').fill('Proxy one')
+  await page.getByTestId('pair-button').click()
+  const proxy = page.getByTestId('instance-row-Proxy one')
+  await expect(proxy.getByTestId('instance-status')).toHaveText('Ready')
+  await expect(proxy).toContainText('dbdataproxy')
+  await proxy.getByTestId('instance-open-link').click()
+  await expect(page.getByTestId('proxy-overview')).toBeVisible()
+
+  await page.getByTestId('rail-data-sources').click()
+  await expect(page).toHaveURL(/\/servers\/proxy-[0-9a-f]+\/data-sources$/)
+  await expect(page.getByTestId('data-source-erp')).toBeVisible()
+
+  await page.getByTestId('rail-identities').click()
+  await page.getByTestId('user-name-input').fill('analyst')
+  await page.getByTestId('user-password-input').fill('correct horse battery')
+  await page.getByTestId('user-sources-input').fill('erp')
+  await page.getByTestId('user-save').click()
+  const analyst = page.getByTestId('user-analyst')
+  await expect(analyst).toBeVisible()
+  await expect(analyst.getByTestId('user-has-password')).toHaveText('set')
+  await expect(page.getByText('correct horse battery')).toHaveCount(0)   // a password is never shown back
+
+  await page.getByTestId('rail-tls').click()
+  await expect(page.getByTestId('tls-details')).toBeVisible()
+
+  await page.getByTestId('rail-activity').click()
+  await expect(page.getByTestId('proxy-activity')).toBeVisible()
+  await expect(page.getByTestId('lockouts-table')).toContainText('Nobody is locked out.')
+
+  // The user made above is a commit by the person who made it.
+  await page.getByTestId('rail-config').click()
+  await expect(page.getByTestId('commits-table').locator('[data-testid^="commit-"]').first()).toBeVisible()
 })

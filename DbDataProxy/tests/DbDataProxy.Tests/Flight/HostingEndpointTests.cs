@@ -57,7 +57,7 @@ public sealed class HostingEndpointTests : IAsyncLifetime
         Assert.Equal("Healthy", certificate.GetProperty("status").GetString(), ignoreCase: true);
 
         var version = await client.GetFromJsonAsync<JsonElement>("/version", TestContext.Current.CancellationToken);
-        Assert.Equal("DbDataProxy", version.GetProperty("product").GetString());
+        Assert.Equal("dbdataproxy", version.GetProperty("product").GetString());
         Assert.False(string.IsNullOrEmpty(version.GetProperty("version").GetString()));
     }
 

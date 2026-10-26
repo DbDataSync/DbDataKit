@@ -51,6 +51,23 @@ if (!isWorker) {
   fs.writeFileSync(path.join(scratchDirectory, 'sync-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
+// A Proxy too: a real one, with its management listener on, a self-signed certificate of its own, one data source (nothing needs to answer behind it) and a pairing code that lets the console grant admin.
+export const proxyDirectory = path.join(os.tmpdir(), 'dbdatakit-console-e2e-proxy')
+export const proxyPort = 8484
+export const proxyManagementPort = 8485
+export const proxyUrl = `https://localhost:${proxyManagementPort}`
+const proxyDll = path.join(repoRoot, 'DbDataProxy/src/DbDataProxy.Server/bin/Debug/net10.0/dbdataproxy.dll')
+if (!isWorker) {
+  fs.rmSync(proxyDirectory, { recursive: true, force: true })
+  fs.mkdirSync(path.join(proxyDirectory, 'config', 'connections'), { recursive: true })
+  fs.writeFileSync(path.join(proxyDirectory, 'config', 'server.yaml'), 'schemaVersion: 2\ntls: { mode: selfSigned }\n')
+  fs.writeFileSync(path.join(proxyDirectory, 'config', 'connections', 'erp.yaml'), [
+    'schema: connection/1', 'name: erp', 'engine: sqlserver', 'address: { host: localhost, database: Erp }',
+    "auth: { mode: sql, user: reader, password_secret: 'env:ERP_DB_PASSWORD' }", ''].join('\n'))
+  const made = execFileSync('dotnet', ['exec', proxyDll, 'server', 'pair', '--repo', proxyDirectory, '--max-role', 'admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'proxy-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
+}
+
 // A passkey is bound to the host name and the port it was made on, and the server builds its list of allowed origins from the address it is told to listen on,
 // so the address is fixed here and the test opens exactly that.
 const port = 8481
@@ -87,6 +104,17 @@ export default defineConfig({
     {
       command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(buildDirectory), '--listen', buildUrl].join(' '),
       url: `${buildUrl}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(proxyDll), 'server', 'run',
+        `--Proxy:DataDirectory=${JSON.stringify(proxyDirectory)}`, '--Proxy:Listen:Address=127.0.0.1', `--Proxy:Listen:Port=${proxyPort}`,
+        '--Proxy:Management:Enabled=true', '--Proxy:Management:Address=127.0.0.1', `--Proxy:Management:Port=${proxyManagementPort}`].join(' '),
+      url: `${proxyUrl}/health/live`,
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,
       timeout: 60_000,

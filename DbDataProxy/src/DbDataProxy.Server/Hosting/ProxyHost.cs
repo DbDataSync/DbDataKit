@@ -131,7 +131,7 @@ public static class ProxyHost
     private static void UseSharedHost(WebApplicationBuilder builder, ProxyOptions options, string[] args) =>
         builder.UseDbDataHost(host =>
         {
-            host.Product = ServiceName;
+            host.Product = "dbdataproxy";
             host.Version = Version;
             host.DrainTimeout = TimeSpan.FromSeconds(Math.Max(0, options.Hosting.DrainSeconds));
             host.Limits.MaxConcurrentRequests = Math.Max(1, options.Hosting.MaxConcurrentRequests);
@@ -177,6 +177,8 @@ public static class ProxyHost
             ]);
         });
         services.AddSingleton<QueryLimits>();
+        services.AddSingleton<ActiveQueries>();
+        services.AddSingleton<RecentFailures>();
         if (OperatingSystem.IsWindows())
         {
             services.AddSingleton<WorkerProcessHost>();
@@ -206,6 +208,7 @@ public static class ProxyHost
         builder.Services.AddSingleton(holder);
         builder.Services.AddSingleton(_ => DbDataProxy.Server.State.ProxyState.Open(dataDirectory));
         builder.Services.AddSingleton(sp => new DbDataKit.State.NotificationStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
+        builder.Services.AddSingleton<ProxyEvents>();
         builder.Services.AddHostedService<DbDataProxy.Server.State.ProxyStateStartup>();
         builder.Services.AddSingleton<IReadinessProbe>(new CertificateReadinessProbe(() => holder.Current, CertificateProvider.RenewBeforeDays));
         builder.Services.AddHostedService(sp => new CertificateRotationService(
