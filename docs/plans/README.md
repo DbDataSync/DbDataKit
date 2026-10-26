@@ -25,6 +25,8 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 15 | [DbDataStore: master data and documents](15-master-data-and-documents.md) | Owner's direction, plans 13 and 14 | Proposal for review (not in 13a): user- and agent-defined models on SQL engines, documents with WebDAV, extraction, consumed by Sync, Build and semantic queries |
 | 16 | [Embedded agents and apps](16-embedded-agents-and-custom-front-ends.md) | Owner's backlog, plans 13 to 15 | Backlog (not scheduled): agents in the console on OpenAI, Anthropic and Microsoft Foundry, every action approved by the user; a standalone app host with DbDataStore data, Vega-Lite dashboards, reports and assistants; Windows, OpenID Connect and Entra sign-in |
 | 17 | [Report servers on the semantic models](17-report-servers-on-semantic-models.md) | Plans 14 and 16, Power BI Report Server's supported sources | Documented scenarios (not in 13a), decided per route later: published views, result feeds for many tools, ODBC, Postgres wire with a compatibility layer kept apart from semantic SQL, MDX only via the Excel work |
+| 18 | [Lineage across the suite](18-lineage.md) | Build's column lineage, Sync's mappings, Proxy's data sources, plans 14-16 | Proposed: one suite graph (design and run lineage), column level where known and table level otherwise, shaped for OpenLineage export later; each server owns its lineage, the console joins it; manual entries and export later |
+| 19 | [The next wave, in parallel lanes](19-next-wave.md) | Plans 13a, 14, 15, 16, 18 | Proposed: slices J (semantic layer), H (schema), N (serving), Y (visuals), Z (DbDataStore 1-2), with G from plan 18, grouped into lanes and waves, and the areas where lanes must be sequenced |
 
 ## Dependency graph
 
