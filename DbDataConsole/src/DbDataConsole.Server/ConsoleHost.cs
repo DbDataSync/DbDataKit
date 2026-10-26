@@ -90,6 +90,7 @@ public static class ConsoleHost
             app.UseStaticFiles(new StaticFileOptions { FileProvider = files });
         }
 
+        app.UseWebSockets();
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();

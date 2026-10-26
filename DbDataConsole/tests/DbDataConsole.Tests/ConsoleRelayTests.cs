@@ -122,6 +122,42 @@ public sealed class ConsoleRelayTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_websocket_is_carried_both_ways_with_the_person_named_on_the_servers_side()
+    {
+        using var socket = new System.Net.WebSockets.ClientWebSocket();
+        socket.Options.SetRequestHeader("Cookie", $"{ConsoleHost.Auth.SessionCookie}={admin}");
+        socket.Options.RemoteCertificateValidationCallback = (_, _, _, _) => true;
+        var address = new UriBuilder(new Uri(app.Urls.First())) { Scheme = "wss", Path = $"/relay/{Id}/hubs/echo" }.Uri;
+        await socket.ConnectAsync(address, CancellationToken.None);
+
+        foreach (var text in new[] { "one", "two" })
+        {
+            await socket.SendAsync(Encoding.UTF8.GetBytes(text), System.Net.WebSockets.WebSocketMessageType.Text, true, CancellationToken.None);
+            var buffer = new byte[256];
+            var received = await socket.ReceiveAsync(buffer, CancellationToken.None);
+            Assert.Equal($"Admin person: {text}", Encoding.UTF8.GetString(buffer, 0, received.Count));
+        }
+        await socket.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task A_websocket_needs_a_signed_in_person_like_every_other_call()
+    {
+        using var socket = new System.Net.WebSockets.ClientWebSocket();
+        socket.Options.RemoteCertificateValidationCallback = (_, _, _, _) => true;
+        var address = new UriBuilder(new Uri(app.Urls.First())) { Scheme = "wss", Path = $"/relay/{Id}/hubs/echo" }.Uri;
+        await Assert.ThrowsAsync<System.Net.WebSockets.WebSocketException>(() => socket.ConnectAsync(address, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task A_hub_call_over_plain_http_is_relayed_too_and_a_path_outside_api_and_hubs_is_not()
+    {
+        var response = await Send(HttpMethod.Get, $"/relay/{Id}/hubs/echo", admin);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Send(HttpMethod.Get, $"/relay/{Id}/version", admin)).StatusCode);
+    }
+
+    [Fact]
     public async Task A_server_that_does_not_answer_is_a_502_that_names_it()
     {
         await server.StopAsync();

@@ -13,17 +13,22 @@ export class ApiError extends Error {
 let apiBase = ''
 
 /**
- * Where this app's `/api/...` calls go. A product's own app calls its own server (`''`); a module hosted by the console calls the server it manages through the console's relay
+ * Where this app's `/api/...` calls and `/hubs/...` connections go. A product's own app calls its own server (`''`); a module hosted by the console calls the server it manages through the console's relay
  * (`/relay/<server>`). The sign-in and notification calls always go to the host the app is served by, whatever the base: who is signed in is the console's answer, not a managed server's.
  */
 export function setApiBase(base: string) {
   apiBase = base.replace(/\/+$/, '')
 }
 
+/** The base now in effect; a module being left puts back the base it found, but only if nobody has set another since. */
+export function currentApiBase() {
+  return apiBase
+}
+
 const HOST_OWN = ['/api/auth', '/api/notifications']
 
 export function apiUrl(path: string): string {
-  if (!apiBase || !path.startsWith('/api/') || HOST_OWN.some((own) => path === own || path.startsWith(own + '/') || path.startsWith(own + '?'))) return path
+  if (!apiBase || !(path.startsWith('/api/') || path.startsWith('/hubs/')) || HOST_OWN.some((own) => path === own || path.startsWith(own + '/') || path.startsWith(own + '?'))) return path
   return apiBase + path
 }
 

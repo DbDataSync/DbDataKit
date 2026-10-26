@@ -86,6 +86,25 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(instance.getByTestId('instance-status')).toHaveText('Ready')
   await expect(instance).toContainText('dbdatabuild')
 
+  // Its screens open inside the console: the project it hosts, the models, the graph, a check.
+  await instance.getByTestId('instance-open-link').click()
+  await expect(page).toHaveURL(/\/servers\/build-[0-9a-f]+$/)
+  await expect(page.getByTestId('build-project-starter')).toBeVisible()
+  await page.getByTestId('build-project-link').click()
+  await expect(page).toHaveURL(/\/servers\/build-[0-9a-f]+\/projects\/starter$/)
+  await expect(page.getByTestId('build-model-marts.orders')).toBeVisible()
+  await expect(page.getByTestId('build-model-raw.customers')).toBeVisible()
+  await page.getByTestId('build-tab-graph').click()
+  await expect(page.getByTestId('build-graph-node-marts.customers')).toBeVisible()
+  expect(await page.getByTestId('build-graph-edge').count()).toBeGreaterThan(5)
+  await page.getByTestId('build-tab-check').click()
+  await page.getByTestId('build-check-button').click()
+  await expect(page.getByTestId('build-check-models')).toHaveText('8 models')
+  await expect(page.getByTestId('build-check-errors')).toHaveText('0 errors')
+  await expect(page.getByTestId('build-check-out-of-date')).toBeVisible()   // the starter has never been compiled, so its rendered files are not written yet
+  await page.getByTestId('rail-home-link').click()
+  await expect(page.getByTestId('instances-page')).toBeVisible()
+
   await instance.getByTestId('instance-forget-button').click()
   await expect(page.getByTestId('instances-empty')).toBeVisible()
 

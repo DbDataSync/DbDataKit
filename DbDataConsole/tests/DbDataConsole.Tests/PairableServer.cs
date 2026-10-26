@@ -57,7 +57,27 @@ internal sealed class PairableServer : IAsyncDisposable
         app.MapKeyRotation(new KeyRotationService(InstanceId, clients, new MemoryReplayCache()));
 
         // A management API behind the token check, as a real server has: /api/echo says who is calling and what they sent, /api/admin-only needs the admin role.
-        app.UseManagementAuthentication(new ConsoleTokenValidator(InstanceId, clients, new MemoryReplayCache()));
+        var validator = new ConsoleTokenValidator(InstanceId, clients, new MemoryReplayCache());
+        app.UseWebSockets();
+        app.UseManagementAuthentication(validator);
+        app.UseManagementAuthentication(validator, prefix: "/hubs/");
+        // a realtime channel, as the product servers have: it says who is connected and sends back what it is sent
+        app.Map("/hubs/echo", async (HttpContext context) =>
+        {
+            if (!context.WebSockets.IsWebSocketRequest) return Results.Json(new { subject = context.ManagementToken().SubjectId });
+            using var socket = await context.WebSockets.AcceptWebSocketAsync();
+            var who = context.ManagementToken().SubjectName;
+            var buffer = new byte[4096];
+            while (true)
+            {
+                var received = await socket.ReceiveAsync(buffer, context.RequestAborted);
+                if (received.MessageType == System.Net.WebSockets.WebSocketMessageType.Close) break;
+                var reply = System.Text.Encoding.UTF8.GetBytes($"{who}: {System.Text.Encoding.UTF8.GetString(buffer, 0, received.Count)}");
+                await socket.SendAsync(reply, System.Net.WebSockets.WebSocketMessageType.Text, true, context.RequestAborted);
+            }
+            await socket.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+            return Results.Empty;
+        });
         app.MapMethods("/api/echo", ["GET", "POST", "PUT", "DELETE"], async (HttpContext context) =>
         {
             var token = context.ManagementToken();
