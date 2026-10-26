@@ -113,7 +113,7 @@ Plan 13a's remaining slices are lanes of their own, already in flight; this plan
 
 | # | Slice | Needs | Size | Done when |
 | --- | --- | --- | --- | --- |
-| Z01 | The product: `DbDataStore/` folder, `dbdatastore server run` on the plan 13 shape (hosting, management API, pairing, state), `DbDataStore.slnf`, CI on the reusable workflow | 13a F10 | M | the server starts, pairs with a console and reports health (test) |
+| Z01 | The product: the `DbDataStore/` folder (decided), `dbdatastore server run` on the plan 13 shape (hosting, management API, pairing, state), `DbDataStore.slnf`, CI on the reusable workflow | 13a F10 | M | the server starts, pairs with a console and reports health (test) |
 | Z02 | `model/1`: schema, validation, the file format and its refusal of unknown versions | | M | schema and validation tests; a bad file fails naming the file |
 | Z03 | Storage for new models on SQL Server and PostgreSQL (create only) through `DbDataKit.Schema` | Z01, Z02, H03 | M | a fixture model creates its tables on both engines |
 | Z04 | Row writes with rules and audit | Z03 | M | write tests: a rule violation is refused with the rule's name; every write audited |
@@ -176,12 +176,11 @@ At peak, about six agents can work without sharing an area: J, H, N, Y, Z and G,
 - The status rows: in this file (and plan 18 for G), each lane edits only its own rows.
 - `testenv/`: lanes share the engines. A lane that needs another engine adds it to `testenv/` in its own slice. Integration tests create their own databases, named for the suite, so parallel CI runs do not collide.
 
-## 5. Questions for the owner
+## 5. Decisions
 
-1. DbDataStore's folder and command names: `DbDataStore/` and `dbdatastore` (assumed above).
+All decided by the owner on 2026-10-26:
 
-Decided (owner, 2026-10-26):
-
+- DbDataStore's folder is `DbDataStore/` and its command is `dbdatastore`.
 - Semantic SQL starts after QIS is integrated (J01-J04), as planned; lane J5 can then run beside J2 and J3.
 - Tracing a value from a result or a visual back to its sources, and to its rows, is a later feature, not in lineage's first version (plan 18).
 - Lineage's run history follows the servers' retention policy for run detail.
