@@ -179,5 +179,9 @@ At peak, about six agents can work without sharing an area: J, H, N, Y, Z and G,
 ## 5. Questions for the owner
 
 1. DbDataStore's folder and command names: `DbDataStore/` and `dbdatastore` (assumed above).
-2. Semantic SQL (J17) starts once J01-J04 are merged. Should it run in parallel with Build and Proxy integration (J2, J3), as proposed, or after them?
-3. Lineage's first consumers: is the console's graph view (G10) enough for the first version, or should "trace this number" (G11) be in it too?
+
+Decided (owner, 2026-10-26):
+
+- Semantic SQL starts after QIS is integrated (J01-J04), as planned; lane J5 can then run beside J2 and J3.
+- Tracing a value from a result or a visual back to its sources, and to its rows, is a later feature, not in lineage's first version (plan 18).
+- Lineage's run history follows the servers' retention policy for run detail.
