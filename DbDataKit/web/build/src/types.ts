@@ -118,3 +118,20 @@ export interface SampleResult {
   limit: number
   tables: SampleTable[]
 }
+
+/** `connection compare`: two tables by counts and digests (values are never read through the console). */
+export interface CompareResult {
+  left: { table: string; rows: number; columns: number }
+  right: { table: string; rows: number; columns: number }
+  key: { columns: string[]; source: string }
+  schema: {
+    compared_columns: string[]
+    only_left: string[]
+    only_right: string[]
+    not_compared: { column: string; left_type: string; right_type: string; reason: string }[]
+    type_differences: unknown[]
+  }
+  duplicate_keys: { left: number; right: number }
+  rows: { compared: boolean; only_left: number; only_right: number; matched: number; differing: number; differing_by_column: Record<string, number> }
+  identical: boolean
+}

@@ -26,7 +26,9 @@ implemented until the owner decides the questions in section 9. Reviewed: `DbDat
   (`Microsoft.Data.SqlClient`, a raw connection string), and `SsasExecutor` (ADOMD.NET, Windows only, never run against a server).
 - **Pins:** `DuckDB.NET.Data.Full` 1.1.1, `Microsoft.Data.SqlClient` 6.1.2, `YamlDotNet` 16.1.3, `JsonSchema.Net` 7.2.3, `ClosedXML`.
 
-It is a well-specified semantic layer and federation engine for agents, about where Cube, MetricFlow or a Power BI semantic model sit,
+**What it is, in the owner's words: more an engine and a proof of concept than a spec** (2026-10-26). Its documents, schemas and fixtures
+describe what the engine does today; parts of its design and implementation will be re-evaluated as it is incorporated, so nothing in
+QueryIntentSpec is a contract the suite must keep. It is a semantic layer and federation engine for agents, about where Cube, MetricFlow or a Power BI semantic model sit,
 plus a mashup engine for ad hoc tables that those products do not have.
 
 ## 2. Where it fits
@@ -133,8 +135,10 @@ manage it in both places, so the connection has one owner and two views:
   many rows in memory; it must not be able to take the service down.
 - **State.** Ad hoc registrations, run records, shadow reports and clarify sessions need durable, per-user storage: Proxy's state store
   (plan 13 D18), keyed by the console user or Proxy client identity.
-- **SSAS.** Proxy is already Windows-oriented (service, x86 worker). It can host `SsasExecutor` on Windows; on Linux an SSAS source reports
-  `dax_execution_unavailable` as the engine does today. An SSAS data source for plain DAX pass-through falls out of it if wanted.
+- **SSAS is a supported source** (owner, 2026-10-26): QIS already supports it and will continue to. Proxy is already Windows-oriented
+  (service, x86 worker) and hosts `SsasExecutor` on Windows; on Linux an SSAS source reports `dax_execution_unavailable` as the engine does
+  today. SSAS runs in GitHub CI (QIS's Chocolatey setup), so the DAX path is tested against a real server. An SSAS data source for plain DAX
+  pass-through falls out of it if wanted.
 
 ### R3. The engine becomes shared libraries in this repository
 
@@ -149,11 +153,14 @@ packages, in `DbDataKit/`:
 | `DbDataKit.Semantic.Extraction` | `Qis.Engine.Extraction` | console back-end (uploads), agents |
 | front-end `@dbdatakit/semantic` | `Qis.Engine.Presentation` output | console: matrix and chart renderers over the view specs |
 
-**The spec stays a spec.** The documents, JSON Schemas and fixtures are the contract; keep them versioned on their own
-(`specs/qis/` in this repository, or the QueryIntentSpec repository as the spec's home with the engine moved here). The fixtures run in
-`dbdatakit-ci.yml` against real engines from `testenv/` (SQL Server, PostgreSQL) instead of a separate compose file.
+**An engine to incorporate, not a spec to conform to** (owner, 2026-10-26). QIS is a proof of concept: its documents, JSON Schemas and
+fixtures come along as the **starting point** for the semantic layer's own documentation and tests, and are revised wherever incorporating
+it shows a better design (names, the catalog format next to Build's metadata, the error shape, the request format beside semantic SQL). A
+change to its behaviour is made deliberately, with its fixtures updated in the same change, not avoided to stay compatible with
+QueryIntentSpec. The fixtures run in `dbdatakit-ci.yml` against real engines from `testenv/` (SQL Server, PostgreSQL) and SSAS in CI,
+instead of a separate compose file.
 
-**When to move it.** The other agent is building fast in its own repository, which is fine while the spec is moving. Agree the points in
+**When to move it.** The other agent is building fast in its own repository, which is fine while the engine is moving. Agree the points in
 section 6 now (they are cheap now and expensive later), and import the engine here (a subtree merge, as the three products came in, plan
 09) once its level 5 settles. Until then, keep its seams where the suite will plug in: `ISourceExecutor`, the catalog source registry,
 storage for registrations and run records.
@@ -192,6 +199,9 @@ code is shared already; what is missing is one place that says what the suite su
   instead of fixing them; each is filled when a product needs it.
 
 ### R6. A SQL language over the semantic requests
+
+**Prerequisite (owner, 2026-10-26): QIS is integrated as a shared library (R3, Q1 and Q2) before work on semantic SQL starts; the grammar
+details are settled then, against the engine as it is.**
 
 **Decided (owner, 2026-10-24): semantic SQL, a subset of DuckDB SQL with `MEASURE()`, translated to and from the JSON request.** No new
 grammar.
@@ -381,9 +391,8 @@ none of it exists in the suite today.
 7. **Names.** QIS's "catalog", "dataset" and "source" collide with the suite's: `DbDataKit.Metadata`'s catalog readers, Build's datasets
    in metadata documents, Sync's sources and Build's origins. In the suite, call it the **semantic model** (files under `semantic/`), and keep
    "catalog" for database catalogs.
-8. **Is SSAS strategic?** The DAX emitter and the Windows-only executor are a large share of QIS's untested surface (19 of 364 failing on
-   real DAX, per its `ssas.md`). If the governed models of the future are Build marts, the DuckDB stand-in for SSAS may be all that is
-   needed; if SSAS models are a real source, Proxy on Windows is the place to run them. Worth a decision before more DAX work.
+8. **SSAS: decided, a supported source** (owner, 2026-10-26). QIS supports it and will continue to; Proxy runs it on Windows, and the
+   DAX path runs against a real SSAS in CI. (When this review was written, 19 of 364 fixtures failed on real DAX, per QIS's `ssas.md`.)
 9. **The agent-completion design is a strength.** Partial results with explicit `remaining` steps, sandboxed completion SQL, replay and
    shadow comparison give a safe way to grow the engine. Keep it as is when the engine moves.
 10. **Two specs about rows over the wire.** QIS's table descriptor (Frictionless plus `x_` fields) and Flight SQL's Arrow schema both
@@ -416,9 +425,9 @@ After plan 13's M2 (the console with Sync, the command surface, the trust model)
 | Q6 | Build produces semantic packages and deploys them, with the managed data source, to the paired Proxy (R2a) | Q3, Q5, plan 13 W12 (pairing a Build server) |
 | Q7 | Agent tools on the shared command surface; console semantic module (model browser, query explorer, views, promotion review) | Q5, plan 13 W4a, W5 |
 | Q8 | PostgreSQL emitter | Q2 |
-| Q9 | SSAS on Proxy (Windows), if the decision in section 5 item 8 says so | Q5 |
+| Q9 | SSAS on Proxy (Windows): `SsasExecutor` hosted by Proxy, the DAX path in CI against SSAS | Q5 |
 | Q10 | The engine registry (R5): `engine/1` descriptors read by every product; generated support tables | plan 13 A/B (Connections adopted) |
-| Q11 | Semantic SQL (R6): the spec, the translator both ways, SQL forms of the fixtures | Q2 |
+| Q11 | Semantic SQL (R6): the spec, the translator both ways, SQL forms of the fixtures. **Starts only after QIS is a shared library here** (Q1, Q2) | Q1, Q2 |
 | Q12 | Hosting on Proxy (R1): validate a package against the live catalog, switch atomically, keep versions, rollback from Build; managed data sources read-only in Proxy's module | Q5, Q6 |
 | Q13 | XMLA and MDX for Excel (R7): the recording forwarder; the one-time catalogue on the VM; then Discover, axes and totals, filters and drill, search, each checked against SSAS in CI | Q5, the VM with Excel, SSAS in CI |
 | Q14 | Postgres wire for semantic SQL (R8), tool by tool | Q11 |
@@ -427,7 +436,7 @@ After plan 13's M2 (the console with Sync, the command surface, the trust model)
 
 | Risk | Mitigation |
 | --- | --- |
-| The QIS spec keeps moving while the suite depends on it | the spec versions itself (`spec_version`); the engine moves here only after level 5 settles; fixtures are the contract |
+| QIS's design is re-evaluated while the suite starts depending on it | it is a proof of concept, not a contract: design changes are made deliberately, each with its fixtures updated in the same change; the suite's semantic documentation becomes the reference once it is incorporated |
 | MDX scope creep: Excel is one client, but every MDX client is different | the subset is defined by recorded Excel traffic; other clients are out of scope until asked for |
 | Postgres-wire BI tools each introspect differently | one tool at a time, each with its own recorded fixtures; semantic SQL only |
 | A semantic package deployed against tables that changed | Proxy validates the package against the live catalog before serving it, and refuses with the table named (R1) |
@@ -440,16 +449,16 @@ After plan 13's M2 (the console with Sync, the command surface, the trust model)
 
 ## 9. Questions for the owner
 
-1. **Home of semantic models:** in Build projects (`semantic/`, physical layer generated), as recommended, or standalone catalogs that
-   reference Build's published metadata?
-2. **Home of the engine:** shared libraries in this repository (recommended), with the spec documents and fixtures kept versioned on
-   their own; and when to import it.
-3. **Proxy's interface:** JSON requests through Flight SQL `CommandStatementQuery` and `DoAction` first (recommended); a SQL surface over
-   the semantic model later, or never?
-4. **SSAS:** a real source to support (on Proxy, Windows), or test stand-in only?
-5. **Ad hoc data and extraction:** in the first version on Proxy, or after governed queries work?
-6. **Names:** "semantic model" in the suite, "catalog" kept for database catalogs?
+1. ~~Home of semantic models~~: **decided**: authored and deployed by Build (`semantic/`, physical layer generated), hosted by Proxy (R1, R2a).
+2. ~~Home of the engine~~: **decided** (owner, 2026-10-26): QIS is integrated here as shared libraries (R3) **before** any semantic SQL
+   work starts. QIS is an engine and a proof of concept: its design is re-evaluated as it is incorporated (R3).
+3. ~~Proxy's interface~~: **decided**: JSON requests and semantic SQL through Flight SQL (`CommandStatementQuery`, `DoAction`); other protocols are front ends to the same core (R2, R8).
+4. ~~SSAS~~: **decided**, a supported source (section 5 item 8).
+5. ~~Ad hoc data and extraction~~: **decided** (owner, 2026-10-26): probably not in the first release; governed semantic queries first.
+6. ~~Names~~: **decided** (owner, 2026-10-26): "semantic model" in the suite, "catalog" kept for database catalogs. One thing to know:
+   Microsoft now calls Power BI datasets "semantic models" too. That helps more than it hurts (the same idea, a familiar word), but in
+   documentation about Power BI or SSAS integration (plans 14 R7, 17), say "Power BI semantic model" or "suite semantic model" where both appear.
 7. ~~Semantic SQL~~: **decided**, the DuckDB subset with `MEASURE()` (R6).
 8. ~~Excel~~: **decided**, PivotTables over XMLA, MDX translated to semantic requests, Excel's traffic catalogued once on a VM, SSAS in CI
    as the oracle (R7).
-9. **Protocols:** XMLA with MDX first, Postgres wire after semantic SQL, Quack deferred until DuckDB publishes a server specification (R8)?
+9. ~~Protocols~~: **decided** (owner, 2026-10-26): Postgres wire before Quack; XMLA with the MDX work; Quack deferred until DuckDB publishes a server specification (R8).

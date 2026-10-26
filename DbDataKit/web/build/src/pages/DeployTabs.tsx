@@ -222,3 +222,63 @@ export function SampleTab() {
     </div>
   )
 }
+
+/** Two tables side by side: the columns they share, the rows only one has, and the rows that differ. Only counts and digests are read; the values stay in the database. */
+export function CompareTab() {
+  const { project } = useProject()
+  const [connection, setConnection] = useState('')
+  const [table, setTable] = useState('')
+  const [against, setAgainst] = useState('')
+  const [againstConnection, setAgainstConnection] = useState('')
+  const [key, setKey] = useState('')
+  const compare = useMutation({
+    mutationFn: () => buildApi.compare(project, {
+      connection: connection || undefined, table, against: against || undefined, againstConnection: againstConnection || undefined,
+      key: key.split(',').map((k) => k.trim()).filter(Boolean),
+    }),
+  })
+  const result = compare.data?.document?.data
+  const field = (label: string, value: string, set: (v: string) => void, testId: string, placeholder = '') => (
+    <label className="stack" style={{ gap: 4 }}>
+      <span className="hint">{label}</span>
+      <input className="input mono" value={value} placeholder={placeholder} onChange={(e) => set(e.target.value)} data-testid={testId} />
+    </label>
+  )
+  return (
+    <div data-testid="build-compare">
+      <form className="row" style={{ gap: 12, marginBottom: 14, alignItems: 'end', flexWrap: 'wrap' }} onSubmit={(e) => { e.preventDefault(); if (table) compare.mutate() }}>
+        {field('Connection', connection, setConnection, 'build-compare-connection', "the project's default")}
+        {field('Table', table, setTable, 'build-compare-table', 'schema.table')}
+        {field('Against table', against, setAgainst, 'build-compare-against', 'schema.table')}
+        {field('Against connection', againstConnection, setAgainstConnection, 'build-compare-against-connection', 'the same connection')}
+        {field('Key columns', key, setKey, 'build-compare-key', "the model's grain")}
+        <button type="submit" className="btn btn-primary" disabled={!table || compare.isPending} data-testid="build-compare-button">{compare.isPending ? 'Comparing…' : 'Compare'}</button>
+      </form>
+      <ErrorBanner error={compare.error} />
+      <Problems answer={compare.data} />
+      {result && (
+        <div className="card" data-testid="build-compare-result">
+          <div className="card-body">
+            <div data-testid="build-compare-verdict"><strong>{result.identical ? 'Identical' : 'Different'}</strong></div>
+            <div className="hint" data-testid="build-compare-counts">
+              <span className="mono">{result.left.table}</span>: {result.left.rows} rows, {result.left.columns} columns · <span className="mono">{result.right.table}</span>: {result.right.rows} rows, {result.right.columns} columns · key <span className="mono">{result.key.columns.join(', ')}</span>
+            </div>
+            {result.rows.compared && (
+              <div style={{ marginTop: 8 }} data-testid="build-compare-rows">
+                {result.rows.matched} matched · {result.rows.only_left} only on the left · {result.rows.only_right} only on the right · {result.rows.differing} differ
+                {Object.entries(result.rows.differing_by_column).map(([c, n]) => <div key={c} className="hint">{c}: {n} differ</div>)}
+              </div>
+            )}
+            <div style={{ marginTop: 8 }} data-testid="build-compare-schema">
+              <div className="hint">Compared columns: <span className="mono">{result.schema.compared_columns.join(', ') || 'none'}</span></div>
+              {result.schema.only_left.length > 0 && <div className="hint">Only on the left: <span className="mono">{result.schema.only_left.join(', ')}</span></div>}
+              {result.schema.only_right.length > 0 && <div className="hint">Only on the right: <span className="mono">{result.schema.only_right.join(', ')}</span></div>}
+              {result.schema.not_compared.map((c) => <div key={c.column} className="hint">Not compared, <span className="mono">{c.column}</span>: {c.reason}</div>)}
+              {(result.duplicate_keys.left > 0 || result.duplicate_keys.right > 0) && <div className="hint">Duplicate keys: {result.duplicate_keys.left} on the left, {result.duplicate_keys.right} on the right.</div>}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
