@@ -68,6 +68,9 @@ MCP, and the internal agent has the same tools.
 
 ### Where apps run
 
+**Amended (owner, 2026-10-26) by [plan 20](20-serving-layer.md):** the app host is the `apps` module of the serving layer, which
+calls DbDataStore and the semantic layer in process as the signed-in user. The standalone-host text below is the earlier design.
+
 A standalone app host, **DbDataApps** (`dbdataapps`; the owner's name for now), the same shape as the other products: a server with a management API,
 paired with consoles (plan 13 W12), its own CLI on the shared nouns. It holds no data of its own beyond the apps' definitions and
 versions; it **reaches data as a client** of the servers that own it:
@@ -218,6 +221,9 @@ spike fails.
 a semantic query, on Linux and Windows.
 
 ## 2b. Identity with several consoles
+
+**Amended (owner, 2026-10-26) by [plan 20](20-serving-layer.md):** the identity home is hosted by the serving layer by default, not by
+a console, so end users can sign in without reaching the private console. Running it on its own stays the option.
 
 **The tension.** Plan 13 W12 lets a server be paired with several consoles, and each console keeps its own users and role assignments.
 Apps (and the agents and report servers after them) need **one** answer to "who is this user and what may they do". With users per

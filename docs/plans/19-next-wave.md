@@ -8,6 +8,10 @@ in the same change. Slice letters are new (13a uses F K V S A B C T U E P R M W 
 **Y** visuals, **Z** DbDataStore, **G** lineage (plan 18). Plan 14's steps (Q1-Q14) and plan 15's (M1-M9) are the order; the slices
 below are those steps cut small, and each row names the step it belongs to.
 
+**Amended 2026-10-26 by [plan 20](20-serving-layer.md)** (one serving layer in the Proxy code base): lane Z builds
+`DbDataKit.Store.*` as libraries that the serving layer hosts, so DbDataStore's own server keeps only models and structure. Lane N
+extracts the code for the serving layer's modules. Plan 20's lane O runs beside them.
+
 ## 1. What is ready and what is not
 
 | Ready to slice (this plan) | Needs a design conversation first (not sliced) |

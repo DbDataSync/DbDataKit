@@ -1,7 +1,8 @@
 # How data flows through the suite (future state)
 
 A high-level picture of the planned suite: where data enters, which product moves or shapes it, and who reads it. It is drawn from
-plans 13 to 19 (`docs/plans/`). Some parts are not built yet; the labels say "later" where a plan schedules them after the first version.
+plans 13 to 20 (`docs/plans/`), with plan 20's single serving layer as the only edge end users reach. Some parts are not built yet; the
+labels say "later" where a plan schedules them after the first version.
 
 ## Data
 
@@ -9,81 +10,74 @@ plans 13 to 19 (`docs/plans/`). Some parts are not built yet; the labels say "la
 flowchart LR
     subgraph SRC["Sources"]
         SDB[("Operational databases<br/>SQL Server, PostgreSQL, MySQL,<br/>MariaDB, Oracle, ODBC")]
-        FILES[/"Documents and spreadsheets"/]
-        PEOPLE(["People and agents<br/>editing master data"])
         SSAS[("SSAS models")]
     end
 
-    subgraph STORE["DbDataStore"]
-        DOCS[("Documents, versioned,<br/>stored in the database")]
-        ENT[("Master data entities<br/>versioned, effective-dated")]
-    end
-
-    subgraph SYNC["DbDataSync"]
-        REP["Replications"]
+    subgraph BACK["Back-end servers (private)"]
+        REP["DbDataSync<br/>replications"]
+        MODELS["DbDataBuild<br/>models, loads, semantic packages"]
+        STOREDEF["DbDataStore server<br/>models, rules, structure"]
     end
 
     STAGE[("Replicated tables")]
-
-    subgraph BUILD["DbDataBuild"]
-        MODELS["Models, plans, loads"]
-        SEMPKG["Semantic packages"]
-    end
-
     WH[("Warehouse and marts<br/>SQL Server, PostgreSQL, DuckDB")]
+    ENT[("DbDataStore database<br/>entities with history, documents")]
 
-    subgraph PROXY["DbDataProxy"]
-        DS["Read-only data sources"]
-        SEM["Semantic models<br/>(QIS engine)"]
+    subgraph EDGE["Serving layer (DbDataProxy code base), one or more instances"]
+        DS["flightsql<br/>read-only data sources"]
+        SEM["semantic<br/>semantic models, joins across sources"]
+        STOREMOD["store and webdav<br/>entity reads and writes, documents"]
+        APPSMOD["apps and mcp<br/>DbDataApps, agents"]
+        IDMOD["identity<br/>sign-in, OpenID Connect"]
+        LATER["pgwire, xmla, feeds<br/>later"]
     end
 
-    subgraph USE["Consumers"]
-        CLIENTS["Flight SQL clients<br/>and tools"]
+    subgraph USE["End users and their tools"]
+        CLIENTS["Flight SQL clients and tools"]
         EXCEL["Excel"]
-        BI["Report servers and BI tools<br/>SSRS, Power BI Report Server"]
-        APPS["DbDataApps<br/>dashboards, reports, assistants"]
+        BI["Report servers and BI tools"]
+        PEOPLE(["People, apps and agents"])
     end
 
     SDB -->|"change capture, bulk copy"| REP
     REP --> STAGE
     SDB -->|"copies, native models"| MODELS
     STAGE --> MODELS
-
-    FILES -->|"WebDAV"| DOCS
-    DOCS -->|"extraction on save"| ENT
-    PEOPLE -->|"validated writes,<br/>change requests"| ENT
     ENT -->|"import, on-change trigger"| MODELS
-    ENT -.->|"on-change trigger"| REP
+    MODELS -->|"create and load"| WH
+    STOREDEF -->|"structure changes"| ENT
 
-    MODELS -->|"create and load<br/>tables and views"| WH
-    MODELS --> SEMPKG
-    SEMPKG -->|"deploy with the<br/>read login only"| SEM
+    MODELS -.->|"publish semantic packages<br/>(read login only)"| SEM
+    STOREDEF -.->|"publish models, rules,<br/>permissions"| STOREMOD
 
     WH --> DS
     WH --> SEM
     SSAS --> SEM
-    ENT -->|"dimensions, maps,<br/>calendars"| SEM
+    ENT --> SEM
+    STOREMOD <-->|"reads, validated writes,<br/>history, audit"| ENT
 
-    DS -->|"Flight SQL"| CLIENTS
-    ENT -->|"Flight SQL reads,<br/>as of a date"| CLIENTS
-    SEM -->|"Flight SQL, semantic SQL,<br/>Postgres wire later"| CLIENTS
-    SEM -->|"XMLA and MDX<br/>(pivot tables), later"| EXCEL
-    DOCS -->|"WebDAV"| EXCEL
-    SEM -->|"result feeds, ODBC,<br/>Postgres wire, later"| BI
-    SEM -->|"semantic queries"| APPS
-    ENT -->|"reads and writes"| APPS
+    DS --> CLIENTS
+    SEM --> CLIENTS
+    SEM --> APPSMOD
+    STOREMOD --> APPSMOD
+    STOREMOD -->|"WebDAV"| EXCEL
+    LATER --> EXCEL
+    LATER --> BI
+    APPSMOD --> PEOPLE
+    IDMOD --> PEOPLE
 ```
 
 Reading it left to right:
 
 - **Sync** copies operational data into replicated tables.
-- **DbDataStore** holds the data people own (master data and documents), with history. It extracts tables from documents as they are saved.
-- **Build** turns replicated tables, sources and entities into the warehouse. It also authors the semantic packages and deploys them to
-  Proxy with the read login only; the write login never leaves Build.
-- **Proxy** serves the warehouse and the semantic models: Flight SQL now, with Postgres wire and XMLA for Excel later. The semantic models
-  can also read SSAS and DbDataStore's entities.
-- **DbDataStore** also serves its own entities over the same shared protocol code (Flight SQL, WebDAV).
-- **DbDataApps, report servers, Excel and tools** read from Proxy and DbDataStore; they never reach the databases directly.
+- **Build** turns replicated tables, sources and DbDataStore's entities into the warehouse. It publishes semantic packages to the serving
+  layer with the read login only; the write login never leaves Build.
+- **DbDataStore's server** owns the master data models, rules and structure changes, and publishes them to the serving layer.
+- **The serving layer** is the only thing end users reach. It reads the warehouse, SSAS and DbDataStore's database directly, and it
+  writes DbDataStore's data through DbDataStore's own write path (validation, history, audit). It also hosts sign-in, apps and the
+  agents' endpoint.
+- Because it runs from published definitions, it keeps serving while the back-end servers are patched (plan 20, section 5). Dotted lines
+  are publishes; solid lines are data.
 
 ## Control
 
@@ -91,23 +85,31 @@ The data paths above are managed, monitored and traced from one place. A console
 
 ```mermaid
 flowchart LR
-    ID["Identity home<br/>(users, OpenID Connect)"]
-    CON["dbdatakit console"]
+    CON["dbdatakit console<br/>(private)"]
     AG["Agents<br/>(every action approved by the user)"]
 
-    subgraph SERVERS["Product servers"]
-        S["DbDataSync"]
-        B["DbDataBuild"]
-        P["DbDataProxy"]
-        D["DbDataStore"]
+    subgraph EDGE["Serving group"]
+        ID["identity module<br/>(the identity home)"]
+        SV["serving instances"]
     end
 
-    CON -->|"sign-in"| ID
+    subgraph SERVERS["Back-end servers"]
+        S["DbDataSync"]
+        B["DbDataBuild"]
+        D["DbDataStore server"]
+    end
+
+    CON -->|"sign-in (OpenID Connect client)"| ID
     CON -->|"management API with paired tokens:<br/>configure, run, approve"| SERVERS
+    CON -->|"management API"| EDGE
     SERVERS -.->|"monitoring, audit, lineage<br/>(pulled by the console)"| CON
-    B -->|"pairs as a Publisher:<br/>deploys semantic packages"| P
-    AG -->|"the same commands, as the user"| CON
+    EDGE -.->|"monitoring, run lineage"| CON
+    B -->|"pairs as a Publisher"| EDGE
+    D -->|"pairs as a Publisher"| EDGE
+    AG -->|"mcp module, as the user"| SV
 ```
 
 - **Monitoring and lineage are pulled.** Each server keeps its own runs, audit and lineage, and the console joins them (plans 13 W10 and 18).
-- **One server-to-server path.** Build pairs with Proxy as a client so it can deploy semantic packages (plan 13 W12).
+- **Publishers.** Build and DbDataStore's server pair with the serving group as Publishers (plan 13 W12, plan 20 section 6).
+- **Identity faces users.** The identity home is a module of the serving group, so end users sign in without reaching the console. It can
+  also run on its own behind the firewall, with the serving layer forwarding its endpoints.

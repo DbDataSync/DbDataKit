@@ -27,6 +27,7 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 17 | [Report servers on the semantic models](17-report-servers-on-semantic-models.md) | Plans 14 and 16, Power BI Report Server's supported sources | Documented scenarios (not in 13a), decided per route later: published views, result feeds for many tools, ODBC, Postgres wire with a compatibility layer kept apart from semantic SQL, MDX only via the Excel work |
 | 18 | [Lineage across the suite](18-lineage.md) | Build's column lineage, Sync's mappings, Proxy's data sources, plans 14-16 | Proposed: one suite graph (design and run lineage), column level where known and table level otherwise, shaped for OpenLineage export later; each server owns its lineage, the console joins it; manual entries and export later |
 | 19 | [The next wave, in parallel lanes](19-next-wave.md) | Plans 13a, 14, 15, 16, 18 | Proposed: slices J (semantic layer), H (schema), N (serving), Y (visuals), Z (DbDataStore 1-2), with G from plan 18, grouped into lanes and waves, and the areas where lanes must be sequenced |
+| 20 | [One serving layer](20-serving-layer.md) | Plans 13-19, the owner's direction | Direction decided: every end-user endpoint (Flight SQL, semantic, DbDataStore reads and writes, WebDAV, identity, apps, later Postgres wire, XMLA, feeds) as modules of one layer in the Proxy code base (a rename later); runs from published definitions, so it stays up while back-ends are patched; groups of instances on shared state for scale-out and availability |
 
 ## Dependency graph
 
