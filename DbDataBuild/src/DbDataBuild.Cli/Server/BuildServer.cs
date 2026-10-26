@@ -44,7 +44,7 @@ internal static class BuildServer
 
     public static X509Certificate2 Certificate(string directory) => DirectoryCertificate.Load(directory);
 
-    public static WebApplication Build(BuildServerSettings settings, X509Certificate2 certificate, IProjectCommandRunner runner, ProjectsFile projects, IReadOnlyList<DbDataBuild.Tui.Model.CommandInfo> commands, Action<string> log, Func<string, IReadOnlyList<DbDataBuild.Tui.Model.CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null)
+    public static WebApplication Build(BuildServerSettings settings, X509Certificate2 certificate, IProjectCommandRunner runner, ProjectsFile projects, IReadOnlyList<DbDataBuild.Tui.Model.CommandInfo> commands, Action<string> log, Func<string, IReadOnlyList<DbDataBuild.Tui.Model.CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, WarmSessionRunner? workspaceRunner = null)
     {
         if (settings.Listen.Scheme != Uri.UriSchemeHttps) throw new ArgumentException("A Build server listens on HTTPS only.", nameof(settings));
         var instanceId = InstanceId(settings.ServerYaml);
@@ -75,7 +75,8 @@ internal static class BuildServer
         app.MapPairing(new PairingService(instanceId, fingerprint, clients, files.Codes()));
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new MemoryReplayCache()));
         app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache()), refused => log($"A call was refused ({refused.Failure}): {refused.Detail}"));
-        BuildManagementApi.Map(app, projects, commands, runner, surfaceFor, scheduler, new Workspaces(settings.Directory, TimeProvider.System));
+        BuildManagementApi.Map(app, projects, commands, runner, surfaceFor, scheduler, new Workspaces(settings.Directory, TimeProvider.System), workspaceRunner);
+        if (workspaceRunner is not null) app.Lifetime.ApplicationStopping.Register(workspaceRunner.Dispose);
         return app;
     }
 }

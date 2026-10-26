@@ -88,7 +88,7 @@ internal sealed class ChildProcessCommandRunner(TimeSpan? timeout = null, int ma
     }
 
     /// <summary>This executable when it is <c>dbdatabuild</c> itself; otherwise the program is a host running the assembly (<c>dotnet</c>, or a test host such as <c>testhost.exe</c>), so the assembly is run with <c>dotnet exec</c>.</summary>
-    private static (string File, string[] Prefix) Executable()
+    internal static (string File, string[] Prefix) Executable()
     {
         var running = Environment.ProcessPath ?? throw new InvalidOperationException("The path of the running program is not known.");
         if (string.Equals(Path.GetFileNameWithoutExtension(running), "dbdatabuild", StringComparison.OrdinalIgnoreCase)) return (running, []);

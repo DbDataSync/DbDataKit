@@ -108,11 +108,12 @@ internal static class ServerCli
         var host = new TuiCommand.CliHost(Environment.GetEnvironmentVariable);
         var secrets = ServerSecrets.Open(settings.Directory);
         var runner = new ChildProcessCommandRunner(logins: token => ServerSecrets.LoginsAsync(secrets, token));
+        using var sessions = new WarmSessionRunner(logins: token => ServerSecrets.LoginsAsync(secrets, token));
         // running plans on their schedules is opt-in: a server that was only meant to answer reads never writes a target by itself
         BuildScheduler? scheduler = parsed.Has("scheduler")
             ? new BuildScheduler(projects, runner, BuildSchedulerSchema.Open(settings.Directory), TimeProvider.System, line => context.Error.WriteLine(line))
             : null;
-        var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, projects, host.Commands, line => context.Error.WriteLine(line), parsed.Has("read-only") ? BuildManagementApi.ReadOnlySurface : null, scheduler);
+        var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, projects, host.Commands, line => context.Error.WriteLine(line), parsed.Has("read-only") ? BuildManagementApi.ReadOnlySurface : null, scheduler, sessions);
         await context.Out.WriteLineAsync($"Serving {projects.All().Count} project(s) on {listen} (instance {BuildServer.InstanceId(settings.ServerYaml)}){(scheduler is null ? "" : ", running scheduled refresh plans")}. Pair a client with: dbdatabuild server pair");
         // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
         await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);
