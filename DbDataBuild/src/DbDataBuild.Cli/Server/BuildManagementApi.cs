@@ -190,5 +190,90 @@ internal static class BuildManagementApi
             catch (DbDataKit.Config.Git.GitWorktreeException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
             return Results.NoContent();
         });
+
+        MapWorkspaceGit(app, projects, workspaces, sessions);
+    }
+
+    /// <summary>
+    /// Git for a workspace (plan 13, W08, D15): <c>GET .../changes</c> (what differs from where the draft started, with patches) and <c>GET .../history</c> are a viewer's; <c>POST .../commit</c> (<c>{"message"}</c>) and <c>POST .../push</c> are the owner's and need the
+    /// author role; <c>POST .../merge</c> needs the approver role, because it changes what the scheduler and the deploys read. A project with a git remote is pushed to (a branch, for a pull request opened where the remote lives) and never merged inside
+    /// the server, since the server's copy of a remote is reset to the remote's branch; a project without one is merged inside the server, in the author's name. A merge that conflicts changes nothing and answers 409 with the files. A merged workspace is abandoned.
+    /// </summary>
+    private static void MapWorkspaceGit(IEndpointRouteBuilder app, ProjectsFile projects, Workspaces workspaces, WarmSessionRunner? sessions)
+    {
+        static DbDataKit.Config.Git.GitAuthor AuthorOf(ValidatedToken token) => new(token.SubjectName ?? token.SubjectId, $"{token.SubjectId}@dbdatabuild.local");
+
+        // the project, the workspace, and whether this caller may do this to it; the failure is the answer
+        IResult? Resolve(string project, string id, HttpContext context, ServerRole needed, bool ownerOnly, out HostedProject hosted, out Workspace workspace)
+        {
+            hosted = null!;
+            workspace = null!;
+            if (projects.Find(project) is not { } found) return Results.NotFound();
+            hosted = found;
+            var token = context.ManagementToken();
+            var decision = ManagementAuthorization.Authorize(token, needed, hosted.Id);
+            if (!decision.Allowed) return Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
+            if (workspaces.Find(hosted.Id, id) is not { } w) return Results.NotFound();
+            workspace = w;
+            return ownerOnly && w.Owner != token.SubjectId ? Results.Json(new { error = "A workspace is its owner's." }, statusCode: StatusCodes.Status403Forbidden) : null;
+        }
+
+        static IResult Failed(DbDataKit.Config.Git.GitOperationException ex) => Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict);
+
+        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/changes", (string project, string id, HttpContext context) =>
+        {
+            if (Resolve(project, id, context, ServerRole.Viewer, false, out _, out var workspace) is { } refused) return refused;
+            try { return Results.Json(new { changes = DbDataKit.Config.Git.GitWorkspaceOperations.Changes(workspaces.RootOf(workspace), workspace.Base).Select(c => new { path = c.Path, status = c.Status, patch = c.Patch }) }); }
+            catch (DbDataKit.Config.Git.GitOperationException ex) { return Failed(ex); }
+        });
+
+        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/history", (string project, string id, HttpContext context) =>
+        {
+            if (Resolve(project, id, context, ServerRole.Viewer, false, out _, out var workspace) is { } refused) return refused;
+            return Results.Json(new { commits = DbDataKit.Config.Git.GitWorkspaceOperations.History(workspaces.RootOf(workspace), workspace.Base).Select(c => new { sha = c.Sha, message = c.Message, author = c.AuthorName, when = c.WhenUtc }) });
+        });
+
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/commit", async (string project, string id, HttpContext context) =>
+        {
+            if (Resolve(project, id, context, ServerRole.Author, true, out _, out var workspace) is { } refused) return refused;
+            string? message;
+            try { message = (await JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body, cancellationToken: context.RequestAborted))?["message"]?.GetValue<string>(); }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException) { message = null; }
+            if (string.IsNullOrWhiteSpace(message)) return Results.Json(new { error = "The body is a JSON object with a \"message\"." }, statusCode: StatusCodes.Status400BadRequest);
+            try
+            {
+                var sha = DbDataKit.Config.Git.GitWorkspaceOperations.Commit(workspaces.RootOf(workspace), message, AuthorOf(context.ManagementToken()));
+                return Results.Json(new { committed = sha is not null, sha });
+            }
+            catch (DbDataKit.Config.Git.GitOperationException ex) { return Failed(ex); }
+        });
+
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/push", (string project, string id, HttpContext context) =>
+        {
+            if (Resolve(project, id, context, ServerRole.Author, true, out var hosted, out var workspace) is { } refused) return refused;
+            if (!hosted.IsRemote) return Results.Json(new { error = "This project has no git remote to push to; merge it inside the server instead." }, statusCode: StatusCodes.Status409Conflict);
+            try
+            {
+                DbDataKit.Config.Git.GitWorkspaceOperations.Push(workspaces.RootOf(workspace), workspace.Branch);
+                return Results.Json(new { pushed = true, branch = workspace.Branch });
+            }
+            catch (DbDataKit.Config.Git.GitOperationException ex) { return Failed(ex); }
+        });
+
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/merge", (string project, string id, HttpContext context) =>
+        {
+            if (Resolve(project, id, context, ServerRole.Approver, false, out var hosted, out var workspace) is { } refused) return refused;
+            if (hosted.IsRemote) return Results.Json(new { error = "This project follows a git remote, so its changes go there: push the workspace and merge it where the remote lives." }, statusCode: StatusCodes.Status409Conflict);
+            try
+            {
+                var merged = DbDataKit.Config.Git.GitWorkspaceOperations.Merge(projects.RootOf(hosted), workspace.Branch, AuthorOf(context.ManagementToken()));
+                if (!merged.Merged) return Results.Json(new { error = "The workspace conflicts with the project's branch; nothing was merged.", conflicts = merged.Conflicts }, statusCode: StatusCodes.Status409Conflict);
+                sessions?.End(workspaces.RootOf(workspace));
+                workspaces.Abandon(workspace, projects.RootOf(hosted));
+                return Results.Json(new { merged = true, sha = merged.Sha, fast_forward = merged.FastForward });
+            }
+            catch (DbDataKit.Config.Git.GitOperationException ex) { return Failed(ex); }
+            catch (DbDataKit.Config.Git.GitWorktreeException ex) { return Failed(new DbDataKit.Config.Git.GitOperationException(ex.Message, ex)); }
+        });
     }
 }
