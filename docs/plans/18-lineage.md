@@ -126,7 +126,7 @@ Same rules as plan 13a (one pull request each, a "Done when" test, status in the
 | G05 | Build: design lineage from the model graph and the metadata documents' column lineage; table level for native models and copies | G02, G04 | M | a template project's lineage matches its `project show graph --columns` (test) |
 | G06 | Build: run lineage from the tracking tables (loads, rows, times) | G05 | S | after a refresh in the conformance suite, each load edge carries its last run |
 | G07 | Sync: design lineage from replications and column mappings; run lineage from run history | G02, G04 | M | a replication's mapping appears as column edges with the last run's rows (test) |
-| G08 | Proxy: design lineage for data sources and the tables they serve; run lineage aggregated per table (counts and last use, not every query) | G02, G04 | S | after queries, the served tables show their last use (test) |
+| G08 | Proxy: design lineage for data sources and the tables they serve; run lineage aggregated per table (read count, last read, the clients that read it; never per query: a per-query record belongs to Proxy's activity log, plan 13a P09, under its retention, and the table node links to it) | G02, G04 | S | after queries, the served tables show their last use (test) |
 | G09 | Console: pull and join the servers' graphs by identity; cache and refresh | G04, plan 13 U08 | M | a Sync target and a Build source on one table are one node in the console (test with two paired servers) |
 | G10 | Console: the graph view (systems to datasets to columns), impact and provenance highlighting, run overlay | G09, plan 19 Y04, plan 13 M11 | M | Playwright: open a table, see its upstream to the source, its downstream to a Build model; a failed run is marked |
 | G11 | Semantic layer: measure and dimension bindings as `binds` edges; the semantic models served by Proxy as `serves` edges | G05, plan 19 J12 | S | the console's graph shows a measure's path from the source table through the Sync replication and the Build model (test) |
@@ -140,5 +140,7 @@ owner), and export to OpenLineage (events from run lineage, datasets and jobs fr
 Decided (owner, 2026-10-26): run lineage history follows the servers' retention policy for run detail (section 3); tracing a value is a
 later feature (section 6).
 
-1. Proxy's run lineage: aggregated per table (recommended, G08) or per query for audit?
-2. The graph view's layout library: decided in slice Y04 by a small comparison, unless there is a preference.
+Decided (owner, 2026-10-26): Proxy's run lineage is a summary per served table (G08); a per-query record, if wanted, is Proxy's activity
+log, not lineage.
+
+1. The graph view's layout library: decided in slice Y04 by a small comparison, unless there is a preference.
