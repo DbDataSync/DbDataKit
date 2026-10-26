@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { CheckTab, GraphTab, ModelsTab, ProjectPage } from './pages/ProjectPage'
-import { PlansTab, SampleTab, StatusTab } from './pages/DeployTabs'
+import { CompareTab, PlansTab, SampleTab, StatusTab } from './pages/DeployTabs'
 import { ProjectsPage } from './pages/ProjectsPage'
 
 /**
@@ -17,6 +17,7 @@ export function BuildModule() {
         <Route path="check" element={<CheckTab />} />
         <Route path="status" element={<StatusTab />} />
         <Route path="plans" element={<PlansTab />} />
+        <Route path="compare" element={<CompareTab />} />
         <Route path="sample" element={<SampleTab />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

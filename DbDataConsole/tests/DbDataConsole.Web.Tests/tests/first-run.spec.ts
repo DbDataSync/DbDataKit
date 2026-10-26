@@ -128,6 +128,15 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
     await page.getByTestId('build-tab-status').click()
     await page.getByTestId('build-status-refresh').click()
     await expect(page.getByTestId('build-status-object-marts.orders').getByTestId('build-status-state')).not.toContainText('missing')
+
+    // Two of the deployed tables compared: counts and digests, never the values.
+    await page.getByTestId('build-tab-compare').click()
+    await page.getByTestId('build-compare-table').fill('marts.orders')
+    await page.getByTestId('build-compare-against').fill('staging.orders')
+    await page.getByTestId('build-compare-key').fill('order_id')
+    await page.getByTestId('build-compare-button').click()
+    await expect(page.getByTestId('build-compare-verdict')).toHaveText('Identical')
+    await expect(page.getByTestId('build-compare-rows')).toContainText('251 matched')
   }
 
   await page.getByTestId('rail-home-link').click()

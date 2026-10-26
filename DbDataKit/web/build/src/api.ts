@@ -1,5 +1,5 @@
 import { request } from '@dbdatakit/shell'
-import type { BuildProject, CommandAnswer, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
+import type { BuildProject, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
 
 const project = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}`
 
@@ -29,6 +29,15 @@ export const buildApi = {
       yes: true,
       ...(allowances.risky ? { allow_risky: true } : {}),
       ...(allowances.destructive.length > 0 ? { allow_destructive: allowances.destructive } : {}),
+    }),
+  /** Compares two tables (of one connection, or of two) by counts and digests; the key defaults to the model's grain. */
+  compare: (id: string, o: { connection?: string; table: string; against?: string; againstConnection?: string; key?: string[] }) =>
+    run<CompareResult>(id, 'connection_compare', {
+      ...(o.connection ? { connection: o.connection } : {}),
+      table: o.table,
+      ...(o.against ? { against: o.against } : {}),
+      ...(o.againstConnection ? { against_connection: o.againstConnection } : {}),
+      ...(o.key && o.key.length > 0 ? { key: o.key } : {}),
     }),
   /** Runs the models on generated rows, offline: what they would produce. */
   sample: (id: string, rows?: number) => run<SampleResult>(id, 'project_sample', rows ? { rows } : {}),
