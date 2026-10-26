@@ -1,6 +1,6 @@
 import { put, request } from '@dbdatakit/shell'
 import type {
-  CertificateInfo, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SessionRow, TestResult, WriteDataSourceResult,
+  CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SessionRow, TestResult, WriteDataSourceResult,
 } from './types'
 
 const v1 = '/api/v1'
@@ -21,6 +21,7 @@ export const proxyApi = {
     writeUser: (name: string, body: { auth_type: string; password?: string; data_sources: string[]; default_data_source?: string | null; expected_version?: string | null }) =>
       put<{ name: string; version: string }>(`${v1}/users/${enc(name)}`, body),
     removeUser: (name: string, expectedVersion: string) => request<void>(`${v1}/users/${enc(name)}?expected_version=${enc(expectedVersion)}`, { method: 'DELETE' }),
+    setJwtMappings: (mappings: JwtMapping[], expectedVersion: string | null) => put<{ jwt_mappings: number }>(`${v1}/auth`, { jwt_mappings: mappings, expected_version: expectedVersion }),
     setPassThrough: (allow: boolean, expectedVersion: string | null) => put<{ allow_pass_through: boolean }>(`${v1}/auth`, { allow_pass_through: allow, expected_version: expectedVersion }),
   },
   certificate: {

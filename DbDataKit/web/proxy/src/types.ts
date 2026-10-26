@@ -25,11 +25,12 @@ export interface WriteDataSourceResult { name: string; version: string; created:
 export interface TestResult { ok: boolean; message?: string; kind?: string; code?: string; elapsed_ms?: number }
 
 export interface UserRow { name: string; auth_type: string; has_password: boolean; data_sources: string[]; default_data_source: string | null; version: string }
+export interface JwtMapping { claim: string; value: string; data_sources: string[]; default_data_source: string | null }
 export interface Identities {
   users: UserRow[]
   windows_accounts: UserRow[]
   pass_through: boolean
-  jwt: { enabled: boolean; authority: string | null; issuer: string | null; audience: string | null; name_claim: string; clock_skew_seconds: number; has_signing_key: boolean; mappings: { claim: string; value: string; data_sources: string[]; default_data_source: string | null }[] }
+  jwt: { enabled: boolean; authority: string | null; issuer: string | null; audience: string | null; name_claim: string; clock_skew_seconds: number; has_signing_key: boolean; mappings: JwtMapping[] }
   sessions: { idle_minutes: number; max_hours: number; max_failed_logins: number; lockout_minutes: number }
   auth_version: string | null
 }

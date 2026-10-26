@@ -61,6 +61,8 @@ if (!isWorker) {
   fs.rmSync(proxyDirectory, { recursive: true, force: true })
   fs.mkdirSync(path.join(proxyDirectory, 'config', 'connections'), { recursive: true })
   fs.writeFileSync(path.join(proxyDirectory, 'config', 'server.yaml'), 'schemaVersion: 2\ntls: { mode: selfSigned }\n')
+  fs.mkdirSync(path.join(proxyDirectory, 'config', 'proxy'), { recursive: true })
+  fs.writeFileSync(path.join(proxyDirectory, 'config', 'proxy', 'auth.yaml'), 'jwt:\n  signingKey: console-e2e-signing-key-0123456789abcdef\n  audience: api://console-e2e\n')
   fs.writeFileSync(path.join(proxyDirectory, 'config', 'connections', 'erp.yaml'), [
     'schema: connection/1', 'name: erp', 'engine: sqlserver', 'address: { host: localhost, database: Erp }',
     "auth: { mode: sql, user: reader, password_secret: 'env:ERP_DB_PASSWORD' }", ''].join('\n'))

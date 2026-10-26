@@ -161,6 +161,19 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(analyst.getByTestId('user-has-password')).toHaveText('set')
   await expect(page.getByText('correct horse battery')).toHaveCount(0)   // a password is never shown back
 
+  // a JWT claim mapping, saved as a list into proxy/auth.yaml and shown again from the server
+  await page.getByTestId('jwt-mapping-add').click()
+  await page.getByTestId('jwt-claim-input').fill('group')
+  await page.getByTestId('jwt-value-input').fill('analysts')
+  await page.getByTestId('jwt-sources-input').fill('erp')
+  const saved = page.waitForResponse((r) => r.url().includes('/api/v1/auth') && r.request().method() === 'PUT')
+  await page.getByTestId('jwt-mappings-save').click()
+  const answer = await saved
+  expect(answer.status(), await answer.text()).toBe(200)
+  await expect(page.getByTestId('jwt-mapping-0').getByTestId('jwt-value-input')).toHaveValue('analysts')
+  await page.reload()
+  await expect(page.getByTestId('jwt-mapping-0').getByTestId('jwt-claim-input')).toHaveValue('group')
+
   await page.getByTestId('rail-tls').click()
   await expect(page.getByTestId('tls-details')).toBeVisible()
 
