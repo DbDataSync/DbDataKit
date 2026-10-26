@@ -893,6 +893,13 @@ public partial class ApplyConformanceTests
             Assert.Equal(1, await CountAsync(run, "information_schema.tables", "table_schema = 'marts' AND table_name = 'ex'"));
             Refused(run.Cli("connection", "deploy", "--apply-plan", id), "DDB-438", "a stored plan is applied once too");
             Refused(run.Cli("connection", "deploy", "--apply-plan", "2020-01-01-00000000"), "No plan", "an id nothing is kept under");
+
+            // a refresh is what a schedule runs, and it prunes the same way: the next one removes a log that has gone past the limit since
+            var stale = Path.Combine(logs, "20200102T000000-refresh-stale.jsonl"); File.WriteAllText(stale, "{}"); File.SetLastWriteTimeUtc(stale, DateTime.UtcNow.AddDays(-3));
+            var refreshed = run.Cli("connection", "refresh", "--check", "none");
+            Assert.Contains("older than 1 day(s)", refreshed.Out);
+            Assert.False(File.Exists(stale));
+            Assert.True(File.Exists(recent));
         }
         finally { if (Directory.Exists(run.Dir)) Directory.Delete(run.Dir, true); }
     }
