@@ -154,10 +154,9 @@ public sealed class WebServerTests : IDisposable
     }
 
     [Fact]
-    public void The_command_refuses_a_json_format_a_missing_project_and_a_bad_port()
+    public void The_command_is_gone()
     {
-        Assert.Equal(CliApp.ExitUsage, CliApp.Run(["ui", "web", "--project", dir, "--format", "json"], new StringWriter(), new StringWriter()));
-        Assert.Equal(CliApp.ExitUsage, CliApp.Run(["ui", "web", "--project", Path.Combine(dir, "nope")], new StringWriter(), new StringWriter()));
-        Assert.Equal(CliApp.ExitUsage, CliApp.Run(["ui", "web", "--project", dir, "--port", "70000"], new StringWriter(), new StringWriter()));
+        var error = new StringWriter();
+        Assert.NotEqual(CliApp.ExitOk, CliApp.Run(["ui", "web", "--project", dir], new StringWriter(), error));
     }
 }

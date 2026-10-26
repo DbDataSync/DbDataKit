@@ -33,7 +33,7 @@ internal static class BuildManagementApi
     /// options that show values and the paths outside the project stay refused. A server started with <c>--read-only</c> offers <see cref="ReadOnlySurface"/> instead.
     /// </summary>
     public static ToolSurface FullSurface(string projectRoot, IEnumerable<CommandInfo> all) =>
-        new(projectRoot, all.Where(c => c.Name is not ("ui terminal" or "ui mcp" or "ui web")));
+        new(projectRoot, all.Where(c => c.Name is not ("ui terminal" or "ui mcp")));
 
     /// <summary>The person a call is for, as the tracking tables record them: "Ada via Main console".</summary>
     internal static string ActorOf(ValidatedToken token) => $"{token.SubjectName ?? token.SubjectId} via {token.Client.Name}";

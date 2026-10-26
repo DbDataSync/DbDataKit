@@ -53,4 +53,4 @@ After the first build, `dbdatabuild connection refresh` runs the routine loads (
 
 - Several connections, copies between them, parameters per connection, native queries and macros: `DESIGN.md` section 6.5 and `docs/research/cross-server.md`.
 - Working with an AI agent: `docs/agents.md`; `dbdatabuild project agent-kit --write` installs the skill and schemas in the project.
-- The terminal and web interfaces: `docs/interfaces.md` (`dbdatabuild ui terminal`, `dbdatabuild ui web`).
+- The terminal interface and the console: `docs/interfaces.md` (`dbdatabuild ui terminal`; `dbdatabuild server run` for the console).

@@ -159,13 +159,6 @@ public static class CliApp
                     cmd.Options.Add(mcpProject); cmd.Options.Add(mcpWrites); cmd.Options.Add(mcpApply); cmd.Options.Add(mcpNoShow);
                     cmd.SetAction(pr => Reported(pr, spec, (o, e) => Mcp.McpCommand.Run(Path.GetFullPath(pr.GetValue(mcpProject)!.FullName), pr.GetValue(mcpWrites), pr.GetValue(mcpApply), pr.GetValue(mcpNoShow), o.IsJson(), input, o, e, environment ?? Environment.GetEnvironmentVariable)));
                     break;
-                case "ui web":
-                    var webProject = new Option<DirectoryInfo>("--project") { Description = "Project root to show", DefaultValueFactory = _ => new DirectoryInfo(".") };
-                    var webPort = new Option<int>("--port") { Description = "Port on the loopback address (default: a free one)", DefaultValueFactory = _ => 0 };
-                    var webApply = new Option<bool>("--allow-apply") { Description = "Let the page apply plans (a person confirms each one by typing the plan's id and connection; needs the write login in this environment). Off by default: the page reads and plans only." };
-                    cmd.Options.Add(webProject); cmd.Options.Add(webPort); cmd.Options.Add(webApply);
-                    cmd.SetAction(pr => Reported(pr, spec, (o, e) => Web.WebCommand.Run(Path.GetFullPath(pr.GetValue(webProject)!.FullName), pr.GetValue(webPort), pr.GetValue(webApply), o.IsJson(), o, e, environment ?? Environment.GetEnvironmentVariable)));
-                    break;
                 case "project sample":
                     var sampleModels = new Argument<string[]>("models") { Description = "Model names (marts.fct_orders), model files, or directories (default: every model)", Arity = ArgumentArity.ZeroOrMore };
                     var sampleProject = new Option<DirectoryInfo>("--project") { Description = "Project root (contains models/)", DefaultValueFactory = _ => new DirectoryInfo(".") };

@@ -39,7 +39,7 @@ internal static class TuiCommand
         {
             var root = CliApp.Build(new StringWriter(), new StringWriter(), TextReader.Null, interactive: false);
             var result = new List<CommandInfo>();
-            foreach (var spec in CommandSpecs.All.Where(s => s.Name is not ("ui terminal" or "ui mcp" or "ui web")))
+            foreach (var spec in CommandSpecs.All.Where(s => s.Name is not ("ui terminal" or "ui mcp")))
             {
                 var cmd = CliApp.Find(root, spec.Name)!;
                 var args = cmd.Arguments.Select(a => new ArgumentInfo(a.Name, a.Description ?? "", a.Arity.MaximumNumberOfValues > 1, a.Arity.MinimumNumberOfValues > 0, ArgumentChoices(spec.Name, a.Name))).ToList();

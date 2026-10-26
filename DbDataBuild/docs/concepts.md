@@ -80,7 +80,7 @@ Every command says, in its header and in `--help`, what it touches:
 
 | Command | What it does |
 |---|---|
-| `ui terminal`, `ui web`, `ui mcp` | the terminal interface, the web page, the MCP server for AI agents |
+| `ui terminal`, `ui mcp` | the terminal interface, the MCP server for AI agents |
 | `help code <code>` | explain a diagnostic such as `DDB-214` |
 | `help matrix` | the support matrix |
 | `help dialects` | the dialect profiles of read-only origins: fields, built-ins, how to add one |

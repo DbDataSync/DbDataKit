@@ -35,7 +35,6 @@ Generated from the command tree of `dbdatabuild` (`UPDATE_GOLDEN=1 dotnet test t
 | [`connection seed`](#connection-seed) | `P⇒S` | Target writes (DDL and/or data, as the plan states) | Create the seeded tables (the mapped models) on a connection and fill them from the seeds (prints what it would do unless --apply) |
 | [`connection publish`](#connection-publish) | `P⇒T` | Tracking tables only | Store the project and model metadata as JSON in the connection for introspection |
 | [`ui terminal`](#ui-terminal) | `—` | Offline only | Interactive terminal interface: choose, plan and run operations (each action it runs declares its own effect) |
-| [`ui web`](#ui-web) | `—` | Offline only | Web interface on this machine's loopback address: project health, lineage, models and their rendered scripts, tests, the support matrix (it runs only commands that read, unless started with --allow-apply) |
 | [`ui mcp`](#ui-mcp) | `—` | Offline only | Model Context Protocol server on standard input and output: the commands as tools for an AI agent, the agent kit as resources (each tool it offers declares its own effect; commands that change a connection are offered only with --allow-writes) |
 | [`help code`](#help-code) | `—` | Offline only | Long-form explanation of a diagnostic code |
 | [`help matrix`](#help-matrix) | `—` | Offline only | Print the support matrix and portability report |
@@ -613,20 +612,6 @@ Usage: `dbdatabuild ui terminal [connection] [options]`
 | Option | Meaning |
 |---|---|
 | `--project` `<path>` | Project root |
-
-## ui web
-
-Web interface on this machine's loopback address: project health, lineage, models and their rendered scripts, tests, the support matrix (it runs only commands that read, unless started with --allow-apply).
-
-Effect: Offline only. Reads and writes: `—`.
-
-Usage: `dbdatabuild ui web [options]`
-
-| Option | Meaning |
-|---|---|
-| `--allow-apply` | Let the page apply plans (a person confirms each one by typing the plan's id and connection; needs the write login in this environment). Off by default: the page reads and plans only. |
-| `--port` `<number>` | Port on the loopback address (default: a free one) |
-| `--project` `<path>` | Project root to show |
 
 ## ui mcp
 
