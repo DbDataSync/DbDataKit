@@ -41,7 +41,7 @@ internal static class BuildManagementApi
     /// <param name="projects">The projects served, read again on every call so one added or removed is served or gone at once.</param>
     /// <param name="commands">All the commands there are; each project is offered the read-only ones.</param>
     /// <param name="surfaceFor">Which of them a project is offered and how their inputs are checked; the read-only rules unless a test or a later slice says otherwise.</param>
-    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null)
+    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null)
     {
         surfaceFor ??= FullSurface;
         var specs = CommandSpecs.All.ToDictionary(s => s.Name);
@@ -71,7 +71,7 @@ internal static class BuildManagementApi
             });
         });
 
-        if (workspaces is not null) MapWorkspaces(app, projects, workspaces);
+        if (workspaces is not null) MapWorkspaces(app, projects, workspaces, workspaceRunner);
 
         // the scheduled plans of a project, whether or not this server runs them (the scheduler is opt-in): their schedule, the next time each is due and how the last run went
         app.MapGet("/api/v1/projects/{project}/schedule", (string project) =>
@@ -102,11 +102,13 @@ internal static class BuildManagementApi
             if (projects.Find(project) is not { } hosted) return Results.NotFound();
             var projectId = hosted.Id;
             var projectRoot = projects.RootOf(hosted);
+            var commandRunner = runner;
             if (context.Request.Query["workspace"] is { Count: > 0 } asked && workspaces is not null)
             {
                 if (workspaces.Find(projectId, asked.ToString()) is not { } draft) return Results.Json(new { error = $"There is no workspace '{asked}' in this project." }, statusCode: StatusCodes.Status404NotFound);
                 if (draft.Owner != context.ManagementToken().SubjectId) return Results.Json(new { error = "A workspace is its owner's." }, statusCode: StatusCodes.Status403Forbidden);
                 projectRoot = workspaces.RootOf(draft);
+                commandRunner = workspaceRunner ?? runner;
             }
             if (!Directory.Exists(projectRoot))
                 return Results.Json(new { error = $"The project '{projectId}' has no working copy on this server yet. Run: dbdatabuild server project pull {projectId}" }, statusCode: StatusCodes.Status409Conflict);
@@ -133,7 +135,7 @@ internal static class BuildManagementApi
             if (!surface.TryBuildArguments(command, arguments, out var argv, out var problem))
                 return Results.Json(new { error = problem }, statusCode: StatusCodes.Status400BadRequest);
 
-            var result = await runner.RunAsync(argv, projectRoot, ActorOf(context.ManagementToken()), context.RequestAborted);
+            var result = await commandRunner.RunAsync(argv, projectRoot, ActorOf(context.ManagementToken()), context.RequestAborted);
             JsonNode? document = null;
             try { document = JsonNode.Parse(result.Out); } catch (JsonException) { }
             return Results.Json(new JsonObject { ["exit"] = result.Exit, ["document"] = document, ["text"] = document is null ? (result.Out.Length > 0 ? result.Out : result.Err) : null });
@@ -143,7 +145,7 @@ internal static class BuildManagementApi
     /// <c>GET|POST /api/v1/projects/{project}/workspaces</c> and <c>DELETE .../workspaces/{id}</c> (plan 13, W02). Listing is a viewer's; making one and abandoning one needs the author role, and only the owner abandons theirs.
     /// A command runs in a workspace when the call says <c>?workspace=&lt;id&gt;</c>, and only for its owner; without it the command runs in the project's own checkout, which is what the scheduler reads.
     /// </summary>
-    private static void MapWorkspaces(IEndpointRouteBuilder app, ProjectsFile projects, Workspaces workspaces)
+    private static void MapWorkspaces(IEndpointRouteBuilder app, ProjectsFile projects, Workspaces workspaces, WarmSessionRunner? sessions)
     {
         static object Describe(Workspace w, string? caller) => new { id = w.Id, name = w.Name, owner = w.OwnerName, mine = w.Owner == caller, branch = w.Branch, @base = w.Base, created = w.Created };
         static IResult Refused(AuthorizationDecision decision) => Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
@@ -183,6 +185,7 @@ internal static class BuildManagementApi
             if (!decision.Allowed) return Refused(decision);
             if (workspaces.Find(hosted.Id, id) is not { } workspace) return Results.NotFound();
             if (workspace.Owner != token.SubjectId) return Results.Json(new { error = "A workspace is abandoned by its owner." }, statusCode: StatusCodes.Status403Forbidden);
+            sessions?.End(workspaces.RootOf(workspace));    // its process has the folder open
             try { workspaces.Abandon(workspace, projects.RootOf(hosted)); }
             catch (DbDataKit.Config.Git.GitWorktreeException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
             return Results.NoContent();
