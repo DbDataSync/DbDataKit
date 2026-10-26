@@ -52,7 +52,7 @@ public sealed class BuildServerWorkspacesTests : IAsyncLifetime
         app = BuildServer.Build(settings, BuildServer.Certificate(ServerDir), runner, projects, new TuiCommand.CliHost(_ => null).Commands, _ => { });
         await app.StartAsync();
         var url = new Uri(app.Urls.First());
-        var code = new PairingFiles(settings.ServerYaml).Codes().Create(ServerRole.Author);
+        var code = new PairingFiles(settings.ServerYaml).Codes().Create(ServerRoles.Close(ServerRole.Approver | ServerRole.Author));
         paired = await PairingClient.PairAsync(url, code.Code, console, ClientKind.Console, "test console");
         http = new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint)) { BaseAddress = url };
     }
@@ -163,5 +163,107 @@ public sealed class BuildServerWorkspacesTests : IAsyncLifetime
         var refused = await AsAda(HttpMethod.Post, "/api/v1/projects/plain/workspaces", """{"name":"draft"}""");
         Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
         Assert.Contains("not a git repository", (string)(await Json(refused))["error"]!);
+    }
+
+    private async Task<string> Draft(string name = "draft")
+    {
+        var id = (string)(await Json(await AsAda(HttpMethod.Post, "/api/v1/projects/sales/workspaces", $$"""{"name":"{{name}}"}""")))["id"]!;
+        return id;
+    }
+
+    private string ModelIn(string folder) => Directory.EnumerateFiles(Path.Combine(folder, "models"), "*.sql", SearchOption.AllDirectories).First();
+
+    [Fact]
+    public async Task Changes_are_shown_committed_in_the_callers_name_and_listed_in_the_history()
+    {
+        var id = await Draft();
+        var folder = Path.Combine(ServerDir, "workspaces", "sales", id);
+        File.AppendAllText(ModelIn(folder), "\n-- a draft\n");
+
+        var changes = (await Json(await Send("vic", ServerRole.Viewer, HttpMethod.Get, $"/api/v1/projects/sales/workspaces/{id}/changes")))["changes"]!.AsArray();
+        Assert.Single(changes);
+        Assert.Contains("+-- a draft", (string)changes[0]!["patch"]!);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send("vic", ServerRole.Viewer, HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/commit", """{"message":"x"}""")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send("bob", ServerRole.Author, HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/commit", """{"message":"x"}""")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await AsAda(HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/commit", "{}")).StatusCode);
+        var committed = await Json(await AsAda(HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/commit", """{"message":"Note the draft"}"""));
+        Assert.True((bool)committed["committed"]!);
+        Assert.False((bool)(await Json(await AsAda(HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/commit", """{"message":"again"}""")))["committed"]!);
+
+        var commits = (await Json(await AsAda(HttpMethod.Get, $"/api/v1/projects/sales/workspaces/{id}/history")))["commits"]!.AsArray();
+        Assert.Equal(("Note the draft", "ada"), ((string)commits.Single()!["message"]!, (string)commits[0]!["author"]!));
+    }
+
+    [Fact]
+    public async Task Merging_inside_the_server_needs_an_approver_updates_the_checkout_and_ends_the_workspace()
+    {
+        var id = await Draft();
+        var folder = Path.Combine(ServerDir, "workspaces", "sales", id);
+        var relative = Path.GetRelativePath(folder, ModelIn(folder));
+        File.AppendAllText(ModelIn(folder), "\n-- merged\n");
+        await AsAda(HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/commit", """{"message":"Merge me"}""");
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await AsAda(HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/merge")).StatusCode);
+        var merged = await Json(await Send("ann", ServerRole.Approver, HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/merge"));
+
+        Assert.True((bool)merged["merged"]!);
+        Assert.Contains("-- merged", File.ReadAllText(Path.Combine(project, relative)));
+        Assert.False(Directory.Exists(folder));
+        using var repo = new Repository(project);
+        Assert.Null(repo.Branches["ws/" + id]);
+        Assert.Equal("Merge me", repo.Head.Tip.Message.Trim());
+    }
+
+    [Fact]
+    public async Task A_conflicting_merge_is_refused_with_the_files_and_the_workspace_stays()
+    {
+        var id = await Draft();
+        var folder = Path.Combine(ServerDir, "workspaces", "sales", id);
+        var relative = Path.GetRelativePath(folder, ModelIn(folder));
+        File.WriteAllText(ModelIn(folder), "select 1 as draft\n");
+        await AsAda(HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/commit", """{"message":"Draft"}""");
+        File.WriteAllText(Path.Combine(project, relative), "select 2 as main\n");
+        using (var repo = new Repository(project))
+        {
+            Commands.Stage(repo, "*");
+            var who = new Signature("Bo", "bo@example.com", DateTimeOffset.UtcNow);
+            repo.Commit("Main", who, who);
+        }
+
+        var refused = await Send("ann", ServerRole.Approver, HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/merge");
+
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Equal([relative.Replace('\\', '/')], (await Json(refused))["conflicts"]!.AsArray().Select(c => (string)c!));
+        Assert.Equal("select 2 as main\n", File.ReadAllText(Path.Combine(project, relative)).ReplaceLineEndings("\n"));
+        Assert.True(Directory.Exists(folder));
+    }
+
+    [Fact]
+    public async Task A_project_with_a_remote_is_pushed_to_and_never_merged_inside_the_server()
+    {
+        var bare = Path.Combine(root, "remote.git");
+        Repository.Clone(project, bare, new CloneOptions { IsBare = true });
+        projects.Add(new HostedProject("far", null, bare, null));
+        projects.Pull(projects.Find("far")!);
+        string Url(string tail) => $"/api/v1/projects/far/workspaces{tail}";
+        var id = (string)(await Json(await AsAda(HttpMethod.Post, Url(""), """{"name":"draft"}""")))["id"]!;
+        var folder = Path.Combine(ServerDir, "workspaces", "far", id);
+        File.AppendAllText(ModelIn(folder), "\n-- pushed\n");
+        await AsAda(HttpMethod.Post, Url($"/{id}/commit"), """{"message":"Push me"}""");
+
+        Assert.Equal(HttpStatusCode.Conflict, (await Send("ann", ServerRole.Approver, HttpMethod.Post, Url($"/{id}/merge"))).StatusCode);
+        Assert.True((bool)(await Json(await AsAda(HttpMethod.Post, Url($"/{id}/push"))))["pushed"]!);
+
+        using var remote = new Repository(bare);
+        Assert.Equal("Push me", remote.Branches["ws/" + id].Tip.Message.Trim());
+    }
+
+    [Fact]
+    public async Task A_project_without_a_remote_has_nothing_to_push_to()
+    {
+        var id = await Draft();
+
+        Assert.Equal(HttpStatusCode.Conflict, (await AsAda(HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/push")).StatusCode);
     }
 }
