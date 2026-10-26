@@ -50,6 +50,21 @@ internal static class Conn
 }
 
 /// <summary>A temporary configuration directory (<c>server.yaml</c>, <c>proxy/</c>, <c>connections/</c>) written from literal text.</summary>
+internal static class TestFolder
+{
+    /// <summary>Deletes a folder a test made. A git repository's object files are read-only, which Windows will not delete until the attribute is cleared.</summary>
+    public static void Delete(string path)
+    {
+        try
+        {
+            foreach (var file in System.IO.Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal);
+            System.IO.Directory.Delete(path, true);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+}
+
 internal sealed class TempConfig : IDisposable
 {
     private readonly TempFile _holder = TempFile.Create("", "placeholder");

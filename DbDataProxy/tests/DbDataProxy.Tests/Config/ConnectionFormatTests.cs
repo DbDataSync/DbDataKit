@@ -126,10 +126,12 @@ public sealed class ConnectionFormatTests
     [Fact]
     public void The_extension_carries_every_setting_a_data_source_has()
     {
+        // absolute on this machine, whichever system it is (a Unix path is not absolute on Windows, a drive path is not on Unix)
+        var parquet = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "parquet")).Replace('\\', '/');
         var load = LoadOne("lake", Conn.Yaml("lake", "duckdb", "Data Source=C:/data/lake.duckdb", proxy:
         [
             "pass_through: false", "metadata: informationschema", "batch_size: 1000", "acquire_timeout_seconds: 5", "max_concurrent_queries: 3", "max_concurrent_queries_per_user: 2",
-            "allowed_directories: ['/data/parquet']", "compression: { mode: arrow, codec: lz4, level: 3, allow_client_override: false }",
+            $"allowed_directories: ['{parquet}']", "compression: { mode: arrow, codec: lz4, level: 3, allow_client_override: false }",
         ]));
         Assert.True(load.Ok, Errors(load));
         var source = Assert.Single(load.Value!.DataSources).Value;
@@ -138,7 +140,7 @@ public sealed class ConnectionFormatTests
         Assert.Equal(5, source.AcquireTimeoutSeconds);
         Assert.Equal(3, source.MaxConcurrentQueries);
         Assert.Equal(2, source.MaxConcurrentQueriesPerUser);
-        Assert.Equal(["/data/parquet"], source.AllowedDirectories);
+        Assert.Equal([parquet], source.AllowedDirectories);
         Assert.Equal(CompressionMode.Arrow, source.Compression!.Mode);
         Assert.Equal("lz4", source.Compression.Codec);
         Assert.Equal(3, source.Compression.Level);

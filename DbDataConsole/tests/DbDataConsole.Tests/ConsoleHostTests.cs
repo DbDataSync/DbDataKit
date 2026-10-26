@@ -142,6 +142,28 @@ public sealed class ConsoleHostTests : IAsyncLifetime
     }
 }
 
+public sealed class ConsolePublicAddressTests
+{
+    [Fact]
+    public async Task A_passkey_is_bound_to_the_public_address_not_to_the_address_the_console_listens_on()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ddk-console-" + Guid.NewGuid().ToString("N")[..8]);
+        try
+        {
+            var app = ConsoleHost.Build(new ConsoleSettings(directory, new Uri("https://localhost:0"), new Uri("https://console.example:8480")), ConsoleHost.Certificate(directory), _ => { }, webRoot: Path.Combine(directory, "none"));
+            await using (app)
+            {
+                await app.StartAsync();
+                var passkeys = app.Services.GetRequiredService<DbDataKit.Web.Auth.PasskeyOptions>();
+                Assert.Equal("console.example", passkeys.RelyingPartyId);
+                Assert.Contains("https://console.example:8480", passkeys.Origins);
+                await app.StopAsync();
+            }
+        }
+        finally { try { Directory.Delete(directory, true); } catch (IOException) { } }
+    }
+}
+
 public sealed class ConsoleWithoutWebAppTests : IAsyncLifetime
 {
     private readonly string directory = Path.Combine(Path.GetTempPath(), "ddk-console-" + Guid.NewGuid().ToString("N")[..8]);

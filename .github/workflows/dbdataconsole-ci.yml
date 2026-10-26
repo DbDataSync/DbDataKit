@@ -95,3 +95,34 @@ jobs:
       - name: Run the browser tests
         working-directory: DbDataConsole/tests/DbDataConsole.Web.Tests
         run: npx playwright test
+
+  # The image the console is delivered as: it builds, becomes healthy, serves its web app, and does not run as root.
+  image:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the image
+        run: docker build -f DbDataConsole/Dockerfile -t dbdatakit:ci .
+      - name: Start it and wait for its health check
+        run: |
+          docker run -d --name ddk -p 8480:8480 dbdatakit:ci
+          for i in $(seq 1 40); do
+            status="$(docker inspect -f '{{.State.Health.Status}}' ddk)"
+            [ "$status" = healthy ] && break
+            sleep 3
+          done
+          docker logs ddk
+          [ "$status" = healthy ] || { echo "the container is $status, not healthy" >&2; exit 1; }
+      - name: Answer, serve the app, make an invitation
+        run: |
+          curl -skf https://localhost:8480/version | grep -q '"product":"dbdatakit"'
+          curl -skf https://localhost:8480/ | grep -q '<div id="root">'
+          test "$(curl -sk -o /dev/null -w '%{http_code}' https://localhost:8480/api/users)" = 401
+          docker exec ddk dotnet /app/dbdatakit.dll user invite --url https://localhost:8480 | grep -q '/invite#'
+          test "$(docker exec ddk id -u)" != 0

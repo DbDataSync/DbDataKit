@@ -197,11 +197,17 @@ public sealed partial class ProxyManagement(IConfigurationRoot configuration, st
         name is "server.yaml" or "proxy/auth.yaml" or "proxy/users.yaml"
         || (name.StartsWith("connections/", StringComparison.Ordinal) && name.EndsWith(".yaml", StringComparison.Ordinal) && name["connections/".Length..] is { Length: > 5 } stem && !stem.Contains('/') && !stem.Contains('\\') && !stem.Contains(".."));
 
+    /// <summary>Copies the files of the layout and nothing else. The folder is a git repository, whose objects are read-only files that Windows will not delete again, and validation reads none of it.</summary>
     private static void CopyDirectory(string from, string to)
     {
-        foreach (var directory in Directory.EnumerateDirectories(from, "*", SearchOption.AllDirectories)) Directory.CreateDirectory(Path.Combine(to, Path.GetRelativePath(from, directory)));
         foreach (var file in Directory.EnumerateFiles(from, "*", SearchOption.AllDirectories))
-            File.Copy(file, Path.Combine(to, Path.GetRelativePath(from, file)), overwrite: true);
+        {
+            var relative = Path.GetRelativePath(from, file);
+            if (!IsLayoutFile(relative.Replace(Path.DirectorySeparatorChar, '/'))) continue;
+            var target = Path.Combine(to, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target, overwrite: true);
+        }
     }
 
     private static JsonArray Diagnostics(IEnumerable<ConfigDiagnostic> diagnostics) =>
