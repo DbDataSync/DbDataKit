@@ -17,6 +17,8 @@ The owner's rules for the first version:
 - **Manual lineage entries** (documenting external systems by hand) may be needed later; not in the first version.
 - **Export** (to OpenLineage and external catalogs) will be needed eventually; not in the first version. The model is designed so it maps
   onto OpenLineage, so export is a later addition, not a redesign.
+- **Tracing a value back** (from a query result or a visual's value to where it came from, and further to the rows behind it) is a later
+  feature, not in the first version (owner, 2026-10-26).
 
 ## 2. What the suite already knows
 
@@ -62,7 +64,9 @@ The owner's rules for the first version:
 - **Design lineage**, from definitions: what *can* flow where (models, mappings, bindings, published queries). Rebuilt when a definition
   changes; cheap and complete for what the definitions say.
 - **Run lineage**, from executions: what *did* flow, when and how much (a replication run, a load, a refresh, a semantic query's sources).
-  Attached to design edges as their latest runs, with a short history; this is where freshness and failures come from.
+  Attached to design edges as their latest runs; this is where freshness and failures come from. **Its history is kept and pruned by the
+  same retention policy as the server's other run detail** (plan 13 W10, `DbDataKit.Monitoring`), not by a lineage setting of its own
+  (owner, 2026-10-26).
 
 **Confidence**: every edge says how it is known: `declared` (written in a definition), `derived` (computed, as Build's query analysis does),
 `observed` (seen in a run). A dataset whose upstream is unknown shows an explicit "unknown upstream" marker, so a reader can tell "nothing
@@ -103,8 +107,10 @@ graph layout, so the graph view uses a layout library chosen in slice Y04 (candi
 - **Impact and provenance**: select a node, highlight everything downstream or upstream, with the path's edges labelled by kind.
 - **Run overlay**: each job and dataset coloured by its last run and freshness (from `DbDataKit.Monitoring`): failed, late, fresh.
 - **Gaps visible**: "unknown upstream" and table-level edges drawn differently from column-level ones.
-- **Trace this number**: from a semantic query's result (the console's query explorer, a dashboard cell), open its provenance: the
-  measures, their columns, the Build models and loads, the Sync replications and the source tables.
+- **Later, not in the first version: tracing a value.** From a query result or a visual's value (the console's query explorer, a
+  dashboard cell), open where it came from: the measures, their columns, the Build models and loads, the Sync replications and the source
+  tables (the definition path), and later the rows behind the value (a drill to detail, which needs the semantic engine's help and is
+  its own design).
 - **Text too**: every view has a list form (and the commands' JSON), so lineage is usable without the drawing and in an agent's answer.
 
 ## 7. Slices
@@ -123,14 +129,16 @@ Same rules as plan 13a (one pull request each, a "Done when" test, status in the
 | G08 | Proxy: design lineage for data sources and the tables they serve; run lineage aggregated per table (counts and last use, not every query) | G02, G04 | S | after queries, the served tables show their last use (test) |
 | G09 | Console: pull and join the servers' graphs by identity; cache and refresh | G04, plan 13 U08 | M | a Sync target and a Build source on one table are one node in the console (test with two paired servers) |
 | G10 | Console: the graph view (systems to datasets to columns), impact and provenance highlighting, run overlay | G09, plan 19 Y04, plan 13 M11 | M | Playwright: open a table, see its upstream to the source, its downstream to a Build model; a failed run is marked |
-| G11 | Semantic layer: measure and dimension bindings as `binds` edges; a semantic query's sources as run lineage; "trace this number" | G05, plan 19 J14 | M | Playwright: from a result cell to the source table through the measure, the Build model and the Sync replication |
+| G11 | Semantic layer: measure and dimension bindings as `binds` edges; the semantic models served by Proxy as `serves` edges | G05, plan 19 J12 | S | the console's graph shows a measure's path from the source table through the Sync replication and the Build model (test) |
 | G12 | DbDataStore and DbDataApps emitters (entities, documents, extractions, promotions; apps and dashboards as consumers), when those products exist | G04, plan 19 Z03 | S each | per product, its objects appear in the console's graph |
 
-Later, not in the first version: manual lineage entries for external systems (a lineage file or console form, as `declared` edges with an
+Later, not in the first version: tracing a value from a result or a visual (section 6), then the rows behind it; manual lineage entries for external systems (a lineage file or console form, as `declared` edges with an
 owner), and export to OpenLineage (events from run lineage, datasets and jobs from design lineage) and to external catalogs.
 
 ## 8. Questions for the owner
 
-1. Run lineage history: how long to keep it per edge (the last run only, a fixed number of runs, or a time window)?
-2. Proxy's run lineage: aggregated per table (recommended, G08) or per query for audit?
-3. The graph view's layout library: decided in slice Y04 by a small comparison, unless there is a preference.
+Decided (owner, 2026-10-26): run lineage history follows the servers' retention policy for run detail (section 3); tracing a value is a
+later feature (section 6).
+
+1. Proxy's run lineage: aggregated per table (recommended, G08) or per query for audit?
+2. The graph view's layout library: decided in slice Y04 by a small comparison, unless there is a preference.
