@@ -235,7 +235,7 @@ public sealed class BuildServerWorkspacesTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
         Assert.Equal([relative.Replace('\\', '/')], (await Json(refused))["conflicts"]!.AsArray().Select(c => (string)c!));
-        Assert.Equal("select 2 as main\n", File.ReadAllText(Path.Combine(project, relative)));
+        Assert.Equal("select 2 as main\n", File.ReadAllText(Path.Combine(project, relative)).ReplaceLineEndings("\n"));
         Assert.True(Directory.Exists(folder));
     }
 

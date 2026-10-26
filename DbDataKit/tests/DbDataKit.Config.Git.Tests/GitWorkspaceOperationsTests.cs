@@ -26,6 +26,9 @@ public sealed class GitWorkspaceOperationsTests : IDisposable
         GitWorktrees.Add(Checkout, "ws/ada-draft", Draft);
     }
 
+    /// <summary>Git on Windows may write the checkout with CRLF; what is compared is the text.</summary>
+    private static string Read(string path) => File.ReadAllText(path).ReplaceLineEndings("\n");
+
     public void Dispose()
     {
         try
@@ -61,7 +64,7 @@ public sealed class GitWorkspaceOperationsTests : IDisposable
         var history = GitWorkspaceOperations.History(Draft, _base);
         Assert.Equal(sha, history.Single().Sha);
         Assert.Equal(("Change a", "Ada"), (history[0].Message, history[0].AuthorName));
-        Assert.Equal("one\n", File.ReadAllText(Path.Combine(Checkout, "a.txt")));    // the checkout did not move
+        Assert.Equal("one\n", Read(Path.Combine(Checkout, "a.txt")));    // the checkout did not move
     }
 
     [Fact]
@@ -75,7 +78,7 @@ public sealed class GitWorkspaceOperationsTests : IDisposable
         Assert.True(merged.Merged);
         Assert.True(merged.FastForward);
         Assert.Equal(sha, merged.Sha);
-        Assert.Equal("two\n", File.ReadAllText(Path.Combine(Checkout, "a.txt")));
+        Assert.Equal("two\n", Read(Path.Combine(Checkout, "a.txt")));
     }
 
     [Fact]
@@ -93,7 +96,7 @@ public sealed class GitWorkspaceOperationsTests : IDisposable
         using var repo = new Repository(Checkout);
         Assert.Equal("Ada", repo.Head.Tip.Author.Name);
         Assert.Equal(2, repo.Head.Tip.Parents.Count());
-        Assert.Equal(("two\n", "other\n"), (File.ReadAllText(Path.Combine(Checkout, "a.txt")), File.ReadAllText(Path.Combine(Checkout, "b.txt"))));
+        Assert.Equal(("two\n", "other\n"), (Read(Path.Combine(Checkout, "a.txt")), Read(Path.Combine(Checkout, "b.txt"))));
     }
 
     [Fact]
@@ -110,7 +113,7 @@ public sealed class GitWorkspaceOperationsTests : IDisposable
         Assert.Equal(["a.txt"], merged.Conflicts);
         using var repo = new Repository(Checkout);
         Assert.Equal(tip, repo.Head.Tip.Sha);
-        Assert.Equal("main\n", File.ReadAllText(Path.Combine(Checkout, "a.txt")));
+        Assert.Equal("main\n", Read(Path.Combine(Checkout, "a.txt")));
         Assert.False(repo.RetrieveStatus().IsDirty);
     }
 
