@@ -135,12 +135,11 @@ Same rules as plan 13a (one pull request each, a "Done when" test, status in the
 Later, not in the first version: tracing a value from a result or a visual (section 6), then the rows behind it; manual lineage entries for external systems (a lineage file or console form, as `declared` edges with an
 owner), and export to OpenLineage (events from run lineage, datasets and jobs from design lineage) and to external catalogs.
 
-## 8. Questions for the owner
+## 8. Decisions
 
-Decided (owner, 2026-10-26): run lineage history follows the servers' retention policy for run detail (section 3); tracing a value is a
-later feature (section 6).
+All decided by the owner on 2026-10-26:
 
-Decided (owner, 2026-10-26): Proxy's run lineage is a summary per served table (G08); a per-query record, if wanted, is Proxy's activity
-log, not lineage.
-
-1. The graph view's layout library: decided in slice Y04 by a small comparison, unless there is a preference.
+- Run lineage history follows the servers' retention policy for run detail (section 3).
+- Tracing a value back from a result or a visual is a later feature (section 6).
+- Proxy's run lineage is a summary per served table (G08). A per-query record, if wanted, belongs in Proxy's activity log, not in lineage.
+- The graph view's layout library: no preference. It is chosen in slice Y04 by the comparison described there.
