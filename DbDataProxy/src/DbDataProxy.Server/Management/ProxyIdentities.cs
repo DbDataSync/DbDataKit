@@ -192,21 +192,55 @@ public sealed partial class ProxyIdentities(
 
     // ---- pass-through ----
 
+    private sealed record JwtMappingRequest(
+        [property: System.Text.Json.Serialization.JsonPropertyName("claim")] string? Claim,
+        [property: System.Text.Json.Serialization.JsonPropertyName("value")] string? Value,
+        [property: System.Text.Json.Serialization.JsonPropertyName("data_sources")] string[]? DataSources,
+        [property: System.Text.Json.Serialization.JsonPropertyName("default_data_source")] string? DefaultDataSource);
+
     private sealed record AuthRequest(
         [property: System.Text.Json.Serialization.JsonPropertyName("allow_pass_through")] bool? AllowPassThrough,
+        [property: System.Text.Json.Serialization.JsonPropertyName("jwt_mappings")] JwtMappingRequest[]? JwtMappings,
         [property: System.Text.Json.Serialization.JsonPropertyName("expected_version")] string? ExpectedVersion);
+
+    /// <summary>Which JWT claim values may use which data sources, as the flow list <c>jwt.mappings</c> holds.</summary>
+    private static string MappingsYaml(IEnumerable<JwtMappingRequest> mappings) => "[" + string.Join(", ", mappings.Select(m =>
+        "{" + string.Join(", ", new[]
+        {
+            $"claim: {YamlText.FlowScalar(m.Claim!)}",
+            $"value: {YamlText.FlowScalar(m.Value!)}",
+            $"dataSources: {YamlText.FlowList(m.DataSources ?? [])}",
+            string.IsNullOrEmpty(m.DefaultDataSource) ? null : $"defaultDataSource: {YamlText.FlowScalar(m.DefaultDataSource)}",
+        }.Where(p => p is not null)) + "}")) + "]";
 
     private async Task<ManagementResult> WriteAuthAsync(string? body, ManagementCaller caller, CancellationToken cancellationToken)
     {
         AuthRequest? request;
         try { request = string.IsNullOrWhiteSpace(body) ? null : JsonSerializer.Deserialize<AuthRequest>(body, Json); }
         catch (JsonException) { request = null; }
-        if (request?.AllowPassThrough is not { } allow) return ManagementResult.Problem(400, "The body is a JSON object: {\"allow_pass_through\": true or false, \"expected_version\": ...}.");
+        if (request is null || (request.AllowPassThrough is null && request.JwtMappings is null))
+            return ManagementResult.Problem(400, "The body is a JSON object: {\"allow_pass_through\": true or false and/or \"jwt_mappings\": [{\"claim\", \"value\", \"data_sources\": [...], \"default_data_source\"}], \"expected_version\": ...}.");
+        if (request.JwtMappings is { } given && given.FirstOrDefault(m => string.IsNullOrWhiteSpace(m.Claim) || string.IsNullOrWhiteSpace(m.Value)) is not null)
+            return ManagementResult.Problem(400, "Every mapping names a claim and a value.");
 
         var result = await _guard.RunAsync("auth", request.ExpectedVersion, () => Task.FromResult(File.Exists(AuthFile) ? Sha(File.ReadAllText(AuthFile)) : null), () =>
         {
             var text = File.Exists(AuthFile) ? File.ReadAllText(AuthFile) : "";
-            var edit = text.Length == 0 ? new EditResult("allowPassThrough: " + (allow ? "true" : "false") + "\n", null) : YamlEditor.Set(text, "allowPassThrough", YamlValue.Raw(allow ? "true" : "false"), AuthFile);
+            EditResult edit = new(text, null);
+            if (request.AllowPassThrough is { } allowed)
+            {
+                var flag = YamlValue.Raw(allowed ? "true" : "false");
+                edit = text.Length == 0 ? new EditResult("allowPassThrough: " + (allowed ? "true" : "false") + "\n", null) : YamlEditor.Set(text, "allowPassThrough", flag, AuthFile);
+            }
+            if (edit.Text is not null && request.JwtMappings is { } mappings)
+            {
+                // the editor sets scalars, so the list is taken out (when there is one) and the new one put in its place
+                var without = edit.Text.Length == 0 ? edit : YamlEditor.Remove(edit.Text, "jwt.mappings", AuthFile);
+                if (without.Text is null && without.Problem?.Message.Contains("was not found", StringComparison.Ordinal) == true) without = edit;
+                edit = without.Text is null ? without
+                    : without.Text.Length == 0 ? new EditResult("jwt:\n  mappings: " + MappingsYaml(mappings) + "\n", null)
+                    : YamlEditor.Set(without.Text, "jwt.mappings", YamlValue.Raw(MappingsYaml(mappings)), AuthFile);
+            }
             if (edit.Text is null) return Task.FromResult<(string?, JsonNode?)>((null, new JsonObject { ["error"] = edit.Problem?.Message }));
             var candidate = validation.ValidateFiles(new Dictionary<string, string> { ["proxy/auth.yaml"] = edit.Text });
             if (candidate.Body["valid"]?.GetValue<bool>() != true) return Task.FromResult<(string?, JsonNode?)>((null, candidate.Body));
@@ -214,17 +248,24 @@ public sealed partial class ProxyIdentities(
             return Task.FromResult<(string?, JsonNode?)>((edit.Text, candidate.Body));
         }, cancellationToken);
 
+        var what = request.JwtMappings is null ? "pass-through write" : request.AllowPassThrough is null ? "jwt mappings write" : "auth write";
         if (!result.Applied)
         {
-            Record(caller, "pass-through write", "auth", "stale");
+            Record(caller, what, "auth", "stale");
             return new ManagementResult(409, new JsonObject { ["error"] = "proxy/auth.yaml changed since it was read; read it again.", ["current_version"] = result.CurrentVersion });
         }
         var (written, validated) = ((string? Text, JsonNode? Body))result.Value;
         if (written is null) return new ManagementResult(400, new JsonObject { ["error"] = "The change is not valid, so nothing was written.", ["detail"] = validated?.DeepClone() });
-        Committed(caller, $"Set pass-through {(allow ? "on" : "off")}", [AuthFile]);
-        Record(caller, "pass-through write", "auth", allow ? "on" : "off");
+        var message = request.JwtMappings is { } changed
+            ? $"Set {changed.Length} JWT mapping(s)" + (request.AllowPassThrough is { } both ? $" and pass-through {(both ? "on" : "off")}" : "")
+            : $"Set pass-through {(request.AllowPassThrough!.Value ? "on" : "off")}";
+        Committed(caller, message, [AuthFile]);
+        Record(caller, what, "auth", request.JwtMappings is { } n ? $"{n.Length} mapping(s)" : request.AllowPassThrough!.Value ? "on" : "off");
         reload();
-        return ManagementResult.Ok(new JsonObject { ["allow_pass_through"] = allow, ["auth_version"] = Sha(written) });
+        var answer = new JsonObject { ["auth_version"] = Sha(written) };
+        if (request.AllowPassThrough is { } pt) answer["allow_pass_through"] = pt;
+        if (request.JwtMappings is { } jm) answer["jwt_mappings"] = jm.Length;
+        return ManagementResult.Ok(answer);
     }
 
     // ---- shared ----

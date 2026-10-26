@@ -529,6 +529,35 @@ public sealed partial class ManagementTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_jwt_mappings_are_replaced_as_a_list_and_validated_and_the_rest_of_the_file_stays()
+    {
+        await StartAsync();
+        var server = await PairAsync();
+        var view = await IdentitiesAsync(server);
+        var version = (string)view["auth_version"]!;
+
+        var changed = await CallAsync(server, HttpMethod.Put, "/api/v1/auth", ServerRole.Admin, JsonSerializer(new
+        {
+            jwt_mappings = new[] { new { claim = "group", value = "analysts", data_sources = new[] { "erp" }, default_data_source = (string?)"erp" }, new { claim = "role", value = "admin", data_sources = new[] { "*" }, default_data_source = (string?)null } },
+            expected_version = version,
+        }));
+        Assert.True(changed.StatusCode == HttpStatusCode.OK, await changed.Content.ReadAsStringAsync());
+        var jwt = (await IdentitiesAsync(server))["jwt"]!;
+        Assert.Equal(2, jwt["mappings"]!.AsArray().Count);
+        Assert.Equal("analysts", (string)jwt["mappings"]![0]!["value"]!);
+        Assert.Contains($"{Sentinel}-jwt", File.ReadAllText(Path.Combine(ConfigDirectory, "proxy", "auth.yaml")));   // the signing key is still there, and was never shown
+        Assert.Equal("Set 2 JWT mapping(s)", new GitCommitService(ConfigDirectory).GetHistory("proxy", 1)[0].Message);
+
+        // a stale version is refused, a mapping without a claim is refused before anything is written, and an empty list removes them all
+        var next = (string)JsonNode.Parse(await changed.Content.ReadAsStringAsync())!["auth_version"]!;
+        Assert.Equal(HttpStatusCode.Conflict, (await CallAsync(server, HttpMethod.Put, "/api/v1/auth", ServerRole.Admin, JsonSerializer(new { jwt_mappings = Array.Empty<object>(), expected_version = version }))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(server, HttpMethod.Put, "/api/v1/auth", ServerRole.Admin, JsonSerializer(new { jwt_mappings = new[] { new { claim = "", value = "x", data_sources = new[] { "erp" } } }, expected_version = next }))).StatusCode);
+        Assert.Equal(2, (await IdentitiesAsync(server))["jwt"]!["mappings"]!.AsArray().Count);
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(server, HttpMethod.Put, "/api/v1/auth", ServerRole.Admin, JsonSerializer(new { jwt_mappings = Array.Empty<object>(), expected_version = next }))).StatusCode);
+        Assert.Empty((await IdentitiesAsync(server))["jwt"]!["mappings"]!.AsArray());
+    }
+
+    [Fact]
     public async Task The_view_shows_the_jwt_settings_and_mappings_as_in_effect_and_only_whether_there_is_a_signing_key()
     {
         await StartAsync();

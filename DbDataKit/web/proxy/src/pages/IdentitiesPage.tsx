@@ -3,7 +3,32 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { proxyApi } from '../api'
 import { ProxyShell } from '../ProxyShell'
-import type { UserRow } from '../types'
+import type { JwtMapping, UserRow } from '../types'
+
+/** Which values of a token's claim may use which data sources. Saved as a whole list; the rest of the JWT settings (key, authority, audience) stay in proxy/auth.yaml. */
+function JwtMappings({ initial, version, onSaved }: { initial: JwtMapping[]; version: string | null; onSaved: () => void }) {
+  const [rows, setRows] = useState<JwtMapping[]>(initial)
+  const save = useMutation({ mutationFn: () => proxyApi.identities.setJwtMappings(rows, version), onSuccess: onSaved })
+  const change = (i: number, patch: Partial<JwtMapping>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+  return (
+    <div data-testid="jwt-mappings">
+      <ErrorBanner error={save.error} />
+      {rows.map((r, i) => (
+        <div key={i} className="row" style={{ gap: 8, marginBottom: 8, flexWrap: 'wrap' }} data-testid={`jwt-mapping-${i}`}>
+          <input className="input" placeholder="claim" value={r.claim} onChange={(e) => change(i, { claim: e.target.value })} data-testid="jwt-claim-input" />
+          <input className="input" placeholder="value" value={r.value} onChange={(e) => change(i, { value: e.target.value })} data-testid="jwt-value-input" />
+          <input className="input" placeholder="data sources (* for all)" value={r.data_sources.join(', ')} onChange={(e) => change(i, { data_sources: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} data-testid="jwt-sources-input" />
+          <input className="input" placeholder="default data source" value={r.default_data_source ?? ''} onChange={(e) => change(i, { default_data_source: e.target.value || null })} />
+          <button type="button" className="btn" onClick={() => setRows(rows.filter((_, j) => j !== i))} data-testid="jwt-mapping-remove">Remove</button>
+        </div>
+      ))}
+      <div className="row" style={{ gap: 8 }}>
+        <button type="button" className="btn" onClick={() => setRows([...rows, { claim: '', value: '', data_sources: [], default_data_source: null }])} data-testid="jwt-mapping-add">Add a mapping</button>
+        <button type="button" className="btn btn-primary" disabled={save.isPending} onClick={() => save.mutate()} data-testid="jwt-mappings-save">Save mappings</button>
+      </div>
+    </div>
+  )
+}
 
 /** Who may use the proxy: the Flight users and Windows accounts (a password is typed here, hashed on the server and never shown again), pass-through, and the JWT settings as they are in effect. */
 export function IdentitiesPage() {
@@ -74,9 +99,10 @@ export function IdentitiesPage() {
               </label>
               <p style={{ marginTop: 12 }} data-testid="jwt-summary">
                 {data.jwt.enabled
-                  ? `JWT bearer tokens are accepted${data.jwt.authority ? ` from ${data.jwt.authority}` : ' with a shared key'}${data.jwt.has_signing_key ? ' (a signing key is set)' : ''}, audience ${data.jwt.audience ?? '—'}; ${data.jwt.mappings.length} mapping(s). Change them in proxy/auth.yaml.`
-                  : 'JWT bearer tokens are not accepted.'}
+                  ? `JWT bearer tokens are accepted${data.jwt.authority ? ` from ${data.jwt.authority}` : ' with a shared key'}${data.jwt.has_signing_key ? ' (a signing key is set)' : ''}, audience ${data.jwt.audience ?? '—'}. The key, authority and audience are in proxy/auth.yaml.`
+                  : 'JWT bearer tokens are not accepted. Turn them on in proxy/auth.yaml; the mappings below apply once they are.'}
               </p>
+              <JwtMappings key={JSON.stringify(data.jwt.mappings)} initial={data.jwt.mappings} version={data.auth_version} onSaved={refresh} />
             </div>
           </div>
         )}
