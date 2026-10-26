@@ -75,7 +75,7 @@ internal static class BuildServer
         app.MapPairing(new PairingService(instanceId, fingerprint, clients, files.Codes()));
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new MemoryReplayCache()));
         app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache()), refused => log($"A call was refused ({refused.Failure}): {refused.Detail}"));
-        BuildManagementApi.Map(app, projects, commands, runner, surfaceFor, scheduler);
+        BuildManagementApi.Map(app, projects, commands, runner, surfaceFor, scheduler, new Workspaces(settings.Directory, TimeProvider.System));
         return app;
     }
 }
