@@ -266,4 +266,29 @@ public sealed class BuildServerWorkspacesTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.Conflict, (await AsAda(HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/push")).StatusCode);
     }
+
+    [Fact]
+    public async Task An_author_edits_and_commits_in_a_workspace_and_can_neither_approve_nor_apply()
+    {
+        var id = await Draft();
+        string Command(string tool) => $"/api/v1/projects/sales/commands/{tool}?workspace={id}";
+
+        // editing: the file and compile commands write only the repository's files
+        foreach (var (tool, body) in new[]
+        {
+            ("project_file_write", """{"path":"models/x.sql","content":"select 1","create":true}"""),
+            ("project_file_move", """{"from":"models/x.sql","to":"models/y.sql","expect_hash":"h"}"""),
+            ("project_file_delete", """{"path":"models/y.sql","expect_hash":"h"}"""),
+            ("project_compile", "{}"),
+        })
+            Assert.Equal(HttpStatusCode.OK, (await AsAda(HttpMethod.Post, Command(tool), body)).StatusCode);
+        Assert.Equal(4, runner.Roots.Count);
+        Assert.Equal(HttpStatusCode.OK, (await AsAda(HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/commit", """{"message":"Edit"}""")).StatusCode);
+
+        // approving and applying, and anything that writes a target: refused, and the runner is not reached
+        foreach (var tool in new[] { "connection_deploy", "connection_refresh", "connection_init", "connection_seed" })
+            Assert.Equal(HttpStatusCode.Forbidden, (await AsAda(HttpMethod.Post, Command(tool), "{}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await AsAda(HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/merge")).StatusCode);
+        Assert.Equal(4, runner.Roots.Count);
+    }
 }
