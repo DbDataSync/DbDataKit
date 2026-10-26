@@ -52,7 +52,6 @@ public sealed partial class ManagementTests : IAsyncLifetime
 
     private async Task StartAsync(bool management = true, bool localChannel = false, string? localDirectory = null, string[]? extra = null)
     {
-        managementPort = FreePort();
         // Secrets in every place one can be written: the sentinel must not come back in any answer.
         Write("server.yaml", $"schemaVersion: 2\ntls: {{ mode: selfSigned, certificatePassword: {Sentinel}-tls }}\n");
         Write("proxy/auth.yaml", $"jwt:\n  signingKey: {Sentinel}-jwt\n  audience: api://x\n  mappings: [ {{ claim: c, value: v, dataSources: ['*'] }} ]\n");
@@ -61,13 +60,27 @@ public sealed partial class ManagementTests : IAsyncLifetime
         var args = new List<string>
         {
             $"--Proxy:DataDirectory={dataDirectory}", "--Proxy:Listen:Address=127.0.0.1", "--Proxy:Listen:Port=0",
-            $"--Proxy:Management:Enabled={management}", "--Proxy:Management:Address=127.0.0.1", $"--Proxy:Management:Port={managementPort}",
+            $"--Proxy:Management:Enabled={management}", "--Proxy:Management:Address=127.0.0.1", "--Proxy:Management:Port=0",
             $"--Proxy:Management:LocalChannel={localChannel}",
         };
         if (localDirectory is not null) args.Add($"--Proxy:Management:LocalChannelDirectory={localDirectory}");
         args.AddRange(extra ?? []);
-        app = ProxyHost.Build([.. args]);
-        await app.StartAsync();
+        // A free port is looked up and then released before the server binds it, so another process can take it in between; that is a failure to bind, and it is answered by looking up another port.
+        for (var attempt = 1; ; attempt++)
+        {
+            managementPort = FreePort();
+            var arguments = args.Select(a => a.StartsWith("--Proxy:Management:Port=", StringComparison.Ordinal) ? $"--Proxy:Management:Port={managementPort}" : a).ToArray();
+            app = ProxyHost.Build(arguments);
+            try
+            {
+                await app.StartAsync();
+                break;
+            }
+            catch (IOException ex) when (attempt < 5 && ex.Message.Contains("address already in use", StringComparison.OrdinalIgnoreCase))
+            {
+                await app.DisposeAsync();
+            }
+        }
         flight = new Uri(app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First());
     }
 

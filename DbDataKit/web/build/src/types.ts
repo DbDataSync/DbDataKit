@@ -135,3 +135,27 @@ export interface CompareResult {
   rows: { compared: boolean; only_left: number; only_right: number; matched: number; differing: number; differing_by_column: Record<string, number> }
   identical: boolean
 }
+
+/** One person's draft of a project (`GET /api/v1/projects/{p}/workspaces`). */
+export interface Workspace {
+  id: string
+  name: string
+  owner: string
+  mine: boolean
+  branch: string
+  base: string
+  created: string
+}
+
+/** A file of the project tree, with the hash a write must name to be accepted. */
+export interface ProjectFile {
+  path: string
+  size: number
+  hash: string
+}
+
+export interface FileContent {
+  path: string
+  hash: string
+  content: string
+}

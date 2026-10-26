@@ -103,6 +103,25 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(page.getByTestId('build-check-errors')).toHaveText('0 errors')
   await expect(page.getByTestId('build-check-out-of-date')).toBeVisible()   // the starter has never been compiled, so its rendered files are not written yet
 
+  // Editing, in a workspace of one's own: break a model and the compiler's diagnostic is on the file, then fix it and it is gone.
+  await page.getByTestId('build-tab-edit').click()
+  await page.getByTestId('build-edit-workspace-name').fill('draft')
+  await page.getByTestId('build-edit-workspace-make').click()
+  await page.getByTestId('build-edit-file-models/staging/orders.sql').click()
+  await expect(page.getByTestId('build-edit-open')).toHaveText('models/staging/orders.sql')
+  await expect(page.getByTestId('build-edit-clean')).toBeVisible()
+  await page.getByTestId('build-edit-editor').locator('.monaco-editor').click()
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type(')')
+  await page.getByTestId('build-edit-save').click()
+  await expect(page.getByTestId('build-edit-diagnostic').first()).toContainText('DDB-306')
+  await expect(page.getByTestId('build-edit-editor').locator('.squiggly-error').first()).toBeVisible()
+  await page.getByTestId('build-edit-editor').locator('.monaco-editor').click()
+  await page.keyboard.press('Control+End')
+  await page.keyboard.press('Backspace')
+  await page.getByTestId('build-edit-save').click()
+  await expect(page.getByTestId('build-edit-clean')).toBeVisible()
+
   // The models run on generated rows, offline.
   await page.getByTestId('build-tab-sample').click()
   await page.getByTestId('build-sample-button').click()
