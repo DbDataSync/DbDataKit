@@ -54,7 +54,7 @@ flowchart LR
     WH --> SEM
     SSAS --> SEM
     ENT --> SEM
-    STOREMOD <-->|"reads, validated writes,<br/>history, audit"| ENT
+    ENT <-->|"reads, validated writes,<br/>history, audit"| STOREMOD
 
     DS --> CLIENTS
     SEM --> CLIENTS
