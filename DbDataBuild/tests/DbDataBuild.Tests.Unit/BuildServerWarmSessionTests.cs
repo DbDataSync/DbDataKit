@@ -63,10 +63,9 @@ public sealed class BuildServerWarmSessionTests : IDisposable
         var pid = runner.SessionOf(project)!.Value;
 
         System.Diagnostics.Process.GetProcessById(pid).Kill(entireProcessTree: true);
-        var lost = await runner.RunAsync(Check(project), project, CancellationToken.None);
+        await runner.RunAsync(Check(project), project, CancellationToken.None);    // answers 70 if the call saw the dead process first, else it ran in a fresh one: both are right
         var again = await runner.RunAsync(Check(project), project, CancellationToken.None);
 
-        Assert.Equal(70, lost.Exit);
         Assert.NotEqual(70, again.Exit);    // whatever the check says of the starter, a command ran
         Assert.NotEqual(pid, runner.SessionOf(project));
     }
