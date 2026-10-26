@@ -1,7 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
-import { buildUrl, proxyUrl, scratchDirectory, syncUrl } from '../playwright.config'
+import { buildUrl, proxyUrl, scratchDirectory, syncUrl, warehouseConnection } from '../playwright.config'
 
 /** A browser-side authenticator that holds the passkeys, so the test can register one and sign in with it the way a person's device would. */
 async function addAuthenticator(context: BrowserContext, page: Page) {
@@ -90,7 +90,7 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await instance.getByTestId('instance-open-link').click()
   await expect(page).toHaveURL(/\/servers\/build-[0-9a-f]+$/)
   await expect(page.getByTestId('build-project-starter')).toBeVisible()
-  await page.getByTestId('build-project-link').click()
+  await page.getByTestId('build-project-starter').getByTestId('build-project-link').click()
   await expect(page).toHaveURL(/\/servers\/build-[0-9a-f]+\/projects\/starter$/)
   await expect(page.getByTestId('build-model-marts.orders')).toBeVisible()
   await expect(page.getByTestId('build-model-raw.customers')).toBeVisible()
@@ -102,6 +102,34 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(page.getByTestId('build-check-models')).toHaveText('8 models')
   await expect(page.getByTestId('build-check-errors')).toHaveText('0 errors')
   await expect(page.getByTestId('build-check-out-of-date')).toBeVisible()   // the starter has never been compiled, so its rendered files are not written yet
+
+  // The models run on generated rows, offline.
+  await page.getByTestId('build-tab-sample').click()
+  await page.getByTestId('build-sample-button').click()
+  await expect(page.getByTestId('build-sample-table-marts.orders')).toContainText('rows')
+
+  // A deploy, when there is a PostgreSQL to deploy to: where it stands, a plan written and reviewed, a dry run, then approved and applied by the person at the console.
+  if (warehouseConnection) {
+    const serverUrl = page.url().replace(/\/projects\/starter\/sample$/, '')
+    await page.goto(`${serverUrl}/projects/warehouse/status`)
+    await expect(page.getByTestId('build-status-structure')).toHaveText('pending')
+    await expect(page.getByTestId('build-status-object-marts.orders').getByTestId('build-status-state')).toContainText('missing')
+    await page.getByTestId('build-tab-plans').click()
+    await expect(page.getByTestId('build-plans-empty')).toBeVisible()
+    await page.getByTestId('build-plan-write').click()
+    await expect(page.getByTestId('build-plan-review')).toBeVisible()
+    await expect(page.getByTestId('build-plan-facts')).toContainText('11 steps')
+    await page.getByTestId('build-plan-step-5').locator('summary').click()
+    await expect(page.getByTestId('build-plan-step-5')).toContainText('CREATE TABLE')
+    await page.getByTestId('build-plan-dry-run').click()
+    await expect(page.getByTestId('build-plan-dry-ok')).toBeVisible()
+    await page.getByTestId('build-plan-apply').click()
+    await expect(page.getByTestId('build-plan-applied')).toBeVisible()
+    await page.getByTestId('build-tab-status').click()
+    await page.getByTestId('build-status-refresh').click()
+    await expect(page.getByTestId('build-status-object-marts.orders').getByTestId('build-status-state')).not.toContainText('missing')
+  }
+
   await page.getByTestId('rail-home-link').click()
   await expect(page.getByTestId('instances-page')).toBeVisible()
 

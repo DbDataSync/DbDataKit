@@ -31,6 +31,9 @@ export function ProjectPage() {
           <NavLink to={base} end className={tabClass} data-testid="build-tab-models">Models</NavLink>
           <NavLink to={`${base}/graph`} className={tabClass} data-testid="build-tab-graph">Graph</NavLink>
           <NavLink to={`${base}/check`} className={tabClass} data-testid="build-tab-check">Check</NavLink>
+          <NavLink to={`${base}/status`} className={tabClass} data-testid="build-tab-status">Status</NavLink>
+          <NavLink to={`${base}/plans`} className={tabClass} data-testid="build-tab-plans">Plans</NavLink>
+          <NavLink to={`${base}/sample`} className={tabClass} data-testid="build-tab-sample">Sample</NavLink>
         </>
       }
     >
