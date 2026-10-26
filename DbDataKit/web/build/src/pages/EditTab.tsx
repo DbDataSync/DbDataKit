@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { CodeEditor, ErrorBanner, type EditorDiagnostic } from '@dbdatakit/shell'
 import { buildApi } from '../api'
+import { PreviewPanel, isModelQuery } from './PreviewPanel'
 import type { Diagnostic, ProjectFile, Workspace } from '../types'
 
 const languageOf = (path: string) => (path.endsWith('.sql') ? 'sql' : path.endsWith('.yml') || path.endsWith('.yaml') ? 'yaml' : 'plaintext')
@@ -149,6 +150,7 @@ export function EditTab() {
                 <CodeEditor value={text} language={languageOf(open)} onChange={setText} diagnostics={markersFor(open, diagnostics)} minLines={12} maxLines={32} testId="build-edit-editor" />
               </>
             )}
+            {open !== null && workspace !== null && isModelQuery(open) && <PreviewPanel project={project} workspace={workspace} path={open} version={hash} />}
             <ErrorBanner error={read.error ?? save.error ?? check.error} />
             <div className="card flush" style={{ marginTop: 14 }} data-testid="build-edit-diagnostics">
               <div className="grid-head" style={{ gridTemplateColumns: '0.8fr 2fr 3fr', gap: 14 }}><span>Code</span><span>File</span><span>What</span></div>

@@ -110,6 +110,16 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await page.getByTestId('build-edit-file-models/staging/orders.sql').click()
   await expect(page.getByTestId('build-edit-open')).toHaveText('models/staging/orders.sql')
   await expect(page.getByTestId('build-edit-clean')).toBeVisible()
+  // the lowered text and sample rows beside the editor follow the saved file: limit the query and both change
+  await expect(page.getByTestId('build-preview-text').first()).toContainText('status_group')
+  await expect(page.getByTestId('build-preview-text').first()).not.toContainText('LIMIT 2')
+  await expect.poll(() => page.getByTestId('build-preview-row').count()).toBeGreaterThan(2)
+  await page.getByTestId('build-edit-editor').locator('.monaco-editor').click()
+  await page.keyboard.press('Control+End')
+  await page.keyboard.insertText(' LIMIT 2')   // inserted, not typed: typing lets the editor's suggestions finish the word
+  await page.getByTestId('build-edit-save').click()
+  await expect(page.getByTestId('build-preview-text').first()).toContainText('LIMIT 2')
+  await expect.poll(() => page.getByTestId('build-preview-row').count()).toBe(2)
   await page.getByTestId('build-edit-editor').locator('.monaco-editor').click()
   await page.keyboard.press('Control+End')
   await page.keyboard.type(')')
