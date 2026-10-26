@@ -19,9 +19,11 @@ flowchart LR
         STOREDEF["DbDataStore server<br/>models, rules, structure"]
     end
 
-    STAGE[("Replicated tables")]
-    WH[("Warehouse and marts<br/>SQL Server, PostgreSQL, DuckDB")]
-    ENT[("DbDataStore database<br/>entities with history, documents")]
+    subgraph MANAGED["Managed databases (targets the suite writes)"]
+        STAGE[("Replicated tables")]
+        WH[("Warehouse and marts<br/>SQL Server, PostgreSQL, DuckDB")]
+        ENT[("DbDataStore database<br/>entities with history, documents")]
+    end
 
     subgraph EDGE["Serving layer (DbDataProxy code base), one or more instances"]
         DS["flightsql<br/>read-only data sources"]
