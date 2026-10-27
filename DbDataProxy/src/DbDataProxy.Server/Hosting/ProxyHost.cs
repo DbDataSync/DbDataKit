@@ -1,3 +1,5 @@
+using DbDataKit.Serving;
+using DbDataKit.Serving.FlightSql;
 using System.Net;
 using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
@@ -7,7 +9,7 @@ using DbDataProxy.Data;
 using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Configuration;
 using DbDataProxy.Server.Data;
-using DbDataProxy.Server.Flight;
+using DbDataProxy.Server.Serving;
 using DbDataProxy.Server.Management;
 using DbDataProxy.Server.Secrets;
 using DbDataProxy.Server.Tls;
@@ -153,15 +155,27 @@ public static class ProxyHost
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<SessionStore>();
         services.AddSingleton<LoginThrottle>();
-        services.AddSingleton<PendingQueryStore>();
-        services.AddSingleton<PreparedStatementStore>();
         services.AddSingleton<IBasicCredentialValidator, LocalUserValidator>();
         services.AddSingleton<IWindowsLogon, NativeWindowsLogon>();
         services.AddSingleton<IBasicCredentialValidator, WindowsAccountValidator>();
         services.AddSingleton<IBasicCredentialValidator, PassThroughValidator>();
         services.AddSingleton<ChainedCredentialValidator>();
         services.AddSingleton<IJwtValidator, JwtBearerValidator>();
-        services.AddSingleton<RequestAuthenticator>();
+        services.AddSingleton<ProxyServing>();
+        services.AddSingleton<IServingServices>(sp => sp.GetRequiredService<ProxyServing>());
+        services.AddSingleton(sp =>
+        {
+            var current = sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>();
+            return new FlightSqlModule(new FlightSqlOptions
+            {
+                Compression = () => current.CurrentValue.Compression,
+                SourceCompression = name => current.CurrentValue.DataSources.TryGetValue(name, out var source) ? source.Compression : null,
+                LogSql = () => current.CurrentValue.LogSql,
+                ServerName = "DbDataProxy",
+                ServerVersion = typeof(ProxyHost).Assembly.GetName().Version?.ToString(3) ?? "1.0.0",
+            }, sp.GetRequiredService<TimeProvider>());
+        });
+        services.AddHostedService<FlightSqlModuleService>();
 
         // The shared providers: one registry, one composer, one failure model per engine. With Proxy:LogDriverErrors the providers keep the
         // (redacted) driver text of failed connections on the failure, for the local log only.
@@ -192,13 +206,14 @@ public static class ProxyHost
             .AddGrpc(o =>
             {
                 o.Interceptors.Add<RedactingInterceptor>(); // outermost: scrubs the detail of every RpcException
-                o.Interceptors.Add<AuthInterceptor>();
+                o.Interceptors.Add<FlightAuthInterceptor>();
+                o.Interceptors.Add<LoginThrottleInterceptor>();
                 o.MaxReceiveMessageSize = 64 * 1024 * 1024;
                 o.ResponseCompressionAlgorithm = "gzip";
                 o.ResponseCompressionLevel = System.IO.Compression.CompressionLevel.Fastest;
                 o.CompressionProviders = [new GzipCompressionProvider(System.IO.Compression.CompressionLevel.Fastest)];
             })
-            .AddFlightServer<ProxyFlightServer>();
+            .AddFlightServer<ServingFlightServer>();
     }
 
     private static void ConfigureKestrel(WebApplicationBuilder builder, ProxyOptions options)
@@ -250,8 +265,8 @@ public static class ProxyHost
     }
 }
 
-/// <summary>Housekeeping: drops expired sessions and disposes query results nobody fetched.</summary>
-public sealed class MaintenanceService(SessionStore sessions, LoginThrottle throttle, PendingQueryStore pending, PreparedStatementStore prepared, ILogger<MaintenanceService> log) : BackgroundService
+/// <summary>Housekeeping: drops expired sessions and the Flight SQL results and statements nobody came back for.</summary>
+public sealed class MaintenanceService(SessionStore sessions, LoginThrottle throttle, FlightSqlModule flight, ILogger<MaintenanceService> log) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -264,8 +279,7 @@ public sealed class MaintenanceService(SessionStore sessions, LoginThrottle thro
                 {
                     sessions.Sweep();
                     throttle.Sweep();
-                    prepared.Sweep();
-                    await pending.SweepAsync();
+                    await flight.SweepAsync();
                 }
                 catch (Exception ex)
                 {
@@ -275,10 +289,16 @@ public sealed class MaintenanceService(SessionStore sessions, LoginThrottle thro
         }
         catch (OperationCanceledException) { /* shutting down */ }
     }
+}
 
-    public override async Task StopAsync(CancellationToken cancellationToken)
+/// <summary>Starts the Flight SQL module on Proxy's services when the host starts, and drains it and stops it (disposing the results nobody fetched) when the host stops.</summary>
+public sealed class FlightSqlModuleService(FlightSqlModule module, IServingServices services) : IHostedService
+{
+    public Task StartAsync(CancellationToken cancellationToken) => module.StartAsync(services, cancellationToken);
+
+    public async Task StopAsync(CancellationToken cancellationToken)
     {
-        await base.StopAsync(cancellationToken);
-        await pending.DisposeAsync();
+        await module.DrainAsync(cancellationToken);
+        await module.StopAsync(cancellationToken);
     }
 }

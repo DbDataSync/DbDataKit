@@ -288,11 +288,10 @@ public sealed partial class ManagementTests
         // a strict read-only source refuses a write
         Write("connections/ro.yaml", Conn.Yaml("ro", "duckdb", "Data Source=:memory:", proxy: ["classifier: strict"]));
         ((Microsoft.Extensions.Configuration.IConfigurationRoot)app.Configuration).Providers.OfType<DbDataProxy.Server.Configuration.ProxyConfigDirectoryProvider>().Single().ReloadNow();
-        var flight = ActivatorUtilities.CreateInstance<DbDataProxy.Server.Flight.ProxyFlightServer>(app.Services);
         var principal = new ProxyPrincipal("carol", "password", ["*"]);
-        var resolved = app.Services.GetRequiredService<DataSourceCatalog>().Resolve(principal, "ro");
-        var refused = Assert.Throws<RpcException>(() => flight.EnforceReadOnlyText("DROP TABLE secrets_table", principal, resolved));
-        Assert.Equal(StatusCode.PermissionDenied, refused.StatusCode);
+        var serving = app.Services.GetRequiredService<DbDataProxy.Server.Serving.ProxyServing>();
+        await Assert.ThrowsAsync<DbDataKit.Serving.ServingDeniedException>(() => serving.Queries.PrepareAsync(
+            new DbDataKit.Serving.ServingContext(new DbDataProxy.Server.Serving.ProxyCaller(principal)), new DbDataKit.Serving.ServingRequest.Sql("ro", "DROP TABLE secrets_table")));
 
         var feed = await NotificationsAsync(server);
         Assert.Equal(["LimitReached", "StatementRefused"], feed.Select(n => (string)n["kind"]!).Order(StringComparer.Ordinal).ToList());
