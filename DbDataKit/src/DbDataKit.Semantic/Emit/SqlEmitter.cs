@@ -1,12 +1,15 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DbDataKit.Dialect;
 using DbDataKit.Semantic.Abstractions;
 
 namespace DbDataKit.Semantic.Emit;
 
 /// <summary>
 /// Compiles one source's part of a request to SQL.
-/// Dialect "tsql" is sent to SQL Server; "duckdb" runs against the conformance seed data.
+/// The dialect is a shared <see cref="ISqlDialect"/> (<see cref="EmitDialects"/>): it writes the parameter markers and the row limit;
+/// the time zone and bucketing functions are the emitter's, per engine. SQL Server's text is sent to SQL Server; the DuckDB text is the twin that
+/// runs on DuckDB (the conformance seed data, a DuckDB source).
 /// </summary>
 public static class SqlEmitter
 {
@@ -16,9 +19,15 @@ public static class SqlEmitter
         ["count"] = "COUNT({0})", ["count_distinct"] = "COUNT(DISTINCT {0})",
     };
 
-    private sealed class Params(string dialect)
+    private static bool TSql(ISqlDialect dialect) => dialect.Id == EngineId.SqlServer;
+
+    /// <summary>OFFSET/FETCH where the dialect has it (the query is always ordered), else the dialect's own style.</summary>
+    private static RowLimitStyle RowLimitStyleFor(ISqlDialect dialect) =>
+        dialect.SupportedRowLimitStyles.Contains(RowLimitStyle.OffsetFetch) ? RowLimitStyle.OffsetFetch : dialect.DefaultRowLimitStyle;
+
+    private sealed class Params(ISqlDialect dialect)
     {
-        public string Dialect => dialect;
+        public ISqlDialect Dialect => dialect;
         public List<object?> Values { get; } = new();
         public string Add(JsonNode value)
         {
@@ -29,7 +38,8 @@ public static class SqlEmitter
                 JsonValueKind.True or JsonValueKind.False => value.GetValue<bool>(),
                 _ => null,
             });
-            return dialect == "tsql" ? $"@p{Values.Count}" : "?";
+            // the first parameter is p1 where the style is named, $1 where it is numbered
+            return dialect.ParameterName(Values.Count - 1, $"p{Values.Count}");
         }
         public string AddText(string value) => Add(JsonValue.Create(value)!);
     }
@@ -53,7 +63,7 @@ public static class SqlEmitter
         return $"(CASE {bits} {string.Join(" ", cases)} END)";
     }
 
-    public static string ColumnExpr(Catalog cat, string source, string attr, string dialect)
+    public static string ColumnExpr(Catalog cat, string source, string attr, ISqlDialect dialect)
     {
         var src = cat.Doc.Sources[source];
         var b = cat.Binding(attr, source)!;
@@ -63,10 +73,10 @@ public static class SqlEmitter
     }
 
     /// <summary>A datetime column as the date it falls on in the request's zone, to be matched to a date table.</summary>
-    private static string LocalDate(Catalog cat, string source, string raw, string dialect)
+    private static string LocalDate(Catalog cat, string source, string raw, ISqlDialect dialect)
     {
         var (zone, stored) = (cat.Zone, cat.Doc.Sources[source].DatetimeZone);
-        return dialect == "tsql"
+        return TSql(dialect)
             ? $"CAST(CAST(({raw} AT TIME ZONE '{TimeZones.WindowsId(stored)}') AT TIME ZONE '{TimeZones.WindowsId(zone)}' AS datetime2) AS date)"
             : $"CAST(timezone('{zone}', timezone('{stored}', {raw})) AS DATE)";
     }
@@ -75,10 +85,10 @@ public static class SqlEmitter
     /// A datetime column as the label of its hour, day, week (Monday), month, quarter or year in the request's zone. The column holds UTC unless the source says
     /// it holds another zone's wall-clock time; the zone names are validated IANA names, so they are safe to write into the text.
     /// </summary>
-    private static string BucketExpr(Catalog cat, string source, string raw, string granularity, string dialect)
+    private static string BucketExpr(Catalog cat, string source, string raw, string granularity, ISqlDialect dialect)
     {
         var (zone, stored) = (cat.Zone, cat.Doc.Sources[source].DatetimeZone);
-        if (dialect == "tsql")
+        if (TSql(dialect))
         {
             var local = $"CAST(({raw} AT TIME ZONE '{TimeZones.WindowsId(stored)}') AT TIME ZONE '{TimeZones.WindowsId(zone)}' AS datetime2)";
             return granularity switch
@@ -113,7 +123,7 @@ public static class SqlEmitter
     {
         var zone = TimeZones.Find(cat.Zone)!;
         var stored = TimeZones.Find(cat.Doc.Sources[source].DatetimeZone)!;
-        string At(DateTime utc) => $"CAST({p.AddText(TimeZones.Text(TimeZones.ToWallClock(utc, stored)))} AS {(p.Dialect == "tsql" ? "datetime2" : "TIMESTAMP")})";
+        string At(DateTime utc) => $"CAST({p.AddText(TimeZones.Text(TimeZones.ToWallClock(utc, stored)))} AS {(TSql(p.Dialect) ? "datetime2" : "TIMESTAMP")})";
         // A value is an instant, or a date, which is the whole of that day in the zone: from its start up to where the next day starts.
         (DateTime Start, DateTime? Next) Bound(JsonNode v)
         {
@@ -273,7 +283,7 @@ public static class SqlEmitter
 
     public static (string Text, List<object?> Parameters) BuildSelect(
         Catalog cat, string source, List<string> attrs, List<string> measures,
-        List<Filter> filters, List<(string Member, string Direction)> order, int? limit, string dialect,
+        List<Filter> filters, List<(string Member, string Direction)> order, int? limit, ISqlDialect dialect,
         List<string>? rollup = null, List<Filter>? having = null, bool cube = false)
     {
         var src = cat.Doc.Sources[source];
@@ -343,7 +353,7 @@ public static class SqlEmitter
         if (orderCols.Count > 0)
             lines.Add("ORDER BY " + string.Join(", ", orderCols.Select(c => $"{c.Column} {c.Direction}")));
         if (limit is not null && attrs.Count > 0)
-            lines.Add(dialect == "tsql" ? $"OFFSET 0 ROWS FETCH NEXT {limit} ROWS ONLY" : $"LIMIT {limit}");
+            lines.Add(dialect.RowLimit(RowLimitStyleFor(dialect), limit.Value).Suffix.Trim());
 
         return (string.Join("\n", lines) + ";", p.Values);
     }

@@ -25,7 +25,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -47,7 +47,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -77,7 +77,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -99,7 +99,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -136,7 +136,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -158,7 +158,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -194,7 +194,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -216,7 +216,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -253,7 +253,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -275,7 +275,7 @@ SELECT f.region AS customers_region,
        COUNT(f.amount) AS budget_budget_lines
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -311,7 +311,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -333,7 +333,7 @@ SELECT f.region AS customers_region,
        COUNT(f.amount) AS budget_budget_lines
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -370,7 +370,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -392,7 +392,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -428,7 +428,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -450,7 +450,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -473,7 +473,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -495,7 +495,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -532,7 +532,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -563,11 +563,11 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 --- duckdb
 SELECT c.region AS customers_region,
        SUM(f.net_amount) AS orders_net_revenue,
-       SUM(CASE WHEN f.status = ? THEN f.net_amount END) AS completed_revenue
+       SUM(CASE WHEN f.status = $1 THEN f.net_amount END) AS completed_revenue
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $2
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -597,11 +597,11 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 --- duckdb
 SELECT c.region AS customers_region,
        SUM(f.net_amount) AS orders_net_revenue,
-       SUM(CASE WHEN f.status = ? THEN f.net_amount END) AS completed_revenue
+       SUM(CASE WHEN f.status = $1 THEN f.net_amount END) AS completed_revenue
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $2
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -634,12 +634,12 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 --- duckdb
 SELECT c.region AS customers_region,
        SUM(f.net_amount) AS orders_net_revenue,
-       SUM(CASE WHEN f.status = ? THEN f.net_amount END) AS completed_revenue
+       SUM(CASE WHEN f.status = $1 THEN f.net_amount END) AS completed_revenue
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
-  AND f.status = ?
+WHERE d.fiscal_quarter = $2
+  AND f.status = $3
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -671,12 +671,12 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 --- duckdb
 SELECT c.region AS customers_region,
        SUM(f.net_amount) AS orders_net_revenue,
-       SUM(CASE WHEN f.status = ? THEN f.net_amount END) AS completed_revenue
+       SUM(CASE WHEN f.status = $1 THEN f.net_amount END) AS completed_revenue
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
-  AND f.status = ?
+WHERE d.fiscal_quarter = $2
+  AND f.status = $3
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -703,11 +703,11 @@ OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
 --- parameters String:Completed, String:FY27-Q1
 --- duckdb
 SELECT c.region AS customers_region,
-       SUM(CASE WHEN f.status = ? THEN f.net_amount END) AS completed_revenue
+       SUM(CASE WHEN f.status = $1 THEN f.net_amount END) AS completed_revenue
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $2
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -729,7 +729,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -755,11 +755,11 @@ OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
 --- parameters String:Completed, String:FY27-Q1
 --- duckdb
 SELECT c.region AS customers_region,
-       SUM(CASE WHEN f.status = ? THEN f.net_amount END) AS completed_revenue
+       SUM(CASE WHEN f.status = $1 THEN f.net_amount END) AS completed_revenue
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $2
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -781,7 +781,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -818,7 +818,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -840,7 +840,7 @@ SELECT f.region AS customers_region,
        COUNT(f.amount) AS budget_budget_lines
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -876,7 +876,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -898,7 +898,7 @@ SELECT f.region AS customers_region,
        COUNT(f.amount) AS budget_budget_lines
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -926,11 +926,11 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 --- parameters String:Completed, String:FY27-Q1
 --- duckdb
 SELECT c.region AS customers_region,
-       SUM(CASE WHEN f.status = ? THEN f.net_amount END) AS orders_completed_revenue
+       SUM(CASE WHEN f.status = $1 THEN f.net_amount END) AS orders_completed_revenue
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $2
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -957,11 +957,11 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 --- parameters String:Completed, String:FY27-Q1
 --- duckdb
 SELECT c.region AS customers_region,
-       SUM(CASE WHEN f.status = ? THEN f.net_amount END) AS orders_completed_revenue
+       SUM(CASE WHEN f.status = $1 THEN f.net_amount END) AS orders_completed_revenue
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $2
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -989,10 +989,10 @@ ORDER BY [customers_region] ASC
 --- parameters String:West, String:FY27-Q1
 --- duckdb
 SELECT f.region AS customers_region,
-       SUM(CASE WHEN f.region = ? THEN f.amount END) AS west_budget
+       SUM(CASE WHEN f.region = $1 THEN f.amount END) AS west_budget
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $2
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -1016,10 +1016,10 @@ ORDER BY [customers_region] ASC
 --- parameters String:West, String:FY27-Q1
 --- duckdb
 SELECT f.region AS customers_region,
-       SUM(CASE WHEN f.region = ? THEN f.amount END) AS west_budget
+       SUM(CASE WHEN f.region = $1 THEN f.amount END) AS west_budget
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $2
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -1054,7 +1054,7 @@ FROM fact_sales f
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_category c2 ON c2.category_key = p.category_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c2.category_group
 ORDER BY products_category_group ASC
 LIMIT 101;
@@ -1088,7 +1088,7 @@ FROM fact_sales f
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_category c2 ON c2.category_key = p.category_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c2.category_group
 ORDER BY products_category_group ASC
 LIMIT 101;
@@ -1120,7 +1120,7 @@ SELECT d2.fiscal_month AS ship_date_fiscal_month,
 FROM fact_sales f
 JOIN dim_date d2 ON d2.date_key = f.ship_date_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY d2.fiscal_month
 ORDER BY ship_date_fiscal_month ASC
 LIMIT 101;
@@ -1151,7 +1151,7 @@ SELECT d2.fiscal_month AS ship_date_fiscal_month,
 FROM fact_sales f
 JOIN dim_date d2 ON d2.date_key = f.ship_date_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY d2.fiscal_month
 ORDER BY ship_date_fiscal_month ASC
 LIMIT 101;
@@ -1186,7 +1186,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
 JOIN dim_date d2 ON d2.date_key = f.ship_date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY d.fiscal_month, d2.fiscal_month
 ORDER BY date_fiscal_month ASC, ship_date_fiscal_month ASC
 LIMIT 101;
@@ -1220,7 +1220,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
 JOIN dim_date d2 ON d2.date_key = f.ship_date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY d.fiscal_month, d2.fiscal_month
 ORDER BY date_fiscal_month ASC, ship_date_fiscal_month ASC
 LIMIT 101;
@@ -1251,7 +1251,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -1281,7 +1281,7 @@ SELECT c.region AS customers_region,
 FROM fact_returns f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -1311,7 +1311,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -1341,7 +1341,7 @@ SELECT c.region AS customers_region,
 FROM fact_returns f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -1378,7 +1378,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1414,7 +1414,7 @@ FROM fact_returns f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1450,7 +1450,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1486,7 +1486,7 @@ FROM fact_returns f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1514,7 +1514,7 @@ SELECT f.status AS orders_status,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY f.status
 ORDER BY orders_status ASC
 LIMIT 1000001;
@@ -1528,7 +1528,7 @@ WHERE d.fiscal_quarter = @p1;
 SELECT SUM(f.return_amount) AS returns_return_amount
 FROM fact_returns f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?;
+WHERE d.fiscal_quarter = $1;
 --- sqlserver_sales tsql
 SELECT f.status AS orders_status,
        SUM(f.net_amount) AS orders_net_revenue
@@ -1552,7 +1552,7 @@ SELECT f.status AS orders_status,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY f.status
 ORDER BY orders_status ASC
 LIMIT 1000001;
@@ -1566,7 +1566,7 @@ WHERE d.fiscal_quarter = @p1;
 SELECT SUM(f.return_amount) AS returns_return_amount
 FROM fact_returns f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?;
+WHERE d.fiscal_quarter = $1;
 === level2/22_relative_period_reaches_both_sources.json
 --- sqlserver_sales tsql
 SELECT d.fiscal_month AS lvl, MIN(d.calendar_date) AS lo, MAX(d.calendar_date) AS hi
@@ -1600,7 +1600,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_month IN (?, ?)
+WHERE d.fiscal_month IN ($1, $2)
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
@@ -1621,7 +1621,7 @@ ORDER BY [date_fiscal_month] ASC
 SELECT f.fiscal_month AS date_fiscal_month,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-WHERE f.fiscal_month IN (?, ?)
+WHERE f.fiscal_month IN ($1, $2)
 GROUP BY f.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
@@ -1657,7 +1657,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_month IN (?, ?)
+WHERE d.fiscal_month IN ($1, $2)
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
@@ -1678,7 +1678,7 @@ ORDER BY [date_fiscal_month] ASC
 SELECT f.fiscal_month AS date_fiscal_month,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-WHERE f.fiscal_month IN (?, ?)
+WHERE f.fiscal_month IN ($1, $2)
 GROUP BY f.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
@@ -1709,7 +1709,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -1731,7 +1731,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -1761,7 +1761,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -1783,7 +1783,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -1813,13 +1813,13 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 --- parameters String:Completed, String:FY27-Q1, String:Completed, Decimal:400
 --- duckdb
 SELECT c.region AS customers_region,
-       SUM(CASE WHEN f.status = ? THEN f.net_amount END) AS completed
+       SUM(CASE WHEN f.status = $1 THEN f.net_amount END) AS completed
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $2
 GROUP BY c.region
-HAVING SUM(CASE WHEN f.status = ? THEN f.net_amount END) >= ?
+HAVING SUM(CASE WHEN f.status = $3 THEN f.net_amount END) >= $4
 ORDER BY customers_region ASC
 LIMIT 101;
 --- sqlserver_sales tsql
@@ -1847,13 +1847,13 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 --- parameters String:Completed, String:FY27-Q1, String:Completed, Decimal:400
 --- duckdb
 SELECT c.region AS customers_region,
-       SUM(CASE WHEN f.status = ? THEN f.net_amount END) AS completed
+       SUM(CASE WHEN f.status = $1 THEN f.net_amount END) AS completed
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $2
 GROUP BY c.region
-HAVING SUM(CASE WHEN f.status = ? THEN f.net_amount END) >= ?
+HAVING SUM(CASE WHEN f.status = $3 THEN f.net_amount END) >= $4
 ORDER BY customers_region ASC
 LIMIT 101;
 === level2/25_measure_default_role.json
@@ -1881,7 +1881,7 @@ SELECT d2.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_shipped_revenue
 FROM fact_sales f
 JOIN dim_date d2 ON d2.date_key = f.ship_date_key
-WHERE d2.fiscal_quarter = ?
+WHERE d2.fiscal_quarter = $1
 GROUP BY d2.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -1909,7 +1909,7 @@ SELECT d2.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_shipped_revenue
 FROM fact_sales f
 JOIN dim_date d2 ON d2.date_key = f.ship_date_key
-WHERE d2.fiscal_quarter = ?
+WHERE d2.fiscal_quarter = $1
 GROUP BY d2.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -1938,7 +1938,7 @@ SELECT d.fiscal_month AS order_date_fiscal_month,
        SUM(f.net_amount) AS orders_shipped_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY d.fiscal_month
 ORDER BY order_date_fiscal_month ASC
 LIMIT 101;
@@ -1966,7 +1966,7 @@ SELECT d.fiscal_month AS order_date_fiscal_month,
        SUM(f.net_amount) AS orders_shipped_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY d.fiscal_month
 ORDER BY order_date_fiscal_month ASC
 LIMIT 101;
@@ -1994,7 +1994,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
@@ -2021,7 +2021,7 @@ SELECT d2.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_shipped_revenue
 FROM fact_sales f
 JOIN dim_date d2 ON d2.date_key = f.ship_date_key
-WHERE d2.fiscal_quarter = ?
+WHERE d2.fiscal_quarter = $1
 GROUP BY d2.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
@@ -2048,7 +2048,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
@@ -2075,7 +2075,7 @@ SELECT d2.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_shipped_revenue
 FROM fact_sales f
 JOIN dim_date d2 ON d2.date_key = f.ship_date_key
-WHERE d2.fiscal_quarter = ?
+WHERE d2.fiscal_quarter = $1
 GROUP BY d2.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;

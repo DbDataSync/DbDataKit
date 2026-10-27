@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DbDataKit.Semantic.Abstractions;
-using YamlDotNet.RepresentationModel;
+using DbDataKit.Config.Yaml;
 
 namespace DbDataKit.Semantic;
 
@@ -29,9 +29,22 @@ public static partial class CatalogLoader
     [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*$")]
     private static partial Regex Identifier();
 
-    public static Catalog Load(string path) => LoadText(File.ReadAllText(path));
+    /// <summary>Reads a catalog file. Any error names the file and the line of what it found.</summary>
+    public static Catalog Load(string path) => LoadText(File.ReadAllText(path), path);
 
-    public static Catalog LoadText(string yaml) => LoadJson(YamlToJson(yaml));
+    /// <summary>
+    /// Reads catalog text. With <paramref name="file"/> (the name the errors report), a malformed document or a failed check comes back as a
+    /// <see cref="CatalogException"/> whose messages start with <c>file:line:column</c>.
+    /// </summary>
+    public static Catalog LoadText(string yaml, string? file = null)
+    {
+        var root = ReadYaml(yaml, file ?? "catalog");
+        try { return LoadJson(ToJson(root)); }
+        catch (CatalogException e) when (file is not null)
+        {
+            throw new CatalogException(e.Errors.Select(x => Locate(root, file, x)).ToList());
+        }
+    }
 
     /// <summary>Loads a catalog already read as JSON, for example one imported from Ossie documents.</summary>
     public static Catalog LoadJson(JsonObject json)
@@ -48,24 +61,51 @@ public static partial class CatalogLoader
 
     /// <summary>
     /// YAML to JSON, with plain scalars typed (true, 3, 0.5, null) so the document can be checked against a JSON Schema.
-    /// Quoted scalars stay strings.
+    /// Quoted scalars stay strings. The reader is the suite's strict one (<c>DbDataKit.Config.Yaml</c>): a duplicate key, an anchor, an alias,
+    /// a tag or a merge key is an error, not silently read.
     /// </summary>
-    public static JsonObject YamlToJson(string yaml)
+    public static JsonObject YamlToJson(string yaml) => ToJson(ReadYaml(yaml, "catalog"));
+
+    private static YamlMapping ReadYaml(string yaml, string file)
     {
-        var stream = new YamlStream();
-        stream.Load(new StringReader(yaml));
-        return (JsonObject)Convert(stream.Documents[0].RootNode)!;
+        var diagnostics = new List<ConfigDiagnostic>();
+        var root = StrictYamlReader.Read(yaml, file, diagnostics);
+        var errors = diagnostics.Where(d => d.Severity == ConfigSeverity.Error)
+            .Select(d => Err("catalog_yaml_invalid", "$", d.ToString())).ToList();
+        if (errors.Count == 0 && root is not YamlMapping)
+            errors.Add(Err("catalog_yaml_invalid", "$", root is null ? $"{file}: the file is empty; a catalog is a mapping" : $"{file}:{root.Line}:{root.Column}: a catalog is a mapping of blocks, not a {(root is YamlSequence ? "list" : "value")}"));
+        if (errors.Count > 0) throw new CatalogException(errors);
+        return (YamlMapping)root!;
     }
+
+    private static JsonObject ToJson(YamlMapping root) => (JsonObject)Convert(root)!;
 
     private static JsonNode? Convert(YamlNode node) => node switch
     {
-        YamlMappingNode m => new JsonObject(m.Children.Select(kv =>
-            KeyValuePair.Create(((YamlScalarNode)kv.Key).Value!, Convert(kv.Value)))),
-        YamlSequenceNode s => new JsonArray(s.Children.Select(Convert).ToArray()),
-        YamlScalarNode { Style: YamlDotNet.Core.ScalarStyle.Plain } sc => Plain(sc.Value),
-        YamlScalarNode sc => JsonValue.Create(sc.Value),
+        YamlMapping m => new JsonObject(m.Entries.Select(e => KeyValuePair.Create<string, JsonNode?>(e.Key.Value, Convert(e.Value)))),
+        YamlSequence s => new JsonArray(s.Items.Select(Convert).ToArray()),
+        YamlScalar { Quoted: false } sc => Plain(sc.Value),
+        YamlScalar sc => JsonValue.Create(sc.Value),
         _ => null,
     };
+
+    /// <summary>An error with the file, line and column of the node its path names (the deepest one that exists), as <c>file:line:column</c> in front of the message.</summary>
+    private static QisError Locate(YamlNode root, string file, QisError error)
+    {
+        var node = root;
+        foreach (var step in error.Path.Split(['$', '.', '/', '[', ']'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var next = node switch
+            {
+                YamlMapping m => m.Get(step),
+                YamlSequence q when int.TryParse(step, out var i) && i >= 0 && i < q.Items.Count => q.Items[i],
+                _ => null,
+            };
+            if (next is null) break;
+            node = next;
+        }
+        return error with { Message = $"{file}:{node.Line}:{node.Column}: {error.Message}" };
+    }
 
     private static JsonNode? Plain(string? v)
     {

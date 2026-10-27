@@ -449,12 +449,12 @@ public sealed partial class QisEngine(Catalog cat, ISourceExecutor executor, Val
     {
         var native = cat.Doc.Sources[source].Kind == "ssas"
             ? new NativeQuery("dax", DaxEmitter.BuildDax(cat, source, attrs, measures, applied, order, limit, rollup, having, cube))
-            : new NativeQuery("tsql", SqlEmitter.BuildSelect(cat, source, attrs, measures, applied, order, limit, "tsql", rollup, having, cube).Text);
+            : new NativeQuery("tsql", SqlEmitter.BuildSelect(cat, source, attrs, measures, applied, order, limit, EmitDialects.TSql, rollup, having, cube).Text);
 
         var execLimit = limit is not null ? limit.Value + 1 : rowCap + 1;
-        var (duckSql, duckParams) = SqlEmitter.BuildSelect(cat, source, attrs, measures, applied, order, execLimit, "duckdb", rollup, having, cube);
+        var (duckSql, duckParams) = SqlEmitter.BuildSelect(cat, source, attrs, measures, applied, order, execLimit, EmitDialects.DuckDb, rollup, having, cube);
         var execText = native.Dialect == "tsql"
-            ? SqlEmitter.BuildSelect(cat, source, attrs, measures, applied, order, execLimit, "tsql", rollup, having, cube).Text : null;
+            ? SqlEmitter.BuildSelect(cat, source, attrs, measures, applied, order, execLimit, EmitDialects.TSql, rollup, having, cube).Text : null;
         var rows = executor.Execute(new CompiledQuery(source, native, duckSql, duckParams, execText), execLimit).Rows;
         NormalizeDatetimes(source, attrs, rows);
 

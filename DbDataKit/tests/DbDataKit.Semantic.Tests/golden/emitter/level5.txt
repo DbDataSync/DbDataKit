@@ -31,7 +31,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -67,7 +67,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -104,7 +104,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -140,7 +140,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -177,7 +177,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -213,7 +213,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -250,7 +250,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -286,7 +286,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -323,7 +323,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -362,7 +362,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, ROLLUP(p.product)
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -398,7 +398,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -437,7 +437,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, ROLLUP(p.product)
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -471,7 +471,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, d.fiscal_month
 ORDER BY customers_region ASC, date_fiscal_month ASC
 LIMIT 1000001;
@@ -504,7 +504,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, d.fiscal_month
 ORDER BY customers_region ASC, date_fiscal_month ASC
 LIMIT 1000001;
@@ -540,8 +540,8 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
-  AND f.status = ?
+WHERE d.fiscal_quarter = $1
+  AND f.status = $2
 GROUP BY c.region, d.fiscal_month
 ORDER BY customers_region ASC, date_fiscal_month ASC
 LIMIT 1000001;
@@ -576,8 +576,8 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
-  AND f.status = ?
+WHERE d.fiscal_quarter = $1
+  AND f.status = $2
 GROUP BY c.region, d.fiscal_month
 ORDER BY customers_region ASC, date_fiscal_month ASC
 LIMIT 1000001;
@@ -613,8 +613,8 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
-  AND f.status = ?
+WHERE d.fiscal_quarter = $1
+  AND f.status = $2
 GROUP BY c.region, d.fiscal_month
 ORDER BY customers_region ASC, date_fiscal_month ASC
 LIMIT 1000001;
@@ -631,8 +631,8 @@ ORDER BY date_fiscal_month ASC;
 SELECT d.fiscal_month AS date_fiscal_month
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
-  AND f.status = ?
+WHERE d.fiscal_quarter = $1
+  AND f.status = $2
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC;
 --- sqlserver_sales tsql
@@ -666,8 +666,8 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
-  AND f.status = ?
+WHERE d.fiscal_quarter = $1
+  AND f.status = $2
 GROUP BY c.region, d.fiscal_month
 ORDER BY customers_region ASC, date_fiscal_month ASC
 LIMIT 1000001;
@@ -684,8 +684,8 @@ ORDER BY date_fiscal_month ASC;
 SELECT d.fiscal_month AS date_fiscal_month
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
-  AND f.status = ?
+WHERE d.fiscal_quarter = $1
+  AND f.status = $2
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC;
 === level5/10_rollup_override_with_totals.json
@@ -718,7 +718,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, d.fiscal_month
 ORDER BY customers_region ASC, date_fiscal_month ASC
 LIMIT 1000001;
@@ -745,7 +745,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS avg_monthly_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
@@ -778,7 +778,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, d.fiscal_month
 ORDER BY customers_region ASC, date_fiscal_month ASC
 LIMIT 1000001;
@@ -805,7 +805,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS avg_monthly_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
@@ -840,7 +840,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, d.fiscal_month
 ORDER BY customers_region ASC, date_fiscal_month ASC
 LIMIT 1000001;
@@ -873,7 +873,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, d.fiscal_month
 ORDER BY customers_region ASC, date_fiscal_month ASC
 LIMIT 1000001;
@@ -909,7 +909,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -942,7 +942,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -982,7 +982,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product, d.fiscal_month
 ORDER BY customers_region ASC, products_product ASC, date_fiscal_month ASC
 LIMIT 1000001;
@@ -1021,7 +1021,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product, d.fiscal_month
 ORDER BY customers_region ASC, products_product ASC, date_fiscal_month ASC
 LIMIT 1000001;
@@ -1061,7 +1061,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
 JOIN dim_product p ON p.product_key = f.product_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, d.fiscal_month, p.product
 ORDER BY customers_region ASC, date_fiscal_month ASC, products_product ASC
 LIMIT 1000001;
@@ -1100,7 +1100,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
 JOIN dim_product p ON p.product_key = f.product_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, d.fiscal_month, p.product
 ORDER BY customers_region ASC, date_fiscal_month ASC, products_product ASC
 LIMIT 1000001;
@@ -1138,7 +1138,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1174,7 +1174,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1202,7 +1202,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
@@ -1229,7 +1229,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
@@ -1266,7 +1266,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1302,7 +1302,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1339,7 +1339,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1375,7 +1375,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1412,7 +1412,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1448,7 +1448,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1485,7 +1485,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1521,7 +1521,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1558,7 +1558,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1594,7 +1594,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1631,7 +1631,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1667,7 +1667,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1704,7 +1704,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1740,7 +1740,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1777,7 +1777,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1816,7 +1816,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, ROLLUP(p.product)
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1852,7 +1852,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1891,7 +1891,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, ROLLUP(p.product)
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1928,7 +1928,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -1964,7 +1964,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -2001,7 +2001,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -2037,7 +2037,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -2074,7 +2074,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -2110,7 +2110,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -2139,7 +2139,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_year = ?
+WHERE d.fiscal_year = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
@@ -2164,7 +2164,7 @@ ORDER BY date_fiscal_month ASC;
 SELECT d.fiscal_month AS date_fiscal_month
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_year = ?
+WHERE d.fiscal_year = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC;
 --- sqlserver_sales tsql
@@ -2177,7 +2177,7 @@ WHERE d.fiscal_month = @p1;
 SELECT SUM(f.net_amount) AS growth__prior
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_month = ?;
+WHERE d.fiscal_month = $1;
 --- sqlserver_sales tsql
 SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
@@ -2201,7 +2201,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_year = ?
+WHERE d.fiscal_year = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
@@ -2226,7 +2226,7 @@ ORDER BY date_fiscal_month ASC;
 SELECT d.fiscal_month AS date_fiscal_month
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_year = ?
+WHERE d.fiscal_year = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC;
 --- sqlserver_sales tsql
@@ -2239,4 +2239,4 @@ WHERE d.fiscal_month = @p1;
 SELECT SUM(f.net_amount) AS growth__prior
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_month = ?;
+WHERE d.fiscal_month = $1;

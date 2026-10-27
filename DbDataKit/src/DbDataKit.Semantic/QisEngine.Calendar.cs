@@ -244,9 +244,9 @@ public sealed partial class QisEngine
     {
         var native = cat.Doc.Sources[source].Kind == "ssas"
             ? new NativeQuery("dax", DaxEmitter.BuildDax(cat, source, attrs, [], filters, [], null))
-            : new NativeQuery("tsql", SqlEmitter.BuildSelect(cat, source, attrs, [], filters, [], null, "tsql").Text);
-        var (duckSql, duckParams) = SqlEmitter.BuildSelect(cat, source, attrs, [], filters, [], null, "duckdb");
-        var execText = native.Dialect == "tsql" ? SqlEmitter.BuildSelect(cat, source, attrs, [], filters, [], null, "tsql").Text : null;
+            : new NativeQuery("tsql", SqlEmitter.BuildSelect(cat, source, attrs, [], filters, [], null, EmitDialects.TSql).Text);
+        var (duckSql, duckParams) = SqlEmitter.BuildSelect(cat, source, attrs, [], filters, [], null, EmitDialects.DuckDb);
+        var execText = native.Dialect == "tsql" ? SqlEmitter.BuildSelect(cat, source, attrs, [], filters, [], null, EmitDialects.TSql).Text : null;
         return executor.Execute(new CompiledQuery(source, native, duckSql, duckParams, execText), rowCap + 1).Rows;
     }
 }

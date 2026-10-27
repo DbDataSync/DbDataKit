@@ -29,7 +29,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY orders_net_revenue DESC, customers_region ASC
 LIMIT 101;
@@ -63,7 +63,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY orders_net_revenue DESC, customers_region ASC
 LIMIT 101;
@@ -101,7 +101,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY orders_net_revenue DESC, customers_region ASC, products_product ASC
 LIMIT 4;
@@ -138,7 +138,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY orders_net_revenue DESC, customers_region ASC, products_product ASC
 LIMIT 4;
@@ -165,7 +165,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -191,7 +191,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -222,7 +222,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -244,7 +244,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -274,7 +274,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -296,7 +296,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -333,7 +333,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -355,7 +355,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -391,7 +391,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -413,7 +413,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -449,8 +449,8 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
 JOIN dim_product p ON p.product_key = f.product_key
-WHERE d.fiscal_quarter = ?
-  AND p.category = ?
+WHERE d.fiscal_quarter = $1
+  AND p.category = $2
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -472,7 +472,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -511,7 +511,7 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 1000001;
@@ -542,7 +542,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -564,7 +564,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -611,8 +611,8 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
-  AND (c.region = ? OR p.product = ?)
+WHERE d.fiscal_quarter = $1
+  AND (c.region = $2 OR p.product = $3)
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 101;
@@ -658,8 +658,8 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
-  AND (c.region = ? OR p.product = ?)
+WHERE d.fiscal_quarter = $1
+  AND (c.region = $2 OR p.product = $3)
 GROUP BY c.region, p.product
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 101;
@@ -691,7 +691,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -731,8 +731,8 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
-  AND f.status = ?
+WHERE d.fiscal_quarter = $1
+  AND f.status = $2
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -765,8 +765,8 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
-  AND f.status = ?
+WHERE d.fiscal_quarter = $1
+  AND f.status = $2
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -802,9 +802,9 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
-  AND f.status = ?
-  AND c.region = ?
+WHERE d.fiscal_quarter = $1
+  AND f.status = $2
+  AND c.region = $3
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -839,9 +839,9 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
-  AND f.status = ?
-  AND c.region = ?
+WHERE d.fiscal_quarter = $1
+  AND f.status = $2
+  AND c.region = $3
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -871,7 +871,7 @@ SELECT d.calendar_date AS date_calendar_date,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.calendar_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+WHERE d.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
 GROUP BY d.calendar_date
 ORDER BY date_calendar_date ASC
 LIMIT 101;
@@ -899,7 +899,7 @@ SELECT d.calendar_date AS date_calendar_date,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.calendar_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+WHERE d.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
 GROUP BY d.calendar_date
 ORDER BY date_calendar_date ASC
 LIMIT 101;
@@ -928,7 +928,7 @@ SELECT d.calendar_date AS date_calendar_date,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.calendar_date < CAST(? AS DATE)
+WHERE d.calendar_date < CAST($1 AS DATE)
 GROUP BY d.calendar_date
 ORDER BY date_calendar_date ASC
 LIMIT 101;
@@ -956,7 +956,7 @@ SELECT d.calendar_date AS date_calendar_date,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.calendar_date < CAST(? AS DATE)
+WHERE d.calendar_date < CAST($1 AS DATE)
 GROUP BY d.calendar_date
 ORDER BY date_calendar_date ASC
 LIMIT 101;
@@ -985,7 +985,7 @@ SELECT d.calendar_date AS date_calendar_date,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.calendar_date > CAST(? AS DATE)
+WHERE d.calendar_date > CAST($1 AS DATE)
 GROUP BY d.calendar_date
 ORDER BY date_calendar_date ASC
 LIMIT 101;
@@ -1013,7 +1013,7 @@ SELECT d.calendar_date AS date_calendar_date,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.calendar_date > CAST(? AS DATE)
+WHERE d.calendar_date > CAST($1 AS DATE)
 GROUP BY d.calendar_date
 ORDER BY date_calendar_date ASC
 LIMIT 101;
@@ -1042,7 +1042,7 @@ SELECT d.calendar_date AS date_calendar_date,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE (d.calendar_date = CAST(? AS DATE) OR d.calendar_date >= CAST(? AS DATE))
+WHERE (d.calendar_date = CAST($1 AS DATE) OR d.calendar_date >= CAST($2 AS DATE))
 GROUP BY d.calendar_date
 ORDER BY date_calendar_date ASC
 LIMIT 101;
@@ -1070,7 +1070,7 @@ SELECT d.calendar_date AS date_calendar_date,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE (d.calendar_date = CAST(? AS DATE) OR d.calendar_date >= CAST(? AS DATE))
+WHERE (d.calendar_date = CAST($1 AS DATE) OR d.calendar_date >= CAST($2 AS DATE))
 GROUP BY d.calendar_date
 ORDER BY date_calendar_date ASC
 LIMIT 101;
@@ -1103,7 +1103,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.calendar_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+WHERE d.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -1131,7 +1131,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.calendar_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+WHERE d.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -1169,7 +1169,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_month IN (?, ?)
+WHERE d.fiscal_month IN ($1, $2)
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -1206,7 +1206,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_month IN (?, ?)
+WHERE d.fiscal_month IN ($1, $2)
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -1244,7 +1244,7 @@ SELECT d.fiscal_quarter AS date_fiscal_quarter,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.calendar_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+WHERE d.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
 GROUP BY d.fiscal_quarter
 ORDER BY date_fiscal_quarter ASC
 LIMIT 101;
@@ -1281,7 +1281,7 @@ SELECT d.fiscal_quarter AS date_fiscal_quarter,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.calendar_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+WHERE d.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
 GROUP BY d.fiscal_quarter
 ORDER BY date_fiscal_quarter ASC
 LIMIT 101;
@@ -1319,7 +1319,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -1356,7 +1356,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -1385,7 +1385,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_year = ?
+WHERE d.fiscal_year = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -1413,7 +1413,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_year = ?
+WHERE d.fiscal_year = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -1451,7 +1451,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -1488,7 +1488,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -1517,7 +1517,7 @@ SELECT d.calendar_date AS date_calendar_date,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.calendar_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+WHERE d.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
 GROUP BY d.calendar_date
 ORDER BY date_calendar_date ASC
 LIMIT 101;
@@ -1545,7 +1545,7 @@ SELECT d.calendar_date AS date_calendar_date,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.calendar_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+WHERE d.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
 GROUP BY d.calendar_date
 ORDER BY date_calendar_date ASC
 LIMIT 101;
@@ -1580,7 +1580,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.calendar_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+WHERE d.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
 GROUP BY c.region, d.fiscal_quarter
 ORDER BY customers_region ASC, date_fiscal_quarter ASC
 LIMIT 101;
@@ -1614,7 +1614,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.calendar_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+WHERE d.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
 GROUP BY c.region, d.fiscal_quarter
 ORDER BY customers_region ASC, date_fiscal_quarter ASC
 LIMIT 101;
@@ -1663,7 +1663,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_year = ?
+WHERE d.fiscal_year = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -1691,7 +1691,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_year = ?
+WHERE d.fiscal_year = $1
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -1731,9 +1731,9 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
-HAVING SUM(f.net_amount) > ?
+HAVING SUM(f.net_amount) > $2
 ORDER BY customers_region ASC
 LIMIT 101;
 --- sqlserver_sales tsql
@@ -1765,9 +1765,9 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
-HAVING SUM(f.net_amount) > ?
+HAVING SUM(f.net_amount) > $2
 ORDER BY customers_region ASC
 LIMIT 101;
 === level1/50_having_measure_not_in_the_query.json
@@ -1800,7 +1800,7 @@ SELECT c.region AS customers_region,
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -1822,7 +1822,7 @@ SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
 JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = ?
+WHERE m.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -1860,7 +1860,7 @@ SELECT d2.fiscal_month AS ship_date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d2 ON d2.date_key = f.ship_date_key
-WHERE d2.fiscal_month IN (?, ?)
+WHERE d2.fiscal_month IN ($1, $2)
 GROUP BY d2.fiscal_month
 ORDER BY ship_date_fiscal_month ASC
 LIMIT 101;
@@ -1897,7 +1897,7 @@ SELECT d2.fiscal_month AS ship_date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d2 ON d2.date_key = f.ship_date_key
-WHERE d2.fiscal_month IN (?, ?)
+WHERE d2.fiscal_month IN ($1, $2)
 GROUP BY d2.fiscal_month
 ORDER BY ship_date_fiscal_month ASC
 LIMIT 101;
@@ -1941,7 +1941,7 @@ SELECT c.region AS customers_region,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
-WHERE c.region = ?
+WHERE c.region = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -1976,7 +1976,7 @@ SELECT c.region AS customers_region,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
-WHERE c.region = ?
+WHERE c.region = $1
 GROUP BY c.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -2004,8 +2004,8 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 SELECT f.ordered_at AS orders_ordered_at,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE f.ordered_at >= CAST(? AS TIMESTAMP)
-  AND f.ordered_at < CAST(? AS TIMESTAMP)
+WHERE f.ordered_at >= CAST($1 AS TIMESTAMP)
+  AND f.ordered_at < CAST($2 AS TIMESTAMP)
 GROUP BY f.ordered_at
 ORDER BY orders_ordered_at ASC
 LIMIT 101;
@@ -2032,8 +2032,8 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 SELECT f.ordered_at AS orders_ordered_at,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE f.ordered_at >= CAST(? AS TIMESTAMP)
-  AND f.ordered_at < CAST(? AS TIMESTAMP)
+WHERE f.ordered_at >= CAST($1 AS TIMESTAMP)
+  AND f.ordered_at < CAST($2 AS TIMESTAMP)
 GROUP BY f.ordered_at
 ORDER BY orders_ordered_at ASC
 LIMIT 101;
@@ -2059,7 +2059,7 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 SELECT strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y-%m') AS orders_ordered_at_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP))
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP))
 GROUP BY strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y-%m')
 ORDER BY orders_ordered_at_month ASC
 LIMIT 101;
@@ -2084,7 +2084,7 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 SELECT strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y-%m') AS orders_ordered_at_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP))
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP))
 GROUP BY strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y-%m')
 ORDER BY orders_ordered_at_month ASC
 LIMIT 101;
@@ -2110,7 +2110,7 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 SELECT strftime(timezone('UTC', timezone('UTC', f.ordered_at)), '%Y-%m') AS orders_ordered_at_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP))
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP))
 GROUP BY strftime(timezone('UTC', timezone('UTC', f.ordered_at)), '%Y-%m')
 ORDER BY orders_ordered_at_month ASC
 LIMIT 101;
@@ -2135,7 +2135,7 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 SELECT strftime(timezone('UTC', timezone('UTC', f.ordered_at)), '%Y-%m') AS orders_ordered_at_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP))
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP))
 GROUP BY strftime(timezone('UTC', timezone('UTC', f.ordered_at)), '%Y-%m')
 ORDER BY orders_ordered_at_month ASC
 LIMIT 101;
@@ -2148,7 +2148,7 @@ WHERE (f.ordered_at >= CAST(@p1 AS datetime2) AND f.ordered_at < CAST(@p2 AS dat
 --- duckdb
 SELECT SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP));
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP));
 --- sqlserver_sales tsql
 SELECT SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
@@ -2157,7 +2157,7 @@ WHERE (f.ordered_at >= CAST(@p1 AS datetime2) AND f.ordered_at < CAST(@p2 AS dat
 --- duckdb
 SELECT SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP));
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP));
 === level1/59_between_dates_on_a_datetime.json
 --- sqlserver_sales tsql
 SELECT CONVERT(varchar(7), CAST((f.ordered_at AT TIME ZONE 'UTC') AT TIME ZONE 'Central Standard Time' AS datetime2), 120) AS orders_ordered_at_month,
@@ -2180,7 +2180,7 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 SELECT strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y-%m') AS orders_ordered_at_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP))
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP))
 GROUP BY strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y-%m')
 ORDER BY orders_ordered_at_month ASC
 LIMIT 101;
@@ -2205,7 +2205,7 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 SELECT strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y-%m') AS orders_ordered_at_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP))
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP))
 GROUP BY strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y-%m')
 ORDER BY orders_ordered_at_month ASC
 LIMIT 101;
@@ -2231,7 +2231,7 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 SELECT strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y-%m') AS orders_ordered_at_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP))
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP))
 GROUP BY strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y-%m')
 ORDER BY orders_ordered_at_month ASC
 LIMIT 101;
@@ -2256,7 +2256,7 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 SELECT strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y-%m') AS orders_ordered_at_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP))
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP))
 GROUP BY strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y-%m')
 ORDER BY orders_ordered_at_month ASC
 LIMIT 101;
@@ -2283,7 +2283,7 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 SELECT (strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y') || '-Q' || CAST(quarter(timezone('America/Chicago', timezone('UTC', f.ordered_at))) AS VARCHAR)) AS orders_ordered_at_quarter,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP))
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP))
 GROUP BY (strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y') || '-Q' || CAST(quarter(timezone('America/Chicago', timezone('UTC', f.ordered_at))) AS VARCHAR))
 ORDER BY orders_ordered_at_quarter ASC
 LIMIT 101;
@@ -2308,7 +2308,7 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 SELECT (strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y') || '-Q' || CAST(quarter(timezone('America/Chicago', timezone('UTC', f.ordered_at))) AS VARCHAR)) AS orders_ordered_at_quarter,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP))
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP))
 GROUP BY (strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y') || '-Q' || CAST(quarter(timezone('America/Chicago', timezone('UTC', f.ordered_at))) AS VARCHAR))
 ORDER BY orders_ordered_at_quarter ASC
 LIMIT 101;
@@ -2334,7 +2334,7 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 SELECT strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y-%m-%d %H:00') AS orders_ordered_at_hour,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP))
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP))
 GROUP BY strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y-%m-%d %H:00')
 ORDER BY orders_ordered_at_hour ASC
 LIMIT 101;
@@ -2359,7 +2359,7 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 SELECT strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y-%m-%d %H:00') AS orders_ordered_at_hour,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP))
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP))
 GROUP BY strftime(timezone('America/Chicago', timezone('UTC', f.ordered_at)), '%Y-%m-%d %H:00')
 ORDER BY orders_ordered_at_hour ASC
 LIMIT 101;
@@ -2385,7 +2385,7 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 SELECT strftime(date_trunc('week', timezone('America/Chicago', timezone('UTC', f.ordered_at))), '%Y-%m-%d') AS orders_ordered_at_week,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP))
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP))
 GROUP BY strftime(date_trunc('week', timezone('America/Chicago', timezone('UTC', f.ordered_at))), '%Y-%m-%d')
 ORDER BY orders_ordered_at_week ASC
 LIMIT 101;
@@ -2410,7 +2410,7 @@ OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY;
 SELECT strftime(date_trunc('week', timezone('America/Chicago', timezone('UTC', f.ordered_at))), '%Y-%m-%d') AS orders_ordered_at_week,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP))
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP))
 GROUP BY strftime(date_trunc('week', timezone('America/Chicago', timezone('UTC', f.ordered_at))), '%Y-%m-%d')
 ORDER BY orders_ordered_at_week ASC
 LIMIT 101;
@@ -2442,7 +2442,7 @@ SELECT d3.fiscal_month AS orders_ordered_at_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 LEFT JOIN dim_date d3 ON d3.calendar_date = CAST(timezone('America/Chicago', timezone('UTC', f.ordered_at)) AS DATE)
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP))
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP))
   AND d3.fiscal_month IS NOT NULL
 GROUP BY d3.fiscal_month
 ORDER BY orders_ordered_at_fiscal_month ASC
@@ -2473,7 +2473,7 @@ SELECT d3.fiscal_month AS orders_ordered_at_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 LEFT JOIN dim_date d3 ON d3.calendar_date = CAST(timezone('America/Chicago', timezone('UTC', f.ordered_at)) AS DATE)
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP))
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP))
   AND d3.fiscal_month IS NOT NULL
 GROUP BY d3.fiscal_month
 ORDER BY orders_ordered_at_fiscal_month ASC
@@ -2503,7 +2503,7 @@ SELECT d3.fiscal_month AS orders_ordered_at_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 LEFT JOIN dim_date d3 ON d3.calendar_date = CAST(timezone('America/Chicago', timezone('UTC', f.ordered_at)) AS DATE)
-WHERE d3.fiscal_quarter = ?
+WHERE d3.fiscal_quarter = $1
 GROUP BY d3.fiscal_month
 ORDER BY orders_ordered_at_fiscal_month ASC
 LIMIT 101;
@@ -2531,7 +2531,7 @@ SELECT d3.fiscal_month AS orders_ordered_at_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 LEFT JOIN dim_date d3 ON d3.calendar_date = CAST(timezone('America/Chicago', timezone('UTC', f.ordered_at)) AS DATE)
-WHERE d3.fiscal_quarter = ?
+WHERE d3.fiscal_quarter = $1
 GROUP BY d3.fiscal_month
 ORDER BY orders_ordered_at_fiscal_month ASC
 LIMIT 101;
@@ -2569,7 +2569,7 @@ SELECT d3.fiscal_month AS orders_ordered_at_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 LEFT JOIN dim_date d3 ON d3.calendar_date = CAST(timezone('America/Chicago', timezone('UTC', f.ordered_at)) AS DATE)
-WHERE d3.fiscal_month IN (?, ?)
+WHERE d3.fiscal_month IN ($1, $2)
 GROUP BY d3.fiscal_month
 ORDER BY orders_ordered_at_fiscal_month ASC
 LIMIT 101;
@@ -2606,7 +2606,7 @@ SELECT d3.fiscal_month AS orders_ordered_at_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 LEFT JOIN dim_date d3 ON d3.calendar_date = CAST(timezone('America/Chicago', timezone('UTC', f.ordered_at)) AS DATE)
-WHERE d3.fiscal_month IN (?, ?)
+WHERE d3.fiscal_month IN ($1, $2)
 GROUP BY d3.fiscal_month
 ORDER BY orders_ordered_at_fiscal_month ASC
 LIMIT 101;
@@ -2650,9 +2650,9 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
-HAVING SUM(f.net_amount) BETWEEN ? AND ?
+HAVING SUM(f.net_amount) BETWEEN $2 AND $3
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 101;
 --- sqlserver_sales tsql
@@ -2690,9 +2690,9 @@ FROM fact_sales f
 JOIN dim_customer c ON c.customer_key = f.customer_key
 JOIN dim_product p ON p.product_key = f.product_key
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_quarter = ?
+WHERE d.fiscal_quarter = $1
 GROUP BY c.region, p.product
-HAVING SUM(f.net_amount) BETWEEN ? AND ?
+HAVING SUM(f.net_amount) BETWEEN $2 AND $3
 ORDER BY customers_region ASC, products_product ASC
 LIMIT 101;
 === level1/74_between_period_labels.json
@@ -2720,7 +2720,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_month BETWEEN ? AND ?
+WHERE d.fiscal_month BETWEEN $1 AND $2
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -2748,7 +2748,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.fiscal_month BETWEEN ? AND ?
+WHERE d.fiscal_month BETWEEN $1 AND $2
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -2762,8 +2762,8 @@ WHERE f.ordered_at >= CAST(@p1 AS datetime2)
 --- duckdb
 SELECT SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE f.ordered_at >= CAST(? AS TIMESTAMP)
-  AND f.ordered_at < CAST(? AS TIMESTAMP);
+WHERE f.ordered_at >= CAST($1 AS TIMESTAMP)
+  AND f.ordered_at < CAST($2 AS TIMESTAMP);
 --- sqlserver_sales tsql
 SELECT SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
@@ -2773,8 +2773,8 @@ WHERE f.ordered_at >= CAST(@p1 AS datetime2)
 --- duckdb
 SELECT SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE f.ordered_at >= CAST(? AS TIMESTAMP)
-  AND f.ordered_at < CAST(? AS TIMESTAMP);
+WHERE f.ordered_at >= CAST($1 AS TIMESTAMP)
+  AND f.ordered_at < CAST($2 AS TIMESTAMP);
 === level1/76_datetime_between_instants.json
 --- sqlserver_sales tsql
 SELECT SUM(f.net_amount) AS orders_net_revenue
@@ -2784,7 +2784,7 @@ WHERE (f.ordered_at >= CAST(@p1 AS datetime2) AND f.ordered_at <= CAST(@p2 AS da
 --- duckdb
 SELECT SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at <= CAST(? AS TIMESTAMP));
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at <= CAST($2 AS TIMESTAMP));
 --- sqlserver_sales tsql
 SELECT SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
@@ -2793,7 +2793,7 @@ WHERE (f.ordered_at >= CAST(@p1 AS datetime2) AND f.ordered_at <= CAST(@p2 AS da
 --- duckdb
 SELECT SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at <= CAST(? AS TIMESTAMP));
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at <= CAST($2 AS TIMESTAMP));
 === level1/77_datetime_equals_a_date_is_the_whole_day.json
 --- sqlserver_sales tsql
 SELECT SUM(f.net_amount) AS orders_net_revenue
@@ -2803,7 +2803,7 @@ WHERE (f.ordered_at >= CAST(@p1 AS datetime2) AND f.ordered_at < CAST(@p2 AS dat
 --- duckdb
 SELECT SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP));
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP));
 --- sqlserver_sales tsql
 SELECT SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
@@ -2812,7 +2812,7 @@ WHERE (f.ordered_at >= CAST(@p1 AS datetime2) AND f.ordered_at < CAST(@p2 AS dat
 --- duckdb
 SELECT SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
-WHERE (f.ordered_at >= CAST(? AS TIMESTAMP) AND f.ordered_at < CAST(? AS TIMESTAMP));
+WHERE (f.ordered_at >= CAST($1 AS TIMESTAMP) AND f.ordered_at < CAST($2 AS TIMESTAMP));
 === level1/78_last_complete_day.json
 --- sqlserver_sales tsql
 SELECT d.calendar_date AS lvl, MIN(d.calendar_date) AS lo, MAX(d.calendar_date) AS hi
@@ -2847,7 +2847,7 @@ SELECT d.calendar_date AS date_calendar_date,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.calendar_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+WHERE d.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
 GROUP BY d.calendar_date
 ORDER BY date_calendar_date ASC
 LIMIT 101;
@@ -2884,7 +2884,7 @@ SELECT d.calendar_date AS date_calendar_date,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE d.calendar_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+WHERE d.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
 GROUP BY d.calendar_date
 ORDER BY date_calendar_date ASC
 LIMIT 101;
@@ -2922,7 +2922,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE (d.fiscal_month = ? OR d.fiscal_month = ?)
+WHERE (d.fiscal_month = $1 OR d.fiscal_month = $2)
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;
@@ -2959,7 +2959,7 @@ SELECT d.fiscal_month AS date_fiscal_month,
        SUM(f.net_amount) AS orders_net_revenue
 FROM fact_sales f
 JOIN dim_date d ON d.date_key = f.date_key
-WHERE (d.fiscal_month = ? OR d.fiscal_month = ?)
+WHERE (d.fiscal_month = $1 OR d.fiscal_month = $2)
 GROUP BY d.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 101;

@@ -25,9 +25,9 @@ public sealed partial class QisEngine
         var kind = cat.Doc.Sources[source].Kind;
         var native = kind == "ssas"
             ? new NativeQuery("dax", DaxEmitter.BuildDax(cat, source, [attribute], [], [], [], null))
-            : new NativeQuery("tsql", table ? SqlEmitter.BuildMembers(cat, source, attribute) : SqlEmitter.BuildSelect(cat, source, [attribute], [], [], [], null, "tsql").Text);
+            : new NativeQuery("tsql", table ? SqlEmitter.BuildMembers(cat, source, attribute) : SqlEmitter.BuildSelect(cat, source, [attribute], [], [], [], null, EmitDialects.TSql).Text);
         var (duckSql, duckParams) = table ? (SqlEmitter.BuildMembers(cat, source, attribute), new List<object?>())
-            : SqlEmitter.BuildSelect(cat, source, [attribute], [], [], [], null, "duckdb");
+            : SqlEmitter.BuildSelect(cat, source, [attribute], [], [], [], null, EmitDialects.DuckDb);
         var rows = executor.Execute(new CompiledQuery(source, native, duckSql, duckParams), rowCap + 1).Rows;
         return rows.Select(r => r[Catalog.ColName(attribute)]?.ToString()).Where(v => v is not null).Select(v => v!).Distinct().Order().ToList();
     }
