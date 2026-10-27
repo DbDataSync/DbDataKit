@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dbdatakit.invalid/visuals/vega-lite-subset.schema.json",
+  "title": "Vega-Lite subset",
+  "description": "The chart spec a view document may carry: marks, channels and encodings, nothing that fetches or computes (docs/semantic/presentation.md, Chart). Closed: a key not listed here is refused. The spec holds no data; a rendered chart adds inline values only (see rendered-view.schema.json). A string in this spec is never read as an expression.",
+  "$ref": "#/$defs/spec",
+  "$defs": {
+    "mark": { "enum": ["bar", "line", "area", "point", "rule", "text"] },
+    "spec": {
+      "type": "object",
+      "required": ["mark"],
+      "additionalProperties": false,
+      "properties": {
+        "$schema": { "type": "string", "pattern": "^https://vega\\.github\\.io/schema/vega-lite/v[56](\\.[0-9]+)*\\.json$" },
+        "mark": {
+          "oneOf": [
+            { "$ref": "#/$defs/mark" },
+            {
+              "type": "object",
+              "required": ["type"],
+              "additionalProperties": false,
+              "properties": {
+                "type": { "$ref": "#/$defs/mark" },
+                "tooltip": { "type": "boolean" },
+                "point": { "type": "boolean" }
+              }
+            }
+          ]
+        },
+        "encoding": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": { "$ref": "#/$defs/channel" },
+            "y": { "$ref": "#/$defs/channel" },
+            "color": { "$ref": "#/$defs/channel" },
+            "column": { "$ref": "#/$defs/channel" },
+            "row": { "$ref": "#/$defs/channel" },
+            "tooltip": { "oneOf": [{ "$ref": "#/$defs/channel" }, { "type": "array", "items": { "$ref": "#/$defs/channel" } }] }
+          }
+        },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "width": { "type": "integer", "minimum": 1, "maximum": 4000 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 4000 }
+      }
+    },
+    "channel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "field": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["quantitative", "ordinal", "nominal", "temporal"] },
+        "sort": {
+          "oneOf": [
+            { "enum": ["ascending", "descending", "sort_key", null] },
+            { "type": "array", "items": { "type": ["string", "number", "boolean"] } }
+          ]
+        },
+        "stack": { "enum": [null, true, false, "zero", "center", "normalize"] },
+        "title": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "kind": "rendered_view",
+  "status": "complete",
+  "views": [
+    {
+      "id": "c1",
+      "type": "chart",
+      "vega_lite": {
+        "mark": "bar",
+        "encoding": {
+          "x": {
+            "field": "date_fiscal_quarter",
+            "type": "ordinal"
+          },
+          "y": {
+            "field": "orders_order_count",
+            "type": "quantitative",
+            "stack": null
+          },
+          "color": {
+            "field": "customers_region",
+            "type": "nominal"
+          }
+        },
+        "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+        "data": {
+          "values": [
+            {
+              "customers_region": "West",
+              "date_fiscal_quarter": "FY27-Q1",
+              "orders_net_revenue": 4200000,
+              "orders_order_count": 40,
+              "region_share": 0.38
+            },
+            {
+              "customers_region": "West",
+              "date_fiscal_quarter": "FY27-Q2",
+              "orders_net_revenue": 4600000,
+              "orders_order_count": 44,
+              "region_share": 0.39
+            },
+            {
+              "customers_region": "Central",
+              "date_fiscal_quarter": "FY27-Q1",
+              "orders_net_revenue": 3100000,
+              "orders_order_count": 30,
+              "region_share": 0.28
+            },
+            {
+              "customers_region": "Central",
+              "date_fiscal_quarter": "FY27-Q2",
+              "orders_net_revenue": 3300000,
+              "orders_order_count": 31,
+              "region_share": 0.28
+            },
+            {
+              "customers_region": "East",
+              "date_fiscal_quarter": "FY27-Q1",
+              "orders_net_revenue": 3800000,
+              "orders_order_count": 35,
+              "region_share": 0.34
+            },
+            {
+              "customers_region": "East",
+              "date_fiscal_quarter": "FY27-Q2",
+              "orders_net_revenue": 3900000,
+              "orders_order_count": 34,
+              "region_share": 0.33
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "errors": null
+}

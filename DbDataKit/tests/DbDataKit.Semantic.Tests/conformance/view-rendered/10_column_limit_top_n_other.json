@@ -1,0 +1,64 @@
+{
+  "kind": "rendered_view",
+  "status": "complete",
+  "views": [
+    {
+      "id": "m1",
+      "type": "matrix",
+      "columns": [
+        {
+          "labels": [
+            "West",
+            "orders.net_revenue"
+          ],
+          "total": false,
+          "other": false
+        },
+        {
+          "labels": [
+            "Other",
+            "orders.net_revenue"
+          ],
+          "total": false,
+          "other": true
+        }
+      ],
+      "rows": [
+        {
+          "labels": [
+            "FY27-Q1"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 4200000,
+              "text": "4,200,000"
+            },
+            {
+              "v": 6900000,
+              "text": "6,900,000"
+            }
+          ]
+        },
+        {
+          "labels": [
+            "FY27-Q2"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 4600000,
+              "text": "4,600,000"
+            },
+            {
+              "v": 7200000,
+              "text": "7,200,000"
+            }
+          ]
+        }
+      ],
+      "notice": "The 2 smallest of 3 columns are combined as Other."
+    }
+  ],
+  "errors": null
+}

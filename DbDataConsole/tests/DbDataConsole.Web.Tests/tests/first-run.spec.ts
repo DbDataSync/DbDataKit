@@ -2,6 +2,7 @@ import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
 import { buildUrl, proxyUrl, scratchDirectory, syncUrl, warehouseConnection } from '../playwright.config'
+import { viewsStory } from './views'
 
 /** A browser-side authenticator that holds the passkeys, so the test can register one and sign in with it the way a person's device would. */
 async function addAuthenticator(context: BrowserContext, page: Page) {
@@ -63,7 +64,12 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(page.getByText('only enabled administrator')).toBeVisible()
   await expect(row.getByTestId('user-enabled-checkbox')).toBeChecked()
 
+  // Views: fixture views (a matrix, a chart) are opened and drawn by the shared visuals, in both themes, and a chart that names a URL is refused.
+  await viewsStory(page)
+
   // An invitation for someone else: a link, shown once.
+  await page.getByTestId('rail-users').click()
+  await expect(page.getByTestId('users-page')).toBeVisible()
   await page.getByTestId('invite-create-button').click()
   await expect(page.getByTestId('invite-link')).toHaveValue(/\/invite#.+/)
 
