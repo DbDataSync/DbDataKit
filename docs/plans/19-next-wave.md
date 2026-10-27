@@ -83,6 +83,7 @@ Plan 13a's remaining slices are lanes of their own, already in flight; this plan
 | J17 | Semantic SQL: the spec (`docs/semantic-sql.md` beside `query.md`, model-anchored names, flattened names and `flat_name`) and the SQL form of every fixture | Q11 | J04 | M | the owner approves the spec; every fixture has a SQL form checked in |
 | J18 | The translator, SQL to request | Q11 | J17 | M | every fixture's SQL form translates to its request (test) |
 | J19 | The translator, request to SQL (round trip) | Q11 | J18 | S | round trip on every fixture (test) |
+| J21 | DuckDB loading: measure `Sandbox.Run` and replace the per-row INSERT | Q1 | J01 | S | a benchmark checked in; the load is at least 100x faster with every fixture and golden unchanged | **Status: done** (branch `suite/j21-duckdb-loading`, stacked on `suite/j01b-ssas-extraction`; a slice added on 2026-10-27 at the owner's request). `Sandbox.Run` loads result sets with DuckDB's appender: 100,000 rows 154 s to 0.43 s, 1,000,000 rows (est. 26 min) to 1.0 s. Reading rows out of a source is now the larger cost (about 200,000 rows/s through ADO.NET); the Arrow path stays an open item (`docs/semantic/open-questions.md`) |
 | J20 | The recording forwarder for Excel's XMLA traffic (a pass-through that logs requests and responses to files) | Q13 | | S | records a session against SSAS in CI; the owner runs it on the VM for the catalogue |
 
 **Notes for whoever starts lane J1 (J01-J04), written 2026-10-27 when lane N, G and H01 were done beside it:**
