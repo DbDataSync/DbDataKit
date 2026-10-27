@@ -19,6 +19,9 @@ public sealed class ManagementCaller
     /// <summary>The operating system decided who could connect to the local channel, so this caller holds every role.</summary>
     public static ManagementCaller Local(string operatingSystemUser) => new(operatingSystemUser);
 
+    /// <summary>The token the call came with; null for the local channel.</summary>
+    public ValidatedToken? Token => _token;
+
     public bool Holds(ServerRole role) => _token is null || ManagementAuthorization.Authorize(_token, role).Allowed;
 
     public GitAuthor Author

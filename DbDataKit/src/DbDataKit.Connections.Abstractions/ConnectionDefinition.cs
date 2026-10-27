@@ -78,6 +78,8 @@ public sealed class ConnectionDefinition
     public string Engine { get; set; } = "";
     /// <summary>Optional dialect id override (Plan 05).</summary>
     public string? Dialect { get; set; }
+    /// <summary>The id of the paired server client that created this connection (a Build server publishing it); empty for one made by hand. The server that keeps the file checks it on every change by a client (<c>OwnerScope</c>).</summary>
+    public string? ManagedBy { get; set; }
     public AccessMode Access { get; set; } = AccessMode.Readwrite;
     public AddressSpec? Address { get; set; }
     /// <summary>A connection string without credentials. Plaintext credentials are refused.</summary>
