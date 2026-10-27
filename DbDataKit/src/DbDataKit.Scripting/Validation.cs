@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace DbDataKit.Connections.Libraries;
+namespace DbDataKit.Scripting;
 
 /// <summary>An input to the library installer was refused. The message names the rule and the field, and quotes the value only after escaping it.</summary>
 public sealed class LibraryValidationException(string field, string rule, string? shownValue = null)
