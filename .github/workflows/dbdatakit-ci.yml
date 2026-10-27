@@ -51,3 +51,33 @@ jobs:
     with:
       # The live tests run against the shared engines every time (a dispatch can still switch them off).
       engines: ${{ github.event_name != 'workflow_dispatch' || inputs.engines }}
+
+  # The semantic layer's conformance fixtures (plan 19, J02) on the shared engines, as a check of their own: the engine seeds a scratch
+  # database on SQL Server and PostgreSQL and runs every fixture through it. The tests also run in the job above whenever the engines
+  # are up; this one fails by name when the semantic layer breaks and requires both engines instead of skipping.
+  semantic-fixtures:
+    name: Semantic fixtures (SQL Server, PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "DbDataKit/**/*.csproj"
+      - name: Start the shared engines (SQL Server, PostgreSQL)
+        run: testenv/testenv.sh up mssql postgres
+      - name: Point the suite at the engines
+        run: |
+          testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
+          echo "DBDATA_REQUIRE_SQLSERVER=true" >> "$GITHUB_ENV"
+          echo "DBDATA_REQUIRE_POSTGRES=true" >> "$GITHUB_ENV"
+      - name: Fetch the pinned DuckDB engine
+        run: scripts/fetch-duckdb.sh
+      - name: Test
+        working-directory: DbDataKit
+        run: dotnet test --project tests/DbDataKit.Semantic.Tests
+      - name: Stop the shared engines
+        if: always()
+        run: testenv/testenv.sh down

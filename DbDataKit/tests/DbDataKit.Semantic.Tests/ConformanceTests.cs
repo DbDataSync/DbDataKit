@@ -12,9 +12,10 @@ namespace DbDataKit.Semantic.Tests;
 /// </summary>
 public class ConformanceTests
 {
-    private static readonly string Root = Path.Combine(AppContext.BaseDirectory, "conformance");
-    private static readonly Catalog Cat = Catalog.Load(Path.Combine(Root, "catalog", "catalog.yaml"));
-    private static readonly string Seed = File.ReadAllText(Path.Combine(Root, "data", "seed.sql"));
+    internal static readonly string Root = Path.Combine(AppContext.BaseDirectory, "conformance");
+    internal static readonly Catalog Cat = Catalog.Load(Path.Combine(Root, "catalog", "catalog.yaml"));
+
+    internal static readonly string Seed = File.ReadAllText(Path.Combine(Root, "data", "seed.sql"));
 
     public static IEnumerable<object[]> Fixtures() =>
         Directory.GetFiles(Path.Combine(Root, "fixtures"), "*.json", SearchOption.AllDirectories)
@@ -23,7 +24,7 @@ public class ConformanceTests
 
     [Theory]
     [MemberData(nameof(Fixtures))]
-    public void Fixture(string relativePath) => RunFixture(relativePath, "native");
+    public void Fixture(string relativePath) => RunOnStandIn(relativePath, "native");
 
     /// <summary>Subtotals computed by the engine, or by the source only where needed, give the same rows as the source computing them all (the same fixtures, another mode).</summary>
     public static IEnumerable<object[]> TotalsFixtures() =>
@@ -31,13 +32,20 @@ public class ConformanceTests
 
     [Theory]
     [MemberData(nameof(TotalsFixtures))]
-    public void FixtureWithEngineSubtotals(string relativePath) => RunFixture(relativePath, "engine");
+    public void FixtureWithEngineSubtotals(string relativePath) => RunOnStandIn(relativePath, "engine");
 
     [Theory]
     [MemberData(nameof(TotalsFixtures))]
-    public void FixtureWithAutoSubtotals(string relativePath) => RunFixture(relativePath, "auto");
+    public void FixtureWithAutoSubtotals(string relativePath) => RunOnStandIn(relativePath, "auto");
 
-    private void RunFixture(string relativePath, string totalsCompute)
+    private static void RunOnStandIn(string relativePath, string totalsCompute)
+    {
+        using var standIn = new DuckDbStandInExecutor(Seed);
+        RunFixture(relativePath, totalsCompute, standIn);
+    }
+
+    /// <summary>Runs one fixture through the executor: the engine's result must match the fixture's expectations, validate against the result schema and replay from its run record.</summary>
+    internal static void RunFixture(string relativePath, string totalsCompute, ISourceExecutor executor)
     {
         var fx = JsonNode.Parse(File.ReadAllText(Path.Combine(Root, "fixtures", relativePath)))!.AsObject();
         var request = fx["request"]!.AsObject();
@@ -47,8 +55,6 @@ public class ConformanceTests
         if (totalsCompute != "native" && fx["expect"]!["native_query_contains"] is JsonObject text)
             foreach (var id in text.Select(p => p.Key).Where(k => k.EndsWith("_g")).ToList()) text.Remove(id);
 
-        using var standIn = new DuckDbStandInExecutor(Seed);
-        ISourceExecutor executor = standIn;
         if (request["kind"]!.GetValue<string>() == "native_batch" && !executor.RunsNativeText)
             return; // Needs an executor that runs agent-written text: the engine fixture job (J02).
 

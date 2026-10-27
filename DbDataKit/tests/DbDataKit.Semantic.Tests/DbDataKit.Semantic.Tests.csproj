@@ -3,6 +3,8 @@
     <Using Include="Xunit" />
     <PackageReference Include="DuckDB.NET.Data" />
     <PackageReference Include="JsonSchema.Net" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Npgsql" />
     <ProjectReference Include="..\..\src\DbDataKit.Semantic\DbDataKit.Semantic.csproj" />
   </ItemGroup>
   <ItemGroup>
