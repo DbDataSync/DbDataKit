@@ -41,7 +41,7 @@ internal static class BuildManagementApi
     /// <param name="projects">The projects served, read again on every call so one added or removed is served or gone at once.</param>
     /// <param name="commands">All the commands there are; each project is offered the read-only ones.</param>
     /// <param name="surfaceFor">Which of them a project is offered and how their inputs are checked; the read-only rules unless a test or a later slice says otherwise.</param>
-    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null)
+    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null, PairingCodes? pairingCodes = null, string? clientName = null)
     {
         surfaceFor ??= FullSurface;
         var specs = CommandSpecs.All.ToDictionary(s => s.Name);
@@ -72,7 +72,15 @@ internal static class BuildManagementApi
         });
 
         if (workspaces is not null) MapWorkspaces(app, projects, workspaces, workspaceRunner);
-        if (proxies is not null && publisher is not null) MapProxies(app, projects, proxies, publisher);
+        // T11: the code a console asks for so that another server can pair with this one as a publisher
+        if (pairingCodes is not null)
+            app.MapPost(PairingCodeIssuer.Path, async (HttpContext context) =>
+            {
+                using var reader = new StreamReader(context.Request.Body);
+                var (status, body) = PairingCodeIssuer.Issue(pairingCodes, ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin).Allowed, await reader.ReadToEndAsync(context.RequestAborted));
+                return Results.Json(body, statusCode: status);
+            });
+        if (proxies is not null && publisher is not null) MapProxies(app, projects, proxies, publisher, clientName ?? "Build server");
 
         // the scheduled plans of a project, whether or not this server runs them (the scheduler is opt-in): their schedule, the next time each is due and how the last run went
         app.MapGet("/api/v1/projects/{project}/schedule", (string project) =>
@@ -222,8 +230,32 @@ internal static class BuildManagementApi
     /// The proxies this server is paired with, and publishing a connection to one (plan 13, T10): <c>GET /api/v1/proxies</c> (viewer) and <c>POST /api/v1/projects/{project}/proxies/{proxy}/publish</c> (<c>{"connection", "data_source"?}</c>; the approver role, because it
     /// puts a database login on a server people outside reach). Only the connection's read login is sent; the call to the proxy carries the Publisher role and the name of the person who asked.
     /// </summary>
-    private static void MapProxies(IEndpointRouteBuilder app, ProjectsFile projects, ProxiesFile proxies, ProxyPublisher publisher)
+    private static void MapProxies(IEndpointRouteBuilder app, ProjectsFile projects, ProxiesFile proxies, ProxyPublisher publisher, string clientName)
     {
+        // T11: a console brokering a pairing sends the Proxy's address and a code the Proxy just made for this server; pairing is configuration, so it is an administrator's
+        app.MapPost("/api/v1/proxies", async (HttpContext context) =>
+        {
+            if (!ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin).Allowed) return Results.Json(new { error = "This needs the admin role." }, statusCode: StatusCodes.Status403Forbidden);
+            string? name, address, code;
+            try
+            {
+                var body = await JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body, cancellationToken: context.RequestAborted);
+                (name, address, code) = (body?["name"]?.GetValue<string>(), body?["url"]?.GetValue<string>(), body?["code"]?.GetValue<string>());
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException) { name = address = code = null; }
+            if (string.IsNullOrWhiteSpace(name) || !ProjectsFile.IsValidId(name) || string.IsNullOrWhiteSpace(code) || !Uri.TryCreate(address, UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps)
+                return Results.Json(new { error = "The body is a JSON object with a \"name\" (lower-case letters, digits, '-' and '_'), the proxy's https \"url\" and a pairing \"code\"." }, statusCode: StatusCodes.Status400BadRequest);
+            try
+            {
+                var (paired, _) = await publisher.PairAsync(name, url, code, clientName, context.RequestAborted);
+                return Results.Json(new { name = paired.Name, url = paired.Url, instance_id = paired.InstanceId, paired_at = paired.PairedAt });
+            }
+            catch (Exception ex) when (ex is PairingFailedException or IncompatibleServerException)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status502BadGateway);
+            }
+        });
+
         app.MapGet("/api/v1/proxies", () => Results.Json(new { proxies = proxies.All().Select(p => new { name = p.Name, url = p.Url, instance_id = p.InstanceId, paired_at = p.PairedAt }) }));
 
         app.MapPost("/api/v1/projects/{project}/proxies/{proxy}/publish", async (string project, string proxy, HttpContext context) =>

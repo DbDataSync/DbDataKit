@@ -59,7 +59,7 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
         build = BuildServer.Build(settings, BuildServer.Certificate(BuildDir), new Idle(), projects, new TuiCommand.CliHost(_ => null).Commands, _ => { }, proxyPublisher: publisher);
         await build.StartAsync();
         var url = new Uri(build.Urls.First());
-        var code = new PairingFiles(settings.ServerYaml).Codes().Create(ServerRoles.Close(ServerRole.Approver | ServerRole.Author));
+        var code = new PairingFiles(settings.ServerYaml).Codes().Create(ServerRoles.Close(ServerRole.Admin | ServerRole.Approver | ServerRole.Author));
         paired = await PairingClient.PairAsync(url, code.Code, console, ClientKind.Console, "test console");
         http = new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint)) { BaseAddress = url };
     }
@@ -118,6 +118,47 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
         using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/projects/sales/proxies/{proxyName}/publish") { Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(body), Encoding.UTF8, "application/json") };
         request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, console.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, who, who, role)));
         return await http.SendAsync(request);
+    }
+
+    private async Task<HttpResponseMessage> Call(HttpMethod method, string path, ServerRole role, object? body = null)
+    {
+        using var request = new HttpRequestMessage(method, path);
+        if (body is not null) request.Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+        request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, console.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, "ana", "Ana", role)));
+        return await http.SendAsync(request);
+    }
+
+    [Fact]
+    public async Task A_console_has_the_server_make_a_publisher_code_and_pairs_it_with_a_proxy_through_the_api_without_anyone_typing_a_code()
+    {
+        // T11: the code this server makes lets another server pair as a publisher, once, and nothing wider
+        using (var made = await Call(HttpMethod.Post, "/api/v1/pairing-codes", ServerRole.Admin, new { name = "ana", minutes = 5 }))
+        {
+            Assert.Equal(HttpStatusCode.OK, made.StatusCode);
+            var answer = JsonNode.Parse(await made.Content.ReadAsStringAsync())!;
+            Assert.Equal("publisher", (string?)answer["max_role"]![0]);
+            var grant = new PairingFiles(new BuildServerSettings(BuildDir, new Uri("https://127.0.0.1:0")).ServerYaml).Codes().Redeem((string?)answer["code"]);
+            Assert.Equal(ServerRole.Publisher, grant!.Ceiling);
+            Assert.Equal("ana", grant.Label);
+        }
+        using (var wide = await Call(HttpMethod.Post, "/api/v1/pairing-codes", ServerRole.Admin, new { minutes = 9999 })) Assert.Equal(HttpStatusCode.BadRequest, wide.StatusCode);
+        using (var notAdmin = await Call(HttpMethod.Post, "/api/v1/pairing-codes", ServerRole.Approver | ServerRole.Author)) Assert.Equal(HttpStatusCode.Forbidden, notAdmin.StatusCode);
+
+        // the pairing itself: this server pairs with the proxy, using a code the proxy made
+        var proxyCode = new PairingFiles(new BuildServerSettings(ProxyDir, new Uri("https://127.0.0.1:0")).ServerYaml).Codes().Create(ServerRoles.Close(ServerRole.Publisher)).Code;
+        using (var denied = await Call(HttpMethod.Post, "/api/v1/proxies", ServerRole.Approver | ServerRole.Author, new { name = "edge", url = proxy.Urls.First(), code = proxyCode })) Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        using (var wrong = await Call(HttpMethod.Post, "/api/v1/proxies", ServerRole.Admin, new { name = "edge", url = proxy.Urls.First(), code = "AAAAA-BBBBB-CCCCC-DDDDD" }))
+        {
+            Assert.Equal(HttpStatusCode.BadGateway, wrong.StatusCode);
+            Assert.Empty(new ProxiesFile(BuildDir).All());
+        }
+        using (var bad = await Call(HttpMethod.Post, "/api/v1/proxies", ServerRole.Admin, new { name = "Not Valid", url = proxy.Urls.First(), code = proxyCode })) Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+        using (var ok = await Call(HttpMethod.Post, "/api/v1/proxies", ServerRole.Admin, new { name = "edge", url = proxy.Urls.First(), code = proxyCode }))
+        {
+            Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+            Assert.Equal("edge", new ProxiesFile(BuildDir).All().Single().Name);
+        }
+        Assert.Equal(ClientKind.Server, new PairingFiles(new BuildServerSettings(ProxyDir, new Uri("https://127.0.0.1:0")).ServerYaml).Clients().All().Single().Kind);
     }
 
     [Fact]

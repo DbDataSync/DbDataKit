@@ -38,6 +38,25 @@ public sealed partial class ManagementTests
     private static string Plain(string name) => Conn.Yaml(name, "duckdb", "Data Source=:memory:");
 
     [Fact]
+    public async Task An_administrator_has_the_proxy_make_a_publisher_code_that_pairs_a_server_once_and_a_publisher_cannot_make_one()
+    {
+        await StartAsync();
+        var admin = await PairAsync();
+
+        var made = await CallAsync(admin, HttpMethod.Post, "/api/v1/pairing-codes", ServerRole.Admin, "{\"name\":\"build\",\"minutes\":5}");
+        Assert.Equal(HttpStatusCode.OK, made.StatusCode);
+        var code = (string)JsonNode.Parse(await made.Content.ReadAsStringAsync())!["code"]!;
+
+        var publisher = await PairingClient.PairAsync(ManagementUrl, code, build1, ClientKind.Server, build1.Id);
+        Assert.Equal(ServerRole.Publisher, publisher.Ceiling);
+        await Assert.ThrowsAsync<PairingFailedException>(() => PairingClient.PairAsync(ManagementUrl, code, build2, ClientKind.Server, build2.Id));   // single use
+
+        // a publisher may not make codes (only an administrator, who asked through a console)
+        var refused = await CallAsAsync(build1, publisher, HttpMethod.Post, "/api/v1/pairing-codes", ServerRole.Publisher);
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+    }
+
+    [Fact]
     public async Task A_publishing_client_creates_data_sources_stamped_with_its_id_and_changes_and_removes_only_those()
     {
         await StartAsync();

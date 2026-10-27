@@ -156,10 +156,8 @@ internal static class ServerCli
                 try
                 {
                     var store = ServerSecrets.Open(directory);
-                    var self = await new ConsoleKeyStore(store, store).GetOrCreateAsync(context.Cancellation);
-                    var paired = await PairingClient.PairAsync(url, code, self, ClientKind.Server, $"Build server {BuildServer.InstanceId(Path.Combine(directory, "server.yaml"))}", context.Cancellation);
-                    proxies.Add(new PairedProxy(name, paired.Url.ToString().TrimEnd('/'), paired.InstanceId, paired.CertificateFingerprint, DateTimeOffset.UtcNow));
-                    await context.Out.WriteLineAsync($"Paired with the proxy '{name}' ({paired.InstanceId}); it lets this server publish as {string.Join(", ", paired.Ceiling.ToString().ToLowerInvariant())}.");
+                    var (paired, ceiling) = await new ProxyPublisher(proxies, new ConsoleKeyStore(store, store), store).PairAsync(name, url, code, $"Build server {BuildServer.InstanceId(Path.Combine(directory, "server.yaml"))}", context.Cancellation);
+                    await context.Out.WriteLineAsync($"Paired with the proxy '{name}' ({paired.InstanceId}); it lets this server publish as {string.Join(", ", ceiling.ToString().ToLowerInvariant())}.");
                     context.Data["added"] = name;
                     return CliExit.Ok;
                 }
