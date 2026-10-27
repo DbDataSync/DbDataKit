@@ -1,0 +1,78 @@
+# fan_in_fan_out on sqlserver: 2 model(s)
+
+## create
+1. Ddl warehouse.orders [Safe] create schema warehouse
+   reason: obj.missing.table
+   | IF SCHEMA_ID(N'warehouse') IS NULL EXEC(N'CREATE SCHEMA [warehouse]');
+2. Ddl warehouse.orders [Safe] create table warehouse.orders
+   reason: obj.missing.table
+   | CREATE TABLE [warehouse].[orders] (
+   |   [order_id] bigint NOT NULL,
+   |   [ordered_on] date NOT NULL,
+   |   [channel] nvarchar(10) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [amount] decimal(12, 2) NOT NULL,
+   |   [store_id] nvarchar(10) COLLATE Latin1_General_100_CS_AS NOT NULL
+   | );
+3. Ddl warehouse.orders [Safe] create index ux_orders_store_order
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_orders_store_order] ON [warehouse].[orders] ([store_id], [order_id]);
+4. Ddl warehouse.orders [Safe] create index ix_orders_ordered_on
+   reason: index.added
+   | CREATE INDEX [ix_orders_ordered_on] ON [warehouse].[orders] ([ordered_on]);
+5. Ddl marts.daily_sales [Safe] create schema marts
+   reason: obj.missing.table
+   | IF SCHEMA_ID(N'marts') IS NULL EXEC(N'CREATE SCHEMA [marts]');
+6. Ddl marts.daily_sales [Safe] create table marts.daily_sales
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[daily_sales] (
+   |   [store_id] nvarchar(10) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [ordered_on] date NOT NULL,
+   |   [channel] nvarchar(10) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [orders] bigint NOT NULL,
+   |   [amount] decimal(38, 2) NULL
+   | );
+
+## columns as declared (no index or view recorded)
+1. Ddl warehouse.orders [Safe] create index ux_orders_store_order
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_orders_store_order] ON [warehouse].[orders] ([store_id], [order_id]);
+2. Ddl warehouse.orders [Safe] create index ix_orders_ordered_on
+   reason: index.added
+   | CREATE INDEX [ix_orders_ordered_on] ON [warehouse].[orders] ([ordered_on]);
+
+## a column is missing
+1. Ddl warehouse.orders [Safe] create index ux_orders_store_order
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_orders_store_order] ON [warehouse].[orders] ([store_id], [order_id]);
+2. Ddl warehouse.orders [Safe] create index ix_orders_ordered_on
+   reason: index.added
+   | CREATE INDEX [ix_orders_ordered_on] ON [warehouse].[orders] ([ordered_on]);
+? Q-history-warehouse.orders.store_id: warehouse.orders gains column `store_id`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+
+## the first sized column is wider
+1. Ddl warehouse.orders [Destructive] alter column channel
+   reason: col.type.other
+   | ALTER TABLE [warehouse].[orders] ALTER COLUMN [channel] nvarchar(10) COLLATE Latin1_General_100_CS_AS NOT NULL;
+2. Ddl warehouse.orders [Safe] create index ux_orders_store_order
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_orders_store_order] ON [warehouse].[orders] ([store_id], [order_id]);
+3. Ddl warehouse.orders [Safe] create index ix_orders_ordered_on
+   reason: index.added
+   | CREATE INDEX [ix_orders_ordered_on] ON [warehouse].[orders] ([ordered_on]);
+4. Ddl marts.daily_sales [Destructive] alter column store_id
+   reason: col.type.other
+   | ALTER TABLE [marts].[daily_sales] ALTER COLUMN [store_id] nvarchar(10) COLLATE Latin1_General_100_CS_AS NOT NULL;
+
+## the last column's nullability is flipped
+1. Ddl warehouse.orders [Risky] alter column store_id
+   reason: col.null.tighten
+   | ALTER TABLE [warehouse].[orders] ALTER COLUMN [store_id] nvarchar(10) COLLATE Latin1_General_100_CS_AS NOT NULL;
+2. Ddl warehouse.orders [Safe] create index ux_orders_store_order
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_orders_store_order] ON [warehouse].[orders] ([store_id], [order_id]);
+3. Ddl warehouse.orders [Safe] create index ix_orders_ordered_on
+   reason: index.added
+   | CREATE INDEX [ix_orders_ordered_on] ON [warehouse].[orders] ([ordered_on]);
+4. Ddl marts.daily_sales [Safe] alter column amount
+   reason: col.null.relax
+   | ALTER TABLE [marts].[daily_sales] ALTER COLUMN [amount] decimal(38, 2) NULL;

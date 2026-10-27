@@ -1,0 +1,77 @@
+# macro_examples on sqlserver: 3 model(s)
+
+## create
+1. Ddl marts.orders [Safe] create schema marts
+   reason: obj.missing.table
+   | IF SCHEMA_ID(N'marts') IS NULL EXEC(N'CREATE SCHEMA [marts]');
+2. Ddl marts.orders [Safe] create table marts.orders
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[orders] (
+   |   [order_id] int NOT NULL,
+   |   [customer_id] int NOT NULL,
+   |   [status] nvarchar(20) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [status_group] nvarchar(10) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [amount] decimal(12, 2) NOT NULL,
+   |   [size_band] nvarchar(6) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [ordered_on] date NOT NULL
+   | );
+3. Ddl marts.orders [Safe] create index ux_orders_order_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_orders_order_id] ON [marts].[orders] ([order_id]);
+4. Ddl marts.status_totals_history [Safe] create table marts.status_totals_history
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[status_totals_history] (
+   |   [as_of_date] date NOT NULL,
+   |   [status] nvarchar(20) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [orders] bigint NOT NULL,
+   |   [total] decimal(38, 2) NULL
+   | );
+5. Ddl marts.status_totals_live [Safe] create table marts.status_totals_live
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[status_totals_live] (
+   |   [as_of_date] date NOT NULL,
+   |   [status] nvarchar(20) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [orders] bigint NOT NULL,
+   |   [total] decimal(38, 2) NULL
+   | );
+
+## columns as declared (no index or view recorded)
+1. Ddl marts.orders [Safe] create index ux_orders_order_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_orders_order_id] ON [marts].[orders] ([order_id]);
+
+## a column is missing
+1. Ddl marts.orders [Safe] create index ux_orders_order_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_orders_order_id] ON [marts].[orders] ([order_id]);
+? Q-history-marts.orders.ordered_on: marts.orders gains column `ordered_on`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.status_totals_history.total: marts.status_totals_history gains column `total`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.status_totals_live.total: marts.status_totals_live gains column `total`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+
+## the first sized column is wider
+1. Ddl marts.orders [Destructive] alter column status
+   reason: col.type.other
+   | ALTER TABLE [marts].[orders] ALTER COLUMN [status] nvarchar(20) COLLATE Latin1_General_100_CS_AS NOT NULL;
+2. Ddl marts.orders [Safe] create index ux_orders_order_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_orders_order_id] ON [marts].[orders] ([order_id]);
+3. Ddl marts.status_totals_history [Destructive] alter column status
+   reason: col.type.other
+   | ALTER TABLE [marts].[status_totals_history] ALTER COLUMN [status] nvarchar(20) COLLATE Latin1_General_100_CS_AS NOT NULL;
+4. Ddl marts.status_totals_live [Destructive] alter column status
+   reason: col.type.other
+   | ALTER TABLE [marts].[status_totals_live] ALTER COLUMN [status] nvarchar(20) COLLATE Latin1_General_100_CS_AS NOT NULL;
+
+## the last column's nullability is flipped
+1. Ddl marts.orders [Risky] alter column ordered_on
+   reason: col.null.tighten
+   | ALTER TABLE [marts].[orders] ALTER COLUMN [ordered_on] date NOT NULL;
+2. Ddl marts.orders [Safe] create index ux_orders_order_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_orders_order_id] ON [marts].[orders] ([order_id]);
+3. Ddl marts.status_totals_history [Safe] alter column total
+   reason: col.null.relax
+   | ALTER TABLE [marts].[status_totals_history] ALTER COLUMN [total] decimal(38, 2) NULL;
+4. Ddl marts.status_totals_live [Safe] alter column total
+   reason: col.null.relax
+   | ALTER TABLE [marts].[status_totals_live] ALTER COLUMN [total] decimal(38, 2) NULL;

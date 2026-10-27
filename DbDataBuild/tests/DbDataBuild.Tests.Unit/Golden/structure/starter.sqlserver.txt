@@ -1,0 +1,142 @@
+# starter on sqlserver: 5 model(s)
+
+## create
+1. Ddl staging.orders [Safe] create schema staging
+   reason: obj.missing.view
+   | IF SCHEMA_ID(N'staging') IS NULL EXEC(N'CREATE SCHEMA [staging]');
+2. Ddl staging.orders [Safe] create view staging.orders
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[orders] ([order_id], [customer_id], [order_date], [status], [status_group]) AS
+   | /* Staging for orders, with the one piece of business knowledge staging may hold: which statuses count as what. */ SELECT id AS order_id, user_id AS customer_id, order_date, status, CASE WHEN status IN ('completed', 'shipped') THEN 'fulfilled' WHEN status IN ('returned', 'return_pending') THEN 'returned' ELSE 'open' END AS status_group FROM raw.orders;
+3. Ddl staging.payments [Safe] create view staging.payments
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[payments] ([payment_id], [order_id], [payment_method], [amount]) AS
+   | /* Staging for payments: cents become dollars. An integer times 0.01 stays exact, so no rounding is involved. */ SELECT id AS payment_id, order_id, payment_method, amount_cents * 0.01 AS amount FROM raw.payments;
+4. Ddl marts.orders [Safe] create schema marts
+   reason: obj.missing.table
+   | IF SCHEMA_ID(N'marts') IS NULL EXEC(N'CREATE SCHEMA [marts]');
+5. Ddl marts.orders [Safe] create table marts.orders
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[orders] (
+   |   [order_id] int NOT NULL,
+   |   [customer_id] int NOT NULL,
+   |   [order_date] date NOT NULL,
+   |   [status] nvarchar(20) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [status_group] nvarchar(10) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [credit_card_amount] decimal(14, 2) NULL,
+   |   [bank_transfer_amount] decimal(14, 2) NULL,
+   |   [coupon_amount] decimal(14, 2) NULL,
+   |   [gift_card_amount] decimal(14, 2) NULL,
+   |   [amount] decimal(14, 2) NULL
+   | );
+6. Ddl marts.orders [Safe] create index ux_orders_order_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_orders_order_id] ON [marts].[orders] ([order_id]);
+7. Ddl staging.customers [Safe] create view staging.customers
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[customers] ([customer_id], [first_name], [last_name], [email]) AS
+   | /* Staging: the source as the rest of the project will see it. Names are made consistent and nothing else changes. */ SELECT id AS customer_id, first_name, last_name, email FROM raw.customers;
+8. Ddl marts.customers [Safe] create table marts.customers
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[customers] (
+   |   [customer_id] int NOT NULL,
+   |   [first_name] nvarchar(40) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [last_name] nvarchar(40) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [number_of_orders] bigint NOT NULL,
+   |   [first_order_date] date NULL,
+   |   [most_recent_order_date] date NULL,
+   |   [lifetime_value] decimal(14, 2) NULL
+   | );
+9. Ddl marts.customers [Safe] create index ux_customers_customer_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_customers_customer_id] ON [marts].[customers] ([customer_id]);
+
+## columns as declared (no index or view recorded)
+1. Ddl staging.orders [Safe] alter view staging.orders
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[orders] ([order_id], [customer_id], [order_date], [status], [status_group]) AS
+   | /* Staging for orders, with the one piece of business knowledge staging may hold: which statuses count as what. */ SELECT id AS order_id, user_id AS customer_id, order_date, status, CASE WHEN status IN ('completed', 'shipped') THEN 'fulfilled' WHEN status IN ('returned', 'return_pending') THEN 'returned' ELSE 'open' END AS status_group FROM raw.orders;
+2. Ddl staging.payments [Safe] alter view staging.payments
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[payments] ([payment_id], [order_id], [payment_method], [amount]) AS
+   | /* Staging for payments: cents become dollars. An integer times 0.01 stays exact, so no rounding is involved. */ SELECT id AS payment_id, order_id, payment_method, amount_cents * 0.01 AS amount FROM raw.payments;
+3. Ddl marts.orders [Safe] create index ux_orders_order_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_orders_order_id] ON [marts].[orders] ([order_id]);
+4. Ddl staging.customers [Safe] alter view staging.customers
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[customers] ([customer_id], [first_name], [last_name], [email]) AS
+   | /* Staging: the source as the rest of the project will see it. Names are made consistent and nothing else changes. */ SELECT id AS customer_id, first_name, last_name, email FROM raw.customers;
+5. Ddl marts.customers [Safe] create index ux_customers_customer_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_customers_customer_id] ON [marts].[customers] ([customer_id]);
+
+## a column is missing
+1. Ddl staging.orders [Safe] alter view staging.orders
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[orders] ([order_id], [customer_id], [order_date], [status], [status_group]) AS
+   | /* Staging for orders, with the one piece of business knowledge staging may hold: which statuses count as what. */ SELECT id AS order_id, user_id AS customer_id, order_date, status, CASE WHEN status IN ('completed', 'shipped') THEN 'fulfilled' WHEN status IN ('returned', 'return_pending') THEN 'returned' ELSE 'open' END AS status_group FROM raw.orders;
+2. Ddl staging.payments [Safe] alter view staging.payments
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[payments] ([payment_id], [order_id], [payment_method], [amount]) AS
+   | /* Staging for payments: cents become dollars. An integer times 0.01 stays exact, so no rounding is involved. */ SELECT id AS payment_id, order_id, payment_method, amount_cents * 0.01 AS amount FROM raw.payments;
+3. Ddl marts.orders [Safe] create index ux_orders_order_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_orders_order_id] ON [marts].[orders] ([order_id]);
+4. Ddl staging.customers [Safe] alter view staging.customers
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[customers] ([customer_id], [first_name], [last_name], [email]) AS
+   | /* Staging: the source as the rest of the project will see it. Names are made consistent and nothing else changes. */ SELECT id AS customer_id, first_name, last_name, email FROM raw.customers;
+? Q-history-marts.orders.amount: marts.orders gains column `amount`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+
+## the first sized column is wider
+1. Ddl staging.orders [Safe] alter view staging.orders
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[orders] ([order_id], [customer_id], [order_date], [status], [status_group]) AS
+   | /* Staging for orders, with the one piece of business knowledge staging may hold: which statuses count as what. */ SELECT id AS order_id, user_id AS customer_id, order_date, status, CASE WHEN status IN ('completed', 'shipped') THEN 'fulfilled' WHEN status IN ('returned', 'return_pending') THEN 'returned' ELSE 'open' END AS status_group FROM raw.orders;
+2. Ddl staging.payments [Safe] alter view staging.payments
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[payments] ([payment_id], [order_id], [payment_method], [amount]) AS
+   | /* Staging for payments: cents become dollars. An integer times 0.01 stays exact, so no rounding is involved. */ SELECT id AS payment_id, order_id, payment_method, amount_cents * 0.01 AS amount FROM raw.payments;
+3. Ddl marts.orders [Destructive] alter column status
+   reason: col.type.other
+   | ALTER TABLE [marts].[orders] ALTER COLUMN [status] nvarchar(20) COLLATE Latin1_General_100_CS_AS NOT NULL;
+4. Ddl marts.orders [Safe] create index ux_orders_order_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_orders_order_id] ON [marts].[orders] ([order_id]);
+5. Ddl staging.customers [Safe] alter view staging.customers
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[customers] ([customer_id], [first_name], [last_name], [email]) AS
+   | /* Staging: the source as the rest of the project will see it. Names are made consistent and nothing else changes. */ SELECT id AS customer_id, first_name, last_name, email FROM raw.customers;
+6. Ddl marts.customers [Destructive] alter column first_name
+   reason: col.type.other
+   | ALTER TABLE [marts].[customers] ALTER COLUMN [first_name] nvarchar(40) COLLATE Latin1_General_100_CS_AS NULL;
+7. Ddl marts.customers [Safe] create index ux_customers_customer_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_customers_customer_id] ON [marts].[customers] ([customer_id]);
+
+## the last column's nullability is flipped
+1. Ddl staging.orders [Safe] alter view staging.orders
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[orders] ([order_id], [customer_id], [order_date], [status], [status_group]) AS
+   | /* Staging for orders, with the one piece of business knowledge staging may hold: which statuses count as what. */ SELECT id AS order_id, user_id AS customer_id, order_date, status, CASE WHEN status IN ('completed', 'shipped') THEN 'fulfilled' WHEN status IN ('returned', 'return_pending') THEN 'returned' ELSE 'open' END AS status_group FROM raw.orders;
+2. Ddl staging.payments [Safe] alter view staging.payments
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[payments] ([payment_id], [order_id], [payment_method], [amount]) AS
+   | /* Staging for payments: cents become dollars. An integer times 0.01 stays exact, so no rounding is involved. */ SELECT id AS payment_id, order_id, payment_method, amount_cents * 0.01 AS amount FROM raw.payments;
+3. Ddl marts.orders [Safe] alter column amount
+   reason: col.null.relax
+   | ALTER TABLE [marts].[orders] ALTER COLUMN [amount] decimal(14, 2) NULL;
+4. Ddl marts.orders [Safe] create index ux_orders_order_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_orders_order_id] ON [marts].[orders] ([order_id]);
+5. Ddl staging.customers [Safe] alter view staging.customers
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[customers] ([customer_id], [first_name], [last_name], [email]) AS
+   | /* Staging: the source as the rest of the project will see it. Names are made consistent and nothing else changes. */ SELECT id AS customer_id, first_name, last_name, email FROM raw.customers;
+6. Ddl marts.customers [Safe] alter column lifetime_value
+   reason: col.null.relax
+   | ALTER TABLE [marts].[customers] ALTER COLUMN [lifetime_value] decimal(14, 2) NULL;
+7. Ddl marts.customers [Safe] create index ux_customers_customer_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_customers_customer_id] ON [marts].[customers] ([customer_id]);

@@ -1,0 +1,31 @@
+# fan_in_fan_out on postgres: 1 model(s)
+
+## create
+1. Ddl marts.daily_sales [Safe] create schema marts
+   reason: obj.missing.table
+   | CREATE SCHEMA IF NOT EXISTS "marts";
+2. Ddl marts.daily_sales [Safe] create table marts.daily_sales
+   reason: obj.missing.table
+   | CREATE TABLE "marts"."daily_sales" (
+   |   "store_id" varchar(10) COLLATE "C" NOT NULL,
+   |   "ordered_on" date NOT NULL,
+   |   "channel" varchar(10) COLLATE "C" NOT NULL,
+   |   "orders" bigint NOT NULL,
+   |   "amount" numeric(38, 2) NULL
+   | );
+
+## columns as declared (no index or view recorded)
+nothing to do
+
+## a column is missing
+? Q-history-marts.daily_sales.amount: marts.daily_sales gains column `amount`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+
+## the first sized column is wider
+1. Ddl marts.daily_sales [Destructive] alter column store_id
+   reason: col.type.other
+   | ALTER TABLE "marts"."daily_sales" ALTER COLUMN "store_id" TYPE varchar(10) COLLATE "C", ALTER COLUMN "store_id" SET NOT NULL;
+
+## the last column's nullability is flipped
+1. Ddl marts.daily_sales [Safe] alter column amount
+   reason: col.null.relax
+   | ALTER TABLE "marts"."daily_sales" ALTER COLUMN "amount" TYPE numeric(38, 2), ALTER COLUMN "amount" DROP NOT NULL;

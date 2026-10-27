@@ -1,0 +1,328 @@
+# chinook on sqlserver: 24 model(s)
+
+## create
+1. Ddl staging.invoices [Safe] create schema staging
+   reason: obj.missing.view
+   | IF SCHEMA_ID(N'staging') IS NULL EXEC(N'CREATE SCHEMA [staging]');
+2. Ddl staging.invoices [Safe] create view staging.invoices
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[invoices] ([invoice_id], [customer_id], [invoiced_at], [invoice_date], [billing_city], [billing_country], [total]) AS
+   | SELECT invoice_id, customer_id, invoice_date AS invoiced_at, CAST(invoice_date AS DATE) AS invoice_date, billing_city, billing_country, total FROM chinook.invoice;
+3. Ddl marts.agg_customer_cohorts [Safe] create schema marts
+   reason: obj.missing.table
+   | IF SCHEMA_ID(N'marts') IS NULL EXEC(N'CREATE SCHEMA [marts]');
+4. Ddl marts.agg_customer_cohorts [Safe] create table marts.agg_customer_cohorts
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[agg_customer_cohorts] (
+   |   [cohort] bigint NOT NULL,
+   |   [months_since_first] bigint NOT NULL,
+   |   [active_customers] bigint NOT NULL
+   | );
+5. Ddl marts.dim_date [Safe] create table marts.dim_date
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[dim_date] (
+   |   [date_key] bigint NOT NULL,
+   |   [date] date NULL,
+   |   [year] bigint NULL,
+   |   [quarter] bigint NULL,
+   |   [month] bigint NULL,
+   |   [year_month] bigint NULL,
+   |   [month_start] datetime2(6) NULL,
+   |   [iso_weekday] bigint NULL,
+   |   [is_weekend] bit NULL
+   | );
+6. Ddl staging.albums [Safe] create view staging.albums
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[albums] ([album_id], [album_title], [artist_id]) AS
+   | SELECT album_id, title AS album_title, artist_id FROM chinook.album;
+7. Ddl staging.artists [Safe] create view staging.artists
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[artists] ([artist_id], [artist_name]) AS
+   | SELECT artist_id, name AS artist_name FROM chinook.artist;
+8. Ddl staging.genres [Safe] create view staging.genres
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[genres] ([genre_id], [genre_name]) AS
+   | SELECT genre_id, name AS genre_name FROM chinook.genre;
+9. Ddl staging.media_types [Safe] create view staging.media_types
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[media_types] ([media_type_id], [media_type_name]) AS
+   | SELECT media_type_id, name AS media_type_name FROM chinook.media_type;
+10. Ddl staging.invoice_lines [Safe] create view staging.invoice_lines
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[invoice_lines] ([invoice_line_id], [invoice_id], [track_id], [unit_price], [quantity], [line_amount]) AS
+   | SELECT invoice_line_id, invoice_id, track_id, unit_price, quantity, unit_price * quantity AS line_amount FROM chinook.invoice_line;
+11. Ddl marts.fct_invoice_lines [Safe] create table marts.fct_invoice_lines
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[fct_invoice_lines] (
+   |   [invoice_line_id] int NOT NULL,
+   |   [invoice_id] int NOT NULL,
+   |   [date_key] bigint NULL,
+   |   [customer_id] int NOT NULL,
+   |   [track_id] int NOT NULL,
+   |   [quantity] int NOT NULL,
+   |   [unit_price] decimal(10, 2) NOT NULL,
+   |   [line_amount] decimal(18, 2) NULL
+   | );
+12. Ddl marts.fct_invoice_lines [Safe] create index ux_fct_invoice_lines_invoice_line_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_fct_invoice_lines_invoice_line_id] ON [marts].[fct_invoice_lines] ([invoice_line_id]);
+13. Ddl staging.customers [Safe] create view staging.customers
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[customers] ([customer_id], [full_name], [company], [city], [state], [country], [postal_code], [phone], [email], [support_rep_id]) AS
+   | SELECT customer_id, first_name + ' ' + last_name AS full_name, company, city, state, country, postal_code, phone, email, support_rep_id FROM chinook.customer;
+14. Ddl staging.employees [Safe] create view staging.employees
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[employees] ([employee_id], [full_name], [title], [reports_to], [hire_date], [city], [country], [email]) AS
+   | SELECT employee_id, first_name + ' ' + last_name AS full_name, title, reports_to, hire_date, city, country, email FROM chinook.employee;
+15. Ddl marts.dim_customer [Safe] create table marts.dim_customer
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[dim_customer] (
+   |   [customer_id] int NOT NULL,
+   |   [full_name] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [company] nvarchar(80) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [customer_type] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [city] nvarchar(40) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [state] nvarchar(40) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [country] nvarchar(40) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [email_domain] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [support_rep] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL
+   | );
+16. Ddl marts.dim_employee [Safe] create table marts.dim_employee
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[dim_employee] (
+   |   [employee_id] int NOT NULL,
+   |   [full_name] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [title] nvarchar(max) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [reports_to] int NULL,
+   |   [level] int NULL,
+   |   [path] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL
+   | );
+17. Ddl staging.playlist_tracks [Safe] create view staging.playlist_tracks
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[playlist_tracks] ([playlist_id], [track_id]) AS
+   | SELECT playlist_id, track_id FROM chinook.playlist_track;
+18. Ddl staging.playlists [Safe] create view staging.playlists
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[playlists] ([playlist_id], [playlist_name]) AS
+   | SELECT playlist_id, name AS playlist_name FROM chinook.playlist;
+19. Ddl marts.rpt_sales_by_manager [Safe] create table marts.rpt_sales_by_manager
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[rpt_sales_by_manager] (
+   |   [employee_id] int NOT NULL,
+   |   [full_name] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [title] nvarchar(max) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [level] int NULL,
+   |   [own_revenue] decimal(18, 2) NOT NULL,
+   |   [team_revenue] decimal(18, 2) NOT NULL
+   | );
+blocked: DDB-434 staging.tracks: the transpiler reported: Unsupported: DuckDB // with unresolved operand types; use explicit numeric casts is not supported in tsql.
+
+## columns as declared (no index or view recorded)
+1. Ddl staging.invoices [Safe] alter view staging.invoices
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[invoices] ([invoice_id], [customer_id], [invoiced_at], [invoice_date], [billing_city], [billing_country], [total]) AS
+   | SELECT invoice_id, customer_id, invoice_date AS invoiced_at, CAST(invoice_date AS DATE) AS invoice_date, billing_city, billing_country, total FROM chinook.invoice;
+2. Ddl staging.albums [Safe] alter view staging.albums
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[albums] ([album_id], [album_title], [artist_id]) AS
+   | SELECT album_id, title AS album_title, artist_id FROM chinook.album;
+3. Ddl staging.artists [Safe] alter view staging.artists
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[artists] ([artist_id], [artist_name]) AS
+   | SELECT artist_id, name AS artist_name FROM chinook.artist;
+4. Ddl staging.genres [Safe] alter view staging.genres
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[genres] ([genre_id], [genre_name]) AS
+   | SELECT genre_id, name AS genre_name FROM chinook.genre;
+5. Ddl staging.media_types [Safe] alter view staging.media_types
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[media_types] ([media_type_id], [media_type_name]) AS
+   | SELECT media_type_id, name AS media_type_name FROM chinook.media_type;
+6. Ddl staging.invoice_lines [Safe] alter view staging.invoice_lines
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[invoice_lines] ([invoice_line_id], [invoice_id], [track_id], [unit_price], [quantity], [line_amount]) AS
+   | SELECT invoice_line_id, invoice_id, track_id, unit_price, quantity, unit_price * quantity AS line_amount FROM chinook.invoice_line;
+7. Ddl marts.fct_invoice_lines [Safe] create index ux_fct_invoice_lines_invoice_line_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_fct_invoice_lines_invoice_line_id] ON [marts].[fct_invoice_lines] ([invoice_line_id]);
+8. Ddl staging.customers [Safe] alter view staging.customers
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[customers] ([customer_id], [full_name], [company], [city], [state], [country], [postal_code], [phone], [email], [support_rep_id]) AS
+   | SELECT customer_id, first_name + ' ' + last_name AS full_name, company, city, state, country, postal_code, phone, email, support_rep_id FROM chinook.customer;
+9. Ddl staging.employees [Safe] alter view staging.employees
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[employees] ([employee_id], [full_name], [title], [reports_to], [hire_date], [city], [country], [email]) AS
+   | SELECT employee_id, first_name + ' ' + last_name AS full_name, title, reports_to, hire_date, city, country, email FROM chinook.employee;
+10. Ddl staging.playlist_tracks [Safe] alter view staging.playlist_tracks
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[playlist_tracks] ([playlist_id], [track_id]) AS
+   | SELECT playlist_id, track_id FROM chinook.playlist_track;
+11. Ddl staging.playlists [Safe] alter view staging.playlists
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[playlists] ([playlist_id], [playlist_name]) AS
+   | SELECT playlist_id, name AS playlist_name FROM chinook.playlist;
+blocked: DDB-434 staging.tracks: the transpiler reported: Unsupported: DuckDB // with unresolved operand types; use explicit numeric casts is not supported in tsql.
+
+## a column is missing
+1. Ddl staging.invoices [Safe] alter view staging.invoices
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[invoices] ([invoice_id], [customer_id], [invoiced_at], [invoice_date], [billing_city], [billing_country], [total]) AS
+   | SELECT invoice_id, customer_id, invoice_date AS invoiced_at, CAST(invoice_date AS DATE) AS invoice_date, billing_city, billing_country, total FROM chinook.invoice;
+2. Ddl staging.albums [Safe] alter view staging.albums
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[albums] ([album_id], [album_title], [artist_id]) AS
+   | SELECT album_id, title AS album_title, artist_id FROM chinook.album;
+3. Ddl staging.artists [Safe] alter view staging.artists
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[artists] ([artist_id], [artist_name]) AS
+   | SELECT artist_id, name AS artist_name FROM chinook.artist;
+4. Ddl staging.genres [Safe] alter view staging.genres
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[genres] ([genre_id], [genre_name]) AS
+   | SELECT genre_id, name AS genre_name FROM chinook.genre;
+5. Ddl staging.media_types [Safe] alter view staging.media_types
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[media_types] ([media_type_id], [media_type_name]) AS
+   | SELECT media_type_id, name AS media_type_name FROM chinook.media_type;
+6. Ddl staging.invoice_lines [Safe] alter view staging.invoice_lines
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[invoice_lines] ([invoice_line_id], [invoice_id], [track_id], [unit_price], [quantity], [line_amount]) AS
+   | SELECT invoice_line_id, invoice_id, track_id, unit_price, quantity, unit_price * quantity AS line_amount FROM chinook.invoice_line;
+7. Ddl marts.fct_invoice_lines [Safe] create index ux_fct_invoice_lines_invoice_line_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_fct_invoice_lines_invoice_line_id] ON [marts].[fct_invoice_lines] ([invoice_line_id]);
+8. Ddl staging.customers [Safe] alter view staging.customers
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[customers] ([customer_id], [full_name], [company], [city], [state], [country], [postal_code], [phone], [email], [support_rep_id]) AS
+   | SELECT customer_id, first_name + ' ' + last_name AS full_name, company, city, state, country, postal_code, phone, email, support_rep_id FROM chinook.customer;
+9. Ddl staging.employees [Safe] alter view staging.employees
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[employees] ([employee_id], [full_name], [title], [reports_to], [hire_date], [city], [country], [email]) AS
+   | SELECT employee_id, first_name + ' ' + last_name AS full_name, title, reports_to, hire_date, city, country, email FROM chinook.employee;
+10. Ddl staging.playlist_tracks [Safe] alter view staging.playlist_tracks
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[playlist_tracks] ([playlist_id], [track_id]) AS
+   | SELECT playlist_id, track_id FROM chinook.playlist_track;
+11. Ddl staging.playlists [Safe] alter view staging.playlists
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[playlists] ([playlist_id], [playlist_name]) AS
+   | SELECT playlist_id, name AS playlist_name FROM chinook.playlist;
+? Q-history-marts.agg_customer_cohorts.active_customers: marts.agg_customer_cohorts gains column `active_customers`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.dim_customer.support_rep: marts.dim_customer gains column `support_rep`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.dim_date.is_weekend: marts.dim_date gains column `is_weekend`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.dim_employee.path: marts.dim_employee gains column `path`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.fct_invoice_lines.line_amount: marts.fct_invoice_lines gains column `line_amount`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+blocked: DDB-434 staging.tracks: the transpiler reported: Unsupported: DuckDB // with unresolved operand types; use explicit numeric casts is not supported in tsql.
+
+## the first sized column is wider
+1. Ddl staging.invoices [Safe] alter view staging.invoices
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[invoices] ([invoice_id], [customer_id], [invoiced_at], [invoice_date], [billing_city], [billing_country], [total]) AS
+   | SELECT invoice_id, customer_id, invoice_date AS invoiced_at, CAST(invoice_date AS DATE) AS invoice_date, billing_city, billing_country, total FROM chinook.invoice;
+2. Ddl staging.albums [Safe] alter view staging.albums
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[albums] ([album_id], [album_title], [artist_id]) AS
+   | SELECT album_id, title AS album_title, artist_id FROM chinook.album;
+3. Ddl staging.artists [Safe] alter view staging.artists
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[artists] ([artist_id], [artist_name]) AS
+   | SELECT artist_id, name AS artist_name FROM chinook.artist;
+4. Ddl staging.genres [Safe] alter view staging.genres
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[genres] ([genre_id], [genre_name]) AS
+   | SELECT genre_id, name AS genre_name FROM chinook.genre;
+5. Ddl staging.media_types [Safe] alter view staging.media_types
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[media_types] ([media_type_id], [media_type_name]) AS
+   | SELECT media_type_id, name AS media_type_name FROM chinook.media_type;
+6. Ddl staging.invoice_lines [Safe] alter view staging.invoice_lines
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[invoice_lines] ([invoice_line_id], [invoice_id], [track_id], [unit_price], [quantity], [line_amount]) AS
+   | SELECT invoice_line_id, invoice_id, track_id, unit_price, quantity, unit_price * quantity AS line_amount FROM chinook.invoice_line;
+7. Ddl marts.fct_invoice_lines [Safe] create index ux_fct_invoice_lines_invoice_line_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_fct_invoice_lines_invoice_line_id] ON [marts].[fct_invoice_lines] ([invoice_line_id]);
+8. Ddl staging.customers [Safe] alter view staging.customers
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[customers] ([customer_id], [full_name], [company], [city], [state], [country], [postal_code], [phone], [email], [support_rep_id]) AS
+   | SELECT customer_id, first_name + ' ' + last_name AS full_name, company, city, state, country, postal_code, phone, email, support_rep_id FROM chinook.customer;
+9. Ddl staging.employees [Safe] alter view staging.employees
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[employees] ([employee_id], [full_name], [title], [reports_to], [hire_date], [city], [country], [email]) AS
+   | SELECT employee_id, first_name + ' ' + last_name AS full_name, title, reports_to, hire_date, city, country, email FROM chinook.employee;
+10. Ddl marts.dim_customer [Destructive] alter column company
+   reason: col.type.other
+   | ALTER TABLE [marts].[dim_customer] ALTER COLUMN [company] nvarchar(80) COLLATE Latin1_General_100_CS_AS NULL;
+11. Ddl staging.playlist_tracks [Safe] alter view staging.playlist_tracks
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[playlist_tracks] ([playlist_id], [track_id]) AS
+   | SELECT playlist_id, track_id FROM chinook.playlist_track;
+12. Ddl staging.playlists [Safe] alter view staging.playlists
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[playlists] ([playlist_id], [playlist_name]) AS
+   | SELECT playlist_id, name AS playlist_name FROM chinook.playlist;
+blocked: DDB-434 staging.tracks: the transpiler reported: Unsupported: DuckDB // with unresolved operand types; use explicit numeric casts is not supported in tsql.
+
+## the last column's nullability is flipped
+1. Ddl staging.invoices [Safe] alter view staging.invoices
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[invoices] ([invoice_id], [customer_id], [invoiced_at], [invoice_date], [billing_city], [billing_country], [total]) AS
+   | SELECT invoice_id, customer_id, invoice_date AS invoiced_at, CAST(invoice_date AS DATE) AS invoice_date, billing_city, billing_country, total FROM chinook.invoice;
+2. Ddl marts.agg_customer_cohorts [Risky] alter column active_customers
+   reason: col.null.tighten
+   | ALTER TABLE [marts].[agg_customer_cohorts] ALTER COLUMN [active_customers] bigint NOT NULL;
+3. Ddl marts.dim_date [Safe] alter column is_weekend
+   reason: col.null.relax
+   | ALTER TABLE [marts].[dim_date] ALTER COLUMN [is_weekend] bit NULL;
+4. Ddl staging.albums [Safe] alter view staging.albums
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[albums] ([album_id], [album_title], [artist_id]) AS
+   | SELECT album_id, title AS album_title, artist_id FROM chinook.album;
+5. Ddl staging.artists [Safe] alter view staging.artists
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[artists] ([artist_id], [artist_name]) AS
+   | SELECT artist_id, name AS artist_name FROM chinook.artist;
+6. Ddl staging.genres [Safe] alter view staging.genres
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[genres] ([genre_id], [genre_name]) AS
+   | SELECT genre_id, name AS genre_name FROM chinook.genre;
+7. Ddl staging.media_types [Safe] alter view staging.media_types
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[media_types] ([media_type_id], [media_type_name]) AS
+   | SELECT media_type_id, name AS media_type_name FROM chinook.media_type;
+8. Ddl staging.invoice_lines [Safe] alter view staging.invoice_lines
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[invoice_lines] ([invoice_line_id], [invoice_id], [track_id], [unit_price], [quantity], [line_amount]) AS
+   | SELECT invoice_line_id, invoice_id, track_id, unit_price, quantity, unit_price * quantity AS line_amount FROM chinook.invoice_line;
+9. Ddl marts.fct_invoice_lines [Safe] alter column line_amount
+   reason: col.null.relax
+   | ALTER TABLE [marts].[fct_invoice_lines] ALTER COLUMN [line_amount] decimal(18, 2) NULL;
+10. Ddl marts.fct_invoice_lines [Safe] create index ux_fct_invoice_lines_invoice_line_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_fct_invoice_lines_invoice_line_id] ON [marts].[fct_invoice_lines] ([invoice_line_id]);
+11. Ddl staging.customers [Safe] alter view staging.customers
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[customers] ([customer_id], [full_name], [company], [city], [state], [country], [postal_code], [phone], [email], [support_rep_id]) AS
+   | SELECT customer_id, first_name + ' ' + last_name AS full_name, company, city, state, country, postal_code, phone, email, support_rep_id FROM chinook.customer;
+12. Ddl staging.employees [Safe] alter view staging.employees
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[employees] ([employee_id], [full_name], [title], [reports_to], [hire_date], [city], [country], [email]) AS
+   | SELECT employee_id, first_name + ' ' + last_name AS full_name, title, reports_to, hire_date, city, country, email FROM chinook.employee;
+13. Ddl marts.dim_customer [Safe] alter column support_rep
+   reason: col.null.relax
+   | ALTER TABLE [marts].[dim_customer] ALTER COLUMN [support_rep] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL;
+14. Ddl marts.dim_employee [Safe] alter column path
+   reason: col.null.relax
+   | ALTER TABLE [marts].[dim_employee] ALTER COLUMN [path] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL;
+15. Ddl staging.playlist_tracks [Safe] alter view staging.playlist_tracks
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[playlist_tracks] ([playlist_id], [track_id]) AS
+   | SELECT playlist_id, track_id FROM chinook.playlist_track;
+16. Ddl staging.playlists [Safe] alter view staging.playlists
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[playlists] ([playlist_id], [playlist_name]) AS
+   | SELECT playlist_id, name AS playlist_name FROM chinook.playlist;
+17. Ddl marts.rpt_sales_by_manager [Risky] alter column team_revenue
+   reason: col.null.tighten
+   | ALTER TABLE [marts].[rpt_sales_by_manager] ALTER COLUMN [team_revenue] decimal(18, 2) NOT NULL;
+blocked: DDB-434 staging.tracks: the transpiler reported: Unsupported: DuckDB // with unresolved operand types; use explicit numeric casts is not supported in tsql.
