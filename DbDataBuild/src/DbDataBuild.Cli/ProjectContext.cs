@@ -20,6 +20,9 @@ internal sealed class ProjectContext
     public required List<Diagnostic> Diagnostics { get; init; }
     public required ModelLowering Lowering { get; init; }
 
+    /// <summary>The project's semantic files (`semantic/`), compiled against its models; empty when it has none. Their problems are in <see cref="Diagnostics"/>.</summary>
+    public required DbDataBuild.Semantic.SemanticProject Semantic { get; init; }
+
     public static ProjectContext Load(string root)
     {
         var diags = new List<Diagnostic>();
@@ -31,7 +34,8 @@ internal sealed class ProjectContext
         var matrix = MatrixLoader.LoadEmbedded(matrixDiags);
         if (matrixDiags.Count > 0) throw new InvalidOperationException("The embedded support matrix is invalid: " + string.Join("; ", matrixDiags.Select(d => d.Found)));
         var linter = new MatrixLinter(matrix);
-        return new ProjectContext { Root = root, Project = project, Config = config, Matrix = matrix, Linter = linter, Renderer = new LoadRenderer(matrix, linter, config), Diagnostics = diags, Lowering = new ModelLowering(project.Models, project.DeclaredModelsAndStaging, config, project.Macros) };
+        var semantic = DbDataBuild.Semantic.SemanticProject.Load(root, ProjectModels.Of(project, config.DefaultConnections), config, diags);
+        return new ProjectContext { Root = root, Project = project, Config = config, Matrix = matrix, Linter = linter, Renderer = new LoadRenderer(matrix, linter, config), Diagnostics = diags, Lowering = new ModelLowering(project.Models, project.DeclaredModelsAndStaging, config, project.Macros), Semantic = semantic };
     }
 
     /// <summary>

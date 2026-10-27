@@ -43,6 +43,7 @@
           "kind": {
             "enum": [
               "sqlserver",
+              "postgres",
               "ssas"
             ]
           },

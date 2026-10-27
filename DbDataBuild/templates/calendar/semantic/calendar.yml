@@ -1,0 +1,100 @@
+# The semantic model over the calendar (docs/semantic/catalog.md, written without its physical layer: `table:` names a model of this project, `default` is the project's
+# default connection, and the tables and keys are generated from the models).
+#
+# A calendar names its date attribute (one value per day) and its levels, each the attribute holding that level's label for every day. A relative period in a query
+# (last complete fiscal month, year to date) is resolved from this table, and `shifts` say where each day's, month's and quarter's counterpart one fiscal year earlier is:
+# the prior_year_* columns of `marts.dim_date`.
+version: "0.3"
+name: calendar_sales
+description: Sales by fiscal period, with the same period a year earlier.
+
+# `sold_on` of a sale is a day of the calendar. The generated checks test that it is (no sale outside the calendar) and that each day is there once.
+relationships:
+  - {name: sales_to_date, from: marts.fct_sales, to: marts.dim_date, from_columns: [sold_on], to_columns: [calendar_date]}
+
+dimensions:
+  date:
+    attributes:
+      calendar_date:
+        type: date
+        synonyms: [date, day, sale date]
+        bindings:
+          default: {table: marts.dim_date, column: calendar_date}
+      calendar_date_prior_year:
+        type: date
+        bindings:
+          default: {table: marts.dim_date, column: prior_year_calendar_date}
+      fiscal_year:
+        type: string
+        synonyms: [year, fiscal year]
+        sort_key: fiscal_year
+        bindings:
+          default: {table: marts.dim_date, column: fiscal_year, is_time: true}
+      fiscal_quarter:
+        type: string
+        synonyms: [quarter, fiscal quarter]
+        bindings:
+          default: {table: marts.dim_date, column: fiscal_quarter, is_time: true}
+      fiscal_month:
+        type: string
+        synonyms: [month, fiscal month, period]
+        bindings:
+          default: {table: marts.dim_date, column: fiscal_month, is_time: true}
+      fiscal_year_prior_year:
+        type: string
+        bindings:
+          default: {table: marts.dim_date, column: prior_year_fiscal_year, is_time: true}
+      fiscal_quarter_prior_year:
+        type: string
+        synonyms: [quarter a year ago]
+        bindings:
+          default: {table: marts.dim_date, column: prior_year_fiscal_quarter, is_time: true}
+      fiscal_month_prior_year:
+        type: string
+        synonyms: [month a year ago]
+        bindings:
+          default: {table: marts.dim_date, column: prior_year_fiscal_month, is_time: true}
+
+measures:
+  sales.amount:
+    type: number
+    source: default
+    agg: sum
+    of: {table: marts.fct_sales, column: amount}
+    synonyms: [sales, revenue]
+    format: {style: currency, currency: USD, decimals: 2}
+    semantics: {rollup: {default: sum}, spread: blank, status: governed}
+  sales.units:
+    type: integer
+    source: default
+    agg: sum
+    of: {table: marts.fct_sales, column: units}
+    synonyms: [units sold]
+    semantics: {rollup: {default: sum}, spread: blank, status: governed}
+  sales.sale_count:
+    type: integer
+    source: default
+    agg: count
+    of: {table: marts.fct_sales, column: sale_id}
+    synonyms: [sales made]
+    semantics: {rollup: {default: none}, spread: blank, status: governed}
+
+# Each level is many-to-one onto the one above: `FY2025-P01` is in `FY2025-Q1` is in `FY2025`. `connection check` tests it against the data.
+hierarchies:
+  date.by_fiscal_year:
+    levels: [date.fiscal_year, date.fiscal_quarter, date.fiscal_month]
+
+calendars:
+  fiscal:
+    date: date.calendar_date
+    levels:
+      day: date.calendar_date
+      fiscal_month: date.fiscal_month
+      fiscal_quarter: date.fiscal_quarter
+      fiscal_year: date.fiscal_year
+    shifts:
+      fiscal_year:
+        date.calendar_date: date.calendar_date_prior_year
+        date.fiscal_month: date.fiscal_month_prior_year
+        date.fiscal_quarter: date.fiscal_quarter_prior_year
+        date.fiscal_year: date.fiscal_year_prior_year

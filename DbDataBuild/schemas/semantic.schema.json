@@ -1,0 +1,618 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.internal/qis/semantic.schema.json",
+  "title": "Semantic model (authoring format)",
+  "description": "A semantic model as a person writes it in a DbDataBuild project: dimensions, measures, hierarchies, calendars and segments. The physical layer (tables, columns, keys, sources) is not written: a binding's or measure's `table` names a model of the project, a source is a connection, and the tool generates what the catalog format calls tables from the models' definitions. Relationships are written between models, by their columns.",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "dimensions",
+    "measures"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": "0.3"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "ai_context": {},
+    "timezone": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The business time zone (IANA, for example America/Chicago). A day, week, month, quarter or year of a datetime is read in this zone unless the request names another. Default UTC."
+    },
+    "sources": {
+      "type": "object",
+      "description": "Settings of the connections the model reads, by connection name. Optional: a connection the model uses needs no entry. The kind of a source comes from the connection's engine.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "datetime_zone": {
+            "type": "string",
+            "minLength": 1,
+            "description": "How the source stores datetime values: UTC (the default), or the IANA zone whose wall-clock time its datetime columns hold."
+          },
+          "totals": {
+            "description": "How this source computes subtotals unless a request says otherwise: native (ROLLUP or ROLLUPADDISSUBTOTAL), engine, or auto.",
+            "enum": [
+              "native",
+              "engine",
+              "auto"
+            ]
+          }
+        }
+      }
+    },
+    "relationships": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/relationship"
+      },
+      "description": "Many-to-one relationships between models: `from` is the model that holds the key, `to` the model whose grain the key is. They are instantiated on every connection both models are built on."
+    },
+    "dimensions": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/dimension"
+      }
+    },
+    "measures": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/measure"
+      }
+    },
+    "hierarchies": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "levels"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "levels": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+            }
+          }
+        }
+      }
+    },
+    "calendars": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "anyOf": [
+          {
+            "required": [
+              "shifts"
+            ]
+          },
+          {
+            "required": [
+              "date",
+              "levels"
+            ]
+          }
+        ],
+        "dependentRequired": {
+          "date": [
+            "levels"
+          ],
+          "levels": [
+            "date"
+          ]
+        },
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "description": "The date attribute: one value per day. A query can filter it with between, or with last_complete, current and period_to_date for days.",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+          },
+          "levels": {
+            "description": "Level names for this calendar (its periods), each the attribute holding that level's member for every day. Fiscal and calendar levels are both just attributes here.",
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+            }
+          },
+          "shifts": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {
+                "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "segments": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "filters"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "filters": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "semantic_request.schema.json#/$defs/filter"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "synonyms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "relationship": {
+      "type": "object",
+      "required": [
+        "name",
+        "from",
+        "to",
+        "from_columns",
+        "to_columns"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "from_columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "to_columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "x_role": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "ai_context": {}
+      },
+      "description": "A many-to-one relationship between two models of the project."
+    },
+    "binding": {
+      "type": "object",
+      "required": [
+        "table",
+        "column"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "table": {
+          "type": "string",
+          "minLength": 1
+        },
+        "column": {
+          "type": "string",
+          "minLength": 1
+        },
+        "native": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "DAX": {
+              "type": "string"
+            }
+          }
+        },
+        "is_time": {
+          "type": "boolean",
+          "description": "The bound column holds periods (month labels, fiscal years) that sort in time order, though its type is not a date: the same as marking the column is_time in a physical layer."
+        }
+      }
+    },
+    "measure": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/aggregateMeasure"
+        },
+        {
+          "$ref": "#/$defs/derivedMeasure"
+        }
+      ]
+    },
+    "aggregateMeasure": {
+      "type": "object",
+      "required": [
+        "type",
+        "source",
+        "agg",
+        "of"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "integer",
+            "number"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "agg": {
+          "enum": [
+            "sum",
+            "avg",
+            "min",
+            "max",
+            "count",
+            "count_distinct"
+          ]
+        },
+        "of": {
+          "type": "object",
+          "required": [
+            "table",
+            "column"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "table": {
+              "type": "string",
+              "minLength": 1
+            },
+            "column": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "label": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "synonyms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "native": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "DAX": {
+              "type": "string"
+            }
+          }
+        },
+        "nonempty": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Per dialect, a table (or table expression) the request-filtered form of this measure tests with NOT ISEMPTY, so a group that has fact rows is kept when the filtered measure is blank. Optional: the default is the table in the DAX expression of the field the measure aggregates. Set it when that is missing or isn't the fact table, for example when the model keeps its measures on a measures table.",
+          "properties": {
+            "DAX": {
+              "type": "string"
+            }
+          }
+        },
+        "filters": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "semantic_request.schema.json#/$defs/filter"
+          }
+        },
+        "roles": {
+          "type": "object",
+          "description": "For each role-playing dimension (such as date), the role this measure reads when a request uses the dimension's own name (date.fiscal_month): {date: ship_date}. A dimension it doesn't name reads its default role.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "format": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "How a person reads this measure's numbers: carried to the result's descriptor as x_format, and used by views.",
+          "properties": {
+            "style": {
+              "enum": [
+                "number",
+                "currency",
+                "percent"
+              ],
+              "description": "number (the default), currency, or percent (the value is a fraction: 0.38 reads 38%)."
+            },
+            "currency": {
+              "type": "string",
+              "pattern": "^[A-Z]{3}$",
+              "description": "ISO 4217 code; required for the currency style."
+            },
+            "decimals": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 6,
+              "description": "Digits after the decimal point."
+            }
+          }
+        },
+        "semantics": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "grain": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+              }
+            },
+            "rollup": {
+              "type": "object",
+              "additionalProperties": {
+                "enum": [
+                  "sum",
+                  "avg",
+                  "min",
+                  "max",
+                  "first",
+                  "last",
+                  "none"
+                ]
+              }
+            },
+            "spread": {
+              "enum": [
+                "repeat",
+                "blank"
+              ]
+            },
+            "status": {
+              "enum": [
+                "governed",
+                "inferred"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "computeArg": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "$ref": "#/$defs/compute"
+        }
+      ]
+    },
+    "compute": {
+      "type": "object",
+      "required": [
+        "op",
+        "args"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "enum": [
+            "divide",
+            "subtract",
+            "add",
+            "multiply",
+            "coalesce"
+          ]
+        },
+        "args": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/computeArg"
+          }
+        }
+      }
+    },
+    "derivedMeasure": {
+      "type": "object",
+      "required": [
+        "type",
+        "compute"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "integer",
+            "number"
+          ]
+        },
+        "compute": {
+          "$ref": "#/$defs/compute"
+        },
+        "label": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "synonyms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "attribute": {
+      "type": "object",
+      "required": [
+        "type",
+        "bindings"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "For a datetime: the date attribute (type date, one value per day) its local date is a member of. Each attribute of that attribute's dimension then also becomes an attribute of the datetime's dimension (orders.ordered_at_fiscal_month), so the date table's periods work on a datetime."
+        },
+        "type": {
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean",
+            "date",
+            "datetime"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "synonyms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sort_key": {
+          "type": "string"
+        },
+        "members": {
+          "description": "The canonical members, used for value maps and for allocating over members the data doesn't show. A list is the members themselves; {from: source} reads them from that source's dimension table, so a member with no fact rows still counts. Without it, the members are the values that appear in a source's fact rows.",
+          "oneOf": [
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "from"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "from": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        },
+        "bindings": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/$defs/binding"
+          }
+        }
+      }
+    },
+    "dimension": {
+      "type": "object",
+      "required": [
+        "attributes"
+      ],
+      "additionalProperties": false,
+      "description": "A dimension: a table that describes the context of fact rows (date, customer, product). Its columns are its attributes; those are what a query groups and filters by.",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "default_role": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "For a dimension a fact table reaches in more than one role (the order date and the ship date): the role its own name reads when a measure doesn't say otherwise. Required when any attribute's table is reached in several roles."
+        },
+        "attributes": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/attribute"
+          }
+        }
+      }
+    }
+  }
+}

@@ -9,6 +9,7 @@
   <ItemGroup>
     <DbDataKitReference Include="Metadata" />   <!-- the catalog readers; plan 13, A11 -->
     <DbDataKitReference Include="Metadata.Abstractions" />
+    <DbDataKitReference Include="Transfer" />   <!-- the batch contracts the shared bulk writers take; plan 13, A14 -->
   </ItemGroup>
 
   <PropertyGroup>

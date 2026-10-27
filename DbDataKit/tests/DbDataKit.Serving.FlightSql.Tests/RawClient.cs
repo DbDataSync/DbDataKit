@@ -26,8 +26,15 @@ public sealed class RawClient : IDisposable
         var flight = new FlightClient(channel);
         var basic = "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{password}"));
         using var call = flight.Handshake(new Grpc.Core.Metadata { { "authorization", basic } });
-        await call.RequestStream.WriteAsync(new FlightHandshakeRequest(Google.Protobuf.ByteString.Empty, 0));
-        await call.RequestStream.CompleteAsync();
+        try
+        {
+            await call.RequestStream.WriteAsync(new FlightHandshakeRequest(Google.Protobuf.ByteString.Empty, 0));
+            await call.RequestStream.CompleteAsync();
+        }
+        catch (Exception ex) when (ex is Grpc.Core.RpcException { StatusCode: Grpc.Core.StatusCode.Cancelled } or OperationCanceledException)
+        {
+            // credentials in the header are enough, so the server answers and ends the call without reading the request; a client that has not written yet finds the call finished (what matters is the response below)
+        }
         var headers = await call.ResponseHeadersAsync;
         while (await call.ResponseStream.MoveNext(CancellationToken.None)) { }
         var token = headers.First(h => h.Key == "authorization").Value;

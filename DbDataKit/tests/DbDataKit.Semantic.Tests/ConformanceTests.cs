@@ -184,9 +184,18 @@ public static class FixtureChecker
         if (expect["native_query_contains"] is JsonObject nqc)
             foreach (var (id, needles) in nqc)
             {
-                var text = r["result_sets"]?.AsArray().FirstOrDefault(x => x!["id"]!.GetValue<string>() == id)?["native_query"]?["text"]?.GetValue<string>() ?? "";
+                var native = r["result_sets"]?.AsArray().FirstOrDefault(x => x!["id"]!.GetValue<string>() == id)?["native_query"];
+                var text = native?["text"]?.GetValue<string>() ?? "";
+                var postgres = native?["dialect"]?.GetValue<string>() == "postgres";
                 foreach (var n in needles!.AsArray())
-                    if (!text.Contains(n!.GetValue<string>())) f.Add($"result_sets[{id}].native_query: missing '{n}'");
+                {
+                    // the needles are written as T-SQL; PostgreSQL's text differs in its markers and its row limit only
+                    var needle = n!.GetValue<string>();
+                    if (postgres)
+                        needle = System.Text.RegularExpressions.Regex.Replace(
+                            System.Text.RegularExpressions.Regex.Replace(needle, @"@p(\d*)", "$$$1"), @"OFFSET 0 ROWS FETCH NEXT (\d+) ROWS ONLY", "LIMIT $1");
+                    if (!text.Contains(needle)) f.Add($"result_sets[{id}].native_query: missing '{needle}'");
+                }
             }
         return f;
     }
