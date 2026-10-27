@@ -384,7 +384,7 @@ none of it exists in the suite today.
 4. **Identity and caching.** Proxy's pass-through means two users can see different rows for the same request. Request hashes are cache
    and comparison keys in QIS; any cache or saved result must include the identity (and later any row-level rule), or one user's numbers
    reach another.
-5. **Row-level security** is not in QIS. Proxy is where it would belong (one place that sees the user and every query). Not needed now;
+5. **Row-level security** (*superseded 2026-10-27 by [plan 22](22-suite-gaps.md) section 2: enforced in the serving layer, keyed on user attributes*) is not in QIS. Proxy is where it would belong (one place that sees the user and every query). Not needed now;
    the design should not make it hard (filters added per identity before planning).
 6. **The Ossie dependency.** Ossie is a `0.2.0.dev0` draft. Generating the physical layer from Build (R1) reduces exposure: the authoring
    format matters less when people write only the logical layer, and Ossie becomes an export format.
