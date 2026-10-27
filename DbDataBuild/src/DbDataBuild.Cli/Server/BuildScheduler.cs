@@ -46,67 +46,9 @@ internal static class BuildSchedulerSchema
 {
     public const string Service = "dbdatabuild";
 
-    /// <summary>Appended after the shared two: a plan someone paused, so it is not queued until resumed.</summary>
-    private const string Pauses =
-        """
-        CREATE TABLE ScheduleJobPauses (
-            Service {{key}} NOT NULL,
-            Owner {{key}} NOT NULL,
-            Job {{key}} NOT NULL,
-            PausedBy {{text}} NOT NULL,
-            PausedAtUtc {{text}} NOT NULL,
-            PRIMARY KEY (Service, Owner, Job)
-        );
-        """;
-
-    public static StateSchema Schema => new([WorkQueueSchema.Queue, JobStateSchema.Table, Pauses]);
+    public static StateSchema Schema => new([WorkQueueSchema.Queue, JobStateSchema.Table, JobPauseSchema.Table]);
 
     public static StateDatabase Open(string serverDirectory) => new(Path.Combine(serverDirectory, "state.db"), Schema);
-}
-
-/// <summary>The plans someone paused: a paused plan's scheduled times are passed over, not run.</summary>
-internal sealed class JobPauses(StateDatabase database, string service)
-{
-    public (string By, DateTimeOffset At)? Get(string owner, string job) =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "SELECT PausedBy, PausedAtUtc FROM ScheduleJobPauses WHERE Service = $service AND Owner = $owner AND Job = $job;");
-            Bind(cmd, owner, job);
-            using var reader = cmd.ExecuteReader();
-            return reader.Read() ? ((string, DateTimeOffset)?)(reader.GetString(0), DateTimeOffset.Parse(reader.GetString(1), System.Globalization.CultureInfo.InvariantCulture)) : null;
-        });
-
-    public bool IsPaused(string owner, string job) => Get(owner, job) is not null;
-
-    public void Set(string owner, string job, string by, DateTimeOffset at) =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using (var insert = database.Command(connection, database.Dialect.InsertOrIgnore("ScheduleJobPauses", "Service, Owner, Job, PausedBy, PausedAtUtc", "$service, $owner, $job, $by, $at", "Service, Owner, Job")))
-            {
-                Bind(insert, owner, job);
-                insert.Bind(database, "by", by);
-                insert.Bind(database, "at", at.ToString("O"));
-                insert.ExecuteNonQuery();
-            }
-        });
-
-    public void Clear(string owner, string job) =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "DELETE FROM ScheduleJobPauses WHERE Service = $service AND Owner = $owner AND Job = $job;");
-            Bind(cmd, owner, job);
-            cmd.ExecuteNonQuery();
-        });
-
-    private void Bind(System.Data.Common.DbCommand cmd, string owner, string job)
-    {
-        cmd.Bind(database, "service", service);
-        cmd.Bind(database, "owner", owner);
-        cmd.Bind(database, "job", job);
-    }
 }
 
 /// <summary>
@@ -124,7 +66,7 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
     public static readonly TimeSpan DefaultLease = TimeSpan.FromMinutes(10);
 
     private readonly JobStateStore _jobs = new(database, BuildSchedulerSchema.Service);
-    private readonly JobPauses _pauses = new(database, BuildSchedulerSchema.Service);
+    private readonly JobPauseStore _pauses = new(database, BuildSchedulerSchema.Service);
     private readonly WorkQueueStore _queue = new(database, BuildSchedulerSchema.Service, clock) { LeaseDuration = lease ?? DefaultLease };
     public const string Kind = "refresh";
 
