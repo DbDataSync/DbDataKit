@@ -38,6 +38,11 @@ public class SsasProbe
         // what EXECUTE would do with text that is not a DAX query: the executor runs agent text as it is
         ("P1 MDX through the same command", "SELECT [Measures].[Budget Amount] ON 0 FROM [Model]"),
         ("P2 a DMV query", "SELECT [DATABASE_NAME] FROM $SYSTEM.DBSCHEMA_CATALOGS"),
+        // how a DATATABLE writes a date, and what the day-grain calendar queries return (plan 19 J23)
+        ("Q1 DATATABLE with ISO date strings", "EVALUATE DATATABLE ( \"d\", DATETIME, { { \"2025-07-01\" }, { \"2025-07-15\" } } )"),
+        ("Q2 DATATABLE with date and time strings", "EVALUATE DATATABLE ( \"d\", DATETIME, { { \"2025-07-01 00:00:00\" } } )"),
+        ("Q3 a date from DATE()", "EVALUATE ROW ( \"d\", DATE ( 2025, 7, 1 ), \"m\", FORMAT ( DATE ( 2025, 7, 1 ), \"yyyy-MM\" ) )"),
+        ("Q4 min and max of a date column grouped by another", "EVALUATE SUMMARIZECOLUMNS ( 'Customer'[Region], \"lo\", MIN ( 'Budget'[Amount] ), \"hi\", MAX ( 'Budget'[Amount] ) )"),
     ];
 
     [Fact]
