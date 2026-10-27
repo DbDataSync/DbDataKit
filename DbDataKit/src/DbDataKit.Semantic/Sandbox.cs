@@ -83,6 +83,7 @@ public static class Sandbox
         foreach (var ds in resultSets)
         {
             var fields = CreateTable(con, ds.Id, ds.Descriptor);
+            if (ds.Columnar is { } columnar) { Append(con, ds.Id, fields, columnar); continue; }
             // The appender writes the rows in bulk; one parameterized INSERT per row took about 1.5 ms each (plan 19 J21).
             using var appender = con.CreateAppender(ds.Id);
             foreach (var row in ds.Rows)
@@ -109,17 +110,22 @@ public static class Sandbox
         foreach (var t in tables)
         {
             var fields = CreateTable(con, t.Id, t.Descriptor);
-            var batch = t.Rows.Batch;
-            var writers = fields.Select(f => ColumnWriter(batch.Column(f.Name), f.Type)).ToArray();
-            using var appender = con.CreateAppender(t.Id);
-            for (int r = 0; r < batch.Length; r++)
-            {
-                var line = appender.CreateRow();
-                foreach (var w in writers) w(line, r);
-                line.EndRow();
-            }
+            Append(con, t.Id, fields, t.Rows);
         }
         return Query(con, sql, maxRows);
+    }
+
+    private static void Append(DuckDBConnection con, string id, List<(string Name, string Type)> fields, ColumnarRows rows)
+    {
+        var batch = rows.Batch;
+        var writers = fields.Select(f => ColumnWriter(batch.Column(f.Name), f.Type)).ToArray();
+        using var appender = con.CreateAppender(id);
+        for (int r = 0; r < batch.Length; r++)
+        {
+            var line = appender.CreateRow();
+            foreach (var w in writers) w(line, r);
+            line.EndRow();
+        }
     }
 
     private static List<(string Name, string Type)> CreateTable(DuckDBConnection con, string id, JsonObject descriptor)

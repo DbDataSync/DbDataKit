@@ -38,6 +38,22 @@ public class ConformanceTests
     [MemberData(nameof(TotalsFixtures))]
     public void FixtureWithAutoSubtotals(string relativePath) => RunOnStandIn(relativePath, "auto");
 
+    /// <summary>The same fixtures with an executor that only answers in rows: the engine's row path, which SQL Server decimals, datetimes and SSAS still take.</summary>
+    [Theory]
+    [MemberData(nameof(Fixtures))]
+    public void FixtureOnARowsOnlyExecutor(string relativePath)
+    {
+        using var standIn = new DuckDbStandInExecutor(Seed);
+        RunFixture(relativePath, "native", new RowsOnly(standIn));
+    }
+
+    private sealed class RowsOnly(ISourceExecutor inner) : ISourceExecutor
+    {
+        public bool RunsNativeText => inner.RunsNativeText;
+        public QueryRows Execute(CompiledQuery query, int maxRows) => inner.Execute(query, maxRows);
+        public QueryRows ExecuteNativeText(string source, NativeQuery native, int maxRows) => inner.ExecuteNativeText(source, native, maxRows);
+    }
+
     private static void RunOnStandIn(string relativePath, string totalsCompute)
     {
         using var standIn = new DuckDbStandInExecutor(Seed);

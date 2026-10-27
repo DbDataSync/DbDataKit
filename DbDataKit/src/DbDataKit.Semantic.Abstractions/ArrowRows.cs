@@ -19,6 +19,8 @@ public static class ArrowRows
         public Int64Array.Builder? Long;
         public DoubleArray.Builder? Double;
         public Decimal128Array.Builder? Decimal;
+        /// <summary>A decimal the provider gave no precision for is held as read, and given the largest scale seen when the batch is built (exact, as every value fits it).</summary>
+        public List<decimal?>? Inferred;
         public BooleanArray.Builder? Bool;
         public StringArray.Builder? Text;
     }
@@ -39,6 +41,7 @@ public static class ArrowRows
             else if (t == typeof(DateOnly)
                 || (t == typeof(DateTime) && reader.GetDataTypeName(i).Equals("date", StringComparison.OrdinalIgnoreCase))) cols.Add(new(name, Kind.DateText, 0, 0));
             else if (t == typeof(decimal) && schema?[i] is { NumericPrecision: > 0 and <= 38, NumericScale: { } s } c) cols.Add(new(name, Kind.Decimal, c.NumericPrecision!.Value, s));
+            else if (t == typeof(decimal)) cols.Add(new(name, Kind.Decimal, 0, 0));
             else return null;
         }
         return cols;
@@ -53,7 +56,7 @@ public static class ArrowRows
             {
                 case Kind.Long: c.Long = new(); break;
                 case Kind.Double: c.Double = new(); break;
-                case Kind.Decimal: c.Decimal = new(new Decimal128Type(c.Precision, c.Scale)); break;
+                case Kind.Decimal: if (c.Precision > 0) c.Decimal = new(new Decimal128Type(c.Precision, c.Scale)); else c.Inferred = []; break;
                 case Kind.Bool: c.Bool = new(); break;
                 default: c.Text = new(); break;
             }
@@ -70,7 +73,7 @@ public static class ArrowRows
                 {
                     case Kind.Long: c.Long!.Append(Convert.ToInt64(reader.GetValue(i), CultureInfo.InvariantCulture)); break;
                     case Kind.Double: c.Double!.Append(types[i] == typeof(double) ? reader.GetDouble(i) : reader.GetFloat(i)); break;
-                    case Kind.Decimal: c.Decimal!.Append(reader.GetDecimal(i)); break;
+                    case Kind.Decimal: if (c.Inferred is not null) c.Inferred.Add(reader.GetDecimal(i)); else c.Decimal!.Append(reader.GetDecimal(i)); break;
                     case Kind.Bool: c.Bool!.Append(reader.GetBoolean(i)); break;
                     case Kind.Text: c.Text!.Append(reader.GetString(i)); break;
                     default: c.Text!.Append(types[i] == typeof(DateOnly) ? reader.GetFieldValue<DateOnly>(i).ToString("yyyy-MM-dd") : reader.GetDateTime(i).ToString("yyyy-MM-dd")); break;
@@ -78,15 +81,10 @@ public static class ArrowRows
             }
             n++;
         }
-        var fields = cols.Select(c => new Field(c.Name, TypeOf(c), true)).ToList();
-        return new ColumnarRows([.. cols.Select(c => c.Name)], new RecordBatch(new Schema(fields, null), cols.Select(Build), n));
+        var arrays = cols.Select(Build).ToList();
+        var fields = cols.Select((c, i) => new Field(c.Name, arrays[i].Data.DataType, true)).ToList();
+        return new ColumnarRows([.. cols.Select(c => c.Name)], new RecordBatch(new Schema(fields, null), arrays, n));
     }
-
-    private static IArrowType TypeOf(Column c) => c.Kind switch
-    {
-        Kind.Long => Int64Type.Default, Kind.Double => DoubleType.Default, Kind.Bool => BooleanType.Default,
-        Kind.Decimal => new Decimal128Type(c.Precision, c.Scale), _ => StringType.Default,
-    };
 
     private static void AppendNull(Column c)
     {
@@ -94,7 +92,7 @@ public static class ArrowRows
         {
             case Kind.Long: c.Long!.AppendNull(); break;
             case Kind.Double: c.Double!.AppendNull(); break;
-            case Kind.Decimal: c.Decimal!.AppendNull(); break;
+            case Kind.Decimal: if (c.Inferred is not null) c.Inferred.Add(null); else c.Decimal!.AppendNull(); break;
             case Kind.Bool: c.Bool!.AppendNull(); break;
             default: c.Text!.AppendNull(); break;
         }
@@ -102,9 +100,19 @@ public static class ArrowRows
 
     private static IArrowArray Build(Column c) => c.Kind switch
     {
-        Kind.Long => c.Long!.Build(), Kind.Double => c.Double!.Build(), Kind.Decimal => c.Decimal!.Build(),
+        Kind.Long => c.Long!.Build(), Kind.Double => c.Double!.Build(), Kind.Decimal => BuildDecimal(c),
         Kind.Bool => c.Bool!.Build(), _ => c.Text!.Build(),
     };
+
+    private static IArrowArray BuildDecimal(Column c)
+    {
+        if (c.Inferred is null) return c.Decimal!.Build();
+        int scale = 0;
+        foreach (var v in c.Inferred) if (v is { } d) scale = Math.Max(scale, (decimal.GetBits(d)[3] >> 16) & 0xFF);
+        var builder = new Decimal128Array.Builder(new Decimal128Type(38, scale));
+        foreach (var v in c.Inferred) if (v is { } d) builder.Append(d); else builder.AppendNull();
+        return builder.Build();
+    }
 
     /// <summary>The value at a row, boxed the way <see cref="QueryRowReader"/> boxes it.</summary>
     public static object? Value(IArrowArray a, int i) => a switch

@@ -218,7 +218,28 @@ public sealed record ResultSet(
     Covers? Covers,
     JsonObject Descriptor,
     NativeQuery? NativeQuery,
-    List<Dictionary<string, object?>> Rows);
+    List<Dictionary<string, object?>> Rows)
+{
+    private List<Dictionary<string, object?>>? _rows = Rows;
+
+    /// <summary>A result set whose rows arrived as Arrow columns (plan 19 J24): the dictionaries are built when something asks for <see cref="Rows"/>, and the sandbox loads from the columns without them.</summary>
+    public ResultSet(string id, string? source, List<string> grain, Covers? covers, JsonObject descriptor, NativeQuery? nativeQuery, ColumnarRows columnar)
+        : this(id, source, grain, covers, descriptor, nativeQuery, (List<Dictionary<string, object?>>)null!) => Columnar = columnar;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public ColumnarRows? Columnar { get; init; }
+
+    /// <summary>The rows; for a columnar result set, built once from the columns on first use.</summary>
+    public List<Dictionary<string, object?>> Rows
+    {
+        get => _rows ??= Columnar!.ToRows().Rows;
+        init => _rows = value;
+    }
+
+    /// <summary>The number of rows, without building them for a columnar result set.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int RowCount => _rows?.Count ?? Columnar!.Count;
+}
 
 public sealed record Warning(string Code, string Message);
 

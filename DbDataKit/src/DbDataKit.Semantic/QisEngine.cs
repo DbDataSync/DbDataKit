@@ -455,15 +455,26 @@ public sealed partial class QisEngine(Catalog cat, ISourceExecutor executor, Val
         var (duckSql, duckParams) = SqlEmitter.BuildSelect(cat, source, attrs, measures, applied, order, execLimit, EmitDialects.DuckDb, rollup, having, cube);
         var execText = native.Dialect == "tsql"
             ? SqlEmitter.BuildSelect(cat, source, attrs, measures, applied, order, execLimit, EmitDialects.TSql, rollup, having, cube).Text : null;
-        var rows = executor.Execute(new CompiledQuery(source, native, duckSql, duckParams, execText), execLimit).Rows;
-        NormalizeDatetimes(source, attrs, rows);
+        var compiled = new CompiledQuery(source, native, duckSql, duckParams, execText);
+        // An executor that reads Arrow hands the rows over as columns; a column it cannot (a datetime among them) makes it answer in rows.
+        var outcome = executor is IColumnarSourceExecutor columnarExecutor ? columnarExecutor.ExecuteColumnar(compiled, execLimit) : new ColumnarOutcome(null, executor.Execute(compiled, execLimit));
+        var columnar = outcome.Columnar;
+        var rows = outcome.Rows?.Rows;
+        if (rows is not null) NormalizeDatetimes(source, attrs, rows);
+        var count = columnar?.Count ?? rows!.Count;
 
         var truncated = false;
-        if (limit is not null && rows.Count > limit) { rows = rows.Take(limit.Value).ToList(); truncated = true; }
-        else if (limit is null && rows.Count > rowCap)
+        if (limit is not null && count > limit)
+        {
+            if (columnar is not null) columnar = columnar with { Batch = columnar.Batch.Slice(0, limit.Value) };
+            else rows = rows!.Take(limit.Value).ToList();
+            count = limit.Value;
+            truncated = true;
+        }
+        else if (limit is null && count > rowCap)
             return (null, Result.Failed(level, hash, [Err("row_cap_exceeded", path, $"{source} returned more than {rowCap} rows.")]));
 
-        var descriptor = Descriptor(id, source, attrs, measures, rows.Count, truncated, hash);
+        var descriptor = Descriptor(id, source, attrs, measures, count, truncated, hash);
         if (rollup is { Count: > 0 })
         {
             // A native subtotal result set: its rows include the subtotal rows, told apart by the level column.
@@ -475,9 +486,8 @@ public sealed partial class QisEngine(Catalog cat, ISourceExecutor executor, Val
                 ["levels"] = levels?.DeepClone(),
             };
         }
-        return (new ResultSet(id, source, attrs,
-            new Covers(measures, applied.Concat(having ?? []).Select(f => f.Text()).ToList(), notApplied),
-            descriptor, native, rows), null);
+        var covers = new Covers(measures, applied.Concat(having ?? []).Select(f => f.Text()).ToList(), notApplied);
+        return (columnar is not null ? new ResultSet(id, source, attrs, covers, descriptor, native, columnar) : new ResultSet(id, source, attrs, covers, descriptor, native, rows!), null);
     }
 
     /// <summary>

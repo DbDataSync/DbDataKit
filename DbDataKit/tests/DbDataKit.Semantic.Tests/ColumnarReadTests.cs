@@ -57,13 +57,15 @@ public class ColumnarReadTests
     }
 
     [Fact]
-    public void ADecimalTheProviderGivesNoPrecisionForFallsBackToRows()
+    public void ADecimalTheProviderGivesNoPrecisionForTakesTheLargestScaleSeenAndKeepsEveryValueExact()
     {
-        // DuckDB.NET reports no precision or scale, and a guessed scale could round: the row read keeps the exact value
+        // DuckDB.NET reports no precision or scale: the scale comes from the values, so nothing rounds
         using var con = Open();
-        var outcome = QueryRowReader.ReadColumnar(Command(con, "SELECT 12.50::DECIMAL(18,2) AS dec"), 100);
-        Assert.Null(outcome.Columnar);
-        Assert.Equal(12.50m, outcome.Rows!.Rows[0]["dec"]);
+        var sql = "SELECT * FROM (VALUES (12.5::DECIMAL(18,4)), (NULL), (-0.0001::DECIMAL(18,4)), (7::DECIMAL(18,4))) t(dec)";
+        var outcome = QueryRowReader.ReadColumnar(Command(con, sql), 100);
+        Assert.NotNull(outcome.Columnar);
+        var expected = QueryRowReader.Read(Command(con, sql), 100).Rows.Select(r => (decimal?)r["dec"]).ToList();
+        Assert.Equal(expected, outcome.AsRows().Rows.Select(r => (decimal?)r["dec"]));
     }
 
     [Fact]
@@ -88,5 +90,27 @@ public class ColumnarReadTests
         Assert.Equal(expected.Rows.Count, actual.Rows.Count);
         for (int r = 0; r < expected.Rows.Count; r++)
             foreach (var c in expected.Columns) Assert.Equal(expected.Rows[r][c], actual.Rows[r][c]);
+    }
+}
+
+public class ColumnarEngineTests
+{
+    [Fact]
+    public void ASourceScanFromAnArrowExecutorKeepsItsRowsAsColumnsUntilSomethingAsksForRows()
+    {
+        using var standIn = new DuckDbStandInExecutor(ConformanceTests.Seed);
+        var cat = ConformanceTests.Cat.Clone();
+        var engine = new QisEngine(cat, standIn, new Validator(cat), 1, runDir: Path.Combine(Path.GetTempPath(), "qis-runs-" + Guid.NewGuid().ToString("N")));
+        var request = System.Text.Json.Nodes.JsonNode.Parse("""
+            {"spec_version":"0.3","kind":"query","query":{"measures":["orders.net_revenue"],"limit":100,"attributes":["customers.region"]}}
+            """)!.AsObject();
+        var result = engine.Run(request);
+        Assert.Equal("complete", result.Status);
+        var scanned = Assert.Single(result.ResultSets!);
+        Assert.True(scanned.Columnar is not null, $"rows: {scanned.Rows.Count}; first row types: {string.Join(", ", scanned.Rows[0].Select(kv => kv.Key + ":" + kv.Value?.GetType().Name))}");
+        Assert.Equal(scanned.Columnar.Count, scanned.RowCount);
+        // the dictionaries are built on demand and are the rows of the columns
+        Assert.Equal(scanned.RowCount, scanned.Rows.Count);
+        Assert.Same(scanned.Rows, scanned.Rows);
     }
 }
