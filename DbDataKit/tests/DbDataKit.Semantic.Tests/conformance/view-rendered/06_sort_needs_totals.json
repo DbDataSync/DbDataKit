@@ -1,0 +1,13 @@
+{
+  "kind": "rendered_view",
+  "status": "failed",
+  "views": null,
+  "errors": [
+    {
+      "spec": "presentation",
+      "code": "sort_needs_totals",
+      "path": "$.views[0].sort.rows.by",
+      "message": "Sorting by orders.net_revenue uses each member\u0027s total across the other axis, which the result doesn\u0027t contain. Request the query with totals."
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "kind": "rendered_view",
+  "status": "complete",
+  "views": [
+    {
+      "id": "m1",
+      "type": "matrix",
+      "columns": [
+        {
+          "labels": [
+            "FY27-Q1",
+            "orders.net_revenue"
+          ],
+          "total": false,
+          "other": false
+        },
+        {
+          "labels": [
+            "FY27-Q2",
+            "orders.net_revenue"
+          ],
+          "total": false,
+          "other": false
+        },
+        {
+          "labels": [
+            "Total",
+            "orders.net_revenue"
+          ],
+          "total": true,
+          "other": false
+        }
+      ],
+      "rows": [
+        {
+          "labels": [
+            "West"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 4200000,
+              "text": "4,200,000"
+            },
+            {
+              "v": 4600000,
+              "text": "4,600,000"
+            },
+            {
+              "v": 8800000,
+              "text": "8,800,000"
+            }
+          ]
+        },
+        {
+          "labels": [
+            "East"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 3800000,
+              "text": "3,800,000"
+            },
+            {
+              "v": 3900000,
+              "text": "3,900,000"
+            },
+            {
+              "v": 7700000,
+              "text": "7,700,000"
+            }
+          ]
+        },
+        {
+          "labels": [
+            "Central"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 3100000,
+              "text": "3,100,000"
+            },
+            {
+              "v": 3300000,
+              "text": "3,300,000"
+            },
+            {
+              "v": 6400000,
+              "text": "6,400,000"
+            }
+          ]
+        }
+      ],
+      "notice": null
+    }
+  ],
+  "errors": null
+}

@@ -1,0 +1,13 @@
+{
+  "kind": "rendered_view",
+  "status": "failed",
+  "views": null,
+  "errors": [
+    {
+      "spec": "presentation",
+      "code": "stack_not_additive",
+      "path": "$.views[0].vega_lite.encoding.y",
+      "message": "orders.order_count can\u0027t be added up, so its series can\u0027t be stacked. Set \u0022stack\u0022: null for a grouped chart, or use a measure that adds."
+    }
+  ]
+}

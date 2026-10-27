@@ -1,0 +1,13 @@
+{
+  "kind": "rendered_view",
+  "status": "failed",
+  "views": null,
+  "errors": [
+    {
+      "spec": "presentation",
+      "code": "totals_missing",
+      "path": "$.views[0].totals.rows",
+      "message": "The result has no rows where customers.region is rolled up. Request the query with totals."
+    }
+  ]
+}
