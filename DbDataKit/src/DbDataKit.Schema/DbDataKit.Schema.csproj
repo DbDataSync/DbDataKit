@@ -9,5 +9,6 @@
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
     <ProjectReference Include="..\DbDataKit.Dialect\DbDataKit.Dialect.csproj" />
+    <ProjectReference Include="..\DbDataKit.Metadata.Abstractions\DbDataKit.Metadata.Abstractions.csproj" />
   </ItemGroup>
 </Project>
