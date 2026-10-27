@@ -73,3 +73,44 @@ public sealed class PostgresBulkWriter(NpgsqlConnection connection, IReadOnlyDic
         }
     }
 }
+
+/// <summary>
+/// One cell of a binary COPY. The switch on the runtime type is what makes the write work: a value arrives boxed, and handing Npgsql a statically
+/// <see cref="object"/> value leaves it resolving a converter for <c>object</c> rather than for the value's own type. Naming the CLR type at the call
+/// site lets it pick the converter from that type to the column's, and avoids the per-cell lookup of the untyped overload. Anything not listed takes
+/// the untyped overload.
+/// </summary>
+internal static class PostgresCopyCell
+{
+    public static async ValueTask WriteAsync(NpgsqlBinaryImporter importer, object value, NpgsqlDbType type, string column, CancellationToken ct)
+    {
+        try
+        {
+            switch (value)
+            {
+                case int v: await importer.WriteAsync(v, type, ct); break;
+                case long v: await importer.WriteAsync(v, type, ct); break;
+                case short v: await importer.WriteAsync(v, type, ct); break;
+                case byte v: await importer.WriteAsync(v, type, ct); break;
+                case bool v: await importer.WriteAsync(v, type, ct); break;
+                case decimal v: await importer.WriteAsync(v, type, ct); break;
+                case double v: await importer.WriteAsync(v, type, ct); break;
+                case float v: await importer.WriteAsync(v, type, ct); break;
+                case string v: await importer.WriteAsync(v, type, ct); break;
+                case char v: await importer.WriteAsync(v.ToString(), type, ct); break;
+                case DateTime v: await importer.WriteAsync(v, type, ct); break;
+                case DateTimeOffset v: await importer.WriteAsync(v, type, ct); break;
+                case DateOnly v: await importer.WriteAsync(v, type, ct); break;
+                case TimeOnly v: await importer.WriteAsync(v, type, ct); break;
+                case TimeSpan v: await importer.WriteAsync(v, type, ct); break;
+                case Guid v: await importer.WriteAsync(v, type, ct); break;
+                case byte[] v: await importer.WriteAsync(v, type, ct); break;
+                default: await importer.WriteAsync(value, type, ct); break;
+            }
+        }
+        catch (Exception ex) when (ex is InvalidCastException or NotSupportedException or ArgumentException or OverflowException or FormatException)
+        {
+            throw new PostgresCopyValueException(column, value.GetType(), type, ex);
+        }
+    }
+}
