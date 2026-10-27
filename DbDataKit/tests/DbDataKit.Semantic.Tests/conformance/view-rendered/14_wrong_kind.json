@@ -1,0 +1,13 @@
+{
+  "kind": "rendered_view",
+  "status": "failed",
+  "views": null,
+  "errors": [
+    {
+      "spec": "presentation",
+      "code": "wrong_field_kind",
+      "path": "$.views[0].rows[0]",
+      "message": "orders.net_revenue is a measure; here a attribute is needed."
+    }
+  ]
+}

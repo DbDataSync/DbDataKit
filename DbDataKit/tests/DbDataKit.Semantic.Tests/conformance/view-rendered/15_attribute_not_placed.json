@@ -1,0 +1,13 @@
+{
+  "kind": "rendered_view",
+  "status": "failed",
+  "views": null,
+  "errors": [
+    {
+      "spec": "presentation",
+      "code": "attribute_not_placed",
+      "path": "$.views[0]",
+      "message": "date.fiscal_quarter is a attribute of the result but is on neither axis, so a cell would hold several rows. Put it on rows or columns."
+    }
+  ]
+}

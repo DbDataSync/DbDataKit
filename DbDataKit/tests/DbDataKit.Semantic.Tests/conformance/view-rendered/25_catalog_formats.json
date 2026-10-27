@@ -1,0 +1,92 @@
+{
+  "kind": "rendered_view",
+  "status": "complete",
+  "views": [
+    {
+      "id": "m1",
+      "type": "matrix",
+      "columns": [
+        {
+          "labels": [
+            "returns.return_amount"
+          ],
+          "total": false,
+          "other": false
+        },
+        {
+          "labels": [
+            "budget.budget_amount"
+          ],
+          "total": false,
+          "other": false
+        },
+        {
+          "labels": [
+            "Margin"
+          ],
+          "total": false,
+          "other": false
+        },
+        {
+          "labels": [
+            "orders.net_revenue"
+          ],
+          "total": false,
+          "other": false
+        }
+      ],
+      "rows": [
+        {
+          "labels": [
+            "West"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 1234.5,
+              "text": "$1,234.50"
+            },
+            {
+              "v": 4200000,
+              "text": "$4.2M"
+            },
+            {
+              "v": 0.385,
+              "text": "38.5%"
+            },
+            {
+              "v": 4200000,
+              "text": "4,200,000"
+            }
+          ]
+        },
+        {
+          "labels": [
+            "East"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": -50,
+              "text": "-$50.00"
+            },
+            {
+              "v": 380000,
+              "text": "$380K"
+            },
+            {
+              "v": 0.1,
+              "text": "10.0%"
+            },
+            {
+              "v": 3800000,
+              "text": "3,800,000"
+            }
+          ]
+        }
+      ],
+      "notice": null
+    }
+  ],
+  "errors": null
+}

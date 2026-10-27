@@ -1,0 +1,13 @@
+{
+  "kind": "rendered_view",
+  "status": "failed",
+  "views": null,
+  "errors": [
+    {
+      "spec": "presentation",
+      "code": "duplicate_view_id",
+      "path": "$.views[1].id",
+      "message": "Another view is already called m1."
+    }
+  ]
+}

@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.internal/qis/view.schema.json",
+  "title": "View document",
+  "description": "How a result is displayed: one or more views of one result. A view arranges rows the result already has; it never computes a value.",
+  "type": "object",
+  "required": [
+    "spec_version",
+    "kind",
+    "result",
+    "views"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "spec_version": {
+      "const": "0.3"
+    },
+    "kind": {
+      "const": "view"
+    },
+    "result": {
+      "type": "object",
+      "required": [
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "views": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/matrix"
+          },
+          {
+            "$ref": "#/$defs/chart"
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "field": {
+      "description": "A field of the result, by logical name (orders.net_revenue) or by the name of an alias or transform output.",
+      "type": "string",
+      "minLength": 1
+    },
+    "sort": {
+      "type": "object",
+      "required": [
+        "by"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "by": {
+          "description": "sort_key (the order the result gives the members in), label, or a measure.",
+          "type": "string",
+          "minLength": 1
+        },
+        "dir": {
+          "enum": [
+            "asc",
+            "desc"
+          ]
+        }
+      }
+    },
+    "matrix": {
+      "type": "object",
+      "required": [
+        "type",
+        "id",
+        "values"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "matrix"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "field"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "$ref": "#/$defs/field"
+              },
+              "empty": {
+                "enum": [
+                  "blank",
+                  "zero"
+                ]
+              },
+              "format": {
+                "enum": [
+                  "compact",
+                  "full",
+                  "percent"
+                ]
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "values_on": {
+          "enum": [
+            "columns",
+            "rows"
+          ]
+        },
+        "totals": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "rows": {
+              "type": "boolean"
+            },
+            "columns": {
+              "type": "boolean"
+            }
+          }
+        },
+        "sort": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "rows": {
+              "$ref": "#/$defs/sort"
+            },
+            "columns": {
+              "$ref": "#/$defs/sort"
+            }
+          }
+        },
+        "column_limit": {
+          "type": "object",
+          "required": [
+            "max",
+            "overflow"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "max": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "overflow": {
+              "enum": [
+                "error",
+                "truncate",
+                "top_n_other"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "chart": {
+      "type": "object",
+      "required": [
+        "type",
+        "id",
+        "vega_lite"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "chart"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "vega_lite": {
+          "description": "A restricted subset of Vega-Lite: encodings only. The renderer supplies the data.",
+          "type": "object"
+        }
+      }
+    }
+  }
+}

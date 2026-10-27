@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Scripting</RootNamespace>
+    <PackageId>DbDataKit.Scripting</PackageId>
+    <Description>Our own scripting (plan 14): the NuGet resolver that turns #r "nuget:" directives into a closure of packages on disk without the .NET SDK, with a cache, a lock file with hash pins, source mapping and an allow-list; the loader (a collectible load context per closure) and the compiler (.csx to a cached assembly).</Description>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" />
+    <PackageReference Include="NuGet.Frameworks" />
+    <PackageReference Include="NuGet.Packaging" />
+    <PackageReference Include="NuGet.Protocol" />
+    <PackageReference Include="NuGet.Versioning" />
+    <!-- NuGet.Packaging brings 8.0.1 transitively, which has known advisories; the root pins the patched line -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
+  </ItemGroup>
+</Project>

@@ -166,8 +166,8 @@ public sealed class SecretLeakTests : IDisposable
         var interceptor = new RedactingInterceptor(app.Services.GetRequiredService<SecretsRuntime>());
 
         var context = new FakeContext();
-        context.UserState[AuthInterceptor.PrincipalKey] =
-            new ProxyPrincipal("mallory", "passthrough", ["pt"], null, new DbCredentials("mallory", PassThroughSentinel));
+        context.UserState[DbDataKit.Serving.FlightSql.FlightCallContext.ContextKey] = new DbDataKit.Serving.ServingContext(
+            new DbDataProxy.Server.Serving.ProxyCaller(new ProxyPrincipal("mallory", "passthrough", ["pt"], null, new DbCredentials("mallory", PassThroughSentinel))));
         // The env secret was registered at startup; the caller's password is only known through the principal.
         var ex = await Assert.ThrowsAsync<RpcException>(() => interceptor.UnaryServerHandler<string, string>("req", context,
             (_, _) => throw new RpcException(new Status(StatusCode.InvalidArgument,

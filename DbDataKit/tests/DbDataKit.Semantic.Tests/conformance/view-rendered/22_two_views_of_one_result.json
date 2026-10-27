@@ -1,0 +1,172 @@
+{
+  "kind": "rendered_view",
+  "status": "complete",
+  "views": [
+    {
+      "id": "m1",
+      "type": "matrix",
+      "columns": [
+        {
+          "labels": [
+            "FY27-Q1",
+            "orders.net_revenue"
+          ],
+          "total": false,
+          "other": false
+        },
+        {
+          "labels": [
+            "FY27-Q2",
+            "orders.net_revenue"
+          ],
+          "total": false,
+          "other": false
+        },
+        {
+          "labels": [
+            "Total",
+            "orders.net_revenue"
+          ],
+          "total": true,
+          "other": false
+        }
+      ],
+      "rows": [
+        {
+          "labels": [
+            "West"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 4200000,
+              "text": "4,200,000"
+            },
+            {
+              "v": 4600000,
+              "text": "4,600,000"
+            },
+            {
+              "v": 8800000,
+              "text": "8,800,000"
+            }
+          ]
+        },
+        {
+          "labels": [
+            "Central"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 3100000,
+              "text": "3,100,000"
+            },
+            {
+              "v": 3300000,
+              "text": "3,300,000"
+            },
+            {
+              "v": 6400000,
+              "text": "6,400,000"
+            }
+          ]
+        },
+        {
+          "labels": [
+            "East"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 3800000,
+              "text": "3,800,000"
+            },
+            {
+              "v": 3900000,
+              "text": "3,900,000"
+            },
+            {
+              "v": 7700000,
+              "text": "7,700,000"
+            }
+          ]
+        }
+      ],
+      "notice": null
+    },
+    {
+      "id": "c1",
+      "type": "chart",
+      "vega_lite": {
+        "mark": "line",
+        "encoding": {
+          "x": {
+            "field": "date_fiscal_quarter",
+            "type": "ordinal",
+            "sort": [
+              "FY27-Q1",
+              "FY27-Q2"
+            ]
+          },
+          "y": {
+            "field": "orders_net_revenue",
+            "type": "quantitative"
+          },
+          "color": {
+            "field": "customers_region",
+            "type": "nominal"
+          }
+        },
+        "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+        "data": {
+          "values": [
+            {
+              "customers_region": "West",
+              "date_fiscal_quarter": "FY27-Q1",
+              "orders_net_revenue": 4200000,
+              "orders_order_count": 40,
+              "region_share": 0.38
+            },
+            {
+              "customers_region": "West",
+              "date_fiscal_quarter": "FY27-Q2",
+              "orders_net_revenue": 4600000,
+              "orders_order_count": 44,
+              "region_share": 0.39
+            },
+            {
+              "customers_region": "Central",
+              "date_fiscal_quarter": "FY27-Q1",
+              "orders_net_revenue": 3100000,
+              "orders_order_count": 30,
+              "region_share": 0.28
+            },
+            {
+              "customers_region": "Central",
+              "date_fiscal_quarter": "FY27-Q2",
+              "orders_net_revenue": 3300000,
+              "orders_order_count": 31,
+              "region_share": 0.28
+            },
+            {
+              "customers_region": "East",
+              "date_fiscal_quarter": "FY27-Q1",
+              "orders_net_revenue": 3800000,
+              "orders_order_count": 35,
+              "region_share": 0.34
+            },
+            {
+              "customers_region": "East",
+              "date_fiscal_quarter": "FY27-Q2",
+              "orders_net_revenue": 3900000,
+              "orders_order_count": 34,
+              "region_share": 0.33
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "errors": null
+}
