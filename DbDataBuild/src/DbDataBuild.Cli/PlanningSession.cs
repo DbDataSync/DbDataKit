@@ -310,7 +310,7 @@ internal sealed class PlanningSession
         }
 
         var loads = renderedOps.GroupBy(o => o.Model).ToDictionary(g => g.Key, g => (IReadOnlyList<RenderedLoad>)g
-            .Select(o => new RenderedLoad(o.Operation, o.IsDefault, o.Script, DbDataBuild.State.Hashing.ScriptHash(o.Script), o.Resolver, o.Parameters, o.Watermark)).ToList());
+            .Select(o => new RenderedLoad(o.Operation, o.IsDefault, o.Script, DbDataKit.Schema.Hashing.ScriptHash(o.Script), o.Resolver, o.Parameters, o.Watermark)).ToList());
         var input = new PlanInput(target, ctx.Config, planned, snapshot.Live, snapshot.Schemas, snapshot.RecordedShapeHashes, snapshot.LastViewStatementHashes,
             snapshot.LastLoadDefinitionHashes, snapshot.Acknowledged, loads, resolved, operations, backfills, rangeBounds) { Tracked = trackingScope != null, LoadInputs = loadInputs };
         return (new PlanningSession { Root = root, Target = target, Context = ctx, Input = input, Warnings = distinct.Where(d => d.Severity != Severity.Error).ToList() }, CliApp.ExitOk);

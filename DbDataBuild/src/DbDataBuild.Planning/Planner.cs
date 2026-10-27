@@ -6,6 +6,7 @@ using DbDataBuild.Sql;
 using DbDataBuild.State;
 using DbDataBuild.Targets;
 using DbDataBuild.Targets.Ddl;
+using DbDataKit.Schema.Planning;
 
 namespace DbDataBuild.Planning;
 
@@ -143,8 +144,10 @@ public static class Planner
     }
 
     private sealed class ModelContext(PlanInput input, PlannedModel model, DdlGenerator ddl, Dictionary<string, ResolvedAnswer> answers, Dictionary<string, ResolvedAnswer> used,
-        List<Question> questions, List<string> noticed, HashSet<string> schemasCreated)
+        List<Question> questions, List<string> noticed, HashSet<string> schemasCreated) : IStructureHost
     {
+        public void Notice(string text) => noticed.Add(text);
+
         public PlanInput Input => input;
         public PlannedModel Model => model;
         public ModelDefinition Def => model.Definition;
@@ -169,51 +172,35 @@ public static class Planner
     // ------------------------------------------------------------------------------------------------------------------------------------
     // Object-level rows shared by every kind: missing, untracked (adopt), out of band (block), in sync.
 
-    private enum Gate { Proceed, Blocked, Waiting }
+    // The decisions about the structure of a table are `DbDataKit.Schema.Planning.StructurePlanner`'s; what is here turns Build's model into its input and its answers into Build's plan steps and diagnostics.
+
+    private static PlanStep ToStep(StructureStep s) =>
+        Step(s.IsTrack ? StepType.Track : StepType.Ddl, s.Object, s.Description, s.Text, s.Risk, s.Reasons, s.HashAfter, shapeSource: s.ShapeSource) with { Expect = s.Expect };
+
+    private static Diagnostic ToDiagnostic(ModelContext c, StructureProblem p) => p.Kind switch
+    {
+        StructureProblemKind.AdoptionDeclined => new Diagnostic(DiagnosticCatalog.AdoptionDeclined, new(c.Model.QueryFile, 0, 0), p.Message),
+        StructureProblemKind.ObjectChangedOutsideTool => new Diagnostic(DiagnosticCatalog.ObjectChangedOutsideTool, new(c.Model.QueryFile, 0, 0), p.Message),
+        StructureProblemKind.AnswerValueMismatch => new Diagnostic(DiagnosticCatalog.AnswerValueMismatch, new(c.Def.Name, 0, 0), p.Message),
+        StructureProblemKind.IndexNotSupported => new Diagnostic(DiagnosticCatalog.IndexNotSupported, new(c.Model.QueryFile, 0, 0), p.Message),
+        StructureProblemKind.IndexNameIsConstraint => new Diagnostic(DiagnosticCatalog.ModelUnplannable, new(c.Model.QueryFile, 0, 0), p.Message),
+        _ => throw new InvalidOperationException($"No diagnostic for {p.Kind}."),
+    };
+
+    private static DesiredTable Desired(ModelContext c, IReadOnlyList<NativeColumn> native) => new(c.Def.Name, native,
+        c.Def.Renames.Select(r => new RenameSpec(r.From, r.To)).ToList(),
+        c.Def.Indexes.Where(i => i.AppliesTo(c.Input.Target)).Select(i => new IndexSpec(i.Name, i.Unique, i.Columns, i.Include)).ToList());
 
     private static Gate Baseline(ModelContext c, ObjectShape? live, List<PlanStep> ddlSteps, List<ObjectBase> bases, List<Diagnostic> blocks, out ObjectState state)
     {
         var obj = c.Def.Name;
-        var recorded = c.Input.RecordedShapeHashes.GetValueOrDefault(obj);
-        // with no tracking there is no baseline to drift from: an object that exists is judged against the declaration alone (and what changes in it is risky, below)
-        state = c.Input.Tracked ? Drift.Classify(live, recorded) : live == null ? ObjectState.Missing : ObjectState.InSync;
-        bases.Add(new ObjectBase(obj, state, live?.ShapeHash, recorded));
-        switch (state)
-        {
-            case ObjectState.Missing or ObjectState.InSync:
-                return Gate.Proceed;
-
-            case ObjectState.Untracked:
-            {
-                var q = new Question(QuestionIds.Adopt(obj),
-                    $"`{obj}` exists on the target, but the tool has no record of creating it. Adopt it?",
-                    [$"Live shape hash: {live!.ShapeHash}", $"The model declares {c.Def.Columns.Count} column(s); the object has {live.Columns.Count}."],
-                    [new("adopt", "Record the live shape as the baseline and plan any difference from the model", "A track step is added to the plan; later changes are diffed against this shape."),
-                     new("stop", "Do not plan this model", "The model and everything downstream of it are skipped.")]);
-                var a = c.Answer(q);
-                if (a == null) return Gate.Waiting;
-                if (a.Choice == "stop")
-                {
-                    blocks.Add(new Diagnostic(DiagnosticCatalog.AdoptionDeclined, new(c.Model.QueryFile, 0, 0), $"{obj} exists on the target and adoption was declined (answer `{q.Id}` is `stop`)."));
-                    return Gate.Blocked;
-                }
-                ddlSteps.Add(Step(StepType.Track, obj, $"adopt {obj}", $"record shape {live.ShapeHash}", RiskClass.Safe, ["obj.untracked", $"answer {q.Id} = adopt"], live.ShapeHash, shapeSource: "adopted"));
-                return Gate.Proceed;
-            }
-
-            default: // out of band
-            {
-                var key = Acknowledgements.Key(DiagnosticCatalog.ObjectChangedOutsideTool.Code, obj, live!.ShapeHash);
-                if (!c.Input.Acknowledged.Contains(key))
-                {
-                    blocks.Add(new Diagnostic(DiagnosticCatalog.ObjectChangedOutsideTool, new(c.Model.QueryFile, 0, 0),
-                        $"{obj} has shape {live.ShapeHash[..12]}, but the last recorded shape is {recorded![..12]}. Something changed it outside the tool."));
-                    return Gate.Blocked;
-                }
-                ddlSteps.Add(Step(StepType.Track, obj, $"record acknowledged change to {obj}", $"record shape {live.ShapeHash}", RiskClass.Safe, ["obj.drift.acknowledged"], live.ShapeHash, shapeSource: "out_of_band"));
-                return Gate.Proceed;
-            }
-        }
+        var steps = new List<StructureStep>();
+        var problems = new List<StructureProblem>();
+        var gate = StructurePlanner.Baseline(obj, live, c.Input.RecordedShapeHashes.GetValueOrDefault(obj), c.Input.Tracked, c.Def.Columns.Count,
+            hash => c.Input.Acknowledged.Contains(Acknowledgements.Key(DiagnosticCatalog.ObjectChangedOutsideTool.Code, obj, hash)), c, steps, bases, problems, out state);
+        ddlSteps.AddRange(steps.Select(ToStep));
+        blocks.AddRange(problems.Select(p => ToDiagnostic(c, p)));
+        return gate;
     }
 
     // ------------------------------------------------------------------------------------------------------------------------------------
@@ -296,9 +283,7 @@ public static class Planner
         var waiting = false;
         if (state == ObjectState.Missing)
         {
-            if (c.NeedsSchema(schema)) local.Add(Step(StepType.Ddl, def.Name, $"create schema {schema}", c.Ddl.CreateSchema(schema), RiskClass.Safe, ["obj.missing.table"]));
-            local.Add(Step(StepType.Ddl, def.Name, $"create table {def.Name}", c.Ddl.CreateTable(schema, name, native), RiskClass.Safe, ["obj.missing.table"],
-                Hashing.ShapeHash(DdlGenerator.ExpectedShape(native))));
+            local.AddRange(StructurePlanner.Create(Desired(c, native), c.Ddl.Statements, c.NeedsSchema(schema)).Select(ToStep));
         }
         else
         {
@@ -312,164 +297,25 @@ public static class Planner
         return PlanLoads(c, state == ObjectState.Missing, loadSteps, blocks) && !waiting;
     }
 
-    // Declared indexes against the live ones, by name. Indexes are what the operator declared: nothing is inferred, an undeclared live index is left alone and reported.
     private static bool PlanIndexes(ModelContext c, ObjectShape? live, List<PlanStep> steps, List<Diagnostic> blocks)
     {
-        var def = c.Def;
-        var wanted = def.Indexes.Where(i => i.AppliesTo(c.Input.Target)).ToList();
-        if (wanted.Count == 0 && live == null) return true;
-        var (schema, name) = c.Name;
-
-        if (wanted.Count > 0 && c.Input.Engine == TargetNames.Fabric)
-        {
-            blocks.Add(new Diagnostic(DiagnosticCatalog.IndexNotSupported, new(c.Model.QueryFile, 0, 0),
-                $"index.unsupported: {def.Name} declares index(es) {string.Join(", ", wanted.Select(i => $"`{i.Name}`"))}, and Fabric has no CREATE INDEX."));
-            return false;
-        }
-
-        var liveIndexes = (live?.Physical ?? []).Where(p => p.Kind is "index" or "constraint_index").ToList();
-        foreach (var index in wanted)
-        {
-            var canonical = IndexText.Canonical(index.Unique, index.Columns, index.Include);
-            var existing = liveIndexes.FirstOrDefault(p => string.Equals(p.Name, index.Name, StringComparison.OrdinalIgnoreCase));
-            var expect = $"index:{index.Name}={canonical}";
-            if (existing == null)
-                steps.Add(Step(StepType.Ddl, def.Name, $"create index {index.Name}", c.Ddl.CreateIndex(schema, name, index), RiskClass.Safe, ["index.added"]) with { Expect = expect });
-            else if (existing.Kind == "constraint_index")
-            {
-                blocks.Add(new Diagnostic(DiagnosticCatalog.ModelUnplannable, new(c.Model.QueryFile, 0, 0),
-                    $"index.constraint_name: {def.Name} declares index `{index.Name}`, but a PRIMARY KEY or UNIQUE constraint of that name exists on the target. Rename the index in the model."));
-                return false;
-            }
-            else if (!string.Equals(existing.Definition, canonical, StringComparison.OrdinalIgnoreCase))
-                steps.Add(Step(StepType.Ddl, def.Name, $"rebuild index {index.Name}", c.Ddl.DropIndex(schema, name, index.Name) + "\n" + c.Ddl.CreateIndex(schema, name, index), RiskClass.Risky,
-                    ["index.changed", $"live definition {existing.Definition}; declared {canonical}"]) with { Expect = expect });
-        }
-
-        foreach (var extra in liveIndexes.Where(p => p.Kind == "index" && !wanted.Any(i => string.Equals(i.Name, p.Name, StringComparison.OrdinalIgnoreCase))))
-            c.Noticed.Add($"Index `{extra.Name}` on {def.Name} exists on the target but is not declared in the model; it was left alone ({extra.Definition}).");
-        return true;
+        var made = new List<StructureStep>();
+        var problems = new List<StructureProblem>();
+        var ok = StructurePlanner.Indexes(Desired(c, []), live, c.Ddl.Statements, c.Input.Engine != TargetNames.Fabric, c, made, problems);
+        steps.AddRange(made.Select(ToStep));
+        blocks.AddRange(problems.Select(p => ToDiagnostic(c, p)));
+        return ok;
     }
 
     // Column diff of a live table against the declared columns. Returns false when a question is open.
     private static bool Diff(ModelContext c, ObjectShape live, IReadOnlyList<NativeColumn> declared, List<PlanStep> steps, List<Diagnostic> blocks)
     {
-        var def = c.Def;
-        var (schema, name) = c.Name;
-        var current = live.Columns.ToList();                                  // running shape, so every step knows the hash it must leave behind
-        var liveByName = live.Columns.ToDictionary(x => x.Name, StringComparer.Ordinal);
-        var liveAtStart = liveByName.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
-        var declaredByName = declared.ToDictionary(x => x.Name, StringComparer.Ordinal);
-        var open = false;
-        var blocksBefore = blocks.Count;
-
-        string HashNow() => Hashing.ShapeHash(current);
-        void Replace(string oldName, ColumnShape? to)
-        {
-            var i = current.FindIndex(x => x.Name == oldName);
-            if (to == null) current.RemoveAt(i); else current[i] = to;
-        }
-
-        void RenameColumn(string from, string to)
-        {
-            var shape = liveByName[from] with { Name = to };
-            Replace(from, shape);
-            liveByName.Remove(from);
-            liveByName[to] = shape;
-        }
-
-        // declared renames first (explicit in the model; never inferred)
-        var renamed = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var r in def.Renames)
-        {
-            if (!liveByName.ContainsKey(r.From) || liveByName.ContainsKey(r.To) || !declaredByName.ContainsKey(r.To)) continue;
-            RenameColumn(r.From, r.To);
-            steps.Add(Step(StepType.Ddl, def.Name, $"rename column {r.From} to {r.To}", c.Ddl.RenameColumn(schema, name, r.From, r.To), RiskClass.Risky, ["col.renamed", "declared in the model"], HashNow()));
-            renamed.Add(r.From);
-            renamed.Add(r.To);
-        }
-
-        var removed = live.Columns.Select(x => x.Name).Where(n => !declaredByName.ContainsKey(n) && !renamed.Contains(n)).ToList();
-        var added = declared.Select(x => x.Name).Where(n => !liveByName.ContainsKey(n) && !renamed.Contains(n)).ToList();
-
-        // a missing and a new column might be a rename: ask, never infer
-        var renameTargets = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var r in removed.ToList())
-        {
-            if (added.Count == 0) break;
-            var oldShape = liveAtStart[r];
-            var same = added.Where(a => declaredByName[a].Expected with { Name = r } == oldShape).ToList();
-            Proposal? proposal = removed.Count == 1 && added.Count == 1 && same.Count == 1
-                ? new Proposal("rename_to", same[0], ProposalCertainty.Normal, [$"`{r}` is gone and `{same[0]}` is new, with the identical type, length, nullability and collation."])
-                : null;
-            var q = new Question(QuestionIds.Rename(def.Name, r),
-                $"`{r}` is no longer declared on {def.Name}, and new column(s) {string.Join(", ", added.Select(a => $"`{a}`"))} appear. Is `{r}` renamed?",
-                [$"`{r}` is {oldShape.Type}{Size(oldShape)}; undeclared renames plan as a destructive drop plus an add."],
-                [new("rename_to", "Rename the column, keeping its data", "A rename step replaces the drop and the add.", TakesValue: true, ValueHint: "the new column name, one of: " + string.Join(", ", added)),
-                 new("drop_and_add", "Drop the old column and add the new one", "The old column's data is lost (destructive).")], proposal);
-            var a = c.Answer(q);
-            if (a == null) { open = true; continue; }
-            if (a.Choice != "rename_to") continue;
-            if (!added.Contains(a.Value!) || renameTargets.Contains(a.Value!))
-            {
-                blocks.Add(new Diagnostic(DiagnosticCatalog.AnswerValueMismatch, new(def.Name, 0, 0), $"col.rename.invalid: the answer to `{q.Id}` renames `{r}` to `{a.Value}`, which is not a new column of {def.Name} that is still free. New columns: {string.Join(", ", added)}."));
-                continue;
-            }
-            renameTargets.Add(a.Value!);
-            RenameColumn(r, a.Value!);
-            steps.Add(Step(StepType.Ddl, def.Name, $"rename column {r} to {a.Value}", c.Ddl.RenameColumn(schema, name, r, a.Value!), RiskClass.Risky, ["col.renamed", $"answer {q.Id} = rename_to {a.Value}"], HashNow()));
-            removed.Remove(r);
-            added.Remove(a.Value!);
-            // the renamed column may differ in more than its name; the common-column check below handles that
-        }
-        if (blocks.Count > blocksBefore) return false;
-
-        foreach (var r in removed)
-        {
-            Replace(r, null);
-            liveByName.Remove(r);
-            steps.Add(Step(StepType.Ddl, def.Name, $"drop column {r}", c.Ddl.DropColumn(schema, name, r), RiskClass.Destructive, ["col.removed"], HashNow()));
-        }
-
-        foreach (var a in added)
-        {
-            var col = declaredByName[a];
-            current.Add(col.Expected);
-            var reasons = new List<string> { col.Nullable ? "col.added" : "col.added.notnull" };
-            var q = new Question(QuestionIds.History(def.Name, a),
-                $"{def.Name} gains column `{a}`. What about the rows that are already loaded?",
-                ["Rows loaded before this change will have NULL (or the column default) in the new column."],
-                [new("not_backfilled", "Leave existing rows as they are", "Rows loaded before this change keep NULL in the column; recorded in the plan."),
-                 new("backfill_later", "Request a backfill separately", "The plan records the intent; run a backfill plan afterwards to fill the column.")]);
-            var answer = c.Answer(q);
-            if (answer == null) { open = true; continue; }
-            reasons.Add($"answer {q.Id} = {answer.Choice}");
-            c.Noticed.Add(answer.Choice == "not_backfilled"
-                ? $"Rows of {def.Name} loaded before this plan will have NULL in `{a}` (history disposition: not_backfilled{(answer.Note == null ? "" : ", " + answer.Note)})."
-                : $"A backfill of `{a}` in {def.Name} was requested but is not part of this plan.");
-            steps.Add(Step(StepType.Ddl, def.Name, $"add column {a}", c.Ddl.AddColumn(schema, name, col), col.Nullable ? RiskClass.Safe : RiskClass.Risky, reasons, HashNow()));
-        }
-
-        // columns present on both sides: type, nullability and collation
-        foreach (var col in declared.Where(d => liveByName.ContainsKey(d.Name) && !added.Contains(d.Name)))
-        {
-            var from = liveByName[col.Name];
-            var to = col.Expected;
-            if (from == to) continue;
-            if (from.Computed != null) { c.Noticed.Add($"`{col.Name}` of {def.Name} is a computed column on the target and was not changed."); continue; }
-            var change = DdlGenerator.Classify(from, to);
-            var risk = RiskClass.Safe;
-            var reasons = new List<string>();
-            if (change == TypeChange.Widening) reasons.Add("col.type.widen");
-            else if (change == TypeChange.Other) { risk = RiskClass.Destructive; reasons.Add("col.type.other"); }
-            if (from.Nullable != to.Nullable) { reasons.Add(to.Nullable ? "col.null.relax" : "col.null.tighten"); if (!to.Nullable && risk == RiskClass.Safe) risk = RiskClass.Risky; }
-            if (from.Collation != to.Collation) { reasons.Add("col.collation"); if (risk == RiskClass.Safe) risk = RiskClass.Risky; }
-            Replace(col.Name, to);
-            steps.Add(Step(StepType.Ddl, def.Name, $"alter column {col.Name}", c.Ddl.AlterColumn(schema, name, col), risk, reasons, HashNow()));
-        }
-        return !open;
-
-        static string Size(ColumnShape s) => s.Length != null ? $"({(s.Length == -1 ? "max" : s.Length.ToString())})" : s.Precision != null ? $"({s.Precision}, {s.Scale})" : "";
+        var made = new List<StructureStep>();
+        var problems = new List<StructureProblem>();
+        var ok = StructurePlanner.Columns(Desired(c, declared), live, c.Ddl.Statements, c, made, problems);
+        steps.AddRange(made.Select(ToStep));
+        blocks.AddRange(problems.Select(p => ToDiagnostic(c, p)));
+        return ok;
     }
 
     // ------------------------------------------------------------------------------------------------------------------------------------

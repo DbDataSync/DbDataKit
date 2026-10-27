@@ -129,7 +129,7 @@ public class MutationGateTests
         await gate.ExecuteAsync(GateStatement.FromPlanStep("b", StatementKind.Data, "UPDATE t SET y = 1"));
         Assert.Equal([1, 1, 2, 2], log.Entries.Select(e => e.Ordinal));
         var begin = log.Entries[0];
-        Assert.Equal(DbDataBuild.State.Hashing.ScriptHash("UPDATE t SET x = @x"), begin.StatementHash);
+        Assert.Equal(DbDataKit.Schema.Hashing.ScriptHash("UPDATE t SET x = @x"), begin.StatementHash);
         Assert.Equal("UPDATE t SET x = @x", begin.Text);
         Assert.Equal([("x", "5")], begin.Parameters);
         Assert.Null(log.Entries[1].Text);

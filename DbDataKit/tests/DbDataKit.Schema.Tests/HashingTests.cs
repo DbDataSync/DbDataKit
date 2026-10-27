@@ -1,6 +1,6 @@
-using DbDataBuild.State;
+using DbDataKit.Schema;
 
-namespace DbDataBuild.Tests.Unit;
+namespace DbDataKit.Schema.Tests;
 
 public class HashingTests
 {

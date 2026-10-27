@@ -279,6 +279,6 @@ internal sealed class ModelLowering(IReadOnlyList<ModelDefinition> models, IRead
         if (!policy.IsDefault) sb.Append($"-- rewrites off: {policy.Describe()}\n");
         sb.Append(QueryParameters.BackToReferences(query.Sql, parameters)).Append('\n');
         var text = sb.ToString();
-        return (new LoweredModel(query.Sql, query, ArtifactPathFor(name, variant), text, DbDataBuild.State.Hashing.ScriptHash(text)), null);
+        return (new LoweredModel(query.Sql, query, ArtifactPathFor(name, variant), text, DbDataKit.Schema.Hashing.ScriptHash(text)), null);
     }
 }

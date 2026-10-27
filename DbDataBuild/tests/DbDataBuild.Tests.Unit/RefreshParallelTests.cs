@@ -114,8 +114,20 @@ public class RefreshParallelTests
         public readonly List<string> Locks = [];
         public readonly List<string> Order = [];
         private readonly object gate = new();
-        public void Enter(string name) { lock (gate) { MostRunning = Math.Max(MostRunning, ++Running); Order.Add("start " + name); } }
-        public void Leave(string name) { lock (gate) { Running--; Order.Add("end " + name); } }
+        private readonly Dictionary<string, TaskCompletionSource> events = [];
+        private TaskCompletionSource Event(string key) { lock (gate) { if (!events.TryGetValue(key, out var tcs)) events[key] = tcs = new(TaskCreationOptions.RunContinuationsAsynchronously); return tcs; } }
+        public void Enter(string name) { lock (gate) { MostRunning = Math.Max(MostRunning, ++Running); Order.Add("start " + name); } Event("entered " + name).TrySetResult(); }
+        public void Leave(string name) { lock (gate) { Running--; Order.Add("end " + name); } Event("left " + name).TrySetResult(); }
+
+        /// <summary>Waits until every named load has entered or left, as a statement's hold says (`entered=b,c`, `left=a`): the order the test needs, not a pause that a busy machine can stretch or shrink. A hold nothing ends fails the test instead of hanging it.</summary>
+        public async Task WaitAsync(string hold, CancellationToken ct)
+        {
+            var (kind, names) = (hold[..hold.IndexOf('=')], hold[(hold.IndexOf('=') + 1)..].Split(','));
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            limit.CancelAfter(TimeSpan.FromSeconds(30));
+            try { await Task.WhenAll(names.Select(n => Event($"{kind} {n}").Task.WaitAsync(limit.Token))); }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { throw new TimeoutException($"Nothing ended the hold '{hold}'."); }
+        }
         public void Lock(string resource) { lock (gate) Locks.Add(resource); }
     }
 
@@ -127,7 +139,8 @@ public class RefreshParallelTests
             fleet.Enter(parts[1]);
             try
             {
-                await Task.Delay(int.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture), ct);
+                if (parts[2].Contains('=')) await fleet.WaitAsync(parts[2], ct);
+                else await Task.Delay(int.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture), ct);
                 if (parts[3] == "fail") throw new InvalidOperationException("the load failed");
                 return 7;
             }
@@ -139,7 +152,8 @@ public class RefreshParallelTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed record Spec(string Model, int Ms = 20, bool Fails = false, string OnFailure = OnFailureModes.Continue, string[]? Reads = null);
+    /// <param name="Hold">Instead of taking <paramref name="Ms"/> milliseconds, wait for other loads: `entered=b,c` or `left=a`.</param>
+    private sealed record Spec(string Model, int Ms = 20, bool Fails = false, string OnFailure = OnFailureModes.Continue, string[]? Reads = null, string? Hold = null);
 
     private static async Task<(ApplyResult Result, Fleet Fleet, MemoryStatementLog Log)> RunAsync(Spec[] specs, int parallel)
     {
@@ -162,7 +176,7 @@ public class RefreshParallelTests
         PrepareLoad prepare = (unit, session, ct) =>
         {
             var s = specs[unit.Position - 1];
-            var step = new PlanStep(unit.LoadStepId, StepType.Load, s.Model, "load", $"work:{s.Model}:{s.Ms}:{(s.Fails ? "fail" : "ok")}", RiskClass.Safe, [], null, []);
+            var step = new PlanStep(unit.LoadStepId, StepType.Load, s.Model, "load", $"work:{s.Model}:{s.Hold ?? s.Ms.ToString(System.Globalization.CultureInfo.InvariantCulture)}:{(s.Fails ? "fail" : "ok")}", RiskClass.Safe, [], null, []);
             return Task.FromResult(new PreparedLoad([step], "[]"));
         };
         var options = new ApplyOptions(false, false, new HashSet<string>(), null, false, "test", Lane: "refresh", Refresh: true, RecordShapes: false, Execution: new RefreshExecution(units, prepare, Downstream), Parallel: parallel);
@@ -231,8 +245,8 @@ public class RefreshParallelTests
     [Fact]
     public async Task Under_stop_the_loads_in_flight_finish_and_nothing_else_starts()
     {
-        // a fails at once under stop; b and c are running beside it and finish; d to g never start
-        var specs = new[] { new Spec("a", 10, Fails: true, OnFailure: OnFailureModes.Stop), new Spec("b", 120), new Spec("c", 120), new Spec("d", 5), new Spec("e", 5), new Spec("f", 5), new Spec("g", 5) };
+        // a fails under stop once b and c are running beside it; b and c finish after that; d to g never start. The order is held by the loads waiting for each other, not by how long each takes
+        var specs = new[] { new Spec("a", Fails: true, OnFailure: OnFailureModes.Stop, Hold: "entered=b,c"), new Spec("b", Hold: "left=a"), new Spec("c", Hold: "left=a"), new Spec("d", 5), new Spec("e", 5), new Spec("f", 5), new Spec("g", 5) };
         var (result, fleet, _) = await RunAsync(specs, 3);
         var byModel = result.Refresh!.Loads.ToDictionary(l => l.Unit.Model);
         Assert.Equal(RefreshSummary.Stopped, result.Refresh.Outcome);

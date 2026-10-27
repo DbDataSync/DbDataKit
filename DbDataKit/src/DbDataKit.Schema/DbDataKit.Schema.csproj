@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Schema</RootNamespace>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageId>DbDataKit.Schema</PackageId>
+    <Description>The structure model of tables (columns, physical items, objects as a catalog reports them), the hashes that tell whether a shape changed, and drift against a recorded shape. The decisions about what to change come in later slices; no product logic.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Dialect\DbDataKit.Dialect.csproj" />
+  </ItemGroup>
+</Project>

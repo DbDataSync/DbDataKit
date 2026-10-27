@@ -3,14 +3,9 @@ using System.Text.RegularExpressions;
 using DbDataBuild.Core;
 using DbDataBuild.Define;
 using DbDataBuild.Models;
-using DbDataBuild.State;
+using DbDataKit.Schema.Ddl;
 
 namespace DbDataBuild.Targets.Ddl;
-
-/// <summary>A declared column mapped to one engine: the text to write in DDL, and the shape the engine's catalog will report for it.</summary>
-/// <param name="Declaration">The type text, for example `nvarchar(20)` or `numeric(14, 2)`. Never contains user text beyond validated numbers.</param>
-/// <param name="Collation">The engine collation to emit and expect, or null for non-text columns.</param>
-public sealed record NativeColumn(string Name, string Declaration, string? Collation, bool Nullable, ColumnShape Expected);
 
 /// <summary>Thrown when a declared type or collation has no faithful native form. Carries the diagnostic the planner reports.</summary>
 public sealed class DdlUnsupportedException(Diagnostic diagnostic) : Exception(diagnostic.Found)
@@ -18,35 +13,32 @@ public sealed class DdlUnsupportedException(Diagnostic diagnostic) : Exception(d
     public Diagnostic Diagnostic { get; } = diagnostic;
 }
 
-/// <summary>How a type change is classified for risk (DESIGN.md 10.4).</summary>
-public enum TypeChange { None, Widening, Other }
-
-/// <summary>Per-engine DDL statements and the logical-to-native type table (DESIGN.md 8: `IDdlGenerator`).</summary>
-public abstract partial class DdlGenerator(string target, ProjectConfig config)
+/// <summary>
+/// Per-engine DDL for a model (DESIGN.md 8: `IDdlGenerator`): the logical-to-native type table and the project's collations, which are Build's, and the statements, which are the shared <see cref="TableDdl"/>
+/// of the engine (plan 19, H03).
+/// </summary>
+public abstract partial class DdlGenerator(string target, ProjectConfig config, TableDdl statements)
 {
     public string Target => target;
 
-    protected abstract string Quote(string identifier);
+    /// <summary>The engine's statements, shared (plan 19, H03): the structure planner writes its DDL with these.</summary>
+    public TableDdl Statements => statements;
+
     protected abstract (string Declaration, string CatalogType, int? Length, int? Precision, int? Scale)? MapType(string normalized);
-    protected abstract string CollateClause(string collation);
 
     [GeneratedRegex(@"^[A-Za-z0-9_.\-]+$")]
     private static partial Regex SafeCollation();
 
-    public string Qualified(string schema, string name) => $"{Quote(schema)}.{Quote(name)}";
+    public string Qualified(string schema, string name) => statements.Qualified(schema, name);
 
     /// <summary>An identifier quoted for this engine (a column name in an INSERT list).</summary>
-    public string QuoteIdentifier(string identifier) => Quote(identifier);
+    public string QuoteIdentifier(string identifier) => statements.Quote(identifier);
 
     /// <summary>Drops a table that may not exist (SQL Server 2016 and later, PostgreSQL, Fabric).</summary>
-    public string DropTableIfExists(string schema, string name) => $"DROP TABLE IF EXISTS {Qualified(schema, name)};";
+    public string DropTableIfExists(string schema, string name) => statements.DropTableIfExists(schema, name);
 
     /// <summary>Splits `marts.fct_orders` into schema and name.</summary>
-    public static (string SchemaName, string Name) Split(string model)
-    {
-        var i = model.LastIndexOf('.');
-        return i < 0 ? ("dbo", model) : (model[..i], model[(i + 1)..]);
-    }
+    public static (string SchemaName, string Name) Split(string model) => TableDdl.Split(model);
 
     public NativeColumn Map(string model, ColumnDefinition column)
     {
@@ -68,55 +60,30 @@ public abstract partial class DdlGenerator(string target, ProjectConfig config)
 
     public IReadOnlyList<NativeColumn> MapAll(ModelDefinition model) => model.Columns.Select(c => Map(model.Name, c)).ToList();
 
-    public static IReadOnlyList<ColumnShape> ExpectedShape(IEnumerable<NativeColumn> columns) => columns.Select(c => c.Expected).ToList();
+    public static IReadOnlyList<ColumnShape> ExpectedShape(IEnumerable<NativeColumn> columns) => TableDdl.ExpectedShape(columns);
 
-    protected string ColumnText(NativeColumn c) =>
-        $"{Quote(c.Name)} {c.Declaration}{(c.Collation == null ? "" : " " + CollateClause(c.Collation))} {(c.Nullable ? "NULL" : "NOT NULL")}";
-
-    public abstract string CreateSchema(string schema);
-
-    public string CreateTable(string schema, string name, IReadOnlyList<NativeColumn> columns) =>
-        $"CREATE TABLE {Qualified(schema, name)} (\n{string.Join(",\n", columns.Select(c => "  " + ColumnText(c)))}\n);";
-
-    public abstract string AddColumn(string schema, string name, NativeColumn column);
-    public string DropColumn(string schema, string name, string column) => $"ALTER TABLE {Qualified(schema, name)} DROP COLUMN {Quote(column)};";
-    public abstract string RenameColumn(string schema, string name, string from, string to);
-    public abstract string AlterColumn(string schema, string name, NativeColumn column);
-    public abstract string DropTable(string schema, string name);
-
-    public string CreateIndex(string schema, string name, IndexDefinition index) =>
-        $"CREATE {(index.Unique ? "UNIQUE " : "")}INDEX {Quote(index.Name)} ON {Qualified(schema, name)} ({string.Join(", ", index.Columns.Select(Quote))})" +
-        $"{(index.Include.Count > 0 ? $" INCLUDE ({string.Join(", ", index.Include.Select(Quote))})" : "")};";
-
-    public abstract string DropIndex(string schema, string table, string indexName);
+    public string CreateSchema(string schema) => statements.CreateSchema(schema);
+    public string CreateTable(string schema, string name, IReadOnlyList<NativeColumn> columns) => statements.CreateTable(schema, name, columns);
+    public string AddColumn(string schema, string name, NativeColumn column) => statements.AddColumn(schema, name, column);
+    public string DropColumn(string schema, string name, string column) => statements.DropColumn(schema, name, column);
+    public string RenameColumn(string schema, string name, string from, string to) => statements.RenameColumn(schema, name, from, to);
+    public string AlterColumn(string schema, string name, NativeColumn column) => statements.AlterColumn(schema, name, column);
+    public string DropTable(string schema, string name) => statements.DropTable(schema, name);
+    public string CreateIndex(string schema, string name, IndexDefinition index) => statements.CreateIndex(schema, name, new IndexSpec(index.Name, index.Unique, index.Columns, index.Include));
+    public string DropIndex(string schema, string table, string indexName) => statements.DropIndex(schema, table, indexName);
 
     /// <param name="bodySql">The model body transpiled to this engine.</param>
-    public abstract string CreateOrReplaceView(string schema, string name, IReadOnlyList<NativeColumn> columns, string bodySql);
+    public string CreateOrReplaceView(string schema, string name, IReadOnlyList<NativeColumn> columns, string bodySql) => statements.CreateOrReplaceView(schema, name, columns, bodySql);
 
     /// <summary>Safe when the new type holds every value of the old one: same family, larger length or precision at the same scale.</summary>
-    public static TypeChange Classify(ColumnShape from, ColumnShape to)
-    {
-        if (from.Type == to.Type && from.Length == to.Length && from.Precision == to.Precision && from.Scale == to.Scale) return TypeChange.None;
-        static bool Wider(int? a, int? b) => a == -1 ? b == -1 : b == -1 || (a != null && b != null && b > a);
-        if (from.Type == to.Type)
-        {
-            if (from.Length != to.Length && from.Precision == to.Precision && from.Scale == to.Scale && Wider(from.Length, to.Length)) return TypeChange.Widening;
-            if (from.Length == to.Length && from.Scale == to.Scale && from.Precision != null && to.Precision > from.Precision) return TypeChange.Widening;
-        }
-        if (from.Type == "character varying" && to.Type == "text" && from.Collation == to.Collation) return TypeChange.Widening;   // varchar(n) to unlimited text holds every value
-        var rank = new Dictionary<string, int> { ["smallint"] = 1, ["int"] = 2, ["integer"] = 2, ["bigint"] = 3 };
-        if (rank.TryGetValue(from.Type, out var fr) && rank.TryGetValue(to.Type, out var tr) && tr > fr) return TypeChange.Widening;
-        return TypeChange.Other;
-    }
+    public static DbDataKit.Schema.Ddl.TypeChange Classify(ColumnShape from, ColumnShape to) => TableDdl.Classify(from, to);
 
     protected static string Num(int v) => v.ToString(CultureInfo.InvariantCulture);
 }
 
-public sealed partial class TSqlDdl(string target, ProjectConfig config) : DdlGenerator(target, config)
+public sealed partial class TSqlDdl(string target, ProjectConfig config) : DdlGenerator(target, config, new TSqlTableDdl(target))
 {
     private readonly bool fabric = target == "fabric";
-    protected override string Quote(string id) => SharedQuoting.Quote("sqlserver", id);
-    protected override string CollateClause(string collation) => "COLLATE " + collation;
 
     [GeneratedRegex(@"^VARCHAR\((\d+)\)$")] private static partial Regex Varchar();
     [GeneratedRegex(@"^DECIMAL\((\d+), (\d+)\)$")] private static partial Regex Decimal();
@@ -154,26 +121,10 @@ public sealed partial class TSqlDdl(string target, ProjectConfig config) : DdlGe
             _ => null,
         };
     }
-
-    public override string CreateSchema(string schema) => $"IF SCHEMA_ID({Lit(schema)}) IS NULL EXEC({Lit("CREATE SCHEMA " + Quote(schema))});";
-    private static string Lit(string s) => "N'" + s.Replace("'", "''") + "'";
-
-    public override string AddColumn(string schema, string name, NativeColumn c) => $"ALTER TABLE {Qualified(schema, name)} ADD {ColumnText(c)};";
-    public override string RenameColumn(string schema, string name, string from, string to) =>
-        $"EXEC sp_rename {Lit($"{Quote(schema)}.{Quote(name)}.{Quote(from)}")}, {Lit(to)}, N'COLUMN';";
-    public override string AlterColumn(string schema, string name, NativeColumn c) => $"ALTER TABLE {Qualified(schema, name)} ALTER COLUMN {ColumnText(c)};";
-    public override string DropTable(string schema, string name) => $"DROP TABLE {Qualified(schema, name)};";
-    public override string DropIndex(string schema, string table, string indexName) => $"DROP INDEX {Quote(indexName)} ON {Qualified(schema, table)};";
-
-    public override string CreateOrReplaceView(string schema, string name, IReadOnlyList<NativeColumn> columns, string bodySql) =>
-        $"CREATE OR ALTER VIEW {Qualified(schema, name)} ({string.Join(", ", columns.Select(c => Quote(c.Name)))}) AS\n{bodySql.Trim().TrimEnd(';')};";
 }
 
-public sealed partial class PostgresDdl(ProjectConfig config) : DdlGenerator("postgres", config)
+public sealed partial class PostgresDdl(ProjectConfig config) : DdlGenerator("postgres", config, new PostgresTableDdl())
 {
-    protected override string Quote(string id) => SharedQuoting.Quote("postgres", id);
-    protected override string CollateClause(string collation) => "COLLATE " + Quote(collation);
-
     [GeneratedRegex(@"^VARCHAR\((\d+)\)$")] private static partial Regex Varchar();
     [GeneratedRegex(@"^DECIMAL\((\d+), (\d+)\)$")] private static partial Regex Decimal();
 
@@ -208,23 +159,4 @@ public sealed partial class PostgresDdl(ProjectConfig config) : DdlGenerator("po
             _ => null,
         };
     }
-
-    public override string CreateSchema(string schema) => $"CREATE SCHEMA IF NOT EXISTS {Quote(schema)};";
-    public override string AddColumn(string schema, string name, NativeColumn c) => $"ALTER TABLE {Qualified(schema, name)} ADD COLUMN {ColumnText(c)};";
-    public override string RenameColumn(string schema, string name, string from, string to) =>
-        $"ALTER TABLE {Qualified(schema, name)} RENAME COLUMN {Quote(from)} TO {Quote(to)};";
-
-    public override string AlterColumn(string schema, string name, NativeColumn c)
-    {
-        var q = Quote(c.Name);
-        var type = $"{c.Declaration}{(c.Collation == null ? "" : " " + CollateClause(c.Collation))}";
-        return $"ALTER TABLE {Qualified(schema, name)} ALTER COLUMN {q} TYPE {type}, ALTER COLUMN {q} {(c.Nullable ? "DROP" : "SET")} NOT NULL;";
-    }
-
-    public override string DropTable(string schema, string name) => $"DROP TABLE {Qualified(schema, name)};";
-    public override string DropIndex(string schema, string table, string indexName) => $"DROP INDEX {Qualified(schema, indexName)};"; // PostgreSQL index names are schema-scoped
-
-    // PostgreSQL's CREATE OR REPLACE VIEW cannot change or reorder existing columns, so a changed view is dropped and created in one statement batch (one implicit transaction)
-    public override string CreateOrReplaceView(string schema, string name, IReadOnlyList<NativeColumn> columns, string bodySql) =>
-        $"DROP VIEW IF EXISTS {Qualified(schema, name)};\nCREATE VIEW {Qualified(schema, name)} ({string.Join(", ", columns.Select(c => Quote(c.Name)))}) AS\n{bodySql.Trim().TrimEnd(';')};";
 }

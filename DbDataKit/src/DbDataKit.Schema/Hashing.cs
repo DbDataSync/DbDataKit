@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace DbDataBuild.State;
+namespace DbDataKit.Schema;
 
 /// <summary>One column as a catalog (or a model definition) reports it. Only what the shape hash covers (DESIGN.md 12.1).</summary>
 /// <param name="Type">The engine's type name, lower case, without length or precision (`varchar`, `decimal`, `bigint`).</param>

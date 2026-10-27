@@ -106,7 +106,7 @@ public class NativeCommandTests
     private static readonly ProjectConfig Config = ProjectConfig.Default;
 
     private static PlanInput Input(PlannedModel model) => new(
-        "sqlserver", Config, [model], new Dictionary<string, DbDataBuild.State.ObjectShape>(), new HashSet<string>(), new Dictionary<string, string>(), new Dictionary<string, string>(),
+        "sqlserver", Config, [model], new Dictionary<string, DbDataKit.Schema.ObjectShape>(), new HashSet<string>(), new Dictionary<string, string>(), new Dictionary<string, string>(),
         new Dictionary<string, string>(), new HashSet<string>(),
         new Dictionary<string, IReadOnlyList<RenderedLoad>> { [model.Definition.Name] = [new RenderedLoad("default", true, "-- load script", new string('a', 64), null, [], null)] },
         new Dictionary<string, ResolverOutcome>());

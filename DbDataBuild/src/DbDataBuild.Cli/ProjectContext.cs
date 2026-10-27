@@ -166,7 +166,7 @@ internal sealed class ProjectContext
     {
         var hash = AstHasher.Hash(sql).Hash ?? "";
         var macros = Project.Macros.HashOf([sql]);
-        return macros.Length == 0 ? hash : DbDataBuild.State.Hashing.ScriptHash(hash + "\n" + macros);
+        return macros.Length == 0 ? hash : DbDataKit.Schema.Hashing.ScriptHash(hash + "\n" + macros);
     }
 
     /// <summary>The macros a model's query calls directly, by the name its node has in the graph (`name()`).</summary>

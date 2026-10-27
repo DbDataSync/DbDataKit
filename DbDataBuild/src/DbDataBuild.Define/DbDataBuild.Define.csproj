@@ -13,4 +13,12 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Using Include="DbDataKit.Schema.Questions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="DbDataKit.Schema.Ddl" />
+  </ItemGroup>
+
 </Project>

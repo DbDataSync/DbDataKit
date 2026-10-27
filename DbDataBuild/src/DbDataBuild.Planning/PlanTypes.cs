@@ -6,8 +6,6 @@ namespace DbDataBuild.Planning;
 /// <summary>`track` is a tracking-table write (recording an adopted or acknowledged shape); the other types are those of DESIGN.md 10.2.</summary>
 public enum StepType { Ddl, Load, Backfill, Hook, Track, Transfer }
 
-public enum RiskClass { Safe, Risky, Destructive }
-
 /// <param name="Source">runtime (a person supplied it) or resolver (read from the target).</param>
 /// <param name="Value">Invariant-culture text of the value in the parameter's logical type, or null for SQL NULL.</param>
 /// <param name="Planned">Only while a plan is applied: the value the plan was made with, when apply bound another (a moved input the deployer approved, or a value given with `--input` at apply). Recorded in `run_log`; never written to a plan file.</param>
@@ -92,9 +90,6 @@ public sealed record PlanStep(
     string? HashAfter, IReadOnlyList<PlanParameter> Parameters, string? ResolverText = null, string? ResolverResult = null, bool HasResolver = false,
     string? FileHash = null, string? Operation = null, string? ShapeSource = null, string? DefinitionHash = null, string? Expect = null, string? Hook = null, string? Effect = null, TransferSpec? Transfer = null,
     IReadOnlyList<PlannedInput>? Inputs = null);
-
-/// <summary>What the plan assumed about an object, verified against the live target at apply (a mismatch is a stale plan).</summary>
-public sealed record ObjectBase(string Object, ObjectState State, string? LiveShapeHash, string? RecordedShapeHash);
 
 public sealed record Plan(
     string Id, string Connection, string? GitCommit, bool GitDirty, string ToolVersion,

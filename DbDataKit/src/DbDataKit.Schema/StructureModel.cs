@@ -1,4 +1,4 @@
-namespace DbDataBuild.State;
+namespace DbDataKit.Schema;
 
 public enum ObjectKind { Table, View }
 
