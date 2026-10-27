@@ -92,6 +92,18 @@ public class DefinitionTests
     }
 
     [Fact]
+    public void A_product_whose_files_carry_no_address_can_say_so_and_every_other_rule_still_applies()
+    {
+        const string noAddress = "schema: connection/1\nname: a\nengine: sqlserver\n";
+        Assert.True(ConnectionDefinitionLoader.Load(noAddress, addressRequired: false).Ok);
+        Assert.False(ConnectionDefinitionLoader.Load(noAddress).Ok);
+        var plaintext = ConnectionDefinitionLoader.Load(noAddress + "connection_string: Server=h;Password=hunter2\n", addressRequired: false);
+        Assert.Contains(plaintext.Diagnostics, d => d.Code == ConnectionDefinitionLoader.PlaintextCredential);
+        var both = ConnectionDefinitionLoader.Load(noAddress + "address: { host: h }\nconnection_string: Server=h\n", addressRequired: false);
+        Assert.Contains(both.Diagnostics, d => d.Code == ConnectionDefinitionLoader.BadAddress);      // two forms are still wrong
+    }
+
+    [Fact]
     public void A_login_with_a_whole_string_secret_can_stand_without_an_address()
     {
         var r = ConnectionDefinitionLoader.Load("schema: connection/1\nname: a\nengine: sqlserver\nread_login: { connection_string_secret: \"env:X\" }\n");

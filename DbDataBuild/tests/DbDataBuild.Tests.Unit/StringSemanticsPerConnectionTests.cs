@@ -11,10 +11,10 @@ public class StringSemanticsPerConnectionTests
     private static string Project(string config)
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
         Directory.CreateDirectory(Path.Combine(dir, "models", "marts"));
-        File.WriteAllText(Path.Combine(dir, "models", "marts", "m.yml"), "name: marts.m\nkind: full\ncolumns:\n  - {name: code, type: \"VARCHAR(20)\", nullable: false}\n");
-        File.WriteAllText(Path.Combine(dir, "models", "marts", "m.sql"), "SELECT CAST('a' AS VARCHAR(20)) AS code\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models", "marts", "m.yml"), "name: marts.m\nkind: full\ncolumns:\n  - {name: code, type: \"VARCHAR(20)\", nullable: false}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models", "marts", "m.sql"), "SELECT CAST('a' AS VARCHAR(20)) AS code\n");
         return dir;
     }
 

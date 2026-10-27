@@ -21,9 +21,10 @@ public class SchemaConformanceTests
     {
         // output.schema.json refers to metadata.schema.json by its $id, so that one is loaded (and registered) first
         var schema = JsonSchema.FromFile(Path.Combine(RepoRoot(), "schemas", name + ".schema.json"));
-        if (name is "metadata" or "declared-model" or "model" or "config") SchemaRegistry.Global.Register(schema);
+        if (name is "metadata" or "declared-model" or "model" or "config" or "connection") SchemaRegistry.Global.Register(schema);
         if (name == "output") LoadSchema("metadata");
         if (name == "model") LoadSchema("declared-model");       // a model file that says `kind: mapped` or `kind: native` is handed to the declared-model schema
+        if (name == "connection") LoadSchema("config");   // the connection file's `extensions.build` shares the project file's definitions
         if (name is "config" or "folder") LoadSchema("model");   // the `defaults:` of the project and folder files are the model's own settings
         return schema;
     }
@@ -435,6 +436,12 @@ public class DesignDocExampleTests
         var cfg = DbDataBuild.Models.ProjectConfigLoader.Load(yaml, "dbdatabuild.yml", diags);
         Assert.Empty(diags.Select(DbDataBuild.Core.DiagnosticFormatter.Format));
         Assert.Equal(DbDataBuild.Models.ProjectConfig.Default.StringSemantics, cfg!.StringSemantics with { Collations = DbDataBuild.Models.ProjectConfig.Default.StringSemantics.Collations });
-        Assert.Equal(17, cfg.TargetVersions["postgres"]);
+        Assert.DoesNotContain("\nconnections:", yaml);      // connections are files now: the example of one follows the project file's
+        var connection = YamlBlockAfter("**Connection files (as built");
+        Assert.True(SchemaConformanceTests.SchemaAccepts(SchemaConformanceTests.LoadSchema("connection"), connection));
+        var found = new List<DbDataBuild.Core.Diagnostic>();
+        var entry = DbDataBuild.Models.ProjectConnectionFiles.ReadOne(connection, "connections/shop.yaml", "shop", found, new Dictionary<DbDataBuild.Models.Yaml.YamlNode, string>());
+        Assert.NotNull(entry);
+        Assert.Empty(found.Select(DbDataBuild.Core.DiagnosticFormatter.Format));
     }
 }

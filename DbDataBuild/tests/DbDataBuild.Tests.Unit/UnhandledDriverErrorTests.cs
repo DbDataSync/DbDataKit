@@ -13,9 +13,9 @@ public class UnhandledDriverErrorTests
     public void An_unreachable_server_under_a_command_that_does_not_catch_it_is_reported_without_the_driver_text()
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n");
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\ngrain: [order_id]\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\ngrain: [order_id]\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
         var env = new Dictionary<string, string?> { ["DBDATA_BUILD_SQLSERVER_READ"] = "Server=secret-host.invalid,1;User Id=r;Password=hunter2;Connect Timeout=1" };
         var o = new StringWriter(); var e = new StringWriter();
         var exit = CliApp.Run(["connection", "compare", "staging.orders", "--against-schema", "dev", "--project", dir], o, e, environment: v => env.GetValueOrDefault(v));
@@ -33,9 +33,9 @@ public class UnhandledDriverErrorTests
     public void In_json_mode_the_database_error_is_one_document_with_the_diagnostic_and_no_driver_text()
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n");
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\ngrain: [order_id]\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\ngrain: [order_id]\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
         var env = new Dictionary<string, string?> { ["DBDATA_BUILD_SQLSERVER_READ"] = "Server=secret-host.invalid,1;User Id=r;Password=hunter2;Connect Timeout=1" };
         var o = new StringWriter(); var e = new StringWriter();
         var exit = CliApp.Run(["connection", "compare", "staging.orders", "--against-schema", "dev", "--project", dir, "--format", "json"], o, e, environment: v => env.GetValueOrDefault(v));

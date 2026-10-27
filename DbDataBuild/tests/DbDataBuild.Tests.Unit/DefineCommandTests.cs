@@ -15,9 +15,9 @@ public class DefineCommandTests
     {
         var dir = NewProjectDir();
         Directory.CreateDirectory(Path.Combine(dir, "models", "staging"));
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), Sources);
-        File.WriteAllText(Path.Combine(dir, "models/staging/customers.yml"), Customers);
-        if (config != null) File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), Sources);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/customers.yml"), Customers);
+        if (config != null) TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
         return dir;
     }
 
@@ -25,8 +25,8 @@ public class DefineCommandTests
     {
         var stem = Path.Combine(dir, "models", name.Replace('.', '/'));
         Directory.CreateDirectory(Path.GetDirectoryName(stem)!);
-        File.WriteAllText(stem + ".sql", sql);
-        if (yaml != null) File.WriteAllText(stem + ".yml", yaml);
+        TestFiles.WriteAllText(stem + ".sql", sql);
+        if (yaml != null) TestFiles.WriteAllText(stem + ".yml", yaml);
         return stem;
     }
 
@@ -43,7 +43,7 @@ public class DefineCommandTests
     private static string Answers(string dir, string yaml)
     {
         var path = Path.Combine(dir, "answers.yml");
-        File.WriteAllText(path, yaml);
+        TestFiles.WriteAllText(path, yaml);
         return path;
     }
 
@@ -244,7 +244,7 @@ public class DefineCommandTests
     {
         var dir = Project();
         Directory.CreateDirectory(Path.Combine(dir, "models/marts"));
-        File.WriteAllText(Path.Combine(dir, "models/marts/lonely.yml"), "name: marts.lonely\nkind: full\ncolumns:\n  - {name: a, type: INT}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/lonely.yml"), "name: marts.lonely\nkind: full\ncolumns:\n  - {name: a, type: INT}\n");
         var (exit, _, err) = Define(dir, "--check");
         Assert.Equal(CliApp.ExitFindings, exit);
         Assert.Contains("DDB-108", err);
@@ -331,7 +331,7 @@ public class DefineCommandTests
         var stem = Model(dir, "marts.dim_customer", "SELECT c.customer_id, c.name FROM staging.customers c");
         var yml = stem + ".yml";
         // someone creates the definition while define waits at the confirmation prompt
-        var reader = new TriggerReader(Script(InteractiveForSmallModel.SkipLast(1).ToArray()), "y", () => File.WriteAllText(yml, "someone: else\n"));
+        var reader = new TriggerReader(Script(InteractiveForSmallModel.SkipLast(1).ToArray()), "y", () => TestFiles.WriteAllText(yml, "someone: else\n"));
         var o = new StringWriter();
         var e = new StringWriter();
         var exit = CliApp.Run(["project", "model", "update", "--project", dir], o, e, reader, interactive: true);

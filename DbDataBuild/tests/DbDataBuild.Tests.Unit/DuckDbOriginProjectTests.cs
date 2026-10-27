@@ -38,7 +38,7 @@ public class DuckDbOriginProjectTests : IDisposable
     {
         var p = Path.Combine(dir, rel);
         Directory.CreateDirectory(Path.GetDirectoryName(p)!);
-        File.WriteAllText(p, text);
+        TestFiles.WriteAllText(p, text);
     }
 
     private const string EventsModel = "name: src.events\nkind: mapped\nconnections=: [analytics]\ngrain: [id]\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n  - {name: day, type: DATE, nullable: false}\n  - {name: label, type: VARCHAR(20)}\n  - {name: amount, type: \"DECIMAL(18, 2)\"}\n";

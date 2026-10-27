@@ -19,16 +19,16 @@ public class ProjectTestsTests
         var dir = NewProjectDir();
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
         Directory.CreateDirectory(Path.Combine(dir, "hooks"));
-        File.WriteAllText(Path.Combine(dir, "hooks/grant.sql"), "GRANT SELECT ON marts.fct_orders TO reader;\n");
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), Config);
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), Orders);
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), Fct);
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT o.order_id, o.amount, o.note || '!' AS note2 FROM staging.orders o\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "hooks/grant.sql"), "GRANT SELECT ON marts.fct_orders TO reader;\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), Config);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), Orders);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), Fct);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT o.order_id, o.amount, o.note || '!' AS note2 FROM staging.orders o\n");
         foreach (var (path, text) in rules)
         {
             var full = Path.Combine(dir, "tests/metadata", path);
             Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-            File.WriteAllText(full, text);
+            TestFiles.WriteAllText(full, text);
         }
         return dir;
     }
@@ -147,7 +147,7 @@ public class ProjectTestsTests
 
         Assert.Equal(1, Test(dir, "--strict").Exit);
 
-        File.WriteAllText(Path.Combine(dir, "tests/metadata/grain_is_the_key.sql"), "-- tags: critical\nSELECT model FROM metadata_models WHERE len(unique_key) > 0\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "tests/metadata/grain_is_the_key.sql"), "-- tags: critical\nSELECT model FROM metadata_models WHERE len(unique_key) > 0\n");
         var (failExit, failDoc, _) = Test(dir);
         Assert.Equal(1, failExit);
         var failed = One(failDoc, "grain_is_the_key");

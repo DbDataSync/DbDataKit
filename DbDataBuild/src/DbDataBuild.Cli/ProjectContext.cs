@@ -246,7 +246,7 @@ internal sealed class ProjectContext
         if (files == null) { error.WriteLine(problem); return null; }
         var built = Project.BuiltModels.OrderBy(s => s.Definition.Name, StringComparer.Ordinal).ToList();
         var changed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (files.Contains(ProductInfo.ConfigFile) || files.Contains(ProductInfo.DialectLockFile)) changed.UnionWith(Models.Select(m => m.Name));                    // the project settings reach every model
+        if (files.Contains(ProductInfo.ConfigFile) || files.Contains(ProductInfo.DialectLockFile) || files.Any(f => f.StartsWith(ProjectConnectionFiles.Folder + "/", StringComparison.Ordinal))) changed.UnionWith(Models.Select(m => m.Name));                    // the project settings (and the connections) reach every model
         foreach (var s in built.Where(s => files.Contains(s.QueryFile) || files.Contains(s.DefinitionFile))) changed.Add(s.Definition.Name);
         foreach (var d in Project.DeclaredModels.Where(d => files.Contains(d.File.Length > 0 ? d.File : ModelFilePath(d.Name))))
         {

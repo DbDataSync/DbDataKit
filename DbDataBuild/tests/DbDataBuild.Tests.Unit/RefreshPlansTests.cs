@@ -24,7 +24,7 @@ public class RefreshPlansTests
     internal static string Project(string fctRefresh, string configExtra = "", string? summaryRefresh = null, string? folderFile = null)
     {
         var dir = NewProjectDir();
-        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); File.WriteAllText(p, text); }
+        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); TestFiles.WriteAllText(p, text); }
         Write("dbdatabuild.yml", Config + configExtra);
         Write("models/staging/events.yml", Events);
         Write("models/marts/fct_events.yml", FctHead + Cols + Loads + fctRefresh);
@@ -212,7 +212,7 @@ public class RefreshPlansTests
         var dir = Project("refresh: { hourly: incremental }\n");
         Assert.Equal(0, Compile(dir).Exit);
         Assert.True(File.Exists(Path.Combine(dir, "rendered/sqlserver/refresh/hourly.yml")));
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_events.yml"), FctHead + Cols + Loads);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_events.yml"), FctHead + Cols + Loads);
         Assert.NotEqual(0, RenderFiles("--check", "--project", dir).Exit);
         Assert.Equal(0, Compile(dir).Exit);
         Assert.False(File.Exists(Path.Combine(dir, "rendered/sqlserver/refresh/hourly.yml")));

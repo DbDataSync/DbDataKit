@@ -69,7 +69,7 @@ public class OdbcOriginConformanceTests
         {
             var path = Path.Combine(dir, rel);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, text);
+            TestFiles.WriteAllText(path, text);
         }
 
         public void Dispose() { try { Directory.Delete(dir, true); } catch (IOException) { } }

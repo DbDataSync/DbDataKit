@@ -1,0 +1,10 @@
+schema: connection/1
+name: postgres
+engine: postgres
+extensions:
+  build:
+    title: Reporting
+    description: "The database the report is read from."
+    tags: [reporting]
+    properties: {role: serve}
+    string_semantics: { trailing_space: significant }

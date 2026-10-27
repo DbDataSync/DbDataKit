@@ -21,7 +21,7 @@ public class LoadGraphTests
     private static string Project()
     {
         var dir = NewProjectDir();
-        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); File.WriteAllText(p, text); }
+        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); TestFiles.WriteAllText(p, text); }
         Write("dbdatabuild.yml", Config);
         Write("models/staging/events.yml", Events);
         Write("models/marts/fct_events.yml", "name: marts.fct_events\nkind: {incremental_by_time_range: {time_column: event_ts}}\n" + Cols + Loads);
@@ -71,7 +71,7 @@ public class LoadGraphTests
         Assert.Equal(again, File.ReadAllText(LoadsPath(dir)));
         Assert.Equal(0, RenderFiles("--check", "--project", dir).Exit);
         // and it changes with the project: a model that stops reading another loses the edge, and the file is rewritten
-        File.WriteAllText(Path.Combine(dir, "models/marts/report.sql"), "SELECT event_id FROM marts.fct_events\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/report.sql"), "SELECT event_id FROM marts.fct_events\n");
         Assert.NotEqual(0, RenderFiles("--check", "--project", dir).Exit);
         Assert.Equal(0, RenderFiles("--write", "--project", dir).Exit);
         Assert.Equal("marts.report[full]>marts.fct_events[incremental_by_time_range]@1;marts.summary[full]>marts.fct_events[incremental_by_time_range]@2", Edges(ReadLoads(dir)));

@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "connection.schema.json",
+  "title": "A dbdatabuild connection file",
+  "description": "connections/<name>.yaml, a connection/1 file (plan 13, E03). The file name is the connection's name. It holds no address and no login: the login is the environment variable DBDATA_BUILD_<NAME>_READ and _WRITE (the name in capitals, anything but a letter or digit an underscore). The driver is `engine`, `access: readonly` makes the connection only read (never a destination, a tracking connection or a deploy target, and no _WRITE login is read), `dialect` names the SQL dialect (a built-in or one under `dialects:` in dbdatabuild.yml), and the tool's own settings are under `extensions.build`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "name",
+    "engine"
+  ],
+  "properties": {
+    "schema": {
+      "const": "connection/1"
+    },
+    "name": {
+      "description": "The connection's name; equal to the file's name. Letters, digits and underscores, starting with a letter.",
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+    },
+    "engine": {
+      "description": "The driver, one word. duckdb, odbc and flightsql need `access: readonly`. A connection named after an engine (sqlserver, postgres, fabric) needs no file unless it sets a version or other settings, and then its engine is its name.",
+      "enum": [
+        "sqlserver",
+        "postgres",
+        "fabric",
+        "duckdb",
+        "odbc",
+        "flightsql"
+      ]
+    },
+    "dialect": {
+      "description": "The SQL dialect of the system behind the connection, where it is not the driver's own: a built-in (ansi, sqlserver, postgres, fabric, duckdb, mysql, oracle) or a name under `dialects:` in dbdatabuild.yml.",
+      "type": "string",
+      "minLength": 1
+    },
+    "access": {
+      "description": "`readonly`: the tool only reads this connection. The default is `readwrite`.",
+      "enum": [
+        "readwrite",
+        "readonly"
+      ]
+    },
+    "extensions": {
+      "type": "object",
+      "properties": {
+        "build": {
+          "description": "The tool's own settings for this connection (what `connections.<name>:` held in dbdatabuild.yml before connection files).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "version": {
+              "description": "The engine's major version, or the T-SQL level to generate for: 16 for SQL Server 2022 (and a 2025 server at compatibility level 160), 17 for 2025 at level 170. Lets the matrix linter resolve min_version rows.",
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*$"
+                }
+              ]
+            },
+            "parameters": {
+              "description": "Values this connection carries, which differ between connections of one application (a store id, a region). Referenced as `${connection.name}`, or `${origin.name}` by a copy that reads from the connection. Names are lowercase words with underscores; values are single values, read as text.",
+              "type": "object",
+              "additionalProperties": false,
+              "patternProperties": {
+                "^[a-z][a-z0-9_]*$": {
+                  "$ref": "config.schema.json#/$defs/parameterValue"
+                }
+              }
+            },
+            "tracking": {
+              "description": "`none` (not tracked, no warning), or another tracking connection (and schema name) for this connection's records.",
+              "oneOf": [
+                {
+                  "const": "none"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "connection": {
+                      "description": "The connection that keeps the records of what the tool built (a connection of this project: its read and write logins are used). Without it, nothing is tracked and every command that would record something warns.",
+                      "$ref": "config.schema.json#/$defs/connectionName"
+                    },
+                    "schema": {
+                      "description": "The schema name of the tracking tables on that connection. Default: dbdatabuild.",
+                      "type": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                    }
+                  }
+                }
+              ]
+            },
+            "timezone": {
+              "description": "An IANA time zone name (for example `Europe/Berlin`). It decides what `current_date` and `now()` mean in an `expression` resolver of a load on this connection; it wins over the project's. Default: the project's, else UTC. The machine's own zone is never used.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "allow_native_commands": {
+              "description": "Whether a native command (a procedure call that returns rows, `kind: {native: {access: command}}`) may be run on this connection. Default false: a procedure can write, so each connection that runs one says so. The read login's permissions are what keep it read-only; the call also runs in a transaction that is rolled back.",
+              "type": "boolean"
+            },
+            "max_parallel": {
+              "description": "How many sessions one refresh may have open at this connection at once. At an origin of a copy it counts the sessions that read rows for it (and the checks and `source` resolvers that go with them); at the destination it caps `parallel`, the loads that run together. A limit holds within one run (another process has its own). Default: no limit.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "string_semantics": {
+              "$ref": "config.schema.json#/$defs/stringSemantics"
+            },
+            "plans": {
+              "description": "This connection's own plan policy; what it leaves out is the project's.",
+              "$ref": "config.schema.json#/$defs/planSettings"
+            },
+            "refresh": {
+              "description": "This connection's own refresh check; what it leaves out is the project's.",
+              "$ref": "config.schema.json#/$defs/refreshSettings"
+            },
+            "title": {
+              "description": "A short display name, one line, at most 200 characters. Never inherited.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[^\\n]*$"
+            },
+            "description": {
+              "description": "Free text, at most 4000 characters. Never inherited.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "tags": {
+              "description": "Labels: words of letters, digits, `_`, `-`, `.` and `:`, at most 128 characters each.",
+              "type": "array",
+              "uniqueItems": true,
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:\\-]*$"
+              }
+            },
+            "properties": {
+              "description": "Free key-value data. A value is text, a number or true or false (a number written as plain digits is a number, text in quotes is text); keys are at most 128 characters, values at most 4000.",
+              "type": "object",
+              "propertyNames": {
+                "maxLength": 128,
+                "pattern": "^[A-Za-z_]([A-Za-z0-9_.:\\-]*[A-Za-z0-9_.:])?$"
+              },
+              "additionalProperties": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

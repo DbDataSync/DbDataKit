@@ -64,7 +64,7 @@ public partial class ApplyConformanceTests
         {
             var path = Path.Combine(dir, rel);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, text);
+            TestFiles.WriteAllText(path, text);
         }
 
         public Engine Engine => engine;
@@ -241,7 +241,7 @@ public partial class ApplyConformanceTests
 
             // ---- an edited plan is refused ----
             var tampered = plan4File.Replace(".plan.yml", ".edited.plan.yml");
-            File.WriteAllText(tampered, File.ReadAllText(plan4File).Replace("DROP COLUMN", "DROP  COLUMN"));
+            TestFiles.WriteAllText(tampered, File.ReadAllText(plan4File).Replace("DROP COLUMN", "DROP  COLUMN"));
             Refused(run.Cli("connection", "deploy", "--apply-plan", tampered, "--allow-destructive", "marts.fct_orders"), "DDB-435", "an edited plan");
 
             // ---- failure part-way, then resume ----
@@ -837,8 +837,8 @@ public partial class ApplyConformanceTests
             // statement logs: one that is days old goes at the next deploy, a recent one stays
             var logs = Path.Combine(run.Dir, ".dbdatabuild", "statement-log");
             Directory.CreateDirectory(logs);
-            var old = Path.Combine(logs, "20200101T000000-apply-old.jsonl"); File.WriteAllText(old, "{}"); File.SetLastWriteTimeUtc(old, DateTime.UtcNow.AddDays(-3));
-            var recent = Path.Combine(logs, "20990101T000000-apply-recent.jsonl"); File.WriteAllText(recent, "{}");
+            var old = Path.Combine(logs, "20200101T000000-apply-old.jsonl"); TestFiles.WriteAllText(old, "{}"); File.SetLastWriteTimeUtc(old, DateTime.UtcNow.AddDays(-3));
+            var recent = Path.Combine(logs, "20990101T000000-apply-recent.jsonl"); TestFiles.WriteAllText(recent, "{}");
 
             // ephemeral: the plan is written under .dbdatabuild/plans (git ignores it), never under plans/, and goes when it has been applied
             var written = run.Cli("connection", "deploy", "--write-plan");
@@ -895,7 +895,7 @@ public partial class ApplyConformanceTests
             Refused(run.Cli("connection", "deploy", "--apply-plan", "2020-01-01-00000000"), "No plan", "an id nothing is kept under");
 
             // a refresh is what a schedule runs, and it prunes the same way: the next one removes a log that has gone past the limit since
-            var stale = Path.Combine(logs, "20200102T000000-refresh-stale.jsonl"); File.WriteAllText(stale, "{}"); File.SetLastWriteTimeUtc(stale, DateTime.UtcNow.AddDays(-3));
+            var stale = Path.Combine(logs, "20200102T000000-refresh-stale.jsonl"); TestFiles.WriteAllText(stale, "{}"); File.SetLastWriteTimeUtc(stale, DateTime.UtcNow.AddDays(-3));
             var refreshed = run.Cli("connection", "refresh", "--check", "none");
             Assert.Contains("older than 1 day(s)", refreshed.Out);
             Assert.False(File.Exists(stale));

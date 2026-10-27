@@ -37,7 +37,7 @@ public partial class NativeConformanceTests
             var exit = CliApp.Run([.. args, "--project", dir], o, e, environment: Env);
             return (exit, o.ToString(), e.ToString());
         }
-        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); File.WriteAllText(p, text); }
+        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); TestFiles.WriteAllText(p, text); }
         void Ok((int Exit, string Out, string Err) r, string what) => Assert.True(r.Exit == 0, $"{what} failed:\n{r.Out}\n{r.Err}");
         string PlanOf(string output) => Path.Combine(dir, Regex.Match(output, @"plan:\s+(\S+\.plan\.yml)").Groups[1].Value);
         try
@@ -99,7 +99,7 @@ public partial class NativeConformanceTests
             var exit = CliApp.Run([.. args, "--project", dir], o, e, environment: Env);
             return (exit, o.ToString(), e.ToString());
         }
-        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); File.WriteAllText(p, text); }
+        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); TestFiles.WriteAllText(p, text); }
         void Ok((int Exit, string Out, string Err) r, string what) => Assert.True(r.Exit == 0, $"{what} failed:\n{r.Out}\n{r.Err}");
         try
         {
@@ -141,7 +141,7 @@ public partial class NativeConformanceTests
             var exit = CliApp.Run([.. args, "--project", dir], o, e, environment: Env);
             return (exit, o.ToString(), e.ToString());
         }
-        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); File.WriteAllText(p, text); }
+        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); TestFiles.WriteAllText(p, text); }
         void Ok((int Exit, string Out, string Err) r, string what) => Assert.True(r.Exit == 0, $"{what} failed:\n{r.Out}\n{r.Err}");
         string PlanOf(string output) => Path.Combine(dir, Regex.Match(output, @"plan:\s+(\S+\.plan\.yml)").Groups[1].Value);
         var schema = name == "postgres" ? "public" : "dbo";
@@ -215,7 +215,7 @@ public partial class NativeConformanceTests
             var exit = CliApp.Run([.. args, "--project", dir], o, e, environment: Env);
             return (exit, o.ToString(), e.ToString());
         }
-        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); File.WriteAllText(p, text); }
+        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); TestFiles.WriteAllText(p, text); }
         void Ok((int Exit, string Out, string Err) r, string what) => Assert.True(r.Exit == 0, $"{what} failed:\n{r.Out}\n{r.Err}");
         var schema = originName == "postgres" ? "public" : "dbo";
         var (create, call) = ProcedureFor(originName);
@@ -258,8 +258,8 @@ public partial class NativeConformanceTests
         try
         {
             Directory.CreateDirectory(Path.Combine(dir, "models", "src"));
-            File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), Config("sqlserver"));
-            File.WriteAllText(Path.Combine(dir, "models", "src", "nums.yml"), "name: src.nums\nkind:\n  native:\n    access: command\n    query: EXEC dbo.usp_nums @list = 'a'\n" + Cols);
+            TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), Config("sqlserver"));
+            TestFiles.WriteAllText(Path.Combine(dir, "models", "src", "nums.yml"), "name: src.nums\nkind:\n  native:\n    access: command\n    query: EXEC dbo.usp_nums @list = 'a'\n" + Cols);
             var o = new StringWriter(); var e = new StringWriter();
             Assert.NotEqual(0, CliApp.Run(["project", "compile", "--project", dir], o, e, environment: Env));
             Assert.Contains("allow_native_commands", e.ToString() + o.ToString());
@@ -281,7 +281,7 @@ public partial class NativeConformanceTests
             var exit = CliApp.Run([.. args, "--project", dir], o, e, environment: Env);
             return (exit, o.ToString(), e.ToString());
         }
-        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); File.WriteAllText(p, text); }
+        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); TestFiles.WriteAllText(p, text); }
         try
         {
             Write("dbdatabuild.yml", Config(name));
@@ -322,7 +322,7 @@ public partial class NativeConformanceTests
             var exit = CliApp.Run([.. args, "--project", dir], o, e, environment: Env);
             return (exit, o.ToString(), e.ToString());
         }
-        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); File.WriteAllText(p, text); }
+        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); TestFiles.WriteAllText(p, text); }
         void Ok((int Exit, string Out, string Err) r, string what) => Assert.True(r.Exit == 0, $"{what} failed:\n{r.Out}\n{r.Err}");
         string PlanOf(string output) => Path.Combine(dir, Regex.Match(output, @"plan:\s+(\S+\.plan\.yml)").Groups[1].Value);
         var schema = name == "postgres" ? "public" : "dbo";
@@ -388,7 +388,7 @@ public partial class NativeConformanceTests
             var exit = CliApp.Run([.. args, "--project", dir], o, e, environment: Env);
             return (exit, o.ToString(), e.ToString());
         }
-        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); File.WriteAllText(p, text); }
+        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); TestFiles.WriteAllText(p, text); }
         string PlanOf(string output) => Path.Combine(dir, Regex.Match(output, @"plan:\s+(\S+\.plan\.yml)").Groups[1].Value);
         try
         {

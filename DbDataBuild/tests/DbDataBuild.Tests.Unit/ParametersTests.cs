@@ -13,7 +13,7 @@ public class ParametersTests
     {
         var full = Path.Combine(dir, path);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-        File.WriteAllText(full, text);
+        TestFiles.WriteAllText(full, text);
     }
 
     private static string Project(string config = Config)
@@ -164,7 +164,7 @@ public class ParametersTests
     {
         var dir = QueryProject();
         Assert.Equal(0, RenderFiles("--write", "--project", dir).Exit);
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), Typed.Replace("region: eu", "region: us").Replace("value: 5", "value: 50"));
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), Typed.Replace("region: eu", "region: us").Replace("value: 5", "value: 50"));
         var changed = RenderFiles("--check", "--project", dir);
         Assert.Equal(1, changed.Exit);                                                                      // the values are bound at run time, not rendered: only the load plans (`loads.yml`), which record them, and the plan that names them by hash differ
         Assert.Contains("loads.yml", changed.Err);
@@ -172,7 +172,7 @@ public class ParametersTests
         Assert.DoesNotContain("lowered.sql", changed.Err);
         Assert.Equal(0, RenderFiles("--write", "--project", dir).Exit);
         Assert.Equal(0, RenderFiles("--check", "--project", dir).Exit);
-        File.WriteAllText(Path.Combine(dir, "models/marts/m.sql"), Query.Replace("${project.region}", "${project.limit}").Replace("region = ", "id = "));
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/m.sql"), Query.Replace("${project.region}", "${project.limit}").Replace("region = ", "id = "));
         Assert.NotEqual(0, RenderFiles("--check", "--project", dir).Exit);
     }
 
@@ -195,11 +195,11 @@ public class ParametersTests
     public void A_view_cannot_use_a_parameter_because_ddl_binds_no_values_and_a_table_can()
     {
         var dir = QueryProject("SELECT id, region FROM staging.t WHERE region = ${project.region}\n", OnSqlServer);
-        File.WriteAllText(Path.Combine(dir, "models/marts/m.yml"), Marts.Replace("kind: full", "kind: view"));
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/m.yml"), Marts.Replace("kind: full", "kind: view"));
         var (exit, _, err) = Cli("project", "compile", "--project", dir);
         Assert.NotEqual(0, exit);
         Assert.Contains("a view's query cannot use parameters", err);
-        File.WriteAllText(Path.Combine(dir, "models/marts/m.yml"), Marts);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/m.yml"), Marts);
         Assert.Equal(0, Cli("project", "compile", "--project", dir).Exit);
     }
 

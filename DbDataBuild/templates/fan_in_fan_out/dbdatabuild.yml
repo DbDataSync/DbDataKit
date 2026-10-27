@@ -6,17 +6,7 @@ title: Two shops
 description: "Two shop systems copied into one warehouse and reported on a PostgreSQL database."
 tags: [example, multi-connection]
 properties: {owner: analytics}
-connections:
-  sqlserver: { version: 16, title: Warehouse, description: "Holds the models and, centrally, the tool's records.", tags: [warehouse], properties: {role: build} }
-  postgres:
-    title: Reporting
-    description: "The database the report is read from."
-    tags: [reporting]
-    properties: {role: serve}
-    string_semantics: { trailing_space: significant }
-  # what differs between the systems goes in parameters; a copy reads them as ${origin.store_id}
-  store_east: { engine: readonly postgres, parameters: { store_id: E01 }, title: East shop, tags: [source], properties: {role: origin, region: east} }
-  store_west: { engine: readonly postgres, parameters: { store_id: W01 }, title: West shop, tags: [source], properties: {role: origin, region: west} }
+# The connections are files, connections/<name>.yaml (schema: connection/1); what differs between the shops goes in `parameters`, and a copy reads it as ${origin.store_id}.
 # models are built on the warehouse unless they say otherwise
 defaults: {connections: [sqlserver]}
 # the records of everything the tool builds, on every connection, are kept on the warehouse (central tracking)

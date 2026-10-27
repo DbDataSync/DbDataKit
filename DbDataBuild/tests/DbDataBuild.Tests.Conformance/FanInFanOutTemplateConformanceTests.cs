@@ -59,10 +59,10 @@ public partial class FanInFanOutTemplateConformanceTests
             var refused = Cli("connection", "seed", "store_east", "--seed", "1", "--apply");
             Assert.NotEqual(0, refused.Exit);
             Assert.Contains("DDB-455", refused.Err);
-            File.WriteAllText(config, readOnlyText.Replace("engine: readonly postgres", "engine: postgres"));
+            TestFiles.WriteAllText(config, readOnlyText.Replace("engine: readonly postgres", "engine: postgres"));
             Ok(Cli("connection", "seed", "store_east", "--seed", "1", "--apply"), "seed east");
             Ok(Cli("connection", "seed", "store_west", "--seed", "2", "--apply"), "seed west");
-            File.WriteAllText(config, readOnlyText);
+            TestFiles.WriteAllText(config, readOnlyText);
             Ok(Cli("project", "compile"), "compile");
             // a shop system keeps no records of its own: what is missing is the warehouse's tracking tables, and that is where `init` is advised
             var before = Cli("connection", "inspect", "store_east");

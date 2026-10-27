@@ -19,6 +19,7 @@ internal static class FileSchemas
         new("models/**/*.yml", "model.schema.json", "model"),
         new("tests/models/**/*.yml", "model-test.schema.json", "model test"),
         new("dbdatabuild.yml", "config.schema.json", "project"),
+        new("connections/*.yaml", "connection.schema.json", "connection"),
         new("answers.yml", "answers.schema.json", "answers"),
     ];
 

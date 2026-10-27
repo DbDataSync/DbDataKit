@@ -17,15 +17,15 @@ public class ModelTestsTests
     {
         var dir = NewProjectDir();
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\nstring_semantics:\n  case: sensitive\n  trailing_space: ignored\n  collations:\n    default: { duckdb: NFC, sqlserver: Latin1_General_100_CS_AS }\n");
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), Orders);
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), Fct);
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), FctSql);
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\nstring_semantics:\n  case: sensitive\n  trailing_space: ignored\n  collations:\n    default: { duckdb: NFC, sqlserver: Latin1_General_100_CS_AS }\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), Orders);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), Fct);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), FctSql);
         foreach (var (path, text) in tests)
         {
             var full = Path.Combine(dir, "tests/models", path);
             Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-            File.WriteAllText(full, text);
+            TestFiles.WriteAllText(full, text);
         }
         return dir;
     }
@@ -189,7 +189,7 @@ public class ModelTestsTests
     {
         var dir = Project(("marts/fct_orders.yml", "# tags: orders\ncases:\n  - {name: a, expect: []}\n"));
         Directory.CreateDirectory(Path.Combine(dir, "tests/metadata"));
-        File.WriteAllText(Path.Combine(dir, "tests/metadata/rule.sql"), "-- tags: naming\nSELECT 1 WHERE false\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "tests/metadata/rule.sql"), "-- tags: naming\nSELECT 1 WHERE false\n");
         var before = Snapshot(dir);
         string[] Names(JsonNode d) => d["data"]!["tests"]!.AsArray().Select(t => (string)t!["name"]!).ToArray();
         Assert.Equal(["marts.fct_orders::a", "rule"], Names(Test(dir).Doc));
@@ -206,8 +206,8 @@ public class ModelTestsTests
     public void A_model_that_reads_another_model_is_given_that_models_rows()
     {
         var dir = Project(("marts/v_big.yml", "cases:\n  - name: big only\n    given:\n      marts.fct_orders:\n        - {order_id: 1, amount: 5, note2: a}\n        - {order_id: 2, amount: 500, note2: b}\n    expect:\n      - {order_id: 2}\n"));
-        File.WriteAllText(Path.Combine(dir, "models/marts/v_big.yml"), "name: marts.v_big\nkind: view\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/v_big.sql"), "SELECT f.order_id FROM marts.fct_orders f WHERE f.amount > 100\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/v_big.yml"), "name: marts.v_big\nkind: view\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/v_big.sql"), "SELECT f.order_id FROM marts.fct_orders f WHERE f.amount > 100\n");
         var (exit, doc, _) = Test(dir);
         Assert.Equal((0, "pass"), (exit, Status(doc, "marts.v_big::big only")));
     }

@@ -227,17 +227,17 @@ public class ReadOriginsTests
     public void A_readonly_connection_cannot_be_the_destination_of_a_model_or_a_copy_but_may_be_the_origin_of_one()
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "connections:\n  shop: { engine: readonly postgres }\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), ValidModel.Replace("connections: [sqlserver, fabric]", "connections: [sqlserver, shop]"));
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT 1 AS order_id");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "connections:\n  shop: { engine: readonly postgres }\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), ValidModel.Replace("connections: [sqlserver, fabric]", "connections: [sqlserver, shop]"));
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT 1 AS order_id");
         var result = ProjectValidator.Validate(dir);
         Assert.Contains(result.Diagnostics, d => d.Code == "DDB-455" && d.Found.Contains("built on the connection `shop`") && d.Location.File == "models/marts/fct_orders.yml");
 
         // a mapped model that reads it, and a copy of that, is fine
         var ok = NewProjectDir();
-        File.WriteAllText(Path.Combine(ok, "dbdatabuild.yml"), "connections:\n  shop: { engine: readonly postgres }\n");
-        File.WriteAllText(Path.Combine(ok, "models/marts/fct_orders.yml"), ValidModel.Replace("connections: [sqlserver, fabric]", "connections: [sqlserver]"));
-        File.WriteAllText(Path.Combine(ok, "models/marts/fct_orders.sql"), "SELECT 1 AS order_id");
+        TestFiles.WriteAllText(Path.Combine(ok, "dbdatabuild.yml"), "connections:\n  shop: { engine: readonly postgres }\n");
+        TestFiles.WriteAllText(Path.Combine(ok, "models/marts/fct_orders.yml"), ValidModel.Replace("connections: [sqlserver, fabric]", "connections: [sqlserver]"));
+        TestFiles.WriteAllText(Path.Combine(ok, "models/marts/fct_orders.sql"), "SELECT 1 AS order_id");
         Assert.DoesNotContain(ProjectValidator.Validate(ok).Diagnostics, d => d.Code == "DDB-455");
     }
 
@@ -284,7 +284,7 @@ public class ReadOriginsTests
         var dir = Path.Combine(Path.GetTempPath(), "ddb-readonly-" + Guid.NewGuid().ToString("N")[..8]);
         Assert.Equal(0, Cli(["project", "create", "starter", dir]).Exit);
         var config = Path.Combine(dir, "dbdatabuild.yml");
-        File.WriteAllText(config, File.ReadAllText(config).Replace("connections:\n  sqlserver:", "connections:\n  shop: { engine: readonly postgres }\n  sqlserver:"));
+        TestFiles.WriteAllText(config, File.ReadAllText(config) + "connections:\n  shop: { engine: readonly postgres }\n");
         string? Env(string v) => v == "DBDATA_BUILD_SHOP_READ" ? "Host=127.0.0.1;Port=1;Username=x;Password=x;Timeout=1" : null;
         foreach (var command in new[] { new[] { "connection", "deploy", "shop", "--write-plan" }, ["connection", "refresh", "shop"], ["connection", "seed", "shop"], ["connection", "init", "shop"], ["connection", "publish", "shop"] })
         {

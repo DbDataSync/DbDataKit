@@ -22,7 +22,7 @@ public class RefreshPlanTests
     private static string Project()
     {
         var dir = NewProjectDir();
-        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); File.WriteAllText(p, text); }
+        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); TestFiles.WriteAllText(p, text); }
         Write("dbdatabuild.yml", Config);
         Write("models/staging/events.yml", Events);
         Write("models/marts/fct_events.yml", FctYaml); Write("models/marts/fct_events.sql", FctSql);
@@ -80,7 +80,7 @@ public class RefreshPlanTests
     public void A_model_whose_default_load_needs_a_person_is_a_load_plan_but_in_no_plan_without_a_membership_that_gives_the_values()
     {
         var dir = Project();
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_events.yml"), FctYaml.Replace("    default: true\n    strategy: watermark_append", "    strategy: watermark_append").Replace("  reload:\n", "  reload:\n    default: true\n"));
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_events.yml"), FctYaml.Replace("    default: true\n    strategy: watermark_append", "    strategy: watermark_append").Replace("  reload:\n", "  reload:\n    default: true\n"));
         var file = Compiled(dir);
         Assert.Contains(file.Loads, l => l.Model == "marts.fct_events" && l.Load == "reload");
         var plan = CompiledPlan(dir);
@@ -95,8 +95,8 @@ public class RefreshPlanTests
         var first = Compiled(dir);
         var firstPlan = CompiledPlan(dir);
         Assert.Equal(LoadsDocument.Serialize(first), LoadsDocument.Serialize(Compiled(dir)));
-        File.WriteAllText(Path.Combine(dir, "models/marts/daily.yml"), DailyYaml + "  - {name: n, type: BIGINT}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/daily.sql"), "SELECT CAST(event_ts AS DATE) AS d, COUNT(*) AS n FROM marts.fct_events GROUP BY ALL\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/daily.yml"), DailyYaml + "  - {name: n, type: BIGINT}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/daily.sql"), "SELECT CAST(event_ts AS DATE) AS d, COUNT(*) AS n FROM marts.fct_events GROUP BY ALL\n");
         var second = Compiled(dir);
         Assert.NotEqual(first.ProjectHash, second.ProjectHash);
         Assert.NotEqual(first.Loads.Single(l => l.Model == "marts.daily").ShapeHash, second.Loads.Single(l => l.Model == "marts.daily").ShapeHash);
@@ -153,7 +153,7 @@ public class RefreshPlanTests
         var planPath = Path.Combine(dir, "rendered", "sqlserver", "refresh", "default.yml");
         var before = File.ReadAllText(path); var planBefore = File.ReadAllText(planPath);
         var retired = Path.Combine(dir, "rendered", "sqlserver", "refresh.plan.yml");
-        File.WriteAllText(retired, "refresh_plan:\n");                                    // what an older tool left
+        TestFiles.WriteAllText(retired, "refresh_plan:\n");                                    // what an older tool left
         Assert.Equal(0, RenderFiles("--write", "marts.daily", "--project", dir).Exit);
         Assert.Equal(before, File.ReadAllText(path));
         Assert.Equal(planBefore, File.ReadAllText(planPath));

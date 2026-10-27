@@ -47,9 +47,9 @@ public class CliTests
     public void Validate_prints_header_and_reports_ok()
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), ValidModel.Replace("connections: [sqlserver, fabric]", "connections: [sqlserver]"));
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT 1");
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\nlint:\n  indexes: false\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), ValidModel.Replace("connections: [sqlserver, fabric]", "connections: [sqlserver]"));
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT 1");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\nlint:\n  indexes: false\n");
         var (exit, output, err) = Run("project", "compile", "--project", dir);
         Assert.Equal(0, exit);
         Assert.Contains("effect: Repo files only", output);
@@ -62,8 +62,8 @@ public class CliTests
     public void Validate_fails_with_formatted_diagnostics()
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), ValidModel.Replace("    unique_key: [order_id]\n", ""));
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT 1");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), ValidModel.Replace("    unique_key: [order_id]\n", ""));
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT 1");
         var (exit, _, err) = Run("project", "compile", "--project", dir);
         Assert.Equal(1, exit);
         Assert.Contains("error DDB-214  models/marts/fct_orders.yml:3", err);
@@ -72,11 +72,11 @@ public class CliTests
     private static string ProjectWith(string sql, string targets = "[sqlserver, fabric]", string? config = "defaults: {connections: [sqlserver]}\n")
     {
         var dir = NewProjectDir();
-        if (config != null) File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
+        if (config != null) TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
-        File.WriteAllText(Path.Combine(dir, "models/staging/t.yml"), "name: staging.t\nkind: mapped\ncolumns:\n  - {name: a, type: INTEGER}\n  - {name: b, type: INTEGER}\n  - {name: s, type: VARCHAR(20)}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), ValidModel.Replace("connections: [sqlserver, fabric]", $"connections: {targets}"));
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), sql);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/t.yml"), "name: staging.t\nkind: mapped\ncolumns:\n  - {name: a, type: INTEGER}\n  - {name: b, type: INTEGER}\n  - {name: s, type: VARCHAR(20)}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), ValidModel.Replace("connections: [sqlserver, fabric]", $"connections: {targets}"));
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), sql);
         return dir;
     }
 
@@ -122,13 +122,13 @@ public class CliTests
         const string regexpSql = "SELECT s FROM staging.t WHERE REGEXP_MATCHES(s, 'a')";
         const string postgresConfig = "defaults: {connections: [postgres]}\nstring_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: en_US.utf8 }\n";
         var dir = ProjectWith(regexpSql, config: postgresConfig);
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), ValidModel.Replace("connections: [sqlserver, fabric]\n", ""));
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), ValidModel.Replace("connections: [sqlserver, fabric]\n", ""));
         var (exit, output, err) = Run("project", "compile", "--project", dir);
         Assert.Equal(CliApp.ExitOk, exit);                     // REGEXP_MATCHES is native on postgres
         Assert.Contains("default connections: postgres", output);
         Assert.DoesNotContain("DDB-301", err);
 
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\nconnections:\n  sqlserver: { version: 16 }\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\nconnections:\n  sqlserver: { version: 16 }\n");
         Assert.Equal(CliApp.ExitFindings, Run("project", "compile", "--project", dir).Exit);
     }
 

@@ -181,7 +181,7 @@ public class FlightSqlOriginTests
         var dir = Path.Combine(Path.GetTempPath(), "ddb-flight-" + Guid.NewGuid().ToString("N")[..8]);
         Assert.Equal(0, Cli(["project", "create", "starter", dir]).Exit);
         var config = Path.Combine(dir, "dbdatabuild.yml");
-        File.WriteAllText(config, File.ReadAllText(config).Replace("connections:\n  sqlserver:", "connections:\n  proxy: { engine: readonly flightsql }\n  sqlserver:"));
+        TestFiles.WriteAllText(config, File.ReadAllText(config) + "connections:\n  proxy: { engine: readonly flightsql }\n");
         string? Env(string v) => v == "DBDATA_BUILD_PROXY_READ" ? "grpc://127.0.0.1:1;token=secrettoken123" : null;
         var inspect = Cli(["connection", "inspect", "proxy", "--project", dir], Env);
         Assert.NotEqual(0, inspect.Exit);

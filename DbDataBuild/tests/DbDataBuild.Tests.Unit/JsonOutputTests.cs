@@ -19,10 +19,10 @@ public class JsonOutputTests
     {
         var dir = NewProjectDir();
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), Orders);
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\ntracking: { connection: sqlserver }\nstring_semantics:\n  case: sensitive\n  trailing_space: ignored\n  collations:\n    default: { duckdb: NFC, sqlserver: Latin1_General_100_CS_AS }\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), FctYaml);
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT o.order_id, o.amount FROM staging.orders o\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), Orders);
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\ntracking: { connection: sqlserver }\nstring_semantics:\n  case: sensitive\n  trailing_space: ignored\n  collations:\n    default: { duckdb: NFC, sqlserver: Latin1_General_100_CS_AS }\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), FctYaml);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT o.order_id, o.amount FROM staging.orders o\n");
         return dir;
     }
 
@@ -115,7 +115,7 @@ public class JsonOutputTests
     public void Findings_are_structured_diagnostics_with_the_same_exit_code_as_text_mode()
     {
         var dir = Project();
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT o.order_id, [1, 2] AS l FROM staging.orders o\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT o.order_id, [1, 2] AS l FROM staging.orders o\n");
         var (exit, doc, _, err) = Run("project", "compile", "--project", dir);
         Assert.Equal(1, exit);
         Assert.Equal("", err);
@@ -259,7 +259,7 @@ public class JsonOutputTests
     private static string WriteAnswers(string dir, string body)
     {
         var path = Path.Combine(dir, "answers.yml");
-        File.WriteAllText(path, "answers: []\n" + body);
+        TestFiles.WriteAllText(path, "answers: []\n" + body);
         return path;
     }
     [Fact]

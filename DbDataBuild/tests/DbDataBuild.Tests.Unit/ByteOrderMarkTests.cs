@@ -11,7 +11,7 @@ public class ByteOrderMarkTests
     private static string Project(bool bom)
     {
         var dir = NewProjectDir();
-        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); File.WriteAllText(p, text, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: bom)); }
+        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); TestFiles.WriteAllText(p, text, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: bom)); }
         Write("dbdatabuild.yml", "defaults: {connections: [sqlserver]}\n");
         Write("models/staging/orders.yml", "name: staging.orders\nkind: mapped\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
         Write("models/marts/plain.yml", "name: marts.plain\nkind: view\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");

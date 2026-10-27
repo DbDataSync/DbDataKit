@@ -47,8 +47,6 @@ public class FuzzTests
         tags: [fuzz, "layer:one"]
         properties: { owner: data, tier: 2, live: true, ratio: 0.5, code: "007" }
         defaults: {connections: [sqlserver, postgres], tags: [base], properties: { source: fuzz }}
-        connections:
-          sqlserver: { version: 17, title: Warehouse, description: "The main one", tags: [prod], properties: { region: eu } }
         string_semantics:
           case: insensitive
           accent: sensitive
@@ -60,6 +58,14 @@ public class FuzzTests
             - { name: grant, event: post_create, script: hooks/grant.sql }
         """;
 
+    private const string ConnectionFile = """
+        schema: connection/1
+        name: sqlserver
+        engine: sqlserver
+        extensions:
+          build: { version: 17, title: Warehouse, description: "The main one", tags: [prod], properties: { region: eu } }
+        """;
+
     private const string Source = "name: staging.events\ntitle: Events\ndescription: \"Raw events\"\ntags: [raw]\nproperties: {system: crm}\nkind: mapped\ngrain: [event_id]\ncolumns:\n  - {name: event_id, type: BIGINT, nullable: false, title: \"Event id\", description: \"The key\", tags: [key], properties: {pk: true}}\n  - {name: event_ts, type: TIMESTAMP, nullable: false}\n  - {name: seq, type: BIGINT, nullable: false}\n  - {name: payload, type: \"VARCHAR(100)\"}\n";
 
     /// <summary>The words about the model, its columns' neighbours and its index: appended to the model's definition so the mutations reach them.</summary>
@@ -69,18 +75,20 @@ public class FuzzTests
 
     private const string FolderFile = "defaults:\n  connections: [sqlserver]\n  lint_ignore: [DDB-223]\n  tags: [folder]\n  properties: {zone: marts, tier: 3}\n  hooks:\n    - {name: audit, event: post_load, script: hooks/grant.sql}\n";
 
-    private static string Project(string? config = null, string? source = null, string? model = null, string? sql = null, string? folder = null)
+    private static string Project(string? config = null, string? source = null, string? model = null, string? sql = null, string? folder = null, string? connection = null)
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config ?? Config);
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config ?? Config);
+        Directory.CreateDirectory(Path.Combine(dir, "connections"));
+        TestFiles.WriteAllText(Path.Combine(dir, "connections", "sqlserver.yaml"), connection ?? ConnectionFile);
         Directory.CreateDirectory(Path.Combine(dir, "models", "staging"));
         Directory.CreateDirectory(Path.Combine(dir, "hooks"));
-        File.WriteAllText(Path.Combine(dir, "hooks", "grant.sql"), "GRANT SELECT ON marts.fct_events TO reader;\n");
-        File.WriteAllText(Path.Combine(dir, "models", "staging", "events.yml"), source ?? Source);
-        File.WriteAllText(Path.Combine(dir, "models", "marts", "fct_events.yml"), model ?? (LoadRendererTests.AllOpsYaml + ModelExtras));
-        File.WriteAllText(Path.Combine(dir, "models", "marts", "fct_events.sql"), sql ?? LoadRendererTests.AllOpsSql);
-        File.WriteAllText(Path.Combine(dir, "answers.yml"), Answers);
-        File.WriteAllText(Path.Combine(dir, "models", "marts", "_dbdatabuild.yml"), folder ?? FolderFile);
+        TestFiles.WriteAllText(Path.Combine(dir, "hooks", "grant.sql"), "GRANT SELECT ON marts.fct_events TO reader;\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models", "staging", "events.yml"), source ?? Source);
+        TestFiles.WriteAllText(Path.Combine(dir, "models", "marts", "fct_events.yml"), model ?? (LoadRendererTests.AllOpsYaml + ModelExtras));
+        TestFiles.WriteAllText(Path.Combine(dir, "models", "marts", "fct_events.sql"), sql ?? LoadRendererTests.AllOpsSql);
+        TestFiles.WriteAllText(Path.Combine(dir, "answers.yml"), Answers);
+        TestFiles.WriteAllText(Path.Combine(dir, "models", "marts", "_dbdatabuild.yml"), folder ?? FolderFile);
         return dir;
     }
 
@@ -115,13 +123,14 @@ public class FuzzTests
     [InlineData("model")]
     [InlineData("sql")]
     [InlineData("folder")]
+    [InlineData("connection")]
     public void A_damaged_project_file_is_answered_with_diagnostics_not_an_exception(string which)
     {
-        var baseText = which switch { "folder" => FolderFile, "config" => Config, "source" => Source, "model" => LoadRendererTests.AllOpsYaml + ModelExtras, _ => LoadRendererTests.AllOpsSql };
+        var baseText = which switch { "connection" => ConnectionFile, "folder" => FolderFile, "config" => Config, "source" => Source, "model" => LoadRendererTests.AllOpsYaml + ModelExtras, _ => LoadRendererTests.AllOpsSql };
         var n = 0;
         foreach (var mutated in Mutations(baseText, Seed + which.Length, Rounds))
         {
-            var dir = which switch { "config" => Project(config: mutated), "source" => Project(source: mutated), "model" => Project(model: mutated), "folder" => Project(folder: mutated), _ => Project(sql: mutated) };
+            var dir = which switch { "config" => Project(config: mutated), "source" => Project(source: mutated), "model" => Project(model: mutated), "folder" => Project(folder: mutated), "connection" => Project(connection: mutated), _ => Project(sql: mutated) };
             try { RunAll(dir, $"{which} mutation {n++}: {mutated.Replace("\n", "\\n")}"); }
             finally { Directory.Delete(dir, true); }
         }
@@ -186,7 +195,7 @@ public class FuzzTests
             {
                 var full = Path.Combine(dir, path);
                 Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-                File.WriteAllText(full, mutated);
+                TestFiles.WriteAllText(full, mutated);
                 foreach (var args in new[] { new[] { "project", "compile" }, new[] { "project", "tests", "run" }, new[] { "project", "show", "loads" }, new[] { "project", "show", "metadata" }, new[] { "project", "model", "update", "--check" } })
                 {
                     var o = new StringWriter(); var e = new StringWriter();
@@ -207,7 +216,7 @@ public class FuzzTests
         foreach (var mutated in Mutations(Answers, Seed, Rounds))
         {
             var dir = Project();
-            File.WriteAllText(Path.Combine(dir, "answers.yml"), mutated);
+            TestFiles.WriteAllText(Path.Combine(dir, "answers.yml"), mutated);
             try
             {
                 var o = new StringWriter(); var e = new StringWriter();
@@ -238,7 +247,7 @@ public class FuzzTests
             var dir = Project(config: Config.Replace("properties: { region: eu } }\n", "properties: { region: eu } }\n  proxy_erp: { engine: readonly flightsql }\n"));
             try
             {
-                File.WriteAllText(Path.Combine(dir, ProductInfo.DialectLockFile), mutated);
+                TestFiles.WriteAllText(Path.Combine(dir, ProductInfo.DialectLockFile), mutated);
                 foreach (var args in new[] { new[] { "project", "compile" }, new[] { "project", "update", "--check" }, new[] { "project", "update", "--offline", "--check" } })
                 {
                     var o = new StringWriter(); var e = new StringWriter();

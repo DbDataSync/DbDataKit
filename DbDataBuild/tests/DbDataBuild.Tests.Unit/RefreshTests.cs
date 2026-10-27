@@ -15,7 +15,7 @@ public class RefreshTests
     private static string Project(bool compiled = true)
     {
         var dir = NewProjectDir();
-        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); File.WriteAllText(p, text); }
+        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); TestFiles.WriteAllText(p, text); }
         Write("dbdatabuild.yml", Config);
         Write("models/staging/orders.yml", Orders);
         Write("models/marts/fct_orders.yml", FctYaml); Write("models/marts/fct_orders.sql", FctSql);
@@ -69,7 +69,7 @@ public class RefreshTests
 
         var dir2 = Project();
         var planFile = Path.Combine(dir2, "rendered/sqlserver/refresh/default.yml");
-        File.WriteAllText(planFile, File.ReadAllText(planFile).Replace("marts.fct_orders", "marts.fct_ordersx"));
+        TestFiles.WriteAllText(planFile, File.ReadAllText(planFile).Replace("marts.fct_orders", "marts.fct_ordersx"));
         var edited = Refresh(dir2);
         Assert.Equal(CliApp.ExitFindings, edited.Exit);
         Assert.Contains("DDB-435", edited.Err);                                 // the plan's own hash no longer matches

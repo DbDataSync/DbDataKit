@@ -81,9 +81,9 @@ public class ModelKindShapeTests
     public void A_project_that_writes_the_earlier_form_in_a_folder_file_or_a_model_does_not_compile()
     {
         var dir = Project();
-        File.WriteAllText(Path.Combine(dir, "models/marts/_dbdatabuild.yml"), "defaults:\n  kind: {type: view}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/v.yml"), $"name: marts.v\n{Cols}");
-        File.WriteAllText(Path.Combine(dir, "models/marts/v.sql"), "SELECT order_id, CAST(NULL AS DATE) AS ordered_on FROM staging.orders\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/_dbdatabuild.yml"), "defaults:\n  kind: {type: view}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/v.yml"), $"name: marts.v\n{Cols}");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/v.sql"), "SELECT order_id, CAST(NULL AS DATE) AS ordered_on FROM staging.orders\n");
         var result = ProjectValidator.Validate(dir);
         Assert.Contains(result.Diagnostics, d => d.Code == "DDB-248" && d.Location.File == "models/marts/_dbdatabuild.yml");
         Assert.DoesNotContain(result.Diagnostics, d => d.Code == "DDB-247");
@@ -99,7 +99,7 @@ public class ModelKindShapeTests
         string K(string name, string settings = "") => settings.Length > 0 ? $"kind: {{{name}: {{{settings}}}}}" : $"kind: {name}";
         var dir = NewProjectDir();
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "connections:\n  wh: { engine: sqlserver }\ndefaults:\n  connections: [wh]\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "connections:\n  wh: { engine: sqlserver }\ndefaults:\n  connections: [wh]\n");
         string[] models =
         [
             "marts.v|" + K("view") + "|",
@@ -111,10 +111,10 @@ public class ModelKindShapeTests
         {
             var parts = m.Split('|');
             var stem = "models/" + parts[0].Replace('.', '/');
-            File.WriteAllText(Path.Combine(dir, stem + ".yml"), $"name: {parts[0]}\n{parts[1]}\n{parts[2]}columns:\n  - {{name: order_id, type: BIGINT, nullable: false}}\n  - {{name: ordered_on, type: DATE, nullable: false}}\n");
-            File.WriteAllText(Path.Combine(dir, stem + ".sql"), "SELECT order_id, CAST(NULL AS DATE) AS ordered_on FROM staging.orders\n");
+            TestFiles.WriteAllText(Path.Combine(dir, stem + ".yml"), $"name: {parts[0]}\n{parts[1]}\n{parts[2]}columns:\n  - {{name: order_id, type: BIGINT, nullable: false}}\n  - {{name: ordered_on, type: DATE, nullable: false}}\n");
+            TestFiles.WriteAllText(Path.Combine(dir, stem + ".sql"), "SELECT order_id, CAST(NULL AS DATE) AS ordered_on FROM staging.orders\n");
         }
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), $"name: staging.orders\n{K("mapped")}\ncolumns:\n  - {{name: order_id, type: BIGINT, nullable: false}}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), $"name: staging.orders\n{K("mapped")}\ncolumns:\n  - {{name: order_id, type: BIGINT, nullable: false}}\n");
         return dir;
     }
 
@@ -140,13 +140,13 @@ public class ModelKindShapeTests
     {
         var dir = NewProjectDir();
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "connections:\n  wh: { engine: sqlserver }\ndefaults:\n  connections: [wh]\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/_dbdatabuild.yml"), "defaults:\n  kind: {incremental_by_unique_key: {unique_key: [order_id]}}\n");
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), $"name: staging.orders\nkind: mapped\n{Cols}");
-        File.WriteAllText(Path.Combine(dir, "models/marts/f.yml"), $"name: marts.f\nkind: full\n{Cols}");     // not merged key by key: no unique_key survives
-        File.WriteAllText(Path.Combine(dir, "models/marts/f.sql"), "SELECT order_id FROM staging.orders\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/u.yml"), $"name: marts.u\ngrain: [order_id]\n{Cols}");   // takes the folder's kind as it is
-        File.WriteAllText(Path.Combine(dir, "models/marts/u.sql"), "SELECT order_id FROM staging.orders\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "connections:\n  wh: { engine: sqlserver }\ndefaults:\n  connections: [wh]\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/_dbdatabuild.yml"), "defaults:\n  kind: {incremental_by_unique_key: {unique_key: [order_id]}}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), $"name: staging.orders\nkind: mapped\n{Cols}");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/f.yml"), $"name: marts.f\nkind: full\n{Cols}");     // not merged key by key: no unique_key survives
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/f.sql"), "SELECT order_id FROM staging.orders\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/u.yml"), $"name: marts.u\ngrain: [order_id]\n{Cols}");   // takes the folder's kind as it is
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/u.sql"), "SELECT order_id FROM staging.orders\n");
         var result = ProjectValidator.Validate(dir);
         Assert.False(result.HasErrors, string.Join("\n", result.Diagnostics.Select(DiagnosticFormatter.Format)));
         Assert.Equal((ModelKinds.Full, 0), (result.Models.Single(m => m.Name == "marts.f").Kind, result.Models.Single(m => m.Name == "marts.f").UniqueKey.Count));

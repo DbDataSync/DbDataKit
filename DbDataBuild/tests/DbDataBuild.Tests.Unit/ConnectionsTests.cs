@@ -84,14 +84,14 @@ public class ConnectionsTests
     {
         var dir = NewProjectDir();
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), Source);
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), Source);
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
         foreach (var (name, targets, sql) in models)
         {
             var stem = Path.Combine(dir, "models", name.Replace('.', '/'));
             Directory.CreateDirectory(Path.GetDirectoryName(stem)!);
-            File.WriteAllText(stem + ".yml", $"name: {name}\nkind: full\nconnections: [{targets}]\ncolumns:\n  - {{name: order_id, type: BIGINT, nullable: false}}\n  - {{name: label, type: \"VARCHAR(40)\"}}\n");
-            File.WriteAllText(stem + ".sql", sql);
+            TestFiles.WriteAllText(stem + ".yml", $"name: {name}\nkind: full\nconnections: [{targets}]\ncolumns:\n  - {{name: order_id, type: BIGINT, nullable: false}}\n  - {{name: label, type: \"VARCHAR(40)\"}}\n");
+            TestFiles.WriteAllText(stem + ".sql", sql);
         }
         return dir;
     }

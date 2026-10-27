@@ -10,7 +10,7 @@ public class StringEmulationTests
     {
         var full = Path.Combine(dir, path);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-        File.WriteAllText(full, text);
+        TestFiles.WriteAllText(full, text);
     }
 
     // the engine each profile is true of: SQL Server ignores trailing spaces, PostgreSQL keeps them

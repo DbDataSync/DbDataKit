@@ -37,7 +37,7 @@ public class ProjectUpdateMappedModelsTests : IDisposable
     {
         var p = Path.Combine(dir, rel);
         Directory.CreateDirectory(Path.GetDirectoryName(p)!);
-        File.WriteAllText(p, text);
+        TestFiles.WriteAllText(p, text);
     }
 
     private const string StaleEvents = "name: src.events\nkind: mapped\nconnections=: [analytics]\ngrain: [id]\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n  - {name: label, type: VARCHAR}\n";

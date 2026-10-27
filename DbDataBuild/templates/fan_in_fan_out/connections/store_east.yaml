@@ -1,0 +1,10 @@
+schema: connection/1
+name: store_east
+engine: postgres
+access: readonly
+extensions:
+  build:
+    parameters: { store_id: E01 }
+    title: East shop
+    tags: [source]
+    properties: {role: origin, region: east}

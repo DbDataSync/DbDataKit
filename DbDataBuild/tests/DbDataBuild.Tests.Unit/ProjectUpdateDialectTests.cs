@@ -50,7 +50,7 @@ public class ProjectUpdateDialectTests : IDisposable
     {
         var p = Path.Combine(dir, rel);
         Directory.CreateDirectory(Path.GetDirectoryName(p)!);
-        File.WriteAllText(p, text);
+        TestFiles.WriteAllText(p, text);
     }
 
     private string LockText => File.Exists(Path.Combine(dir, ProductInfo.DialectLockFile)) ? File.ReadAllText(Path.Combine(dir, ProductInfo.DialectLockFile)) : "";
