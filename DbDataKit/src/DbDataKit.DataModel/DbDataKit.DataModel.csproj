@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.DataModel</RootNamespace>
+    <PackageId>DbDataKit.DataModel</PackageId>
+    <Description>The model/1 file format of master data models (entities, attributes, keys, references, rules, history): strict reading and validation with positions.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
+    <ProjectReference Include="..\DbDataKit.Dialect.Abstractions\DbDataKit.Dialect.Abstractions.csproj" />
+  </ItemGroup>
+</Project>
