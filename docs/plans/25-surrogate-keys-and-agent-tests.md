@@ -22,6 +22,59 @@ Status: **direction decided by the owner (2026-10-27)**, one question at a time.
      instances and in drafts.
    - A draft row submitted as a change request (plan 21) keeps its id.
 
+## 1a. How a model specifies its keys (decided, owner, 2026-10-27)
+
+Declaring keys over a model's output columns does not work: a fact table often lacks some of a dimension's business-key columns, or
+reaches them only through a join. So a key is **defined once, on the model that owns it**, and **computed in any query by a function
+named after the key**. The function can take its arguments from any column the query can see.
+
+1. **The definition lives in the owning model's YAML.** The key's name is also the name of its function.
+
+   ```yaml
+   # dim_customer.yml
+   keys:
+     customer_key: {from: [source_system, customer_id]}
+   ```
+
+2. **Queries call the function,** in the owning model and in every model that refers to it:
+
+   ```sql
+   -- dim_customer.sql
+   SELECT customer_key(c.source_system, c.customer_id) AS customer_key, ...
+
+   -- fct_sales_lines.sql: an argument can come from a join
+   SELECT customer_key(st.source_system, l.customer_id) AS customer_key, ...
+   FROM staging.sales_lines l
+   JOIN staging.stores st ON st.store_id = l.store_id
+   ```
+
+3. **Build generates a DuckDB macro per key**, so bodies stay plain DuckDB that runs as is (DESIGN.md: no templating). Lowering to
+   another engine replaces the call with that engine's hash expression, or with a lookup for a key-map key.
+4. **Checks.** Build's query analysis checks each call's argument count and types against the definition. For example, a fact that
+   passes one argument is refused: "`customer_key` takes 2 arguments (`source_system`, `customer_id`)". A key name that clashes with a
+   DuckDB built-in function is refused.
+5. **Relationships are inferred, not declared.**
+   - A call records a relationship from the calling model's output column to the owning model, which feeds lineage, the generated
+     relationship checks and the semantic layer.
+   - Roles come from the output column's name: `order_date_key` and `return_date_key` are two relationships to `dim_date`.
+6. **History keys** name their version key explicitly:
+
+   ```yaml
+   keys:
+     product_key: {from: [product_id], history: valid_from, version_key: product_version_key}
+   ```
+
+   `product_version_key(product_id, valid_from)` keys the version, and `product_key(product_id)` is the durable key.
+7. **Key maps:** `method: key_map` keeps the same SQL and lowers the call to a lookup in Build's map table. New business keys get new
+   integers when the owning model loads.
+8. **Missing values.** A call with a NULL argument returns NULL by default. A definition can say `unknown_member: true` instead: the
+   function then returns a reserved "unknown" key, and Build adds that row to the owning model.
+9. **Later: keys defined in pure SQL.**
+   - The owning model's SQL can define the key itself, through a generic call in its select list, for example
+     `surrogate_key(c.source_system, c.customer_id) AS customer_key`.
+   - Build infers the definition from that call (the name from the output column, the parts and types from the arguments) and writes
+     it into the YAML, which stays the stored form, the same way `project import` writes metadata.
+
 ## 2. Testing agent operations without an outside API
 
 1. **Unit tests use a scripted fake chat client.**
