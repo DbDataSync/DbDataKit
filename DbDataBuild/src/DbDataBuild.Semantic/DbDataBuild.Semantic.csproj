@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataBuild.Core\DbDataBuild.Core.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Models\DbDataBuild.Models.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <DbDataKitReference Include="Semantic" />   <!-- the semantic layer's catalog, its authoring format and validation; plan 14 R1, plan 19 J07 -->
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

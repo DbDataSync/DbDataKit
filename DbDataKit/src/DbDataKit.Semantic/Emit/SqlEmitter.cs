@@ -8,7 +8,7 @@ namespace DbDataKit.Semantic.Emit;
 /// <summary>
 /// Compiles one source's part of a request to SQL.
 /// The dialect is a shared <see cref="ISqlDialect"/> (<see cref="EmitDialects"/>): it writes the parameter markers and the row limit;
-/// the time zone and bucketing functions are the emitter's, per engine. SQL Server's text is sent to SQL Server; the DuckDB text is the twin that
+/// the time zone and bucketing functions are the emitter's, per engine. SQL Server's text is sent to SQL Server, PostgreSQL's to PostgreSQL; the DuckDB text is the twin that
 /// runs on DuckDB (the conformance seed data, a DuckDB source).
 /// </summary>
 public static class SqlEmitter
@@ -21,9 +21,14 @@ public static class SqlEmitter
 
     private static bool TSql(ISqlDialect dialect) => dialect.Id == EngineId.SqlServer;
 
-    /// <summary>OFFSET/FETCH where the dialect has it (the query is always ordered), else the dialect's own style.</summary>
+    private static bool Postgres(ISqlDialect dialect) => dialect.Id == EngineId.Postgres;
+
+    /// <summary>OFFSET/FETCH where the dialect has it (the query is always ordered), else the dialect's own style. PostgreSQL has both and reads LIMIT.</summary>
     private static RowLimitStyle RowLimitStyleFor(ISqlDialect dialect) =>
-        dialect.SupportedRowLimitStyles.Contains(RowLimitStyle.OffsetFetch) ? RowLimitStyle.OffsetFetch : dialect.DefaultRowLimitStyle;
+        !Postgres(dialect) && dialect.SupportedRowLimitStyles.Contains(RowLimitStyle.OffsetFetch) ? RowLimitStyle.OffsetFetch : dialect.DefaultRowLimitStyle;
+
+    /// <summary>PostgreSQL stores no NUL character in text, so a value holding one (the engine's "matches no member" marker) cannot be bound and cannot equal anything.</summary>
+    private static bool HoldsNul(JsonNode v) => v.GetValueKind() == JsonValueKind.String && v.GetValue<string>().Contains('\0');
 
     private sealed class Params(ISqlDialect dialect)
     {
@@ -103,6 +108,17 @@ public static class SqlEmitter
             };
         }
         var l = $"timezone('{zone}', timezone('{stored}', {raw}))";
+        if (Postgres(dialect))
+            return granularity switch
+            {
+                "hour" => $"(to_char({l}, 'YYYY-MM-DD HH24') || ':00')",
+                "day" => $"to_char({l}, 'YYYY-MM-DD')",
+                "week" => $"to_char(date_trunc('week', {l}), 'YYYY-MM-DD')",
+                "month" => $"to_char({l}, 'YYYY-MM')",
+                "quarter" => $"(to_char({l}, 'YYYY') || '-Q' || CAST(EXTRACT(QUARTER FROM {l}) AS VARCHAR))",
+                "year" => $"to_char({l}, 'YYYY')",
+                _ => throw new NotSupportedException($"granularity {granularity}"),
+            };
         return granularity switch
         {
             "hour" => $"strftime({l}, '%Y-%m-%d %H:00')",
@@ -172,6 +188,12 @@ public static class SqlEmitter
             case "not_equals":
             {
                 var neg = f.Operator == "not_equals";
+                if (Postgres(p.Dialect) && !date)
+                {
+                    // a value PostgreSQL cannot store equals no row; if none is left, nothing is equal (and everything that has a value is not equal)
+                    vals = vals.Where(v => !HoldsNul(v)).ToList();
+                    if (vals.Count == 0) return neg ? $"{col} IS NOT NULL" : "(1 = 0)";
+                }
                 if (vals.Count == 1) return $"{col} {(neg ? "<>" : "=")} {Bind(vals[0])}";
                 return $"{col} {(neg ? "NOT " : "")}IN ({string.Join(", ", vals.Select(Bind))})";
             }

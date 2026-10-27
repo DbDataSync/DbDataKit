@@ -45,3 +45,12 @@ public static class PostgresCopy
     /// <summary>Rows per COPY: a single COPY unless the caller asked for per-batch commits.</summary>
     public static int RowsPerCopy(BulkOptions o) => o.Transaction == TransactionMode.PerBatch ? Math.Max(1, o.BatchSize) : int.MaxValue;
 }
+
+/// <summary>A value that binary COPY could not write as the column's type. Names the column, the CLR type and the COPY type, never the value.</summary>
+public sealed class PostgresCopyValueException(string column, Type clrType, NpgsqlDbType copyType, Exception inner)
+    : TransferException($"column `{column}`: a {clrType.Name} cannot be written as {copyType} by binary COPY, which sends the column's own wire format and converts nothing", inner)
+{
+    public string Column { get; } = column;
+    public Type ClrType { get; } = clrType;
+    public NpgsqlDbType CopyType { get; } = copyType;
+}

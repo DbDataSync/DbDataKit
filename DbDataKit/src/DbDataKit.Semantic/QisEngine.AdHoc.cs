@@ -23,12 +23,22 @@ public sealed partial class QisEngine
             .First(s => cat.Binding(attribute, s.Key) is not null).Key;
         var table = def.MembersFrom is not null;
         var kind = cat.Doc.Sources[source].Kind;
-        var native = kind == "ssas"
-            ? new NativeQuery("dax", DaxEmitter.BuildDax(cat, source, [attribute], [], [], [], null))
-            : new NativeQuery("tsql", table ? SqlEmitter.BuildMembers(cat, source, attribute) : SqlEmitter.BuildSelect(cat, source, [attribute], [], [], [], null, EmitDialects.TSql).Text);
+        var native = kind switch
+        {
+            "ssas" => new NativeQuery("dax", DaxEmitter.BuildDax(cat, source, [attribute], [], [], [], null)),
+            "postgres" => new NativeQuery("postgres", table ? SqlEmitter.BuildMembers(cat, source, attribute) : SqlEmitter.BuildSelect(cat, source, [attribute], [], [], [], null, EmitDialects.Postgres).Text),
+            _ => new NativeQuery("tsql", table ? SqlEmitter.BuildMembers(cat, source, attribute) : SqlEmitter.BuildSelect(cat, source, [attribute], [], [], [], null, EmitDialects.TSql).Text),
+        };
         var (duckSql, duckParams) = table ? (SqlEmitter.BuildMembers(cat, source, attribute), new List<object?>())
             : SqlEmitter.BuildSelect(cat, source, [attribute], [], [], [], null, EmitDialects.DuckDb);
-        var rows = executor.Execute(new CompiledQuery(source, native, duckSql, duckParams), rowCap + 1).Rows;
+        ParameterizedSql? postgres = null;
+        if (kind != "ssas")
+        {
+            var (pgText, pgParams) = table ? (SqlEmitter.BuildMembers(cat, source, attribute), new List<object?>())
+                : SqlEmitter.BuildSelect(cat, source, [attribute], [], [], [], null, EmitDialects.Postgres);
+            postgres = new ParameterizedSql(pgText, pgParams);
+        }
+        var rows = executor.Execute(new CompiledQuery(source, native, duckSql, duckParams, null, postgres), rowCap + 1).Rows;
         return rows.Select(r => r[Catalog.ColName(attribute)]?.ToString()).Where(v => v is not null).Select(v => v!).Distinct().Order().ToList();
     }
 

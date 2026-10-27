@@ -36,6 +36,7 @@
     <Project Path="src/DbDataKit.Hosting/DbDataKit.Hosting.csproj" />
     <Project Path="src/DbDataKit.Metadata.Abstractions/DbDataKit.Metadata.Abstractions.csproj" />
     <Project Path="src/DbDataKit.Serving.Abstractions/DbDataKit.Serving.Abstractions.csproj" />
+    <Project Path="src/DbDataKit.Serving.Conformance/DbDataKit.Serving.Conformance.csproj" />
     <Project Path="src/DbDataKit.Serving.FlightSql/DbDataKit.Serving.FlightSql.csproj" />
     <Project Path="src/DbDataKit.Semantic/DbDataKit.Semantic.csproj" />
     <Project Path="src/DbDataKit.Semantic.Abstractions/DbDataKit.Semantic.Abstractions.csproj" />

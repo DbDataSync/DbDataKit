@@ -47,30 +47,10 @@ public sealed class NativeTextTestExecutor(ISourceExecutor inner, string sqlServ
     }
 }
 
-/// <summary>
-/// Runs the DuckDB-dialect twin of each query on a real PostgreSQL, until the engine has a PostgreSQL emitter (J05). The twin is
-/// plain SQL for the most part, and its parameters are already <c>$n</c>. Anything that is not the twin's dialect goes to the fallback.
-/// </summary>
-public sealed class PostgresTwinExecutor(string connectionString, ISourceExecutor fallback) : ISourceExecutor
+/// <summary>Seeds the scratch PostgreSQL database. The conformance seed script is plain SQL that PostgreSQL runs as it is.</summary>
+public static class PostgresSeed
 {
-    public bool RunsNativeText => false;
-
-    public QueryRows Execute(CompiledQuery query, int maxRows)
-    {
-        if (query.Native.Dialect == "dax") return fallback.Execute(query, maxRows);
-        using var con = new NpgsqlConnection(connectionString);
-        con.Open();
-        using var cmd = con.CreateCommand();
-        cmd.CommandText = query.DuckDbSql;
-        foreach (var p in query.DuckDbParameters) cmd.Parameters.Add(new NpgsqlParameter { Value = p ?? DBNull.Value });
-        return QueryRowReader.Read(cmd, maxRows);
-    }
-
-    public QueryRows ExecuteNativeText(string source, NativeQuery native, int maxRows) =>
-        throw new NotSupportedException("The PostgreSQL twin executor can't run agent-written text.");
-
-    /// <summary>Loads the DuckDB-dialect seed script as it is: it is plain SQL.</summary>
-    public static void LoadSeed(string connectionString, string seedSql)
+    public static void Load(string connectionString, string seedSql)
     {
         using var con = new NpgsqlConnection(connectionString);
         con.Open();

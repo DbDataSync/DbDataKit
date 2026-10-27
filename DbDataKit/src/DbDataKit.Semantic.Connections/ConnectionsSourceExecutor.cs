@@ -10,7 +10,7 @@ public sealed record SemanticSource(IDbProvider Provider, ConnectionContext Cont
 
 /// <summary>
 /// Runs the queries the semantic engine plans on the connections of <c>DbDataKit.Connections</c>. <paramref name="sources"/> maps a catalog
-/// source name to its connection; a source that is not in the map, or whose dialect this executor cannot run, goes to <paramref name="fallback"/>.
+/// source name to its connection (SQL Server runs the T-SQL, PostgreSQL its own text, DuckDB the twin); a source that is not in the map, or whose dialect this executor cannot run, goes to <paramref name="fallback"/>.
 /// </summary>
 public sealed class ConnectionsSourceExecutor(IReadOnlyDictionary<string, SemanticSource> sources, ISourceExecutor? fallback = null) : IColumnarSourceExecutor
 {
@@ -31,6 +31,12 @@ public sealed class ConnectionsSourceExecutor(IReadOnlyDictionary<string, Semant
         {
             if (query.Native.Dialect != "tsql") return Fallback(query, maxRows, $"cannot run {query.Native.Dialect} on source '{query.Source}' (SQL Server)");
             return Run(source, query.ExecText ?? query.Native.Text, query.DuckDbParameters, named: true, maxRows, columnar);
+        }
+        if (engine == EngineId.Postgres)
+        {
+            // PostgreSQL's own text, whatever the catalog calls the source: its tables are expected on the connection
+            if (query.Postgres is null) return Fallback(query, maxRows, $"cannot run {query.Native.Dialect} on source '{query.Source}' (PostgreSQL)");
+            return Run(source, query.Postgres.Text, query.Postgres.Parameters, named: false, maxRows, columnar);
         }
         if (engine == EngineId.DuckDb)
             return Run(source, query.DuckDbSql, query.DuckDbParameters.Select(DuckDbValue).ToList(), named: false, maxRows, columnar);

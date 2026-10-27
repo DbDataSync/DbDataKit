@@ -17,6 +17,7 @@ Generated from the command tree of `dbdatabuild` (`UPDATE_GOLDEN=1 dotnet test t
 | [`project show loads`](#project-show-loads) | `P→` | Offline only | Print the model x connection x operation pairing table |
 | [`project show graph`](#project-show-graph) | `P→` | Offline only | Show the dependency graph (which table each model reads), column lineage, or a diagram of it; selectors pick the part to show |
 | [`project show metadata`](#project-show-metadata) | `P→` | Offline only | Print everything the tool knows about the project and its models (use --format json) |
+| [`project show semantic`](#project-show-semantic) | `P→` | Offline only | Show the semantic models of the project (semantic/): the connections they read, what each attribute and measure is bound to (connection, model, column), the generated physical layer, relationships and hierarchies |
 | [`project show refresh`](#project-show-refresh) | `P→` | Offline only | Read the compiled refresh plans (offline): the plans of each connection, or one plan with its members in the order they run, the inputs each load takes and where each default comes from, what each load waits for (the dependency graph the loads file carries, with model kinds and depth), what was left out and the hashes |
 | [`project show plan`](#project-show-plan) | `P→` | Offline only | Read plan files (offline, nothing applied): list a project's plans, or show one with its steps, risk, exact statements, report and what applying it would need to be allowed |
 | [`project file list`](#project-file-list) | `P→` | Offline only | List the files of the project (or of a folder in it) with their size and content hash; the way a console or an agent sees the tree |
@@ -32,6 +33,7 @@ Generated from the command tree of `dbdatabuild` (`UPDATE_GOLDEN=1 dotnet test t
 | [`connection refresh`](#connection-refresh) | `P⇒D` | Target writes (data only) | Run the loads of a refresh plan that project compile wrote (the plan default unless one is named, all of it or the members the selectors choose), or one load named model.load, as an event of its own: it checks what refresh.check says first, never changes structure, and leaves what a refresh cannot run to a deploy |
 | [`connection monitor`](#connection-monitor) | `C→` | Target read-only | The events (deploys and refreshes), DDL and load history, recorded shapes, and what needs attention; with a refresh plan named, that plan's runs and each member's last success and failure |
 | [`connection compare`](#connection-compare) | `C→` | Target read-only | Compare the data of two tables, of one connection or across connections and engines (by digests): schemas, row counts and a key-based row diff (values are read only with --show-values) |
+| [`connection check`](#connection-check) | `C→` | Target read-only | Run the data checks generated from the semantic models (semantic/) against a connection: each hierarchy level has one parent per member, every key of a relationship exists on its one side, and the one side's keys are unique (counts only unless --show-values) |
 | [`connection seed`](#connection-seed) | `P⇒S` | Target writes (DDL and/or data, as the plan states) | Create the seeded tables (the mapped models) on a connection and fill them from the seeds (prints what it would do unless --apply) |
 | [`connection publish`](#connection-publish) | `P⇒T` | Tracking tables only | Store the project and model metadata as JSON in the connection for introspection |
 | [`ui terminal`](#ui-terminal) | `—` | Offline only | Interactive terminal interface: choose, plan and run operations (each action it runs declares its own effect) |
@@ -141,7 +143,7 @@ Usage: `dbdatabuild project tests list [options]`
 
 | Option | Meaning |
 |---|---|
-| `--kind` `<text>` | List only tests of this kind: metadata (tests/metadata) or model (tests/models) |
+| `--kind` `<text>` | List only tests of this kind: metadata (tests/metadata), model (tests/models) or semantic (the data checks generated from semantic/, run by `connection check`) |
 | `--project` `<path>` | Project root |
 | `--tag` `<text ...>` | List only tests with this tag (repeat for several: any of them) |
 
@@ -263,6 +265,22 @@ Usage: `dbdatabuild project show metadata [models]... [options]`
 | Argument | Meaning |
 |---|---|
 | `models` (several) | Model selectors: names, files, directories, `+model`, `model+`, `@model`, `kind:`, `tag:`, `property:key=value`, `changed:<git ref>`, `exclude:...` (default: every model) |
+
+| Option | Meaning |
+|---|---|
+| `--project` `<path>` | Project root |
+
+## project show semantic
+
+Show the semantic models of the project (semantic/): the connections they read, what each attribute and measure is bound to (connection, model, column), the generated physical layer, relationships and hierarchies.
+
+Effect: Offline only. Reads and writes: `P→`.
+
+Usage: `dbdatabuild project show semantic [models]... [options]`
+
+| Argument | Meaning |
+|---|---|
+| `models` (several) | Semantic models by name or file (default: every file in semantic/) |
 
 | Option | Meaning |
 |---|---|
@@ -559,6 +577,24 @@ Usage: `dbdatabuild connection compare [connection] [table] [options]`
 | `--limit` `<number>` | With --show-values, how many sample rows of each kind of difference |
 | `--project` `<path>` | Project root |
 | `--show-values` | Read and show values: the smallest and largest of each column and sample rows of each difference (without it only counts are read) |
+
+## connection check
+
+Run the data checks generated from the semantic models (semantic/) against a connection: each hierarchy level has one parent per member, every key of a relationship exists on its one side, and the one side's keys are unique (counts only unless --show-values).
+
+Effect: Target read-only. Reads and writes: `C→`. Lane: inspect.
+
+Usage: `dbdatabuild connection check [connection] [options]`
+
+| Argument | Meaning |
+|---|---|
+| `connection` | Connection to check (default: the project's only default connection) |
+
+| Option | Meaning |
+|---|---|
+| `--limit` `<number>` | With --show-values, how many violating keys or members of each check |
+| `--project` `<path>` | Project root |
+| `--show-values` | Read and show values: up to --limit of the keys or members that break each check (without it only counts are read) |
 
 ## connection seed
 
