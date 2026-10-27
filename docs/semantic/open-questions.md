@@ -228,7 +228,7 @@ without changing the request.
 
 ## Calendars
 
-**SSAS source:** done for months, quarters and years. The sample Tabular model has the prior-year counterpart columns and a year of earlier budget rows, so `prior_period`, `window`, `index` and the whole-period operators run on it; the date table's order still comes from a SQL source. A model with no date column can't take day-level operators (`period_to_date`, `between`), and that is stated in [query.md](query.md#relative-periods). Open: whether a model-only deployment (no SQL source to read the date table from) should read the calendar with a DAX query over its own Date table.
+**SSAS source:** done for months, quarters and years. The sample Tabular model has the prior-year counterpart columns and a year of earlier budget rows, so `prior_period`, `window`, `index` and the whole-period operators run on it; the date table's order still comes from a SQL source. **Plan 19 J23:** the model's Date table is now at day grain (the budget relates to it on the month's first day), so the day-level operators apply to it (fixtures `level4/128` to `130`), and the calendar is read with DAX over that table when no SQL source has one (`CalendarFromDaxTests`; [ssas-gaps.md](ssas-gaps.md)).
 
 Role-playing dimensions are **done** at the catalog and query level: each role is a dimension named `role.attribute`, the bare name reads the measure's role or the default ([catalog.md](catalog.md#tables-columns-and-relationships)). Calendars, `time_attributes`, `prior_period` and allocation weights work in any role ([catalog.md](catalog.md#calendars)). Not yet: a role-aware form in the SQL-like format being specified elsewhere.
 

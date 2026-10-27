@@ -103,3 +103,7 @@ The stand-in agrees with SQL Server on every fixture, but DAX has never been run
 1. **Where does the VM live** (Azure subscription, an existing Hyper-V host, a spare machine), and who owns patching it?
 2. **Is a hosted-runner experiment worth a first try** before the VM, given that it spends Actions minutes on a Windows runner (billed at a higher rate than Linux)?
 3. **Is a Linux-only pipeline a requirement?** If not, the XMLA client isn't needed.
+
+### Day-grain date table (plan 19, J23, 2026-10-27)
+
+The `Date` table of the model is now at day grain, with `Date` and `Date Prior Year` columns beside the fiscal levels, and `Budget` has a `Month Start` column (the month's first day) that relates to `Date[Date]`. Day-level operators and DAX calendar reads work on it; see [ssas-gaps.md](ssas-gaps.md). The text above describes the earlier month-grain model.
