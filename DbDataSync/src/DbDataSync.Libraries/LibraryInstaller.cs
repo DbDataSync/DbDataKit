@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using DbDataKit.Scripting;
 
 namespace DbDataSync.Libraries;
 
@@ -18,12 +19,9 @@ namespace DbDataSync.Libraries;
 public static class LibraryInstaller
 {
     /// <summary>
-    /// Installs (or reinstalls) one library. <paramref name="factoryType"/> null means neither the
-    /// caller nor <see cref="KnownLibraries"/> could name one up front — phase 122's reflection-assist
-    /// then scans the freshly-restored closure for a single public
-    /// <see cref="System.Data.Common.DbProviderFactory"/> subclass (see
-    /// <see cref="FactoryTypeReflector"/>) before giving up. Restore always runs regardless: the
-    /// closure has to exist on disk before there is anything to scan.
+    /// Installs (or reinstalls) one library: its packages are resolved into <c>libraries/&lt;id&gt;/lib/</c> (a feed, <see cref="LibraryResolution.DefaultSource"/> unless <paramref name="nugetSource"/> names one), their hashes go to
+    /// <c>library.lock</c>, and <c>library.csx</c> is written. <paramref name="factoryType"/> null means neither the caller nor <see cref="KnownLibraries"/> could name one up front, so the resolved closure is scanned for a single public
+    /// <see cref="System.Data.Common.DbProviderFactory"/> subclass (see <see cref="FactoryTypeReflector"/>) before giving up. The closure has to exist on disk before there is anything to scan.
     /// </summary>
     public static async Task<LibraryManifest> InstallAsync(
         string repoRoot, string id, IReadOnlyList<PackageRef> packages, string? factoryType,
@@ -31,16 +29,34 @@ public static class LibraryInstaller
     {
         var libraryDir = LibraryPaths.LibraryDir(repoRoot, id);
         var libDir = LibraryPaths.LibDir(libraryDir);
-        await RestorePackagesAsync(libDir, packages, nugetSource, cancellationToken);
+        Directory.CreateDirectory(libraryDir);
+
+        // A fresh store each install: a version downgrade or a dropped transitive dependency must not leave an old package behind. The lock keeps the pins of what stays.
+        if (Directory.Exists(libDir)) Directory.Delete(libDir, recursive: true);
+        Directory.CreateDirectory(libDir);
+
+        Closure closure;
+        try
+        {
+            closure = await LibraryResolution.RestoreAsync(libraryDir, packages, nugetSource, cancellationToken);
+            // DuckDB.NET.Data has managed bindings only; the engine comes from the repository's pin (duckdb.pin), hash-checked.
+            if (DuckDbEngine.Needs(packages))
+                await DuckDbEngine.EnsureAsync(libDir, cancellationToken);
+        }
+        catch
+        {
+            CleanUpFailedInstall(libraryDir);
+            throw;
+        }
 
         if (factoryType is null)
         {
-            var discovery = FactoryTypeReflector.Discover(libDir);
+            var discovery = FactoryTypeReflector.Discover(closure.Managed.Values.ToList());
             if (discovery.Status != FactoryTypeDiscoveryStatus.Found)
             {
                 // Nothing usable under this id — clean up rather than leave a lib/ with no manifest,
                 // the same "nothing installed" outcome any other failed install leaves behind.
-                Directory.Delete(libraryDir, recursive: true);
+                CleanUpFailedInstall(libraryDir);
                 throw new InvalidOperationException(discovery.Status == FactoryTypeDiscoveryStatus.Ambiguous
                     ? $"'{id}' has more than one DbProviderFactory — pass factoryType explicitly."
                     : $"Could not find a DbProviderFactory in '{id}'. Pass factoryType explicitly.");
@@ -52,6 +68,12 @@ public static class LibraryInstaller
         var manifest = new LibraryManifest(id, factoryType!, packages);
         manifest.Write(LibraryPaths.ManifestPath(libraryDir));
         return manifest;
+    }
+
+    // a library that was not there before is removed; one that was keeps its script (and loses only the store that failed to refresh)
+    private static void CleanUpFailedInstall(string libraryDir)
+    {
+        if (!File.Exists(LibraryPaths.ManifestPath(libraryDir))) { try { Directory.Delete(libraryDir, recursive: true); } catch (IOException) { } }
     }
 
     /// <summary>
@@ -99,79 +121,44 @@ public static class LibraryInstaller
     {
         var libraryDir = LibraryPaths.LibraryDir(repoRoot, id);
         var manifest = LibraryManifest.Read(LibraryPaths.ManifestPath(libraryDir));
-        await InstallAsync(repoRoot, id, manifest.Packages, manifest.FactoryType, cancellationToken: cancellationToken);
+        await InstallAsync(repoRoot, id, manifest.Packages, manifest.FactoryType.Length > 0 ? manifest.FactoryType : null, cancellationToken: cancellationToken);
     }
 
-    /// <summary>Phase 121: the outcome of <see cref="InstallOrDeferAsync"/>.</summary>
+    /// <summary>The outcome of <see cref="InstallOrDeferAsync"/>.</summary>
     public enum LibraryInstallOutcome
     {
-        /// <summary>Restored for real via <c>dotnet publish</c> — the ordinary path, unchanged from
-        /// before this phase.</summary>
+        /// <summary>Resolved from a feed into the library's store.</summary>
         Installed,
-        /// <summary>No SDK here to restore anything, but the exact package + pinned version was found
-        /// in the in-image catalog cache and copied from there — no network, no SDK needed.</summary>
+        /// <summary>The exact package and pinned version of a catalog entry was found in the image's catalog cache and copied from there: no network.</summary>
         InstalledFromCache,
-        /// <summary>No SDK, and no cache hit — only <c>library.json</c> was written.
-        /// <c>config library sync</c>, run wherever an SDK exists, completes it.</summary>
-        PendingRestore,
     }
 
-    /// <param name="Manifest">Written either way — even a <see cref="LibraryInstallOutcome.PendingRestore"/>
-    /// needs its manifest committed so <c>config library sync</c> has something to read later.</param>
     public sealed record LibraryInstallResult(LibraryManifest Manifest, LibraryInstallOutcome Outcome);
 
     /// <summary>
-    /// Phase 121's runtime-only-image entry point: on a host with the SDK, this is exactly
-    /// <see cref="InstallAsync"/> (with phase 122's reflection-assist, since that needs a real
-    /// restore). On a host with no SDK — the <c>-runtime</c> image — a catalog id at its
-    /// <see cref="KnownLibraries"/>-pinned version is copied from <paramref name="cacheRoot"/> instead
-    /// of restored; anything else (a non-catalog package, or a catalog one at a different version) can
-    /// only have its manifest written, deferred as <see cref="LibraryInstallOutcome.PendingRestore"/>.
-    /// <paramref name="factoryType"/> must be non-null on this path — reflection-assist needs a real
-    /// restore to scan, which is exactly what isn't available here.
+    /// The runtime-only image's entry point: a catalog id at its <see cref="KnownLibraries"/>-pinned version is copied from <paramref name="cacheRoot"/> when the image carries it (no network), anything else is
+    /// <see cref="InstallAsync"/>. Nothing needs the .NET SDK any more, so there is no deferred "pending restore": an install either completes or fails with the reason.
     /// </summary>
-    /// <param name="hasSdkOverride">Defaults to the real <see cref="SdkAvailability.HasSdk()"/> — every
-    /// production call site. A test drives the no-SDK branches with this instead of needing an actual
-    /// runtime-only machine, the same seam phase 123 added for <c>Environment.ProcessPath</c>.</param>
     public static async Task<LibraryInstallResult> InstallOrDeferAsync(
         string repoRoot, string id, IReadOnlyList<PackageRef> packages, string? factoryType,
-        string? cacheRoot = null, string? nugetSource = null, bool? hasSdkOverride = null,
-        CancellationToken cancellationToken = default)
+        string? cacheRoot = null, string? nugetSource = null, CancellationToken cancellationToken = default)
     {
-        if (hasSdkOverride ?? SdkAvailability.HasSdk())
-        {
-            var manifest = await InstallAsync(repoRoot, id, packages, factoryType, nugetSource, cancellationToken);
-            return new(manifest, LibraryInstallOutcome.Installed);
-        }
-
         var cache = cacheRoot ?? DefaultCacheRoot;
-        var catalogMatch = packages.Count == 1
+        var catalogMatch = packages.Count == 1 && nugetSource is null
             ? KnownLibraries.All.FirstOrDefault(e =>
                 string.Equals(e.PackageId, packages[0].Id, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(e.PinnedVersion, packages[0].Version, StringComparison.OrdinalIgnoreCase))
             : null;
-        var cacheLibDir = catalogMatch is null
-            ? null
-            : LibraryPaths.LibDir(LibraryPaths.LibraryDir(cache, catalogMatch.Id));
+        var cacheLibraryDir = catalogMatch is null ? null : LibraryPaths.LibraryDir(cache, catalogMatch.Id);
 
-        if (cacheLibDir is not null && Directory.Exists(cacheLibDir))
+        if (cacheLibraryDir is not null && Directory.Exists(LibraryPaths.LibDir(cacheLibraryDir)))
         {
-            var manifest = CopyFromCache(cacheLibDir, repoRoot, id, packages, factoryType ?? catalogMatch!.FactoryType);
+            var manifest = CopyFromCache(cacheLibraryDir, repoRoot, id, packages, factoryType ?? catalogMatch!.FactoryType);
             return new(manifest, LibraryInstallOutcome.InstalledFromCache);
         }
 
-        if (factoryType is null)
-        {
-            throw new InvalidOperationException(
-                $"'{id}' has no known DbProviderFactory type, and there is no SDK here to try reflection-assist. " +
-                "Pass factoryType explicitly, or run `config library sync` on a host with the SDK.");
-        }
-
-        var pendingLibraryDir = LibraryPaths.LibraryDir(repoRoot, id);
-        Directory.CreateDirectory(pendingLibraryDir);
-        var pendingManifest = new LibraryManifest(id, factoryType, packages);
-        pendingManifest.Write(LibraryPaths.ManifestPath(pendingLibraryDir));
-        return new(pendingManifest, LibraryInstallOutcome.PendingRestore);
+        var installed = await InstallAsync(repoRoot, id, packages, factoryType, nugetSource, cancellationToken);
+        return new(installed, LibraryInstallOutcome.Installed);
     }
 
     /// <summary>Where <c>internal build-catalog-cache</c> writes and <see cref="InstallOrDeferAsync"/>
@@ -180,14 +167,16 @@ public static class LibraryInstaller
     public const string DefaultCacheRoot = "/app/library-cache";
 
     private static LibraryManifest CopyFromCache(
-        string cacheLibDir, string repoRoot, string id, IReadOnlyList<PackageRef> packages, string factoryType)
+        string cacheLibraryDir, string repoRoot, string id, IReadOnlyList<PackageRef> packages, string factoryType)
     {
         var libraryDir = LibraryPaths.LibraryDir(repoRoot, id);
         var libDir = LibraryPaths.LibDir(libraryDir);
         if (Directory.Exists(libDir))
             Directory.Delete(libDir, recursive: true);
         Directory.CreateDirectory(libDir);
-        CopyAll(cacheLibDir, libDir);
+        CopyAll(LibraryPaths.LibDir(cacheLibraryDir), libDir);
+        var cachedLock = LibraryResolution.LockPath(cacheLibraryDir);
+        if (File.Exists(cachedLock)) File.Copy(cachedLock, LibraryResolution.LockPath(libraryDir), overwrite: true);
 
         var manifest = new LibraryManifest(id, factoryType, packages);
         manifest.Write(LibraryPaths.ManifestPath(libraryDir));

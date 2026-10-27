@@ -58,12 +58,13 @@ public static class FactoryTypeReflector
     /// <summary>Scans every top-level <c>*.dll</c> in <paramref name="libDir"/> — a library's restored
     /// <c>lib/</c> directory; a native asset under <c>runtimes/&lt;rid&gt;/native/</c> is a level down
     /// and never itself a managed <c>*.dll</c> on the platforms that matter here.</summary>
-    public static FactoryTypeDiscoveryResult Discover(string libDir)
+    public static FactoryTypeDiscoveryResult Discover(string libDir) =>
+        Discover(Directory.Exists(libDir) ? Directory.GetFiles(libDir, "*.dll", SearchOption.TopDirectoryOnly) : []);
+
+    /// <summary>Scans the managed assemblies of a resolved closure (<c>Closure.Managed.Values</c>).</summary>
+    public static FactoryTypeDiscoveryResult Discover(IReadOnlyCollection<string> dllPaths)
     {
-        var dllPaths = Directory.Exists(libDir)
-            ? Directory.GetFiles(libDir, "*.dll", SearchOption.TopDirectoryOnly)
-            : [];
-        if (dllPaths.Length == 0)
+        if (dllPaths.Count == 0)
             return FactoryTypeDiscoveryResult.NotFound;
 
         var resolverPaths = Directory.GetFiles(RuntimeEnvironment.GetRuntimeDirectory(), "*.dll")

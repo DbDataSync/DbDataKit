@@ -52,7 +52,7 @@ public sealed class ServeCommandDuckDbTests : IDisposable
     }
 
     /// <summary>
-    /// A failed install (here: no `library.json` written because the restore itself never ran — forced
+    /// A failed install (here: no `library.csx` written because the restore itself never ran — forced
     /// by pointing at a directory that can never resolve any package, see <see cref="BrokenRoot"/>) is
     /// logged and swallowed, not rethrown — the same "shouldn't be allowed to take the whole process
     /// down" posture <c>CertificateExpiryService</c> already takes. This does not assert on the console
