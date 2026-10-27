@@ -1,3 +1,4 @@
+using DbDataKit.Serving.FlightSql;
 using System.Data.Common;
 using Apache.Arrow.Flight;
 using Apache.Arrow.Flight.Server;
@@ -216,48 +217,25 @@ public sealed partial class ProxyFlightServer(
     }
 
     /// <summary>
-    /// Maps failures to gRPC statuses clients can act on. A database failure arrives as a classified <see cref="DbDataKit.Connections.ConnectionFailure"/> and the client
-    /// gets its kind, the engine's error number or SQLSTATE and a fixed sentence (for example "The login was rejected. [sqlserver 18456]"), never the driver's own
-    /// text, which can name tables, columns, servers and file paths; that text goes to the local log. Messages the Proxy wrote itself are passed on.
+    /// Maps failures to gRPC statuses clients can act on (<see cref="FlightFailures.ToRpcException"/>), with the cases only Proxy has: a message it wrote itself for the client, an ODBC policy violation, a catalog larger than the configured limit.
     /// </summary>
-    public static RpcException ToRpcException(Exception ex)
+    public static RpcException ToRpcException(Exception ex) => ex switch
     {
-        switch (ex)
-        {
-            case RpcException rpc:
-                return rpc;
-            case DbDataKit.Connections.ConnectionFailureException failure:
-                return new FailureRpcException(failure.Failure);
-            case IClientVisible or DbDataKit.Odbc.Metadata.OdbcPolicyViolationException:
-                return new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
-            case DbDataKit.Odbc.Metadata.OdbcResultTruncatedException:
-                return new RpcException(new Status(StatusCode.ResourceExhausted, "The data source's catalog is larger than the configured limit."));
-            default:
-                return new FailureRpcException(new DbDataKit.Connections.ConnectionFailure(DbDataKit.Connections.ConnectionFailureKind.Other, ex.GetType().Name, null));
-        }
-    }
+        IClientVisible or DbDataKit.Odbc.Metadata.OdbcPolicyViolationException => new RpcException(new Status(StatusCode.InvalidArgument, ex.Message)),
+        DbDataKit.Odbc.Metadata.OdbcResultTruncatedException => new RpcException(new Status(StatusCode.ResourceExhausted, "The data source's catalog is larger than the configured limit.")),
+        _ => FlightFailures.ToRpcException(ex),
+    };
 
     /// <summary>The client-facing status for <paramref name="ex"/>; a failure nobody classified (a bug, not a database error) is also logged in full.</summary>
     private RpcException Fail(Exception ex)
     {
         var rpc = ToRpcException(ex);
-        if (rpc is FailureRpcException { Failure.Kind: DbDataKit.Connections.ConnectionFailureKind.Other } && ex is not DbDataKit.Connections.ConnectionFailureException)
-            _log.LogError(ex, "Unexpected failure while serving a request");
+        if (FlightFailures.IsUnclassified(rpc, ex)) _log.LogError(ex, "Unexpected failure while serving a request");
         return rpc;
     }
 
     /// <summary>The gRPC status for a failure kind.</summary>
-    public static StatusCode StatusFor(DbDataKit.Connections.ConnectionFailureKind kind) => kind switch
-    {
-        DbDataKit.Connections.ConnectionFailureKind.Login => StatusCode.Unauthenticated,
-        DbDataKit.Connections.ConnectionFailureKind.Network => StatusCode.Unavailable,
-        DbDataKit.Connections.ConnectionFailureKind.Tls => StatusCode.Unavailable,
-        DbDataKit.Connections.ConnectionFailureKind.Timeout => StatusCode.DeadlineExceeded,
-        DbDataKit.Connections.ConnectionFailureKind.Permission => StatusCode.PermissionDenied,
-        DbDataKit.Connections.ConnectionFailureKind.Syntax => StatusCode.InvalidArgument,
-        DbDataKit.Connections.ConnectionFailureKind.Unsupported => StatusCode.InvalidArgument, // as before: a driver or server that cannot do what was asked (a missing ODBC driver is IM002)
-        _ => StatusCode.Internal,
-    };
+    public static StatusCode StatusFor(DbDataKit.Connections.ConnectionFailureKind kind) => FlightFailures.StatusFor(kind);
 
     private string Describe(string sql) => options.CurrentValue.LogSql ? Truncate(sql) : "<sql hidden>";
 

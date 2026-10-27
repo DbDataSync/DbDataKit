@@ -1,3 +1,4 @@
+using DbDataKit.Serving.FlightSql;
 using System.Net;
 using System.Reflection;
 using System.Security.Cryptography.X509Certificates;

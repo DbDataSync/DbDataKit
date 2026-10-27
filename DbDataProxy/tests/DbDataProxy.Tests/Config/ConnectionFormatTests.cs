@@ -1,3 +1,4 @@
+using DbDataKit.Serving.FlightSql;
 using DbDataKit.Config;
 using DbDataKit.Config.Yaml;
 using DbDataProxy.Server.Configuration;

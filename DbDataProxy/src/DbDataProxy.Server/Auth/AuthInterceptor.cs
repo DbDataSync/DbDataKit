@@ -113,7 +113,7 @@ public sealed class AuthInterceptor(RequestAuthenticator authenticator, LoginThr
 
     private void NoteFailure(RpcException ex, ServerCallContext context)
     {
-        if (throttle is null || ex is not DbDataProxy.Server.Flight.FailureRpcException { Failure.Kind: DbDataKit.Connections.ConnectionFailureKind.Login }) return;
+        if (throttle is null || ex is not DbDataKit.Serving.FlightSql.FailureRpcException { Failure.Kind: DbDataKit.Connections.ConnectionFailureKind.Login }) return;
         if (context.UserState.TryGetValue(PrincipalKey, out var p) && p is ProxyPrincipal { Credentials: not null } principal)
             throttle.RecordFailure(context.ClientAddress(), principal.Name);
     }

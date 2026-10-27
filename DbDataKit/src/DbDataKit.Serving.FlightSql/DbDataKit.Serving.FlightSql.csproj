@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Serving.FlightSql</RootNamespace>
+    <PackageId>DbDataKit.Serving.FlightSql</PackageId>
+    <Description>The Flight SQL module of the serving layer (plan 20): the Arrow Flight SQL wire protocol written against the core services of DbDataKit.Serving.Abstractions, with no reference to any product. A host supplies identity, sessions, queries, the catalog and updates.</Description>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Apache.Arrow.Compression" />
+    <PackageReference Include="Apache.Arrow.Flight.AspNetCore" />
+    <PackageReference Include="Apache.Arrow.Flight.Sql" />
+    <ProjectReference Include="..\DbDataKit.Serving.Abstractions\DbDataKit.Serving.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Config\DbDataKit.Config.csproj" />   <!-- the schema attributes of the options the module reads from server.yaml -->
+  </ItemGroup>
+</Project>
