@@ -87,4 +87,33 @@ public sealed class LibraryInstallOrDeferTests : IAsyncLifetime
         Assert.Contains("SomeVendor.Driver", ex.Message);
         Assert.False(Directory.Exists(LibraryPaths.LibraryDir(_repoRoot, "SomeVendor.Driver")));
     }
+
+    [Fact]
+    public void AnOldLibraryJson_StopsTheLoad_WithAMessageNamingTheFile()
+    {
+        var libraryDir = LibraryPaths.LibraryDir(_repoRoot, "old-style");
+        Directory.CreateDirectory(libraryDir);
+        File.WriteAllText(Path.Combine(libraryDir, "library.json"), """{"id":"old-style","factoryType":"X.Y, X","packages":[{"id":"X","version":"1.0.0"}]}""");
+
+        var ex = Assert.Throws<InvalidDataException>(() => new LibraryRegistry(_repoRoot).LoadAll());
+
+        Assert.Contains("library.json", ex.Message);
+        Assert.Contains("library.csx", ex.Message);
+    }
+
+    [Fact]
+    public void ALibraryCsx_HoldsOnlyPackageLines_AndRoundTrips()
+    {
+        var libraryDir = LibraryPaths.LibraryDir(_repoRoot, "round-trip");
+        var manifest = new LibraryManifest("round-trip", "A.B.Factory, A.B", [new PackageRef("A.B", "1.2.3"), new PackageRef("A.B.Native", "4.5.6")]);
+        manifest.Write(LibraryPaths.ManifestPath(libraryDir));
+
+        var read = LibraryManifest.Read(LibraryPaths.ManifestPath(libraryDir));
+        Assert.Equal(("round-trip", "A.B.Factory, A.B"), (read.Id, read.FactoryType));
+        Assert.Equal(manifest.Packages, read.Packages);
+
+        File.AppendAllText(LibraryPaths.ManifestPath(libraryDir), "System.Console.WriteLine(1);" + Environment.NewLine);
+        var ex = Assert.Throws<InvalidDataException>(() => LibraryManifest.Read(LibraryPaths.ManifestPath(libraryDir)));
+        Assert.Contains("more than #r", ex.Message);
+    }
 }

@@ -16,9 +16,9 @@ namespace DbDataSync.Libraries;
 /// entry as a separate case.</param>
 /// <param name="PinnedVersion">The exact version phase 121's <c>internal build-catalog-cache</c>
 /// restores into the runtime-only image's in-image cache, and the only version
-/// <see cref="LibraryInstaller.InstallOrDeferAsync"/> can serve from that cache with no SDK present.
-/// An operator asking for a different version of a curated package on that image still needs an SDK
-/// somewhere to satisfy it (<c>config library sync</c>) — the cache is a fast path for the common
+/// <see cref="LibraryInstaller.InstallOrDeferAsync"/> can serve from that cache with no network.
+/// An operator asking for a different version of a curated package on that image still needs a package feed
+/// to satisfy it — the cache is a fast path for the common
 /// case, not a second source of truth for "whatever version someone wants."</param>
 public sealed record LibraryCatalogEntry(
     string Id, string PackageId, string FactoryType, string DisplayName, string Description,
@@ -28,7 +28,7 @@ public sealed record LibraryCatalogEntry(
 /// The curated, bundled set of libraries DbDataSync knows how to identify by a short id or a package
 /// id — a starter guess for a package's <see cref="System.Data.Common.DbProviderFactory"/> type, and
 /// (from phase 117 on) a catalog id shorthand for <c>config library install</c>. Editable after
-/// install — <c>library.json</c> is a plain file — so a wrong or unlisted guess is a one-line fix,
+/// install — <c>library.csx</c> is a plain file — so a wrong or unlisted guess is a one-line fix,
 /// never a blocker.
 /// </summary>
 public static class KnownLibraries

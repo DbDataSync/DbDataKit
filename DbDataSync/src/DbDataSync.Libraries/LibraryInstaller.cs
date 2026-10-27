@@ -112,7 +112,7 @@ public static class LibraryInstaller
     }
 
     /// <summary>Re-runs the restore for an already-written manifest — a fresh deployment, or after
-    /// hand-editing a package version in <c>library.json</c>. Also what completes phase 121's
+    /// hand-editing a package version in <c>library.csx</c>. Also what completes the
     /// "pending restore" state: <see cref="InstallAsync"/> restores into <c>lib/</c> unconditionally,
     /// whether or not one was already there, so a manifest written with no <c>lib/</c> at all (because
     /// no SDK was available at install time) restores for the first time exactly the same way a

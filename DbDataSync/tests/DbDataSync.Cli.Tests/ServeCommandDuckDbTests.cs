@@ -27,7 +27,7 @@ public sealed class ServeCommandDuckDbTests : IDisposable
         var registry = new LibraryRegistry(_root).LoadAll();
         Assert.True(registry.Installed.TryGetValue("duckdb", out var manifest));
         Assert.Equal("DuckDB.NET.Data.DuckDBClientFactory, DuckDB.NET.Data", manifest!.FactoryType);
-        Assert.True(File.Exists(Path.Combine(_root, "libraries", "duckdb", "lib", "DuckDB.NET.Data.dll")));
+        Assert.Contains("DuckDB.NET.Data.dll", Directory.EnumerateFiles(Path.Combine(_root, "libraries", "duckdb", "lib"), "*.dll", SearchOption.AllDirectories).Select(Path.GetFileName));
     }
 
     /// <summary>
