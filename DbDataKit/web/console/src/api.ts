@@ -20,5 +20,8 @@ export const consoleApi = {
     pair: (url: string, code: string, name: string | null) =>
       request<InstanceSummary>('/api/instances', { method: 'POST', body: JSON.stringify({ url, code, name }) }),
     forget: (id: string) => request<void>(`/api/instances/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    /** Pairs a Build server with a proxy so Build can publish to it; no code is typed (T11). */
+    link: (from: string, to: string, name: string | null) =>
+      request<{ from: string; to: string; name: string }>('/api/instances/link', { method: 'POST', body: JSON.stringify({ from, to, name }) }),
   },
 }
