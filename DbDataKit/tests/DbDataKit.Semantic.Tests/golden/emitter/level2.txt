@@ -2079,3 +2079,188 @@ WHERE d2.fiscal_quarter = $1
 GROUP BY d2.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
+=== level2/28_not_equals_on_an_ssas_source.json
+--- sqlserver_sales tsql
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- duckdb
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- ssas_finance dax
+EVALUATE
+TOPN (
+    100,
+    SELECTCOLUMNS (
+        SUMMARIZECOLUMNS (
+            'Customer'[Region],
+            TREATAS ( { "FY27-Q1" }, 'Date'[Fiscal Quarter] ),
+            FILTER ( ALL ( 'Customer'[Region] ), ( NOT ISBLANK ( 'Customer'[Region] ) && NOT ( 'Customer'[Region] IN { "West" } ) ) ),
+            "budget_budget_amount", [Budget Amount]
+        ),
+        "customers_region", 'Customer'[Region],
+        "budget_budget_amount", [budget_budget_amount]
+    ),
+    [customers_region], ASC
+)
+ORDER BY [customers_region] ASC
+--- parameters String:FY27-Q1, String:West
+--- duckdb
+SELECT f.region AS customers_region,
+       SUM(f.amount) AS budget_budget_amount
+FROM fact_budget f
+JOIN dim_month m ON m.fiscal_month = f.fiscal_month
+WHERE m.fiscal_quarter = $1
+  AND f.region <> $2
+GROUP BY f.region
+ORDER BY customers_region ASC
+LIMIT 101;
+--- sqlserver_sales tsql
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- duckdb
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- ssas_finance dax
+EVALUATE
+TOPN (
+    100,
+    SELECTCOLUMNS (
+        SUMMARIZECOLUMNS (
+            'Customer'[Region],
+            TREATAS ( { "FY27-Q1" }, 'Date'[Fiscal Quarter] ),
+            FILTER ( ALL ( 'Customer'[Region] ), ( NOT ISBLANK ( 'Customer'[Region] ) && NOT ( 'Customer'[Region] IN { "West" } ) ) ),
+            "budget_budget_amount", [Budget Amount]
+        ),
+        "customers_region", 'Customer'[Region],
+        "budget_budget_amount", [budget_budget_amount]
+    ),
+    [customers_region], ASC
+)
+ORDER BY [customers_region] ASC
+--- parameters String:FY27-Q1, String:West
+--- duckdb
+SELECT f.region AS customers_region,
+       SUM(f.amount) AS budget_budget_amount
+FROM fact_budget f
+JOIN dim_month m ON m.fiscal_month = f.fiscal_month
+WHERE m.fiscal_quarter = $1
+  AND f.region <> $2
+GROUP BY f.region
+ORDER BY customers_region ASC
+LIMIT 101;
+=== level2/29_not_contains_on_an_ssas_source.json
+--- ssas_finance dax
+EVALUATE
+TOPN (
+    100,
+    SELECTCOLUMNS (
+        SUMMARIZECOLUMNS (
+            'Customer'[Region],
+            TREATAS ( { "FY27-Q1" }, 'Date'[Fiscal Quarter] ),
+            FILTER ( ALL ( 'Customer'[Region] ), ( NOT ISBLANK ( 'Customer'[Region] ) && NOT CONTAINSSTRING ( 'Customer'[Region], "es" ) ) ),
+            "budget_budget_amount", [Budget Amount]
+        ),
+        "customers_region", 'Customer'[Region],
+        "budget_budget_amount", [budget_budget_amount]
+    ),
+    [customers_region], ASC
+)
+ORDER BY [customers_region] ASC
+--- parameters String:FY27-Q1, String:%es%
+--- duckdb
+SELECT f.region AS customers_region,
+       SUM(f.amount) AS budget_budget_amount
+FROM fact_budget f
+JOIN dim_month m ON m.fiscal_month = f.fiscal_month
+WHERE m.fiscal_quarter = $1
+  AND f.region NOT LIKE $2 ESCAPE '\'
+GROUP BY f.region
+ORDER BY customers_region ASC
+LIMIT 101;
+--- ssas_finance dax
+EVALUATE
+TOPN (
+    100,
+    SELECTCOLUMNS (
+        SUMMARIZECOLUMNS (
+            'Customer'[Region],
+            TREATAS ( { "FY27-Q1" }, 'Date'[Fiscal Quarter] ),
+            FILTER ( ALL ( 'Customer'[Region] ), ( NOT ISBLANK ( 'Customer'[Region] ) && NOT CONTAINSSTRING ( 'Customer'[Region], "es" ) ) ),
+            "budget_budget_amount", [Budget Amount]
+        ),
+        "customers_region", 'Customer'[Region],
+        "budget_budget_amount", [budget_budget_amount]
+    ),
+    [customers_region], ASC
+)
+ORDER BY [customers_region] ASC
+--- parameters String:FY27-Q1, String:%es%
+--- duckdb
+SELECT f.region AS customers_region,
+       SUM(f.amount) AS budget_budget_amount
+FROM fact_budget f
+JOIN dim_month m ON m.fiscal_month = f.fiscal_month
+WHERE m.fiscal_quarter = $1
+  AND f.region NOT LIKE $2 ESCAPE '\'
+GROUP BY f.region
+ORDER BY customers_region ASC
+LIMIT 101;
+=== level2/30_starts_with_on_an_ssas_source.json
+--- ssas_finance dax
+EVALUATE
+TOPN (
+    100,
+    SELECTCOLUMNS (
+        SUMMARIZECOLUMNS (
+            'Customer'[Region],
+            TREATAS ( { "FY27-Q1" }, 'Date'[Fiscal Quarter] ),
+            FILTER ( ALL ( 'Customer'[Region] ), ( LEFT ( 'Customer'[Region], 1 ) = "E" ) ),
+            "budget_budget_amount", [Budget Amount]
+        ),
+        "customers_region", 'Customer'[Region],
+        "budget_budget_amount", [budget_budget_amount]
+    ),
+    [customers_region], ASC
+)
+ORDER BY [customers_region] ASC
+--- parameters String:FY27-Q1, String:E%
+--- duckdb
+SELECT f.region AS customers_region,
+       SUM(f.amount) AS budget_budget_amount
+FROM fact_budget f
+JOIN dim_month m ON m.fiscal_month = f.fiscal_month
+WHERE m.fiscal_quarter = $1
+  AND f.region LIKE $2 ESCAPE '\'
+GROUP BY f.region
+ORDER BY customers_region ASC
+LIMIT 101;
+--- ssas_finance dax
+EVALUATE
+TOPN (
+    100,
+    SELECTCOLUMNS (
+        SUMMARIZECOLUMNS (
+            'Customer'[Region],
+            TREATAS ( { "FY27-Q1" }, 'Date'[Fiscal Quarter] ),
+            FILTER ( ALL ( 'Customer'[Region] ), ( LEFT ( 'Customer'[Region], 1 ) = "E" ) ),
+            "budget_budget_amount", [Budget Amount]
+        ),
+        "customers_region", 'Customer'[Region],
+        "budget_budget_amount", [budget_budget_amount]
+    ),
+    [customers_region], ASC
+)
+ORDER BY [customers_region] ASC
+--- parameters String:FY27-Q1, String:E%
+--- duckdb
+SELECT f.region AS customers_region,
+       SUM(f.amount) AS budget_budget_amount
+FROM fact_budget f
+JOIN dim_month m ON m.fiscal_month = f.fiscal_month
+WHERE m.fiscal_quarter = $1
+  AND f.region LIKE $2 ESCAPE '\'
+GROUP BY f.region
+ORDER BY customers_region ASC
+LIMIT 101;

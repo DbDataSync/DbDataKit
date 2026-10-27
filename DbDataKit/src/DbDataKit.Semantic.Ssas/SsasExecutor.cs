@@ -19,8 +19,36 @@ public sealed class SsasExecutor(string connectionString, ISourceExecutor fallba
     public QueryRows Execute(CompiledQuery query, int maxRows) =>
         query.Native.Dialect == "dax" ? RunDax(query.Native.Text, maxRows) : fallback.Execute(query, maxRows);
 
-    public QueryRows ExecuteNativeText(string source, NativeQuery native, int maxRows) =>
-        native.Dialect == "dax" ? RunDax(native.Text, maxRows) : fallback.ExecuteNativeText(source, native, maxRows);
+    public QueryRows ExecuteNativeText(string source, NativeQuery native, int maxRows)
+    {
+        if (native.Dialect != "dax") return fallback.ExecuteNativeText(source, native, maxRows);
+        // An ADOMD command also runs MDX, DMX and DMV queries (measured on SSAS, plan 19 J22: an MDX SELECT through this path returned the model's value),
+        // so agent-written text is run only when it is a DAX query.
+        if (!IsDaxQuery(native.Text))
+            throw new NotSupportedException("Only a DAX query (DEFINE or EVALUATE) can be run as agent-written text on an Analysis Services source.");
+        return RunDax(native.Text, maxRows);
+    }
+
+    /// <summary>
+    /// True when the text, after whitespace and comments, starts with <c>EVALUATE</c> or <c>DEFINE</c>: a DAX query. MDX, DMX and DMV queries, which the same command
+    /// would run, start with something else.
+    /// </summary>
+    public static bool IsDaxQuery(string text)
+    {
+        var i = 0;
+        while (i < text.Length)
+        {
+            if (char.IsWhiteSpace(text[i])) i++;
+            else if (text.AsSpan(i).StartsWith("//") || text.AsSpan(i).StartsWith("--")) { while (i < text.Length && text[i] is not ('\n' or '\r')) i++; }
+            else if (text.AsSpan(i).StartsWith("/*")) { var end = text.IndexOf("*/", i + 2, StringComparison.Ordinal); if (end < 0) return false; i = end + 2; }
+            else break;
+        }
+        var rest = text.AsSpan(i);
+        foreach (var keyword in new[] { "EVALUATE", "DEFINE" })
+            if (rest.StartsWith(keyword, StringComparison.OrdinalIgnoreCase) && (rest.Length == keyword.Length || !(char.IsLetterOrDigit(rest[keyword.Length]) || rest[keyword.Length] == '_')))
+                return true;
+        return false;
+    }
 
     private QueryRows RunDax(string dax, int maxRows)
     {

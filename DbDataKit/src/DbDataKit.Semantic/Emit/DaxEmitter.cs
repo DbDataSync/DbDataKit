@@ -43,10 +43,11 @@ public static class DaxEmitter
         return f.Operator switch
         {
             "equals" => $"{col} IN {SetOf(vals, date)}",
-            "not_equals" => $"NOT ( {col} IN {SetOf(vals, date)} )",
+            // SQL's <> and NOT LIKE drop a NULL; DAX's NOT ( col IN ... ) keeps a blank (measured on SSAS, plan 19 J22), so the blank is excluded here
+            "not_equals" => $"( NOT ISBLANK ( {col} ) && NOT ( {col} IN {SetOf(vals, date)} ) )",
             "between" => $"( {col} >= {V(vals[0])} && {col} <= {V(vals[1])} )",
             "contains" => "( " + string.Join(" || ", vals.Select(v => $"CONTAINSSTRING ( {col}, {Lit(v)} )")) + " )",
-            "not_contains" => "( " + string.Join(" && ", vals.Select(v => $"NOT CONTAINSSTRING ( {col}, {Lit(v)} )")) + " )",
+            "not_contains" => "( NOT ISBLANK ( " + col + " ) && " + string.Join(" && ", vals.Select(v => $"NOT CONTAINSSTRING ( {col}, {Lit(v)} )")) + " )",
             "starts_with" => "( " + string.Join(" || ", vals.Select(v => $"LEFT ( {col}, {v.GetValue<string>().Length} ) = {Lit(v)}")) + " )",
             "gt" => $"{col} > {V(vals[0])}",
             "gte" => $"{col} >= {V(vals[0])}",
@@ -63,7 +64,7 @@ public static class DaxEmitter
         var vals = l.Values;
         return l.Operator switch
         {
-            "equals" => $"{col} IN {SetOf(vals)}", "not_equals" => $"NOT ( {col} IN {SetOf(vals)} )",
+            "equals" => $"{col} IN {SetOf(vals)}", "not_equals" => $"( NOT ISBLANK ( {col} ) && NOT ( {col} IN {SetOf(vals)} ) )",
             "between" => $"( {col} >= {Lit(vals[0])} && {col} <= {Lit(vals[1])} )",
             "gt" => $"{col} > {Lit(vals[0])}", "gte" => $"{col} >= {Lit(vals[0])}",
             "lt" => $"{col} < {Lit(vals[0])}", "lte" => $"{col} <= {Lit(vals[0])}",

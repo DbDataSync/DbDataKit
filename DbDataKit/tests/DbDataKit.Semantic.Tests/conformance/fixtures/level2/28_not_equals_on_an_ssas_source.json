@@ -1,0 +1,50 @@
+{
+  "name": "28_not_equals_on_an_ssas_source",
+  "level": 2,
+  "description": "Budget by region without West: the SSAS source's not_equals must keep the rows SQL keeps, and drop a blank, as SQL drops a NULL (measured on SSAS in plan 19 J22, where NOT ( col IN ... ) kept a blank).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        },
+        {
+          "attribute": "customers.region",
+          "operator": "not_equals",
+          "values": [
+            "West"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "budget_budget_amount": 500
+      }
+    ],
+    "native_query_contains": {
+      "d1": [
+        "NOT ISBLANK ( 'Customer'[Region] )",
+        "NOT ( 'Customer'[Region] IN { \"West\" } )"
+      ]
+    }
+  }
+}
