@@ -146,6 +146,33 @@ public class SqlServerReaderTests
     }
 
     [Fact]
+    public async Task A_schema_is_read_in_three_queries_whatever_the_number_of_tables()
+    {
+        var log = new List<string>();
+        var conn = new FakeDbConnection(cmd =>
+        {
+            log.Add(cmd.Sql);
+            if (cmd.Sql.Contains("FROM sys.objects o JOIN sys.schemas s", StringComparison.Ordinal) && cmd.Sql.StartsWith("SELECT DB_NAME()", StringComparison.Ordinal))
+                return FakeResult.Rows(["d", "s", "n", "t"], ["Shop", "dbo", "Orders", "U"], ["Shop", "dbo", "Lines", "U"], ["Shop", "dbo", "OrderView", "V"], ["Shop", "other", "Skipped", "U"]);
+            if (cmd.Sql.Contains("FROM sys.columns", StringComparison.Ordinal))
+                return FakeResult.Rows(ColumnNames.Append("t").ToArray(),
+                    ["Id", 1, "int", false, null, null, null, null, null, false, false, "Orders"], ["Id", 1, "int", false, null, null, null, null, null, false, false, "Lines"], ["Id", 1, "int", false, null, null, null, null, null, false, false, "OrderView"]);
+            if (cmd.Sql.Contains("i.type > 0", StringComparison.Ordinal))
+                return FakeResult.Rows(["n", "u", "o", "c", "d", "inc", "con", "comp", "parts", "t"], ["IX_Orders", false, 1, "Id", false, false, 0, "NONE", 1, "Orders"]);
+            return null;
+        });
+
+        var shapes = await new SqlServerCatalogReader(conn).ReadSchemaAsync(null, "dbo");
+
+        Assert.Equal(["Lines", "OrderView", "Orders"], shapes.Select(s => s.Table.Name).ToList());
+        Assert.Equal(TableKind.View, shapes.Single(s => s.Table.Name == "OrderView").Table.Kind);
+        Assert.Equal("IX_Orders", Assert.Single(shapes.Single(s => s.Table.Name == "Orders").Indexes).Name);
+        Assert.Empty(shapes.Single(s => s.Table.Name == "Lines").Indexes);
+        Assert.Equal(3, log.Count);
+        Assert.False(shapes[0].Support.PrimaryKeys);      // keys are not read here, and the flag says so
+    }
+
+    [Fact]
     public async Task The_index_behind_a_primary_key_is_asked_for_only_when_the_options_say_so()
     {
         var asked = new List<string>();

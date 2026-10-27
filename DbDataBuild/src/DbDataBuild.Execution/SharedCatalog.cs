@@ -47,11 +47,13 @@ internal static class SharedCatalog
             ? m.Groups[1].Value.Split(',').Select(a => a.Trim()).Select(a => a.Equals("max", StringComparison.OrdinalIgnoreCase) ? -1 : int.TryParse(a, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? (int?)n : null).ToList()
             : [];
         var type = Regex.Replace(ArgumentList.Replace(native, ""), @"\s+", " ").Trim().ToLowerInvariant();
+        if (postgres && type.EndsWith("[]", StringComparison.Ordinal)) type = "array";      // information_schema says ARRAY for every array type, and the tool has always recorded that
         int? first = arguments.Count > 0 ? arguments[0] : null, second = arguments.Count > 1 ? arguments[1] : null;
         var numeric = type is "decimal" or "numeric";
         var temporal = postgres ? type.StartsWith("timestamp", StringComparison.Ordinal) || type.StartsWith("time", StringComparison.Ordinal) : type is "datetime2" or "time" or "datetimeoffset";
-        var sized = postgres ? type is "character varying" or "character" : type is "char" or "varchar" or "binary" or "varbinary" or "nchar" or "nvarchar";
-        return new(c.Name, type, sized ? first : null, numeric ? first : null, numeric ? second ?? 0 : temporal ? first : null, c.Nullable, c.Collation, c.IsComputed ? c.DefaultExpr : null);
+        var sized = postgres ? type is "character varying" or "character" or "bit" or "bit varying" : type is "char" or "varchar" or "binary" or "varbinary" or "nchar" or "nvarchar";
+        return new(c.Name, type, sized ? first : null, numeric ? first : null, numeric ? (first is null ? null : second ?? 0) : temporal ? first ?? (postgres ? 6 : null) : null,   // a PostgreSQL time or timestamp without an argument has microseconds, which information_schema reports as 6
+             c.Nullable, c.Collation, c.IsComputed ? c.DefaultExpr : null);
     }
 
     /// <summary>Turns the readers' <c>{0}</c> markers into this session's named parameters and runs the query through it.</summary>

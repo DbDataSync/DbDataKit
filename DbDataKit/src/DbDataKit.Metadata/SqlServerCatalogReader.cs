@@ -62,7 +62,8 @@ public class SqlServerCatalogReader(DbConnection connection, ISqlDialect? dialec
             + "CASE WHEN ty.name IN (N'decimal', N'numeric', N'datetime2', N'datetimeoffset', N'time') THEN c.scale END, "
             + "c.collation_name, c.is_identity, c.is_computed, o.name "     // the table's name ends the row (ReadSchemaAsync)
             + $"FROM {p}sys.columns c JOIN {p}sys.objects o ON o.object_id = c.object_id JOIN {p}sys.schemas s ON s.schema_id = o.schema_id "
-            + $"JOIN {p}sys.types ty ON ty.user_type_id = c.system_type_id "
+            // an alias type is read as the type it is based on; a CLR type (geography, hierarchyid, an assembly type) shares system_type_id 240, so it is read by its own id, or the column would match nothing and be left out
+            + $"JOIN {p}sys.types ty ON ty.user_type_id = CASE WHEN c.system_type_id = 240 THEN c.user_type_id ELSE c.system_type_id END "
             + $"LEFT JOIN {p}sys.default_constraints dc ON dc.parent_object_id = c.object_id AND dc.parent_column_id = c.column_id "
             + $"LEFT JOIN {p}sys.computed_columns cc ON cc.object_id = c.object_id AND cc.column_id = c.column_id "
             + $"WHERE {where} ORDER BY c.column_id", args);
