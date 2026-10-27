@@ -46,9 +46,67 @@ internal static class BuildSchedulerSchema
 {
     public const string Service = "dbdatabuild";
 
-    public static StateSchema Schema => new([WorkQueueSchema.Queue, JobStateSchema.Table]);
+    /// <summary>Appended after the shared two: a plan someone paused, so it is not queued until resumed.</summary>
+    private const string Pauses =
+        """
+        CREATE TABLE ScheduleJobPauses (
+            Service {{key}} NOT NULL,
+            Owner {{key}} NOT NULL,
+            Job {{key}} NOT NULL,
+            PausedBy {{text}} NOT NULL,
+            PausedAtUtc {{text}} NOT NULL,
+            PRIMARY KEY (Service, Owner, Job)
+        );
+        """;
+
+    public static StateSchema Schema => new([WorkQueueSchema.Queue, JobStateSchema.Table, Pauses]);
 
     public static StateDatabase Open(string serverDirectory) => new(Path.Combine(serverDirectory, "state.db"), Schema);
+}
+
+/// <summary>The plans someone paused: a paused plan's scheduled times are passed over, not run.</summary>
+internal sealed class JobPauses(StateDatabase database, string service)
+{
+    public (string By, DateTimeOffset At)? Get(string owner, string job) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(connection, "SELECT PausedBy, PausedAtUtc FROM ScheduleJobPauses WHERE Service = $service AND Owner = $owner AND Job = $job;");
+            Bind(cmd, owner, job);
+            using var reader = cmd.ExecuteReader();
+            return reader.Read() ? ((string, DateTimeOffset)?)(reader.GetString(0), DateTimeOffset.Parse(reader.GetString(1), System.Globalization.CultureInfo.InvariantCulture)) : null;
+        });
+
+    public bool IsPaused(string owner, string job) => Get(owner, job) is not null;
+
+    public void Set(string owner, string job, string by, DateTimeOffset at) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using (var insert = database.Command(connection, database.Dialect.InsertOrIgnore("ScheduleJobPauses", "Service, Owner, Job, PausedBy, PausedAtUtc", "$service, $owner, $job, $by, $at", "Service, Owner, Job")))
+            {
+                Bind(insert, owner, job);
+                insert.Bind(database, "by", by);
+                insert.Bind(database, "at", at.ToString("O"));
+                insert.ExecuteNonQuery();
+            }
+        });
+
+    public void Clear(string owner, string job) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(connection, "DELETE FROM ScheduleJobPauses WHERE Service = $service AND Owner = $owner AND Job = $job;");
+            Bind(cmd, owner, job);
+            cmd.ExecuteNonQuery();
+        });
+
+    private void Bind(System.Data.Common.DbCommand cmd, string owner, string job)
+    {
+        cmd.Bind(database, "service", service);
+        cmd.Bind(database, "owner", owner);
+        cmd.Bind(database, "job", job);
+    }
 }
 
 /// <summary>
@@ -66,6 +124,7 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
     public static readonly TimeSpan DefaultLease = TimeSpan.FromMinutes(10);
 
     private readonly JobStateStore _jobs = new(database, BuildSchedulerSchema.Service);
+    private readonly JobPauses _pauses = new(database, BuildSchedulerSchema.Service);
     private readonly WorkQueueStore _queue = new(database, BuildSchedulerSchema.Service, clock) { LeaseDuration = lease ?? DefaultLease };
     public const string Kind = "refresh";
 
@@ -91,6 +150,7 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
                 var decision = ScheduleEvaluator.Evaluate(job.Schedule, state.HandledUpTo, now);
                 if (decision.HandledUpTo != state.HandledUpTo) _jobs.SaveHandled(project.Id, job.Subject, decision.HandledUpTo ?? now);
                 if (!decision.Due) continue;
+                if (_pauses.IsPaused(project.Id, job.Subject)) continue;     // the time is handled (above) and not run: resuming does not start the plan for the times it was paused through
                 _queue.Enqueue(project.Id, Kind, job.Subject, lane: Kind);
                 queued.Add((project.Id, job));
             }
@@ -158,6 +218,25 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
         if (!Directory.Exists(root)) return [];
         var now = clock.GetUtcNow();
         return [.. RefreshJobs.Discover(root).Select(j => (j, (DateTimeOffset?)ScheduleEvaluator.NextAfter(j.Schedule, now), _jobs.Get(project.Id, j.Subject)))];
+    }
+
+    /// <summary>Who paused the plan and when, or null when it is not paused.</summary>
+    public (string By, DateTimeOffset At)? PausedBy(HostedProject project, ScheduledJob job) => _pauses.Get(project.Id, job.Subject);
+
+    /// <summary>The scheduled plan of a project by connection and name, or null.</summary>
+    public ScheduledJob? Find(HostedProject project, string connection, string plan) =>
+        Directory.Exists(projects.RootOf(project)) ? RefreshJobs.Discover(projects.RootOf(project)).FirstOrDefault(j => j.Connection == connection && j.Plan == plan) : null;
+
+    /// <summary>Stops the plan from being queued at its scheduled times until it is resumed. A run already going is not touched.</summary>
+    public void Pause(HostedProject project, ScheduledJob job, string by) => _pauses.Set(project.Id, job.Subject, by, clock.GetUtcNow());
+
+    public void Resume(HostedProject project, ScheduledJob job) => _pauses.Clear(project.Id, job.Subject);
+
+    /// <summary>Queues the plan now, apart from its schedule (a paused plan too: the person asked). False when a run of it is already queued or going.</summary>
+    public bool RunNow(HostedProject project, ScheduledJob job)
+    {
+        try { _queue.EnqueueOrThrow(project.Id, Kind, job.Subject, lane: Kind); return true; }
+        catch (WorkQueueCollisionException) { return false; }
     }
 }
 

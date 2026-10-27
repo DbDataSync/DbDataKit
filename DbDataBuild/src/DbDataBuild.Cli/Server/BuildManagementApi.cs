@@ -93,9 +93,32 @@ internal static class BuildManagementApi
                     next_due = j.NextDue,
                     last_started = j.State?.LastStarted,
                     last_exit = j.State?.LastExit,
+                    paused = scheduler?.PausedBy(hosted, j.Job) is not null,
+                    paused_by = scheduler?.PausedBy(hosted, j.Job)?.By,
                 }),
             });
         });
+
+        // Pausing, resuming and running a scheduled plan now are an operator's (running a plan changes target data). They need the scheduler: without it nothing is queued, so there is nothing to pause or start.
+        foreach (var action in new[] { "pause", "resume", "run" })
+            app.MapPost("/api/v1/projects/{project}/schedule/{connection}/{plan}/" + action, (string project, string connection, string plan, HttpContext context) =>
+            {
+                if (projects.Find(project) is not { } hosted) return Results.NotFound();
+                var token = context.ManagementToken();
+                var decision = ManagementAuthorization.Authorize(token, ServerRole.Operator, hosted.Id);
+                if (!decision.Allowed) return Results.Json(new { error = "This needs the operator role." }, statusCode: StatusCodes.Status403Forbidden);
+                if (scheduler is null) return Results.Json(new { error = "This server does not run schedules (start it with --scheduler)." }, statusCode: StatusCodes.Status409Conflict);
+                if (scheduler.Find(hosted, connection, plan) is not { } job) return Results.NotFound();
+                switch (action)
+                {
+                    case "pause": scheduler.Pause(hosted, job, token.SubjectName ?? token.SubjectId); return Results.Json(new { paused = true });
+                    case "resume": scheduler.Resume(hosted, job); return Results.Json(new { paused = false });
+                    default:
+                        return scheduler.RunNow(hosted, job)
+                            ? Results.Json(new { queued = true })
+                            : Results.Json(new { error = "A run of this plan is already queued or going." }, statusCode: StatusCodes.Status409Conflict);
+                }
+            });
 
         app.MapPost("/api/v1/projects/{project}/commands/{tool}", async (string project, string tool, HttpContext context) =>
         {
