@@ -1,0 +1,2242 @@
+=== level5/01_rank_within_group.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/02_rank_top_n_post_filter.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/03_rank_ties_skip.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/04_rank_ties_dense.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/05_rank_is_null_on_total_rows.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/07_rollup_override_average.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC;
+--- exec
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC;
+--- exec
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+LIMIT 1000001;
+=== level5/08_rollup_override_empty_skip.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+  AND f.status = @p2
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC;
+--- exec
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+  AND f.status = @p2
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1, String:Cancelled
+--- duckdb
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+  AND f.status = ?
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+  AND f.status = @p2
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC;
+--- exec
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+  AND f.status = @p2
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1, String:Cancelled
+--- duckdb
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+  AND f.status = ?
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+LIMIT 1000001;
+=== level5/09_rollup_override_empty_zero.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+  AND f.status = @p2
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC;
+--- exec
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+  AND f.status = @p2
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1, String:Cancelled
+--- duckdb
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+  AND f.status = ?
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT d.fiscal_month AS date_fiscal_month
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+  AND f.status = @p2
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC;
+--- parameters String:FY27-Q1, String:Cancelled
+--- duckdb
+SELECT d.fiscal_month AS date_fiscal_month
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+  AND f.status = ?
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+  AND f.status = @p2
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC;
+--- exec
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+  AND f.status = @p2
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1, String:Cancelled
+--- duckdb
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+  AND f.status = ?
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT d.fiscal_month AS date_fiscal_month
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+  AND f.status = @p2
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC;
+--- parameters String:FY27-Q1, String:Cancelled
+--- duckdb
+SELECT d.fiscal_month AS date_fiscal_month
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+  AND f.status = ?
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC;
+=== level5/10_rollup_override_with_totals.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC;
+--- exec
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC;
+--- exec
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC;
+--- exec
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC;
+--- exec
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC
+LIMIT 1000001;
+=== level5/11_summing_a_distinct_count_needs_acknowledge.json
+=== level5/12_summing_a_distinct_count_acknowledged.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       COUNT(DISTINCT f.order_id) AS orders_summed
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC;
+--- exec
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       COUNT(DISTINCT f.order_id) AS orders_summed
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       COUNT(DISTINCT f.order_id) AS orders_summed
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       COUNT(DISTINCT f.order_id) AS orders_summed
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC;
+--- exec
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       COUNT(DISTINCT f.order_id) AS orders_summed
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       COUNT(DISTINCT f.order_id) AS orders_summed
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+LIMIT 1000001;
+=== level5/13_rollup_attribute_in_query.json
+=== level5/14_empty_needs_rollup.json
+=== level5/15_rank_a_derived_measure.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region
+ORDER BY customers_region ASC;
+--- exec
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region
+ORDER BY customers_region ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region
+ORDER BY customers_region ASC;
+--- exec
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region
+ORDER BY customers_region ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+=== level5/16_rollup_over_two_attributes.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product, d.fiscal_month
+ORDER BY customers_region ASC, products_product ASC, date_fiscal_month ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product, d.fiscal_month
+ORDER BY customers_region ASC, products_product ASC, date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product, d.fiscal_month
+ORDER BY customers_region ASC, products_product ASC, date_fiscal_month ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product, d.fiscal_month
+ORDER BY customers_region ASC, products_product ASC, date_fiscal_month ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product, d.fiscal_month
+ORDER BY customers_region ASC, products_product ASC, date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product, d.fiscal_month
+ORDER BY customers_region ASC, products_product ASC, date_fiscal_month ASC
+LIMIT 1000001;
+=== level5/17_rollup_order_matters.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       p.product AS products_product,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+JOIN dim_product p ON p.product_key = f.product_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, d.fiscal_month, p.product
+ORDER BY customers_region ASC, date_fiscal_month ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       p.product AS products_product,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+JOIN dim_product p ON p.product_key = f.product_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, d.fiscal_month, p.product
+ORDER BY customers_region ASC, date_fiscal_month ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       p.product AS products_product,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+JOIN dim_product p ON p.product_key = f.product_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, d.fiscal_month, p.product
+ORDER BY customers_region ASC, date_fiscal_month ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       p.product AS products_product,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+JOIN dim_product p ON p.product_key = f.product_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, d.fiscal_month, p.product
+ORDER BY customers_region ASC, date_fiscal_month ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       p.product AS products_product,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+JOIN dim_product p ON p.product_key = f.product_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, d.fiscal_month, p.product
+ORDER BY customers_region ASC, date_fiscal_month ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       p.product AS products_product,
+       SUM(f.net_amount) AS avg_monthly_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+JOIN dim_product p ON p.product_key = f.product_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, d.fiscal_month, p.product
+ORDER BY customers_region ASC, date_fiscal_month ASC, products_product ASC
+LIMIT 1000001;
+=== level5/18_empty_zero_needs_one_attribute.json
+=== level5/19_rank_a_share.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/20_chain_of_three_steps.json
+--- sqlserver_sales tsql
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC;
+--- exec
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC;
+--- exec
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC
+LIMIT 1000001;
+=== level5/21_rank_keep_top_three.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/22_rank_keep_top_one_per_group.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/23_rank_keep_bottom_two.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/24_rank_keep_ties_skip_keeps_the_tie.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/25_rank_keep_ties_break_is_exact.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/26_rank_keep_ties_dense_counts_values.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/27_rank_keep_leaves_other_transforms_whole.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/28_rank_keep_leaves_total_rows.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/29_rank_keep_then_limit.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/30_rank_keep_with_a_post_filter.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/31_rank_keep_of_a_share.json
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC;
+--- exec
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = @p1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27-Q1
+--- duckdb
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = ?
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+=== level5/32_rank_keep_must_be_positive.json
+=== level5/33_rank_over_an_index.json
+--- sqlserver_sales tsql
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_year = @p1
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC;
+--- exec
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_year = @p1
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27
+--- duckdb
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_year = ?
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT d.fiscal_month AS lvl, MIN(d.calendar_date) AS lo, MAX(d.calendar_date) AS hi
+FROM dim_date d
+GROUP BY d.fiscal_month;
+--- parameters 
+--- duckdb
+SELECT d.fiscal_month AS lvl, MIN(d.calendar_date) AS lo, MAX(d.calendar_date) AS hi
+FROM dim_date d
+GROUP BY d.fiscal_month;
+--- sqlserver_sales tsql
+SELECT d.fiscal_month AS date_fiscal_month
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_year = @p1
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC;
+--- parameters String:FY27
+--- duckdb
+SELECT d.fiscal_month AS date_fiscal_month
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_year = ?
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC;
+--- sqlserver_sales tsql
+SELECT SUM(f.net_amount) AS growth__prior
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_month = @p1;
+--- parameters String:2026-07
+--- duckdb
+SELECT SUM(f.net_amount) AS growth__prior
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_month = ?;
+--- sqlserver_sales tsql
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_year = @p1
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC;
+--- exec
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_year = @p1
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC
+OFFSET 0 ROWS FETCH NEXT 1000001 ROWS ONLY;
+--- parameters String:FY27
+--- duckdb
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_year = ?
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC
+LIMIT 1000001;
+--- sqlserver_sales tsql
+SELECT d.fiscal_month AS lvl, MIN(d.calendar_date) AS lo, MAX(d.calendar_date) AS hi
+FROM dim_date d
+GROUP BY d.fiscal_month;
+--- parameters 
+--- duckdb
+SELECT d.fiscal_month AS lvl, MIN(d.calendar_date) AS lo, MAX(d.calendar_date) AS hi
+FROM dim_date d
+GROUP BY d.fiscal_month;
+--- sqlserver_sales tsql
+SELECT d.fiscal_month AS date_fiscal_month
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_year = @p1
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC;
+--- parameters String:FY27
+--- duckdb
+SELECT d.fiscal_month AS date_fiscal_month
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_year = ?
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC;
+--- sqlserver_sales tsql
+SELECT SUM(f.net_amount) AS growth__prior
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_month = @p1;
+--- parameters String:2026-07
+--- duckdb
+SELECT SUM(f.net_amount) AS growth__prior
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_month = ?;

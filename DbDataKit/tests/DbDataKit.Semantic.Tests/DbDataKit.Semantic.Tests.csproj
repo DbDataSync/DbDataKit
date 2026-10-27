@@ -13,6 +13,8 @@
   <ItemGroup>
     <!-- the fixtures, catalog, seed data and the Ossie schema the conformance suite runs on -->
     <None Include="conformance\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <!-- the recorded native text of every fixture (EmitterGoldenTests) -->
+    <None Include="golden\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Import Project="..\..\build\DuckDb.Native.targets" />
 </Project>
