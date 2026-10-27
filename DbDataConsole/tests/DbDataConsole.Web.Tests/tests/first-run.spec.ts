@@ -107,6 +107,35 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await page.getByTestId('build-tab-edit').click()
   await page.getByTestId('build-edit-workspace-name').fill('draft')
   await page.getByTestId('build-edit-workspace-make').click()
+
+  // Forms (W05): a file with a schema is a form as well as YAML, and both are the same text. A form changes the part it shows and leaves the rest of the file, comments included, as it was.
+  const expectYaml = async (...expected: (string | RegExp)[]) => { await page.getByTestId('build-edit-mode-yaml').click(); for (const e of expected) await expect(page.getByTestId('build-edit-editor')).toContainText(e); await page.getByTestId('build-edit-mode-form').click() }
+  await page.getByTestId('build-edit-file-models/staging/orders.yml').click()                       // a model: add a description with the add chip
+  await expect(page.getByTestId('form-field-name')).toHaveValue('staging.orders')
+  await expect(page.getByTestId('form-field-columns.0.name')).toHaveValue('order_id')
+  await page.getByTestId('form-add-description').click()
+  await page.getByTestId('form-field-description').fill('Orders with their statuses grouped')
+  await expectYaml('description: Orders with their statuses grouped', 'nullable: false')
+  await page.getByTestId('build-edit-save').click()
+  await expect(page.getByTestId('build-edit-clean')).toBeVisible()
+  await page.getByTestId('build-edit-file-models/staging/_dbdatabuild.yml').click()                // a folder's settings: a tag added to a list
+  await expect(page.getByTestId('form-field-defaults.tags.0')).toHaveValue('staging')
+  await page.getByTestId('form-append-defaults.tags').click()
+  await page.getByTestId('form-field-defaults.tags.1').fill('curated')
+  await expectYaml(/tags:\s*\[\s*staging,\s*curated\s*\]/)
+  await page.getByTestId('build-edit-save').click()
+  await expect(page.getByTestId('build-edit-clean')).toBeVisible()
+  await page.getByTestId('build-edit-file-tests/models/staging/orders.yml').click()                 // a model test: a case renamed, the header comments stay
+  await expect(page.getByTestId('form-field-cases.0.name')).toHaveValue('every raw status lands in one group')
+  await page.getByTestId('form-field-cases.0.name').fill('every raw status has a group')
+  await expectYaml('# description: staging.orders groups the raw statuses', '- name: every raw status has a group')
+  await page.getByTestId('build-edit-save').click()
+  await expect(page.getByTestId('build-edit-clean')).toBeVisible()
+  await page.getByTestId('build-edit-file-dbdatabuild.yml').click()                                // the project file: a connection's title
+  await page.getByTestId('form-field-connections.sqlserver.title').fill('Main warehouse')
+  await expectYaml('Main warehouse', '# Where the models are built, and how text behaves there')
+  await page.getByTestId('build-edit-save').click()
+  await expect(page.getByTestId('build-edit-clean')).toBeVisible()
   await page.getByTestId('build-edit-file-models/staging/orders.sql').click()
   await expect(page.getByTestId('build-edit-open')).toHaveText('models/staging/orders.sql')
   await expect(page.getByTestId('build-edit-clean')).toBeVisible()
@@ -133,7 +162,8 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(page.getByTestId('build-edit-clean')).toBeVisible()
 
   // Taking the draft in: it shows the changed file, is committed, and merged into the project (an approver's act; the administrator is one), which ends the workspace.
-  await expect(page.getByTestId('build-git-change')).toHaveText(/models\/staging\/orders\.sql/)
+  await expect(page.getByTestId('build-git-change').filter({ hasText: 'models/staging/orders.sql' })).toHaveCount(1)
+  await expect(page.getByTestId('build-git-change')).toHaveCount(5)                // the four files edited through forms, and the model's query
   await expect(page.getByTestId('build-git-merge')).toBeDisabled()
   await page.getByTestId('build-git-message').fill('Limit staging orders')
   await page.getByTestId('build-git-commit').click()

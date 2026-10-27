@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "folder.schema.json",
+  "title": "DbDataBuild folder file",
+  "description": "A folder's _dbdatabuild.yml under models/: the same `defaults:` section of model settings as the project file, layered between the project file and the models beneath the folder (the nearest wins). It has no other section; the project-wide sections (connections, tracking, policy, string semantics) are root-only. This schema is for editors; the tool applies the same rules where the settings are merged into a model.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "defaults": { "$ref": "config.schema.json#/properties/defaults" }
+  }
+}

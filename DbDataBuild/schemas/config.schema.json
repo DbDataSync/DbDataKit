@@ -37,7 +37,13 @@
           "items": {
             "$ref": "#/$defs/connectionName"
           }
-        }
+        },
+        "kind": { "$ref": "model.schema.json#/$defs/builtModel/properties/kind" },
+        "tags": { "$ref": "model.schema.json#/$defs/builtModel/properties/tags" },
+        "properties": { "$ref": "model.schema.json#/$defs/builtModel/properties/properties" },
+        "lint_ignore": { "$ref": "model.schema.json#/$defs/builtModel/properties/lint_ignore" },
+        "hooks": { "$ref": "model.schema.json#/$defs/builtModel/properties/hooks" },
+        "rewrites": { "$ref": "model.schema.json#/$defs/builtModel/properties/rewrites" }
       }
     },
     "parameters": {

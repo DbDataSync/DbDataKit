@@ -1,4 +1,4 @@
-import { request } from '@dbdatakit/shell'
+import { request, type SchemaAssociation, type SchemaNode } from '@dbdatakit/shell'
 import type { GitChange, GitCommit, RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
 
 const project = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}`
@@ -9,7 +9,14 @@ function run<T>(id: string, tool: string, inputs: Record<string, unknown> = {}, 
   return request<CommandAnswer<T>>(`${project(id)}/commands/${tool}${query}`, { method: 'POST', body: JSON.stringify(inputs) })
 }
 
+/** The schemas of a project's files and which file each describes (the same for every project). */
+export interface FileSchemaDocument {
+  associations: SchemaAssociation[]
+  schemas: Record<string, SchemaNode>
+}
+
 export const buildApi = {
+  fileSchemas: () => request<FileSchemaDocument>('/api/v1/schemas'),
   projects: () => request<{ projects: BuildProject[] }>('/api/v1/projects').then((r) => r.projects),
   graph: (id: string) => run<ProjectGraph>(id, 'project_show_graph'),
   /** Checks the project without writing anything: compiles it and says what would change. */

@@ -1,6 +1,8 @@
 {
   "yaml.schemas": {
-    "schemas/model.schema.json": "models/**/*.yml",
+    "schemas/model.schema.json": ["models/**/*.yml", "!models/**/_dbdatabuild.yml"],
+    "schemas/folder.schema.json": "models/**/_dbdatabuild.yml",
+    "schemas/model-test.schema.json": "tests/models/**/*.yml",
     "schemas/config.schema.json": "dbdatabuild.yml",
     "schemas/answers.schema.json": ["answers.yml", "*-answers.yml", "plans/**/answers*.yml"]
   }

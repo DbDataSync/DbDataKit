@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
-import { CodeEditor, ErrorBanner, type EditorDiagnostic } from '@dbdatakit/shell'
+import { CodeEditor, ErrorBanner, SchemaForm, SchemaSet, schemaFor, type EditorDiagnostic } from '@dbdatakit/shell'
 import { buildApi } from '../api'
 import { GitPanel } from './GitPanel'
 import { PreviewPanel, isModelQuery } from './PreviewPanel'
@@ -43,6 +43,11 @@ export function EditTab() {
   const [newName, setNewName] = useState('')
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([])
   const [refused, setRefused] = useState<string | null>(null)
+  // a file with a schema can be edited as a form or as its YAML; both change the same text
+  const [mode, setMode] = useState<'form' | 'yaml'>('form')
+  const fileSchemas = useQuery({ queryKey: ['build', 'file-schemas'], queryFn: () => buildApi.fileSchemas(), staleTime: Infinity })
+  const schemaSet = useMemo(() => (fileSchemas.data ? new SchemaSet(fileSchemas.data.schemas) : null), [fileSchemas.data])
+  const association = open !== null && fileSchemas.data ? schemaFor(fileSchemas.data.associations, open) : undefined
 
   const projects = useQuery({ queryKey: ['build', 'projects'], queryFn: () => buildApi.projects() })
   const remote = projects.data?.find((p) => p.id === project)?.source === 'git'
@@ -151,7 +156,16 @@ export function EditTab() {
                   {!dirty && <span className="hint" data-testid="build-edit-saved">Saved</span>}
                 </div>
                 {refused && <div className="empty" data-testid="build-edit-refused">{refused}</div>}
-                <CodeEditor value={text} language={languageOf(open)} onChange={setText} diagnostics={markersFor(open, diagnostics)} minLines={12} maxLines={32} testId="build-edit-editor" />
+                {association && schemaSet && (
+                  <div className="row" style={{ gap: 6, marginBottom: 8 }} role="tablist" aria-label="How to edit">
+                    <button type="button" role="tab" aria-selected={mode === 'form'} className={mode === 'form' ? 'btn btn-primary btn-sm' : 'btn btn-sm'} onClick={() => setMode('form')} data-testid="build-edit-mode-form">Form</button>
+                    <button type="button" role="tab" aria-selected={mode === 'yaml'} className={mode === 'yaml' ? 'btn btn-primary btn-sm' : 'btn btn-sm'} onClick={() => setMode('yaml')} data-testid="build-edit-mode-yaml">YAML</button>
+                    <span className="hint">{association.kind}: the form and the YAML are the same file.</span>
+                  </div>
+                )}
+                {association && schemaSet && mode === 'form'
+                  ? <SchemaForm schemas={schemaSet} schema={association.schema} text={text} onText={setText} />
+                  : <CodeEditor value={text} language={languageOf(open)} onChange={setText} diagnostics={markersFor(open, diagnostics)} minLines={12} maxLines={32} testId="build-edit-editor" />}
               </>
             )}
             {open !== null && workspace !== null && isModelQuery(open) && <PreviewPanel project={project} workspace={workspace} path={open} version={hash} />}

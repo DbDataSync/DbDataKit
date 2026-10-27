@@ -359,8 +359,8 @@
             ]
           },
           "default": {
-            "description": "The value when there is no resolver; with a resolver, the value `on_null: initial` falls back to. May be a `${project.name}` or `${connection.name}` reference.",
-            "$ref": "#/$defs/nonEmptyString"
+            "description": "The value when there is no resolver; with a resolver, the value `on_null: initial` falls back to. May be a `${project.name}` or `${connection.name}` reference. The tool reads it as text; an editor reads plain digits as a number, so a number is accepted too.",
+            "oneOf": [{ "$ref": "#/$defs/nonEmptyString" }, { "type": "number" }, { "type": "boolean" }]
           },
           "resolver": {
             "description": "How the value is computed when the load runs: exactly one of `expression`, `target`, `source`.",
@@ -1099,7 +1099,7 @@
           "description": "The refresh plans the model's loads are in: plan name to a membership or a list of them. It layers like `tags` (a list appends, `refresh=` replaces what a folder gave). A model with a default load and no `refresh:` anywhere is in the plan `default`. A plan the project does not declare is an error when the project declares any (`refresh.plans` in dbdatabuild.yml).",
           "type": "object",
           "propertyNames": {
-            "pattern": "^[a-z][a-z0-9_]*$"
+            "pattern": "^[a-z][a-z0-9_]*[=+-]?$"
           },
           "additionalProperties": {
             "oneOf": [
