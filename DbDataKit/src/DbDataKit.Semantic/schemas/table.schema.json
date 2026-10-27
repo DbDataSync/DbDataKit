@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.internal/qis/table.schema.json",
+  "title": "Registered table",
+  "description": "An ad hoc table: rows with a descriptor, registered under a name. Each registration creates a new version.",
+  "type": "object",
+  "required": [
+    "kind",
+    "name",
+    "descriptor",
+    "rows"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "spec_version": {
+      "const": "0.3"
+    },
+    "kind": {
+      "const": "table"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+    },
+    "scope": {
+      "enum": [
+        "session",
+        "personal",
+        "shared",
+        "governed"
+      ]
+    },
+    "descriptor": {
+      "$ref": "descriptor.schema.json"
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  }
+}

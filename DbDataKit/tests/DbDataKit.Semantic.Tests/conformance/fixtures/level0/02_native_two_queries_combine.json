@@ -1,0 +1,59 @@
+{
+  "name": "02_native_two_queries_combine",
+  "level": 0,
+  "description": "Two agent-written queries; the agent combines them with recorded DuckDB SQL.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "native_batch",
+    "queries": [
+      {
+        "id": "actuals",
+        "source": "sqlserver_sales",
+        "dialect": "tsql",
+        "text": "SELECT c.region, SUM(f.net_amount) AS revenue FROM fact_sales f JOIN dim_customer c ON c.customer_key = f.customer_key JOIN dim_date d ON d.date_key = f.date_key WHERE d.fiscal_quarter = 'FY27-Q1' GROUP BY c.region"
+      },
+      {
+        "id": "prior",
+        "source": "sqlserver_sales",
+        "dialect": "tsql",
+        "text": "SELECT c.region, SUM(f.net_amount) AS revenue_py FROM fact_sales f JOIN dim_customer c ON c.customer_key = f.customer_key JOIN dim_date d ON d.date_key = f.date_key WHERE d.fiscal_quarter = 'FY26-Q1' GROUP BY c.region"
+      }
+    ]
+  },
+  "expect": {
+    "status": "partial",
+    "reason_code": "agent_combines",
+    "remaining": [
+      {
+        "step": 1,
+        "op": "combine",
+        "inputs": [
+          "actuals",
+          "prior"
+        ]
+      }
+    ]
+  },
+  "then_complete": {
+    "completes": [
+      1
+    ],
+    "sql": "SELECT region, SUM(revenue) AS revenue, SUM(revenue_py) AS revenue_py\nFROM (SELECT * FROM actuals UNION ALL BY NAME SELECT * FROM prior)\nGROUP BY region ORDER BY region"
+  },
+  "expect_after_completion": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "region": "East",
+        "revenue": 400,
+        "revenue_py": 300
+      },
+      {
+        "region": "West",
+        "revenue": 500,
+        "revenue_py": 400
+      }
+    ]
+  }
+}

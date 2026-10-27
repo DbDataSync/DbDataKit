@@ -1,0 +1,151 @@
+{
+  "name": "24_weighted_relation_totals_match_source",
+  "level": 3,
+  "description": "The grand total over the split territories equals the source totals (900 and 1,100).",
+  "setup": [
+    {
+      "spec_version": "0.3",
+      "kind": "table",
+      "name": "adhoc.user_territories",
+      "descriptor": {
+        "descriptor_version": "1.0",
+        "name": "user_territories",
+        "schema": {
+          "fields": [
+            {
+              "name": "territory",
+              "type": "string"
+            },
+            {
+              "name": "region_label",
+              "type": "string"
+            },
+            {
+              "name": "share",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "rows": [
+        {
+          "territory": "Pacific",
+          "region_label": "WST-01",
+          "share": 0.7
+        },
+        {
+          "territory": "Mountain",
+          "region_label": "WST-01",
+          "share": 0.3
+        },
+        {
+          "territory": "Atlantic",
+          "region_label": "EST-01",
+          "share": 1.0
+        }
+      ]
+    },
+    {
+      "spec_version": "0.3",
+      "kind": "value_map",
+      "id": "terr_region",
+      "table": "adhoc.user_territories@v1",
+      "field": "region_label",
+      "target": "customers.region",
+      "mode": "catalog",
+      "scope": "governed",
+      "pairs": [
+        {
+          "from": "WST-01",
+          "to": "West"
+        },
+        {
+          "from": "EST-01",
+          "to": "East"
+        }
+      ]
+    },
+    {
+      "spec_version": "0.3",
+      "kind": "bindings",
+      "table": "adhoc.user_territories@v1",
+      "confirmed_by": "user",
+      "bindings": [
+        {
+          "field": "territory",
+          "role": "attribute",
+          "as": "user_territories.territory"
+        },
+        {
+          "field": "region_label",
+          "role": "attribute",
+          "binds_to": "customers.region",
+          "via_map": "terr_region"
+        },
+        {
+          "field": "share",
+          "role": "weight"
+        }
+      ]
+    }
+  ],
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "user_territories.territory"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "user_territories.territory"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "user_territories_territory": "Atlantic",
+        "_rollup_level": 0,
+        "orders_net_revenue": 400,
+        "budget_budget_amount": 500
+      },
+      {
+        "user_territories_territory": "Mountain",
+        "_rollup_level": 0,
+        "orders_net_revenue": 150,
+        "budget_budget_amount": 180
+      },
+      {
+        "user_territories_territory": "Pacific",
+        "_rollup_level": 0,
+        "orders_net_revenue": 350,
+        "budget_budget_amount": 420
+      },
+      {
+        "user_territories_territory": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 900,
+        "budget_budget_amount": 1100
+      }
+    ]
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "name": "54_derived_takes_only_an_alias",
+  "level": 4,
+  "description": "A derived measure is computed from others, so a filter, spread or rollup goes on the measures it reads.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "measure": "orders.avg_order_value",
+          "as": "x",
+          "filters": [
+            {
+              "attribute": "orders.status",
+              "operator": "equals",
+              "values": [
+                "Completed"
+              ]
+            }
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "derived_measure_override"
+    ]
+  }
+}

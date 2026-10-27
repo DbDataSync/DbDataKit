@@ -1,0 +1,33 @@
+{
+  "name": "120_index_beside_a_finer_level",
+  "level": 4,
+  "description": "A fiscal month has two calendar dates in the date table, so a date beside it can't be read for the month.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "growth",
+          "transform": "index",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "base": "2026-07"
+        }
+      ],
+      "attributes": [
+        "date.calendar_date",
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "index_attribute_not_coarser"
+    ]
+  }
+}

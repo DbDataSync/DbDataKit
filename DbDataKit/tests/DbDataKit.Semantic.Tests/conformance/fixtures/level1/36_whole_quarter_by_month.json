@@ -1,0 +1,55 @@
+{
+  "name": "36_whole_quarter_by_month",
+  "level": 1,
+  "description": "The last complete fiscal quarter, broken down by month.",
+  "today": "2026-09-15",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "last_complete",
+          "count": 1
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "resolved": [
+      {
+        "attribute": "date.fiscal_quarter",
+        "members": [
+          "FY26-Q1"
+        ],
+        "start": "2025-07-01",
+        "end": "2025-09-15",
+        "path": "$.query.filters[0]"
+      }
+    ],
+    "rows": [
+      {
+        "date_fiscal_month": "2025-07",
+        "orders_net_revenue": 390
+      },
+      {
+        "date_fiscal_month": "2025-08",
+        "orders_net_revenue": 160
+      },
+      {
+        "date_fiscal_month": "2025-09",
+        "orders_net_revenue": 150
+      }
+    ]
+  }
+}

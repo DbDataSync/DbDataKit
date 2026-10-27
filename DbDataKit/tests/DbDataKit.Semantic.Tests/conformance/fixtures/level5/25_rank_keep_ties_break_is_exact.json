@@ -1,0 +1,53 @@
+{
+  "name": "25_rank_keep_ties_break_is_exact",
+  "level": 5,
+  "description": "ties break numbers the rows 1, 2, 3, 4 (value first, then the query's attributes), so keep 2 returns exactly two rows and East B beats West A at the tie.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "rev_rank",
+          "transform": "rank",
+          "measure": "orders.net_revenue",
+          "ties": "break",
+          "keep": 2
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "orders_net_revenue": 300,
+        "rev_rank": 1
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "orders_net_revenue": 300,
+        "rev_rank": 2
+      }
+    ]
+  }
+}

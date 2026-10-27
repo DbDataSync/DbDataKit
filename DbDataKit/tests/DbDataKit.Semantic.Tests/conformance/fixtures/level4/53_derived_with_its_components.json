@@ -1,0 +1,47 @@
+{
+  "name": "53_derived_with_its_components",
+  "level": 4,
+  "description": "A derived measure beside the measures it reads: components are returned as asked, nothing is computed twice differently.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "orders.order_count",
+        "orders.avg_order_value"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "orders_net_revenue": 400,
+        "orders_order_count": 4,
+        "orders_avg_order_value": 100
+      },
+      {
+        "customers_region": "West",
+        "orders_net_revenue": 500,
+        "orders_order_count": 6,
+        "orders_avg_order_value": 83.33333333333333
+      }
+    ]
+  }
+}

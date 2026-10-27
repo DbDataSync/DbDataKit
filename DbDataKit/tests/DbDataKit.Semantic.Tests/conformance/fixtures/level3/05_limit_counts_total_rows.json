@@ -1,0 +1,69 @@
+{
+  "name": "05_limit_counts_total_rows",
+  "level": 3,
+  "description": "The limit applies to the final rows including totals, and the descriptor reports truncation.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 4,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region",
+          "products.product"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "_rollup_level": 0,
+        "orders_net_revenue": 100
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "_rollup_level": 0,
+        "orders_net_revenue": 300
+      },
+      {
+        "customers_region": "East",
+        "products_product": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 400
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "_rollup_level": 0,
+        "orders_net_revenue": 300
+      }
+    ],
+    "descriptor": {
+      "x_truncated": true,
+      "x_row_count": 4
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "name": "75_datetime_lte_a_date_is_through_its_end",
+  "level": 1,
+  "description": "On a datetime a date is the whole day in the zone: gte 2026-07-01 and lte 2026-07-01 is that one day in Chicago, which holds orders 4 and 8 (150) but not order 1, which was already June 30 there.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [],
+      "filters": [
+        {
+          "attribute": "orders.ordered_at",
+          "operator": "gte",
+          "values": [
+            "2026-07-01"
+          ]
+        },
+        {
+          "attribute": "orders.ordered_at",
+          "operator": "lte",
+          "values": [
+            "2026-07-01"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "orders_net_revenue": 150
+      }
+    ]
+  }
+}

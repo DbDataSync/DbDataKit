@@ -1,0 +1,56 @@
+{
+  "name": "04_llm_pair_target_invalid",
+  "level": 4,
+  "description": "An llm pair whose target isn't a member of the dimension is rejected.",
+  "setup": [
+    {
+      "spec_version": "0.3",
+      "kind": "table",
+      "name": "adhoc.user_territories",
+      "descriptor": {
+        "descriptor_version": "1.0",
+        "name": "user_territories",
+        "schema": {
+          "fields": [
+            {
+              "name": "territory",
+              "type": "string"
+            },
+            {
+              "name": "region_label",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "rows": [
+        {
+          "territory": "Pacific",
+          "region_label": "WST-01"
+        }
+      ]
+    }
+  ],
+  "request": {
+    "spec_version": "0.3",
+    "kind": "value_map",
+    "id": "terr_region",
+    "table": "adhoc.user_territories@v1",
+    "field": "region_label",
+    "target": "customers.region",
+    "mode": "llm",
+    "pairs": [
+      {
+        "from": "WST-01",
+        "to": "Westt",
+        "confidence": 0.9
+      }
+    ]
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "target_value_invalid"
+    ]
+  }
+}

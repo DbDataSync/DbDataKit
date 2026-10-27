@@ -1,0 +1,61 @@
+{
+  "name": "05_llm_duplicate_from",
+  "level": 4,
+  "description": "One source value can't map to two targets.",
+  "setup": [
+    {
+      "spec_version": "0.3",
+      "kind": "table",
+      "name": "adhoc.user_territories",
+      "descriptor": {
+        "descriptor_version": "1.0",
+        "name": "user_territories",
+        "schema": {
+          "fields": [
+            {
+              "name": "territory",
+              "type": "string"
+            },
+            {
+              "name": "region_label",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "rows": [
+        {
+          "territory": "Pacific",
+          "region_label": "WST-01"
+        }
+      ]
+    }
+  ],
+  "request": {
+    "spec_version": "0.3",
+    "kind": "value_map",
+    "id": "terr_region",
+    "table": "adhoc.user_territories@v1",
+    "field": "region_label",
+    "target": "customers.region",
+    "mode": "llm",
+    "pairs": [
+      {
+        "from": "WST-01",
+        "to": "West",
+        "confidence": 0.9
+      },
+      {
+        "from": "WST-01",
+        "to": "East",
+        "confidence": 0.4
+      }
+    ]
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "duplicate_from"
+    ]
+  }
+}

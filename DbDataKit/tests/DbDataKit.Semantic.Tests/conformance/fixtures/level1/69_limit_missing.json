@@ -1,0 +1,23 @@
+{
+  "name": "69_limit_missing",
+  "level": 1,
+  "description": "A query always states its limit; there is no default to forget about.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "attributes": [
+        "customers.region"
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "limit_missing"
+    ]
+  }
+}

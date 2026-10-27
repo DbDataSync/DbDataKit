@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>The semantic layer engine (Query Intent Specs): catalog, validator, planner, SQL and DAX emitters, combine in DuckDB, ad hoc tables, relative periods, matrix and chart views. It runs the queries it plans through an ISourceExecutor the host supplies.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <EmbeddedResource Include="schemas\*.schema.json" LogicalName="DbDataKit.Semantic.schemas.%(Filename)%(Extension)" />
+    <PackageReference Include="DuckDB.NET.Data" />
+    <PackageReference Include="JsonSchema.Net" />
+    <PackageReference Include="YamlDotNet" />
+    <ProjectReference Include="..\DbDataKit.Semantic.Abstractions\DbDataKit.Semantic.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

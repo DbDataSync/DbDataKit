@@ -1,0 +1,59 @@
+{
+  "name": "33_period_to_date",
+  "level": 1,
+  "description": "Fiscal quarter to date stops at today, partway through a period, so it filters the date dimension.",
+  "today": "2026-09-15",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_quarter"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "period_to_date"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "result_sets": [
+      {
+        "id": "d1",
+        "grain": [
+          "date.fiscal_quarter"
+        ],
+        "covers": {
+          "measures": [
+            "orders.net_revenue"
+          ],
+          "filters_applied": [
+            "date.calendar_date between 2026-07-01, 2026-09-15"
+          ],
+          "filters_not_applied": []
+        }
+      }
+    ],
+    "resolved": [
+      {
+        "path": "$.query.filters[0]",
+        "today": "2026-09-15",
+        "start": "2026-07-01",
+        "end": "2026-09-15"
+      }
+    ],
+    "rows": [
+      {
+        "date_fiscal_quarter": "FY27-Q1",
+        "orders_net_revenue": 900
+      }
+    ]
+  }
+}

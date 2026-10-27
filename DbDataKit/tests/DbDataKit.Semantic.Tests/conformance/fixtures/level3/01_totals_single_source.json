@@ -1,0 +1,137 @@
+{
+  "name": "01_totals_single_source",
+  "level": 3,
+  "description": "Subtotals and a grand total from one source. order_count has rollup none, and net_revenue is a sum, so the source computes both itself: one query with ROLLUP over the grain, and a single _rollup_level column that says how many of the listed dimensions each row has rolled up.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "orders.order_count"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region",
+          "products.product"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "_rollup_level": 0,
+        "orders_net_revenue": 100,
+        "orders_order_count": 1
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "_rollup_level": 0,
+        "orders_net_revenue": 300,
+        "orders_order_count": 3
+      },
+      {
+        "customers_region": "East",
+        "products_product": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 400,
+        "orders_order_count": 4
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "_rollup_level": 0,
+        "orders_net_revenue": 300,
+        "orders_order_count": 3
+      },
+      {
+        "customers_region": "West",
+        "products_product": "B",
+        "_rollup_level": 0,
+        "orders_net_revenue": 200,
+        "orders_order_count": 3
+      },
+      {
+        "customers_region": "West",
+        "products_product": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 500,
+        "orders_order_count": 6
+      },
+      {
+        "customers_region": null,
+        "products_product": null,
+        "_rollup_level": 2,
+        "orders_net_revenue": 900,
+        "orders_order_count": 10
+      }
+    ],
+    "descriptor": {
+      "x_totals": {
+        "level_field": "_rollup_level",
+        "subtotal_by": [
+          "customers.region",
+          "products.product"
+        ],
+        "levels": [
+          {
+            "level": 0,
+            "kind": "detail",
+            "kept": [
+              "customers.region",
+              "products.product"
+            ],
+            "rolled_up": []
+          },
+          {
+            "level": 1,
+            "kind": "subtotal",
+            "kept": [
+              "customers.region"
+            ],
+            "rolled_up": [
+              "products.product"
+            ]
+          },
+          {
+            "level": 2,
+            "kind": "grand_total",
+            "kept": [],
+            "rolled_up": [
+              "customers.region",
+              "products.product"
+            ]
+          }
+        ]
+      }
+    },
+    "native_query_contains": {
+      "d1_g": [
+        "ROLLUP(",
+        "GROUPING(",
+        "AS _rollup_level"
+      ]
+    }
+  }
+}

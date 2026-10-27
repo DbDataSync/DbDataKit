@@ -1,0 +1,51 @@
+{
+  "name": "66_fiscal_month_of_a_datetime",
+  "level": 1,
+  "description": "orders.ordered_at is tied to the date dimension (date: date.calendar_date), so each attribute of the date table is also an attribute of the datetime: the fiscal month of the day an order was placed, in the zone. Orders placed on July 31 and August 31 in Chicago have no row in the sample date table, so their fiscal month is blank; filtering on set leaves them out.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "orders.ordered_at_fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "orders.ordered_at",
+          "operator": "between",
+          "values": [
+            "2026-07-01",
+            "2026-09-30"
+          ]
+        },
+        {
+          "attribute": "orders.ordered_at_fiscal_month",
+          "operator": "set",
+          "values": []
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "orders_ordered_at_fiscal_month": "2026-07",
+        "orders_net_revenue": 150
+      },
+      {
+        "orders_ordered_at_fiscal_month": "2026-08",
+        "orders_net_revenue": 270
+      },
+      {
+        "orders_ordered_at_fiscal_month": "2026-09",
+        "orders_net_revenue": 180
+      }
+    ]
+  }
+}

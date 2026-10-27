@@ -1,0 +1,28 @@
+{
+  "name": "42_last_complete_needs_a_count",
+  "level": 1,
+  "description": "last_complete says how many whole periods; without a count it is rejected.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [],
+      "filters": [
+        {
+          "attribute": "date.fiscal_month",
+          "operator": "last_complete"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "period_count_invalid"
+    ]
+  }
+}

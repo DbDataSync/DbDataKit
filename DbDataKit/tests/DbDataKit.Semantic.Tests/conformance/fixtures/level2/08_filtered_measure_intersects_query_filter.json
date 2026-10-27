@@ -1,0 +1,63 @@
+{
+  "name": "08_filtered_measure_intersects_query_filter",
+  "level": 2,
+  "description": "The measure's filter intersects with the query's and never replaces it: with the query filtered to Cancelled orders, 'completed' revenue is empty.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "measure": "orders.net_revenue",
+          "as": "completed_revenue",
+          "filters": [
+            {
+              "attribute": "orders.status",
+              "operator": "equals",
+              "values": [
+                "Completed"
+              ]
+            }
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        },
+        {
+          "attribute": "orders.status",
+          "operator": "equals",
+          "values": [
+            "Cancelled"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "orders_net_revenue": 100,
+        "completed_revenue": null
+      },
+      {
+        "customers_region": "West",
+        "orders_net_revenue": 80,
+        "completed_revenue": null
+      }
+    ]
+  }
+}

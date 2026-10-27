@@ -1,0 +1,74 @@
+{
+  "name": "20_chain_of_three_steps",
+  "level": 5,
+  "description": "Three steps, each reading the one before: share of the quarter, its running total, and the rank of that running total (the latest month has accumulated the most).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "share",
+          "transform": "pct_of_total",
+          "measure": "orders.net_revenue",
+          "over": [
+            "date.fiscal_month"
+          ]
+        },
+        {
+          "as": "cum_share",
+          "transform": "running_total",
+          "measure": "share",
+          "along": "date.fiscal_month"
+        },
+        {
+          "as": "cum_rank",
+          "transform": "rank",
+          "measure": "cum_share",
+          "within": []
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "share": 0.277777777777778,
+        "cum_share": 0.277777777777778,
+        "cum_rank": 3
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "share": 0.433333333333333,
+        "cum_share": 0.711111111111111,
+        "cum_rank": 2
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "share": 0.288888888888889,
+        "cum_share": 1.0,
+        "cum_rank": 1
+      }
+    ]
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "name": "51_derived_across_sources_totals",
+  "level": 4,
+  "description": "The grand total compares total revenue (900) with total budget (1,100).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "finance.pct_to_budget"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "_rollup_level": 0,
+        "finance_pct_to_budget": 0.8
+      },
+      {
+        "customers_region": "West",
+        "_rollup_level": 0,
+        "finance_pct_to_budget": 0.8333333333333334
+      },
+      {
+        "customers_region": null,
+        "_rollup_level": 1,
+        "finance_pct_to_budget": 0.8181818181818182
+      }
+    ]
+  }
+}

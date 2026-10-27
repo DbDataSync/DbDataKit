@@ -1,0 +1,19 @@
+{
+  "name": "19_unsupported_unknown_reason",
+  "level": 1,
+  "description": "Reason codes come from a closed list, so the roadmap counts mean something.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "unsupported",
+    "unsupported": {
+      "reason_code": "too_hard",
+      "detail": "No."
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "schema_invalid"
+    ]
+  }
+}

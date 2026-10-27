@@ -1,0 +1,48 @@
+{
+  "name": "03_ssas_single_source",
+  "level": 1,
+  "description": "Budget from SSAS compiles to DAX with output columns renamed to contract names.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "remaining": [],
+    "rows": [
+      {
+        "customers_region": "East",
+        "budget_budget_amount": 500
+      },
+      {
+        "customers_region": "West",
+        "budget_budget_amount": 600
+      }
+    ],
+    "native_query_contains": {
+      "d1": [
+        "TREATAS ( { \"FY27-Q1\" }, 'Date'[Fiscal Quarter] )",
+        "\"budget_budget_amount\", [Budget Amount]",
+        "SELECTCOLUMNS"
+      ]
+    }
+  }
+}

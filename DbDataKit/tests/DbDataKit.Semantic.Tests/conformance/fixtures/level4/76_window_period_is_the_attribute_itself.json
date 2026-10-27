@@ -1,0 +1,35 @@
+{
+  "name": "76_window_period_is_the_attribute_itself",
+  "level": 4,
+  "description": "The period a window starts in has to be a different, coarser level than along.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "x",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "start": {
+            "period_start": "date.fiscal_month"
+          },
+          "end": "current"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "window_period_not_coarser"
+    ]
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "name": "36_period_attribute_with_totals_and_having",
+  "level": 3,
+  "description": "Features together: a period attribute in the query's attributes can be rolled up in totals; a filter on a measure then tests each row on its own value, subtotals included. East's July (100) is dropped but East's subtotal (300) stays, because 300 passes.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "measure": "orders.net_revenue",
+          "operator": "gte",
+          "values": [
+            150
+          ]
+        },
+        {
+          "attribute": "date.calendar_date",
+          "operator": "between",
+          "values": [
+            "2026-07-01",
+            "2026-08-31"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "date.fiscal_month"
+        ],
+        "grand_total": false
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2026-08",
+        "_rollup_level": 0,
+        "orders_net_revenue": 200
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_month": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 300
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2026-07",
+        "_rollup_level": 0,
+        "orders_net_revenue": 150
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2026-08",
+        "_rollup_level": 0,
+        "orders_net_revenue": 190
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 340
+      }
+    ]
+  }
+}

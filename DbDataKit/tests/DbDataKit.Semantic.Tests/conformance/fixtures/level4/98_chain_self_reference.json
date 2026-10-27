@@ -1,0 +1,39 @@
+{
+  "name": "98_chain_self_reference",
+  "level": 4,
+  "description": "A transform can't read its own output.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "cum_share",
+          "transform": "running_total",
+          "measure": "cum_share",
+          "along": "date.fiscal_month"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "transform_base_unknown"
+    ]
+  }
+}

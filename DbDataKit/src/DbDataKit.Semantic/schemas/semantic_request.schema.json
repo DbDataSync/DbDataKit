@@ -1,0 +1,817 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.internal/qis/semantic_request.schema.json",
+  "title": "Semantic request",
+  "description": "What a user or agent asks for. Level 1 engines execute plain measures, dimensions, filters, order and limit; other measure forms are returned as remaining steps.",
+  "type": "object",
+  "required": [
+    "spec_version",
+    "kind",
+    "query"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "spec_version": {
+      "const": "0.3"
+    },
+    "kind": {
+      "const": "query"
+    },
+    "query": {
+      "type": "object",
+      "required": [
+        "measures",
+        "limit"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "measures": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/memberName"
+              },
+              {
+                "$ref": "#/$defs/measureOverride"
+              },
+              {
+                "$ref": "#/$defs/adHocAggregate"
+              },
+              {
+                "$ref": "#/$defs/transform"
+              }
+            ]
+          }
+        },
+        "attributes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/memberName"
+          }
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/filter"
+          }
+        },
+        "order": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "asc",
+                  "desc"
+                ]
+              }
+            ],
+            "items": false,
+            "minItems": 2
+          }
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The IANA time zone (America/Chicago) in which dates, days, weeks, months, quarters and years of a datetime are read. Defaults to the catalog's."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "totals": {
+          "type": "object",
+          "required": [
+            "subtotal_by"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "subtotal_by": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/memberName"
+              }
+            },
+            "grand_total": {
+              "type": "boolean"
+            },
+            "cube": {
+              "description": "Every subset of the listed dimensions is rolled up (CUBE), not only the innermost ones in turn (ROLLUP). A level number still says which set a row is; the descriptor's level map says what each means.",
+              "type": "boolean"
+            },
+            "compute": {
+              "description": "Where subtotals are computed: native (the source, with ROLLUP), engine (rolled up here), or auto (the source only for measures that would otherwise need another query). A preference: a measure the source can't subtotal correctly stays with the engine. Omitted, the source's own setting and then the engine's default apply.",
+              "enum": [
+                "native",
+                "engine",
+                "auto"
+              ]
+            }
+          }
+        },
+        "post_filters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/postFilter"
+          }
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/memberName"
+          }
+        }
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "levelName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "period": {
+      "description": "A calendar shift: a unit the catalog's calendar knows and a signed count. Negative is earlier, so -1 is the previous period.",
+      "type": "object",
+      "required": [
+        "unit",
+        "offset"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "unit": {
+          "type": "string"
+        },
+        "offset": {
+          "type": "integer",
+          "not": {
+            "const": 0
+          }
+        }
+      }
+    },
+    "memberName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+    },
+    "alias": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "filter": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "operator"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "attribute": {
+              "description": "The attribute (dimension.attribute) the condition is on.",
+              "$ref": "#/$defs/memberName"
+            },
+            "measure": {
+              "description": "A measure the query returns, by its alias or catalog name: the condition is on the measure's value for each group (HAVING).",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/memberName"
+                },
+                {
+                  "$ref": "#/$defs/alias"
+                }
+              ]
+            },
+            "operator": {
+              "enum": [
+                "equals",
+                "not_equals",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "gt",
+                "gte",
+                "lt",
+                "lte",
+                "set",
+                "not_set",
+                "between",
+                "last_complete",
+                "current",
+                "period_to_date"
+              ],
+              "description": "between takes two values, both included. last_complete, current and period_to_date are relative to today and take no values: the attribute is the period (a level of a calendar, or a day), so last_complete with count 2 on date.fiscal_month is the two fiscal months before the current one."
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              }
+            },
+            "count": {
+              "description": "With last_complete: how many whole periods before the current one.",
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "attribute"
+              ]
+            },
+            {
+              "required": [
+                "measure"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "and"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "and": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/filter"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "or"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "or": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/filter"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "rule": {
+      "enum": [
+        "sum",
+        "avg",
+        "min",
+        "max",
+        "first",
+        "last",
+        "none"
+      ]
+    },
+    "measureOverride": {
+      "type": "object",
+      "required": [
+        "measure"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "measure": {
+          "$ref": "#/$defs/memberName"
+        },
+        "as": {
+          "$ref": "#/$defs/alias"
+        },
+        "rollup": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/rule"
+          }
+        },
+        "spread": {
+          "oneOf": [
+            {
+              "enum": [
+                "repeat",
+                "blank"
+              ]
+            },
+            {
+              "$ref": "#/$defs/allocateSpread"
+            }
+          ]
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/filter"
+          }
+        },
+        "empty": {
+          "enum": [
+            "skip",
+            "zero"
+          ]
+        },
+        "acknowledge": {
+          "type": "boolean"
+        }
+      }
+    },
+    "adHocAggregate": {
+      "type": "object",
+      "required": [
+        "as",
+        "agg",
+        "of"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "as": {
+          "$ref": "#/$defs/alias"
+        },
+        "agg": {
+          "enum": [
+            "sum",
+            "avg",
+            "min",
+            "max",
+            "count",
+            "count_distinct",
+            "median"
+          ]
+        },
+        "of": {
+          "$ref": "#/$defs/memberName"
+        }
+      }
+    },
+    "transformBase": {
+      "description": "What a transform reads: a catalog measure, or (for the transforms that run over the aggregated rows) the `as` of an earlier transform entry in the same `measures` array.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/memberName"
+        },
+        {
+          "$ref": "#/$defs/alias"
+        }
+      ]
+    },
+    "transform": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "as",
+            "transform",
+            "measure",
+            "over"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "as": {
+              "$ref": "#/$defs/alias"
+            },
+            "measure": {
+              "$ref": "#/$defs/transformBase"
+            },
+            "transform": {
+              "const": "pct_of_total"
+            },
+            "over": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/memberName"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "as",
+            "transform",
+            "measure",
+            "attribute",
+            "parent"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "as": {
+              "$ref": "#/$defs/alias"
+            },
+            "measure": {
+              "$ref": "#/$defs/transformBase"
+            },
+            "transform": {
+              "const": "share_of_parent"
+            },
+            "attribute": {
+              "$ref": "#/$defs/memberName"
+            },
+            "parent": {
+              "$ref": "#/$defs/memberName"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "as",
+            "transform",
+            "measure",
+            "entity",
+            "agg"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "as": {
+              "$ref": "#/$defs/alias"
+            },
+            "measure": {
+              "$ref": "#/$defs/transformBase"
+            },
+            "transform": {
+              "const": "per_entity"
+            },
+            "entity": {
+              "$ref": "#/$defs/memberName"
+            },
+            "agg": {
+              "enum": [
+                "avg",
+                "min",
+                "max"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "as",
+            "transform",
+            "measure",
+            "period",
+            "output"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "as": {
+              "$ref": "#/$defs/alias"
+            },
+            "measure": {
+              "$ref": "#/$defs/transformBase"
+            },
+            "transform": {
+              "const": "prior_period"
+            },
+            "period": {
+              "$ref": "#/$defs/period"
+            },
+            "output": {
+              "enum": [
+                "value",
+                "delta",
+                "pct_change"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The measure aggregated over a window of calendar members around each member of along (year to date at each month, or the trailing twelve months), at the source, so a distinct count is a count of the window's distinct values. Members are counted in the date table's order; a window that runs off an end covers the members that exist.",
+          "required": [
+            "as",
+            "transform",
+            "measure",
+            "along"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "as": {
+              "$ref": "#/$defs/alias"
+            },
+            "measure": {
+              "$ref": "#/$defs/transformBase"
+            },
+            "transform": {
+              "const": "window"
+            },
+            "along": {
+              "description": "A period attribute (a level of a calendar, the date attribute, or a datetime bucket) that is in the query's attributes: the window is read at each of its members.",
+              "$ref": "#/$defs/memberName"
+            },
+            "start": {
+              "description": "Where the window begins: a number of members of along back from the current one (0 is the current member, -11 the eleventh before it), or the first member inside the current member's period of a coarser level.",
+              "oneOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "period_start"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "period_start": {
+                      "$ref": "#/$defs/memberName"
+                    }
+                  }
+                }
+              ]
+            },
+            "end": {
+              "description": "Where the window ends: \"current\", or a number of members of along from the current one (negative earlier, positive later).",
+              "oneOf": [
+                {
+                  "const": "current"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "offset": {
+              "description": "A window of one member, that many members of along from the current one (-1 the previous member, +1 the next). Shorthand for start and end both set to the number; it can't be combined with start or end.",
+              "type": "integer"
+            },
+            "output": {
+              "description": "What the entry returns: the window's value (default), delta (the current member's own value minus the window's value), or pct_change (delta over the window's value; blank when that is blank or zero).",
+              "enum": [
+                "value",
+                "delta",
+                "pct_change"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The measure as an index to one base member of along: each row's value divided by the value at the base member, times scale (100 by default), so the base member reads 100. The base is read from the source for each combination of the query's other attributes, whatever the query's filters on along say, so a distinct count or any measure that can't be added is right. A base that is blank or zero gives a blank index.",
+          "required": [
+            "as",
+            "transform",
+            "measure",
+            "along",
+            "base"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "as": {
+              "$ref": "#/$defs/alias"
+            },
+            "measure": {
+              "$ref": "#/$defs/transformBase"
+            },
+            "transform": {
+              "const": "index"
+            },
+            "along": {
+              "$ref": "#/$defs/memberName",
+              "description": "A period attribute (a level of a calendar, the date attribute, or a datetime bucket) that is in the query's attributes: the index is read at each of its members."
+            },
+            "base": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The member of along the index is relative to: a level's member label, an ISO date for the date attribute, or a bucket label for a datetime bucket."
+            },
+            "scale": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "What the base member reads as. 100 by default; 1 gives a plain ratio."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "as",
+            "transform",
+            "measure",
+            "along"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "as": {
+              "$ref": "#/$defs/alias"
+            },
+            "measure": {
+              "$ref": "#/$defs/transformBase"
+            },
+            "transform": {
+              "const": "running_total"
+            },
+            "along": {
+              "$ref": "#/$defs/memberName"
+            },
+            "reset_by": {
+              "$ref": "#/$defs/memberName"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "as",
+            "transform",
+            "measure"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "as": {
+              "$ref": "#/$defs/alias"
+            },
+            "measure": {
+              "$ref": "#/$defs/transformBase"
+            },
+            "transform": {
+              "const": "rank"
+            },
+            "within": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/memberName"
+              }
+            },
+            "order": {
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            },
+            "ties": {
+              "enum": [
+                "skip",
+                "dense",
+                "break"
+              ]
+            },
+            "keep": {
+              "description": "Keep only the best-ranked rows: this many per within group, in the direction of order. Applied after every transform and after totals, like a post filter, so other transforms still read all rows.",
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      ]
+    },
+    "allocateSpread": {
+      "type": "object",
+      "required": [
+        "allocate"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "allocate": {
+          "type": "object",
+          "required": [
+            "by"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "by": {
+              "enum": [
+                "measure",
+                "equal"
+              ]
+            },
+            "measure": {
+              "$ref": "#/$defs/memberName"
+            },
+            "members": {
+              "enum": [
+                "present",
+                "catalog"
+              ]
+            },
+            "fallback": {
+              "enum": [
+                "fail",
+                "blank"
+              ]
+            },
+            "period": {
+              "$ref": "#/$defs/period"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "by": {
+                    "const": "measure"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "measure"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "by": {
+                    "const": "equal"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "members"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "postFilter": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "measure",
+            "operator"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "measure": {
+              "$ref": "#/$defs/alias"
+            },
+            "operator": {
+              "enum": [
+                "equals",
+                "not_equals",
+                "gt",
+                "gte",
+                "lt",
+                "lte",
+                "set",
+                "not_set"
+              ]
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "and"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "and": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/postFilter"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "or"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "or": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/postFilter"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

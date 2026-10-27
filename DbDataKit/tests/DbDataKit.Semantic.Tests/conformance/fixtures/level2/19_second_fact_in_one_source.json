@@ -1,0 +1,54 @@
+{
+  "name": "19_second_fact_in_one_source",
+  "level": 2,
+  "description": "Sales and returns are two fact tables in the same SQL Server. Each is queried through the dimensions it can reach, and the two come back as separate result sets that combine like any two sources.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "returns.return_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "orders_net_revenue": 400,
+        "returns_return_amount": 50
+      },
+      {
+        "customers_region": "West",
+        "orders_net_revenue": 500,
+        "returns_return_amount": 40
+      }
+    ],
+    "result_sets": [
+      {
+        "id": "d1",
+        "source": "sqlserver_sales"
+      },
+      {
+        "id": "d2",
+        "source": "sqlserver_sales.fact_returns"
+      }
+    ]
+  }
+}

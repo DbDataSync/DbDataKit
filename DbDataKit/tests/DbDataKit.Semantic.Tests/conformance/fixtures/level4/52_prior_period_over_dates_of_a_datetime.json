@@ -1,0 +1,44 @@
+{
+  "name": "52_prior_period_over_dates_of_a_datetime",
+  "level": 4,
+  "description": "A between on dates of a datetime can't be moved back a year (the date table has no counterpart for an instant), so the request says to filter on a fiscal period instead.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "rev_prior",
+          "transform": "prior_period",
+          "measure": "orders.net_revenue",
+          "output": "value",
+          "period": {
+            "unit": "fiscal_year",
+            "offset": -1
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "orders.ordered_at_fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "orders.ordered_at",
+          "operator": "between",
+          "values": [
+            "2026-07-01",
+            "2026-09-30"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "shift_filter_unsupported"
+    ]
+  }
+}

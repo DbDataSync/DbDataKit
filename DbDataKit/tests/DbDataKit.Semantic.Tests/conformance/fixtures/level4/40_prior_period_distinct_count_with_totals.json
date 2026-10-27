@@ -1,0 +1,49 @@
+{
+  "name": "40_prior_period_distinct_count_with_totals",
+  "level": 4,
+  "description": "A distinct count can't be added up for the totals of its earlier value.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "as": "x",
+          "transform": "prior_period",
+          "measure": "orders.order_count",
+          "output": "value",
+          "period": {
+            "unit": "fiscal_year",
+            "offset": -1
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "date.fiscal_quarter"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "prior_period_totals_unsupported"
+    ]
+  }
+}

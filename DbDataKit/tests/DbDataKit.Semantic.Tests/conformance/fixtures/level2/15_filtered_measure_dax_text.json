@@ -1,0 +1,61 @@
+{
+  "name": "15_filtered_measure_dax_text",
+  "level": 2,
+  "description": "On an SSAS source a filtered measure compiles to CALCULATE with KEEPFILTERS, so the query's own filters still apply. DAX can't run here, so the text is checked and the stand-in runs the equivalent SQL.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "measure": "budget.budget_amount",
+          "as": "west_budget",
+          "filters": [
+            {
+              "attribute": "customers.region",
+              "operator": "equals",
+              "values": [
+                "West"
+              ]
+            }
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "west_budget": null
+      },
+      {
+        "customers_region": "West",
+        "west_budget": 600
+      }
+    ],
+    "native_query_contains": {
+      "d1": [
+        "CALCULATE ( [Budget Amount]",
+        "KEEPFILTERS",
+        "IF ( NOT ISEMPTY ( 'Budget' ), 1 )",
+        "TREATAS ( { \"West\" }, 'Customer'[Region] )"
+      ]
+    }
+  }
+}

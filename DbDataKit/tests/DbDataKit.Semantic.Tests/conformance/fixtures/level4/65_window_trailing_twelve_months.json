@@ -1,0 +1,63 @@
+{
+  "name": "65_window_trailing_twelve_months",
+  "level": 4,
+  "description": "A window of twelve months back reaches the start of the date table for every month shown: 390, 550, 700, 950, 1340, 1600. The date table has six months, so each window covers the months that exist.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "r12",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "start": -11,
+          "end": "current"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2025-07",
+        "orders_net_revenue": 390,
+        "r12": 390
+      },
+      {
+        "date_fiscal_month": "2025-08",
+        "orders_net_revenue": 160,
+        "r12": 550
+      },
+      {
+        "date_fiscal_month": "2025-09",
+        "orders_net_revenue": 150,
+        "r12": 700
+      },
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "r12": 950
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "r12": 1340
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "r12": 1600
+      }
+    ]
+  }
+}

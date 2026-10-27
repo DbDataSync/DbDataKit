@@ -1,0 +1,63 @@
+{
+  "name": "83_window_month_over_month_pct_change",
+  "level": 4,
+  "description": "output pct_change is the delta over the window's value: 160 against 390 is -230 / 390, 250 against 150 is 100 / 150. Blank for the first month, which has nothing before it.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "growth",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "offset": -1,
+          "output": "pct_change"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2025-07",
+        "orders_net_revenue": 390,
+        "growth": null
+      },
+      {
+        "date_fiscal_month": "2025-08",
+        "orders_net_revenue": 160,
+        "growth": -0.5897435897435898
+      },
+      {
+        "date_fiscal_month": "2025-09",
+        "orders_net_revenue": 150,
+        "growth": -0.0625
+      },
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "growth": 0.6666666666666666
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "growth": 0.56
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "growth": -0.3333333333333333
+      }
+    ]
+  }
+}

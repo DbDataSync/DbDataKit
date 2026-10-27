@@ -1,0 +1,103 @@
+{
+  "name": "32_native_subtotals_in_dax",
+  "level": 3,
+  "description": "The budget source is SSAS, so its subtotals are asked for in DAX: each listed dimension is wrapped in ROLLUPADDISSUBTOTAL, the combinations that skip a level are filtered out, and the level is the number of subtotal flags set. (The conformance run uses the DuckDB stand-in for this source; the DAX is checked as text.)",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region",
+          "date.fiscal_month"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2026-07",
+        "_rollup_level": 0,
+        "budget_budget_amount": 150
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2026-08",
+        "_rollup_level": 0,
+        "budget_budget_amount": 150
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2026-09",
+        "_rollup_level": 0,
+        "budget_budget_amount": 200
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_month": null,
+        "_rollup_level": 1,
+        "budget_budget_amount": 500
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2026-07",
+        "_rollup_level": 0,
+        "budget_budget_amount": 200
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2026-08",
+        "_rollup_level": 0,
+        "budget_budget_amount": 200
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2026-09",
+        "_rollup_level": 0,
+        "budget_budget_amount": 200
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": null,
+        "_rollup_level": 1,
+        "budget_budget_amount": 600
+      },
+      {
+        "customers_region": null,
+        "date_fiscal_month": null,
+        "_rollup_level": 2,
+        "budget_budget_amount": 1100
+      }
+    ],
+    "native_query_contains": {
+      "d1_g": [
+        "ROLLUPADDISSUBTOTAL",
+        "_sub_customers_region",
+        "NOT ( [_sub_customers_region] && NOT [_sub_date_fiscal_month] )",
+        "\"_rollup_level\""
+      ]
+    }
+  }
+}

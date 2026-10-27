@@ -1,0 +1,33 @@
+{
+  "name": "72_window_starting_after_the_current_member",
+  "level": 4,
+  "description": "A window starts at or before the current member: start 1 is not a window.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "x",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "start": 1,
+          "end": 2
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "window_frame_invalid"
+    ]
+  }
+}

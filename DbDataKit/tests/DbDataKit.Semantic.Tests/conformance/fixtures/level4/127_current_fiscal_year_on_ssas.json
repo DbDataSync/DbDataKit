@@ -1,0 +1,35 @@
+{
+  "name": "127_current_fiscal_year_on_ssas",
+  "level": 4,
+  "description": "On 2026-08-15 the current fiscal year is FY27; its SSAS budget is 1100.",
+  "today": "2026-08-15",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "limit": 100,
+      "measures": [
+        "budget.budget_amount"
+      ],
+      "attributes": [
+        "date.fiscal_year"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_year",
+          "operator": "current"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_year": "FY27",
+        "budget_budget_amount": 1100.0
+      }
+    ]
+  }
+}

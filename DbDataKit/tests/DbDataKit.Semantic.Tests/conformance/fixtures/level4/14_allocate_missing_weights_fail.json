@@ -1,0 +1,57 @@
+{
+  "name": "14_allocate_missing_weights_fail",
+  "level": 4,
+  "description": "East has no cancelled product-A revenue to weight its budget by, so splitting it would lose 500. The default fallback stops the query.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "measure": "budget.budget_amount",
+          "spread": {
+            "allocate": {
+              "by": "measure",
+              "measure": "orders.net_revenue"
+            }
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        },
+        {
+          "attribute": "products.product",
+          "operator": "equals",
+          "values": [
+            "A"
+          ]
+        },
+        {
+          "attribute": "orders.status",
+          "operator": "equals",
+          "values": [
+            "Cancelled"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "allocation_weights_invalid"
+    ]
+  }
+}

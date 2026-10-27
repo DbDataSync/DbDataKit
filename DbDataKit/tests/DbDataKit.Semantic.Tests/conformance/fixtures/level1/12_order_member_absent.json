@@ -1,0 +1,30 @@
+{
+  "name": "12_order_member_absent",
+  "level": 1,
+  "description": "Ordering on something not in the query is rejected.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "order": [
+        [
+          "budget.budget_amount",
+          "desc"
+        ]
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "order_member_missing"
+    ]
+  }
+}

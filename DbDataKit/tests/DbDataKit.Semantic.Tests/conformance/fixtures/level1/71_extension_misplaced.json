@@ -1,0 +1,25 @@
+{
+  "name": "71_extension_misplaced",
+  "level": 1,
+  "description": "A request has no x_ fields: the prefix marks extensions of the descriptor and the catalog.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "x_note": "for the planner"
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "extension_misplaced"
+    ]
+  }
+}

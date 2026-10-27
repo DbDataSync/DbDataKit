@@ -1,0 +1,52 @@
+{
+  "name": "71_window_on_a_datetime",
+  "level": 4,
+  "description": "A window along the fiscal months of a datetime, read through its date table: the two months ending at 2026-08 (150 + 270 = 420) and at 2026-09 (270 + 180 = 450), by the day each order was placed in Chicago.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "r2",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "orders.ordered_at_fiscal_month",
+          "start": -1,
+          "end": "current"
+        }
+      ],
+      "attributes": [
+        "orders.ordered_at_fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "orders.ordered_at_fiscal_month",
+          "operator": "equals",
+          "values": [
+            "2026-08",
+            "2026-09"
+          ]
+        }
+      ],
+      "limit": 100
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "orders_ordered_at_fiscal_month": "2026-08",
+        "orders_net_revenue": 270,
+        "r2": 420
+      },
+      {
+        "orders_ordered_at_fiscal_month": "2026-09",
+        "orders_net_revenue": 180,
+        "r2": 450
+      }
+    ]
+  }
+}

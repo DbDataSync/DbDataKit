@@ -1,0 +1,63 @@
+{
+  "name": "82_window_month_over_month_delta",
+  "level": 4,
+  "description": "output delta is the current member's own value minus the window's value: this month less the month before it (160 - 390 = -230). The first month has no month before it, so its delta is blank.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "change",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "offset": -1,
+          "output": "delta"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2025-07",
+        "orders_net_revenue": 390,
+        "change": null
+      },
+      {
+        "date_fiscal_month": "2025-08",
+        "orders_net_revenue": 160,
+        "change": -230
+      },
+      {
+        "date_fiscal_month": "2025-09",
+        "orders_net_revenue": 150,
+        "change": -10
+      },
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "change": 100
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "change": 140
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "change": -130
+      }
+    ]
+  }
+}

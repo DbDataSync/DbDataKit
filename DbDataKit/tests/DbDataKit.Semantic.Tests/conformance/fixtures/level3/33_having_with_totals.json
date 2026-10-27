@@ -1,0 +1,56 @@
+{
+  "name": "33_having_with_totals",
+  "level": 3,
+  "description": "With totals, the condition applies to every row, subtotals and the grand total too: East (400) drops out and the grand total (900) stays.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        },
+        {
+          "measure": "orders.net_revenue",
+          "operator": "gte",
+          "values": [
+            450
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "West",
+        "_rollup_level": 0,
+        "orders_net_revenue": 500
+      },
+      {
+        "customers_region": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 900
+      }
+    ]
+  }
+}

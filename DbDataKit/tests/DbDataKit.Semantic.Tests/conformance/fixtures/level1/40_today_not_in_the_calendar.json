@@ -1,0 +1,29 @@
+{
+  "name": "40_today_not_in_the_calendar",
+  "level": 1,
+  "description": "The date table doesn't reach today, so 'to date' has nothing to start from.",
+  "today": "2027-01-15",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [],
+      "filters": [
+        {
+          "attribute": "date.fiscal_month",
+          "operator": "period_to_date"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "range_unresolved"
+    ]
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "name": "10_spread_override_repeat",
+  "level": 2,
+  "description": "Budget lines are blank by default; this request overrides the spread to repeat, so every product row shows the region's 3.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "measure": "budget.budget_lines",
+          "spread": "repeat"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "orders_net_revenue": 100,
+        "budget_budget_lines": 3
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "orders_net_revenue": 300,
+        "budget_budget_lines": 3
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "orders_net_revenue": 300,
+        "budget_budget_lines": 3
+      },
+      {
+        "customers_region": "West",
+        "products_product": "B",
+        "orders_net_revenue": 200,
+        "budget_budget_lines": 3
+      }
+    ]
+  }
+}

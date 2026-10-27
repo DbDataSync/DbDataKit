@@ -1,0 +1,91 @@
+{
+  "name": "03_blank_shows_on_totals",
+  "level": 3,
+  "description": "A blank measure is empty on detail rows and appears on the total rows at or above its native grain.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "budget.budget_lines"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region",
+          "products.product"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "_rollup_level": 0,
+        "orders_net_revenue": 100,
+        "budget_budget_lines": null
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "_rollup_level": 0,
+        "orders_net_revenue": 300,
+        "budget_budget_lines": null
+      },
+      {
+        "customers_region": "East",
+        "products_product": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 400,
+        "budget_budget_lines": 3
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "_rollup_level": 0,
+        "orders_net_revenue": 300,
+        "budget_budget_lines": null
+      },
+      {
+        "customers_region": "West",
+        "products_product": "B",
+        "_rollup_level": 0,
+        "orders_net_revenue": 200,
+        "budget_budget_lines": null
+      },
+      {
+        "customers_region": "West",
+        "products_product": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 500,
+        "budget_budget_lines": 3
+      },
+      {
+        "customers_region": null,
+        "products_product": null,
+        "_rollup_level": 2,
+        "orders_net_revenue": 900,
+        "budget_budget_lines": 6
+      }
+    ]
+  }
+}

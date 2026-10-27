@@ -1,0 +1,38 @@
+{
+  "name": "64_week_buckets",
+  "level": 1,
+  "description": "Weeks start on Monday and are labeled with that date: orders 1, 4 and 8 all fall in the week of Monday 2026-06-29 in Chicago, though order 1 is already July 1 in UTC.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "orders.ordered_at_week"
+      ],
+      "filters": [
+        {
+          "attribute": "orders.ordered_at",
+          "operator": "between",
+          "values": [
+            "2026-06-29",
+            "2026-07-05"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "orders_ordered_at_week": "2026-06-29",
+        "orders_net_revenue": 250
+      }
+    ]
+  }
+}

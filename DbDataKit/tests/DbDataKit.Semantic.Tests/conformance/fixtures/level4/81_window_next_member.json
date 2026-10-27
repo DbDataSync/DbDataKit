@@ -1,0 +1,62 @@
+{
+  "name": "81_window_next_member",
+  "level": 4,
+  "description": "offset 1 is the next member (lead): each month shows the month after it, and the last month has none, so it is blank.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "next",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "offset": 1
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2025-07",
+        "orders_net_revenue": 390,
+        "next": 160
+      },
+      {
+        "date_fiscal_month": "2025-08",
+        "orders_net_revenue": 160,
+        "next": 150
+      },
+      {
+        "date_fiscal_month": "2025-09",
+        "orders_net_revenue": 150,
+        "next": 250
+      },
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "next": 390
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "next": 260
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "next": null
+      }
+    ]
+  }
+}

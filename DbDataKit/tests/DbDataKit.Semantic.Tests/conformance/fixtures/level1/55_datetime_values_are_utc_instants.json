@@ -1,0 +1,52 @@
+{
+  "name": "55_datetime_values_are_utc_instants",
+  "level": 1,
+  "description": "A datetime dimension's values are ISO 8601 UTC instants, whatever zone the catalog or the request reads days in, and a comparison takes instants. The three orders placed on 2026-07-01 UTC (03:30, 12:00 and 18:00).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "orders.ordered_at"
+      ],
+      "filters": [
+        {
+          "attribute": "orders.ordered_at",
+          "operator": "gte",
+          "values": [
+            "2026-07-01T00:00:00Z"
+          ]
+        },
+        {
+          "attribute": "orders.ordered_at",
+          "operator": "lt",
+          "values": [
+            "2026-07-02T00:00:00Z"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "orders_ordered_at": "2026-07-01T03:30:00Z",
+        "orders_net_revenue": 100
+      },
+      {
+        "orders_ordered_at": "2026-07-01T12:00:00Z",
+        "orders_net_revenue": 100
+      },
+      {
+        "orders_ordered_at": "2026-07-01T18:00:00Z",
+        "orders_net_revenue": 50
+      }
+    ]
+  }
+}

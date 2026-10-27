@@ -1,0 +1,70 @@
+{
+  "name": "32_last_complete",
+  "level": 1,
+  "description": "The last 2 complete fiscal months, with today fixed at 2026-09-15: September is the current month, so the filter covers July and August. Whole periods filter on the level's members, and the result says what the operator resolved to.",
+  "today": "2026-09-15",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_month",
+          "operator": "last_complete",
+          "count": 2
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "result_sets": [
+      {
+        "id": "d1",
+        "grain": [
+          "date.fiscal_month"
+        ],
+        "covers": {
+          "measures": [
+            "orders.net_revenue"
+          ],
+          "filters_applied": [
+            "date.fiscal_month equals 2026-07, 2026-08"
+          ],
+          "filters_not_applied": []
+        }
+      }
+    ],
+    "resolved": [
+      {
+        "path": "$.query.filters[0]",
+        "today": "2026-09-15",
+        "start": "2026-07-01",
+        "end": "2026-08-15",
+        "attribute": "date.fiscal_month",
+        "members": [
+          "2026-07",
+          "2026-08"
+        ]
+      }
+    ],
+    "rows": [
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390
+      }
+    ]
+  }
+}

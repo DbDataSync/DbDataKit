@@ -1,0 +1,35 @@
+{
+  "name": "77_window_period_is_finer_than_along",
+  "level": 4,
+  "description": "Along fiscal years, a window can't start at the beginning of a fiscal month: a year has several, so which one is the start is not defined.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "x",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_year",
+          "start": {
+            "period_start": "date.fiscal_month"
+          },
+          "end": "current"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_year"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "window_period_not_coarser"
+    ]
+  }
+}

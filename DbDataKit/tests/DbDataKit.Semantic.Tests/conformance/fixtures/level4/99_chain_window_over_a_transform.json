@@ -1,0 +1,48 @@
+{
+  "name": "99_chain_window_over_a_transform",
+  "level": 4,
+  "description": "A window scans the source for each member, and a transform's output isn't something the source has: it needs a catalog measure.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "share",
+          "transform": "pct_of_total",
+          "measure": "orders.net_revenue",
+          "over": [
+            "date.fiscal_month"
+          ]
+        },
+        {
+          "as": "prev_share",
+          "transform": "window",
+          "measure": "share",
+          "along": "date.fiscal_month",
+          "offset": -1
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "transform_base_not_scannable"
+    ]
+  }
+}

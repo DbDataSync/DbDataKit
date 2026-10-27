@@ -1,0 +1,25 @@
+{
+  "name": "17_clarify_needs_two_options",
+  "level": 1,
+  "description": "A question with one option isn't a question.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "clarify",
+    "clarify": {
+      "question": "Which revenue do you mean?",
+      "options": [
+        {
+          "label": "Net revenue",
+          "measure": "orders.net_revenue"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "schema_invalid",
+      "schema_invalid"
+    ]
+  }
+}

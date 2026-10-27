@@ -1,0 +1,120 @@
+{
+  "name": "35_cube_totals_in_dax",
+  "level": 3,
+  "description": "A cube in DAX: each listed dimension gets its own ROLLUPADDISSUBTOTAL flag, every combination is kept (no chain filter), and the level is looked up from the flags in the same numbering the engine uses. (The conformance run uses the DuckDB stand-in for this source; the DAX is checked as text.)",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region",
+          "date.fiscal_month"
+        ],
+        "grand_total": true,
+        "cube": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2026-07",
+        "_rollup_level": 0,
+        "budget_budget_amount": 150
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2026-08",
+        "_rollup_level": 0,
+        "budget_budget_amount": 150
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2026-09",
+        "_rollup_level": 0,
+        "budget_budget_amount": 200
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_month": null,
+        "_rollup_level": 2,
+        "budget_budget_amount": 500
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2026-07",
+        "_rollup_level": 0,
+        "budget_budget_amount": 200
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2026-08",
+        "_rollup_level": 0,
+        "budget_budget_amount": 200
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2026-09",
+        "_rollup_level": 0,
+        "budget_budget_amount": 200
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": null,
+        "_rollup_level": 2,
+        "budget_budget_amount": 600
+      },
+      {
+        "customers_region": null,
+        "date_fiscal_month": "2026-07",
+        "_rollup_level": 1,
+        "budget_budget_amount": 350
+      },
+      {
+        "customers_region": null,
+        "date_fiscal_month": "2026-08",
+        "_rollup_level": 1,
+        "budget_budget_amount": 350
+      },
+      {
+        "customers_region": null,
+        "date_fiscal_month": "2026-09",
+        "_rollup_level": 1,
+        "budget_budget_amount": 400
+      },
+      {
+        "customers_region": null,
+        "date_fiscal_month": null,
+        "_rollup_level": 3,
+        "budget_budget_amount": 1100
+      }
+    ],
+    "native_query_contains": {
+      "d1_g": [
+        "ROLLUPADDISSUBTOTAL",
+        "SWITCH ( IF ( [_sub_customers_region], 2, 0 ) + IF ( [_sub_date_fiscal_month], 1, 0 ), 0, 0, 2, 1, 1, 2, 3, 3 )"
+      ]
+    }
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "name": "121_index_with_totals",
+  "level": 4,
+  "description": "With totals, the detail rows are indexed to 2026-07 and each region's own base (East 100, West 150), and a subtotal or grand total row has no base of its own, so its index is blank.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "growth",
+          "transform": "index",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "base": "2026-07"
+        }
+      ],
+      "attributes": [
+        "customers.region",
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": [
+        {
+          "attribute": "date.fiscal_month",
+          "operator": "equals",
+          "values": [
+            "2026-07",
+            "2026-08"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region",
+          "date.fiscal_month"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2026-07",
+        "_rollup_level": 0,
+        "orders_net_revenue": 100,
+        "growth": 100.0
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2026-08",
+        "_rollup_level": 0,
+        "orders_net_revenue": 200,
+        "growth": 200.0
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_month": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 300,
+        "growth": null
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2026-07",
+        "_rollup_level": 0,
+        "orders_net_revenue": 150,
+        "growth": 100.0
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2026-08",
+        "_rollup_level": 0,
+        "orders_net_revenue": 190,
+        "growth": 126.66666666666666
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 340,
+        "growth": null
+      },
+      {
+        "customers_region": null,
+        "date_fiscal_month": null,
+        "_rollup_level": 2,
+        "orders_net_revenue": 640,
+        "growth": null
+      }
+    ]
+  }
+}

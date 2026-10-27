@@ -1,0 +1,62 @@
+{
+  "name": "109_index_distinct_customers",
+  "level": 4,
+  "description": "Customers per month as an index to 2026-07 (2 customers): 2, 1, 1, 2, 2, 3 against 2 is 100, 50, 50, 100, 100, 150. The base is a scan of its own, so a distinct count stays a distinct count.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.customer_count",
+        {
+          "as": "growth",
+          "transform": "index",
+          "measure": "orders.customer_count",
+          "along": "date.fiscal_month",
+          "base": "2026-07"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2025-07",
+        "orders_customer_count": 2,
+        "growth": 100.0
+      },
+      {
+        "date_fiscal_month": "2025-08",
+        "orders_customer_count": 1,
+        "growth": 50.0
+      },
+      {
+        "date_fiscal_month": "2025-09",
+        "orders_customer_count": 1,
+        "growth": 50.0
+      },
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_customer_count": 2,
+        "growth": 100.0
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_customer_count": 2,
+        "growth": 100.0
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_customer_count": 3,
+        "growth": 150.0
+      }
+    ]
+  }
+}

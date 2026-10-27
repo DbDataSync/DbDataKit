@@ -1,0 +1,32 @@
+{
+  "name": "45_date_that_isnt_one",
+  "level": 1,
+  "description": "Month 13 isn't a date.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [],
+      "filters": [
+        {
+          "attribute": "date.calendar_date",
+          "operator": "between",
+          "values": [
+            "2026-13-01",
+            "2026-12-01"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "invalid_date"
+    ]
+  }
+}

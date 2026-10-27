@@ -1,0 +1,28 @@
+{
+  "name": "16_clarify_option_wrong_kind",
+  "level": 1,
+  "description": "A measure option must name a measure.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "clarify",
+    "clarify": {
+      "question": "Which revenue do you mean?",
+      "options": [
+        {
+          "label": "Net revenue",
+          "measure": "orders.net_revenue"
+        },
+        {
+          "label": "By region",
+          "measure": "customers.region"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "wrong_member_kind"
+    ]
+  }
+}

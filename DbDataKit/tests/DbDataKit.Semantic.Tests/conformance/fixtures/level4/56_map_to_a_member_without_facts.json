@@ -1,0 +1,69 @@
+{
+  "name": "56_map_to_a_member_without_facts",
+  "level": 4,
+  "description": "North is in the dimension table and has no sales. With the catalog's members read from the dimension table, a label can map to it (here 'Nrth', by similarity); with members taken from the facts it would have stayed unmatched.",
+  "setup": [
+    {
+      "spec_version": "0.3",
+      "kind": "table",
+      "name": "adhoc.user_territories",
+      "descriptor": {
+        "descriptor_version": "1.0",
+        "name": "user_territories",
+        "schema": {
+          "fields": [
+            {
+              "name": "territory",
+              "type": "string"
+            },
+            {
+              "name": "region_label",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "rows": [
+        {
+          "territory": "North",
+          "region_label": "Nrth"
+        },
+        {
+          "territory": "Pacific",
+          "region_label": "west"
+        }
+      ]
+    }
+  ],
+  "request": {
+    "spec_version": "0.3",
+    "kind": "value_map",
+    "id": "terr_region",
+    "table": "adhoc.user_territories@v1",
+    "field": "region_label",
+    "target": "customers.region",
+    "mode": "fuzzy"
+  },
+  "expect": {
+    "status": "complete",
+    "result_sets": [
+      {
+        "id": "map_terr_region",
+        "rows": [
+          {
+            "from": "Nrth",
+            "to": "North",
+            "confidence": 0.94,
+            "method": "fuzzy"
+          },
+          {
+            "from": "west",
+            "to": "West",
+            "confidence": 1.0,
+            "method": "exact"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "name": "87_window_offset_distinct_customers",
+  "level": 4,
+  "description": "The previous month's customers, as a change: customers this month (2, 1, 1, 2, 2, 3) less customers in the month before (blank, 2, 1, 1, 2, 2). The window is a scan of its own, so a distinct count is read as a distinct count.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.customer_count",
+        {
+          "as": "change",
+          "transform": "window",
+          "measure": "orders.customer_count",
+          "along": "date.fiscal_month",
+          "offset": -1,
+          "output": "delta"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2025-07",
+        "orders_customer_count": 2,
+        "change": null
+      },
+      {
+        "date_fiscal_month": "2025-08",
+        "orders_customer_count": 1,
+        "change": -1
+      },
+      {
+        "date_fiscal_month": "2025-09",
+        "orders_customer_count": 1,
+        "change": 0
+      },
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_customer_count": 2,
+        "change": 1
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_customer_count": 2,
+        "change": 0
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_customer_count": 3,
+        "change": 1
+      }
+    ]
+  }
+}

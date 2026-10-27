@@ -1,0 +1,111 @@
+{
+  "name": "93_chain_with_totals",
+  "level": 4,
+  "description": "A chain is computed on detail rows. A total row has NULL for the later step, as for any running total, and the first step keeps its rule: 100% on a row that has rolled up the attribute it totals over.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "share_of_region",
+          "transform": "pct_of_total",
+          "measure": "orders.net_revenue",
+          "over": [
+            "products.product"
+          ]
+        },
+        {
+          "as": "rev_cum",
+          "transform": "running_total",
+          "measure": "share_of_region",
+          "along": "products.product"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region",
+          "products.product"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "_rollup_level": 0,
+        "orders_net_revenue": 100,
+        "rev_cum": 0.25,
+        "share_of_region": 0.25
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "_rollup_level": 0,
+        "orders_net_revenue": 300,
+        "rev_cum": 1.0,
+        "share_of_region": 0.75
+      },
+      {
+        "customers_region": "East",
+        "products_product": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 400,
+        "rev_cum": null,
+        "share_of_region": 1.0
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "_rollup_level": 0,
+        "orders_net_revenue": 300,
+        "rev_cum": 0.6,
+        "share_of_region": 0.6
+      },
+      {
+        "customers_region": "West",
+        "products_product": "B",
+        "_rollup_level": 0,
+        "orders_net_revenue": 200,
+        "rev_cum": 1.0,
+        "share_of_region": 0.4
+      },
+      {
+        "customers_region": "West",
+        "products_product": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 500,
+        "rev_cum": null,
+        "share_of_region": 1.0
+      },
+      {
+        "customers_region": null,
+        "products_product": null,
+        "_rollup_level": 2,
+        "orders_net_revenue": 900,
+        "rev_cum": null,
+        "share_of_region": 1.0
+      }
+    ]
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "name": "13_filtered_measure_needs_level_2",
+  "level": 1,
+  "description": "A level 1 engine doesn't compile filtered measures: the base data comes back with the entry as a remaining step.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "measure": "orders.net_revenue",
+          "as": "completed_revenue",
+          "filters": [
+            {
+              "attribute": "orders.status",
+              "operator": "equals",
+              "values": [
+                "Completed"
+              ]
+            }
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "partial",
+    "reason_code": "level_not_implemented",
+    "result_sets": [
+      {
+        "id": "d1",
+        "grain": [
+          "customers.region"
+        ]
+      }
+    ],
+    "remaining": [
+      {
+        "step": 1,
+        "op": "measure_expression",
+        "reason": "level_not_implemented"
+      },
+      {
+        "step": 2,
+        "op": "finalize"
+      }
+    ]
+  }
+}

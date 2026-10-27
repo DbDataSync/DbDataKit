@@ -1,0 +1,109 @@
+{
+  "name": "15_adhoc_none_measure_refused",
+  "level": 3,
+  "description": "A distinct count can't be added across the relation, and the source has no territory to recompute it by.",
+  "setup": [
+    {
+      "spec_version": "0.3",
+      "kind": "table",
+      "name": "adhoc.user_territories",
+      "descriptor": {
+        "descriptor_version": "1.0",
+        "name": "user_territories",
+        "schema": {
+          "fields": [
+            {
+              "name": "territory",
+              "type": "string"
+            },
+            {
+              "name": "region_label",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "rows": [
+        {
+          "territory": "Pacific",
+          "region_label": "WST-01"
+        },
+        {
+          "territory": "Atlantic",
+          "region_label": "EST-01"
+        }
+      ]
+    },
+    {
+      "spec_version": "0.3",
+      "kind": "value_map",
+      "id": "terr_region",
+      "table": "adhoc.user_territories@v1",
+      "field": "region_label",
+      "target": "customers.region",
+      "mode": "catalog",
+      "pairs": [
+        {
+          "from": "WST-01",
+          "to": "West"
+        },
+        {
+          "from": "EST-01",
+          "to": "East"
+        }
+      ],
+      "scope": "governed"
+    },
+    {
+      "spec_version": "0.3",
+      "kind": "bindings",
+      "table": "adhoc.user_territories@v1",
+      "bindings": [
+        {
+          "field": "territory",
+          "role": "attribute",
+          "as": "user_territories.territory"
+        },
+        {
+          "field": "region_label",
+          "role": "attribute",
+          "binds_to": "customers.region",
+          "via_map": "terr_region"
+        }
+      ],
+      "grain": [
+        "user_territories.territory",
+        "customers.region"
+      ],
+      "confirmed_by": "user"
+    }
+  ],
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.order_count"
+      ],
+      "limit": 100,
+      "attributes": [
+        "user_territories.territory"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "non_additive_rollup"
+    ]
+  }
+}

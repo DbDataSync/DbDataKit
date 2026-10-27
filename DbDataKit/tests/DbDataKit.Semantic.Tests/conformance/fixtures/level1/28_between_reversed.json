@@ -1,0 +1,34 @@
+{
+  "name": "28_between_reversed",
+  "level": 1,
+  "description": "between takes the start first.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.calendar_date",
+          "operator": "between",
+          "values": [
+            "2026-09-01",
+            "2026-07-01"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "between_invalid"
+    ]
+  }
+}

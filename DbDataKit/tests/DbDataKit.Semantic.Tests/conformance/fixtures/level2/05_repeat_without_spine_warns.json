@@ -1,0 +1,35 @@
+{
+  "name": "05_repeat_without_spine_warns",
+  "level": 2,
+  "description": "No result set has the full grain to repeat over, so the budget can't be repeated: the result is empty and carries a warning.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "warnings": [
+      "spread_blank"
+    ],
+    "rows": []
+  }
+}

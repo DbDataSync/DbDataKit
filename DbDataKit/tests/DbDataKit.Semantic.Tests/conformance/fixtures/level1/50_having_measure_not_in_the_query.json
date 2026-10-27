@@ -1,0 +1,40 @@
+{
+  "name": "50_having_measure_not_in_the_query",
+  "level": 1,
+  "description": "A measure that is filtered on has to be one the query returns.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        },
+        {
+          "measure": "orders.order_count",
+          "operator": "gt",
+          "values": [
+            3
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "having_measure_missing"
+    ]
+  }
+}

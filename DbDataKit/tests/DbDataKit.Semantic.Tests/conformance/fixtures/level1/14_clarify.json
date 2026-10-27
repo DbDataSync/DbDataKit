@@ -1,0 +1,32 @@
+{
+  "name": "14_clarify",
+  "level": 1,
+  "description": "When a term maps to more than one catalog member the agent asks instead of guessing. Valid options resolve to catalog members, so the answer can be turned into a query.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "clarify",
+    "clarify": {
+      "question": "Which revenue do you mean?",
+      "options": [
+        {
+          "label": "Net revenue",
+          "measure": "orders.net_revenue"
+        },
+        {
+          "label": "Completed revenue",
+          "measure": "orders.completed_revenue"
+        }
+      ],
+      "partial": {
+        "attributes": [
+          "customers.region"
+        ],
+        "limit": 100
+      }
+    }
+  },
+  "expect": {
+    "status": "partial",
+    "reason_code": "clarification_needed"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "name": "63_hour_buckets",
+  "level": 1,
+  "description": "Hours are labeled with the zone's wall-clock hour: on July 1 in Chicago, order 8 was placed at 07:00 and order 4 at 13:00.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "orders.ordered_at_hour"
+      ],
+      "filters": [
+        {
+          "attribute": "orders.ordered_at",
+          "operator": "between",
+          "values": [
+            "2026-07-01",
+            "2026-07-01"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "orders_ordered_at_hour": "2026-07-01 07:00",
+        "orders_net_revenue": 100
+      },
+      {
+        "orders_ordered_at_hour": "2026-07-01 13:00",
+        "orders_net_revenue": 50
+      }
+    ]
+  }
+}

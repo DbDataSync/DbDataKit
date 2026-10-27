@@ -1,0 +1,63 @@
+{
+  "name": "38_between_dates_with_other_attributes",
+  "level": 1,
+  "description": "A period attribute joins the query's other attributes.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "date.fiscal_quarter"
+      ],
+      "filters": [
+        {
+          "attribute": "date.calendar_date",
+          "operator": "between",
+          "values": [
+            "2025-07-01",
+            "2026-12-31"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "result_sets": [
+      {
+        "grain": [
+          "customers.region",
+          "date.fiscal_quarter"
+        ]
+      }
+    ],
+    "rows": [
+      {
+        "customers_region": "East",
+        "date_fiscal_quarter": "FY26-Q1",
+        "orders_net_revenue": 300
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_quarter": "FY27-Q1",
+        "orders_net_revenue": 400
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_quarter": "FY26-Q1",
+        "orders_net_revenue": 400
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_quarter": "FY27-Q1",
+        "orders_net_revenue": 500
+      }
+    ]
+  }
+}

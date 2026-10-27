@@ -1,0 +1,195 @@
+{
+  "name": "12_empty_blank_and_zero",
+  "description": "East has no row for the second quarter. A blank cell stays blank, and a measure with empty: zero shows 0.",
+  "result": {
+    "descriptor": {
+      "descriptor_version": "1.0",
+      "name": "combined",
+      "schema": {
+        "fields": [
+          {
+            "name": "customers_region",
+            "type": "string",
+            "x_kind": "attribute",
+            "x_binding": "customers.region"
+          },
+          {
+            "name": "date_fiscal_quarter",
+            "type": "string",
+            "x_kind": "attribute",
+            "x_binding": "date.fiscal_quarter"
+          },
+          {
+            "name": "orders_net_revenue",
+            "type": "number",
+            "x_kind": "measure",
+            "x_binding": "orders.net_revenue",
+            "x_semantics": {
+              "rollup": {
+                "default": "sum"
+              }
+            }
+          },
+          {
+            "name": "orders_order_count",
+            "type": "integer",
+            "x_kind": "measure",
+            "x_binding": "orders.order_count",
+            "x_semantics": {
+              "rollup": {
+                "default": "none"
+              }
+            }
+          },
+          {
+            "name": "region_share",
+            "type": "number",
+            "x_kind": "measure",
+            "x_binding": "orders.net_revenue",
+            "x_semantics": {
+              "rollup": {
+                "default": "none"
+              }
+            },
+            "x_transform": "pct_of_total"
+          }
+        ]
+      }
+    },
+    "rows": [
+      {
+        "customers_region": "West",
+        "date_fiscal_quarter": "FY27-Q1",
+        "orders_net_revenue": 4200000,
+        "orders_order_count": 40,
+        "region_share": 0.38
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_quarter": "FY27-Q2",
+        "orders_net_revenue": 4600000,
+        "orders_order_count": 44,
+        "region_share": 0.39
+      },
+      {
+        "customers_region": "Central",
+        "date_fiscal_quarter": "FY27-Q1",
+        "orders_net_revenue": 3100000,
+        "orders_order_count": 30,
+        "region_share": 0.28
+      },
+      {
+        "customers_region": "Central",
+        "date_fiscal_quarter": "FY27-Q2",
+        "orders_net_revenue": 3300000,
+        "orders_order_count": 31,
+        "region_share": 0.28
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_quarter": "FY27-Q1",
+        "orders_net_revenue": 3800000,
+        "orders_order_count": 35,
+        "region_share": 0.34
+      }
+    ]
+  },
+  "view": {
+    "spec_version": "0.3",
+    "kind": "view",
+    "result": {
+      "ref": "result.fixture"
+    },
+    "views": [
+      {
+        "type": "matrix",
+        "id": "m1",
+        "values": [
+          {
+            "field": "orders.net_revenue",
+            "empty": "blank"
+          },
+          {
+            "field": "orders.order_count",
+            "empty": "zero",
+            "label": "Orders"
+          }
+        ],
+        "rows": [
+          "customers.region"
+        ],
+        "columns": [
+          "date.fiscal_quarter"
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "status": "complete",
+    "views": [
+      {
+        "columns": [
+          {
+            "labels": [
+              "FY27-Q1",
+              "orders.net_revenue"
+            ]
+          },
+          {
+            "labels": [
+              "FY27-Q1",
+              "Orders"
+            ]
+          },
+          {
+            "labels": [
+              "FY27-Q2",
+              "orders.net_revenue"
+            ]
+          },
+          {
+            "labels": [
+              "FY27-Q2",
+              "Orders"
+            ]
+          }
+        ],
+        "rows": [
+          {
+            "labels": [
+              "West"
+            ],
+            "texts": [
+              "4,200,000",
+              "40",
+              "4,600,000",
+              "44"
+            ]
+          },
+          {
+            "labels": [
+              "Central"
+            ],
+            "texts": [
+              "3,100,000",
+              "30",
+              "3,300,000",
+              "31"
+            ]
+          },
+          {
+            "labels": [
+              "East"
+            ],
+            "texts": [
+              "3,800,000",
+              "35",
+              "",
+              "0"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

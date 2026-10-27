@@ -1,0 +1,53 @@
+{
+  "name": "62_window_in_the_ship_role",
+  "level": 4,
+  "description": "Revenue by the month it shipped, and the fiscal year to date of the ship dates: 250 in 2026-08, then 650 more in 2026-09 for 900. The role's own date table columns order and group the periods.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "ytd",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "ship_date.fiscal_month",
+          "start": {
+            "period_start": "ship_date.fiscal_year"
+          },
+          "end": "current"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "ship_date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "ship_date.fiscal_year",
+          "operator": "equals",
+          "values": [
+            "FY27"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "ship_date_fiscal_month": "2026-08",
+        "orders_net_revenue": 250,
+        "ytd": 250
+      },
+      {
+        "ship_date_fiscal_month": "2026-09",
+        "orders_net_revenue": 650,
+        "ytd": 900
+      }
+    ]
+  }
+}

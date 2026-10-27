@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <PackageReference Include="DuckDB.NET.Data" />
+    <PackageReference Include="JsonSchema.Net" />
+    <ProjectReference Include="..\..\src\DbDataKit.Semantic\DbDataKit.Semantic.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- the fixtures, catalog, seed data and the Ossie schema the conformance suite runs on -->
+    <None Include="conformance\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Import Project="..\..\build\DuckDb.Native.targets" />
+</Project>

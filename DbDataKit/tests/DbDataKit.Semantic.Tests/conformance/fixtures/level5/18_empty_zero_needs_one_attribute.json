@@ -1,0 +1,41 @@
+{
+  "name": "18_empty_zero_needs_one_attribute",
+  "level": 5,
+  "description": "Counting empty members as zero is defined over one dimension; a rollup of two is refused.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "measure": "orders.net_revenue",
+          "as": "avg_monthly_revenue",
+          "rollup": {
+            "products.product": "sum",
+            "date.fiscal_month": "avg"
+          },
+          "empty": "zero"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "empty_needs_one_attribute"
+    ]
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "name": "27_measures_with_different_default_roles_share_an_axis",
+  "level": 2,
+  "description": "Revenue is by the date ordered and shipped revenue by the date shipped, both against one bare date.fiscal_month: each measure reads its own role, and a warning says so.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "orders.shipped_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "warnings": [
+      "role_differs_by_measure"
+    ],
+    "rows": [
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "orders_shipped_revenue": null
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "orders_shipped_revenue": 250
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "orders_shipped_revenue": 650
+      }
+    ]
+  }
+}

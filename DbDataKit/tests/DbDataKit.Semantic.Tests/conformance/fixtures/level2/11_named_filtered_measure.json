@@ -1,0 +1,41 @@
+{
+  "name": "11_named_filtered_measure",
+  "level": 2,
+  "description": "A catalog measure can carry its own filters; it needs no alias and no request filter.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.completed_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "orders_completed_revenue": 300
+      },
+      {
+        "customers_region": "West",
+        "orders_completed_revenue": 420
+      }
+    ]
+  }
+}

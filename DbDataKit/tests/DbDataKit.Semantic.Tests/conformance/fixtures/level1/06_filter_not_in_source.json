@@ -1,0 +1,63 @@
+{
+  "name": "06_filter_not_in_source",
+  "level": 1,
+  "description": "A product filter can't reach budget. It's reported per result set and as a warning.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        },
+        {
+          "attribute": "products.category",
+          "operator": "equals",
+          "values": [
+            "Laptops"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "partial",
+    "warnings": [
+      "filter_not_applied"
+    ],
+    "result_sets": [
+      {
+        "id": "d1",
+        "covers": {
+          "filters_not_applied": []
+        }
+      },
+      {
+        "id": "d2",
+        "covers": {
+          "filters_applied": [
+            "date.fiscal_quarter equals FY27-Q1"
+          ],
+          "filters_not_applied": [
+            {
+              "filter": "products.category equals Laptops",
+              "reason": "not_in_source"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

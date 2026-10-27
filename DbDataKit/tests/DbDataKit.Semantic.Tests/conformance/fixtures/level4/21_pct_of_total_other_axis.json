@@ -1,0 +1,66 @@
+{
+  "name": "21_pct_of_total_other_axis",
+  "level": 4,
+  "description": "Over region instead: each region's share of its product's revenue (A: 400, B: 500).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "pct_of_product",
+          "transform": "pct_of_total",
+          "measure": "orders.net_revenue",
+          "over": [
+            "customers.region"
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "orders_net_revenue": 100,
+        "pct_of_product": 0.25
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "orders_net_revenue": 300,
+        "pct_of_product": 0.6
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "orders_net_revenue": 300,
+        "pct_of_product": 0.75
+      },
+      {
+        "customers_region": "West",
+        "products_product": "B",
+        "orders_net_revenue": 200,
+        "pct_of_product": 0.4
+      }
+    ]
+  }
+}

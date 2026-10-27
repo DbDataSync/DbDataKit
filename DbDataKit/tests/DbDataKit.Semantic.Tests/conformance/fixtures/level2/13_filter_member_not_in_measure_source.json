@@ -1,0 +1,45 @@
+{
+  "name": "13_filter_member_not_in_measure_source",
+  "level": 2,
+  "description": "Budget comes from SSAS, which has no order status, so it can't be filtered by it.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "measure": "budget.budget_amount",
+          "as": "completed_budget",
+          "filters": [
+            {
+              "attribute": "orders.status",
+              "operator": "equals",
+              "values": [
+                "Completed"
+              ]
+            }
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "filter_member_not_in_source"
+    ]
+  }
+}

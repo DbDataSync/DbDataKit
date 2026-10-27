@@ -1,0 +1,47 @@
+{
+  "name": "36_prior_period_by_quarter",
+  "level": 4,
+  "description": "At quarter level the whole of FY26-Q1 is the prior: 390 + 160 + 150 = 700.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "rev_yoy",
+          "transform": "prior_period",
+          "measure": "orders.net_revenue",
+          "output": "pct_change",
+          "period": {
+            "unit": "fiscal_year",
+            "offset": -1
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_quarter"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "rows": [
+      {
+        "date_fiscal_quarter": "FY27-Q1",
+        "orders_net_revenue": 900,
+        "rev_yoy": 0.2857142857142857
+      }
+    ]
+  }
+}

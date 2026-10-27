@@ -1,0 +1,47 @@
+{
+  "name": "21_attribute_a_fact_table_cannot_reach",
+  "level": 2,
+  "description": "Returns have no order status. Grouped by status they can't be broken down, so (blank by default) they have no values, and the result says so.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "returns.return_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "orders.status"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "warnings": [
+      "spread_blank"
+    ],
+    "rows": [
+      {
+        "orders_status": "Cancelled",
+        "orders_net_revenue": 180,
+        "returns_return_amount": null
+      },
+      {
+        "orders_status": "Completed",
+        "orders_net_revenue": 720,
+        "returns_return_amount": null
+      }
+    ]
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "name": "58_window_counts_months_outside_the_filter",
+  "level": 4,
+  "description": "A filter on the calendar picks the months shown, not the months counted: asking for September alone still gives the year to date through September (900).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "ytd",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "start": {
+            "period_start": "date.fiscal_year"
+          },
+          "end": "current"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_month",
+          "operator": "equals",
+          "values": [
+            "2026-09"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "ytd": 900
+      }
+    ]
+  }
+}

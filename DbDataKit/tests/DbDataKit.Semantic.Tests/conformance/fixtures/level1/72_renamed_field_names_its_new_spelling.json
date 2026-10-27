@@ -1,0 +1,29 @@
+{
+  "name": "72_renamed_field_names_its_new_spelling",
+  "level": 1,
+  "description": "A field that used to carry the prefix (x_totals) is refused with the name it has now (totals).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "x_totals": {
+        "rollup": [
+          "customers.region"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "extension_misplaced"
+    ]
+  }
+}

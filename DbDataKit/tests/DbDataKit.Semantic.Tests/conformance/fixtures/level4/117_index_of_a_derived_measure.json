@@ -1,0 +1,32 @@
+{
+  "name": "117_index_of_a_derived_measure",
+  "level": 4,
+  "description": "A ratio has no source column to scan for its base, as for a window.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.avg_order_value",
+        {
+          "as": "growth",
+          "transform": "index",
+          "measure": "orders.avg_order_value",
+          "along": "date.fiscal_month",
+          "base": "2026-07"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "transform_not_allowed"
+    ]
+  }
+}

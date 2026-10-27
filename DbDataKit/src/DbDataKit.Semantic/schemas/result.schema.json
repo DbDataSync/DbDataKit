@@ -1,0 +1,418 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.internal/qis/result.schema.json",
+  "title": "Result",
+  "description": "The same response shape at every adoption level. Partial results list the logical plan steps the engine did not execute.",
+  "type": "object",
+  "required": [
+    "kind",
+    "status",
+    "engine_level"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "const": "result"
+    },
+    "status": {
+      "enum": [
+        "complete",
+        "partial",
+        "failed"
+      ]
+    },
+    "request_hash": {
+      "type": "string"
+    },
+    "engine_level": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5
+    },
+    "result_sets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/result_set"
+      }
+    },
+    "combined": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/result_set"
+        }
+      ]
+    },
+    "remaining": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    },
+    "reason_code": {
+      "type": "string"
+    },
+    "resolved": {
+      "description": "Each relative period operator the engine turned into members or dates for this run (path of the filter, its attribute and operator), and the clock date it used, so the run can be repeated.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "today",
+          "start",
+          "end"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "today": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          },
+          "attribute": {
+            "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "operator": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ]
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/error"
+      }
+    }
+  },
+  "$defs": {
+    "result_set": {
+      "type": "object",
+      "required": [
+        "id",
+        "grain",
+        "descriptor",
+        "rows"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "grain": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "covers": {
+          "type": "object",
+          "properties": {
+            "measures": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "filters_applied": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "filters_not_applied": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "filter",
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "descriptor": {
+          "$ref": "descriptor.schema.json"
+        },
+        "native_query": {
+          "type": "object",
+          "required": [
+            "dialect",
+            "text"
+          ],
+          "properties": {
+            "dialect": {
+              "enum": [
+                "tsql",
+                "dax",
+                "duckdb"
+              ]
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "step": {
+      "type": "object",
+      "required": [
+        "step",
+        "op"
+      ],
+      "properties": {
+        "step": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "op": {
+          "enum": [
+            "rollup",
+            "spread",
+            "union",
+            "totals",
+            "compute",
+            "measure_expression",
+            "finalize",
+            "combine"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "spread"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "input",
+              "to",
+              "spread"
+            ],
+            "properties": {
+              "input": {
+                "type": "string"
+              },
+              "to": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "spread": {
+                "type": "object",
+                "additionalProperties": {
+                  "enum": [
+                    "repeat",
+                    "blank",
+                    "allocate"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "rollup"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "input",
+              "to"
+            ],
+            "properties": {
+              "input": {
+                "type": "string"
+              },
+              "to": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "union"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "inputs"
+            ],
+            "properties": {
+              "inputs": {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "totals"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "subtotal_by"
+            ],
+            "properties": {
+              "subtotal_by": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "grand_total": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "measure_expression"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "entry",
+              "reason"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "combine"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "inputs"
+            ],
+            "properties": {
+              "inputs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "finalize"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "order": {
+                "type": "array"
+              },
+              "limit": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "spec",
+        "code",
+        "path",
+        "message"
+      ],
+      "properties": {
+        "spec": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "suggestions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

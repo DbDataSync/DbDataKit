@@ -1,0 +1,34 @@
+{
+  "name": "30_date_operator_on_string",
+  "level": 1,
+  "description": "between is for members that sort (numbers, dates, datetimes, periods), not free text.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "customers.region",
+          "operator": "between",
+          "values": [
+            "2026-07-01",
+            "2026-09-01"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "invalid_operator"
+    ]
+  }
+}

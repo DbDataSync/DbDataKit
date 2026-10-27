@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.internal/qis/value_map.schema.json",
+  "title": "Value map",
+  "description": "Translates a column's values onto the canonical members of a catalog dimension.",
+  "type": "object",
+  "required": [
+    "kind",
+    "id",
+    "table",
+    "field",
+    "target",
+    "mode"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "spec_version": {
+      "const": "0.3"
+    },
+    "kind": {
+      "const": "value_map"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "table": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*(@v[0-9]+)?$"
+    },
+    "field": {
+      "type": "string"
+    },
+    "target": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+    },
+    "mode": {
+      "enum": [
+        "catalog",
+        "fuzzy",
+        "llm"
+      ]
+    },
+    "scope": {
+      "enum": [
+        "session",
+        "personal",
+        "shared",
+        "governed"
+      ]
+    },
+    "threshold": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "on_unmatched": {
+      "enum": [
+        "keep",
+        "drop",
+        "fail"
+      ]
+    },
+    "pairs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "enum": [
+              "catalog",
+              "llm"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "pairs"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "fuzzy"
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "pairs"
+          ]
+        }
+      }
+    }
+  ]
+}

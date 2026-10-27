@@ -1,0 +1,60 @@
+{
+  "name": "29_per_entity_total_is_not_average_of_averages",
+  "level": 4,
+  "description": "The grand total is the average over all three customers (300), not the average of the two region averages (325): totals repeat the per-customer scan at the coarser grain.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "as": "avg_rev_per_customer",
+          "transform": "per_entity",
+          "measure": "orders.net_revenue",
+          "entity": "customers.customer",
+          "agg": "avg"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "_rollup_level": 0,
+        "avg_rev_per_customer": 400
+      },
+      {
+        "customers_region": "West",
+        "_rollup_level": 0,
+        "avg_rev_per_customer": 250
+      },
+      {
+        "customers_region": null,
+        "_rollup_level": 1,
+        "avg_rev_per_customer": 300
+      }
+    ]
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "name": "118_index_cannot_be_accumulated",
+  "level": 4,
+  "description": "An index is a ratio to one value and doesn't add up, so a running total of it is refused.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "growth",
+          "transform": "index",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "base": "2026-07"
+        },
+        {
+          "as": "cum",
+          "transform": "running_total",
+          "measure": "growth",
+          "along": "date.fiscal_month"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "transform_not_allowed"
+    ]
+  }
+}

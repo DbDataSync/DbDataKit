@@ -1,0 +1,64 @@
+{
+  "name": "15_allocate_missing_weights_blank",
+  "level": 4,
+  "description": "With fallback blank the same query leaves East's budget empty and still answers for West.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "measure": "budget.budget_amount",
+          "spread": {
+            "allocate": {
+              "by": "measure",
+              "measure": "orders.net_revenue",
+              "fallback": "blank"
+            }
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        },
+        {
+          "attribute": "products.product",
+          "operator": "equals",
+          "values": [
+            "A"
+          ]
+        },
+        {
+          "attribute": "orders.status",
+          "operator": "equals",
+          "values": [
+            "Cancelled"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "orders_net_revenue": 80,
+        "budget_budget_amount": 600
+      }
+    ]
+  }
+}

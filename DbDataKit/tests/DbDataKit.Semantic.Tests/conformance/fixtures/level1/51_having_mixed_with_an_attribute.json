@@ -1,0 +1,51 @@
+{
+  "name": "51_having_mixed_with_an_attribute",
+  "level": 1,
+  "description": "One entry can't test a measure and a dimension: they apply at different points.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        },
+        {
+          "or": [
+            {
+              "measure": "orders.net_revenue",
+              "operator": "gt",
+              "values": [
+                450
+              ]
+            },
+            {
+              "attribute": "customers.region",
+              "operator": "equals",
+              "values": [
+                "East"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "filter_mixes_kinds"
+    ]
+  }
+}

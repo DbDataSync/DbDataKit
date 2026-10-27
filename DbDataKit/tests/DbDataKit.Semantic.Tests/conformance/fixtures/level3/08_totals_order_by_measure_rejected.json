@@ -1,0 +1,44 @@
+{
+  "name": "08_totals_order_by_measure_rejected",
+  "level": 3,
+  "description": "Total rows follow their detail rows, so order can only name dimensions.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "order": [
+        [
+          "orders.net_revenue",
+          "desc"
+        ]
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "totals_order_not_attribute"
+    ]
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "name": "37_prior_period_with_totals",
+  "level": 4,
+  "description": "The earlier value is summed like any other measure, so total rows have one too: the grand total compares 900 with 700.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "rev_yoy",
+          "transform": "prior_period",
+          "measure": "orders.net_revenue",
+          "output": "pct_change",
+          "period": {
+            "unit": "fiscal_year",
+            "offset": -1
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "date.fiscal_quarter"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "date_fiscal_quarter": "FY27-Q1",
+        "_rollup_level": 0,
+        "orders_net_revenue": 400,
+        "rev_yoy": 0.3333333333333333
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_quarter": "FY27-Q1",
+        "_rollup_level": 0,
+        "orders_net_revenue": 500,
+        "rev_yoy": 0.25
+      },
+      {
+        "customers_region": null,
+        "date_fiscal_quarter": "FY27-Q1",
+        "_rollup_level": 1,
+        "orders_net_revenue": 900,
+        "rev_yoy": 0.2857142857142857
+      }
+    ]
+  }
+}

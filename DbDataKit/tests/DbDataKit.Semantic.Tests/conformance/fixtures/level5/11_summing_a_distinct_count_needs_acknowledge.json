@@ -1,0 +1,39 @@
+{
+  "name": "11_summing_a_distinct_count_needs_acknowledge",
+  "level": 5,
+  "description": "The catalog says a distinct count can't be added across months. Doing it anyway has to be said.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "measure": "orders.order_count",
+          "as": "orders_summed",
+          "rollup": {
+            "date.fiscal_month": "sum"
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "acknowledge_required"
+    ]
+  }
+}

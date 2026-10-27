@@ -1,0 +1,55 @@
+{
+  "name": "25_gt_a_date",
+  "level": 1,
+  "description": "gt on a date is strictly later, so a filter on 2026-08-01 leaves September.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.calendar_date"
+      ],
+      "filters": [
+        {
+          "attribute": "date.calendar_date",
+          "operator": "gt",
+          "values": [
+            "2026-08-01"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "result_sets": [
+      {
+        "id": "d1",
+        "source": "sqlserver_sales",
+        "grain": [
+          "date.calendar_date"
+        ],
+        "covers": {
+          "measures": [
+            "orders.net_revenue"
+          ],
+          "filters_applied": [
+            "date.calendar_date gt 2026-08-01"
+          ],
+          "filters_not_applied": []
+        }
+      }
+    ],
+    "remaining": [],
+    "rows": [
+      {
+        "date_calendar_date": "2026-09-01",
+        "orders_net_revenue": 260
+      }
+    ]
+  }
+}

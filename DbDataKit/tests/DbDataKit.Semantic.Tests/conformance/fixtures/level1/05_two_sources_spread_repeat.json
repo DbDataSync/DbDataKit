@@ -1,0 +1,111 @@
+{
+  "name": "05_two_sources_spread_repeat",
+  "level": 1,
+  "description": "Budget has no product dimension. A spread (repeat) and a union remain.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "partial",
+    "result_sets": [
+      {
+        "id": "d1",
+        "grain": [
+          "customers.region",
+          "products.product"
+        ]
+      },
+      {
+        "id": "d2",
+        "grain": [
+          "customers.region"
+        ]
+      }
+    ],
+    "remaining": [
+      {
+        "step": 1,
+        "op": "spread",
+        "input": "d2",
+        "to": [
+          "customers.region",
+          "products.product"
+        ],
+        "spread": {
+          "budget.budget_amount": "repeat"
+        }
+      },
+      {
+        "step": 2,
+        "op": "union",
+        "inputs": [
+          "d1",
+          "step:1"
+        ]
+      },
+      {
+        "step": 3,
+        "op": "finalize"
+      }
+    ]
+  },
+  "then_complete": {
+    "completes": [
+      1,
+      2,
+      3
+    ],
+    "sql": "SELECT d1.customers_region, d1.products_product, d1.orders_net_revenue, d2.budget_budget_amount\nFROM d1 LEFT JOIN d2 ON d2.customers_region = d1.customers_region\nORDER BY 1, 2"
+  },
+  "expect_after_completion": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "orders_net_revenue": 100,
+        "budget_budget_amount": 500
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "orders_net_revenue": 300,
+        "budget_budget_amount": 500
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "orders_net_revenue": 300,
+        "budget_budget_amount": 600
+      },
+      {
+        "customers_region": "West",
+        "products_product": "B",
+        "orders_net_revenue": 200,
+        "budget_budget_amount": 600
+      }
+    ]
+  }
+}

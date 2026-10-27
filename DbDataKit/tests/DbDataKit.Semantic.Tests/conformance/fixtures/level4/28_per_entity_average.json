@@ -1,0 +1,47 @@
+{
+  "name": "28_per_entity_average",
+  "level": 4,
+  "description": "Average revenue per customer by region: revenue per customer first (C1 230, C2 270, C3 400), then averaged per region.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "as": "avg_rev_per_customer",
+          "transform": "per_entity",
+          "measure": "orders.net_revenue",
+          "entity": "customers.customer",
+          "agg": "avg"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "avg_rev_per_customer": 400
+      },
+      {
+        "customers_region": "West",
+        "avg_rev_per_customer": 250
+      }
+    ]
+  }
+}

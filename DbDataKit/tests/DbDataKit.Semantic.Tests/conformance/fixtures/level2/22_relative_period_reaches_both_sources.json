@@ -1,0 +1,43 @@
+{
+  "name": "22_relative_period_reaches_both_sources",
+  "level": 2,
+  "description": "A whole-period operator filters on the fiscal month, which the budget source has too, so it applies to both. A between on dates would only reach the sales source.",
+  "today": "2026-09-15",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_month",
+          "operator": "last_complete",
+          "count": 2
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "budget_budget_amount": 350
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "budget_budget_amount": 350
+      }
+    ]
+  }
+}

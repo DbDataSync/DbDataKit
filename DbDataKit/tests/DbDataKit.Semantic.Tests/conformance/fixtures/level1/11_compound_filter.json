@@ -1,0 +1,71 @@
+{
+  "name": "11_compound_filter",
+  "level": 1,
+  "description": "An OR across two columns: SQL uses OR, DAX filters a CROSSJOIN of both columns.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        },
+        {
+          "or": [
+            {
+              "attribute": "customers.region",
+              "operator": "equals",
+              "values": [
+                "East"
+              ]
+            },
+            {
+              "attribute": "products.product",
+              "operator": "equals",
+              "values": [
+                "A"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "orders_net_revenue": 100
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "orders_net_revenue": 300
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "orders_net_revenue": 300
+      }
+    ],
+    "native_query_contains": {
+      "d1": [
+        "(c.region = @p2 OR p.product = @p3)"
+      ]
+    }
+  }
+}

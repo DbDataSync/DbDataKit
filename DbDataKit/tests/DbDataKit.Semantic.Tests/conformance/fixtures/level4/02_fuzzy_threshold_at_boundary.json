@@ -1,0 +1,60 @@
+{
+  "name": "02_fuzzy_threshold_at_boundary",
+  "level": 4,
+  "description": "'Wesst' scores 0.9533 against 'West': a threshold of 0.9533 accepts it.",
+  "setup": [
+    {
+      "spec_version": "0.3",
+      "kind": "table",
+      "name": "adhoc.user_territories",
+      "descriptor": {
+        "descriptor_version": "1.0",
+        "name": "user_territories",
+        "schema": {
+          "fields": [
+            {
+              "name": "territory",
+              "type": "string"
+            },
+            {
+              "name": "region_label",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "rows": [
+        {
+          "territory": "Pacific",
+          "region_label": "Wesst"
+        }
+      ]
+    }
+  ],
+  "request": {
+    "spec_version": "0.3",
+    "kind": "value_map",
+    "id": "terr_region",
+    "table": "adhoc.user_territories@v1",
+    "field": "region_label",
+    "target": "customers.region",
+    "mode": "fuzzy",
+    "threshold": 0.9533
+  },
+  "expect": {
+    "status": "complete",
+    "result_sets": [
+      {
+        "id": "map_terr_region",
+        "rows": [
+          {
+            "from": "Wesst",
+            "to": "West",
+            "confidence": 0.9533,
+            "method": "fuzzy"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "name": "57_window_year_to_date_distinct_count",
+  "level": 4,
+  "description": "Customers who ordered in the month, and in the year so far: 2, then 3, then 3. A customer who ordered in two months counts once, which adding the months (2, 4, 7) would get wrong.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.customer_count",
+        {
+          "as": "customers_ytd",
+          "transform": "window",
+          "measure": "orders.customer_count",
+          "along": "date.fiscal_month",
+          "start": {
+            "period_start": "date.fiscal_year"
+          },
+          "end": "current"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_year",
+          "operator": "equals",
+          "values": [
+            "FY27"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_customer_count": 2,
+        "customers_ytd": 2
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_customer_count": 2,
+        "customers_ytd": 3
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_customer_count": 3,
+        "customers_ytd": 3
+      }
+    ]
+  }
+}

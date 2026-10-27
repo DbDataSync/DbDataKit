@@ -1,0 +1,49 @@
+{
+  "name": "20_fuzzy_map_needs_level_4",
+  "level": 3,
+  "description": "Fuzzy and llm maps belong to level 4; at level 3 only reviewed catalog maps run.",
+  "setup": [
+    {
+      "spec_version": "0.3",
+      "kind": "table",
+      "name": "adhoc.user_territories",
+      "descriptor": {
+        "descriptor_version": "1.0",
+        "name": "user_territories",
+        "schema": {
+          "fields": [
+            {
+              "name": "territory",
+              "type": "string"
+            },
+            {
+              "name": "region_label",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "rows": [
+        {
+          "territory": "Pacific",
+          "region_label": "west"
+        }
+      ]
+    }
+  ],
+  "request": {
+    "spec_version": "0.3",
+    "kind": "value_map",
+    "id": "terr_region",
+    "table": "adhoc.user_territories@v1",
+    "field": "region_label",
+    "target": "customers.region",
+    "mode": "fuzzy"
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "level_not_implemented"
+    ]
+  }
+}

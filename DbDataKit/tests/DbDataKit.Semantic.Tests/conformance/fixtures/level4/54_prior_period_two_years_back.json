@@ -1,0 +1,58 @@
+{
+  "name": "54_prior_period_two_years_back",
+  "level": 4,
+  "description": "Two years back is the counterpart of the counterpart: 2026-07 to 2025-07 to 2024-07. The sample has no sales that early, so the earlier value is blank, and the current months still show.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "two_back",
+          "transform": "prior_period",
+          "measure": "orders.net_revenue",
+          "output": "value",
+          "period": {
+            "unit": "fiscal_year",
+            "offset": -2
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "two_back": null
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "two_back": null
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "two_back": null
+      }
+    ]
+  }
+}

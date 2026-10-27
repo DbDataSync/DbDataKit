@@ -1,0 +1,59 @@
+{
+  "name": "24_share_of_parent",
+  "level": 4,
+  "description": "A month's share of its quarter, using the hierarchy the catalog declares (quarter above month).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "month_share",
+          "transform": "share_of_parent",
+          "measure": "orders.net_revenue",
+          "attribute": "date.fiscal_month",
+          "parent": "date.fiscal_quarter"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_quarter",
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_quarter": "FY27-Q1",
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "month_share": 0.2777777777777778
+      },
+      {
+        "date_fiscal_quarter": "FY27-Q1",
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "month_share": 0.43333333333333335
+      },
+      {
+        "date_fiscal_quarter": "FY27-Q1",
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "month_share": 0.28888888888888886
+      }
+    ]
+  }
+}

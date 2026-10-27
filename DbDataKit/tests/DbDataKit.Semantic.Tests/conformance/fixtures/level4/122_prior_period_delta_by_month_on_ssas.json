@@ -1,0 +1,58 @@
+{
+  "name": "122_prior_period_delta_by_month_on_ssas",
+  "level": 4,
+  "description": "Budget by month against the same month a year earlier, as the change: 350-220, 350-230, 400-270.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "limit": 100,
+      "measures": [
+        "budget.budget_amount",
+        {
+          "as": "chg",
+          "transform": "prior_period",
+          "measure": "budget.budget_amount",
+          "output": "delta",
+          "period": {
+            "unit": "fiscal_year",
+            "offset": -1
+          }
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2026-07",
+        "budget_budget_amount": 350.0,
+        "chg": 130.0
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "budget_budget_amount": 350.0,
+        "chg": 120.0
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "budget_budget_amount": 400.0,
+        "chg": 130.0
+      }
+    ]
+  }
+}

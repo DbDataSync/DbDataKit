@@ -1,0 +1,41 @@
+{
+  "name": "25_measure_default_role",
+  "level": 2,
+  "description": "Shipped revenue says its dates are the dates it shipped (roles: {date: ship_date}), so the bare date.fiscal_month and the quarter filter are read in the ship role: two ship months, 250 and 650.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.shipped_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_shipped_revenue": 250
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_shipped_revenue": 650
+      }
+    ]
+  }
+}

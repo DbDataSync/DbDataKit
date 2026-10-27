@@ -1,0 +1,39 @@
+{
+  "name": "22_unknown_segment",
+  "level": 1,
+  "description": "A segment that isn't in the catalog is rejected, with the ones that are.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "segments": [
+        "orders.complete"
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "unknown_segment"
+    ],
+    "error_suggestions_include": {
+      "0": "orders.completed"
+    }
+  }
+}

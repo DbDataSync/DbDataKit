@@ -1,0 +1,63 @@
+{
+  "name": "67_window_distinct_customers",
+  "level": 4,
+  "description": "Customers who ordered in the month, and in it and the two months before it: 2, 3, 3, 3, 3, 3. Adding the monthly counts would give 2, 3, 4, 4, 5, 6 and count a customer who ordered in several months more than once.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.customer_count",
+        {
+          "as": "customers_r3",
+          "transform": "window",
+          "measure": "orders.customer_count",
+          "along": "date.fiscal_month",
+          "start": -2,
+          "end": "current"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2025-07",
+        "orders_customer_count": 2,
+        "customers_r3": 2
+      },
+      {
+        "date_fiscal_month": "2025-08",
+        "orders_customer_count": 1,
+        "customers_r3": 3
+      },
+      {
+        "date_fiscal_month": "2025-09",
+        "orders_customer_count": 1,
+        "customers_r3": 3
+      },
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_customer_count": 2,
+        "customers_r3": 3
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_customer_count": 2,
+        "customers_r3": 3
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_customer_count": 3,
+        "customers_r3": 3
+      }
+    ]
+  }
+}

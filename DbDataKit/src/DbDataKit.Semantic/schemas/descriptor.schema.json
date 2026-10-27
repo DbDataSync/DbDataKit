@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.internal/qis/descriptor.schema.json",
+  "title": "Table descriptor",
+  "description": "A Frictionless Table Schema extended with x_ fields. Every table passed between specs carries one.",
+  "type": "object",
+  "required": [
+    "descriptor_version",
+    "name",
+    "schema"
+  ],
+  "properties": {
+    "descriptor_version": {
+      "const": "1.0"
+    },
+    "name": {
+      "type": "string"
+    },
+    "schema": {
+      "type": "object",
+      "required": [
+        "fields"
+      ],
+      "properties": {
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        },
+        "primaryKey": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "x_grain": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "x_row_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "x_truncated": {
+      "type": "boolean"
+    },
+    "x_totals": {
+      "type": "object",
+      "description": "Present when the rows include subtotals. One column, level_field, holds each row's rollup level; levels says what each level means.",
+      "required": [
+        "level_field",
+        "subtotal_by",
+        "levels"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "level_field": {
+          "type": "string"
+        },
+        "subtotal_by": {
+          "description": "The dimensions the request listed, outermost first. Level k has rolled up the k innermost.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "level",
+              "kind",
+              "kept",
+              "rolled_up"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "level": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "kind": {
+                "enum": [
+                  "detail",
+                  "subtotal",
+                  "grand_total"
+                ]
+              },
+              "kept": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "rolled_up": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "x_provenance": {
+      "type": "object",
+      "required": [
+        "spec",
+        "spec_version"
+      ],
+      "properties": {
+        "spec": {
+          "enum": [
+            "native_query",
+            "mashup",
+            "extraction",
+            "mapping"
+          ]
+        },
+        "spec_version": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "agent_native",
+            "agent_completion",
+            "engine"
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "field": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean",
+            "date",
+            "datetime"
+          ]
+        },
+        "x_kind": {
+          "enum": [
+            "attribute",
+            "measure",
+            "column"
+          ]
+        },
+        "x_binding": {
+          "type": "string"
+        },
+        "x_additivity": {
+          "description": "Derived from the rollup rules: additive (every rule is sum), semi_additive, or non_additive (a distinct count, a ratio).",
+          "enum": [
+            "additive",
+            "semi_additive",
+            "non_additive"
+          ]
+        },
+        "x_format": {
+          "type": "object",
+          "description": "The measure's display format from the catalog: style (number, currency, percent), currency, decimals.",
+          "properties": {
+            "style": {"enum": ["number", "currency", "percent"]},
+            "currency": {"type": "string"},
+            "decimals": {"type": "integer"}
+          }
+        },
+        "x_decimal": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "x_semantics": {
+          "type": "object",
+          "properties": {
+            "grain": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rollup": {
+              "type": "object",
+              "additionalProperties": {
+                "enum": [
+                  "sum",
+                  "avg",
+                  "min",
+                  "max",
+                  "first",
+                  "last",
+                  "none"
+                ]
+              }
+            },
+            "spread": {
+              "oneOf": [
+                {
+                  "enum": [
+                    "repeat",
+                    "blank"
+                  ]
+                },
+                {
+                  "type": "object"
+                }
+              ]
+            },
+            "status": {
+              "enum": [
+                "governed",
+                "inferred"
+              ]
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "x_kind": {
+                "const": "measure"
+              }
+            },
+            "required": [
+              "x_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "integer",
+                  "number"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

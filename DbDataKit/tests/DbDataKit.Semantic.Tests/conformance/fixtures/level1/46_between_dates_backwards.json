@@ -1,0 +1,32 @@
+{
+  "name": "46_between_dates_backwards",
+  "level": 1,
+  "description": "between ends before it starts.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [],
+      "filters": [
+        {
+          "attribute": "date.calendar_date",
+          "operator": "between",
+          "values": [
+            "2026-09-01",
+            "2026-07-01"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "between_invalid"
+    ]
+  }
+}

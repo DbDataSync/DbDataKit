@@ -1,0 +1,25 @@
+{
+  "name": "61_unknown_timezone",
+  "level": 1,
+  "description": "A zone that isn't an IANA name is rejected, with the way to write one.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "timezone": "Central Time",
+      "attributes": [
+        "orders.ordered_at_month"
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "unknown_timezone"
+    ]
+  }
+}

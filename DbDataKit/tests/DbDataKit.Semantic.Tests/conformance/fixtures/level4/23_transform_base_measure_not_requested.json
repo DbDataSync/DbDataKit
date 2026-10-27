@@ -1,0 +1,61 @@
+{
+  "name": "23_transform_base_measure_not_requested",
+  "level": 4,
+  "description": "A transform's base measure is computed even if it isn't asked for on its own; only what was asked for is returned.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "as": "pct_of_region",
+          "transform": "pct_of_total",
+          "measure": "orders.net_revenue",
+          "over": [
+            "products.product"
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "pct_of_region": 0.25
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "pct_of_region": 0.75
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "pct_of_region": 0.6
+      },
+      {
+        "customers_region": "West",
+        "products_product": "B",
+        "pct_of_region": 0.4
+      }
+    ]
+  }
+}

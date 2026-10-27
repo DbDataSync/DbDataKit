@@ -1,0 +1,65 @@
+{
+  "name": "107_index_group_without_a_base_is_blank",
+  "level": 4,
+  "description": "Indexed to 2025-09: East bought in that month (150), so its months are indexed (2025-07 is 150 / 150 = 100). West has no sales in 2025-09, so West has no base and its index is blank, never zero or infinity.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "growth",
+          "transform": "index",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "base": "2025-09"
+        }
+      ],
+      "attributes": [
+        "customers.region",
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": [
+        {
+          "attribute": "date.fiscal_year",
+          "operator": "equals",
+          "values": [
+            "FY26"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2025-07",
+        "orders_net_revenue": 150,
+        "growth": 100.0
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2025-09",
+        "orders_net_revenue": 150,
+        "growth": 100.0
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2025-07",
+        "orders_net_revenue": 240,
+        "growth": null
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2025-08",
+        "orders_net_revenue": 160,
+        "growth": null
+      }
+    ]
+  }
+}

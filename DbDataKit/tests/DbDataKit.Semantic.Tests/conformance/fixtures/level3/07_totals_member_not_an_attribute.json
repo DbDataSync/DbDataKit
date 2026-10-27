@@ -1,0 +1,38 @@
+{
+  "name": "07_totals_member_not_an_attribute",
+  "level": 3,
+  "description": "A rolled-up dimension that isn't in the query is rejected.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "products.product"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "totals_member_missing"
+    ]
+  }
+}

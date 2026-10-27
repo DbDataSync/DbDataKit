@@ -1,0 +1,118 @@
+{
+  "name": "06_llm_pairs_end_to_end",
+  "level": 4,
+  "description": "Explicit llm pairs carry their confidence as data; the query rolls up through them like any other map.",
+  "setup": [
+    {
+      "spec_version": "0.3",
+      "kind": "table",
+      "name": "adhoc.user_territories",
+      "descriptor": {
+        "descriptor_version": "1.0",
+        "name": "user_territories",
+        "schema": {
+          "fields": [
+            {
+              "name": "territory",
+              "type": "string"
+            },
+            {
+              "name": "region_label",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "rows": [
+        {
+          "territory": "Pacific",
+          "region_label": "WST-01"
+        },
+        {
+          "territory": "Atlantic",
+          "region_label": "EST-01"
+        }
+      ]
+    },
+    {
+      "spec_version": "0.3",
+      "kind": "value_map",
+      "id": "terr_region",
+      "table": "adhoc.user_territories@v1",
+      "field": "region_label",
+      "target": "customers.region",
+      "mode": "llm",
+      "pairs": [
+        {
+          "from": "WST-01",
+          "to": "West",
+          "confidence": 0.9
+        },
+        {
+          "from": "EST-01",
+          "to": "East",
+          "confidence": 0.8
+        }
+      ]
+    },
+    {
+      "spec_version": "0.3",
+      "kind": "bindings",
+      "table": "adhoc.user_territories@v1",
+      "bindings": [
+        {
+          "field": "territory",
+          "role": "attribute",
+          "as": "user_territories.territory"
+        },
+        {
+          "field": "region_label",
+          "role": "attribute",
+          "binds_to": "customers.region",
+          "via_map": "terr_region"
+        }
+      ],
+      "grain": [
+        "user_territories.territory",
+        "customers.region"
+      ],
+      "confirmed_by": "user"
+    }
+  ],
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "user_territories.territory"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "user_territories_territory": "Atlantic",
+        "orders_net_revenue": 400
+      },
+      {
+        "user_territories_territory": "Pacific",
+        "orders_net_revenue": 500
+      }
+    ]
+  }
+}

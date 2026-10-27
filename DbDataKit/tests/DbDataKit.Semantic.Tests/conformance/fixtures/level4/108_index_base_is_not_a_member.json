@@ -1,0 +1,35 @@
+{
+  "name": "108_index_base_is_not_a_member",
+  "level": 4,
+  "description": "2030-01 isn't a month of the date table, so the index can't be read; the closest months are suggested.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "growth",
+          "transform": "index",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "base": "2026-7"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "index_base_unknown"
+    ],
+    "error_suggestions_include": {
+      "0": "2026-07"
+    }
+  }
+}

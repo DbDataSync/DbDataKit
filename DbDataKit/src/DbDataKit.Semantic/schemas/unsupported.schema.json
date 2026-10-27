@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.internal/qis/unsupported.schema.json",
+  "title": "Unsupported",
+  "description": "The agent says the question needs something the format can't express yet. Counts by reason code are the roadmap.",
+  "type": "object",
+  "required": [
+    "spec_version",
+    "kind",
+    "unsupported"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "spec_version": {
+      "const": "0.3"
+    },
+    "kind": {
+      "const": "unsupported"
+    },
+    "unsupported": {
+      "type": "object",
+      "required": [
+        "reason_code",
+        "detail"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "reason_code": {
+          "enum": [
+            "set_filter",
+            "cohort",
+            "funnel",
+            "nested_transform",
+            "custom_expression",
+            "unknown_concept",
+            "out_of_domain"
+          ]
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

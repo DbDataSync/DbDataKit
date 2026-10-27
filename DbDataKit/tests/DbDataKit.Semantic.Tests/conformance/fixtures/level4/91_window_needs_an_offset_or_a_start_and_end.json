@@ -1,0 +1,32 @@
+{
+  "name": "91_window_needs_an_offset_or_a_start_and_end",
+  "level": 4,
+  "description": "A window with a start and no end, and no offset, doesn't say where it ends.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "x",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "start": -2
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "window_frame_invalid"
+    ]
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "name": "08_catalog_map_replaces_fuzzy",
+  "level": 4,
+  "description": "A reviewed catalog map for the same column and target replaces the fuzzy map. The fuzzy map would send 'Wst' to West and leave 'EST-01' unmatched; the reviewed pairs swap them, so Pacific is East and Atlantic is West.",
+  "setup": [
+    {
+      "spec_version": "0.3",
+      "kind": "table",
+      "name": "adhoc.user_territories",
+      "descriptor": {
+        "descriptor_version": "1.0",
+        "name": "user_territories",
+        "schema": {
+          "fields": [
+            {
+              "name": "territory",
+              "type": "string"
+            },
+            {
+              "name": "region_label",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "rows": [
+        {
+          "territory": "Pacific",
+          "region_label": "Wst"
+        },
+        {
+          "territory": "Atlantic",
+          "region_label": "EST-01"
+        }
+      ]
+    },
+    {
+      "spec_version": "0.3",
+      "kind": "value_map",
+      "id": "terr_region",
+      "table": "adhoc.user_territories@v1",
+      "field": "region_label",
+      "target": "customers.region",
+      "mode": "fuzzy"
+    },
+    {
+      "spec_version": "0.3",
+      "kind": "value_map",
+      "id": "terr_reviewed",
+      "table": "adhoc.user_territories@v1",
+      "field": "region_label",
+      "target": "customers.region",
+      "mode": "catalog",
+      "pairs": [
+        {
+          "from": "Wst",
+          "to": "East"
+        },
+        {
+          "from": "EST-01",
+          "to": "West"
+        }
+      ],
+      "scope": "shared"
+    },
+    {
+      "spec_version": "0.3",
+      "kind": "bindings",
+      "table": "adhoc.user_territories@v1",
+      "bindings": [
+        {
+          "field": "territory",
+          "role": "attribute",
+          "as": "user_territories.territory"
+        },
+        {
+          "field": "region_label",
+          "role": "attribute",
+          "binds_to": "customers.region",
+          "via_map": "terr_region"
+        }
+      ],
+      "grain": [
+        "user_territories.territory",
+        "customers.region"
+      ],
+      "confirmed_by": "user"
+    }
+  ],
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "user_territories.territory"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "user_territories_territory": "Atlantic",
+        "orders_net_revenue": 500
+      },
+      {
+        "user_territories_territory": "Pacific",
+        "orders_net_revenue": 400
+      }
+    ]
+  }
+}
