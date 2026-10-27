@@ -7,6 +7,9 @@
     <PackageReference Include="Npgsql" />
     <ProjectReference Include="..\..\src\DbDataKit.Semantic\DbDataKit.Semantic.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.Semantic.Connections\DbDataKit.Semantic.Connections.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Semantic.Extraction\DbDataKit.Semantic.Extraction.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Semantic.Ssas\DbDataKit.Semantic.Ssas.csproj" />
+    <PackageReference Include="ClosedXML" />
     <ProjectReference Include="..\..\src\DbDataKit.Connections.SqlServer\DbDataKit.Connections.SqlServer.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.Connections.DuckDb\DbDataKit.Connections.DuckDb.csproj" />
   </ItemGroup>

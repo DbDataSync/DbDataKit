@@ -1,0 +1,165 @@
+{
+  "name": "04_layout_drift_fails_the_fingerprint",
+  "description": "A column was inserted before Region. The fingerprint stops the run, and says where Region went.",
+  "workbook": {
+    "sheets": [
+      {
+        "name": "Summary",
+        "cells": {
+          "A1": "Forecast"
+        }
+      },
+      {
+        "name": "Detail",
+        "cells": {
+          "E4": "Jul",
+          "F4": "Aug",
+          "G4": "Sep",
+          "C4": "Region",
+          "D4": "Product",
+          "C5": "West",
+          "D5": "A",
+          "E5": 100,
+          "F5": 110,
+          "G5": 120,
+          "D6": "B",
+          "E6": 50,
+          "F6": 60,
+          "G6": 70,
+          "D7": "Subtotal",
+          "E7": 150,
+          "F7": 170,
+          "G7": 190,
+          "C8": "East",
+          "D8": "A",
+          "E8": 80,
+          "F8": 90,
+          "G8": 100,
+          "D9": "B",
+          "E9": 20,
+          "F9": 30,
+          "G9": 40,
+          "D10": "Subtotal",
+          "E10": 100,
+          "F10": 120,
+          "G10": 140,
+          "D12": "Grand Total",
+          "E12": 250,
+          "F12": 290,
+          "G12": 330,
+          "E3": "2025"
+        },
+        "merges": [
+          "E3:G3"
+        ]
+      }
+    ]
+  },
+  "spec": {
+    "spec_version": "0.3",
+    "id": "regional_forecast",
+    "match": {
+      "library": "Finance/Forecasts",
+      "name_pattern": "Forecast_*_FY*.xlsx"
+    },
+    "fingerprint": {
+      "sheets": [
+        "Summary",
+        "Detail"
+      ],
+      "cells": [
+        {
+          "sheet": "Detail",
+          "ref": "B4",
+          "equals": "Region"
+        },
+        {
+          "sheet": "Detail",
+          "ref": "D4",
+          "matches": "^(Jul|July)"
+        }
+      ]
+    },
+    "tables": [
+      {
+        "name": "forecast",
+        "sheet": "Detail",
+        "header": {
+          "rows": [
+            3,
+            4
+          ],
+          "join": " "
+        },
+        "data": {
+          "start": "B5",
+          "end": {
+            "until_blank_in": "C"
+          },
+          "columns": "B:F"
+        },
+        "skip_rows": [
+          {
+            "column": "C",
+            "matches": "(?i)^(sub)?total"
+          },
+          {
+            "blank_in": "D:F"
+          }
+        ],
+        "fill_down": [
+          "B"
+        ],
+        "unpivot": {
+          "columns": "D:F",
+          "name_as": "month",
+          "value_as": "amount"
+        },
+        "types": {
+          "month": "date",
+          "amount": "number"
+        },
+        "checks": [
+          {
+            "type": "row_count",
+            "min": 1
+          },
+          {
+            "type": "not_null",
+            "columns": [
+              "region"
+            ]
+          },
+          {
+            "type": "unique",
+            "columns": [
+              "region",
+              "product",
+              "month"
+            ]
+          },
+          {
+            "type": "total_matches",
+            "column": "amount",
+            "against": {
+              "sheet": "Detail",
+              "find_row": {
+                "column": "C",
+                "equals": "Grand Total"
+              },
+              "columns": "D:F"
+            },
+            "tolerance": 0.01
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "status": "failed",
+    "errors_include": [
+      "fingerprint_failed"
+    ],
+    "message_includes": "column(s) were inserted"
+  }
+}

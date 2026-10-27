@@ -1,0 +1,200 @@
+{
+  "createOrReplace": {
+    "object": {
+      "database": "qis_budget"
+    },
+    "database": {
+      "name": "qis_budget",
+      "compatibilityLevel": 1600,
+      "model": {
+        "culture": "en-US",
+        "tables": [
+          {
+            "name": "Customer",
+            "columns": [
+              {
+                "type": "calculatedTableColumn",
+                "name": "Region",
+                "dataType": "string",
+                "isNameInferred": true,
+                "isDataTypeInferred": true,
+                "sourceColumn": "[Region]"
+              }
+            ],
+            "partitions": [
+              {
+                "name": "Customer",
+                "mode": "import",
+                "source": {
+                  "type": "calculated",
+                  "expression": [
+                    "DATATABLE(",
+                    "    \"Region\", STRING,",
+                    "    {",
+                    "        { \"West\" },",
+                    "        { \"East\" },",
+                    "        { \"North\" }",
+                    "    }",
+                    ")"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Date",
+            "columns": [
+              {
+                "type": "calculatedTableColumn",
+                "name": "Fiscal Month",
+                "dataType": "string",
+                "isNameInferred": true,
+                "isDataTypeInferred": true,
+                "sourceColumn": "[Fiscal Month]"
+              },
+              {
+                "type": "calculatedTableColumn",
+                "name": "Fiscal Quarter",
+                "dataType": "string",
+                "isNameInferred": true,
+                "isDataTypeInferred": true,
+                "sourceColumn": "[Fiscal Quarter]"
+              },
+              {
+                "type": "calculatedTableColumn",
+                "name": "Fiscal Year",
+                "dataType": "string",
+                "isNameInferred": true,
+                "isDataTypeInferred": true,
+                "sourceColumn": "[Fiscal Year]"
+              },
+              {
+                "type": "calculatedTableColumn",
+                "name": "Fiscal Month Prior Year",
+                "dataType": "string",
+                "isNameInferred": true,
+                "isDataTypeInferred": true,
+                "sourceColumn": "[Fiscal Month Prior Year]"
+              },
+              {
+                "type": "calculatedTableColumn",
+                "name": "Fiscal Quarter Prior Year",
+                "dataType": "string",
+                "isNameInferred": true,
+                "isDataTypeInferred": true,
+                "sourceColumn": "[Fiscal Quarter Prior Year]"
+              }
+            ],
+            "partitions": [
+              {
+                "name": "Date",
+                "mode": "import",
+                "source": {
+                  "type": "calculated",
+                  "expression": [
+                    "DATATABLE(",
+                    "    \"Fiscal Month\", STRING, \"Fiscal Quarter\", STRING, \"Fiscal Year\", STRING, \"Fiscal Month Prior Year\", STRING, \"Fiscal Quarter Prior Year\", STRING,",
+                    "    {",
+                    "        { \"2025-07\", \"FY26-Q1\", \"FY26\", \"2024-07\", \"FY25-Q1\" },",
+                    "        { \"2025-08\", \"FY26-Q1\", \"FY26\", \"2024-08\", \"FY25-Q1\" },",
+                    "        { \"2025-09\", \"FY26-Q1\", \"FY26\", \"2024-09\", \"FY25-Q1\" },",
+                    "        { \"2026-07\", \"FY27-Q1\", \"FY27\", \"2025-07\", \"FY26-Q1\" },",
+                    "        { \"2026-08\", \"FY27-Q1\", \"FY27\", \"2025-08\", \"FY26-Q1\" },",
+                    "        { \"2026-09\", \"FY27-Q1\", \"FY27\", \"2025-09\", \"FY26-Q1\" }",
+                    "    }",
+                    ")"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Budget",
+            "columns": [
+              {
+                "type": "calculatedTableColumn",
+                "name": "Region",
+                "dataType": "string",
+                "isNameInferred": true,
+                "isDataTypeInferred": true,
+                "sourceColumn": "[Region]"
+              },
+              {
+                "type": "calculatedTableColumn",
+                "name": "Fiscal Month",
+                "dataType": "string",
+                "isNameInferred": true,
+                "isDataTypeInferred": true,
+                "sourceColumn": "[Fiscal Month]"
+              },
+              {
+                "type": "calculatedTableColumn",
+                "name": "Amount",
+                "dataType": "decimal",
+                "isNameInferred": true,
+                "isDataTypeInferred": true,
+                "sourceColumn": "[Amount]"
+              }
+            ],
+            "partitions": [
+              {
+                "name": "Budget",
+                "mode": "import",
+                "source": {
+                  "type": "calculated",
+                  "expression": [
+                    "DATATABLE(",
+                    "    \"Region\", STRING, \"Fiscal Month\", STRING, \"Amount\", CURRENCY,",
+                    "    {",
+                    "        { \"West\", \"2026-07\", 200 },",
+                    "        { \"West\", \"2026-08\", 200 },",
+                    "        { \"West\", \"2026-09\", 200 },",
+                    "        { \"East\", \"2026-07\", 150 },",
+                    "        { \"East\", \"2026-08\", 150 },",
+                    "        { \"East\", \"2026-09\", 200 },",
+                    "        { \"West\", \"2025-07\", 120 },",
+                    "        { \"West\", \"2025-08\", 120 },",
+                    "        { \"West\", \"2025-09\", 140 },",
+                    "        { \"East\", \"2025-07\", 100 },",
+                    "        { \"East\", \"2025-08\", 110 },",
+                    "        { \"East\", \"2025-09\", 130 }",
+                    "    }",
+                    ")"
+                  ]
+                }
+              }
+            ],
+            "measures": [
+              {
+                "name": "Budget Amount",
+                "expression": "SUM(Budget[Amount])",
+                "formatString": "#,0"
+              },
+              {
+                "name": "Budget Lines",
+                "expression": "COUNT(Budget[Amount])",
+                "formatString": "#,0"
+              }
+            ]
+          }
+        ],
+        "relationships": [
+          {
+            "name": "Budget_Customer",
+            "fromTable": "Budget",
+            "fromColumn": "Region",
+            "toTable": "Customer",
+            "toColumn": "Region"
+          },
+          {
+            "name": "Budget_Date",
+            "fromTable": "Budget",
+            "fromColumn": "Fiscal Month",
+            "toTable": "Date",
+            "toColumn": "Fiscal Month"
+          }
+        ]
+      }
+    }
+  }
+}

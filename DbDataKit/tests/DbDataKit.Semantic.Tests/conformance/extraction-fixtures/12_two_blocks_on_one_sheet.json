@@ -1,0 +1,106 @@
+{
+  "name": "12_two_blocks_on_one_sheet",
+  "description": "A report page with two blocks becomes two tables.",
+  "workbook": {
+    "sheets": [
+      {
+        "name": "Report",
+        "cells": {
+          "A1": "Region",
+          "B1": "Sales",
+          "A2": "West",
+          "B2": 10,
+          "A3": "East",
+          "B3": 20,
+          "D1": "Product",
+          "E1": "Units",
+          "D2": "A",
+          "E2": 5,
+          "D3": "B",
+          "E3": 6,
+          "D4": "C",
+          "E4": 7
+        }
+      }
+    ]
+  },
+  "spec": {
+    "spec_version": "0.3",
+    "id": "two_blocks",
+    "tables": [
+      {
+        "name": "sales",
+        "sheet": "Report",
+        "header": {
+          "rows": [
+            1
+          ]
+        },
+        "data": {
+          "start": "A2",
+          "end": {
+            "until_blank_in": "A"
+          },
+          "columns": "A:B"
+        },
+        "types": {
+          "sales": "number"
+        }
+      },
+      {
+        "name": "units",
+        "sheet": "Report",
+        "header": {
+          "rows": [
+            1
+          ]
+        },
+        "data": {
+          "start": "D2",
+          "end": {
+            "until_blank_in": "D"
+          },
+          "columns": "D:E"
+        },
+        "types": {
+          "units": "integer"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "status": "complete",
+    "tables": [
+      {
+        "name": "adhoc.sales",
+        "rows": [
+          {
+            "region": "West",
+            "sales": 10
+          },
+          {
+            "region": "East",
+            "sales": 20
+          }
+        ]
+      },
+      {
+        "name": "adhoc.units",
+        "rows": [
+          {
+            "product": "A",
+            "units": 5
+          },
+          {
+            "product": "B",
+            "units": 6
+          },
+          {
+            "product": "C",
+            "units": 7
+          }
+        ]
+      }
+    ]
+  }
+}

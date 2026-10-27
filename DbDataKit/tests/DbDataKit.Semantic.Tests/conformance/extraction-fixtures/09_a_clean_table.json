@@ -1,0 +1,107 @@
+{
+  "name": "09_a_clean_table",
+  "description": "One header row, typed columns: integers, real date cells, booleans, and amounts written as text with a thousands separator and as an accounting negative. Blank cells are null.",
+  "workbook": {
+    "sheets": [
+      {
+        "name": "Sheet1",
+        "cells": {
+          "A1": "Order ID",
+          "B1": "Customer",
+          "C1": "Shipped",
+          "D1": "Paid",
+          "E1": "Amount",
+          "A2": 1,
+          "B2": "Ann",
+          "C2": "2026-07-01",
+          "D2": true,
+          "E2": "1,200.50",
+          "A3": 2,
+          "B3": "Bo",
+          "C3": "2026-08-15",
+          "D3": false,
+          "E3": "(80)",
+          "A4": 3,
+          "B4": "Cy",
+          "E4": 300
+        },
+        "dates": [
+          "C2",
+          "C3"
+        ]
+      }
+    ]
+  },
+  "spec": {
+    "spec_version": "0.3",
+    "id": "orders_export",
+    "tables": [
+      {
+        "name": "orders",
+        "sheet": "Sheet1",
+        "header": {
+          "rows": [
+            1
+          ]
+        },
+        "data": {
+          "start": "A2",
+          "columns": "A:E"
+        },
+        "types": {
+          "order_id": "integer",
+          "shipped": "date",
+          "paid": "boolean",
+          "amount": "number"
+        },
+        "checks": [
+          {
+            "type": "row_count",
+            "min": 3,
+            "max": 3
+          },
+          {
+            "type": "unique",
+            "columns": [
+              "order_id"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "status": "complete",
+    "tables": [
+      {
+        "name": "adhoc.orders",
+        "descriptor": {
+          "x_row_count": 3
+        },
+        "rows": [
+          {
+            "order_id": 1,
+            "customer": "Ann",
+            "shipped": "2026-07-01",
+            "paid": true,
+            "amount": 1200.5
+          },
+          {
+            "order_id": 2,
+            "customer": "Bo",
+            "shipped": "2026-08-15",
+            "paid": false,
+            "amount": -80
+          },
+          {
+            "order_id": 3,
+            "customer": "Cy",
+            "shipped": null,
+            "paid": null,
+            "amount": 300
+          }
+        ]
+      }
+    ]
+  }
+}

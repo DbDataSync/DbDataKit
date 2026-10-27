@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>The semantic layer's source executor for SQL Server Analysis Services (a Tabular model): sends the DAX the engine emits with ADOMD.NET and deploys a TMSL model. The ADOMD.NET client runs only on Windows; this compiles everywhere.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <!-- The client library only runs on Windows (it throws NotSupportedException elsewhere), so SSAS lives in its own project. -->
+    <PackageReference Include="Microsoft.AnalysisServices.AdomdClient" />
+    <ProjectReference Include="..\DbDataKit.Semantic.Abstractions\DbDataKit.Semantic.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

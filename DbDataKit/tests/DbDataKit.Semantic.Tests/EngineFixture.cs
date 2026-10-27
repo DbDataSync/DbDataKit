@@ -14,18 +14,20 @@ public sealed class EngineFixture : IAsyncLifetime
     public const string Postgres = "postgres";
     /// <summary>DuckDB needs no server: the fixtures run on a seeded file, opened read-only through <c>DbDataKit.Connections.DuckDb</c>.</summary>
     public const string DuckDb = "duckdb";
+    /// <summary>SQL Server Analysis Services (Tabular), Windows only: <c>DBDATA_TEST_SSAS</c> is the connection string of the instance without a Catalog (<c>Data Source=localhost:2383</c>); the sample model is deployed once as database <c>qis_budget</c>.</summary>
+    public const string Ssas = "ssas";
 
     private readonly string _name = $"dbdatakit_semantic_{Guid.NewGuid():N}";
     private readonly Dictionary<string, string> _databases = [];
     private DirectoryInfo? _directory;
 
-    public static TheoryData<string> Engines => [SqlServer, DuckDb, Postgres];
+    public static TheoryData<string> Engines => [SqlServer, DuckDb, Postgres, Ssas];
 
-    private static string? Server(string engine) =>
-        Environment.GetEnvironmentVariable(engine == SqlServer ? "DBDATA_TEST_SQLSERVER" : "DBDATA_TEST_POSTGRES");
+    private static string Suffix(string engine) => engine switch { SqlServer => "SQLSERVER", Ssas => "SSAS", _ => "POSTGRES" };
 
-    private static bool Required(string engine) => string.Equals(
-        Environment.GetEnvironmentVariable(engine == SqlServer ? "DBDATA_REQUIRE_SQLSERVER" : "DBDATA_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase);
+    private static string? Server(string engine) => Environment.GetEnvironmentVariable("DBDATA_TEST_" + Suffix(engine));
+
+    private static bool Required(string engine) => string.Equals(Environment.GetEnvironmentVariable("DBDATA_REQUIRE_" + Suffix(engine)), "true", StringComparison.OrdinalIgnoreCase);
 
     public ValueTask InitializeAsync()
     {
@@ -46,6 +48,11 @@ public sealed class EngineFixture : IAsyncLifetime
             var db = new SqlConnectionStringBuilder(mssql) { InitialCatalog = _name }.ConnectionString;
             NativeTextTestExecutor.LoadSeed(db, File.ReadAllText(Path.Combine(root, "data", "seed.tsql.sql")));
             _databases[SqlServer] = db;
+        }
+        if (Server(Ssas) is { } ssas)
+        {
+            DbDataKit.Semantic.Ssas.SsasExecutor.DeployModel(ssas, File.ReadAllText(Path.Combine(root, "ssas", "model.tmsl.json")));
+            _databases[Ssas] = ssas + ";Catalog=qis_budget";
         }
         if (Server(Postgres) is { } postgres)
         {
@@ -82,7 +89,7 @@ public sealed class EngineFixture : IAsyncLifetime
     {
         if (_databases.TryGetValue(engine, out var db)) return db;
         Assert.False(Required(engine), $"{engine} is required but its DBDATA_TEST_* variable is not set");
-        Assert.Skip($"set DBDATA_TEST_{(engine == SqlServer ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
+        Assert.Skip($"set DBDATA_TEST_{Suffix(engine)} to run on {engine}");
         return "";
     }
 

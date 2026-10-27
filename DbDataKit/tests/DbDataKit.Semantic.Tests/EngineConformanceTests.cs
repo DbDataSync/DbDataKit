@@ -8,7 +8,7 @@ namespace DbDataKit.Semantic.Tests;
 /// <summary>
 /// The conformance fixtures on the shared engines. SQL Server and DuckDB run through <c>DbDataKit.Semantic.Connections</c> (the shared connections:
 /// the T-SQL the engine emits on SQL Server, its DuckDB twin on a read-only DuckDB file; the level 0 agent-written queries run on SQL Server in test code);
-/// PostgreSQL runs the DuckDB-dialect twin until the engine has its own emitter (J05). The same checks as the stand-in run:
+/// SSAS (Windows, <c>DBDATA_TEST_SSAS</c>) runs the DAX of the catalog's SSAS source on a real Tabular server; PostgreSQL runs the DuckDB-dialect twin until the engine has its own emitter (J05). The same checks as the stand-in run:
 /// the expected rows, the result schema, replay from the run record, and the other subtotal modes.
 /// </summary>
 public class EngineConformanceTests(EngineFixture engines) : IClassFixture<EngineFixture>
@@ -33,7 +33,7 @@ public class EngineConformanceTests(EngineFixture engines) : IClassFixture<Engin
     public static TheoryData<string, string> Fixtures()
     {
         var data = new TheoryData<string, string>();
-        foreach (var engine in new[] { EngineFixture.SqlServer, EngineFixture.DuckDb, EngineFixture.Postgres })
+        foreach (var engine in new[] { EngineFixture.SqlServer, EngineFixture.DuckDb, EngineFixture.Postgres, EngineFixture.Ssas })
             foreach (var f in ConformanceTests.Fixtures()) data.Add(engine, (string)f[0]);
         return data;
     }
@@ -41,7 +41,7 @@ public class EngineConformanceTests(EngineFixture engines) : IClassFixture<Engin
     public static TheoryData<string, string> TotalsFixtures()
     {
         var data = new TheoryData<string, string>();
-        foreach (var engine in new[] { EngineFixture.SqlServer, EngineFixture.DuckDb, EngineFixture.Postgres })
+        foreach (var engine in new[] { EngineFixture.SqlServer, EngineFixture.DuckDb, EngineFixture.Postgres, EngineFixture.Ssas })
             foreach (var f in ConformanceTests.TotalsFixtures()) data.Add(engine, (string)f[0]);
         return data;
     }
@@ -73,6 +73,8 @@ public class EngineConformanceTests(EngineFixture engines) : IClassFixture<Engin
                 new ConnectionsSourceExecutor(new Dictionary<string, SemanticSource> { ["sqlserver_sales"] = ConnectionContexts.SqlServer(DatabaseName(database)) }, standIn), database),
             EngineFixture.DuckDb => new ConnectionsSourceExecutor(
                 new Dictionary<string, SemanticSource> { ["sqlserver_sales"] = ConnectionContexts.DuckDb(database) }, standIn),
+            // the SSAS source runs as real DAX; the SQL Server source stays on the stand-in (the Windows runner has no SQL Server)
+            EngineFixture.Ssas => new DbDataKit.Semantic.Ssas.SsasExecutor(database, standIn),
             _ => new PostgresTwinExecutor(database, standIn),
         };
         ConformanceTests.RunFixture(relativePath, totalsCompute, executor);
