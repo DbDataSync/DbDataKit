@@ -103,24 +103,29 @@ internal sealed class WarmSessionRunner(TimeSpan? timeout = null, TimeSpan? idle
         {
             using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             limit.CancelAfter(timeout ?? ChildProcessCommandRunner.DefaultTimeout);
+            // A read of the child's output does not stop when its token is cancelled (a process pipe cannot be interrupted), so the limit ends the process, which ends the read.
+            using var stop = limit.Token.Register(session.Kill);
             try
             {
                 await session.Input.WriteLineAsync(request.AsMemory(), limit.Token).ConfigureAwait(false);
                 await session.Input.FlushAsync(limit.Token).ConfigureAwait(false);
                 var line = await session.Output.ReadLineAsync(limit.Token).ConfigureAwait(false);
-                if (line is null) return Lost(session, root, "The session ended while the command ran.");
+                if (line is null)
+                {
+                    limit.Token.ThrowIfCancellationRequested();
+                    return Lost(session, root, "The session ended while the command ran.");
+                }
                 var answer = JsonNode.Parse(line)!.AsObject();
                 session.Touch();
                 return new CommandResult(answer["exit"]!.GetValue<int>(), answer["out"]!.GetValue<string>(), answer["err"]!.GetValue<string>());
             }
             catch (OperationCanceledException)
             {
-                Lost(session, root, "");
-                cancellationToken.ThrowIfCancellationRequested();
-                return new CommandResult(ChildProcessCommandRunner.TimedOut, "", "The command ran longer than the server allows and was stopped.");
+                return TimedOut(session, root, cancellationToken);
             }
             catch (IOException)
             {
+                if (limit.IsCancellationRequested) return TimedOut(session, root, cancellationToken);
                 return Lost(session, root, "The session ended while the command ran.");
             }
         }
@@ -128,6 +133,13 @@ internal sealed class WarmSessionRunner(TimeSpan? timeout = null, TimeSpan? idle
         {
             session.Turn.Release();
         }
+    }
+
+    private CommandResult TimedOut(Session session, string root, CancellationToken cancellationToken)
+    {
+        Lost(session, root, "");
+        cancellationToken.ThrowIfCancellationRequested();
+        return new CommandResult(ChildProcessCommandRunner.TimedOut, "", "The command ran longer than the server allows and was stopped.");
     }
 
     private CommandResult Lost(Session session, string root, string message)

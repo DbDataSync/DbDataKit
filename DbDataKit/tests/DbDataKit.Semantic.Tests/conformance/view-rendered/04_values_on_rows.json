@@ -1,0 +1,132 @@
+{
+  "kind": "rendered_view",
+  "status": "complete",
+  "views": [
+    {
+      "id": "m1",
+      "type": "matrix",
+      "columns": [
+        {
+          "labels": [
+            "FY27-Q1"
+          ],
+          "total": false,
+          "other": false
+        },
+        {
+          "labels": [
+            "FY27-Q2"
+          ],
+          "total": false,
+          "other": false
+        }
+      ],
+      "rows": [
+        {
+          "labels": [
+            "West",
+            "orders.net_revenue"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 4200000,
+              "text": "4,200,000"
+            },
+            {
+              "v": 4600000,
+              "text": "4,600,000"
+            }
+          ]
+        },
+        {
+          "labels": [
+            "West",
+            "Orders"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 40,
+              "text": "40"
+            },
+            {
+              "v": 44,
+              "text": "44"
+            }
+          ]
+        },
+        {
+          "labels": [
+            "Central",
+            "orders.net_revenue"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 3100000,
+              "text": "3,100,000"
+            },
+            {
+              "v": 3300000,
+              "text": "3,300,000"
+            }
+          ]
+        },
+        {
+          "labels": [
+            "Central",
+            "Orders"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 30,
+              "text": "30"
+            },
+            {
+              "v": 31,
+              "text": "31"
+            }
+          ]
+        },
+        {
+          "labels": [
+            "East",
+            "orders.net_revenue"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 3800000,
+              "text": "3,800,000"
+            },
+            {
+              "v": 3900000,
+              "text": "3,900,000"
+            }
+          ]
+        },
+        {
+          "labels": [
+            "East",
+            "Orders"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 35,
+              "text": "35"
+            },
+            {
+              "v": 34,
+              "text": "34"
+            }
+          ]
+        }
+      ],
+      "notice": null
+    }
+  ],
+  "errors": null
+}

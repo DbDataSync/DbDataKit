@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -217,6 +218,8 @@ public sealed partial class EncryptedFileSecretStore : ISecretStore, ISecretProv
 
     // ---- the lock: one writer at a time, in this process and in any other ----
 
+    private static readonly TimeSpan LockWait = TimeSpan.FromSeconds(30);
+
     private async Task<IAsyncDisposable> LockAsync(CancellationToken ct)
     {
         await _gate.WaitAsync(ct);
@@ -224,14 +227,16 @@ public sealed partial class EncryptedFileSecretStore : ISecretStore, ISecretProv
         {
             AclHelper.EnsureRestrictedDirectory(_directory, _identities);
             var path = Path.Combine(_directory, "secrets.lock");
-            for (var attempt = 0; ; attempt++)
+            // The lock is polled, so a waiter is not served in turn: it waits against a deadline, not a count of attempts, which a crowd of writers on a slow disk can use up while each of them makes progress.
+            var deadline = Stopwatch.StartNew();
+            while (true)
             {
                 try
                 {
                     var stream = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
                     return new Release(stream, _gate);
                 }
-                catch (IOException) when (attempt < 200) { await Task.Delay(25, ct); }
+                catch (IOException) when (deadline.Elapsed < LockWait) { await Task.Delay(Random.Shared.Next(10, 40), ct); }
                 catch (IOException ex) { throw new SecretStoreException($"Could not lock the secret store '{_directory}' for writing: another process is holding it.", ex); }
             }
         }

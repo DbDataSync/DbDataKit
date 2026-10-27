@@ -1,0 +1,48 @@
+/* @dbdatakit/visuals. The root carries data-vz-theme="light" or "dark" (the component resolves "auto" from the system setting), so every colour is a variable here. */
+.vz {
+  --vz-text: #1f2328;
+  --vz-muted: #59636e;
+  --vz-ground: transparent;
+  --vz-head: #f3f4f6;
+  --vz-total: #eef2f7;
+  --vz-other: #f6f1e7;
+  --vz-edge: #d8dee4;
+  --vz-error-ink: #a8402f;
+  --vz-error-edge: #e3c9c4;
+  color: var(--vz-text);
+  background: var(--vz-ground);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color-scheme: light;
+}
+.vz[data-vz-theme='dark'] {
+  --vz-ground: #0d1117;
+  padding: 12px;
+  border-radius: 6px;
+  --vz-text: #e6edf3;
+  --vz-muted: #9da7b3;
+  --vz-head: #1f262e;
+  --vz-total: #1b2736;
+  --vz-other: #2a2619;
+  --vz-edge: #30363d;
+  --vz-error-ink: #ff9b85;
+  --vz-error-edge: #6b3326;
+  color-scheme: dark;
+}
+.vz-view { margin: 0 0 20px; }
+.vz-matrix-scroll, .vz-table-scroll { overflow-x: auto; }
+.vz-matrix, .vz-table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.vz-matrix th, .vz-matrix td, .vz-table th, .vz-table td { border: 1px solid var(--vz-edge); padding: 4px 10px; }
+.vz-matrix thead th, .vz-table thead th, .vz-matrix tbody th { background: var(--vz-head); font-weight: 600; text-align: left; }
+.vz-matrix thead th { text-align: center; }
+.vz-corner { border: 0 !important; background: none !important; }
+.vz-num { text-align: right; }
+.vz-total { background: var(--vz-total) !important; font-weight: 600; }
+.vz-other { background: var(--vz-other); }
+.vz-table caption { text-align: left; color: var(--vz-muted); padding-bottom: 4px; }
+.vz-notice { color: var(--vz-muted); margin: 6px 0 0; }
+.vz-data { margin-top: 8px; }
+.vz-data summary { cursor: pointer; color: var(--vz-muted); }
+.vz-problems, .vz-error { border: 1px solid var(--vz-error-edge); color: var(--vz-error-ink); padding: 8px 12px; border-radius: 4px; }
+.vz-problems ul { margin: 6px 0 0; padding-left: 18px; }
+.vz-path { color: var(--vz-muted); }

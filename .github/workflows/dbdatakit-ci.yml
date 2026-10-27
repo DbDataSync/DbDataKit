@@ -44,6 +44,10 @@ on:
         description: With ssas, run only the DAX probe (SsasProbe) instead of the suite.
         type: boolean
         default: false
+      ssas_record:
+        description: With ssas, also record a session through the XMLA forwarder (DbDataKit/tools/DbDataKit.Tools.XmlaForwarder) and upload the recording as the artifact xmla-recording.
+        type: boolean
+        default: false
 
 # A newer push to a PR supersedes the older run; runs on main always complete.
 concurrency:
@@ -172,6 +176,20 @@ jobs:
         if: ${{ !inputs.ssas_probe }}
         working-directory: DbDataKit
         run: dotnet test --project tests/DbDataKit.Semantic.Tests --report-xunit-trx --report-xunit-trx-filename ssas.trx
+      - name: Record a session through the XMLA forwarder
+        if: ${{ inputs.ssas_record && !inputs.ssas_probe }}
+        working-directory: DbDataKit
+        env:
+          DBDATA_TEST_SSAS_RECORD: "1"
+          DBDATA_XMLA_RECORDING_DIR: ${{ runner.temp }}\xmla-recording
+        run: dotnet test --project tests/DbDataKit.Semantic.Tests --filter-class "*SsasRecordingTests"
+      - name: Upload the recording
+        if: ${{ always() && inputs.ssas_record && !inputs.ssas_probe }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: xmla-recording
+          path: ${{ runner.temp }}\xmla-recording
+          if-no-files-found: warn
       - name: Failures grouped by cause
         if: always() && !inputs.ssas_probe
         shell: pwsh

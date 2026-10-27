@@ -203,7 +203,34 @@ cancellation token; and a trace ID. Services take it as their first argument, so
 `AuthenticateAsync`, `DescribeAsync`, `LimitsFor`, `QueryAsync` and `Writes` become Identity, Catalog, Platform, Query and Entities).
 J10 stays behind its adapter until that mapping lands.
 
+### 10.7 The contract against the ten modules (review, 2026-10-27)
+
+Each module was read against 10.1 to 10.4 and the code in `DbDataKit.Serving.Abstractions`: what it needs from the core, whether the contract already gives it, and when a missing piece is added. Nothing is added before the module that needs it
+starts, except what the Flight SQL module (N02, the first) needs, which this slice adds and tests.
+
+| Module | What it needs from the core | In the contract today | Added |
+| --- | --- | --- | --- |
+| `flightsql` | A handshake that trades basic credentials for a token; every later call authenticated from a bearer token (a core session's, or an identity provider's) or basic credentials, with a login throttle keyed on user and client address; SQL with positional, typed parameters (prepared statements keep their handle and bound rows as adapter state); updates to writable sources; schemas, tables, columns and primary keys; server facts (`GetSqlInfo`); a classified database failure mapped to a gRPC status with a fixed sentence; compression chosen per source | identity, sessions, queries, catalog | **this slice:** `ServingParameter` (positional, typed), the client address on `AuthenticateAsync`, `IServingUpdates`, `ServingObject.PrimaryKey`, `IServingCatalog.FactsAsync` (`ServingSourceFacts`: product, version, read-only, identifier quote, compression), `ServingBackendException` carrying the shared `ConnectionFailure`. Imported and exported keys, cross reference, bulk ingest and XDBC type info are not offered by Proxy today and are not added |
+| `semantic` | semantic request, semantic SQL, the catalog of models, dimensions and measures, an explain that returns the plan without running it | requests, catalog kinds | **when J10 starts:** `ExplainAsync` on the query service (J14's query explorer and J15's agent tools both ask for explain) |
+| `pgwire` | a multi-step password exchange (SCRAM), portals and cursors (adapter state), a cancel key per connection, `COPY` as an ingest, `pg_catalog` views from the catalog | sessions, queries, catalog | **when pgwire starts:** a multi-leg authentication exchange on the identity service (SCRAM and Windows negotiation both need it), cancel by session, ingest. `ServingCredentials` cannot express a challenge today |
+| `xmla` | `Discover` rowsets from the catalog (cubes, dimensions, hierarchies, levels, measures, members, properties, perspectives), `Execute` of MDX into a cell set, sessions | MDX request, catalog kinds `Dimension`, `Hierarchy`, `Level`, `Measure`, sessions | **when xmla starts:** member listing and perspectives in the catalog, and a convention for the axes of a cell set in the Arrow schema's metadata (no new type: provenance and Arrow metadata carry it) |
+| `feeds` | paged results with a stable identity for conditional requests, a refresh from a watermark | queries and provenance (definition version) | **when feeds start:** a data version in the answer for an ETag, from the result cache of the platform service |
+| `store` | as-of reads, writes that can insert, change or delete a row against an expected row version, change requests, history of a row | `IServingEntities.ReadAsync`, `WriteAsync(rows)` | **when store starts:** `WriteAsync` becomes a change set (insert, upsert, delete; expected version) that answers with the rows applied or the change request made |
+| `webdav` | versioned documents, locks, properties, extraction on save | none | **when webdav starts:** the documents service of 10.3 (it is not in the code) |
+| `apps` | acts as the signed-in user, queries, entities and documents in process | identity (a bearer token from the identity module), queries, entities | documents, when apps need them |
+| `mcp` | tools that act as the signed-in user, with the user approving each change as it happens | identity, queries, entities | **when mcp starts:** an approval request on the platform service (ask the signed-in user, wait for the answer) |
+| `identity` | is a producer, not a consumer: it issues tokens and holds the sign-in; the core's identity service trusts the issuer it names | identity validates bearer tokens | no change: the module registers its issuer with the core; it needs no service from the contract beyond platform |
+
+The platform and definitions services of 10.3 and the module's definitions subscription of 10.2 are not in the code yet: the Flight module serves data sources, which have no published definition, and the audit, tracing and throttling it needs
+happen inside the core. They arrive with the first module that needs them (semantic, J10).
+
+Two decisions this review made, not asked of anyone because the other choice is dearer to undo: (1) a **positional** parameter list, not a dictionary, because Flight SQL and the Postgres wire both bind by position and a name is only a label; (2) the **classified
+failure is the shared `ConnectionFailure`**, not a new type, so the message a client sees stays word for word what it is today.
+
 ### 10.6 Sequencing
 
 N02 is the first module on this contract: a design review of 10.1 to 10.4 against all ten modules, then the contract in
 `DbDataKit.Serving.Abstractions`, then Flight SQL moved onto it with no behaviour change. Proxy's Flight SQL suite is the safety net.
+
+N02 is done in three steps, each green on Proxy's Flight tests: (1) the contract additions of 10.7 (the slice that put the review here); (2) `DbDataKit.Serving.FlightSql`, the wire adapter written against the services, with its protocol-only parts moved first (compression, status mapping, prepared and pending statement stores, basic-credential parsing);
+(3) Proxy supplies the services from its data sources, sessions and validators, and loads the module in place of `ProxyFlightServer`.
