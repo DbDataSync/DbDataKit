@@ -54,7 +54,8 @@ public sealed partial class ProxyManagement(IConfigurationRoot configuration, st
         if (route == Prefix + "/data-sources" || route.StartsWith(Prefix + "/data-sources/", StringComparison.Ordinal))
         {
             if (dataSources is null) return ManagementResult.Problem(404, "There is no such call.");
-            if (!caller.Holds(ServerRole.Admin)) return Denied(ServerRole.Admin);
+            // an administrator may do everything; a publishing server client (a Build server) only what the owner rules let it do to its own data sources, which ProxyDataSources checks
+            if (!caller.Holds(ServerRole.Admin) && !caller.Holds(ServerRole.Publisher)) return Denied(ServerRole.Admin);
             var rest = route.Length > (Prefix + "/data-sources").Length ? route[(Prefix + "/data-sources/").Length..].Split('/') : [];
             return await dataSources.HandleAsync(method, rest, body, query["expected_version"], caller, cancellationToken);
         }
