@@ -45,7 +45,6 @@
       "DbDataSync/tests/DbDataSync.TaskRunner.Tests/DbDataSync.TaskRunner.Tests.csproj",
       "DbDataSync/tests/DbDataSync.Updates.Tests/DbDataSync.Updates.Tests.csproj",
       "DbDataSync/tests/DbDataSync.Verification.Tests/DbDataSync.Verification.Tests.csproj",
-      "DbDataSync/tests/fixtures/DbDataSync.Drivers.LoaderTestFixture/DbDataSync.Drivers.LoaderTestFixture.csproj",
       "DbDataSync/tests/fixtures/DbDataSync.Libraries.CompatFixtureDriver/DbDataSync.Libraries.CompatFixtureDriver.csproj",
       "DbDataSync/tests/fixtures/DbDataSync.Libraries.CompatFixtureLibraryComplete/DbDataSync.Libraries.CompatFixtureLibraryComplete.csproj",
       "DbDataSync/tests/fixtures/DbDataSync.Libraries.CompatFixtureLibraryIncomplete/DbDataSync.Libraries.CompatFixtureLibraryIncomplete.csproj",

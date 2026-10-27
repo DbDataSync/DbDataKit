@@ -27,6 +27,7 @@ public static class DriverCommand
             "install" => await InstallAsync(repoRoot, rest),
             "list" => List(repoRoot),
             "uninstall" => Uninstall(repoRoot, rest),
+            "sync" => await SyncAsync(repoRoot, rest),
             var other => Unknown(other),
         };
     }
@@ -35,32 +36,33 @@ public static class DriverCommand
     /// <c>driver install &lt;id&gt; --library &lt;name&gt; --version &lt;v&gt;
     /// [--factory-type type] [--from mysql] [--display-name name]</c> for a YAML descriptor (109d), or
     /// <c>driver install &lt;id&gt; --kind compiled --package &lt;packageId&gt; --version &lt;v&gt;
-    /// --assembly &lt;name.dll&gt; --driver-type &lt;FQTypeName&gt; [--source feed]</c> for a compiled
-    /// plugin (109e) — restores the package into this driver's own <c>lib/</c> (not
+    /// --driver-type &lt;FQTypeName&gt; [--source feed]</c> for a compiled
+    /// plugin (109e) — resolves the package into this driver's own <c>lib/</c> (not
     /// <c>libraries/&lt;id&gt;/</c>: a compiled driver's package is private to it, not a shared
-    /// library another driver or the state store might also resolve) and writes a <c>driver.json</c>
-    /// naming the assembly and the <see cref="Abstractions.IDriver"/> type to load from it.
+    /// library another driver or the state store might also resolve) and writes a <c>driver.csx</c>
+    /// that asks for the package and ends with <c>new DriverType()</c>.
     /// </summary>
     private static async Task<int> InstallAsync(string repoRoot, string[] args) =>
-        string.Equals(CliOptions.Read(args, "--kind"), CompiledDriverManifest.CompiledKind, StringComparison.OrdinalIgnoreCase)
+        string.Equals(CliOptions.Read(args, "--kind"), CompiledKind, StringComparison.OrdinalIgnoreCase)
             ? await InstallCompiledAsync(repoRoot, args)
             : await InstallDescriptorAsync(repoRoot, args);
 
+    private const string CompiledKind = "compiled";
+
     private static async Task<int> InstallCompiledAsync(string repoRoot, string[] args)
     {
-        var ids = StripFlagValues(args, "--kind", "--package", "--version", "--assembly", "--driver-type", "--source", "--repo")
+        var ids = StripFlagValues(args, "--kind", "--package", "--version", "--driver-type", "--source", "--repo")
             .Where(a => !a.StartsWith("--", StringComparison.Ordinal)).ToList();
         var packageId = CliOptions.Read(args, "--package");
         var version = CliOptions.Read(args, "--version");
-        var assembly = CliOptions.Read(args, "--assembly");
         var driverType = CliOptions.Read(args, "--driver-type");
         var source = CliOptions.Read(args, "--source");
 
-        if (ids.Count != 1 || packageId is null || version is null || assembly is null || driverType is null)
+        if (ids.Count != 1 || packageId is null || version is null || driverType is null)
         {
             Console.Error.WriteLine(
                 "Usage: dbdatasync driver install <id> --kind compiled --package <packageId> --version <v> " +
-                "--assembly <name.dll> --driver-type <FQTypeName> [--source feed]");
+                "--driver-type <FQTypeName> [--source feed]");
             return 1;
         }
 
@@ -73,22 +75,57 @@ public static class DriverCommand
             return 1;
         }
 
-        Directory.CreateDirectory(driverDir);
         var package = new PackageRef(packageId, version);
         try
         {
-            await LibraryInstaller.RestorePackagesAsync(Path.Combine(driverDir, "lib"), [package], source);
+            Directory.CreateDirectory(driverDir);
+            await LibraryResolution.RestoreAsync(driverDir, [package], source, lockFileName: CompiledDriverManifest.LockFileName);
         }
         catch (InvalidOperationException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            try { Directory.Delete(driverDir, recursive: true); } catch (IOException) { }
+            return 1;
+        }
+
+        CompiledDriverManifest.ForPackage(id, package, driverType).Write(manifestPath);
+
+        Console.WriteLine($"Installed compiled driver '{id}' ({packageId} {version}) and wrote '{manifestPath}'.");
+        return 0;
+    }
+
+    /// <summary><c>driver sync &lt;id&gt; [--source feed]</c>: restores what a <c>driver.csx</c> names, for a fresh checkout of the repository (<c>lib/</c> is not tracked) or after a hand edit of a version.</summary>
+    private static async Task<int> SyncAsync(string repoRoot, string[] args)
+    {
+        var ids = StripFlagValues(args, "--source", "--repo").Where(a => !a.StartsWith("--", StringComparison.Ordinal)).ToList();
+        if (ids.Count != 1)
+        {
+            Console.Error.WriteLine("Usage: dbdatasync driver sync <id> [--source feed]");
+            return 1;
+        }
+
+        var driverDir = Path.Combine(repoRoot, "drivers", ids[0]);
+        var manifestPath = Path.Combine(driverDir, CompiledDriverManifest.FileName);
+        if (!File.Exists(manifestPath))
+        {
+            Console.Error.WriteLine($"There is no '{manifestPath}'.");
+            return 1;
+        }
+
+        try
+        {
+            var manifest = CompiledDriverManifest.Read(manifestPath);
+            var libDir = LibraryPaths.LibDir(driverDir);
+            if (Directory.Exists(libDir)) Directory.Delete(libDir, recursive: true);
+            await LibraryResolution.RestoreAsync(driverDir, manifest.Packages, CliOptions.Read(args, "--source"), lockFileName: CompiledDriverManifest.LockFileName);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException)
         {
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
 
-        new CompiledDriverManifest(id, CompiledDriverManifest.CompiledKind, assembly, driverType, [package])
-            .Write(manifestPath);
-
-        Console.WriteLine($"Installed compiled driver '{id}' ({packageId} {version}) and wrote '{manifestPath}'.");
+        Console.WriteLine($"Restored driver '{ids[0]}'.");
         return 0;
     }
 
@@ -237,9 +274,9 @@ public static class DriverCommand
                 try
                 {
                     var manifest = CompiledDriverManifest.Read(jsonPath);
-                    Console.WriteLine($"{manifest.Id}  [compiled]  assembly: {manifest.Assembly}  type: {manifest.DriverType}");
+                    Console.WriteLine($"{manifest.Id}  [compiled]  packages: {string.Join(", ", manifest.Packages.Select(p => $"{p.Id} {p.Version}"))}");
                 }
-                catch (Exception ex) when (ex is IOException or InvalidOperationException or System.Text.Json.JsonException)
+                catch (Exception ex) when (ex is IOException or InvalidOperationException or InvalidDataException)
                 {
                     Console.WriteLine($"{Path.GetFileName(dir)}  [FAILED TO PARSE: {ex.Message}]");
                 }
@@ -300,7 +337,8 @@ public static class DriverCommand
         Console.Error.WriteLine("""
             Usage:
               dbdatasync driver install <id> [--library <name>] --version <v> [--factory-type type] [--from <knownDriverId>] [--display-name name]
-              dbdatasync driver install <id> --kind compiled --package <packageId> --version <v> --assembly <name.dll> --driver-type <FQTypeName> [--source feed]
+              dbdatasync driver install <id> --kind compiled --package <packageId> --version <v> --driver-type <FQTypeName> [--source feed]
+              dbdatasync driver sync <id> [--source feed]
               dbdatasync driver list
               dbdatasync driver uninstall <id>
             """);

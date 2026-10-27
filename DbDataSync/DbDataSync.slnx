@@ -51,6 +51,5 @@
     <Project Path="tests/DbDataSync.TaskRunner.Tests/DbDataSync.TaskRunner.Tests.csproj" />
   </Folder>
   <Folder Name="/tests/fixtures/">
-    <Project Path="tests/fixtures/DbDataSync.Drivers.LoaderTestFixture/DbDataSync.Drivers.LoaderTestFixture.csproj" />
   </Folder>
 </Solution>

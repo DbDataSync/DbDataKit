@@ -226,7 +226,6 @@
     <Project Path="DbDataSync/tests/DbDataSync.TaskRunner.Tests/DbDataSync.TaskRunner.Tests.csproj" />
     <Project Path="DbDataSync/tests/DbDataSync.Updates.Tests/DbDataSync.Updates.Tests.csproj" />
     <Project Path="DbDataSync/tests/DbDataSync.Verification.Tests/DbDataSync.Verification.Tests.csproj" />
-    <Project Path="DbDataSync/tests/fixtures/DbDataSync.Drivers.LoaderTestFixture/DbDataSync.Drivers.LoaderTestFixture.csproj" />
     <Project Path="DbDataSync/tests/fixtures/DbDataSync.Libraries.CompatFixtureDriver/DbDataSync.Libraries.CompatFixtureDriver.csproj" />
     <Project Path="DbDataSync/tests/fixtures/DbDataSync.Libraries.CompatFixtureLibraryComplete/DbDataSync.Libraries.CompatFixtureLibraryComplete.csproj" />
     <Project Path="DbDataSync/tests/fixtures/DbDataSync.Libraries.CompatFixtureLibraryIncomplete/DbDataSync.Libraries.CompatFixtureLibraryIncomplete.csproj" />

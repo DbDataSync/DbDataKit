@@ -80,7 +80,7 @@ public static class LibraryInstaller
     /// The restore-then-copy half of <see cref="InstallAsync"/>, without a manifest — for a caller
     /// that writes a different manifest shape into the same directory layout. A compiled driver plugin
     /// (phase 109e) is exactly this: its package restores into <c>&lt;repo&gt;/drivers/&lt;id&gt;/lib/</c>
-    /// rather than <c>libraries/&lt;id&gt;/lib/</c>, and its manifest is a <c>driver.json</c>, not a
+    /// rather than <c>libraries/&lt;id&gt;/lib/</c>, and its manifest is a <c>driver.csx</c>, not a
     /// <c>library.json</c> — but the restore mechanics (publish, flatten, replace) are identical.
     /// </summary>
     public static async Task RestorePackagesAsync(
