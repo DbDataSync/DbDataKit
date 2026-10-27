@@ -14,6 +14,7 @@
     <PackageReference Include="Apache.Arrow.Flight.AspNetCore" />
     <PackageReference Include="Apache.Arrow.Flight.Sql" />
     <ProjectReference Include="..\DbDataKit.Serving.Abstractions\DbDataKit.Serving.Abstractions.csproj" />
-    <ProjectReference Include="..\DbDataKit.Config\DbDataKit.Config.csproj" />   <!-- the schema attributes of the options the module reads from server.yaml -->
+    <ProjectReference Include="..\DbDataKit.Config\DbDataKit.Config.csproj" />
+    <ProjectReference Include="..\DbDataKit.Metadata.Abstractions\DbDataKit.Metadata.Abstractions.csproj" />   <!-- the LIKE matcher for catalog filters -->   <!-- the schema attributes of the options the module reads from server.yaml -->
   </ItemGroup>
 </Project>

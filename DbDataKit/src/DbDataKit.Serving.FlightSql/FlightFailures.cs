@@ -38,6 +38,7 @@ public static class FlightFailures
         RpcException rpc => rpc,
         ConnectionFailureException failure => new FailureRpcException(failure.Failure),
         ServingBackendException backend => new FailureRpcException(backend.Failure),
+        ServingUnauthenticatedException => new RpcException(new Status(StatusCode.Unauthenticated, ex.Message)),
         ServingDeniedException => new RpcException(new Status(StatusCode.PermissionDenied, ex.Message)),
         ServingNotFoundException => new RpcException(new Status(StatusCode.NotFound, ex.Message)),
         ServingInvalidException => new RpcException(new Status(StatusCode.InvalidArgument, ex.Message)),

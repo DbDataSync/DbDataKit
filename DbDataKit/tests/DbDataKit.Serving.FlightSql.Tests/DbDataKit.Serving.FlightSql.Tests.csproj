@@ -4,9 +4,12 @@
     <NoWarn>$(NoWarn);xUnit1051</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\DbDataKit.Serving.FlightSql\DbDataKit.Serving.FlightSql.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Connections.FlightSql\DbDataKit.Connections.FlightSql.csproj" />   <!-- the client the module is tested with -->
+    <Compile Include="..\DbDataKit.Serving.Abstractions.Tests\FakeServingHost.cs" Link="FakeServingHost.cs" />
   </ItemGroup>
 </Project>

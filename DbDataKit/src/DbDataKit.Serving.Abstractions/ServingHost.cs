@@ -2,8 +2,8 @@ using Apache.Arrow;
 
 namespace DbDataKit.Serving;
 
-/// <summary>Who a caller is once the host has accepted their credentials. <see cref="Roles"/> and <see cref="Claims"/> are the host's to define; a protocol only carries them back to the host.</summary>
-public sealed record ServingCaller(string Id, string Name, IReadOnlySet<string> Roles, IReadOnlyDictionary<string, string> Claims)
+/// <summary>Who a caller is once the host has accepted their credentials. <see cref="Roles"/> and <see cref="Claims"/> are the host's to define; a protocol only carries them back to the host. A host may derive from this to carry what it needs to run the caller's queries (a protocol never looks inside).</summary>
+public record ServingCaller(string Id, string Name, IReadOnlySet<string> Roles, IReadOnlyDictionary<string, string> Claims)
 {
     public ServingCaller(string id, string name) : this(id, name, new HashSet<string>(), new Dictionary<string, string>()) { }
 }
@@ -79,7 +79,11 @@ public interface IServingHost
 /// <summary>A failure a protocol answers in its own words (a Flight status code, a Postgres error code). The message is safe to show the caller.</summary>
 public abstract class ServingException(string message) : Exception(message);
 
+/// <summary>The caller is not allowed to do this (they are known, and the answer is no).</summary>
 public sealed class ServingDeniedException(string message) : ServingException(message);
+
+/// <summary>The caller could not be identified (no credentials, wrong credentials, a session that ended, too many failed attempts). A protocol answers "unauthenticated", not "denied".</summary>
+public sealed class ServingUnauthenticatedException(string message) : ServingException(message);
 
 public sealed class ServingNotFoundException(string message) : ServingException(message);
 

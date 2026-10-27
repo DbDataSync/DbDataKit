@@ -116,6 +116,7 @@ public class ServingContractTests
 
         Assert.True(facts.ReadOnly);
         Assert.Null(facts.IdentifierQuote);
+        Assert.Null(facts.IdentifiersCaseInsensitive);
         Assert.False((await new HostServices(new FakeServingHost(withWrites: true)).Catalog.FactsAsync(await As("admin"), "main")).ReadOnly);
     }
 
@@ -129,6 +130,25 @@ public class ServingContractTests
         Assert.Equal(failure.PublicMessage, error.Message);
         Assert.IsAssignableFrom<ServingException>(error);
     }
+
+    [Theory]
+    [InlineData("select * from t", 0)]
+    [InlineData("select * from t where a = ? and b = ?", 2)]
+    [InlineData("select '?' as q, \"?\" as r from t where a = ?", 1)]
+    public async Task Preparing_a_statement_tells_its_parameter_count_the_question_marks_outside_quotes(string text, int expected) =>
+        Assert.Equal(expected, (await _services.Queries.PrepareAsync(await As("admin"), new ServingRequest.Sql("main", text))).ParameterCount);
+
+    [Fact]
+    public async Task A_host_may_derive_its_own_caller_and_the_services_hand_it_back()
+    {
+        var caller = new HostCaller("u1", "ada", new HashSet<string>(), new Dictionary<string, string>(), "secret-for-the-core");
+        ServingCaller asBase = caller;
+
+        Assert.Equal("secret-for-the-core", Assert.IsType<HostCaller>(asBase).Principal);
+        await Task.CompletedTask;
+    }
+
+    private sealed record HostCaller(string Id, string Name, IReadOnlySet<string> Roles, IReadOnlyDictionary<string, string> Claims, string Principal) : ServingCaller(Id, Name, Roles, Claims);
 
     [Fact]
     public async Task A_module_starts_with_the_services_reports_health_and_drains()

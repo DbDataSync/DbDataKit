@@ -10,7 +10,8 @@ namespace DbDataKit.Serving;
 /// <param name="Preview">The preview whose draft layer the request sees, or null.</param>
 /// <param name="SessionId">The core session the request belongs to, or null for a request outside one.</param>
 /// <param name="TraceId">The trace the request belongs to, carried across modules.</param>
-public sealed record ServingContext(ServingCaller Caller, string Channel = ServingContext.ProductionChannel, string? Preview = null, string? SessionId = null, string? TraceId = null)
+/// <param name="ClientAddress">Where the call came from, for the core's login throttle and audit.</param>
+public sealed record ServingContext(ServingCaller Caller, string Channel = ServingContext.ProductionChannel, string? Preview = null, string? SessionId = null, string? TraceId = null, string? ClientAddress = null)
 {
     public const string ProductionChannel = "prod";
 }
@@ -65,13 +66,14 @@ public sealed record ServingSession(string Id, string Protocol, string CallerId,
 
 public interface IServingSessions
 {
-    Task<ServingSession> OpenAsync(ServingCaller caller, string protocol, TimeSpan timeToLive, CancellationToken cancellationToken = default);
+    /// <param name="timeToLive">How long the session lives without use; null leaves it to the core's configuration.</param>
+    Task<ServingSession> OpenAsync(ServingCaller caller, string protocol, TimeSpan? timeToLive = null, CancellationToken cancellationToken = default);
 
     /// <summary>The session, or null when it does not exist, has expired, or belongs to another caller.</summary>
     Task<ServingSession?> GetAsync(ServingCaller caller, string id, CancellationToken cancellationToken = default);
 
     /// <summary>Stores the adapter's state and extends the life of the session.</summary>
-    Task SaveStateAsync(ServingCaller caller, string id, byte[] state, TimeSpan timeToLive, CancellationToken cancellationToken = default);
+    Task SaveStateAsync(ServingCaller caller, string id, byte[] state, TimeSpan? timeToLive = null, CancellationToken cancellationToken = default);
 
     Task CloseAsync(ServingCaller caller, string id, CancellationToken cancellationToken = default);
 }
@@ -83,31 +85,46 @@ public enum ServingObjectKind { Catalog, Schema, Table, View, Column, Model, Dim
 /// <param name="Columns">The Arrow schema of a table, view, model or entity; null for the other kinds.</param>
 /// <param name="Properties">What only some kinds have: <c>type</c>, <c>key</c>, <c>format</c> (a measure's format string), <c>as_of</c> (an entity supports as-of reads).</param>
 /// <param name="PrimaryKey">The columns of a table's primary key in key order; null where the source cannot say, empty where there is none.</param>
-public sealed record ServingObject(ServingObjectKind Kind, IReadOnlyList<string> Path, string? Description = null, Schema? Columns = null, IReadOnlyDictionary<string, string>? Properties = null, IReadOnlyList<string>? PrimaryKey = null)
+/// <param name="Catalog">For a schema, table or view: the catalog it is in, or null when the source has none (<see cref="Path"/> leaves out a part a source does not have, so a path alone cannot say which part is missing).</param>
+/// <param name="SchemaName">For a table or view: the schema it is in, or null when the source has none.</param>
+public sealed record ServingObject(ServingObjectKind Kind, IReadOnlyList<string> Path, string? Description = null, Schema? Columns = null, IReadOnlyDictionary<string, string>? Properties = null, IReadOnlyList<string>? PrimaryKey = null, string? Catalog = null, string? SchemaName = null)
 {
     public string Name => Path[^1];
 }
 
 /// <summary>What a source says about itself, for the protocols that report server facts (Flight SQL's <c>GetSqlInfo</c>, the Postgres wire's parameter status).</summary>
 /// <param name="Product">The database product, as the source reports it (<c>Microsoft SQL Server</c>, <c>PostgreSQL</c>), or the kind of source for a semantic model.</param>
+/// <param name="Version">The product's version as it reports it, or null when it was not asked or would not say.</param>
 /// <param name="ReadOnly">The source takes no writes through this server.</param>
-/// <param name="IdentifierQuote">How the source quotes an identifier (the characters before and after), or null when it does not say.</param>
-/// <param name="Compression">The codec the source asks its results to be sent with (<c>zstd</c>, <c>lz4</c>), or null for none; the client's own request decides when the source says nothing.</param>
-public sealed record ServingSourceFacts(string Product, string? Version, bool ReadOnly, (string Open, string Close)? IdentifierQuote = null, string? Compression = null);
+/// <param name="IdentifierQuote">The character that opens a quoted identifier, or null when the source does not say.</param>
+/// <param name="IdentifiersCaseInsensitive">Identifiers compare without regard to case; null when the source does not say.</param>
+/// <param name="NullsSortLow">A null sorts before every value; false sorts it at the end; null when the source does not say.</param>
+public sealed record ServingSourceFacts(string Product, string? Version, bool ReadOnly, string? IdentifierQuote = null, bool? IdentifiersCaseInsensitive = null, bool? NullsSortLow = null);
 
 public interface IServingCatalog
 {
-    /// <summary>What the source says about itself. Throws <see cref="ServingNotFoundException"/> for a source the caller cannot see.</summary>
+    /// <summary>What the source says about itself; an empty name is the caller's default source. Throws <see cref="ServingNotFoundException"/> for a source the caller cannot see and <see cref="ServingInvalidException"/> when no default can be chosen.</summary>
     Task<ServingSourceFacts> FactsAsync(ServingContext context, string source, CancellationToken cancellationToken = default);
 
     /// <summary>The objects under <paramref name="under"/> (the whole catalog when empty) that the caller may see. A caller sees nothing they could not query.</summary>
-    IAsyncEnumerable<ServingObject> DescribeAsync(ServingContext context, IReadOnlyList<string> under, CancellationToken cancellationToken = default);
+    /// <param name="withColumns">Fill in <see cref="ServingObject.Columns"/> of tables and views; reading them can cost a query each, so they are asked for only when the protocol needs them (Flight SQL's <c>GetTables</c> with <c>include_schema</c>).</param>
+    IAsyncEnumerable<ServingObject> DescribeAsync(ServingContext context, IReadOnlyList<string> under, bool withColumns = false, CancellationToken cancellationToken = default);
 }
+
+/// <summary>What a client is told when it prepares a statement.</summary>
+/// <param name="ParameterCount">How many positional parameters the statement takes, by the source's own marker rules (<c>?</c>, <c>$1</c>). A statement with named markers reports none, because those are matched by the names the client sends.</param>
+public sealed record ServingStatementInfo(int ParameterCount);
 
 public interface IServingQueries
 {
     /// <summary>Runs the request as the caller, in the context's channel, within the lower of their limits and the request's. Access rules are applied here and nowhere else.</summary>
     Task<IServingAnswer> RunAsync(ServingContext context, ServingRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Checks a statement the way running it would, without running it: the source must be one the caller may use, and a statement the source would refuse (a write on a read-only source) is refused with <see cref="ServingDeniedException"/>.
+    /// Returns what a client needs to prepare it.
+    /// </summary>
+    Task<ServingStatementInfo> PrepareAsync(ServingContext context, ServingRequest.Sql statement, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -176,7 +193,9 @@ public interface IServingModule
 /// </summary>
 public sealed class HostServices(IServingHost host) : IServingServices, IServingIdentity, IServingSessions, IServingQueries, IServingCatalog, IServingUpdates
 {
+    private static readonly TimeSpan DefaultLifetime = TimeSpan.FromHours(8);
     private readonly ConcurrentDictionary<string, ServingSession> _sessions = new();
+    private readonly ConcurrentDictionary<string, ServingCaller> _callers = new();
 
     public IServingIdentity Identity => this;
 
@@ -190,7 +209,13 @@ public sealed class HostServices(IServingHost host) : IServingServices, IServing
 
     public IServingUpdates? Updates => host.Writes is null ? null : this;
 
-    public ValueTask<ServingCaller?> AuthenticateAsync(ServingCredentials credentials, string? clientAddress = null, CancellationToken cancellationToken = default) => host.AuthenticateAsync(credentials, cancellationToken);
+    public ValueTask<ServingCaller?> AuthenticateAsync(ServingCredentials credentials, string? clientAddress = null, CancellationToken cancellationToken = default)
+    {
+        // a bearer token that is a session's id means the caller who opened the session
+        if (credentials is ServingCredentials.Bearer(var token) && _sessions.TryGetValue(token, out var session) && session.ExpiresAt > DateTimeOffset.UtcNow && _callers.TryGetValue(token, out var caller))
+            return ValueTask.FromResult<ServingCaller?>(caller);
+        return host.AuthenticateAsync(credentials, cancellationToken);
+    }
 
     public async Task<IServingAnswer> RunAsync(ServingContext context, ServingRequest request, CancellationToken cancellationToken = default)
     {
@@ -212,36 +237,51 @@ public sealed class HostServices(IServingHost host) : IServingServices, IServing
         return new ServingSourceFacts("host", null, ReadOnly: host.Writes is null);
     }
 
-    public async IAsyncEnumerable<ServingObject> DescribeAsync(ServingContext context, IReadOnlyList<string> under, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public Task<ServingStatementInfo> PrepareAsync(ServingContext context, ServingRequest.Sql statement, CancellationToken cancellationToken = default)
+    {
+        // the host knows no dialect: count the question marks outside quotes, which is what a plain positional statement has
+        var count = 0;
+        char? quote = null;
+        foreach (var c in statement.Text)
+        {
+            if (quote is not null) { if (c == quote) quote = null; }
+            else if (c is '\'' or '"') quote = c;
+            else if (c == '?') count++;
+        }
+        return Task.FromResult(new ServingStatementInfo(count));
+    }
+
+    public async IAsyncEnumerable<ServingObject> DescribeAsync(ServingContext context, IReadOnlyList<string> under, bool withColumns = false, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await foreach (var table in host.DescribeAsync(context.Caller, new ServingCatalogRequest(), cancellationToken).ConfigureAwait(false))
         {
             var path = new[] { table.Catalog, table.Schema, table.Name }.OfType<string>().ToArray();
             if (under.Count > 0 && !path.Take(under.Count).SequenceEqual(under)) continue;
-            yield return new ServingObject(table.Kind == "VIEW" ? ServingObjectKind.View : ServingObjectKind.Table, path, Columns: table.Columns);
+            yield return new ServingObject(table.Kind == "VIEW" ? ServingObjectKind.View : ServingObjectKind.Table, path, Columns: table.Columns, Catalog: table.Catalog, SchemaName: table.Schema);
         }
     }
 
-    public Task<ServingSession> OpenAsync(ServingCaller caller, string protocol, TimeSpan timeToLive, CancellationToken cancellationToken = default)
+    public Task<ServingSession> OpenAsync(ServingCaller caller, string protocol, TimeSpan? timeToLive = null, CancellationToken cancellationToken = default)
     {
-        var session = new ServingSession(Guid.NewGuid().ToString("N"), protocol, caller.Id, [], DateTimeOffset.UtcNow + timeToLive);
+        var session = new ServingSession(Guid.NewGuid().ToString("N"), protocol, caller.Id, [], DateTimeOffset.UtcNow + (timeToLive ?? DefaultLifetime));
         _sessions[session.Id] = session;
+        _callers[session.Id] = caller;
         return Task.FromResult(session);
     }
 
     public Task<ServingSession?> GetAsync(ServingCaller caller, string id, CancellationToken cancellationToken = default) =>
         Task.FromResult(_sessions.TryGetValue(id, out var s) && s.CallerId == caller.Id && s.ExpiresAt > DateTimeOffset.UtcNow ? s : null);
 
-    public Task SaveStateAsync(ServingCaller caller, string id, byte[] state, TimeSpan timeToLive, CancellationToken cancellationToken = default)
+    public Task SaveStateAsync(ServingCaller caller, string id, byte[] state, TimeSpan? timeToLive = null, CancellationToken cancellationToken = default)
     {
         if (!_sessions.TryGetValue(id, out var s) || s.CallerId != caller.Id) throw new ServingNotFoundException($"There is no session '{id}'.");
-        _sessions[id] = s with { State = state, ExpiresAt = DateTimeOffset.UtcNow + timeToLive };
+        _sessions[id] = s with { State = state, ExpiresAt = DateTimeOffset.UtcNow + (timeToLive ?? DefaultLifetime) };
         return Task.CompletedTask;
     }
 
     public Task CloseAsync(ServingCaller caller, string id, CancellationToken cancellationToken = default)
     {
-        if (_sessions.TryGetValue(id, out var s) && s.CallerId == caller.Id) _sessions.TryRemove(id, out _);
+        if (_sessions.TryGetValue(id, out var s) && s.CallerId == caller.Id) { _sessions.TryRemove(id, out _); _callers.TryRemove(id, out _); }
         return Task.CompletedTask;
     }
 
