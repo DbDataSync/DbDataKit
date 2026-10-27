@@ -36,7 +36,8 @@ export function GitPanel({ project, workspace, remote, onMerged }: { project: st
     },
   })
 
-  const list = changes.data ?? []
+  const list = changes.data?.changes ?? []
+  const uncommitted = changes.data?.uncommitted ?? false
   const commits = history.data ?? []
   const conflicts = conflictsOf(merge.error)
 
@@ -54,12 +55,12 @@ export function GitPanel({ project, workspace, remote, onMerged }: { project: st
       ))}
       <div className="row" style={{ gap: 12, margin: '10px 0', flexWrap: 'wrap' }}>
         <input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="what this change is" aria-label="Commit message" data-testid="build-git-message" style={{ flex: 1, minWidth: 220 }} />
-        <button type="button" className="btn" disabled={message.trim() === '' || list.length === 0 || commit.isPending} onClick={() => commit.mutate()} data-testid="build-git-commit">Commit</button>
+        <button type="button" className="btn" disabled={message.trim() === '' || !uncommitted || commit.isPending} onClick={() => commit.mutate()} data-testid="build-git-commit">Commit</button>
         {remote
           ? <button type="button" className="btn btn-primary" disabled={commits.length === 0 || push.isPending} onClick={() => push.mutate()} data-testid="build-git-push">Push the branch</button>
-          : <button type="button" className="btn btn-primary" disabled={commits.length === 0 || merge.isPending} onClick={() => merge.mutate()} data-testid="build-git-merge">Merge into the project</button>}
+          : <button type="button" className="btn btn-primary" disabled={commits.length === 0 || uncommitted || merge.isPending} onClick={() => merge.mutate()} data-testid="build-git-merge">Merge into the project</button>}
       </div>
-      {!remote && <div className="hint">A merge takes what is committed: commit again after saving more.</div>}
+      {!remote && uncommitted && commits.length > 0 && <div className="hint" data-testid="build-git-uncommitted">There are changes no commit has taken; commit them before merging.</div>}
       {remote && <div className="hint">This project follows a git remote: push the branch and merge it where the remote lives.</div>}
       {push.isSuccess && <div className="hint" data-testid="build-git-pushed">Pushed {push.data.branch}.</div>}
       {conflicts.length > 0 && (

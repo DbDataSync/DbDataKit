@@ -223,7 +223,13 @@ internal static class BuildManagementApi
         app.MapGet("/api/v1/projects/{project}/workspaces/{id}/changes", (string project, string id, HttpContext context) =>
         {
             if (Resolve(project, id, context, ServerRole.Viewer, false, out _, out var workspace) is { } refused) return refused;
-            try { return Results.Json(new { changes = DbDataKit.Config.Git.GitWorkspaceOperations.Changes(workspaces.RootOf(workspace), workspace.Base).Select(c => new { path = c.Path, status = c.Status, patch = c.Patch }) }); }
+            try
+            {
+                var root = workspaces.RootOf(workspace);
+                var changes = DbDataKit.Config.Git.GitWorkspaceOperations.Changes(root, workspace.Base).Select(c => new { path = c.Path, status = c.Status, patch = c.Patch }).ToList();
+                // whether a commit has not taken some of them yet: a merge takes what is committed
+                return Results.Json(new { changes, uncommitted = DbDataKit.Config.Git.GitWorkspaceOperations.HasUncommitted(root) });
+            }
             catch (DbDataKit.Config.Git.GitOperationException ex) { return Failed(ex); }
         });
 
