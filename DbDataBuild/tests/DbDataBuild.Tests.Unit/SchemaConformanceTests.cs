@@ -25,6 +25,7 @@ public class SchemaConformanceTests
         if (name == "output") LoadSchema("metadata");
         if (name == "model") LoadSchema("declared-model");       // a model file that says `kind: mapped` or `kind: native` is handed to the declared-model schema
         if (name is "config" or "folder") LoadSchema("model");   // the `defaults:` of the project and folder files are the model's own settings
+        if (name == "semantic") SchemaRegistry.Global.Register(JsonSchema.FromFile(Path.Combine(RepoRoot(), "..", "DbDataKit", "src", "DbDataKit.Semantic", "schemas", "semantic_request.schema.json")));   // its filters are the semantic request's
         return schema;
     }
 
