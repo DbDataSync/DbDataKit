@@ -160,6 +160,12 @@
   <Folder Name="/DbDataProxy/tests/">
     <Project Path="DbDataProxy/tests/DbDataProxy.Tests/DbDataProxy.Tests.csproj" />
   </Folder>
+  <Folder Name="/DbDataStore/src/">
+    <Project Path="DbDataStore/src/DbDataStore.Server/DbDataStore.Server.csproj" />
+  </Folder>
+  <Folder Name="/DbDataStore/tests/">
+    <Project Path="DbDataStore/tests/DbDataStore.Tests/DbDataStore.Tests.csproj" />
+  </Folder>
   <Folder Name="/DbDataSync/src/">
     <Project Path="DbDataSync/src/DbDataSync.Api/DbDataSync.Api.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Certificates/DbDataSync.Certificates.csproj" />
