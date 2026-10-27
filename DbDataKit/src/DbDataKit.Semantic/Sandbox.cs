@@ -82,9 +82,7 @@ public static class Sandbox
         con.Open();
         foreach (var ds in resultSets)
         {
-            var fields = ds.Descriptor["schema"]!["fields"]!.AsArray()
-                .Select(f => (Name: f!["name"]!.GetValue<string>(), Type: f["type"]!.GetValue<string>())).ToList();
-            Exec(con, $"CREATE TABLE \"{ds.Id}\" ({string.Join(", ", fields.Select(f => $"\"{f.Name}\" {TypeSql.GetValueOrDefault(f.Type, "VARCHAR")}"))})");
+            var fields = CreateTable(con, ds.Id, ds.Descriptor);
             // The appender writes the rows in bulk; one parameterized INSERT per row took about 1.5 ms each (plan 19 J21).
             using var appender = con.CreateAppender(ds.Id);
             foreach (var row in ds.Rows)
@@ -94,11 +92,65 @@ public static class Sandbox
                 line.EndRow();
             }
         }
+        return Query(con, sql, maxRows);
+    }
+
+    /// <summary>A result set that arrived as Arrow columns (<see cref="IColumnarSourceExecutor"/>): its table id, descriptor and rows.</summary>
+    public sealed record ColumnarTable(string Id, JsonObject Descriptor, ColumnarRows Rows);
+
+    /// <summary>
+    /// <see cref="Run"/> for tables read as Arrow: each value goes from its array into the appender typed, without a dictionary or a boxed value per cell
+    /// (plan 19 J24). A column the descriptor types differently from the array is converted; a column the array lacks is NULL.
+    /// </summary>
+    public static QueryRows RunColumnar(string sql, IEnumerable<ColumnarTable> tables, int maxRows)
+    {
+        using var con = new DuckDBConnection("DataSource=:memory:");
+        con.Open();
+        foreach (var t in tables)
+        {
+            var fields = CreateTable(con, t.Id, t.Descriptor);
+            var batch = t.Rows.Batch;
+            var writers = fields.Select(f => ColumnWriter(batch.Column(f.Name), f.Type)).ToArray();
+            using var appender = con.CreateAppender(t.Id);
+            for (int r = 0; r < batch.Length; r++)
+            {
+                var line = appender.CreateRow();
+                foreach (var w in writers) w(line, r);
+                line.EndRow();
+            }
+        }
+        return Query(con, sql, maxRows);
+    }
+
+    private static List<(string Name, string Type)> CreateTable(DuckDBConnection con, string id, JsonObject descriptor)
+    {
+        var fields = descriptor["schema"]!["fields"]!.AsArray()
+            .Select(f => (Name: f!["name"]!.GetValue<string>(), Type: f["type"]!.GetValue<string>())).ToList();
+        Exec(con, $"CREATE TABLE \"{id}\" ({string.Join(", ", fields.Select(f => $"\"{f.Name}\" {TypeSql.GetValueOrDefault(f.Type, "VARCHAR")}"))})");
+        return fields;
+    }
+
+    private static QueryRows Query(DuckDBConnection con, string sql, int maxRows)
+    {
         Exec(con, "SET enable_external_access = false");
         Exec(con, "SET lock_configuration = true");
         using var cmd = con.CreateCommand();
         cmd.CommandText = sql;
         return QueryRowReader.Read(cmd, maxRows);
+    }
+
+    /// <summary>The writer of one Arrow column into the appender as the descriptor's type; an Arrow type that already matches is read without boxing.</summary>
+    private static Action<IDuckDBAppenderRow, int> ColumnWriter(Apache.Arrow.IArrowArray? array, string type)
+    {
+        switch (array, type)
+        {
+            case (null, _): return (row, _) => row.AppendNullValue();
+            case (Apache.Arrow.Int64Array a, "integer"): return (row, i) => { if (a.GetValue(i) is { } v) row.AppendValue(v); else row.AppendNullValue(); };
+            case (Apache.Arrow.DoubleArray a, "number"): return (row, i) => { if (a.GetValue(i) is { } v) row.AppendValue(v); else row.AppendNullValue(); };
+            case (Apache.Arrow.BooleanArray a, "boolean"): return (row, i) => { if (a.GetValue(i) is { } v) row.AppendValue(v); else row.AppendNullValue(); };
+            case (Apache.Arrow.StringArray a, not ("integer" or "number" or "boolean")): return (row, i) => { if (a.IsNull(i)) row.AppendNullValue(); else row.AppendValue(a.GetString(i)); };
+            default: return (row, i) => Append(row, ArrowRows.Value(array, i), type);
+        }
     }
 
     /// <summary>One value into the appender row as the column's type (the table is created from the descriptor: string, number, integer, boolean, else VARCHAR).</summary>

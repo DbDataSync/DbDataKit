@@ -2,6 +2,7 @@
   <ItemGroup>
     <Using Include="Xunit" />
     <PackageReference Include="DuckDB.NET.Data" />
+    <PackageReference Include="Apache.Arrow" />
     <PackageReference Include="JsonSchema.Net" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Npgsql" />

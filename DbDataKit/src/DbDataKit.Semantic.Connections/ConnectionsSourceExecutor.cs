@@ -12,23 +12,28 @@ public sealed record SemanticSource(IDbProvider Provider, ConnectionContext Cont
 /// Runs the queries the semantic engine plans on the connections of <c>DbDataKit.Connections</c>. <paramref name="sources"/> maps a catalog
 /// source name to its connection; a source that is not in the map, or whose dialect this executor cannot run, goes to <paramref name="fallback"/>.
 /// </summary>
-public sealed class ConnectionsSourceExecutor(IReadOnlyDictionary<string, SemanticSource> sources, ISourceExecutor? fallback = null) : ISourceExecutor
+public sealed class ConnectionsSourceExecutor(IReadOnlyDictionary<string, SemanticSource> sources, ISourceExecutor? fallback = null) : IColumnarSourceExecutor
 {
     /// <summary>False: agent-written native text is for a host that puts its statement classifier in front of it.</summary>
     public bool RunsNativeText => false;
 
     /// <inheritdoc />
-    public QueryRows Execute(CompiledQuery query, int maxRows)
+    public QueryRows Execute(CompiledQuery query, int maxRows) => Route(query, maxRows, columnar: false).AsRows();
+
+    /// <summary>Reads the rows as Arrow arrays where every column has an Arrow form here, otherwise as rows. A fallback executor answers in rows.</summary>
+    public ColumnarOutcome ExecuteColumnar(CompiledQuery query, int maxRows) => Route(query, maxRows, columnar: true);
+
+    private ColumnarOutcome Route(CompiledQuery query, int maxRows, bool columnar)
     {
         if (!sources.TryGetValue(query.Source, out var source)) return Fallback(query, maxRows, $"has no connection for source '{query.Source}'");
         var engine = source.Provider.Engine;
         if (engine == EngineId.SqlServer)
         {
             if (query.Native.Dialect != "tsql") return Fallback(query, maxRows, $"cannot run {query.Native.Dialect} on source '{query.Source}' (SQL Server)");
-            return Run(source, query.ExecText ?? query.Native.Text, query.DuckDbParameters, named: true, maxRows);
+            return Run(source, query.ExecText ?? query.Native.Text, query.DuckDbParameters, named: true, maxRows, columnar);
         }
         if (engine == EngineId.DuckDb)
-            return Run(source, query.DuckDbSql, query.DuckDbParameters.Select(DuckDbValue).ToList(), named: false, maxRows);
+            return Run(source, query.DuckDbSql, query.DuckDbParameters.Select(DuckDbValue).ToList(), named: false, maxRows, columnar);
         return Fallback(query, maxRows, $"cannot run source '{query.Source}': the {engine.Value} engine is not supported yet");
     }
 
@@ -36,10 +41,10 @@ public sealed class ConnectionsSourceExecutor(IReadOnlyDictionary<string, Semant
     public QueryRows ExecuteNativeText(string source, NativeQuery native, int maxRows) =>
         throw new NotSupportedException("Agent-written native text is not run by the connections executor (RunsNativeText is false).");
 
-    private QueryRows Fallback(CompiledQuery query, int maxRows, string why) =>
-        fallback is not null ? fallback.Execute(query, maxRows) : throw new NotSupportedException($"The connections executor {why}.");
+    private ColumnarOutcome Fallback(CompiledQuery query, int maxRows, string why) =>
+        fallback is not null ? new(null, fallback.Execute(query, maxRows)) : throw new NotSupportedException($"The connections executor {why}.");
 
-    private static QueryRows Run(SemanticSource source, string text, IReadOnlyList<object?> parameters, bool named, int maxRows)
+    private static ColumnarOutcome Run(SemanticSource source, string text, IReadOnlyList<object?> parameters, bool named, int maxRows, bool columnar)
     {
         var provider = source.Provider;
         var classifier = new FailureClassifier([provider.FailureMapper]);
@@ -50,7 +55,7 @@ public sealed class ConnectionsSourceExecutor(IReadOnlyDictionary<string, Semant
             cmd.CommandTimeout = source.Context.Definition.Timeouts.CommandS;
             cmd.CommandText = text;
             for (int i = 0; i < parameters.Count; i++) cmd.Parameters.Add(Parameter(cmd, named ? $"@p{i + 1}" : null, parameters[i]));
-            return QueryRowReader.Read(cmd, maxRows);
+            return columnar ? QueryRowReader.ReadColumnar(cmd, maxRows) : new(null, QueryRowReader.Read(cmd, maxRows));
         }
         catch (Exception e) when (e is not (ConnectionFailureException or ConnectionPolicyException or OperationCanceledException))
         {

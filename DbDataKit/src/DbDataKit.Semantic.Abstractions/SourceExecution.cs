@@ -19,3 +19,25 @@ public interface ISourceExecutor
     /// <summary>Runs agent-written native text (level 0).</summary>
     QueryRows ExecuteNativeText(string source, NativeQuery native, int maxRows);
 }
+
+/// <summary>
+/// A source's rows as one Arrow record batch (whole numbers Int64, numbers Double or Decimal128, booleans, and text for strings and dates), read without boxing each value.
+/// <see cref="ToRows"/> gives the same rows <see cref="QueryRowReader.Read"/> would have.
+/// </summary>
+public sealed record ColumnarRows(List<string> Columns, Apache.Arrow.RecordBatch Batch)
+{
+    public int Count => Batch.Length;
+    public QueryRows ToRows() => ArrowRows.ToRows(this);
+}
+
+/// <summary>What <see cref="IColumnarSourceExecutor.ExecuteColumnar"/> returns: the columns, or the row form when a column's type has no Arrow form here (the read does not run twice).</summary>
+public sealed record ColumnarOutcome(ColumnarRows? Columnar, QueryRows? Rows)
+{
+    public QueryRows AsRows() => Rows ?? Columnar!.ToRows();
+}
+
+/// <summary>An executor that can also hand its rows over as Arrow. The engine asks for the columnar form where it only loads the rows into the sandbox.</summary>
+public interface IColumnarSourceExecutor : ISourceExecutor
+{
+    ColumnarOutcome ExecuteColumnar(CompiledQuery query, int maxRows);
+}

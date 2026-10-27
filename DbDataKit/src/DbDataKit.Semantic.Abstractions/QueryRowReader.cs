@@ -21,6 +21,18 @@ public static class QueryRowReader
     public static QueryRows Read(DbCommand cmd, int maxRows)
     {
         using var reader = cmd.ExecuteReader();
+        return ReadRows(reader, maxRows);
+    }
+
+    /// <summary>Runs the command and reads it into Arrow arrays with typed getters; a column type without an Arrow form here falls back to the row read on the same reader.</summary>
+    public static ColumnarOutcome ReadColumnar(DbCommand cmd, int maxRows)
+    {
+        using var reader = cmd.ExecuteReader();
+        return ArrowRows.TryRead(reader, maxRows) is { } columnar ? new(columnar, null) : new(null, ReadRows(reader, maxRows));
+    }
+
+    internal static QueryRows ReadRows(DbDataReader reader, int maxRows)
+    {
         var cols = Enumerable.Range(0, reader.FieldCount).Select(reader.GetName).ToList();
         // the type name is a property of the column, not of each cell: asking for it per value cost more than the rest of the read
         var dateColumn = Enumerable.Range(0, cols.Count).Select(i => reader.GetDataTypeName(i).Equals("date", StringComparison.OrdinalIgnoreCase)).ToArray();
