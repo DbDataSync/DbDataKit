@@ -45,10 +45,12 @@ public class ConformanceTests
     }
 
     /// <summary>Runs one fixture through the executor: the engine's result must match the fixture's expectations, validate against the result schema and replay from its run record.</summary>
-    internal static void RunFixture(string relativePath, string totalsCompute, ISourceExecutor executor)
+    internal static void RunFixture(string relativePath, string totalsCompute, ISourceExecutor executor, Func<JsonObject, JsonObject>? rewrite = null)
     {
         var fx = JsonNode.Parse(File.ReadAllText(Path.Combine(Root, "fixtures", relativePath)))!.AsObject();
         var request = fx["request"]!.AsObject();
+        // a test may hand the engine the same request by another road (through semantic SQL); what the fixture expects does not change
+        if (rewrite is not null && request["kind"]?.GetValue<string>() == "query") { request = rewrite(request.DeepClone().AsObject()); fx["request"] = request; }
         // A fixture that pins where subtotals are computed (a hint in its request, or what it says about the _g result sets) isn't run in other modes.
         if (totalsCompute != "native" && (fx["request"]!["query"]!["totals"]?["compute"] is not null || fx["expect"]!["result_sets_absent"] is not null || fx["expect"]!["result_set_covers"] is not null))
             return;
