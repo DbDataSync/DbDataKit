@@ -3279,6 +3279,130 @@ WHERE b.fiscal_year = $1
 GROUP BY b.fiscal_year
 ORDER BY date_fiscal_year ASC
 LIMIT 101;
+=== level4/128_ssas_between_days.json
+--- ssas_finance dax
+EVALUATE
+TOPN (
+    100,
+    SELECTCOLUMNS (
+        SUMMARIZECOLUMNS (
+            'Customer'[Region],
+            FILTER ( ALL ( 'Date'[Date] ), ( 'Date'[Date] >= DATE ( 2026, 7, 1 ) && 'Date'[Date] <= DATE ( 2026, 8, 31 ) ) ),
+            "budget_budget_amount", [Budget Amount]
+        ),
+        "customers_region", 'Customer'[Region],
+        "budget_budget_amount", [budget_budget_amount]
+    ),
+    [customers_region], ASC
+)
+ORDER BY [customers_region] ASC
+--- parameters String:2026-07-01, String:2026-08-31
+--- duckdb
+SELECT f.region AS customers_region,
+       SUM(f.amount) AS budget_budget_amount
+FROM fact_budget f
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
+GROUP BY f.region
+ORDER BY customers_region ASC
+LIMIT 101;
+--- ssas_finance dax
+EVALUATE
+TOPN (
+    100,
+    SELECTCOLUMNS (
+        SUMMARIZECOLUMNS (
+            'Customer'[Region],
+            FILTER ( ALL ( 'Date'[Date] ), ( 'Date'[Date] >= DATE ( 2026, 7, 1 ) && 'Date'[Date] <= DATE ( 2026, 8, 31 ) ) ),
+            "budget_budget_amount", [Budget Amount]
+        ),
+        "customers_region", 'Customer'[Region],
+        "budget_budget_amount", [budget_budget_amount]
+    ),
+    [customers_region], ASC
+)
+ORDER BY [customers_region] ASC
+--- parameters String:2026-07-01, String:2026-08-31
+--- duckdb
+SELECT f.region AS customers_region,
+       SUM(f.amount) AS budget_budget_amount
+FROM fact_budget f
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
+GROUP BY f.region
+ORDER BY customers_region ASC
+LIMIT 101;
+=== level4/129_ssas_period_to_date.json
+--- sqlserver_sales tsql
+SELECT d.fiscal_quarter AS lvl, MIN(d.calendar_date) AS lo, MAX(d.calendar_date) AS hi
+FROM dim_date d
+GROUP BY d.fiscal_quarter;
+--- parameters 
+--- duckdb
+SELECT d.fiscal_quarter AS lvl, MIN(d.calendar_date) AS lo, MAX(d.calendar_date) AS hi
+FROM dim_date d
+GROUP BY d.fiscal_quarter;
+--- ssas_finance dax
+EVALUATE
+TOPN (
+    100,
+    SELECTCOLUMNS (
+        SUMMARIZECOLUMNS (
+            'Customer'[Region],
+            FILTER ( ALL ( 'Date'[Date] ), ( 'Date'[Date] >= DATE ( 2026, 7, 1 ) && 'Date'[Date] <= DATE ( 2026, 8, 20 ) ) ),
+            "budget_budget_amount", [Budget Amount]
+        ),
+        "customers_region", 'Customer'[Region],
+        "budget_budget_amount", [budget_budget_amount]
+    ),
+    [customers_region], ASC
+)
+ORDER BY [customers_region] ASC
+--- parameters String:2026-07-01, String:2026-08-20
+--- duckdb
+SELECT f.region AS customers_region,
+       SUM(f.amount) AS budget_budget_amount
+FROM fact_budget f
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
+GROUP BY f.region
+ORDER BY customers_region ASC
+LIMIT 101;
+--- sqlserver_sales tsql
+SELECT d.fiscal_quarter AS lvl, MIN(d.calendar_date) AS lo, MAX(d.calendar_date) AS hi
+FROM dim_date d
+GROUP BY d.fiscal_quarter;
+--- parameters 
+--- duckdb
+SELECT d.fiscal_quarter AS lvl, MIN(d.calendar_date) AS lo, MAX(d.calendar_date) AS hi
+FROM dim_date d
+GROUP BY d.fiscal_quarter;
+--- ssas_finance dax
+EVALUATE
+TOPN (
+    100,
+    SELECTCOLUMNS (
+        SUMMARIZECOLUMNS (
+            'Customer'[Region],
+            FILTER ( ALL ( 'Date'[Date] ), ( 'Date'[Date] >= DATE ( 2026, 7, 1 ) && 'Date'[Date] <= DATE ( 2026, 8, 20 ) ) ),
+            "budget_budget_amount", [Budget Amount]
+        ),
+        "customers_region", 'Customer'[Region],
+        "budget_budget_amount", [budget_budget_amount]
+    ),
+    [customers_region], ASC
+)
+ORDER BY [customers_region] ASC
+--- parameters String:2026-07-01, String:2026-08-20
+--- duckdb
+SELECT f.region AS customers_region,
+       SUM(f.amount) AS budget_budget_amount
+FROM fact_budget f
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
+GROUP BY f.region
+ORDER BY customers_region ASC
+LIMIT 101;
 === level4/13_allocate_equal_catalog.json
 --- sqlserver_sales tsql
 SELECT c.region AS customers_region,
@@ -3428,6 +3552,77 @@ FROM fact_sales f
 JOIN dim_product p ON p.product_key = f.product_key
 GROUP BY p.product
 ORDER BY products_product ASC;
+=== level4/130_ssas_last_complete_months.json
+--- sqlserver_sales tsql
+SELECT d.fiscal_month AS lvl, MIN(d.calendar_date) AS lo, MAX(d.calendar_date) AS hi
+FROM dim_date d
+GROUP BY d.fiscal_month;
+--- parameters 
+--- duckdb
+SELECT d.fiscal_month AS lvl, MIN(d.calendar_date) AS lo, MAX(d.calendar_date) AS hi
+FROM dim_date d
+GROUP BY d.fiscal_month;
+--- ssas_finance dax
+EVALUATE
+TOPN (
+    100,
+    SELECTCOLUMNS (
+        SUMMARIZECOLUMNS (
+            'Customer'[Region],
+            TREATAS ( { "2026-07", "2026-08" }, 'Date'[Fiscal Month] ),
+            "budget_budget_amount", [Budget Amount]
+        ),
+        "customers_region", 'Customer'[Region],
+        "budget_budget_amount", [budget_budget_amount]
+    ),
+    [customers_region], ASC
+)
+ORDER BY [customers_region] ASC
+--- parameters String:2026-07, String:2026-08
+--- duckdb
+SELECT f.region AS customers_region,
+       SUM(f.amount) AS budget_budget_amount
+FROM fact_budget f
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month IN ($1, $2)
+GROUP BY f.region
+ORDER BY customers_region ASC
+LIMIT 101;
+--- sqlserver_sales tsql
+SELECT d.fiscal_month AS lvl, MIN(d.calendar_date) AS lo, MAX(d.calendar_date) AS hi
+FROM dim_date d
+GROUP BY d.fiscal_month;
+--- parameters 
+--- duckdb
+SELECT d.fiscal_month AS lvl, MIN(d.calendar_date) AS lo, MAX(d.calendar_date) AS hi
+FROM dim_date d
+GROUP BY d.fiscal_month;
+--- ssas_finance dax
+EVALUATE
+TOPN (
+    100,
+    SELECTCOLUMNS (
+        SUMMARIZECOLUMNS (
+            'Customer'[Region],
+            TREATAS ( { "2026-07", "2026-08" }, 'Date'[Fiscal Month] ),
+            "budget_budget_amount", [Budget Amount]
+        ),
+        "customers_region", 'Customer'[Region],
+        "budget_budget_amount", [budget_budget_amount]
+    ),
+    [customers_region], ASC
+)
+ORDER BY [customers_region] ASC
+--- parameters String:2026-07, String:2026-08
+--- duckdb
+SELECT f.region AS customers_region,
+       SUM(f.amount) AS budget_budget_amount
+FROM fact_budget f
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month IN ($1, $2)
+GROUP BY f.region
+ORDER BY customers_region ASC
+LIMIT 101;
 === level4/14_allocate_missing_weights_fail.json
 --- sqlserver_sales tsql
 SELECT c.region AS customers_region,
