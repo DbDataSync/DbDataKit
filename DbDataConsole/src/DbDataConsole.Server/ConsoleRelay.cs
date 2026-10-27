@@ -31,6 +31,45 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
         ? ServerRole.Admin | ServerRole.Operator | ServerRole.Author | ServerRole.Approver
         : ServerRole.Viewer;
 
+    /// <summary>The token that says the signed-in person is calling <paramref name="instance"/>: the key that server knows, and the roles the person has there (the lower of their role here and what the server lets this console grant).</summary>
+    private async Task<string> TokenForAsync(RegisteredInstance instance, string userId, string? userName, UserRole role, CancellationToken ct)
+    {
+        // The key this server knows: the current one, or the one a rotation is moving to if the server already has that.
+        var identity = (instance.KeyFingerprint is { } fingerprint ? await keys.ForKeyAsync(fingerprint, ct) : null) ?? await keys.GetOrCreateAsync(ct);
+        // A server paired before the ceiling was recorded is asked for reading only.
+        var roles = ServerRoles.Lower(RolesOf(role), instance.Ceiling == ServerRole.None ? ServerRole.Viewer : instance.Ceiling);
+        return identity.Issuer().Issue(new ConsoleTokenRequest(instance.InstanceId, userId, userName, roles));
+    }
+
+    /// <summary>
+    /// A call the console makes itself on the signed-in person's behalf (T11 brokers a pairing with two of them): the same token a relayed call carries, so the server decides what the person may do. The answer is the status and the JSON body, or a 502 saying
+    /// the server did not answer.
+    /// </summary>
+    public async Task<(int Status, System.Text.Json.Nodes.JsonNode? Body)> CallAsync(RegisteredInstance instance, HttpMethod method, string path, object? body, CancellationToken ct)
+    {
+        if (current.Id is not { } userId || current.Role is not { } role) return (401, new System.Text.Json.Nodes.JsonObject { ["error"] = "Sign in first." });
+        using var request = new HttpRequestMessage(method, new Uri(instance.Url, path));
+        request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, await TokenForAsync(instance, userId, current.Name, role, ct));
+        if (body is not null) request.Content = System.Net.Http.Json.JsonContent.Create(body);
+        try
+        {
+            using var response = await ClientFor(instance).SendAsync(request, ct);
+            var text = await response.Content.ReadAsStringAsync(ct);
+            System.Text.Json.Nodes.JsonNode? json = null;
+            try { json = text.Length > 0 ? System.Text.Json.Nodes.JsonNode.Parse(text) : null; } catch (System.Text.Json.JsonException) { }
+            return ((int)response.StatusCode, json);
+        }
+        catch (IncompatibleServerException ex)
+        {
+            return (502, new System.Text.Json.Nodes.JsonObject { ["error"] = ex.Message });
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            log.LogWarning("{Server} did not answer a {Method} {Path}: {Reason}", instance.Name, method, path, ex.GetType().Name);
+            return (502, new System.Text.Json.Nodes.JsonObject { ["error"] = $"{instance.Name} did not answer." });
+        }
+    }
+
     public async Task RelayAsync(HttpContext context, string server, string path)
     {
         if (instances.Registry.Find(server) is not { } instance)
@@ -49,11 +88,7 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
             return;
         }
 
-        // The key this server knows: the current one, or the one a rotation is moving to if the server already has that.
-        var identity = (instance.KeyFingerprint is { } fingerprint ? await keys.ForKeyAsync(fingerprint, context.RequestAborted) : null) ?? await keys.GetOrCreateAsync(context.RequestAborted);
-        // What this person may do there is the lower of their role here and what the server lets this console grant; a server paired before the ceiling was recorded is asked for reading only.
-        var roles = ServerRoles.Lower(RolesOf(role), instance.Ceiling == ServerRole.None ? ServerRole.Viewer : instance.Ceiling);
-        var token = identity.Issuer().Issue(new ConsoleTokenRequest(instance.InstanceId, userId, current.Name, roles));
+        var token = await TokenForAsync(instance, userId, current.Name, role, context.RequestAborted);
 
         if (context.WebSockets.IsWebSocketRequest)
         {

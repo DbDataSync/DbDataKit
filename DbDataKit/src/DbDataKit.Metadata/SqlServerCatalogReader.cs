@@ -44,10 +44,12 @@ public class SqlServerCatalogReader(DbConnection connection, ISqlDialect? dialec
         var conditions = new List<string>();
         var args = new List<object?>();
         if (t.Schema is not null) { conditions.Add($"{schemaColumn} = {{{args.Count}}}"); args.Add(t.Schema); }
-        conditions.Add($"{nameColumn} = {{{args.Count}}}");
-        args.Add(t.Name);
+        if (t.Name.Length > 0) { conditions.Add($"{nameColumn} = {{{args.Count}}}"); args.Add(t.Name); }     // no name: every table of the schema (ReadSchemaAsync)
+        if (conditions.Count == 0) conditions.Add("1 = 1");
         return (string.Join(" AND ", conditions), [.. args]);
     }
+
+    protected override bool ReadsWholeSchemas => true;
 
     protected override (string Sql, object?[] Args) ColumnsQuery(TableRef t)
     {
@@ -58,9 +60,10 @@ public class SqlServerCatalogReader(DbConnection connection, ISqlDialect? dialec
             + "CASE WHEN ty.name IN (N'char', N'varchar', N'binary', N'varbinary') THEN c.max_length WHEN ty.name IN (N'nchar', N'nvarchar') THEN CASE WHEN c.max_length = -1 THEN -1 ELSE c.max_length / 2 END END, "
             + "CASE WHEN ty.name IN (N'decimal', N'numeric') THEN c.precision END, "
             + "CASE WHEN ty.name IN (N'decimal', N'numeric', N'datetime2', N'datetimeoffset', N'time') THEN c.scale END, "
-            + "c.collation_name, c.is_identity, c.is_computed "
+            + "c.collation_name, c.is_identity, c.is_computed, o.name "     // the table's name ends the row (ReadSchemaAsync)
             + $"FROM {p}sys.columns c JOIN {p}sys.objects o ON o.object_id = c.object_id JOIN {p}sys.schemas s ON s.schema_id = o.schema_id "
-            + $"JOIN {p}sys.types ty ON ty.user_type_id = c.system_type_id "
+            // an alias type is read as the type it is based on; a CLR type (geography, hierarchyid, an assembly type) shares system_type_id 240, so it is read by its own id, or the column would match nothing and be left out
+            + $"JOIN {p}sys.types ty ON ty.user_type_id = CASE WHEN c.system_type_id = 240 THEN c.user_type_id ELSE c.system_type_id END "
             + $"LEFT JOIN {p}sys.default_constraints dc ON dc.parent_object_id = c.object_id AND dc.parent_column_id = c.column_id "
             + $"LEFT JOIN {p}sys.computed_columns cc ON cc.object_id = c.object_id AND cc.column_id = c.column_id "
             + $"WHERE {where} ORDER BY c.column_id", args);
@@ -97,11 +100,16 @@ public class SqlServerCatalogReader(DbConnection connection, ISqlDialect? dialec
     {
         string p = Prefix(t.Catalog);
         var (where, args) = Of(t);
-        return ("SELECT i.name, i.is_unique, ic.key_ordinal, c.name, ic.is_descending_key "
+        // Layout: name, unique, ordinal, column, descending, included, backs constraint, compression, partitions. An included column has key_ordinal 0, so its ordinal is its place in the index.
+        var primaryKeys = Options.IncludeConstraintIndexes ? "" : "i.is_primary_key = 0 AND ";
+        return ("SELECT i.name, i.is_unique, CASE WHEN ic.is_included_column = 1 THEN ic.index_column_id ELSE ic.key_ordinal END, c.name, ic.is_descending_key, ic.is_included_column, "
+            + "CASE WHEN i.is_unique_constraint = 1 OR i.is_primary_key <> 0 THEN 1 ELSE 0 END, "
+            + $"(SELECT MIN(pt.data_compression_desc) FROM {p}sys.partitions pt WHERE pt.object_id = i.object_id AND pt.index_id = i.index_id), "
+            + $"(SELECT COUNT(*) FROM {p}sys.partitions pt WHERE pt.object_id = i.object_id AND pt.index_id = i.index_id), o.name "
             + $"FROM {p}sys.indexes i JOIN {p}sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id "
             + $"JOIN {p}sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
             + $"JOIN {p}sys.objects o ON o.object_id = i.object_id JOIN {p}sys.schemas s ON s.schema_id = o.schema_id "
-            + $"WHERE i.is_primary_key = 0 AND i.type > 0 AND i.name IS NOT NULL AND ic.is_included_column = 0 AND ic.key_ordinal > 0 AND {where} ORDER BY i.name, ic.key_ordinal", args);
+            + $"WHERE {primaryKeys}i.type > 0 AND i.name IS NOT NULL AND (ic.is_included_column = 1 OR ic.key_ordinal > 0) AND {where} ORDER BY o.name, i.name, ic.is_included_column, ic.key_ordinal, ic.index_column_id", args);
     }
 
     protected override (string Sql, object?[] Args)? RowEstimateQuery(TableRef t)

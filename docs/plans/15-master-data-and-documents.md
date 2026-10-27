@@ -61,12 +61,12 @@ entities:
     attributes:
       territory_code: {type: VARCHAR(10), references: {entity: territory}}
       region:         {type: VARCHAR(40)}
-      share:          {type: DECIMAL(5,4), min: 0, max: 1}
+      share:          {type: "DECIMAL(5,4)", min: 0, max: 1}
     rules:
       - {kind: sum_equals, attribute: share, group_by: [region], value: 1, tolerance: 0.0001}
 ```
 
-- **Types** are `DbDataKit.Dialect` canonical types, the same names Build uses, written as each engine's own type on deploy.
+- **Types** are `DbDataKit.Dialect` canonical types, the same names Build uses, written as each engine's own type on deploy. In a one-line `{...}` entry a type with a comma is quoted (`"DECIMAL(5,4)"`), as in any YAML.
 - **Rules**: required, unique, default, ranges, patterns, allowed values (or a reference to another entity), references, and a small
   closed set of cross-row rules (a sum per group, no overlapping effective dates, a hierarchy without cycles). Each is checked on write,
   and reported with the field and the row, in the suite's error shape.

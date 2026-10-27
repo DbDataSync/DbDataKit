@@ -25,7 +25,7 @@ public sealed record ManagementResult(int Status, JsonNode Body)
 /// </list>
 /// A secret is never part of an answer: the settings are shown the way <c>config show</c> shows them, and the sentinel test puts a value in every place a secret can be and looks for it in every answer.
 /// </summary>
-public sealed partial class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null, ProxyActivity? activity = null, ProxyCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null)
+public sealed partial class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null, ProxyActivity? activity = null, ProxyCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, ProxySecrets? secrets = null, PairingCodes? pairingCodes = null)
 {
     public const string Prefix = "/api/v1";
 
@@ -42,6 +42,12 @@ public sealed partial class ProxyManagement(IConfigurationRoot configuration, st
                 return caller.Holds(ServerRole.Viewer) ? ManagementResult.Ok(About()) : Denied(ServerRole.Viewer);
             case ("GET", Prefix + "/config"):
                 return caller.Holds(ServerRole.Admin) ? ManagementResult.Ok(Config()) : Denied(ServerRole.Admin);
+            case ("POST", PairingCodeIssuer.Path) when pairingCodes is not null:
+            {
+                // T11: the code a console asks for so that another server (a Build server) can pair as a publisher without anyone typing it
+                var (status, answer) = PairingCodeIssuer.Issue(pairingCodes, caller.Holds(ServerRole.Admin), body);
+                return new ManagementResult(status, answer);
+            }
             case ("POST", Prefix + "/config/validate"):
                 return caller.Holds(ServerRole.Admin) ? Validate(body) : Denied(ServerRole.Admin);
             case ("GET", Prefix + "/config/history"):
@@ -58,6 +64,13 @@ public sealed partial class ProxyManagement(IConfigurationRoot configuration, st
             if (!caller.Holds(ServerRole.Admin) && !caller.Holds(ServerRole.Publisher)) return Denied(ServerRole.Admin);
             var rest = route.Length > (Prefix + "/data-sources").Length ? route[(Prefix + "/data-sources/").Length..].Split('/') : [];
             return await dataSources.HandleAsync(method, rest, body, query["expected_version"], caller, cancellationToken);
+        }
+        if (route == Prefix + "/secrets" || route.StartsWith(Prefix + "/secrets/", StringComparison.Ordinal))
+        {
+            if (secrets is null) return ManagementResult.Problem(404, "There is no such call.");
+            // a publishing client keeps the secrets of its own data sources here; an administrator does too, under their own name
+            if (!caller.Holds(ServerRole.Admin) && !caller.Holds(ServerRole.Publisher)) return Denied(ServerRole.Admin);
+            return await secrets.HandleAsync(method, route[(Prefix.Length + 1)..].Split('/'), body, caller, cancellationToken);
         }
         if (route is Prefix + "/identities" or Prefix + "/auth" || route.StartsWith(Prefix + "/users/", StringComparison.Ordinal))
         {

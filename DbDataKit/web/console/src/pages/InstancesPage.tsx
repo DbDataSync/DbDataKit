@@ -34,10 +34,19 @@ export function InstancesPage() {
       await queryClient.invalidateQueries({ queryKey: instancesKey })
     },
   })
+  const [linkFrom, setLinkFrom] = useState('')
+  const [linkTo, setLinkTo] = useState('')
+  const link = useMutation({
+    mutationFn: () => consoleApi.instances.link(linkFrom, linkTo, null),
+  })
   const forget = useMutation({
     mutationFn: (id: string) => consoleApi.instances.forget(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: instancesKey }),
   })
+
+  const reachable = (instances.data ?? []).filter((i) => i.reachable)
+  const builds = reachable.filter((i) => i.product === 'dbdatabuild')
+  const proxies = reachable.filter((i) => i.product === 'dbdataproxy')
 
   if (!isAdmin) {
     return (
@@ -101,6 +110,32 @@ export function InstancesPage() {
             </button>
           </div>
         </div>
+
+        {builds.length > 0 && proxies.length > 0 && (
+          <div className="card" style={{ marginTop: 20 }} data-testid="link-card">
+            <div className="card-head"><span className="card-title">Link a Build server to a proxy</span></div>
+            <div className="card-body">
+              <span className="hint">Lets the Build server publish to the proxy. The console makes the pairing code and hands it over; nobody types it.</span>
+              <ErrorBanner error={link.error} />
+              <Field label="Build server">
+                <select className="input" value={linkFrom} onChange={(e) => { setLinkFrom(e.target.value); link.reset() }} data-testid="link-from-select">
+                  <option value="">Choose…</option>
+                  {builds.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Proxy">
+                <select className="input" value={linkTo} onChange={(e) => { setLinkTo(e.target.value); link.reset() }} data-testid="link-to-select">
+                  <option value="">Choose…</option>
+                  {proxies.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                </select>
+              </Field>
+              <button type="button" className="btn btn-primary" disabled={link.isPending || !linkFrom || !linkTo} onClick={() => link.mutate()} data-testid="link-button">
+                {link.isPending ? 'Linking…' : 'Link'}
+              </button>
+              {link.isSuccess && <div className="hint" data-testid="link-done">{link.data.from} can now publish to {link.data.to} as “{link.data.name}”.</div>}
+            </div>
+          </div>
+        )}
       </div>
     </ConsoleShell>
   )
