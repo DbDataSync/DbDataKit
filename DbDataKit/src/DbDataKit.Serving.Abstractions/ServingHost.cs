@@ -91,3 +91,12 @@ public sealed class ServingLimitException(string message, string limit) : Servin
     /// <summary><c>rows</c> or <c>time</c>.</summary>
     public string Limit { get; } = limit;
 }
+
+/// <summary>
+/// A data source failed in a way the connection layer classified (a rejected login, a network failure, a timeout, a permission, a syntax error). A protocol answers with <see cref="Failure"/>'s kind and its
+/// <c>PublicMessage</c> (a fixed sentence and the engine's error number, never the driver's own text, which can name tables, servers and file paths).
+/// </summary>
+public sealed class ServingBackendException(DbDataKit.Connections.ConnectionFailure failure) : ServingException(failure.PublicMessage)
+{
+    public DbDataKit.Connections.ConnectionFailure Failure { get; } = failure;
+}

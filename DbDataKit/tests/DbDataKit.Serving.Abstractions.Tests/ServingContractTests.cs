@@ -66,6 +66,71 @@ public class ServingContractTests
     }
 
     [Fact]
+    public async Task Parameters_are_positional_and_reach_the_host_by_position_when_the_client_gave_no_name()
+    {
+        var seen = new List<ServingQuery>();
+        var host = new RecordingHost(seen);
+        var services = new HostServices(host);
+        var context = new ServingContext((await services.Identity.AuthenticateAsync(new ServingCredentials.Password("admin", "admin-pw")))!);
+
+        await using var _ = await services.Queries.RunAsync(context, new ServingRequest.Sql("main", "public.items", [new ServingParameter(null, "int64", "7"), new ServingParameter("who", "string", "ada")]));
+
+        var parameters = Assert.Single(seen).Parameters!;
+        Assert.Equal(("7", "ada"), ((string?)parameters["1"], (string?)parameters["who"]));
+    }
+
+    private sealed class RecordingHost(List<ServingQuery> seen) : IServingHost
+    {
+        private readonly FakeServingHost _inner = new();
+        public ValueTask<ServingCaller?> AuthenticateAsync(ServingCredentials credentials, CancellationToken cancellationToken = default) => _inner.AuthenticateAsync(credentials, cancellationToken);
+        public IAsyncEnumerable<ServingTable> DescribeAsync(ServingCaller caller, ServingCatalogRequest request, CancellationToken cancellationToken = default) => _inner.DescribeAsync(caller, request, cancellationToken);
+        public ServingLimits LimitsFor(ServingCaller caller, string source) => _inner.LimitsFor(caller, source);
+        public Task<IServingResult> QueryAsync(ServingCaller caller, ServingQuery query, CancellationToken cancellationToken = default) { seen.Add(query); return _inner.QueryAsync(caller, query with { Parameters = null }, cancellationToken); }
+        public IServingWrites? Writes => null;
+    }
+
+    [Fact]
+    public async Task The_client_address_is_offered_to_identity_and_a_wrong_password_still_identifies_nobody()
+    {
+        Assert.Null(await _services.Identity.AuthenticateAsync(new ServingCredentials.Password("admin", "wrong"), "203.0.113.9"));
+        Assert.NotNull(await _services.Identity.AuthenticateAsync(new ServingCredentials.Password("admin", "admin-pw"), "203.0.113.9"));
+    }
+
+    [Fact]
+    public async Task Updates_exist_only_when_the_host_takes_writes_and_a_reader_is_refused()
+    {
+        Assert.Null(_services.Updates);
+
+        var writing = new HostServices(new FakeServingHost(withWrites: true));
+        var admin = new ServingContext((await writing.Identity.AuthenticateAsync(new ServingCredentials.Password("admin", "admin-pw")))!);
+        var reader = new ServingContext((await writing.Identity.AuthenticateAsync(new ServingCredentials.Password("reader", "reader-pw")))!);
+
+        Assert.Equal(1, (await writing.Updates!.ExecuteAsync(admin, new ServingRequest.Sql("main", "update items"))).Rows);
+        await Assert.ThrowsAsync<ServingDeniedException>(() => writing.Updates!.ExecuteAsync(reader, new ServingRequest.Sql("main", "update items")));
+    }
+
+    [Fact]
+    public async Task A_source_tells_what_it_is_and_a_host_without_writes_says_read_only()
+    {
+        var facts = await _services.Catalog.FactsAsync(await As("admin"), "main");
+
+        Assert.True(facts.ReadOnly);
+        Assert.Null(facts.IdentifierQuote);
+        Assert.False((await new HostServices(new FakeServingHost(withWrites: true)).Catalog.FactsAsync(await As("admin"), "main")).ReadOnly);
+    }
+
+    [Fact]
+    public void A_classified_backend_failure_carries_its_kind_and_the_fixed_sentence_a_protocol_shows()
+    {
+        var failure = new DbDataKit.Connections.ConnectionFailure(DbDataKit.Connections.ConnectionFailureKind.Login, "18456", "sqlserver");
+        var error = new ServingBackendException(failure);
+
+        Assert.Same(failure, error.Failure);
+        Assert.Equal(failure.PublicMessage, error.Message);
+        Assert.IsAssignableFrom<ServingException>(error);
+    }
+
+    [Fact]
     public async Task A_module_starts_with_the_services_reports_health_and_drains()
     {
         var module = new EchoModule();

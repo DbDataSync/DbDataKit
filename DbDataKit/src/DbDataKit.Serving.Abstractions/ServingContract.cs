@@ -15,11 +15,18 @@ public sealed record ServingContext(ServingCaller Caller, string Channel = Servi
     public const string ProductionChannel = "prod";
 }
 
+/// <summary>
+/// One statement parameter in a form every protocol can produce and the core can bind (the shape Flight SQL, the Postgres wire and a JSON request all reduce to). <see cref="Type"/> is one of <c>null</c>, <c>bool</c>, <c>int64</c>, <c>uint64</c>, <c>double</c>,
+/// <c>decimal</c>, <c>string</c>, <c>date</c>, <c>timestamp</c>, <c>time</c> and <c>binary</c>; <see cref="Text"/> is the value as invariant text (round-trip format for dates and times, base64 for binary), null for SQL NULL.
+/// Parameters are positional, in the order of the markers; <see cref="Name"/> is only what the client called it.
+/// </summary>
+public sealed record ServingParameter(string? Name, string Type, string? Text);
+
 /// <summary>One request the query service runs; the kind says which language the text is in. A write is never a request here (see <see cref="IServingEntities"/>).</summary>
 public abstract record ServingRequest(string Source, ServingLimits? Asked = null)
 {
     /// <summary>SQL passed through to a data source, in that source's dialect.</summary>
-    public sealed record Sql(string Source, string Text, IReadOnlyDictionary<string, object?>? Parameters = null, ServingLimits? Asked = null) : ServingRequest(Source, Asked);
+    public sealed record Sql(string Source, string Text, IReadOnlyList<ServingParameter>? Parameters = null, ServingLimits? Asked = null) : ServingRequest(Source, Asked);
 
     /// <summary>A semantic request: the JSON document of the semantic layer, against the named model.</summary>
     public sealed record Semantic(string Source, string Json, ServingLimits? Asked = null) : ServingRequest(Source, Asked);
@@ -46,8 +53,11 @@ public interface IServingAnswer : IServingResult
 /// <summary>Who the caller is. Credentials a protocol cannot check itself (a Postgres SCRAM exchange, an Windows identity) are passed here as they arrived.</summary>
 public interface IServingIdentity
 {
-    /// <summary>The caller the credentials identify, or null when they identify nobody.</summary>
-    ValueTask<ServingCaller?> AuthenticateAsync(ServingCredentials credentials, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// The caller the credentials identify, or null when they identify nobody. <paramref name="clientAddress"/> is where the call came from, for the core's login throttle (a rejected attempt counts against the user and the address);
+    /// a bearer token is a core session's token or a token from an identity provider the core trusts.
+    /// </summary>
+    ValueTask<ServingCaller?> AuthenticateAsync(ServingCredentials credentials, string? clientAddress = null, CancellationToken cancellationToken = default);
 }
 
 /// <summary>A core session (plan 20, section 6): any instance of a group resumes it by id. <see cref="State"/> is the adapter's own, opaque to the core.</summary>
@@ -72,13 +82,24 @@ public enum ServingObjectKind { Catalog, Schema, Table, View, Column, Model, Dim
 /// <summary>One object of the catalog a caller may see. <see cref="Path"/> is the names from the top, so a column is [schema, table, column].</summary>
 /// <param name="Columns">The Arrow schema of a table, view, model or entity; null for the other kinds.</param>
 /// <param name="Properties">What only some kinds have: <c>type</c>, <c>key</c>, <c>format</c> (a measure's format string), <c>as_of</c> (an entity supports as-of reads).</param>
-public sealed record ServingObject(ServingObjectKind Kind, IReadOnlyList<string> Path, string? Description = null, Schema? Columns = null, IReadOnlyDictionary<string, string>? Properties = null)
+/// <param name="PrimaryKey">The columns of a table's primary key in key order; null where the source cannot say, empty where there is none.</param>
+public sealed record ServingObject(ServingObjectKind Kind, IReadOnlyList<string> Path, string? Description = null, Schema? Columns = null, IReadOnlyDictionary<string, string>? Properties = null, IReadOnlyList<string>? PrimaryKey = null)
 {
     public string Name => Path[^1];
 }
 
+/// <summary>What a source says about itself, for the protocols that report server facts (Flight SQL's <c>GetSqlInfo</c>, the Postgres wire's parameter status).</summary>
+/// <param name="Product">The database product, as the source reports it (<c>Microsoft SQL Server</c>, <c>PostgreSQL</c>), or the kind of source for a semantic model.</param>
+/// <param name="ReadOnly">The source takes no writes through this server.</param>
+/// <param name="IdentifierQuote">How the source quotes an identifier (the characters before and after), or null when it does not say.</param>
+/// <param name="Compression">The codec the source asks its results to be sent with (<c>zstd</c>, <c>lz4</c>), or null for none; the client's own request decides when the source says nothing.</param>
+public sealed record ServingSourceFacts(string Product, string? Version, bool ReadOnly, (string Open, string Close)? IdentifierQuote = null, string? Compression = null);
+
 public interface IServingCatalog
 {
+    /// <summary>What the source says about itself. Throws <see cref="ServingNotFoundException"/> for a source the caller cannot see.</summary>
+    Task<ServingSourceFacts> FactsAsync(ServingContext context, string source, CancellationToken cancellationToken = default);
+
     /// <summary>The objects under <paramref name="under"/> (the whole catalog when empty) that the caller may see. A caller sees nothing they could not query.</summary>
     IAsyncEnumerable<ServingObject> DescribeAsync(ServingContext context, IReadOnlyList<string> under, CancellationToken cancellationToken = default);
 }
@@ -87,6 +108,16 @@ public interface IServingQueries
 {
     /// <summary>Runs the request as the caller, in the context's channel, within the lower of their limits and the request's. Access rules are applied here and nowhere else.</summary>
     Task<IServingAnswer> RunAsync(ServingContext context, ServingRequest request, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// A statement that changes a writable data source (an UPDATE, INSERT or DELETE sent by a client, as Flight SQL's <c>CommandStatementUpdate</c> does). A read-only source refuses it with <see cref="ServingDeniedException"/>; a host with no writable
+/// source offers none. This is not the way managed entities are written (<see cref="IServingEntities"/>), which validates and records history.
+/// </summary>
+public interface IServingUpdates
+{
+    /// <summary>Runs the statement as the caller and returns the rows it affected, or -1 when the source cannot say.</summary>
+    Task<ServingWriteResult> ExecuteAsync(ServingContext context, ServingRequest.Sql statement, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Reads and writes of managed entities (the <c>store</c> module's services); a host without them offers none.</summary>
@@ -111,6 +142,9 @@ public interface IServingServices
     IServingCatalog Catalog { get; }
 
     IServingEntities? Entities { get; }
+
+    /// <summary>Statements that change a writable source; null when the host has none.</summary>
+    IServingUpdates? Updates { get; }
 }
 
 public enum ServingHealthState { Ok, Degraded, Down }
@@ -140,7 +174,7 @@ public interface IServingModule
 /// Offers an <see cref="IServingHost"/> as core services: SQL requests go to <see cref="IServingHost.QueryAsync"/>, the catalog is its tables, identity is its authentication, and sessions are held in memory (a group needs the shared-state sessions of plan 20 O02).
 /// A request kind the host cannot run fails with <see cref="ServingInvalidException"/> naming the kind.
 /// </summary>
-public sealed class HostServices(IServingHost host) : IServingServices, IServingIdentity, IServingSessions, IServingQueries, IServingCatalog
+public sealed class HostServices(IServingHost host) : IServingServices, IServingIdentity, IServingSessions, IServingQueries, IServingCatalog, IServingUpdates
 {
     private readonly ConcurrentDictionary<string, ServingSession> _sessions = new();
 
@@ -154,13 +188,28 @@ public sealed class HostServices(IServingHost host) : IServingServices, IServing
 
     public IServingEntities? Entities => null;
 
-    public ValueTask<ServingCaller?> AuthenticateAsync(ServingCredentials credentials, CancellationToken cancellationToken = default) => host.AuthenticateAsync(credentials, cancellationToken);
+    public IServingUpdates? Updates => host.Writes is null ? null : this;
+
+    public ValueTask<ServingCaller?> AuthenticateAsync(ServingCredentials credentials, string? clientAddress = null, CancellationToken cancellationToken = default) => host.AuthenticateAsync(credentials, cancellationToken);
 
     public async Task<IServingAnswer> RunAsync(ServingContext context, ServingRequest request, CancellationToken cancellationToken = default)
     {
         if (request is not ServingRequest.Sql sql) throw new ServingInvalidException($"This host does not run {request.GetType().Name.ToLowerInvariant()} requests.");
-        var result = await host.QueryAsync(context.Caller, new ServingQuery(sql.Source, sql.Text, sql.Parameters, sql.Asked), cancellationToken).ConfigureAwait(false);
+        var result = await host.QueryAsync(context.Caller, QueryOf(sql), cancellationToken).ConfigureAwait(false);
         return new Answer(result, new ServingProvenance(sql.Text, null, context.Channel));
+    }
+
+    // the host's query takes parameters by name; a positional one is named by its position (1-based), as the markers are counted
+    private static ServingQuery QueryOf(ServingRequest.Sql sql) =>
+        new(sql.Source, sql.Text, sql.Parameters?.Select((p, i) => (Name: p.Name ?? (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), Value: (object?)p.Text)).ToDictionary(x => x.Name, x => x.Value), sql.Asked);
+
+    public Task<ServingWriteResult> ExecuteAsync(ServingContext context, ServingRequest.Sql statement, CancellationToken cancellationToken = default) =>
+        host.Writes is { } writes ? writes.ExecuteAsync(context.Caller, QueryOf(statement), cancellationToken) : throw new ServingDeniedException("This host takes no writes.");
+
+    public async Task<ServingSourceFacts> FactsAsync(ServingContext context, string source, CancellationToken cancellationToken = default)
+    {
+        await foreach (var _ in host.DescribeAsync(context.Caller, new ServingCatalogRequest(), cancellationToken).ConfigureAwait(false)) break;       // a caller who sees nothing has no source to ask about
+        return new ServingSourceFacts("host", null, ReadOnly: host.Writes is null);
     }
 
     public async IAsyncEnumerable<ServingObject> DescribeAsync(ServingContext context, IReadOnlyList<string> under, [EnumeratorCancellation] CancellationToken cancellationToken = default)

@@ -13,7 +13,7 @@ would want it, what is actually in the way, the options, a recommendation, what 
 | 6 | B06 | Build's write gate onto the shared write gate | B07, B08 |
 | 7 | B07 | Build's statement log onto the shared log | nothing |
 | 8 | B08 | Build's cross-engine copy code onto the shared transfer code | nothing |
-| 9 | N02a | The serving contract (plan 20 section 10 and the code) | N02 (moving Flight SQL out of Proxy), N03, the J-lane's J10 |
+| 9 | N02a | not waiting on anyone: reviewed by Claude, see plan 20 section 10.7 | |
 
 Dependencies between them: A14 and A15 come before A16; A16 and B06 come before B08; B06 comes before B07. A19 and A20 are independent. Decisions on A14 and A15 are the same kind of decision, so read them together; B06 is the one that sets the
 terms for B07 and B08.
@@ -185,16 +185,8 @@ principle (Build's logical types are in `LogicalTypes`; canonical types are `DbD
 
 ## 9. N02a: the serving contract (design review)
 
-**What it is.** Plan 20 section 10 and `DbDataKit/src/DbDataKit.Serving.Abstractions/ServingContract.cs` define the interface that every module of the serving layer (Flight SQL, the semantic modules, Postgres wire, XMLA, feeds, store, WebDAV, apps, MCP, identity) is written against: a caller context
-(caller, channel, preview, session, trace), the request kinds (SQL, semantic, semantic SQL, MDX), core services for identity, sessions, queries (an Arrow stream plus provenance), catalog (one rich model) and entities, and a module contract (start, drain, stop, health, definitions
-subscription). The seven design decisions in section 10.1 are *yours* (made 2026-10-27); what is waiting is the review of the written result.
-
-**Why a review.** N02 moves Proxy's Flight SQL server out of Proxy onto this contract as its first module; N03 writes a conformance suite for any host; the J-lane's J10 writes the semantic module against it. Getting the contract wrong would show up in all three.
-
-**What to check (my suggestion).** (1) Read section 10 of `docs/plans/20-serving-layer.md` (about 60 lines) and ask of each of the ten modules whether it can be written against these services without needing something that is missing (the plan's slice N02a was "review section 10 against the ten modules";
-I wrote the section from the decisions but have not been through that review). (2) Read the code in `ServingContract.cs` (one file) and its six tests; `HostServices` adapts the existing small host so current code keeps working. (3) Say whether anything should change before N02 moves code.
-
-**Questions for you.** Anything missing for a module you care about first (the semantic module? Postgres wire?)? Is "services per capability" still how you want the request side?
+**Not a wait on the owner.** The slice's own first step, a review of the contract against the ten modules, is Claude's work and was done on 2026-10-27: plan 20 section 10.7 has the module-by-module result, and the contract in code gained what the Flight SQL module needs.
+N02 (Flight SQL onto the contract) is in progress. An earlier version of this section listed it as waiting on the owner; that was wrong.
 
 ---
 
@@ -204,4 +196,3 @@ I wrote the section from the decisions but have not been through that review). (
 2. **A14/A15** together (one decision), then **A16** (follows from it).
 3. **A20** (three quick decisions; (a) needs none).
 4. **A19**.
-5. **N02a** whenever you want N02 and the J-lane's J10 unblocked; it does not depend on the rest.
