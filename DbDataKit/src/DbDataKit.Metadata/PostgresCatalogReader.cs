@@ -41,10 +41,12 @@ public class PostgresCatalogReader(DbConnection connection, ISqlDialect? dialect
         var conditions = new List<string>();
         var args = new List<object?>();
         if (t.Schema is not null) { conditions.Add($"{schemaColumn} = {{{args.Count}}}"); args.Add(t.Schema); }
-        conditions.Add($"{nameColumn} = {{{args.Count}}}");
-        args.Add(t.Name);
+        if (t.Name.Length > 0) { conditions.Add($"{nameColumn} = {{{args.Count}}}"); args.Add(t.Name); }     // no name: every table of the schema (ReadSchemaAsync)
+        if (conditions.Count == 0) conditions.Add("TRUE");
         return (string.Join(" AND ", conditions), [.. args]);
     }
+
+    protected override bool ReadsWholeSchemas => true;
 
     protected override (string Sql, object?[] Args) ColumnsQuery(TableRef t)
     {
@@ -52,7 +54,7 @@ public class PostgresCatalogReader(DbConnection connection, ISqlDialect? dialect
         // Layout: name, ordinal, type, nullable, default, char_length, precision, scale, collation, identity (identity column or serial default), computed.
         return ("SELECT a.attname::text, a.attnum::int, format_type(a.atttypid, a.atttypmod), NOT a.attnotnull, pg_get_expr(d.adbin, d.adrelid), NULL, NULL, NULL, "
             + "CASE WHEN a.attcollation <> 0 AND coll.collname <> 'default' THEN coll.collname::text END, "
-            + "(a.attidentity <> '' OR COALESCE(pg_get_expr(d.adbin, d.adrelid), '') LIKE 'nextval(%'), a.attgenerated <> '' "
+            + "(a.attidentity <> '' OR COALESCE(pg_get_expr(d.adbin, d.adrelid), '') LIKE 'nextval(%'), a.attgenerated <> '', c.relname::text "     // the table's name ends the row (ReadSchemaAsync)
             + "FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace "
             + "LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum LEFT JOIN pg_collation coll ON coll.oid = a.attcollation "
             + $"WHERE a.attnum > 0 AND NOT a.attisdropped AND {where} ORDER BY a.attnum", args);
@@ -88,10 +90,10 @@ public class PostgresCatalogReader(DbConnection connection, ISqlDialect? dialect
         // expression, reported with a null name.
         var primaryKeys = Options.IncludeConstraintIndexes ? "" : "NOT i.indisprimary AND ";
         return ("SELECT ic.relname::text, i.indisunique, k.ord::int, a.attname::text, k.ord <= i.indnkeyatts AND (i.indoption[k.ord - 1] & 1) <> 0, k.ord > i.indnkeyatts, "
-            + "EXISTS (SELECT 1 FROM pg_constraint pc WHERE pc.conindid = i.indexrelid), NULL::text, NULL::int "
+            + "EXISTS (SELECT 1 FROM pg_constraint pc WHERE pc.conindid = i.indexrelid), NULL::text, NULL::int, c.relname::text "
             + "FROM pg_index i JOIN pg_class ic ON ic.oid = i.indexrelid JOIN pg_class c ON c.oid = i.indrelid JOIN pg_namespace n ON n.oid = c.relnamespace "
             + "CROSS JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord) LEFT JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum "
-            + $"WHERE {primaryKeys}{where} ORDER BY ic.relname, k.ord", args);
+            + $"WHERE {primaryKeys}{where} ORDER BY c.relname, ic.relname, k.ord", args);
     }
 
     protected override (string Sql, object?[] Args)? RowEstimateQuery(TableRef t)

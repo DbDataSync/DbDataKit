@@ -227,7 +227,12 @@ public class InformationSchemaCatalogReader : ICatalogReader
     {
         var (sql, args) = ColumnsQuery(table);
         var rows = await QueryAsync(sql, args, cancellationToken).ConfigureAwait(false);
-        var columns = new List<ColumnInfo>(rows.Count);
+        return ColumnsOf(rows);
+    }
+
+    private IReadOnlyList<ColumnInfo> ColumnsOf(IEnumerable<CatalogRow> rows)
+    {
+        var columns = new List<ColumnInfo>();
         foreach (var r in rows)
         {
             string native = TypeText.Compose(r.Text(2) ?? "unknown", r.Int(5), r.Int(6), r.Int(7));
@@ -235,6 +240,60 @@ public class InformationSchemaCatalogReader : ICatalogReader
                 r.Text(4), IsIdentity: r.Count > 9 && r.Bool(9), IsComputed: r.Count > 10 && r.Bool(10), Collation: r.Text(8)));
         }
         return columns;
+    }
+
+    // ---- A whole schema ----------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Whether the column and index queries of this reader can be asked without a table name (an empty <see cref="TableRef.Name"/>) and then end each row with the table's name. A reader that says so reads a schema
+    /// in a fixed number of queries; any other reads it table by table.
+    /// </summary>
+    protected virtual bool ReadsWholeSchemas => false;
+
+    /// <inheritdoc cref="ICatalogReader.ReadSchemaAsync"/>
+    public virtual async Task<IReadOnlyList<TableShape>> ReadSchemaAsync(string? catalog, string schema, string? table = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(schema);
+        var listed = new List<TableRef>();
+        foreach (var row in await QueryAsync(TablesSql, [], cancellationToken).ConfigureAwait(false))
+        {
+            string? name = row.Text(2), rowCatalog = row.Text(0), rowSchema = row.Text(1);
+            if (name is null || !string.Equals(rowSchema, schema, StringComparison.Ordinal)) continue;
+            if (catalog is not null && UsesCatalogColumn && !string.Equals(rowCatalog, catalog, StringComparison.Ordinal)) continue;
+            if (table is not null && !string.Equals(name, table, StringComparison.Ordinal)) continue;
+            var kind = MapKind(row.Text(3));
+            if (kind is TableKind.Table or TableKind.View) listed.Add(new TableRef(rowCatalog, rowSchema, name, kind));
+        }
+        listed.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
+
+        if (!ReadsWholeSchemas)
+        {
+            var shapes = new List<TableShape>();
+            foreach (var t in listed)
+            {
+                try { shapes.Add(await GetShapeAsync(t, cancellationToken).ConfigureAwait(false)); }
+                catch (KeyNotFoundException) { /* listed, but its columns are not visible to this login */ }
+            }
+            return shapes;
+        }
+
+        var everything = new TableRef(catalog, schema, table ?? "");
+        var (columnsSql, columnsArgs) = ColumnsQuery(everything);
+        var columnRows = (await QueryAsync(columnsSql, columnsArgs, cancellationToken).ConfigureAwait(false)).ToLookup(r => r.Text(r.Count - 1) ?? "", StringComparer.Ordinal);
+        ILookup<string, CatalogRow>? indexRows = null;
+        if (Capabilities.Indexes && IndexesQuery(everything) is var (indexSql, indexArgs))
+            indexRows = (await QueryAsync(indexSql, indexArgs, cancellationToken).ConfigureAwait(false)).ToLookup(r => r.Text(r.Count - 1) ?? "", StringComparer.Ordinal);
+
+        var support = new ShapeSupport(PrimaryKeys: false, ForeignKeys: false, Indexes: indexRows is not null, RowEstimate: false, IdentityAndComputed: Capabilities.IdentityAndComputed);
+        var result = new List<TableShape>();
+        foreach (var t in listed)
+        {
+            var columns = ColumnsOf(columnRows[t.Name].OrderBy(r => r.Int(1) ?? 0));
+            if (columns.Count == 0) continue;
+            var indexes = t.Kind == TableKind.View || indexRows is null ? [] : IndexesOf(indexRows[t.Name]);
+            result.Add(new TableShape(t, columns, null, [], indexes, null, support));
+        }
+        return result;
     }
 
     protected virtual async Task<KeyInfo?> ReadPrimaryKeyAsync(TableRef table, CancellationToken cancellationToken)
@@ -264,7 +323,11 @@ public class InformationSchemaCatalogReader : ICatalogReader
     {
         if (IndexesQuery(table) is not var (sql, args)) return null;
         var rows = await QueryAsync(sql, args, cancellationToken).ConfigureAwait(false);
-        return rows.GroupBy(r => r.Text(0) ?? "").OrderBy(g => g.Key, StringComparer.Ordinal)
+        return IndexesOf(rows);
+    }
+
+    private static IReadOnlyList<IndexInfo> IndexesOf(IEnumerable<CatalogRow> rows) =>
+        rows.GroupBy(r => r.Text(0) ?? "").OrderBy(g => g.Key, StringComparer.Ordinal)
             .Select(g =>
             {
                 var first = g.First();
@@ -273,7 +336,6 @@ public class InformationSchemaCatalogReader : ICatalogReader
                 return new IndexInfo(g.Key, first.Bool(1), keys, include.Count == 0 ? null : include, first.Bool(6), first.Text(7), first.Int(8));
             })
             .ToList();
-    }
 
     protected virtual async Task<long?> ReadRowEstimateAsync(TableRef table, CancellationToken cancellationToken)
     {

@@ -9,6 +9,7 @@
     <DbDataKitReference Include="Connections.Abstractions" />   <!-- the login variable name every product shares, and the failure classifier; plan 13, B02, B03 -->
     <DbDataKitReference Include="Connections.Odbc" />   <!-- the ODBC failure mapper and the missing-prerequisite sentence -->
     <DbDataKitReference Include="Connections.SqlServer" />   <!-- the SQL Server failure mapper -->
+    <DbDataKitReference Include="Metadata" />   <!-- the catalog readers of SQL Server and PostgreSQL, run through the read session; plan 13, B04 -->
     <DbDataKitReference Include="Connections.Postgres" />   <!-- the PostgreSQL failure mapper -->
   </ItemGroup>
 
