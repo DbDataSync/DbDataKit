@@ -123,6 +123,74 @@ public class SqlServerReaderTests
     }
 
     [Fact]
+    public async Task An_index_reports_its_included_columns_the_constraint_behind_it_and_its_storage()
+    {
+        var conn = new FakeDbConnection(cmd =>
+        {
+            if (cmd.Sql.Contains("FROM sys.columns", StringComparison.Ordinal)) return FakeResult.Rows(ColumnNames, ["Id", 1, "int", false, null, null, null, null, null, false, false]);
+            if (cmd.Sql.Contains("sys.indexes", StringComparison.Ordinal))
+                return FakeResult.Rows(["n", "u", "o", "c", "d", "inc", "con", "comp", "parts"],
+                    ["IX_A", true, 1, "X", false, false, 0, "PAGE", 3], ["IX_A", true, 3, "Z", false, true, 0, "PAGE", 3], ["IX_A", true, 2, "Y", true, false, 0, "PAGE", 3],
+                    ["UQ_B", true, 1, "B", false, false, 1, "NONE", 1]);
+            return null;
+        });
+
+        var shape = await new SqlServerCatalogReader(conn).GetShapeAsync(new TableRef(null, "dbo", "Orders"));
+
+        var a = shape.Indexes.Single(i => i.Name == "IX_A");
+        Assert.Equal([new IndexColumn("X", false), new IndexColumn("Y", true)], a.Columns);
+        Assert.Equal(["Z"], a.IncludeList);
+        Assert.False(a.BacksConstraint);
+        Assert.Equal(("PAGE", 3), (a.Compression, a.Partitions));
+        Assert.True(shape.Indexes.Single(i => i.Name == "UQ_B").BacksConstraint);
+    }
+
+    [Fact]
+    public async Task A_schema_is_read_in_three_queries_whatever_the_number_of_tables()
+    {
+        var log = new List<string>();
+        var conn = new FakeDbConnection(cmd =>
+        {
+            log.Add(cmd.Sql);
+            if (cmd.Sql.Contains("FROM sys.objects o JOIN sys.schemas s", StringComparison.Ordinal) && cmd.Sql.StartsWith("SELECT DB_NAME()", StringComparison.Ordinal))
+                return FakeResult.Rows(["d", "s", "n", "t"], ["Shop", "dbo", "Orders", "U"], ["Shop", "dbo", "Lines", "U"], ["Shop", "dbo", "OrderView", "V"], ["Shop", "other", "Skipped", "U"]);
+            if (cmd.Sql.Contains("FROM sys.columns", StringComparison.Ordinal))
+                return FakeResult.Rows(ColumnNames.Append("t").ToArray(),
+                    ["Id", 1, "int", false, null, null, null, null, null, false, false, "Orders"], ["Id", 1, "int", false, null, null, null, null, null, false, false, "Lines"], ["Id", 1, "int", false, null, null, null, null, null, false, false, "OrderView"]);
+            if (cmd.Sql.Contains("i.type > 0", StringComparison.Ordinal))
+                return FakeResult.Rows(["n", "u", "o", "c", "d", "inc", "con", "comp", "parts", "t"], ["IX_Orders", false, 1, "Id", false, false, 0, "NONE", 1, "Orders"]);
+            return null;
+        });
+
+        var shapes = await new SqlServerCatalogReader(conn).ReadSchemaAsync(null, "dbo");
+
+        Assert.Equal(["Lines", "OrderView", "Orders"], shapes.Select(s => s.Table.Name).ToList());
+        Assert.Equal(TableKind.View, shapes.Single(s => s.Table.Name == "OrderView").Table.Kind);
+        Assert.Equal("IX_Orders", Assert.Single(shapes.Single(s => s.Table.Name == "Orders").Indexes).Name);
+        Assert.Empty(shapes.Single(s => s.Table.Name == "Lines").Indexes);
+        Assert.Equal(3, log.Count);
+        Assert.False(shapes[0].Support.PrimaryKeys);      // keys are not read here, and the flag says so
+    }
+
+    [Fact]
+    public async Task The_index_behind_a_primary_key_is_asked_for_only_when_the_options_say_so()
+    {
+        var asked = new List<string>();
+        FakeDbConnection Connection() => new(cmd =>
+        {
+            if (cmd.Sql.Contains("FROM sys.columns", StringComparison.Ordinal)) return FakeResult.Rows(ColumnNames, ["Id", 1, "int", false, null, null, null, null, null, false, false]);
+            if (cmd.Sql.Contains("i.type > 0", StringComparison.Ordinal)) { asked.Add(cmd.Sql); return FakeResult.Rows(["n", "u", "o", "c", "d"]); }
+            return null;
+        });
+
+        await new SqlServerCatalogReader(Connection()).GetShapeAsync(new TableRef(null, "dbo", "Orders"));
+        await new SqlServerCatalogReader(Connection(), options: new CatalogReaderOptions { IncludeConstraintIndexes = true }).GetShapeAsync(new TableRef(null, "dbo", "Orders"));
+
+        Assert.Contains("i.is_primary_key = 0", asked[0]);
+        Assert.DoesNotContain("i.is_primary_key = 0", asked[1]);
+    }
+
+    [Fact]
     public async Task Describe_calls_sp_describe_first_result_set_with_the_checked_text()
     {
         var conn = new FakeDbConnection(cmd => FakeResult.Rows(
