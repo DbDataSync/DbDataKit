@@ -1,5 +1,7 @@
+using DbDataKit.Serving;
 using DbDataKit.Secrets;
-using DbDataProxy.Server.Auth;
+using DbDataKit.Serving.FlightSql;
+using DbDataProxy.Server.Serving;
 using Grpc.Core;
 using Grpc.Core.Interceptors;
 
@@ -84,8 +86,8 @@ public sealed class RedactingInterceptor(SecretsRuntime secrets) : Interceptor
 
     private RpcException Scrub(RpcException ex, ServerCallContext context)
     {
-        string? password = context.UserState.TryGetValue(AuthInterceptor.PrincipalKey, out var p) && p is ProxyPrincipal principal
-            ? principal.Credentials?.Password
+        string? password = context.UserState.TryGetValue(FlightCallContext.ContextKey, out var c) && c is ServingContext { Caller: ProxyCaller caller }
+            ? caller.Principal.Credentials?.Password
             : null;
         string redacted = secrets.Redact(ex.Status.Detail, password);
         return string.Equals(redacted, ex.Status.Detail, StringComparison.Ordinal)

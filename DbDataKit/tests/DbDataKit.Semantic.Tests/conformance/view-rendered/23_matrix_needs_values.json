@@ -1,0 +1,43 @@
+{
+  "kind": "rendered_view",
+  "status": "failed",
+  "views": null,
+  "errors": [
+    {
+      "spec": "presentation",
+      "code": "schema_invalid",
+      "path": "$/views/0",
+      "message": "Expected 1 matching subschema but found 0"
+    },
+    {
+      "spec": "presentation",
+      "code": "schema_invalid",
+      "path": "$/views/0",
+      "message": "Required properties [\u0022values\u0022] are not present"
+    },
+    {
+      "spec": "presentation",
+      "code": "schema_invalid",
+      "path": "$/views/0",
+      "message": "Required properties [\u0022vega_lite\u0022] are not present"
+    },
+    {
+      "spec": "presentation",
+      "code": "schema_invalid",
+      "path": "$/views/0/type",
+      "message": "Expected \u0022\\u0022chart\\u0022\u0022"
+    },
+    {
+      "spec": "presentation",
+      "code": "schema_invalid",
+      "path": "$/views/0/rows",
+      "message": "All values fail against the false schema"
+    },
+    {
+      "spec": "presentation",
+      "code": "schema_invalid",
+      "path": "$/views/0/columns",
+      "message": "All values fail against the false schema"
+    }
+  ]
+}

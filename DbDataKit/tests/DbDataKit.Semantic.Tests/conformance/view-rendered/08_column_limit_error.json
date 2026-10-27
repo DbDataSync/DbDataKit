@@ -1,0 +1,13 @@
+{
+  "kind": "rendered_view",
+  "status": "failed",
+  "views": null,
+  "errors": [
+    {
+      "spec": "presentation",
+      "code": "column_limit_exceeded",
+      "path": "$.views[0].column_limit",
+      "message": "The result has 2 columns and the limit is 1."
+    }
+  ]
+}

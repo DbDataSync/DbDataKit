@@ -1,0 +1,18 @@
+{
+  "kind": "rendered_view",
+  "status": "failed",
+  "views": null,
+  "errors": [
+    {
+      "spec": "presentation",
+      "code": "unknown_field",
+      "path": "$.views[0].columns[0]",
+      "message": "date.fiscal_qtr isn\u0027t a field of the result.",
+      "suggestions": [
+        "date.fiscal_quarter",
+        "orders.order_count",
+        "orders.net_revenue"
+      ]
+    }
+  ]
+}

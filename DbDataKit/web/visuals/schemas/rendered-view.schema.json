@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dbdatakit.invalid/visuals/rendered-view.schema.json",
+  "title": "Rendered view",
+  "description": "What ViewRenderer.Render gives (DbDataKit.Semantic.Presentation) and the browser renderer takes: grids for matrices, Vega-Lite specs with inline data for charts, or the errors. The chart's spec, with its data member removed, must also satisfy vega-lite-subset.schema.json; the validator checks that. The data is inline values: a chart never loads anything.",
+  "type": "object",
+  "required": ["kind", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "rendered_view" },
+    "status": { "enum": ["complete", "failed"] },
+    "views": { "type": ["array", "null"], "items": { "oneOf": [{ "$ref": "#/$defs/matrix" }, { "$ref": "#/$defs/chart" }] } },
+    "errors": { "type": ["array", "null"], "items": { "$ref": "#/$defs/error" } }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+    "error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "spec": { "type": "string" },
+        "code": { "type": "string" },
+        "path": { "type": ["string", "null"] },
+        "message": { "type": "string" },
+        "suggestions": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+    "matrix": {
+      "type": "object",
+      "required": ["id", "type", "columns", "rows"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": { "const": "matrix" },
+        "notice": { "type": ["string", "null"] },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["labels"],
+            "additionalProperties": false,
+            "properties": {
+              "labels": { "type": "array", "items": { "type": "string" } },
+              "total": { "type": "boolean" },
+              "other": { "type": "boolean" }
+            }
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["labels", "cells"],
+            "additionalProperties": false,
+            "properties": {
+              "labels": { "type": "array", "items": { "type": "string" } },
+              "total": { "type": "boolean" },
+              "cells": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["text"],
+                  "additionalProperties": false,
+                  "properties": { "v": { "type": ["number", "null"] }, "text": { "type": "string" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "chart": {
+      "type": "object",
+      "required": ["id", "type", "vega_lite"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": { "const": "chart" },
+        "vega_lite": {
+          "type": "object",
+          "required": ["data"],
+          "properties": {
+            "data": {
+              "type": "object",
+              "required": ["values"],
+              "additionalProperties": false,
+              "properties": {
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": { "type": ["string", "number", "boolean", "null"] }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

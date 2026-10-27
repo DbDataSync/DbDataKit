@@ -1,6 +1,7 @@
 using DbDataKit.Connections;
 using DbDataProxy.Data;
-using DbDataProxy.Server.Flight;
+using DbDataKit.Serving.FlightSql;
+using DbDataProxy.Server.Serving;
 using DbDataProxy.Tests.Support;
 using Grpc.Core;
 
@@ -63,6 +64,9 @@ public class FailureModelTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
         Assert.Contains("[duckdb Catalog-Error]", ex.Status.Detail);
     }
 
+    // what a client sees: Proxy's data layer says the failure in the serving layer's words, the Flight module in gRPC's
+    private static RpcException Wire(Exception ex) => FlightFailures.ToRpcException(ProxyFailures.ToServing(ex));
+
     [Theory]
     [InlineData(ConnectionFailureKind.Login, StatusCode.Unauthenticated)]
     [InlineData(ConnectionFailureKind.Network, StatusCode.Unavailable)]
@@ -74,8 +78,8 @@ public class FailureModelTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
     [InlineData(ConnectionFailureKind.Other, StatusCode.Internal)]
     public void Failure_kinds_map_to_statuses(ConnectionFailureKind kind, StatusCode expected)
     {
-        Assert.Equal(expected, ProxyFlightServer.StatusFor(kind));
-        var rpc = ProxyFlightServer.ToRpcException(new ConnectionFailureException(new ConnectionFailure(kind, "1234", DbDataKit.Dialect.EngineId.SqlServer)));
+        Assert.Equal(expected, FlightFailures.StatusFor(kind));
+        var rpc = Wire(new ConnectionFailureException(new ConnectionFailure(kind, "1234", DbDataKit.Dialect.EngineId.SqlServer)));
         Assert.Equal(expected, rpc.StatusCode);
         Assert.Equal(ConnectionFailure.TextFor(kind) + " [sqlserver 1234]", rpc.Status.Detail);
     }
@@ -83,7 +87,7 @@ public class FailureModelTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
     [Fact]
     public void Unknown_exceptions_never_surface_their_message()
     {
-        var rpc = ProxyFlightServer.ToRpcException(new InvalidOperationException("Server=db7;Password=hunter2 exploded"));
+        var rpc = Wire(new InvalidOperationException("Server=db7;Password=hunter2 exploded"));
         Assert.Equal(StatusCode.Internal, rpc.StatusCode);
         Assert.DoesNotContain("hunter2", rpc.Status.Detail);
         Assert.DoesNotContain("db7", rpc.Status.Detail);
@@ -93,9 +97,9 @@ public class FailureModelTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
     [Fact]
     public void Messages_the_proxy_wrote_itself_are_passed_on()
     {
-        var rpc = ProxyFlightServer.ToRpcException(new ParameterMismatchException("The statement has 2 '?' markers but 1 parameters were supplied."));
+        var rpc = Wire(new ParameterMismatchException("The statement has 2 '?' markers but 1 parameters were supplied."));
         Assert.Equal(StatusCode.InvalidArgument, rpc.StatusCode);
         Assert.Contains("2 '?' markers", rpc.Status.Detail);
-        Assert.Equal(StatusCode.InvalidArgument, ProxyFlightServer.ToRpcException(new UnsupportedValueException("Column 'x' needs a CAST.")).StatusCode);
+        Assert.Equal(StatusCode.InvalidArgument, Wire(new UnsupportedValueException("Column 'x' needs a CAST.")).StatusCode);
     }
 }

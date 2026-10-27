@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Xml.Linq;
+using DbDataKit.Scripting;
 
 namespace DbDataKit.Connections.Libraries;
 

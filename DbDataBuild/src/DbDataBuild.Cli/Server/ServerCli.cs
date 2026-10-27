@@ -16,7 +16,7 @@ namespace DbDataBuild.Cli.Server;
 /// </summary>
 internal static class ServerCli
 {
-    public static bool Handles(string[] args) => args.Length > 0 && args[0] is "server" or "secret" or "service" or "health";
+    public static bool Handles(string[] args) => args.Length > 0 && args[0] is "server" or "secret" or "service" or "health" or "lineage";
 
     public static async Task<int> RunAsync(string[] args, TextWriter output, TextWriter error, TextReader input)
     {
@@ -29,12 +29,16 @@ internal static class ServerCli
         finally { Console.CancelKeyPress -= onCancel; }
     }
 
+    /// <summary>The JSON Schema of the documents the server's nouns write (for the tests that check them).</summary>
+    internal static string OutputSchema(string[] invocation) => Router(invocation).OutputSchema();
+
     private static NounRouter Router(string[] invocation) => new("dbdatabuild",
     [
         ServerNoun.Create(RunServerAsync).With([.. PairingVerbs.Create(args => new PairingFiles(Path.Combine(DirectoryOf(args), "server.yaml"))), new Verb("project", "The projects this server hosts: add, remove, list, pull", EffectClass.RepoFilesOnly, ProjectUsage, ProjectAsync, DataSchemas.None), new Verb("proxy", "The proxies this server publishes data sources to: add, remove, list", EffectClass.RepoFilesOnly, ProxyUsage, ProxyAsync, DataSchemas.None)]),
         // the store is opened (and its key made on first use) only for the secret verbs
         .. invocation is ["secret", ..] ? new[] { SecretVerbs(invocation) } : Array.Empty<Noun>(),
         .. invocation is ["health", ..] ? new[] { HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl) } : Array.Empty<Noun>(),
+        .. invocation is ["lineage", ..] ? new[] { ServerLineage.Create(invocation) } : Array.Empty<Noun>(),
         .. invocation is ["service", ..] ? new[] { BuildService.Noun(BuildServiceEnvironment.Real()) } : Array.Empty<Noun>(),
     ], ProductInfo.Version);
 
@@ -66,7 +70,7 @@ internal static class ServerCli
         return i < 0 ? args : [.. args.Take(i), .. args.Skip(i + 2)];
     }
 
-    private static string DirectoryOf(string[] args)
+    internal static string DirectoryOf(string[] args)
     {
         // the last one wins, so an option given to the service command after the registered default overrides it
         var i = Array.LastIndexOf(args, "--repo");
