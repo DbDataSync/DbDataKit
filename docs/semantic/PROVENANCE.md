@@ -24,6 +24,6 @@ Imported on 2026-10-27 from `DbDataSync/QueryIntentSpec` at `cddca24` (`qis/docs
 | `qis/docker/docker-compose.yml` | **not imported**: `testenv/` (SQL Server 2022 and PostgreSQL) replaces it |
 | `README.md`, `qis/README.md` | **not imported**: layout and how-to-run text of the old repository; `docs/README.md` is the index of the specs and the layout is in each package's README |
 | `.gitattributes` (`eol=lf`) | **not imported**: `DbDataKit/**` is already `eol=lf` here |
-| `refengine/`, `run_conformance.py` | **not in the QIS repository** (not on `main` or the other branch); they exist only in a local checkout. Not imported |
+| `refengine/`, `run_conformance.py` | **removed upstream** (the Python reference engine and its runner were eliminated in the QIS repository; a local checkout that still has them is out of date). Not imported |
 
 Nothing is shared with the `Qis.*` names any more, so QIS's own CI and ours do not meet.
