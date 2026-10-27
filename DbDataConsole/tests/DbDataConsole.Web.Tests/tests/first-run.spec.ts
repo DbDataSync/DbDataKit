@@ -132,6 +132,15 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await page.getByTestId('build-edit-save').click()
   await expect(page.getByTestId('build-edit-clean')).toBeVisible()
 
+  // Taking the draft in: it shows the changed file, is committed, and merged into the project (an approver's act; the administrator is one), which ends the workspace.
+  await expect(page.getByTestId('build-git-change')).toHaveText(/models\/staging\/orders\.sql/)
+  await expect(page.getByTestId('build-git-merge')).toBeDisabled()
+  await page.getByTestId('build-git-message').fill('Limit staging orders')
+  await page.getByTestId('build-git-commit').click()
+  await expect(page.getByTestId('build-git-commit-row')).toContainText('Limit staging orders')
+  await page.getByTestId('build-git-merge').click()
+  await expect(page.getByTestId('build-edit-none')).toBeVisible()
+
   // The models run on generated rows, offline.
   await page.getByTestId('build-tab-sample').click()
   await page.getByTestId('build-sample-button').click()

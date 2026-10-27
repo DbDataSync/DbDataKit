@@ -1,5 +1,5 @@
 import { request } from '@dbdatakit/shell'
-import type { RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
+import type { GitChange, GitCommit, RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
 
 const project = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}`
 
@@ -57,4 +57,12 @@ export const buildApi = {
   rendered: (id: string, workspace: string, path: string) => run<RenderedFiles>(id, 'project_compile', { content: true, models: [path] }, workspace),
   /** A few rows of what one model file of a workspace returns on generated data, offline. */
   sampleOf: (id: string, workspace: string, path: string) => run<SampleResult>(id, 'project_sample', { models: [path], rows: 8, limit: 8 }, workspace),
+  /** What the draft changes from where it started, with the patch of each file. */
+  changes: (id: string, workspace: string) => request<{ changes: GitChange[] }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/changes`).then((r) => r.changes),
+  history: (id: string, workspace: string) => request<{ commits: GitCommit[] }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/history`).then((r) => r.commits),
+  commit: (id: string, workspace: string, message: string) => request<{ committed: boolean; sha: string | null }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/commit`, { method: 'POST', body: JSON.stringify({ message }) }),
+  /** For a project that follows a git remote: sends the draft's branch there. */
+  push: (id: string, workspace: string) => request<{ pushed: boolean; branch: string }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/push`, { method: 'POST' }),
+  /** For a project without a remote: merges the draft into the project, for an approver. A conflict changes nothing. */
+  merge: (id: string, workspace: string) => request<{ merged: boolean; sha: string }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/merge`, { method: 'POST' }),
 }

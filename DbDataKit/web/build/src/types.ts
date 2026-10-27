@@ -165,3 +165,17 @@ export interface FileContent {
   hash: string
   content: string
 }
+
+/** A file the draft changes from where it started. */
+export interface GitChange {
+  path: string
+  status: string
+  patch: string
+}
+
+export interface GitCommit {
+  sha: string
+  message: string
+  author: string
+  when: string
+}
