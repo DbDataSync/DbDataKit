@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Scripting\DbDataKit.Scripting.csproj" />   <!-- the validation corpus moved there (plan 13a, S02) -->
   </ItemGroup>
 </Project>
