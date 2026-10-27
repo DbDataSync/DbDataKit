@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <DbDataKitReference Include="Schema" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -8,5 +9,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="DbDataKit.Schema.Questions" />
+  </ItemGroup>
 
 </Project>

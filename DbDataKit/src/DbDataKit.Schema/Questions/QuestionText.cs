@@ -1,6 +1,13 @@
 using System.Text;
 
-namespace DbDataBuild.Core.Questions;
+namespace DbDataKit.Schema.Questions;
+
+/// <summary>Text that is hashed or compared ends its lines with `\n` on every platform.</summary>
+internal static class StringBuilderLf
+{
+    public static StringBuilder AppendLineLf(this StringBuilder sb, string text) => sb.Append(text).Append('\n');
+    public static StringBuilder AppendLineLf(this StringBuilder sb) => sb.Append('\n');
+}
 
 /// <summary>Plain-text rendering of a question, shared by the interactive prompt and the non-interactive "unanswered" report.</summary>
 public static class QuestionText

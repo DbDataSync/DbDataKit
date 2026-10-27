@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace DbDataBuild.Core.Questions;
+namespace DbDataKit.Schema.Questions;
 
 /// <summary>
 /// The areas a question id can belong to (DESIGN.md 6.5 and 10.1). Ids are <c>Q-&lt;area&gt;-&lt;subject&gt;</c>, built only by
