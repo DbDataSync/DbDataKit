@@ -1,6 +1,6 @@
 # DbDataKit.Scripting
 
-Our own scripting (plan 14; decision D9): `.csx` scripts and libraries that ask for NuGet packages with `#r "nuget: Id, 1.2.3"` and run with only the .NET runtime installed, no SDK and no MSBuild. This is the first part: the resolver (S02). The loader (S03) and the compiler (S04) follow.
+Our own scripting (plan 14; decision D9): `.csx` scripts and libraries that ask for NuGet packages with `#r "nuget: Id, 1.2.3"` and run with only the .NET runtime installed, no SDK and no MSBuild. The resolver (S02) and the loader (S03) are here; the compiler (S04) follows.
 
 | Type | What it does |
 | --- | --- |
@@ -9,6 +9,8 @@ Our own scripting (plan 14; decision D9): `.csx` scripts and libraries that ask 
 | `PackageSource` | a v3 index URL or a folder laid out as NuGet's global-packages folder is (`id/version/id.version.nupkg` with the `.nuspec` and `.nupkg.sha512` beside it), so an offline feed is a folder, with source mapping: when any source has id patterns, a package comes only from the sources mapped to it |
 | `PackageStore` | the cache, `root/<id>/<version>/`: extracted package, the `.nupkg` and its SHA-512; written by an atomic rename, hash checked on every use, an entry that would leave its own folder refuses the package |
 | `LockFile` | `library.lock`: the hash of every package; the first download is trusted and recorded, every later one must match. `RequirePinned` refuses a package with no pin |
+| `ClosureLoadContext` | a collectible load context for one closure: managed assemblies from the closure, native libraries by the file names a DllImport can mean, a name the host shares answered by the default context so the types are the same on both sides |
+| `ClosureLoader` | what a host holds per library, driver or script: load under a key (loading again replaces and unloads the earlier one), unload, and `UnloadedAsync` to ask whether the managed side was collected. Unloading is best effort: it needs every reference to the context's types dropped, and a native library stays loaded for the life of the process, so a changed native package needs a restart |
 | `LibraryValidation` | the checks of the hostile-input corpus (H1) for package ids, exact versions, names and type names, moved here from `Connections.Libraries` |
 
 Nothing here runs package code: no install scripts exist, no MSBuild runs, analyzers are not loaded. Loading a package into a process is code execution in that process; the controls are the allow-list, the pinned lock file and who may edit the configuration.
