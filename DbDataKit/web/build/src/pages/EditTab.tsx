@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { CodeEditor, ErrorBanner, type EditorDiagnostic } from '@dbdatakit/shell'
 import { buildApi } from '../api'
+import { GitPanel } from './GitPanel'
 import { PreviewPanel, isModelQuery } from './PreviewPanel'
 import type { Diagnostic, ProjectFile, Workspace } from '../types'
 
@@ -43,6 +44,8 @@ export function EditTab() {
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([])
   const [refused, setRefused] = useState<string | null>(null)
 
+  const projects = useQuery({ queryKey: ['build', 'projects'], queryFn: () => buildApi.projects() })
+  const remote = projects.data?.find((p) => p.id === project)?.source === 'git'
   const workspaces = useQuery({ queryKey: ['build', project, 'workspaces'], queryFn: () => buildApi.workspaces(project) })
   const mine = useMemo(() => (workspaces.data ?? []).filter((w) => w.mine), [workspaces.data])
   const files = useQuery({ queryKey: ['build', project, workspace, 'files'], queryFn: () => buildApi.files(project, workspace!), enabled: workspace !== null })
@@ -88,6 +91,7 @@ export function EditTab() {
       setHash(document.data.hash)
       setSaved(text)
       await client.invalidateQueries({ queryKey: ['build', project, workspace, 'files'] })
+      await client.invalidateQueries({ queryKey: ['build', project, workspace, 'git'] })
       check.mutate()
     },
   })
@@ -167,6 +171,7 @@ export function EditTab() {
           </div>
         </div>
       )}
+      {workspace !== null && <GitPanel project={project} workspace={workspace} remote={remote} onMerged={() => choose(null)} />}
     </div>
   )
 }
