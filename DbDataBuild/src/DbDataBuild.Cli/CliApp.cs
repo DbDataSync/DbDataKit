@@ -365,6 +365,12 @@ public static class CliApp
                     cmd.Arguments.Add(pubTarget); cmd.Arguments.Add(pubModels); cmd.Options.Add(pubProject);
                     cmd.SetAction(pr => { var (pubConn, pubRest) = SplitConnection(pr.GetValue(pubProject)!.FullName, pr.GetValue(pubTarget), pr.GetValue(pubModels) ?? []); return Reported(pr, spec, (o, e) => PublishMetadataCommand.Run(spec, pr.GetValue(pubProject)!.FullName, pubConn, pubRest, o, e, environment ?? Environment.GetEnvironmentVariable)); });
                     break;
+                case "project show semantic":
+                    var semNames = new Argument<string[]>("models") { Description = "Semantic models by name or file (default: every file in semantic/)", Arity = ArgumentArity.ZeroOrMore };
+                    var semProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
+                    cmd.Arguments.Add(semNames); cmd.Options.Add(semProject);
+                    cmd.SetAction(pr => Reported(pr, spec, (o, e) => SemanticShowCommand.Run(spec, pr.GetValue(semProject)!.FullName, pr.GetValue(semNames) ?? [], o, e)));
+                    break;
                 case "project show refresh":
                     var showRefreshPlan = new Argument<string?>("plan") { Description = "A refresh plan by name; omit to list the plans of every connection", Arity = ArgumentArity.ZeroOrOne };
                     var showRefreshProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
@@ -506,6 +512,7 @@ public static class CliApp
         foreach (var s in result.BuiltModels.Where(s => s.Inherited.Count > 0).OrderBy(s => s.Definition.Name, StringComparer.Ordinal))
             output.WriteLine($"Inherited by {s.Definition.Name}: {string.Join(", ", s.Inherited.Select(o => $"{o.Path} = {o.Value} ({o.File}:{o.Line})"))}");
         diagnostics.AddRange(ProjectChecks.Run(result.BuiltModels, config, null, projectRoot, new ModelLowering(result.Models, result.DeclaredModelsAndStaging, config, result.Macros)));
+        _ = DbDataBuild.Semantic.SemanticProject.Load(projectRoot, ProjectModels.Of(result, config.DefaultConnections), config, diagnostics);       // the semantic files, against the models as loaded: a renamed column breaks them here
         if (!diagnostics.Any(d => d.Severity == Severity.Error)) diagnostics.AddRange(ProjectChecks.Reachability(ProjectContext.Load(projectRoot), null));
 
         diagnostics = diagnostics.DistinctBy(d => (d.Code, d.Location, d.Found)).ToList();      // one line per finding, however many checks reached it

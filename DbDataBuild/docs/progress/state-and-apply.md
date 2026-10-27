@@ -1439,3 +1439,8 @@ Operator decision: correlated subqueries are a hard requirement.
 - **Tests**: `BuildServerTests` (offers with roles, read-only, viewer refused and approver applies with the actor, ceiling); conformance `A_plan_applied_for_a_person_names_that_person_in_the_events_and_the_ddl_log` on SQL Server and PostgreSQL.
 - **Not done**: separate approver and console columns, an approve step apart from applying, a rule that the author of a plan cannot apply it (all for the security review).
 
+## 191. Semantic models in a project (plan 14 R1, plan 19 J07 and J08)
+
+- **Built**: `semantic/**/*.yml` are semantic models written without their physical layer; the tables, columns, types and keys are generated from the project's models (DESIGN.md 9.11). `DbDataKit.Semantic.Authoring` (shared: `AuthoredCatalog`, `AuthoringSchema`, `IPhysicalLayer`) reads and compiles them; `DbDataBuild.Semantic` (new project) is the physical layer over Build's models and connections. Diagnostics DDB-610 to DDB-617, each at the file and line of the semantic file. `project show semantic` lists the bindings. `schemas/semantic.schema.json` (editor and console association `semantic/**/*.yml`). The retail template has `semantic/sales.yml`.
+- **Tests**: `SemanticFilesTests` (15: the template compiles; a bad model, column, type, relationship, connection each a diagnostic with the line; a column renamed in a model breaks the compile; the schema is the derived one; a damaged file never throws; `project show semantic`), `AuthoredCatalogTests` in the shared suite (13).
+- **Not done**: a PostgreSQL emitter (a PostgreSQL connection is validated as a SQL Server source), `references:` on models, semantic models in the metadata documents, a rendered form.

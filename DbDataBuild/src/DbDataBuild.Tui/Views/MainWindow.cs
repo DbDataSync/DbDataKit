@@ -13,7 +13,7 @@ public sealed class MainWindow : Window
 
     private static readonly (string Group, string[] Commands)[] Groups =
     [
-        ("Look at the project", ["project compile", "project show metadata", "project sample", "project show loads", "project show graph", "project tests run", "project tests list", "help matrix", "help code"]),
+        ("Look at the project", ["project compile", "project show metadata", "project sample", "project show loads", "project show graph", "project show semantic", "project tests run", "project tests list", "help matrix", "help code"]),
         ("Define", ["project model create", "project model update", "project agent-kit"]),
         ("Deploy and refresh", ["connection inspect", "connection status", "connection deploy", "connection refresh"]),
         ("Record and report", ["connection monitor", "connection compare", "connection init", "connection publish"]),
