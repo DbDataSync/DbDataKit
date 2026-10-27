@@ -1,0 +1,41 @@
+{
+  "name": "55_percent_of_a_ratio_is_not_allowed",
+  "level": 4,
+  "description": "A share of a ratio isn't meaningful: it carries no rule for adding up across regions.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.avg_order_value",
+        {
+          "as": "s",
+          "transform": "pct_of_total",
+          "measure": "orders.avg_order_value",
+          "over": [
+            "customers.region"
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "transform_not_allowed"
+    ]
+  }
+}

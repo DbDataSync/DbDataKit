@@ -1,0 +1,134 @@
+{
+  "name": "17_adhoc_totals",
+  "level": 3,
+  "description": "Totals over an ad hoc dimension: the grand total is the source totals.",
+  "setup": [
+    {
+      "spec_version": "0.3",
+      "kind": "table",
+      "name": "adhoc.user_territories",
+      "descriptor": {
+        "descriptor_version": "1.0",
+        "name": "user_territories",
+        "schema": {
+          "fields": [
+            {
+              "name": "territory",
+              "type": "string"
+            },
+            {
+              "name": "region_label",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "rows": [
+        {
+          "territory": "Pacific",
+          "region_label": "WST-01"
+        },
+        {
+          "territory": "Atlantic",
+          "region_label": "EST-01"
+        }
+      ]
+    },
+    {
+      "spec_version": "0.3",
+      "kind": "value_map",
+      "id": "terr_region",
+      "table": "adhoc.user_territories@v1",
+      "field": "region_label",
+      "target": "customers.region",
+      "mode": "catalog",
+      "pairs": [
+        {
+          "from": "WST-01",
+          "to": "West"
+        },
+        {
+          "from": "EST-01",
+          "to": "East"
+        }
+      ],
+      "scope": "governed"
+    },
+    {
+      "spec_version": "0.3",
+      "kind": "bindings",
+      "table": "adhoc.user_territories@v1",
+      "bindings": [
+        {
+          "field": "territory",
+          "role": "attribute",
+          "as": "user_territories.territory"
+        },
+        {
+          "field": "region_label",
+          "role": "attribute",
+          "binds_to": "customers.region",
+          "via_map": "terr_region"
+        }
+      ],
+      "grain": [
+        "user_territories.territory",
+        "customers.region"
+      ],
+      "confirmed_by": "user"
+    }
+  ],
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "user_territories.territory"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "user_territories.territory"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "user_territories_territory": "Atlantic",
+        "_rollup_level": 0,
+        "orders_net_revenue": 400,
+        "budget_budget_amount": 500
+      },
+      {
+        "user_territories_territory": "Pacific",
+        "_rollup_level": 0,
+        "orders_net_revenue": 500,
+        "budget_budget_amount": 600
+      },
+      {
+        "user_territories_territory": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 900,
+        "budget_budget_amount": 1100
+      }
+    ]
+  }
+}

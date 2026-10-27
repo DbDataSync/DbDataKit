@@ -1,0 +1,366 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.internal/qis/extraction_spec.schema.json",
+  "title": "Extraction spec",
+  "description": "What to extract from a spreadsheet, never how. An engine-neutral executor runs it and the result is one table per entry of tables.",
+  "type": "object",
+  "required": [
+    "spec_version",
+    "id",
+    "tables"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "spec_version": {
+      "const": "0.3"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "match": {
+      "description": "Which files a saved spec applies to.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "library": {
+          "type": "string"
+        },
+        "name_pattern": {
+          "description": "A file name pattern: * matches any run of characters, ? one character.",
+          "type": "string"
+        }
+      }
+    },
+    "fingerprint": {
+      "description": "What must hold of a file before a saved spec is applied: the sheets it has and anchor cells.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sheets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cells": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "sheet",
+              "ref"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "sheet": {
+                "type": "string"
+              },
+              "ref": {
+                "$ref": "#/$defs/cell"
+              },
+              "equals": {
+                "type": "string"
+              },
+              "matches": {
+                "type": "string"
+              }
+            },
+            "oneOf": [
+              {
+                "required": [
+                  "equals"
+                ]
+              },
+              {
+                "required": [
+                  "matches"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "tables": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/table"
+      }
+    }
+  },
+  "$defs": {
+    "cell": {
+      "type": "string",
+      "pattern": "^[A-Z]{1,3}[1-9][0-9]*$"
+    },
+    "columnSpan": {
+      "type": "string",
+      "pattern": "^[A-Z]{1,3}(:[A-Z]{1,3})?$"
+    },
+    "table": {
+      "type": "object",
+      "required": [
+        "name",
+        "sheet",
+        "header",
+        "data"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "sheet": {
+          "type": "string"
+        },
+        "header": {
+          "type": "object",
+          "required": [
+            "rows"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "rows": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "join": {
+              "type": "string"
+            }
+          }
+        },
+        "data": {
+          "type": "object",
+          "required": [
+            "start",
+            "columns"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "start": {
+              "$ref": "#/$defs/cell"
+            },
+            "end": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/cell"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "until_blank_in"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "until_blank_in": {
+                      "type": "string",
+                      "pattern": "^[A-Z]{1,3}$"
+                    }
+                  }
+                }
+              ]
+            },
+            "columns": {
+              "$ref": "#/$defs/columnSpan"
+            }
+          }
+        },
+        "skip_rows": {
+          "description": "Rules for subtotal, blank and note rows. Rules only, never row numbers, so they survive added rows.",
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "column",
+                  "matches"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "column": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{1,3}$"
+                  },
+                  "matches": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "blank_in"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "blank_in": {
+                    "$ref": "#/$defs/columnSpan"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "fill_down": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z]{1,3}$"
+          }
+        },
+        "unpivot": {
+          "type": "object",
+          "required": [
+            "columns",
+            "name_as",
+            "value_as"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "columns": {
+              "$ref": "#/$defs/columnSpan"
+            },
+            "name_as": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "value_as": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            }
+          }
+        },
+        "types": {
+          "type": "object",
+          "additionalProperties": {
+            "enum": [
+              "string",
+              "integer",
+              "number",
+              "boolean",
+              "date",
+              "datetime"
+            ]
+          }
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "type": {
+                    "const": "row_count"
+                  },
+                  "min": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "max": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "within_percent_of_previous": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type",
+                  "columns"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "type": {
+                    "enum": [
+                      "not_null",
+                      "unique"
+                    ]
+                  },
+                  "columns": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type",
+                  "column",
+                  "against"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "type": {
+                    "const": "total_matches"
+                  },
+                  "column": {
+                    "type": "string"
+                  },
+                  "against": {
+                    "type": "object",
+                    "required": [
+                      "sheet",
+                      "find_row",
+                      "columns"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "sheet": {
+                        "type": "string"
+                      },
+                      "find_row": {
+                        "type": "object",
+                        "required": [
+                          "column",
+                          "equals"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "column": {
+                            "type": "string",
+                            "pattern": "^[A-Z]{1,3}$"
+                          },
+                          "equals": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "columns": {
+                        "$ref": "#/$defs/columnSpan"
+                      }
+                    }
+                  },
+                  "tolerance": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

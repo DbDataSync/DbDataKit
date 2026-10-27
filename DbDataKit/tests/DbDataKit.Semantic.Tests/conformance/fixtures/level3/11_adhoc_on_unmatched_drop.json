@@ -1,0 +1,109 @@
+{
+  "name": "11_adhoc_on_unmatched_drop",
+  "level": 3,
+  "description": "With on_unmatched drop, regions without a territory are excluded.",
+  "setup": [
+    {
+      "spec_version": "0.3",
+      "kind": "table",
+      "name": "adhoc.user_territories",
+      "descriptor": {
+        "descriptor_version": "1.0",
+        "name": "user_territories",
+        "schema": {
+          "fields": [
+            {
+              "name": "territory",
+              "type": "string"
+            },
+            {
+              "name": "region_label",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "rows": [
+        {
+          "territory": "Pacific",
+          "region_label": "WST-01"
+        }
+      ]
+    },
+    {
+      "spec_version": "0.3",
+      "kind": "value_map",
+      "id": "terr_region",
+      "table": "adhoc.user_territories@v1",
+      "field": "region_label",
+      "target": "customers.region",
+      "mode": "catalog",
+      "pairs": [
+        {
+          "from": "WST-01",
+          "to": "West"
+        },
+        {
+          "from": "EST-01",
+          "to": "East"
+        }
+      ],
+      "scope": "governed",
+      "on_unmatched": "drop"
+    },
+    {
+      "spec_version": "0.3",
+      "kind": "bindings",
+      "table": "adhoc.user_territories@v1",
+      "bindings": [
+        {
+          "field": "territory",
+          "role": "attribute",
+          "as": "user_territories.territory"
+        },
+        {
+          "field": "region_label",
+          "role": "attribute",
+          "binds_to": "customers.region",
+          "via_map": "terr_region"
+        }
+      ],
+      "grain": [
+        "user_territories.territory",
+        "customers.region"
+      ],
+      "confirmed_by": "user"
+    }
+  ],
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "user_territories.territory"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "rows": [
+      {
+        "user_territories_territory": "Pacific",
+        "orders_net_revenue": 500
+      }
+    ]
+  }
+}

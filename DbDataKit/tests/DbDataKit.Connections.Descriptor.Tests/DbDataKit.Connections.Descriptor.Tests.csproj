@@ -5,5 +5,12 @@
     <PackageReference Include="System.Data.Odbc" />
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\DbDataKit.Connections.Descriptor\DbDataKit.Connections.Descriptor.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Connections.SqlServer\DbDataKit.Connections.SqlServer.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Connections.Postgres\DbDataKit.Connections.Postgres.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Connections.MySql\DbDataKit.Connections.MySql.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Connections.Oracle\DbDataKit.Connections.Oracle.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Connections.DuckDb\DbDataKit.Connections.DuckDb.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Connections.Odbc\DbDataKit.Connections.Odbc.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Metadata\DbDataKit.Metadata.csproj" />
   </ItemGroup>
 </Project>

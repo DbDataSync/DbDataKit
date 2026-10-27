@@ -1,0 +1,17 @@
+schema: engine/1
+id: postgres
+display_name: PostgreSQL
+library: Npgsql
+dialect: postgres
+default_port: 5432
+aliases: [postgresql, pgsql, pg]
+provider: postgres
+catalog_reader: postgres
+roles:
+  sync_source: { status: supported, note: "native logical decoding, or a watermark column; TriggerAudit" }
+  sync_target: { status: supported, note: "native binary COPY staging" }
+  build_target: { status: supported, note: "PostgreSQL 17 in Build's real-engine suite" }
+  build_origin: { status: supported, note: "project import reads the live catalog" }
+  proxy_source: { status: no, note: "only through ODBC; the proxy has no PostgreSQL provider of its own" }
+  semantic_emitter: { status: planned, note: "plan 19 J05; until then the DuckDB-dialect twin runs on it and 9 fixtures need the emitter" }
+  master_data_store: { status: planned, note: "plan 15" }

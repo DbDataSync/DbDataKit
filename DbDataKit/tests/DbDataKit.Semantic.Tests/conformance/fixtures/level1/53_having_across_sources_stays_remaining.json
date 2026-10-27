@@ -1,0 +1,56 @@
+{
+  "name": "53_having_across_sources_stays_remaining",
+  "level": 1,
+  "description": "Below the level that combines sources, the condition is left for the finalize step, with the filters.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        },
+        {
+          "measure": "budget.budget_amount",
+          "operator": "gt",
+          "values": [
+            550
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "partial",
+    "reason_code": "level_not_implemented",
+    "remaining": [
+      {
+        "op": "union"
+      },
+      {
+        "op": "finalize",
+        "having": [
+          {
+            "measure": "budget.budget_amount",
+            "operator": "gt",
+            "values": [
+              550
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

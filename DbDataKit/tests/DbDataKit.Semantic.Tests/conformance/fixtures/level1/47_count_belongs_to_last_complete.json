@@ -1,0 +1,29 @@
+{
+  "name": "47_count_belongs_to_last_complete",
+  "level": 1,
+  "description": "count is how many periods last_complete counts; another operator has none.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [],
+      "filters": [
+        {
+          "attribute": "date.fiscal_month",
+          "operator": "current",
+          "count": 2
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "period_count_invalid"
+    ]
+  }
+}

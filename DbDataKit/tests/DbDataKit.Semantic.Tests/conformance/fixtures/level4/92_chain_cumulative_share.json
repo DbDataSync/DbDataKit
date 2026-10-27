@@ -1,0 +1,65 @@
+{
+  "name": "92_chain_cumulative_share",
+  "level": 4,
+  "description": "A transform can read the output of one written before it. Each month's share of the quarter (250, 390 and 260 of 900), then the running total of that share along the months: 0.278, 0.711, 1.0.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "share",
+          "transform": "pct_of_total",
+          "measure": "orders.net_revenue",
+          "over": [
+            "date.fiscal_month"
+          ]
+        },
+        {
+          "as": "cum_share",
+          "transform": "running_total",
+          "measure": "share",
+          "along": "date.fiscal_month"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "share": 0.277777777777778,
+        "cum_share": 0.277777777777778
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "share": 0.433333333333333,
+        "cum_share": 0.711111111111111
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "share": 0.288888888888889,
+        "cum_share": 1.0
+      }
+    ]
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "19_allocate_by_itself_rejected",
+  "level": 4,
+  "description": "A measure can't be its own weight.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "measure": "budget.budget_amount",
+          "spread": {
+            "allocate": {
+              "by": "measure",
+              "measure": "budget.budget_amount"
+            }
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "allocate_weight_is_target"
+    ]
+  }
+}

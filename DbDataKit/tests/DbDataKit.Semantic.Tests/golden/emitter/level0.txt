@@ -1,0 +1,3 @@
+=== level0/01_native_single_tsql.json
+=== level0/02_native_two_queries_combine.json
+=== level0/03_semantic_query_needs_level1.json

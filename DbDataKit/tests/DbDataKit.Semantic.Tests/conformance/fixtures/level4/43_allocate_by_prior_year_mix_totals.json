@@ -1,0 +1,103 @@
+{
+  "name": "43_allocate_by_prior_year_mix_totals",
+  "level": 4,
+  "description": "With totals, the budget subtotals and grand total are the source budget.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "measure": "budget.budget_amount",
+          "spread": {
+            "allocate": {
+              "by": "measure",
+              "measure": "orders.net_revenue",
+              "period": {
+                "unit": "fiscal_year",
+                "offset": -1
+              }
+            }
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region",
+          "products.product"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "_rollup_level": 0,
+        "orders_net_revenue": 100,
+        "budget_budget_amount": 250
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "_rollup_level": 0,
+        "orders_net_revenue": 300,
+        "budget_budget_amount": 250
+      },
+      {
+        "customers_region": "East",
+        "products_product": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 400,
+        "budget_budget_amount": 500
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "_rollup_level": 0,
+        "orders_net_revenue": 300,
+        "budget_budget_amount": 360
+      },
+      {
+        "customers_region": "West",
+        "products_product": "B",
+        "_rollup_level": 0,
+        "orders_net_revenue": 200,
+        "budget_budget_amount": 240
+      },
+      {
+        "customers_region": "West",
+        "products_product": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 500,
+        "budget_budget_amount": 600
+      },
+      {
+        "customers_region": null,
+        "products_product": null,
+        "_rollup_level": 2,
+        "orders_net_revenue": 900,
+        "budget_budget_amount": 1100
+      }
+    ]
+  }
+}

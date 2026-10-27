@@ -1,0 +1,45 @@
+{
+  "name": "23_having_across_sources",
+  "level": 2,
+  "description": "With two sources the condition applies after they are combined: regions whose budget is over 550.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        },
+        {
+          "measure": "budget.budget_amount",
+          "operator": "gt",
+          "values": [
+            550
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "rows": [
+      {
+        "customers_region": "West",
+        "orders_net_revenue": 500,
+        "budget_budget_amount": 600
+      }
+    ]
+  }
+}

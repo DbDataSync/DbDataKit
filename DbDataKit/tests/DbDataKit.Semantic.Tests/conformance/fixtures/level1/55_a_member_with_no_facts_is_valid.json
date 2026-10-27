@@ -1,0 +1,31 @@
+{
+  "name": "55_a_member_with_no_facts_is_valid",
+  "level": 1,
+  "description": "North is in the dimension table and has no sales: the filter is valid, and the answer is empty.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "customers.region",
+          "operator": "equals",
+          "values": [
+            "North"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "rows": []
+  }
+}

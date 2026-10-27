@@ -1,0 +1,59 @@
+{
+  "name": "02_spread_repeat",
+  "level": 2,
+  "description": "Budget has no product dimension and its spread is repeat: the engine repeats each region's budget on every product row.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "orders_net_revenue": 100,
+        "budget_budget_amount": 500
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "orders_net_revenue": 300,
+        "budget_budget_amount": 500
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "orders_net_revenue": 300,
+        "budget_budget_amount": 600
+      },
+      {
+        "customers_region": "West",
+        "products_product": "B",
+        "orders_net_revenue": 200,
+        "budget_budget_amount": 600
+      }
+    ]
+  }
+}

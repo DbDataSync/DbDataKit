@@ -1,0 +1,54 @@
+{
+  "name": "52_derived_across_two_facts",
+  "level": 4,
+  "description": "Net of returns reads two fact tables of one source; where there are no returns the coalesce makes it zero instead of empty.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_after_returns"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "orders_net_after_returns": 100
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "orders_net_after_returns": 250
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "orders_net_after_returns": 270
+      },
+      {
+        "customers_region": "West",
+        "products_product": "B",
+        "orders_net_after_returns": 190
+      }
+    ]
+  }
+}

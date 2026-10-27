@@ -1,0 +1,27 @@
+{
+  "name": "07_unknown_member",
+  "level": 1,
+  "description": "An unknown measure fails with suggestions drawn from names and synonyms.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "unknown_member"
+    ],
+    "error_suggestions_include": {
+      "0": "orders.net_revenue"
+    }
+  }
+}

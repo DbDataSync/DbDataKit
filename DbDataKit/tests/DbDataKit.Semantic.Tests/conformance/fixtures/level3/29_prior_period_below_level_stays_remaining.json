@@ -1,0 +1,52 @@
+{
+  "name": "29_prior_period_below_level_stays_remaining",
+  "level": 3,
+  "description": "A level 3 engine returns prior_period as a remaining step.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "x",
+          "transform": "prior_period",
+          "measure": "orders.net_revenue",
+          "output": "value",
+          "period": {
+            "unit": "fiscal_year",
+            "offset": -1
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "partial",
+    "reason_code": "level_not_implemented",
+    "remaining": [
+      {
+        "step": 1,
+        "op": "measure_expression",
+        "reason": "level_not_implemented"
+      },
+      {
+        "step": 2,
+        "op": "finalize"
+      }
+    ]
+  }
+}

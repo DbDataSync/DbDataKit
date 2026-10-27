@@ -1,0 +1,60 @@
+{
+  "name": "10_rollup_override_with_totals",
+  "level": 5,
+  "description": "The grand total averages the total revenue of each month (250, 390, 260 = 300), not the two region averages (150).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "measure": "orders.net_revenue",
+          "as": "avg_monthly_revenue",
+          "rollup": {
+            "date.fiscal_month": "avg"
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "_rollup_level": 0,
+        "avg_monthly_revenue": 133.33333333333334
+      },
+      {
+        "customers_region": "West",
+        "_rollup_level": 0,
+        "avg_monthly_revenue": 166.66666666666666
+      },
+      {
+        "customers_region": null,
+        "_rollup_level": 1,
+        "avg_monthly_revenue": 300
+      }
+    ]
+  }
+}

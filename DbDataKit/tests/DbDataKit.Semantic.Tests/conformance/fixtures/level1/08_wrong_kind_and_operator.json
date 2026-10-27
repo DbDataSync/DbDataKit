@@ -1,0 +1,34 @@
+{
+  "name": "08_wrong_kind_and_operator",
+  "level": 1,
+  "description": "A measure used as a dimension, and a numeric operator on a text dimension.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "orders.order_count"
+      ],
+      "filters": [
+        {
+          "attribute": "customers.region",
+          "operator": "gt",
+          "values": [
+            "M"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "wrong_member_kind",
+      "invalid_operator"
+    ]
+  }
+}

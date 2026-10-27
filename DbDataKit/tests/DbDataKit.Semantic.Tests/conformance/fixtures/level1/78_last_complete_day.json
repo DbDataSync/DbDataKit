@@ -1,0 +1,45 @@
+{
+  "name": "78_last_complete_day",
+  "level": 1,
+  "description": "last_complete on the date attribute counts days of the date table (which here has only the first of each month): the day before the current one is 2026-09-01.",
+  "today": "2026-09-15",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.calendar_date"
+      ],
+      "filters": [
+        {
+          "attribute": "date.calendar_date",
+          "operator": "last_complete",
+          "count": 1
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "resolved": [
+      {
+        "path": "$.query.filters[0]",
+        "attribute": "date.calendar_date",
+        "operator": "last_complete",
+        "start": "2026-09-01",
+        "end": "2026-09-01"
+      }
+    ],
+    "rows": [
+      {
+        "date_calendar_date": "2026-09-01",
+        "orders_net_revenue": 260
+      }
+    ]
+  }
+}

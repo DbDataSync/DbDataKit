@@ -1,0 +1,75 @@
+{
+  "name": "11_row_count_against_the_previous_version",
+  "description": "The last version had 10 rows and this has 3: well outside 10%.",
+  "workbook": {
+    "sheets": [
+      {
+        "name": "Sheet1",
+        "cells": {
+          "A1": "Order ID",
+          "B1": "Customer",
+          "C1": "Shipped",
+          "D1": "Paid",
+          "E1": "Amount",
+          "A2": 1,
+          "B2": "Ann",
+          "C2": "2026-07-01",
+          "D2": true,
+          "E2": "1,200.50",
+          "A3": 2,
+          "B3": "Bo",
+          "C3": "2026-08-15",
+          "D3": false,
+          "E3": "(80)",
+          "A4": 3,
+          "B4": "Cy",
+          "E4": 300
+        },
+        "dates": [
+          "C2",
+          "C3"
+        ]
+      }
+    ]
+  },
+  "spec": {
+    "spec_version": "0.3",
+    "id": "orders_export",
+    "tables": [
+      {
+        "name": "orders",
+        "sheet": "Sheet1",
+        "header": {
+          "rows": [
+            1
+          ]
+        },
+        "data": {
+          "start": "A2",
+          "columns": "A:E"
+        },
+        "types": {
+          "order_id": "integer",
+          "shipped": "date",
+          "paid": "boolean",
+          "amount": "number"
+        },
+        "checks": [
+          {
+            "type": "row_count",
+            "within_percent_of_previous": 10
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "row_count_failed"
+    ]
+  },
+  "context": {
+    "previous_row_count": 10
+  }
+}

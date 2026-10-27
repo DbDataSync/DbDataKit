@@ -1,0 +1,69 @@
+{
+  "name": "119_index_beside_a_coarser_level",
+  "level": 4,
+  "description": "The fiscal year beside the fiscal month is read from the date table for each month, as a window does: 2025-07 (390) is the base, so FY27's 250 reads 64.1.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "growth",
+          "transform": "index",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "base": "2025-07"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_year",
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_year": "FY26",
+        "date_fiscal_month": "2025-07",
+        "orders_net_revenue": 390,
+        "growth": 100.0
+      },
+      {
+        "date_fiscal_year": "FY26",
+        "date_fiscal_month": "2025-08",
+        "orders_net_revenue": 160,
+        "growth": 41.02564102564102
+      },
+      {
+        "date_fiscal_year": "FY26",
+        "date_fiscal_month": "2025-09",
+        "orders_net_revenue": 150,
+        "growth": 38.46153846153847
+      },
+      {
+        "date_fiscal_year": "FY27",
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "growth": 64.1025641025641
+      },
+      {
+        "date_fiscal_year": "FY27",
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "growth": 100.0
+      },
+      {
+        "date_fiscal_year": "FY27",
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "growth": 66.66666666666666
+      }
+    ]
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "name": "110_index_in_the_ship_role",
+  "level": 4,
+  "description": "Revenue by the month it shipped, indexed to the month it shipped 2025-08 (390 = 100), read in the ship role: the base is a scan in the same role.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "growth",
+          "transform": "index",
+          "measure": "orders.net_revenue",
+          "along": "ship_date.fiscal_month",
+          "base": "2025-08"
+        }
+      ],
+      "attributes": [
+        "ship_date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "ship_date_fiscal_month": "2025-08",
+        "orders_net_revenue": 390,
+        "growth": 100.0
+      },
+      {
+        "ship_date_fiscal_month": "2025-09",
+        "orders_net_revenue": 310,
+        "growth": 79.48717948717949
+      },
+      {
+        "ship_date_fiscal_month": "2026-08",
+        "orders_net_revenue": 250,
+        "growth": 64.1025641025641
+      },
+      {
+        "ship_date_fiscal_month": "2026-09",
+        "orders_net_revenue": 650,
+        "growth": 166.66666666666669
+      }
+    ]
+  }
+}

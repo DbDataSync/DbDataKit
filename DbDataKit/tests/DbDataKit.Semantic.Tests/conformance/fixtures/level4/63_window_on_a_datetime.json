@@ -1,0 +1,58 @@
+{
+  "name": "63_window_on_a_datetime",
+  "level": 4,
+  "description": "The fiscal year to date by the day an order was placed (in Chicago) at each fiscal month of the datetime: 150, then 150 + 270, then 420 + 180. The two orders on days the sample date table lacks (July 31 and August 31) are outside every fiscal year, so they are not counted.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "ytd",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "orders.ordered_at_fiscal_month",
+          "start": {
+            "period_start": "orders.ordered_at_fiscal_year"
+          },
+          "end": "current"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "orders.ordered_at_fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "orders.ordered_at_fiscal_year",
+          "operator": "equals",
+          "values": [
+            "FY27"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "orders_ordered_at_fiscal_month": "2026-07",
+        "orders_net_revenue": 150,
+        "ytd": 150
+      },
+      {
+        "orders_ordered_at_fiscal_month": "2026-08",
+        "orders_net_revenue": 270,
+        "ytd": 420
+      },
+      {
+        "orders_ordered_at_fiscal_month": "2026-09",
+        "orders_net_revenue": 180,
+        "ytd": 600
+      }
+    ]
+  }
+}

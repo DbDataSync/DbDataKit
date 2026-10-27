@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Spreadsheet extraction for the semantic layer: an extraction spec turns the cells of a workbook (ClosedXML) into described tables, or errors that name the cell.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <PackageReference Include="ClosedXML" />
+    <ProjectReference Include="..\DbDataKit.Semantic\DbDataKit.Semantic.csproj" />
+  </ItemGroup>
+</Project>

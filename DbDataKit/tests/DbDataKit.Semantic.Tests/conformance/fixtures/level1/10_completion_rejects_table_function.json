@@ -1,0 +1,44 @@
+{
+  "name": "10_completion_rejects_table_function",
+  "level": 1,
+  "description": "Completion SQL may read only the result's result sets.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "partial"
+  },
+  "then_complete": {
+    "completes": [
+      1,
+      2
+    ],
+    "sql": "SELECT * FROM d1 JOIN read_csv('/etc/passwd') x ON true"
+  },
+  "expect_after_completion": {
+    "status": "failed",
+    "errors": [
+      "escape_hatch_invalid"
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "name": "85_window_member_with_no_fact_rows_is_blank",
+  "level": 4,
+  "description": "Revenue by the month it shipped, less the month before it in the date table, in the ship role: 2025-08's previous member (2025-07) and 2026-08's (2026-07) have no shipments, so those deltas are blank, not the whole value; 2025-09 is 310 - 390 = -80 and 2026-09 is 650 - 250 = 400.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "change",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "ship_date.fiscal_month",
+          "offset": -1,
+          "output": "delta"
+        }
+      ],
+      "attributes": [
+        "ship_date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "ship_date_fiscal_month": "2025-08",
+        "orders_net_revenue": 390,
+        "change": null
+      },
+      {
+        "ship_date_fiscal_month": "2025-09",
+        "orders_net_revenue": 310,
+        "change": -80
+      },
+      {
+        "ship_date_fiscal_month": "2026-08",
+        "orders_net_revenue": 250,
+        "change": null
+      },
+      {
+        "ship_date_fiscal_month": "2026-09",
+        "orders_net_revenue": 650,
+        "change": 400
+      }
+    ]
+  }
+}

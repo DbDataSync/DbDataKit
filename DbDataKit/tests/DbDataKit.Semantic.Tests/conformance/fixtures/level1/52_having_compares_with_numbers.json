@@ -1,0 +1,40 @@
+{
+  "name": "52_having_compares_with_numbers",
+  "level": 1,
+  "description": "A filter on a measure takes numbers.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        },
+        {
+          "measure": "orders.net_revenue",
+          "operator": "gt",
+          "values": [
+            "lots"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "having_value_not_number"
+    ]
+  }
+}

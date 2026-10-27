@@ -1,0 +1,31 @@
+{
+  "name": "15_clarify_unknown_member",
+  "level": 1,
+  "description": "An option that doesn't resolve to a catalog member is rejected, with suggestions.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "clarify",
+    "clarify": {
+      "question": "Which revenue do you mean?",
+      "options": [
+        {
+          "label": "Net revenue",
+          "measure": "orders.net_revenue"
+        },
+        {
+          "label": "Gross revenue",
+          "measure": "orders.gross_revenue"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "unknown_member"
+    ],
+    "error_suggestions_include": {
+      "0": "orders.net_revenue"
+    }
+  }
+}

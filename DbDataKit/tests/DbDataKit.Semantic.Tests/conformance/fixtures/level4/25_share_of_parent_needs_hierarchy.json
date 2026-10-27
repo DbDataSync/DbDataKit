@@ -1,0 +1,40 @@
+{
+  "name": "25_share_of_parent_needs_hierarchy",
+  "level": 4,
+  "description": "Region isn't declared as the level above product, so there is no parent to take a share of.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "as": "s",
+          "transform": "share_of_parent",
+          "measure": "orders.net_revenue",
+          "attribute": "products.product",
+          "parent": "customers.region"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "hierarchy_not_declared"
+    ]
+  }
+}

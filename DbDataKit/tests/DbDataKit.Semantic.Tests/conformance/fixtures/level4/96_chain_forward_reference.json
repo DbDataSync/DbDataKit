@@ -1,0 +1,47 @@
+{
+  "name": "96_chain_forward_reference",
+  "level": 4,
+  "description": "A transform reads transforms written before it: cum_share comes first here, and share isn't written yet.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "cum_share",
+          "transform": "running_total",
+          "measure": "share",
+          "along": "date.fiscal_month"
+        },
+        {
+          "as": "share",
+          "transform": "pct_of_total",
+          "measure": "orders.net_revenue",
+          "over": [
+            "date.fiscal_month"
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "transform_base_unknown"
+    ]
+  }
+}

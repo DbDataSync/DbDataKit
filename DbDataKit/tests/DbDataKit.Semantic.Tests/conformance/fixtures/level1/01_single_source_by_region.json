@@ -1,0 +1,77 @@
+{
+  "name": "01_single_source_by_region",
+  "level": 1,
+  "description": "Single source, two measures by region. Complete in one native query.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "orders.order_count"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "order": [
+        [
+          "orders.net_revenue",
+          "desc"
+        ]
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "result_sets": [
+      {
+        "id": "d1",
+        "source": "sqlserver_sales",
+        "grain": [
+          "customers.region"
+        ],
+        "covers": {
+          "measures": [
+            "orders.net_revenue",
+            "orders.order_count"
+          ],
+          "filters_applied": [
+            "date.fiscal_quarter equals FY27-Q1"
+          ],
+          "filters_not_applied": []
+        }
+      }
+    ],
+    "remaining": [],
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "West",
+        "orders_net_revenue": 500,
+        "orders_order_count": 6
+      },
+      {
+        "customers_region": "East",
+        "orders_net_revenue": 400,
+        "orders_order_count": 4
+      }
+    ],
+    "native_query_contains": {
+      "d1": [
+        "COUNT(DISTINCT f.order_id)",
+        "WHERE d.fiscal_quarter = @p1",
+        "OFFSET 0 ROWS FETCH NEXT 100 ROWS ONLY"
+      ]
+    }
+  }
+}

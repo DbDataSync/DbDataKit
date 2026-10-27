@@ -1,0 +1,47 @@
+{
+  "name": "45_allocate_weights_from_a_later_period_missing",
+  "level": 4,
+  "description": "Weights can come from a later period too (offset 1), but FY28 has no sales in the sample, so every key is missing its weights and the allocation says so instead of losing the budget.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "measure": "budget.budget_amount",
+          "spread": {
+            "allocate": {
+              "by": "measure",
+              "measure": "orders.net_revenue",
+              "period": {
+                "unit": "fiscal_year",
+                "offset": 1
+              }
+            }
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "allocation_weights_invalid"
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "89_window_offset_cannot_be_combined_with_start",
+  "level": 4,
+  "description": "offset is a window of one member, so it can't also have a start.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "x",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "offset": -1,
+          "start": -2
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "window_frame_invalid"
+    ]
+  }
+}

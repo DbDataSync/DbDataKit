@@ -1,0 +1,54 @@
+{
+  "name": "06_totals_below_level_stay_remaining",
+  "level": 2,
+  "description": "A level 2 engine doesn't compute totals: the base data comes back with a totals step.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region",
+          "products.product"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "partial",
+    "reason_code": "level_not_implemented",
+    "remaining": [
+      {
+        "step": 1,
+        "op": "totals",
+        "subtotal_by": [
+          "customers.region",
+          "products.product"
+        ],
+        "grand_total": true
+      },
+      {
+        "step": 2,
+        "op": "finalize"
+      }
+    ]
+  }
+}

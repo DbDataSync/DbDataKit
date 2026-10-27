@@ -1,0 +1,82 @@
+{
+  "name": "02_totals_repeat_not_double_counted",
+  "level": 3,
+  "description": "Budget repeats on product rows but its region subtotal is the budget at its own grain (500), not the sum of repeated rows (1,000).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "products.product"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "_rollup_level": 0,
+        "orders_net_revenue": 100,
+        "budget_budget_amount": 500
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "_rollup_level": 0,
+        "orders_net_revenue": 300,
+        "budget_budget_amount": 500
+      },
+      {
+        "customers_region": "East",
+        "products_product": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 400,
+        "budget_budget_amount": 500
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "_rollup_level": 0,
+        "orders_net_revenue": 300,
+        "budget_budget_amount": 600
+      },
+      {
+        "customers_region": "West",
+        "products_product": "B",
+        "_rollup_level": 0,
+        "orders_net_revenue": 200,
+        "budget_budget_amount": 600
+      },
+      {
+        "customers_region": "West",
+        "products_product": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 500,
+        "budget_budget_amount": 600
+      }
+    ]
+  }
+}

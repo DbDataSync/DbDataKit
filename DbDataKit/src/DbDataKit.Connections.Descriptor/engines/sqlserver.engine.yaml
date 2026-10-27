@@ -1,0 +1,17 @@
+schema: engine/1
+id: sqlserver
+display_name: Microsoft SQL Server
+library: Microsoft.Data.SqlClient
+dialect: sqlserver
+default_port: 1433
+aliases: [mssql, sql-server]
+provider: sqlserver
+catalog_reader: sqlserver
+roles:
+  sync_source: { status: supported, note: "Change Tracking or CDC, or a watermark column; TriggerAudit as the portable option" }
+  sync_target: { status: supported, note: "native bulk staging (SqlBulkCopy)" }
+  build_target: { status: supported, note: "SQL Server 2022 in Build's real-engine suite" }
+  build_origin: { status: supported, note: "project import reads keys, foreign keys and indexes from the live catalog" }
+  proxy_source: { status: supported, note: "address, connection string or secret reference; pass-through identity" }
+  semantic_emitter: { status: supported, note: "T-SQL; every conformance fixture passes on SQL Server 2022 (plan 19 J02, J03)" }
+  master_data_store: { status: planned, note: "plan 15" }

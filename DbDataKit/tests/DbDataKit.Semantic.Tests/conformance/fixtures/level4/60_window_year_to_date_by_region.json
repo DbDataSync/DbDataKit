@@ -1,0 +1,80 @@
+{
+  "name": "60_window_year_to_date_by_region",
+  "level": 4,
+  "description": "The year to date for each region at each month: the other dimensions partition the scans, so each region accumulates on its own (West 150, 340, 500; East 100, 300, 400).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "ytd",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "start": {
+            "period_start": "date.fiscal_year"
+          },
+          "end": "current"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_year",
+          "operator": "equals",
+          "values": [
+            "FY27"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 100,
+        "ytd": 100
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 200,
+        "ytd": 300
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 100,
+        "ytd": 400
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 150,
+        "ytd": 150
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 190,
+        "ytd": 340
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 160,
+        "ytd": 500
+      }
+    ]
+  }
+}

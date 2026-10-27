@@ -1,0 +1,84 @@
+{
+  "name": "35_prior_period_by_month",
+  "level": 4,
+  "description": "The same measure one fiscal year earlier. The query's filter on FY27-Q1 moves back to FY26-Q1, and each prior-year month takes the label of the current month it corresponds to: 2025-07 is 2026-07's prior.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "rev_prior",
+          "transform": "prior_period",
+          "measure": "orders.net_revenue",
+          "output": "value",
+          "period": {
+            "unit": "fiscal_year",
+            "offset": -1
+          }
+        },
+        {
+          "as": "rev_delta",
+          "transform": "prior_period",
+          "measure": "orders.net_revenue",
+          "output": "delta",
+          "period": {
+            "unit": "fiscal_year",
+            "offset": -1
+          }
+        },
+        {
+          "as": "rev_yoy",
+          "transform": "prior_period",
+          "measure": "orders.net_revenue",
+          "output": "pct_change",
+          "period": {
+            "unit": "fiscal_year",
+            "offset": -1
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "rev_prior": 390,
+        "rev_delta": -140,
+        "rev_yoy": -0.358974358974359
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "rev_prior": 160,
+        "rev_delta": 230,
+        "rev_yoy": 1.4375
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "rev_prior": 150,
+        "rev_delta": 110,
+        "rev_yoy": 0.7333333333333333
+      }
+    ]
+  }
+}

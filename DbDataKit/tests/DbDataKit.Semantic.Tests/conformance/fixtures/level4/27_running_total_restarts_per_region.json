@@ -1,0 +1,76 @@
+{
+  "name": "27_running_total_restarts_per_region",
+  "level": 4,
+  "description": "The accumulation runs separately for each combination of the other dimensions.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "rev_cumulative",
+          "transform": "running_total",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 100,
+        "rev_cumulative": 100
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 200,
+        "rev_cumulative": 300
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 100,
+        "rev_cumulative": 400
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 150,
+        "rev_cumulative": 150
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 190,
+        "rev_cumulative": 340
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 160,
+        "rev_cumulative": 500
+      }
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "65_invalid_datetime_value",
+  "level": 1,
+  "description": "A comparison on a datetime takes an instant; text that isn't one is rejected with an example of how to write it.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "orders.ordered_at_month"
+      ],
+      "filters": [
+        {
+          "attribute": "orders.ordered_at",
+          "operator": "gte",
+          "values": [
+            "last tuesday"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "invalid_datetime"
+    ]
+  }
+}

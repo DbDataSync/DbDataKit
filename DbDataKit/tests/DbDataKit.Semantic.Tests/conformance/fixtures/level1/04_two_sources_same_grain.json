@@ -1,0 +1,89 @@
+{
+  "name": "04_two_sources_same_grain",
+  "level": 1,
+  "description": "Two sources at the requested grain: one union step remains. The agent completes it with UNION ALL BY NAME.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "partial",
+    "reason_code": "level_not_implemented",
+    "result_sets": [
+      {
+        "id": "d1",
+        "source": "sqlserver_sales",
+        "grain": [
+          "customers.region"
+        ]
+      },
+      {
+        "id": "d2",
+        "source": "ssas_finance",
+        "grain": [
+          "customers.region"
+        ]
+      }
+    ],
+    "remaining": [
+      {
+        "step": 1,
+        "op": "union",
+        "inputs": [
+          "d1",
+          "d2"
+        ],
+        "grain": [
+          "customers.region"
+        ]
+      },
+      {
+        "step": 2,
+        "op": "finalize",
+        "limit": 100
+      }
+    ]
+  },
+  "then_complete": {
+    "completes": [
+      1,
+      2
+    ],
+    "sql": "SELECT customers_region, SUM(orders_net_revenue) AS orders_net_revenue, SUM(budget_budget_amount) AS budget_budget_amount\nFROM (SELECT * FROM d1 UNION ALL BY NAME SELECT * FROM d2)\nGROUP BY customers_region\nORDER BY customers_region"
+  },
+  "expect_after_completion": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "orders_net_revenue": 400,
+        "budget_budget_amount": 500
+      },
+      {
+        "customers_region": "West",
+        "orders_net_revenue": 500,
+        "budget_budget_amount": 600
+      }
+    ]
+  }
+}

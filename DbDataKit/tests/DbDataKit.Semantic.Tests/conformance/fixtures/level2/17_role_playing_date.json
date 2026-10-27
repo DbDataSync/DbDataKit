@@ -1,0 +1,41 @@
+{
+  "name": "17_role_playing_date",
+  "level": 2,
+  "description": "Sales join the date table twice: by the date the order happened (the quarter filter) and by the date it shipped. Orders placed in July ship in August (250); August and September orders ship in September (390 + 260).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "ship_date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "ship_date_fiscal_month": "2026-08",
+        "orders_net_revenue": 250
+      },
+      {
+        "ship_date_fiscal_month": "2026-09",
+        "orders_net_revenue": 650
+      }
+    ]
+  }
+}

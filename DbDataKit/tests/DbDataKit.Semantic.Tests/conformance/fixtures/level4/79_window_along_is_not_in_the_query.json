@@ -1,0 +1,33 @@
+{
+  "name": "79_window_along_is_not_in_the_query",
+  "level": 4,
+  "description": "The attribute a window is read along has to be in the query.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "x",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "start": -1,
+          "end": "current"
+        }
+      ],
+      "attributes": [
+        "customers.region"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "transform_member_missing"
+    ]
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "name": "69_window_beside_a_coarser_level",
+  "level": 4,
+  "description": "The fiscal year can sit beside the months of a window that crosses years: 2026-07's trailing three months are 2025-08, 2025-09 and 2026-07 (160 + 150 + 250 = 560) and the row is still labeled FY27.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "r3",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "start": -2,
+          "end": "current"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_year",
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_year": "FY26",
+        "date_fiscal_month": "2025-07",
+        "orders_net_revenue": 390,
+        "r3": 390
+      },
+      {
+        "date_fiscal_year": "FY26",
+        "date_fiscal_month": "2025-08",
+        "orders_net_revenue": 160,
+        "r3": 550
+      },
+      {
+        "date_fiscal_year": "FY26",
+        "date_fiscal_month": "2025-09",
+        "orders_net_revenue": 150,
+        "r3": 700
+      },
+      {
+        "date_fiscal_year": "FY27",
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "r3": 560
+      },
+      {
+        "date_fiscal_year": "FY27",
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "r3": 790
+      },
+      {
+        "date_fiscal_year": "FY27",
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "r3": 900
+      }
+    ]
+  }
+}

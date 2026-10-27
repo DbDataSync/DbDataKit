@@ -1,0 +1,50 @@
+{
+  "name": "101_chain_share_of_a_rank",
+  "level": 4,
+  "description": "A rank can't be added up, so a share of it is rejected.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "rev_rank",
+          "transform": "rank",
+          "measure": "orders.net_revenue",
+          "within": [
+            "customers.region"
+          ]
+        },
+        {
+          "as": "rank_share",
+          "transform": "pct_of_total",
+          "measure": "rev_rank",
+          "over": [
+            "products.product"
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "transform_not_allowed"
+    ]
+  }
+}

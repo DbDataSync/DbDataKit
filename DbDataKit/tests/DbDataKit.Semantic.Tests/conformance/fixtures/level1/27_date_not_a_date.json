@@ -1,0 +1,33 @@
+{
+  "name": "27_date_not_a_date",
+  "level": 1,
+  "description": "A date filter's value must be YYYY-MM-DD.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.calendar_date",
+          "operator": "equals",
+          "values": [
+            "July 1 2026"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "invalid_date"
+    ]
+  }
+}

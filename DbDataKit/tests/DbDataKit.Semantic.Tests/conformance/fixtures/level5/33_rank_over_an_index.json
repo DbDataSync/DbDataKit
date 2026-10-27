@@ -1,0 +1,63 @@
+{
+  "name": "33_rank_over_an_index",
+  "level": 5,
+  "description": "A rank reads an index like any other output: 2026-08 (390 / 250 = 156) is first, 2026-09 (104) second and the base month (100) last.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "growth",
+          "transform": "index",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "base": "2026-07"
+        },
+        {
+          "as": "growth_rank",
+          "transform": "rank",
+          "measure": "growth",
+          "order": "desc"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": [
+        {
+          "attribute": "date.fiscal_year",
+          "operator": "equals",
+          "values": [
+            "FY27"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "rows": [
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "growth": 100.0,
+        "growth_rank": 3
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "growth": 156.0,
+        "growth_rank": 1
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "growth": 104.0,
+        "growth_rank": 2
+      }
+    ]
+  }
+}

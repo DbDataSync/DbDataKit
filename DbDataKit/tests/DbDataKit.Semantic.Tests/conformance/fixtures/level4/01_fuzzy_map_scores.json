@@ -1,0 +1,99 @@
+{
+  "name": "01_fuzzy_map_scores",
+  "level": 4,
+  "description": "Normalized exact matches score 1.0; near matches score their Jaro-Winkler similarity at or above the threshold; the rest stay unmatched with to null.",
+  "setup": [
+    {
+      "spec_version": "0.3",
+      "kind": "table",
+      "name": "adhoc.user_territories",
+      "descriptor": {
+        "descriptor_version": "1.0",
+        "name": "user_territories",
+        "schema": {
+          "fields": [
+            {
+              "name": "territory",
+              "type": "string"
+            },
+            {
+              "name": "region_label",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "rows": [
+        {
+          "territory": "Pacific",
+          "region_label": "west"
+        },
+        {
+          "territory": "Atlantic",
+          "region_label": "  EAST "
+        },
+        {
+          "territory": "Pacific2",
+          "region_label": "Wesst"
+        },
+        {
+          "territory": "Atlantic2",
+          "region_label": "Eastt"
+        },
+        {
+          "territory": "North",
+          "region_label": "Qqqq"
+        }
+      ]
+    }
+  ],
+  "request": {
+    "spec_version": "0.3",
+    "kind": "value_map",
+    "id": "terr_region",
+    "table": "adhoc.user_territories@v1",
+    "field": "region_label",
+    "target": "customers.region",
+    "mode": "fuzzy"
+  },
+  "expect": {
+    "status": "complete",
+    "result_sets": [
+      {
+        "id": "map_terr_region",
+        "rows": [
+          {
+            "from": "west",
+            "to": "West",
+            "confidence": 1.0,
+            "method": "exact"
+          },
+          {
+            "from": "  EAST ",
+            "to": "East",
+            "confidence": 1.0,
+            "method": "exact"
+          },
+          {
+            "from": "Wesst",
+            "to": "West",
+            "confidence": 0.9533,
+            "method": "fuzzy"
+          },
+          {
+            "from": "Eastt",
+            "to": "East",
+            "confidence": 0.96,
+            "method": "fuzzy"
+          },
+          {
+            "from": "Qqqq",
+            "to": null,
+            "confidence": null,
+            "method": "fuzzy"
+          }
+        ]
+      }
+    ]
+  }
+}

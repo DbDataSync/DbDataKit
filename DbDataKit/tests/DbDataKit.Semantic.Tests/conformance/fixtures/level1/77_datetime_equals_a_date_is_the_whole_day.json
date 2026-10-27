@@ -1,0 +1,34 @@
+{
+  "name": "77_datetime_equals_a_date_is_the_whole_day",
+  "level": 1,
+  "description": "equals a date on a datetime is the whole day in the zone: August 1 in Chicago holds orders 5, 7 and 9.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [],
+      "filters": [
+        {
+          "attribute": "orders.ordered_at",
+          "operator": "equals",
+          "values": [
+            "2026-08-01"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "orders_net_revenue": 270
+      }
+    ]
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "name": "26_running_total",
+  "level": 4,
+  "description": "Cumulative revenue along the fiscal months of the quarter: 250, 250 + 390, then 900.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "rev_cumulative",
+          "transform": "running_total",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "rev_cumulative": 250
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "rev_cumulative": 640
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "rev_cumulative": 900
+      }
+    ]
+  }
+}

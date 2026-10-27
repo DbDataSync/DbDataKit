@@ -1,0 +1,33 @@
+{
+  "name": "113_index_scale_must_be_positive",
+  "level": 4,
+  "description": "A scale of 0 makes every index 0, so the schema rejects it.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "growth",
+          "transform": "index",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "base": "2026-07",
+          "scale": 0
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors_include": [
+      "schema_invalid"
+    ]
+  }
+}

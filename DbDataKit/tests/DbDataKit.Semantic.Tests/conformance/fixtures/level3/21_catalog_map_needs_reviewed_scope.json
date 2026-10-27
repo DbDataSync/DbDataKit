@@ -1,0 +1,60 @@
+{
+  "name": "21_catalog_map_needs_reviewed_scope",
+  "level": 3,
+  "description": "A catalog map has been reviewed, so it can't sit at session scope.",
+  "setup": [
+    {
+      "spec_version": "0.3",
+      "kind": "table",
+      "name": "adhoc.user_territories",
+      "descriptor": {
+        "descriptor_version": "1.0",
+        "name": "user_territories",
+        "schema": {
+          "fields": [
+            {
+              "name": "territory",
+              "type": "string"
+            },
+            {
+              "name": "region_label",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "rows": [
+        {
+          "territory": "Pacific",
+          "region_label": "WST-01"
+        }
+      ]
+    }
+  ],
+  "request": {
+    "spec_version": "0.3",
+    "kind": "value_map",
+    "id": "terr_region",
+    "table": "adhoc.user_territories@v1",
+    "field": "region_label",
+    "target": "customers.region",
+    "mode": "catalog",
+    "pairs": [
+      {
+        "from": "WST-01",
+        "to": "West"
+      },
+      {
+        "from": "EST-01",
+        "to": "East"
+      }
+    ],
+    "scope": "session"
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "catalog_map_scope_invalid"
+    ]
+  }
+}

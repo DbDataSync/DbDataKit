@@ -1,0 +1,41 @@
+{
+  "name": "50_derived_across_sources",
+  "level": 4,
+  "description": "Revenue (SQL Server) against budget (SSAS) in one definition: East 400 of 500, West 500 of 600.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "finance.pct_to_budget"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "finance_pct_to_budget": 0.8
+      },
+      {
+        "customers_region": "West",
+        "finance_pct_to_budget": 0.8333333333333334
+      }
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "18_unsupported",
+  "level": 1,
+  "description": "The agent says the question needs something the format can't express. It comes back as a failed result so the user is told, and the reason code is counted.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "unsupported",
+    "unsupported": {
+      "reason_code": "set_filter",
+      "detail": "Customers who bought product A in 2025 needs a set-based filter, which isn't supported yet."
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "unsupported"
+    ]
+  }
+}

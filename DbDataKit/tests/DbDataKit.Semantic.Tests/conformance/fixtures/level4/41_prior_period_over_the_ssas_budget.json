@@ -1,0 +1,48 @@
+{
+  "name": "41_prior_period_over_the_ssas_budget",
+  "level": 4,
+  "description": "Budget comes from SSAS, whose model now carries the prior-year columns of the Date table. FY27-Q1's budget is 1100 and the same quarter a year earlier (FY26-Q1) is 720.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "budget.budget_amount",
+        {
+          "as": "x",
+          "transform": "prior_period",
+          "measure": "budget.budget_amount",
+          "output": "value",
+          "period": {
+            "unit": "fiscal_year",
+            "offset": -1
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_quarter"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_quarter": "FY27-Q1",
+        "budget_budget_amount": 1100.0,
+        "x": 720.0
+      }
+    ]
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.internal/qis/native_batch.schema.json",
+  "title": "Native batch (level 0)",
+  "description": "Native queries written by the agent, wrapped by the engine in the result contract.",
+  "type": "object",
+  "required": ["spec_version", "kind", "queries"],
+  "additionalProperties": false,
+  "properties": {
+    "spec_version": {"const": "0.3"},
+    "kind": {"const": "native_batch"},
+    "queries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "source", "dialect", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "source": {"type": "string"},
+          "dialect": {"enum": ["tsql", "dax"]},
+          "text": {"type": "string"}
+        }
+      }
+    }
+  }
+}

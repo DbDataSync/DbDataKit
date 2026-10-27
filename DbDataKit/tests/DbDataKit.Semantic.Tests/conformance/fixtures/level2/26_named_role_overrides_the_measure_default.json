@@ -1,0 +1,45 @@
+{
+  "name": "26_named_role_overrides_the_measure_default",
+  "level": 2,
+  "description": "A named role (order_date.fiscal_month, order_date.fiscal_quarter) overrides the measure's default: shipped revenue by the month the order was placed, in the quarter it was placed.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.shipped_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "order_date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "order_date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "order_date_fiscal_month": "2026-07",
+        "orders_shipped_revenue": 250
+      },
+      {
+        "order_date_fiscal_month": "2026-08",
+        "orders_shipped_revenue": 390
+      },
+      {
+        "order_date_fiscal_month": "2026-09",
+        "orders_shipped_revenue": 260
+      }
+    ]
+  }
+}

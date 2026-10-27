@@ -1,0 +1,43 @@
+{
+  "name": "59_prior_period_date_without_a_counterpart",
+  "level": 4,
+  "description": "A single date has to have a counterpart: 2026-09-20 isn't a day of the date table.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "rev_prior",
+          "transform": "prior_period",
+          "measure": "orders.net_revenue",
+          "period": {
+            "unit": "fiscal_year",
+            "offset": -1
+          },
+          "output": "value"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.calendar_date",
+          "operator": "equals",
+          "values": [
+            "2026-09-20"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "shift_date_unmapped"
+    ]
+  }
+}

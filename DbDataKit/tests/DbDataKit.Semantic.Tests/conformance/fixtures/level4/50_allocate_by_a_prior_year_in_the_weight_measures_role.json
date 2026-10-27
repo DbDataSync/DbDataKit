@@ -1,0 +1,63 @@
+{
+  "name": "50_allocate_by_a_prior_year_in_the_weight_measures_role",
+  "level": 4,
+  "description": "Budget for August split by last August's shipped revenue. Shipped revenue reads the date dimension in the ship role, so the weights are what shipped in 2025-08 (West A 240, East A 150); read in the order role there are no weights for product A at all (the only order that month was a B).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "measure": "budget.budget_amount",
+          "spread": {
+            "allocate": {
+              "by": "measure",
+              "measure": "orders.shipped_revenue",
+              "period": {
+                "unit": "fiscal_year",
+                "offset": -1
+              }
+            }
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_month",
+          "operator": "equals",
+          "values": [
+            "2026-08"
+          ]
+        },
+        {
+          "attribute": "products.product",
+          "operator": "equals",
+          "values": [
+            "A"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "budget_budget_amount": 150
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "budget_budget_amount": 200
+      }
+    ]
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "name": "11_allocate_equal_present",
+  "level": 4,
+  "description": "An even split over the members present in the other inputs: two products, so each gets half.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "measure": "budget.budget_amount",
+          "spread": {
+            "allocate": {
+              "by": "equal",
+              "members": "present"
+            }
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "orders_net_revenue": 100,
+        "budget_budget_amount": 250
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "orders_net_revenue": 300,
+        "budget_budget_amount": 250
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "orders_net_revenue": 300,
+        "budget_budget_amount": 300
+      },
+      {
+        "customers_region": "West",
+        "products_product": "B",
+        "orders_net_revenue": 200,
+        "budget_budget_amount": 300
+      }
+    ]
+  }
+}

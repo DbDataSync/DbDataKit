@@ -1,0 +1,12 @@
+schema: engine/1
+id: odbc
+display_name: ODBC
+library: System.Data.Odbc
+dialect: ansi
+odbc_quoting: true
+aliases: []
+provider: odbc
+catalog_reader: odbc
+roles:
+  build_origin: { status: supported, note: "the driver's catalog functions, or information_schema when the dialect says so" }
+  proxy_source: { status: supported, note: "through the 32-bit worker where the driver is 32-bit" }

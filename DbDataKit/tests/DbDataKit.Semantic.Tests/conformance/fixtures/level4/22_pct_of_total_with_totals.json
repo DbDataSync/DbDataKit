@@ -1,0 +1,98 @@
+{
+  "name": "22_pct_of_total_with_totals",
+  "level": 4,
+  "description": "Computed on detail rows. A total row that has rolled up the dimension it totals over (product) is 100%; the grand total too.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "pct_of_region",
+          "transform": "pct_of_total",
+          "measure": "orders.net_revenue",
+          "over": [
+            "products.product"
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region",
+          "products.product"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "_rollup_level": 0,
+        "orders_net_revenue": 100,
+        "pct_of_region": 0.25
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "_rollup_level": 0,
+        "orders_net_revenue": 300,
+        "pct_of_region": 0.75
+      },
+      {
+        "customers_region": "East",
+        "products_product": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 400,
+        "pct_of_region": 1.0
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "_rollup_level": 0,
+        "orders_net_revenue": 300,
+        "pct_of_region": 0.6
+      },
+      {
+        "customers_region": "West",
+        "products_product": "B",
+        "_rollup_level": 0,
+        "orders_net_revenue": 200,
+        "pct_of_region": 0.4
+      },
+      {
+        "customers_region": "West",
+        "products_product": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 500,
+        "pct_of_region": 1.0
+      },
+      {
+        "customers_region": null,
+        "products_product": null,
+        "_rollup_level": 2,
+        "orders_net_revenue": 900,
+        "pct_of_region": 1.0
+      }
+    ]
+  }
+}

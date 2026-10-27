@@ -1,0 +1,54 @@
+{
+  "name": "34_current_period",
+  "level": 1,
+  "description": "The current fiscal quarter, whole.",
+  "today": "2026-09-15",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "current"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "resolved": [
+      {
+        "attribute": "date.fiscal_quarter",
+        "members": [
+          "FY27-Q1"
+        ],
+        "start": "2026-07-01",
+        "end": "2026-09-15",
+        "path": "$.query.filters[0]"
+      }
+    ],
+    "rows": [
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260
+      }
+    ]
+  }
+}

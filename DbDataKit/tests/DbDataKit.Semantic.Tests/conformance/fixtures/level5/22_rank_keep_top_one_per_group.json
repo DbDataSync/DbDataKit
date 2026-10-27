@@ -1,0 +1,55 @@
+{
+  "name": "22_rank_keep_top_one_per_group",
+  "level": 5,
+  "description": "keep 1 within each region: the best row of East and of West.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "rev_rank",
+          "transform": "rank",
+          "measure": "orders.net_revenue",
+          "within": [
+            "customers.region"
+          ],
+          "keep": 1
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "orders_net_revenue": 300,
+        "rev_rank": 1
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "orders_net_revenue": 300,
+        "rev_rank": 1
+      }
+    ]
+  }
+}

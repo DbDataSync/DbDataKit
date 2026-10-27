@@ -1,0 +1,267 @@
+{
+  "name": "01_report_layout",
+  "description": "A report-style sheet: a two-row header with a merged year, the region only on the first row of its group, subtotal rows, and months across the page. The spec skips the subtotals by rule, fills the region down, unpivots the months, and checks the result against the sheet's own grand total.",
+  "workbook": {
+    "sheets": [
+      {
+        "name": "Summary",
+        "cells": {
+          "A1": "Forecast"
+        }
+      },
+      {
+        "name": "Detail",
+        "cells": {
+          "D4": "Jul",
+          "E4": "Aug",
+          "F4": "Sep",
+          "B4": "Region",
+          "C4": "Product",
+          "B5": "West",
+          "C5": "A",
+          "D5": 100,
+          "E5": 110,
+          "F5": 120,
+          "C6": "B",
+          "D6": 50,
+          "E6": 60,
+          "F6": 70,
+          "C7": "Subtotal",
+          "D7": 150,
+          "E7": 170,
+          "F7": 190,
+          "B8": "East",
+          "C8": "A",
+          "D8": 80,
+          "E8": 90,
+          "F8": 100,
+          "C9": "B",
+          "D9": 20,
+          "E9": 30,
+          "F9": 40,
+          "C10": "Subtotal",
+          "D10": 100,
+          "E10": 120,
+          "F10": 140,
+          "C12": "Grand Total",
+          "D12": 250,
+          "E12": 290,
+          "F12": 330,
+          "D3": "2025"
+        },
+        "merges": [
+          "D3:F3"
+        ]
+      }
+    ]
+  },
+  "spec": {
+    "spec_version": "0.3",
+    "id": "regional_forecast",
+    "match": {
+      "library": "Finance/Forecasts",
+      "name_pattern": "Forecast_*_FY*.xlsx"
+    },
+    "fingerprint": {
+      "sheets": [
+        "Summary",
+        "Detail"
+      ],
+      "cells": [
+        {
+          "sheet": "Detail",
+          "ref": "B4",
+          "equals": "Region"
+        },
+        {
+          "sheet": "Detail",
+          "ref": "D4",
+          "matches": "^(Jul|July)"
+        }
+      ]
+    },
+    "tables": [
+      {
+        "name": "forecast",
+        "sheet": "Detail",
+        "header": {
+          "rows": [
+            3,
+            4
+          ],
+          "join": " "
+        },
+        "data": {
+          "start": "B5",
+          "end": {
+            "until_blank_in": "C"
+          },
+          "columns": "B:F"
+        },
+        "skip_rows": [
+          {
+            "column": "C",
+            "matches": "(?i)^(sub)?total"
+          },
+          {
+            "blank_in": "D:F"
+          }
+        ],
+        "fill_down": [
+          "B"
+        ],
+        "unpivot": {
+          "columns": "D:F",
+          "name_as": "month",
+          "value_as": "amount"
+        },
+        "types": {
+          "month": "date",
+          "amount": "number"
+        },
+        "checks": [
+          {
+            "type": "row_count",
+            "min": 1
+          },
+          {
+            "type": "not_null",
+            "columns": [
+              "region"
+            ]
+          },
+          {
+            "type": "unique",
+            "columns": [
+              "region",
+              "product",
+              "month"
+            ]
+          },
+          {
+            "type": "total_matches",
+            "column": "amount",
+            "against": {
+              "sheet": "Detail",
+              "find_row": {
+                "column": "C",
+                "equals": "Grand Total"
+              },
+              "columns": "D:F"
+            },
+            "tolerance": 0.01
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "status": "complete",
+    "tables": [
+      {
+        "name": "adhoc.forecast",
+        "descriptor": {
+          "x_row_count": 12,
+          "x_provenance": {
+            "spec": "extraction",
+            "extraction_spec": "regional_forecast"
+          },
+          "schema": {
+            "fields": [
+              {
+                "name": "region",
+                "type": "string"
+              },
+              {
+                "name": "product",
+                "type": "string"
+              },
+              {
+                "name": "month",
+                "type": "date"
+              },
+              {
+                "name": "amount",
+                "type": "number"
+              }
+            ]
+          }
+        },
+        "rows": [
+          {
+            "region": "West",
+            "product": "A",
+            "month": "2025-07-01",
+            "amount": 100
+          },
+          {
+            "region": "West",
+            "product": "A",
+            "month": "2025-08-01",
+            "amount": 110
+          },
+          {
+            "region": "West",
+            "product": "A",
+            "month": "2025-09-01",
+            "amount": 120
+          },
+          {
+            "region": "West",
+            "product": "B",
+            "month": "2025-07-01",
+            "amount": 50
+          },
+          {
+            "region": "West",
+            "product": "B",
+            "month": "2025-08-01",
+            "amount": 60
+          },
+          {
+            "region": "West",
+            "product": "B",
+            "month": "2025-09-01",
+            "amount": 70
+          },
+          {
+            "region": "East",
+            "product": "A",
+            "month": "2025-07-01",
+            "amount": 80
+          },
+          {
+            "region": "East",
+            "product": "A",
+            "month": "2025-08-01",
+            "amount": 90
+          },
+          {
+            "region": "East",
+            "product": "A",
+            "month": "2025-09-01",
+            "amount": 100
+          },
+          {
+            "region": "East",
+            "product": "B",
+            "month": "2025-07-01",
+            "amount": 20
+          },
+          {
+            "region": "East",
+            "product": "B",
+            "month": "2025-08-01",
+            "amount": 30
+          },
+          {
+            "region": "East",
+            "product": "B",
+            "month": "2025-09-01",
+            "amount": 40
+          }
+        ]
+      }
+    ]
+  }
+}

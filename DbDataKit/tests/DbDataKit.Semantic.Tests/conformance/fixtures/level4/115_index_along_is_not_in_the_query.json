@@ -1,0 +1,32 @@
+{
+  "name": "115_index_along_is_not_in_the_query",
+  "level": 4,
+  "description": "The index is read at each member of date.fiscal_month, which the query doesn't list.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "growth",
+          "transform": "index",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "base": "2026-07"
+        }
+      ],
+      "attributes": [
+        "customers.region"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "transform_member_missing"
+    ]
+  }
+}

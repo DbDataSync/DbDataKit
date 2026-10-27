@@ -1,0 +1,59 @@
+{
+  "name": "48_having_single_source",
+  "level": 1,
+  "description": "A filter on a measure is a condition on the answer (HAVING): regions whose revenue is over 450. One source and nothing to combine, so it is in the source query.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        },
+        {
+          "measure": "orders.net_revenue",
+          "operator": "gt",
+          "values": [
+            450
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "result_sets": [
+      {
+        "id": "d1",
+        "covers": {
+          "filters_applied": [
+            "date.fiscal_quarter equals FY27-Q1",
+            "orders.net_revenue gt 450"
+          ]
+        }
+      }
+    ],
+    "rows": [
+      {
+        "customers_region": "West",
+        "orders_net_revenue": 500
+      }
+    ],
+    "native_query_contains": {
+      "d1": [
+        "HAVING SUM(f.net_amount) > @p2"
+      ]
+    }
+  }
+}

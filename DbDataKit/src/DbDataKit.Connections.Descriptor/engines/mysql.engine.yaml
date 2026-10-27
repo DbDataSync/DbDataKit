@@ -1,0 +1,11 @@
+schema: engine/1
+id: mysql
+display_name: MySQL and MariaDB
+library: MySqlConnector
+dialect: mysql
+default_port: 3306
+provider: mysql
+catalog_reader: mysql
+roles:
+  sync_source: { status: supported, note: "watermark column; TriggerAudit. MariaDB is tested beside MySQL" }
+  sync_target: { status: supported, note: "batched insert staging" }

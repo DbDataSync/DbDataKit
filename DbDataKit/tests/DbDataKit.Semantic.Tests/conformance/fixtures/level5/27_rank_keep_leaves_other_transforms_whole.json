@@ -1,0 +1,64 @@
+{
+  "name": "27_rank_keep_leaves_other_transforms_whole",
+  "level": 5,
+  "description": "The share is of all four rows (900), not of the rows kept: keep is applied after every transform.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "share",
+          "transform": "pct_of_total",
+          "measure": "orders.net_revenue",
+          "over": [
+            "customers.region",
+            "products.product"
+          ]
+        },
+        {
+          "as": "rev_rank",
+          "transform": "rank",
+          "measure": "orders.net_revenue",
+          "ties": "break",
+          "keep": 2
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "orders_net_revenue": 300,
+        "share": 0.3333333333333333,
+        "rev_rank": 1
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "orders_net_revenue": 300,
+        "share": 0.3333333333333333,
+        "rev_rank": 2
+      }
+    ]
+  }
+}

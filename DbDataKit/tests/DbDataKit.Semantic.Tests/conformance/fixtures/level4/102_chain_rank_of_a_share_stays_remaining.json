@@ -1,0 +1,48 @@
+{
+  "name": "102_chain_rank_of_a_share_stays_remaining",
+  "level": 4,
+  "description": "Rank belongs to level 5. A level 4 engine still computes the share the rank reads and returns the rank as a remaining step.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "share",
+          "transform": "pct_of_total",
+          "measure": "orders.net_revenue",
+          "over": [
+            "products.product"
+          ]
+        },
+        {
+          "as": "share_rank",
+          "transform": "rank",
+          "measure": "share",
+          "within": [
+            "customers.region"
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "partial",
+    "reason_code": "level_not_implemented"
+  }
+}

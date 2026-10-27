@@ -1,0 +1,36 @@
+{
+  "name": "54_unknown_filter_value",
+  "level": 1,
+  "description": "Region lists its members in the catalog, so a filter on 'Wset' is refused with the closest members instead of coming back empty.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "customers.region",
+          "operator": "equals",
+          "values": [
+            "Wset"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "invalid_filter_value"
+    ],
+    "error_suggestions_include": {
+      "0": "West"
+    }
+  }
+}

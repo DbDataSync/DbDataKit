@@ -1,0 +1,49 @@
+{
+  "name": "18_both_roles_of_one_dimension",
+  "level": 2,
+  "description": "Order month and ship month together: each role is its own join of the same table.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month",
+        "ship_date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2026-07",
+        "ship_date_fiscal_month": "2026-08",
+        "orders_net_revenue": 250
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "ship_date_fiscal_month": "2026-09",
+        "orders_net_revenue": 390
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "ship_date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260
+      }
+    ]
+  }
+}

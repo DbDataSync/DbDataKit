@@ -1,0 +1,37 @@
+{
+  "name": "46_rollup_override_needs_level_5",
+  "level": 4,
+  "description": "A level 4 engine returns a rollup override as a remaining step.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "measure": "orders.net_revenue",
+          "as": "avg_monthly_revenue",
+          "rollup": {
+            "date.fiscal_month": "avg"
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "partial",
+    "reason_code": "level_not_implemented"
+  }
+}

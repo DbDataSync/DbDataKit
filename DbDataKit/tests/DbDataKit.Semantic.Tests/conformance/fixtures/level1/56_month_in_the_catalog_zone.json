@@ -1,0 +1,50 @@
+{
+  "name": "56_month_in_the_catalog_zone",
+  "level": 1,
+  "description": "With no timezone in the request, a month of a datetime is read in the catalog's zone (America/Chicago, UTC-5 in summer). Order 1 was placed 2026-07-01 03:30 UTC, which is June 30 in Chicago; order 2 (August 1 02:00 UTC) is July 31; order 6 is August 31 at 23:59:59 and order 7 is August 1 at exactly midnight. The dates of the filter are in the same zone.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "orders.ordered_at_month"
+      ],
+      "filters": [
+        {
+          "attribute": "orders.ordered_at",
+          "operator": "between",
+          "values": [
+            "2026-06-01",
+            "2026-09-30"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "orders_ordered_at_month": "2026-06",
+        "orders_net_revenue": 100
+      },
+      {
+        "orders_ordered_at_month": "2026-07",
+        "orders_net_revenue": 270
+      },
+      {
+        "orders_ordered_at_month": "2026-08",
+        "orders_net_revenue": 350
+      },
+      {
+        "orders_ordered_at_month": "2026-09",
+        "orders_net_revenue": 180
+      }
+    ]
+  }
+}

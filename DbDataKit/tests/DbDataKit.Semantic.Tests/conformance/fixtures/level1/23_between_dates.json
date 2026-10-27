@@ -1,0 +1,65 @@
+{
+  "name": "23_between_dates",
+  "level": 1,
+  "description": "A date dimension is filtered with between (both ends inclusive) and comes back as ISO dates.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.calendar_date"
+      ],
+      "filters": [
+        {
+          "attribute": "date.calendar_date",
+          "operator": "between",
+          "values": [
+            "2026-07-01",
+            "2026-08-31"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "result_sets": [
+      {
+        "id": "d1",
+        "source": "sqlserver_sales",
+        "grain": [
+          "date.calendar_date"
+        ],
+        "covers": {
+          "measures": [
+            "orders.net_revenue"
+          ],
+          "filters_applied": [
+            "date.calendar_date between 2026-07-01, 2026-08-31"
+          ],
+          "filters_not_applied": []
+        }
+      }
+    ],
+    "remaining": [],
+    "rows": [
+      {
+        "date_calendar_date": "2026-07-01",
+        "orders_net_revenue": 250
+      },
+      {
+        "date_calendar_date": "2026-08-01",
+        "orders_net_revenue": 390
+      }
+    ],
+    "native_query_contains": {
+      "d1": [
+        "WHERE d.calendar_date BETWEEN CAST(@p1 AS DATE) AND CAST(@p2 AS DATE)"
+      ]
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "43_relative_operator_on_a_non_period",
+  "level": 1,
+  "description": "A relative operator is used on a period (a level of a calendar, a date, or a datetime's day to year), not on any attribute.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [],
+      "filters": [
+        {
+          "attribute": "customers.region",
+          "operator": "current"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "period_operator_not_period_attribute"
+    ]
+  }
+}

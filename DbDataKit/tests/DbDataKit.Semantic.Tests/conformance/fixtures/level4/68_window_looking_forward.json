@@ -1,0 +1,56 @@
+{
+  "name": "68_window_looking_forward",
+  "level": 4,
+  "description": "A window can end after the current member: each month and the next one (250 + 390 = 640 for 2026-07, 650 for 2026-08), and the last month has no next member, so it is only itself (260).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "next2",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "start": 0,
+          "end": 1
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_year",
+          "operator": "equals",
+          "values": [
+            "FY27"
+          ]
+        }
+      ],
+      "limit": 100
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "next2": 640
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "next2": 650
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "next2": 260
+      }
+    ]
+  }
+}

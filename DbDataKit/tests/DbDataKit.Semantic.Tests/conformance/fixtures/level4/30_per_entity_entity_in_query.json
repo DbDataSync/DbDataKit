@@ -1,0 +1,40 @@
+{
+  "name": "30_per_entity_entity_in_query",
+  "level": 4,
+  "description": "When the entity is already a dimension of the query there is nothing to aggregate over.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "as": "avg_rev_per_customer",
+          "transform": "per_entity",
+          "measure": "orders.net_revenue",
+          "entity": "customers.customer",
+          "agg": "avg"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "customers.customer"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "transform_entity_in_query"
+    ]
+  }
+}

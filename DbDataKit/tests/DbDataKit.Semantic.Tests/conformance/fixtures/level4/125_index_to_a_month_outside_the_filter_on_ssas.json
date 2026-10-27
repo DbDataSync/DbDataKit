@@ -1,0 +1,55 @@
+{
+  "name": "125_index_to_a_month_outside_the_filter_on_ssas",
+  "level": 4,
+  "description": "Indexed to 2025-07 (220 = 100) while the query shows only FY27-Q1: the base is fetched from the SSAS source whatever the filter says.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "limit": 100,
+      "measures": [
+        "budget.budget_amount",
+        {
+          "as": "ix",
+          "transform": "index",
+          "measure": "budget.budget_amount",
+          "along": "date.fiscal_month",
+          "base": "2025-07"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2026-07",
+        "budget_budget_amount": 350.0,
+        "ix": 159.0909090909091
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "budget_budget_amount": 350.0,
+        "ix": 159.0909090909091
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "budget_budget_amount": 400.0,
+        "ix": 181.8181818181818
+      }
+    ]
+  }
+}

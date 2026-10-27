@@ -1,0 +1,74 @@
+{
+  "name": "13_allocate_equal_catalog",
+  "level": 4,
+  "description": "Over every catalog member, B is included even though the filter leaves it no revenue: the split differs from 'present', which is why members has no default.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "measure": "budget.budget_amount",
+          "spread": {
+            "allocate": {
+              "by": "equal",
+              "members": "catalog"
+            }
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        },
+        {
+          "attribute": "products.product",
+          "operator": "equals",
+          "values": [
+            "A"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "orders_net_revenue": 100,
+        "budget_budget_amount": 250
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "orders_net_revenue": null,
+        "budget_budget_amount": 250
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "orders_net_revenue": 300,
+        "budget_budget_amount": 300
+      },
+      {
+        "customers_region": "West",
+        "products_product": "B",
+        "orders_net_revenue": null,
+        "budget_budget_amount": 300
+      }
+    ]
+  }
+}

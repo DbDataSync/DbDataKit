@@ -1,0 +1,6 @@
+schema: engine/1
+id: ansi
+display_name: ANSI SQL
+# the base the other dialects extend and the dialect of an engine with none of its own (odbc, flightsql): not an engine to connect to
+library: none
+dialect: ansi

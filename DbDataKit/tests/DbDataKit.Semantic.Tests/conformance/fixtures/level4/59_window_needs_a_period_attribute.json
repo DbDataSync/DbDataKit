@@ -1,0 +1,33 @@
+{
+  "name": "59_window_needs_a_period_attribute",
+  "level": 4,
+  "description": "A window is read at each member of a period attribute (a level of a calendar), so along must be one: a region is not.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "ytd",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "customers.region",
+          "start": -2,
+          "end": "current"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "transform_needs_time"
+    ]
+  }
+}

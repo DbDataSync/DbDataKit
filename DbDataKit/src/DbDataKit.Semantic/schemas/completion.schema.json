@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.internal/qis/completion.schema.json",
+  "title": "Completion",
+  "description": "The agent's DuckDB SQL completing the remaining steps of a partial result.",
+  "type": "object",
+  "required": ["kind", "request_hash", "completes", "sql"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {"const": "completion"},
+    "request_hash": {"type": "string"},
+    "completes": {"type": "array", "items": {"type": "integer", "minimum": 1}, "minItems": 1},
+    "sql": {"type": "string"},
+    "maps": {"type": "array", "items": {"type": "string"}}
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "name": "12_summing_a_distinct_count_acknowledged",
+  "level": 5,
+  "description": "Acknowledged: the sum of each month's distinct orders (West 2 + 2 + 2, East 1 + 2 + 1).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "measure": "orders.order_count",
+          "as": "orders_summed",
+          "rollup": {
+            "date.fiscal_month": "sum"
+          },
+          "acknowledge": true
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "orders_summed": 4
+      },
+      {
+        "customers_region": "West",
+        "orders_summed": 6
+      }
+    ]
+  }
+}

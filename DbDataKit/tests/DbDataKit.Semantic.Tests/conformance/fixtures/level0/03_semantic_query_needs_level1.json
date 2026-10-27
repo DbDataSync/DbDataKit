@@ -1,0 +1,24 @@
+{
+  "name": "03_semantic_query_needs_level1",
+  "level": 0,
+  "description": "A level 0 engine doesn't compile semantic requests.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "level_not_implemented"
+    ]
+  }
+}

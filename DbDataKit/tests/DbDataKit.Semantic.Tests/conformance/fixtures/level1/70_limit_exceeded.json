@@ -1,0 +1,24 @@
+{
+  "name": "70_limit_exceeded",
+  "level": 1,
+  "description": "The most a query returns is 10,000 rows, and a limit above that is refused by name, not as a generic schema failure.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 10001,
+      "attributes": [
+        "customers.region"
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "limit_exceeded"
+    ]
+  }
+}

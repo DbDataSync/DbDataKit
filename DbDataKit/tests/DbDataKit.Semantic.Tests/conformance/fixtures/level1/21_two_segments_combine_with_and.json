@@ -1,0 +1,40 @@
+{
+  "name": "21_two_segments_combine_with_and",
+  "level": 1,
+  "description": "Segments combine with AND, and with the query's own filters: completed orders in the West.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "segments": [
+        "orders.completed",
+        "customers.west"
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "rows": [
+      {
+        "customers_region": "West",
+        "orders_net_revenue": 420
+      }
+    ]
+  }
+}

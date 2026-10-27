@@ -1,0 +1,41 @@
+{
+  "name": "47_derived_ratio",
+  "level": 4,
+  "description": "Average order value is revenue over orders, defined once in the catalog: East 400 over 4, West 500 over 6.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.avg_order_value"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "orders_avg_order_value": 100
+      },
+      {
+        "customers_region": "West",
+        "orders_avg_order_value": 83.33333333333333
+      }
+    ]
+  }
+}

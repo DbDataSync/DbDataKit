@@ -1,0 +1,35 @@
+{
+  "name": "75_window_period_is_not_in_the_calendar",
+  "level": 4,
+  "description": "The period a window starts in is another level of the calendar that along is in; a region is not.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "x",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "start": {
+            "period_start": "customers.region"
+          },
+          "end": "current"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "window_period_not_coarser"
+    ]
+  }
+}

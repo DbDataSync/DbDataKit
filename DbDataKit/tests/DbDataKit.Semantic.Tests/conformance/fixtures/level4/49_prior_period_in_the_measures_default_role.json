@@ -1,0 +1,53 @@
+{
+  "name": "49_prior_period_in_the_measures_default_role",
+  "level": 4,
+  "description": "Shipped revenue reads the date dimension in the ship role, so its prior-year value is the same ship months a year earlier, with the bare date.fiscal_month and date.fiscal_quarter.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.shipped_revenue",
+        {
+          "as": "shipped_prior",
+          "transform": "prior_period",
+          "measure": "orders.shipped_revenue",
+          "output": "value",
+          "period": {
+            "unit": "fiscal_year",
+            "offset": -1
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_shipped_revenue": 250,
+        "shipped_prior": 390
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_shipped_revenue": 650,
+        "shipped_prior": 310
+      }
+    ]
+  }
+}

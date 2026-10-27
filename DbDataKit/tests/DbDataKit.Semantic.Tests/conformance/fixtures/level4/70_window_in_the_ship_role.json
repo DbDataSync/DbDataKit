@@ -1,0 +1,53 @@
+{
+  "name": "70_window_in_the_ship_role",
+  "level": 4,
+  "description": "Revenue by the month it shipped and in it and the month before it, in the ship role: 390 in 2025-08, then 310 for 2025-09 with 390 before it (700); 2026-07 has no shipments so it is not shown, and 2026-08's window (250) has nothing in 2026-07.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "r2",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "ship_date.fiscal_month",
+          "start": -1,
+          "end": "current"
+        }
+      ],
+      "attributes": [
+        "ship_date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "ship_date_fiscal_month": "2025-08",
+        "orders_net_revenue": 390,
+        "r2": 390
+      },
+      {
+        "ship_date_fiscal_month": "2025-09",
+        "orders_net_revenue": 310,
+        "r2": 700
+      },
+      {
+        "ship_date_fiscal_month": "2026-08",
+        "orders_net_revenue": 250,
+        "r2": 250
+      },
+      {
+        "ship_date_fiscal_month": "2026-09",
+        "orders_net_revenue": 650,
+        "r2": 900
+      }
+    ]
+  }
+}

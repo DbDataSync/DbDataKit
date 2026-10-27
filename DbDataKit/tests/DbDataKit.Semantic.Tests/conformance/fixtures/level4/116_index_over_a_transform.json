@@ -1,0 +1,40 @@
+{
+  "name": "116_index_over_a_transform",
+  "level": 4,
+  "description": "An index scans the source for its base, so it needs a catalog measure; a share is the output of another transform.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "share",
+          "transform": "pct_of_total",
+          "measure": "orders.net_revenue",
+          "over": [
+            "date.fiscal_month"
+          ]
+        },
+        {
+          "as": "growth",
+          "transform": "index",
+          "measure": "share",
+          "along": "date.fiscal_month",
+          "base": "2026-07"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "transform_base_not_scannable"
+    ]
+  }
+}

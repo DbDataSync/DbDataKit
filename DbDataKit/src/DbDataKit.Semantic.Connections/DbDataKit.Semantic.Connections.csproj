@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>The semantic layer's source executor over DbDataKit.Connections: runs the queries the engine plans on the connections a host names (SQL Server and DuckDB), with the connection's read-only recipe, timeouts and failure model. No driver is referenced here; the host brings the providers.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Semantic.Abstractions\DbDataKit.Semantic.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

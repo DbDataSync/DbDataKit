@@ -1,0 +1,71 @@
+{
+  "name": "105_index_base_outside_the_query_filters",
+  "level": 4,
+  "description": "The query shows only 2026-07 to 2026-09 but indexes to 2025-07 (390): the base is read from the source whatever the filters on the calendar say. 250 / 390, 390 / 390 and 260 / 390.",
+  "today": "2026-09-15",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "growth",
+          "transform": "index",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "base": "2025-07"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": [
+        {
+          "attribute": "date.fiscal_month",
+          "operator": "equals",
+          "values": [
+            "2026-07",
+            "2026-08",
+            "2026-09"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "growth": 64.1025641025641
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "growth": 100.0
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "growth": 66.66666666666666
+      }
+    ],
+    "resolved": [
+      {
+        "path": "$.query.measures[1]",
+        "today": "2026-09-15",
+        "start": "2025-07-01",
+        "end": "2025-07-15",
+        "attribute": "date.fiscal_month",
+        "members": [
+          "2025-07"
+        ],
+        "operator": "index"
+      }
+    ]
+  }
+}

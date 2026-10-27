@@ -1,0 +1,33 @@
+{
+  "name": "29_between_one_value",
+  "level": 1,
+  "description": "between needs both ends.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.calendar_date",
+          "operator": "between",
+          "values": [
+            "2026-09-01"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "between_invalid"
+    ]
+  }
+}

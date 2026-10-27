@@ -1,0 +1,47 @@
+{
+  "name": "07_rollup_override_average",
+  "level": 5,
+  "description": "Average monthly revenue by region: revenue per region and month first (West 150, 190, 160; East 100, 200, 100), then averaged over the months.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "measure": "orders.net_revenue",
+          "as": "avg_monthly_revenue",
+          "rollup": {
+            "date.fiscal_month": "avg"
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "avg_monthly_revenue": 133.33333333333334
+      },
+      {
+        "customers_region": "West",
+        "avg_monthly_revenue": 166.66666666666666
+      }
+    ]
+  }
+}

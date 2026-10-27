@@ -1,0 +1,34 @@
+{
+  "name": "01_native_single_tsql",
+  "level": 0,
+  "description": "One agent-written T-SQL query, wrapped as a complete result with an inferred descriptor.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "native_batch",
+    "queries": [
+      {
+        "id": "sales",
+        "source": "sqlserver_sales",
+        "dialect": "tsql",
+        "text": "SELECT TOP 10 c.region, SUM(f.net_amount) AS revenue FROM fact_sales f JOIN dim_customer c ON c.customer_key = f.customer_key JOIN dim_date d ON d.date_key = f.date_key WHERE d.fiscal_quarter = 'FY27-Q1' GROUP BY c.region ORDER BY revenue DESC"
+      }
+    ]
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "region": "West",
+        "revenue": 500
+      },
+      {
+        "region": "East",
+        "revenue": 400
+      }
+    ],
+    "descriptor_field_status": {
+      "revenue": "inferred"
+    }
+  }
+}

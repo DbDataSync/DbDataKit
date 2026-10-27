@@ -1,0 +1,68 @@
+{
+  "name": "08_spec_missing_tables",
+  "description": "A spec has to name at least one table.",
+  "workbook": {
+    "sheets": [
+      {
+        "name": "Summary",
+        "cells": {
+          "A1": "Forecast"
+        }
+      },
+      {
+        "name": "Detail",
+        "cells": {
+          "D4": "Jul",
+          "E4": "Aug",
+          "F4": "Sep",
+          "B4": "Region",
+          "C4": "Product",
+          "B5": "West",
+          "C5": "A",
+          "D5": 100,
+          "E5": 110,
+          "F5": 120,
+          "C6": "B",
+          "D6": 50,
+          "E6": 60,
+          "F6": 70,
+          "C7": "Subtotal",
+          "D7": 150,
+          "E7": 170,
+          "F7": 190,
+          "B8": "East",
+          "C8": "A",
+          "D8": 80,
+          "E8": 90,
+          "F8": 100,
+          "C9": "B",
+          "D9": 20,
+          "E9": 30,
+          "F9": 40,
+          "C10": "Subtotal",
+          "D10": 100,
+          "E10": 120,
+          "F10": 140,
+          "C12": "Grand Total",
+          "D12": 250,
+          "E12": 290,
+          "F12": 330,
+          "D3": "2025"
+        },
+        "merges": [
+          "D3:F3"
+        ]
+      }
+    ]
+  },
+  "spec": {
+    "spec_version": "0.3",
+    "id": "x"
+  },
+  "expect": {
+    "status": "failed",
+    "errors_include": [
+      "schema_invalid"
+    ]
+  }
+}

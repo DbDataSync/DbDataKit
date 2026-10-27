@@ -1,0 +1,60 @@
+{
+  "name": "24_having_on_an_alias",
+  "level": 2,
+  "description": "The name to filter on is the output name, so an alias works: completed revenue of at least 400 (West 420, East 300).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "measure": "orders.net_revenue",
+          "as": "completed",
+          "filters": [
+            {
+              "attribute": "orders.status",
+              "operator": "equals",
+              "values": [
+                "Completed"
+              ]
+            }
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        },
+        {
+          "measure": "completed",
+          "operator": "gte",
+          "values": [
+            400
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "rows": [
+      {
+        "customers_region": "West",
+        "completed": 420
+      }
+    ],
+    "native_query_contains": {
+      "d1": [
+        "HAVING SUM(CASE WHEN f.status = @p"
+      ]
+    }
+  }
+}

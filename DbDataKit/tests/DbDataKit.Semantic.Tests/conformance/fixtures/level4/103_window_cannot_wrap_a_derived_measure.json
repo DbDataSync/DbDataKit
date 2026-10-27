@@ -1,0 +1,40 @@
+{
+  "name": "103_window_cannot_wrap_a_derived_measure",
+  "level": 4,
+  "description": "A window scans the source again, and a derived measure (a ratio) has no source column of its own to scan, as for prior_period and per_entity.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.avg_order_value",
+        {
+          "as": "prev",
+          "transform": "window",
+          "measure": "orders.avg_order_value",
+          "along": "date.fiscal_month",
+          "offset": -1
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "transform_not_allowed"
+    ]
+  }
+}

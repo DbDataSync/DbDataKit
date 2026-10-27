@@ -1,0 +1,46 @@
+{
+  "name": "100_chain_running_total_over_a_window",
+  "level": 4,
+  "description": "A window's value isn't additive, so a running total of it is rejected as it is for any measure that can't be added up.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "prev",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "offset": -1
+        },
+        {
+          "as": "prev_cum",
+          "transform": "running_total",
+          "measure": "prev",
+          "along": "date.fiscal_month"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "transform_not_allowed"
+    ]
+  }
+}

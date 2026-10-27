@@ -1,0 +1,13 @@
+schema: engine/1
+id: duckdb
+display_name: DuckDB
+library: DuckDB.NET.Data
+dialect: duckdb
+aliases: [duck]
+provider: duckdb
+catalog_reader: duckdb
+roles:
+  sync_source: { status: supported, note: "query only: Parquet, CSV, an S3 glob or an attached database" }
+  build_origin: { status: supported, note: "project import reads a DuckDB database's catalog" }
+  proxy_source: { status: supported, note: "opened READ_ONLY in the sandbox (no external access, locked configuration)" }
+  semantic_emitter: { status: supported, note: "the DuckDB twin of each query, on a read-only file (plan 19 J03)" }

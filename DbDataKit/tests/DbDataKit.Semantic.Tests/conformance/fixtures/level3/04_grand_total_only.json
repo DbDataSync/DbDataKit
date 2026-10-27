@@ -1,0 +1,54 @@
+{
+  "name": "04_grand_total_only",
+  "level": 3,
+  "description": "Rolling up every dimension with a grand total and no subtotal levels besides it.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "totals": {
+        "subtotal_by": [
+          "customers.region"
+        ],
+        "grand_total": true
+      }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "_rollup_level": 0,
+        "orders_net_revenue": 400
+      },
+      {
+        "customers_region": "West",
+        "_rollup_level": 0,
+        "orders_net_revenue": 500
+      },
+      {
+        "customers_region": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 900
+      }
+    ]
+  }
+}

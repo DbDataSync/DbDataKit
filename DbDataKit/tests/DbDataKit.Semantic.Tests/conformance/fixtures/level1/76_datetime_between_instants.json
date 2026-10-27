@@ -1,0 +1,35 @@
+{
+  "name": "76_datetime_between_instants",
+  "level": 1,
+  "description": "between with instants includes both ends: noon and 18:00 UTC on July 1 are orders 8 and 4.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [],
+      "filters": [
+        {
+          "attribute": "orders.ordered_at",
+          "operator": "between",
+          "values": [
+            "2026-07-01T12:00:00Z",
+            "2026-07-01T18:00:00Z"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "orders_net_revenue": 150
+      }
+    ]
+  }
+}

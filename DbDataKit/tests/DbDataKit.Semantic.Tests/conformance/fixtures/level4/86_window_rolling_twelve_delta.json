@@ -1,0 +1,64 @@
+{
+  "name": "86_window_rolling_twelve_delta",
+  "level": 4,
+  "description": "A rolling-12 window with output delta: this month less the twelve months ending with it (the window includes the current month, so the first month's delta is 0). With only six members in the date table the window is everything up to the month: 390-390, 160-550, 150-700, 250-950, 390-1340, 260-1600.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "vs_r12",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "start": -11,
+          "end": "current",
+          "output": "delta"
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "date_fiscal_month": "2025-07",
+        "orders_net_revenue": 390,
+        "vs_r12": 0
+      },
+      {
+        "date_fiscal_month": "2025-08",
+        "orders_net_revenue": 160,
+        "vs_r12": -390
+      },
+      {
+        "date_fiscal_month": "2025-09",
+        "orders_net_revenue": 150,
+        "vs_r12": -550
+      },
+      {
+        "date_fiscal_month": "2026-07",
+        "orders_net_revenue": 250,
+        "vs_r12": -700
+      },
+      {
+        "date_fiscal_month": "2026-08",
+        "orders_net_revenue": 390,
+        "vs_r12": -950
+      },
+      {
+        "date_fiscal_month": "2026-09",
+        "orders_net_revenue": 260,
+        "vs_r12": -1340
+      }
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "74_window_from_period_start_cannot_end_early",
+  "level": 4,
+  "description": "A window that starts at the beginning of a period can't end before the current member.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "x",
+          "transform": "window",
+          "measure": "orders.net_revenue",
+          "along": "date.fiscal_month",
+          "start": {
+            "period_start": "date.fiscal_year"
+          },
+          "end": -1
+        }
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 100,
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "window_frame_invalid"
+    ]
+  }
+}

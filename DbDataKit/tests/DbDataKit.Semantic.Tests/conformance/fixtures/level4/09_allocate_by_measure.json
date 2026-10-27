@@ -1,0 +1,67 @@
+{
+  "name": "09_allocate_by_measure",
+  "level": 4,
+  "description": "Budget is defined by region. Allocated by revenue mix it splits onto products: West 600 as 60/40 (360, 240), East 500 as 25/75 (125, 375). Each region's budget is preserved.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "measure": "budget.budget_amount",
+          "spread": {
+            "allocate": {
+              "by": "measure",
+              "measure": "orders.net_revenue"
+            }
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "orders_net_revenue": 100,
+        "budget_budget_amount": 125
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "orders_net_revenue": 300,
+        "budget_budget_amount": 375
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "orders_net_revenue": 300,
+        "budget_budget_amount": 360
+      },
+      {
+        "customers_region": "West",
+        "products_product": "B",
+        "orders_net_revenue": 200,
+        "budget_budget_amount": 240
+      }
+    ]
+  }
+}

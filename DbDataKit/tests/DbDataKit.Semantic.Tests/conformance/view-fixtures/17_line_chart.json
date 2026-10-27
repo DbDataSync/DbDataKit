@@ -1,0 +1,267 @@
+{
+  "name": "17_line_chart",
+  "description": "The renderer resolves fields to the result's columns, turns sort_key into the members' order, and supplies the data: the six detail rows, no total rows, no level column.",
+  "result": {
+    "descriptor": {
+      "descriptor_version": "1.0",
+      "name": "combined",
+      "schema": {
+        "fields": [
+          {
+            "name": "customers_region",
+            "type": "string",
+            "x_kind": "attribute",
+            "x_binding": "customers.region"
+          },
+          {
+            "name": "date_fiscal_quarter",
+            "type": "string",
+            "x_kind": "attribute",
+            "x_binding": "date.fiscal_quarter"
+          },
+          {
+            "name": "orders_net_revenue",
+            "type": "number",
+            "x_kind": "measure",
+            "x_binding": "orders.net_revenue",
+            "x_semantics": {
+              "rollup": {
+                "default": "sum"
+              }
+            }
+          },
+          {
+            "name": "orders_order_count",
+            "type": "integer",
+            "x_kind": "measure",
+            "x_binding": "orders.order_count",
+            "x_semantics": {
+              "rollup": {
+                "default": "none"
+              }
+            }
+          },
+          {
+            "name": "region_share",
+            "type": "number",
+            "x_kind": "measure",
+            "x_binding": "orders.net_revenue",
+            "x_semantics": {
+              "rollup": {
+                "default": "none"
+              }
+            },
+            "x_transform": "pct_of_total"
+          },
+          {
+            "name": "_rollup_level",
+            "type": "integer",
+            "x_kind": "column"
+          }
+        ]
+      },
+      "x_totals": {
+        "level_field": "_rollup_level",
+        "subtotal_by": [
+          "customers.region",
+          "date.fiscal_quarter"
+        ],
+        "levels": [
+          {
+            "level": 0,
+            "kind": "detail",
+            "kept": [
+              "customers.region",
+              "date.fiscal_quarter"
+            ],
+            "rolled_up": []
+          },
+          {
+            "level": 1,
+            "kind": "subtotal",
+            "kept": [
+              "customers.region"
+            ],
+            "rolled_up": [
+              "date.fiscal_quarter"
+            ]
+          },
+          {
+            "level": 2,
+            "kind": "subtotal",
+            "kept": [
+              "date.fiscal_quarter"
+            ],
+            "rolled_up": [
+              "customers.region"
+            ]
+          },
+          {
+            "level": 3,
+            "kind": "grand_total",
+            "kept": [],
+            "rolled_up": [
+              "customers.region",
+              "date.fiscal_quarter"
+            ]
+          }
+        ]
+      }
+    },
+    "rows": [
+      {
+        "customers_region": "West",
+        "date_fiscal_quarter": "FY27-Q1",
+        "_rollup_level": 0,
+        "orders_net_revenue": 4200000,
+        "orders_order_count": 40,
+        "region_share": 0.38
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_quarter": "FY27-Q2",
+        "_rollup_level": 0,
+        "orders_net_revenue": 4600000,
+        "orders_order_count": 44,
+        "region_share": 0.39
+      },
+      {
+        "customers_region": "Central",
+        "date_fiscal_quarter": "FY27-Q1",
+        "_rollup_level": 0,
+        "orders_net_revenue": 3100000,
+        "orders_order_count": 30,
+        "region_share": 0.28
+      },
+      {
+        "customers_region": "Central",
+        "date_fiscal_quarter": "FY27-Q2",
+        "_rollup_level": 0,
+        "orders_net_revenue": 3300000,
+        "orders_order_count": 31,
+        "region_share": 0.28
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_quarter": "FY27-Q1",
+        "_rollup_level": 0,
+        "orders_net_revenue": 3800000,
+        "orders_order_count": 35,
+        "region_share": 0.34
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_quarter": "FY27-Q2",
+        "_rollup_level": 0,
+        "orders_net_revenue": 3900000,
+        "orders_order_count": 34,
+        "region_share": 0.33
+      },
+      {
+        "customers_region": "West",
+        "date_fiscal_quarter": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 8800000,
+        "orders_order_count": 70,
+        "region_share": 0.38
+      },
+      {
+        "customers_region": "Central",
+        "date_fiscal_quarter": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 6400000,
+        "orders_order_count": 52,
+        "region_share": 0.28
+      },
+      {
+        "customers_region": "East",
+        "date_fiscal_quarter": null,
+        "_rollup_level": 1,
+        "orders_net_revenue": 7700000,
+        "orders_order_count": 62,
+        "region_share": 0.34
+      },
+      {
+        "customers_region": null,
+        "date_fiscal_quarter": "FY27-Q1",
+        "_rollup_level": 2,
+        "orders_net_revenue": 11100000,
+        "orders_order_count": 95,
+        "region_share": 1
+      },
+      {
+        "customers_region": null,
+        "date_fiscal_quarter": "FY27-Q2",
+        "_rollup_level": 2,
+        "orders_net_revenue": 11800000,
+        "orders_order_count": 96,
+        "region_share": 1
+      },
+      {
+        "customers_region": null,
+        "date_fiscal_quarter": null,
+        "_rollup_level": 3,
+        "orders_net_revenue": 22900000,
+        "orders_order_count": 150,
+        "region_share": 1
+      }
+    ]
+  },
+  "view": {
+    "spec_version": "0.3",
+    "kind": "view",
+    "result": {
+      "ref": "result.fixture"
+    },
+    "views": [
+      {
+        "type": "chart",
+        "id": "c1",
+        "vega_lite": {
+          "mark": "line",
+          "encoding": {
+            "x": {
+              "field": "date.fiscal_quarter",
+              "type": "ordinal",
+              "sort": "sort_key"
+            },
+            "y": {
+              "field": "orders.net_revenue",
+              "type": "quantitative"
+            },
+            "color": {
+              "field": "customers.region",
+              "type": "nominal"
+            }
+          }
+        }
+      }
+    ]
+  },
+  "expect": {
+    "status": "complete",
+    "chart_rows": 6,
+    "views": [
+      {
+        "vega_lite": {
+          "mark": "line",
+          "encoding": {
+            "x": {
+              "field": "date_fiscal_quarter",
+              "sort": [
+                "FY27-Q1",
+                "FY27-Q2"
+              ]
+            },
+            "y": {
+              "field": "orders_net_revenue"
+            },
+            "color": {
+              "field": "customers_region"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

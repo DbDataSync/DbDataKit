@@ -1,0 +1,44 @@
+{
+  "name": "12_filtered_measure_needs_alias",
+  "level": 2,
+  "description": "A measure with its own filters needs an alias, so it can't be mistaken for the unfiltered one.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "measure": "orders.net_revenue",
+          "filters": [
+            {
+              "attribute": "orders.status",
+              "operator": "equals",
+              "values": [
+                "Completed"
+              ]
+            }
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "alias_required"
+    ]
+  }
+}

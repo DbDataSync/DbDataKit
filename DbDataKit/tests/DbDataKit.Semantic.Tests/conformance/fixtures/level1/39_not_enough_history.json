@@ -1,0 +1,32 @@
+{
+  "name": "39_not_enough_history",
+  "level": 1,
+  "description": "Six complete fiscal months were asked for and the date table has five before September.",
+  "today": "2026-09-15",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_month",
+          "operator": "last_complete",
+          "count": 6
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "range_unresolved"
+    ]
+  }
+}

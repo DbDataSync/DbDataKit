@@ -1,0 +1,79 @@
+{
+  "name": "10_checks_that_fail",
+  "description": "A column with a blank and a count under the minimum: both are reported, and nothing is emitted.",
+  "workbook": {
+    "sheets": [
+      {
+        "name": "Sheet1",
+        "cells": {
+          "A1": "Order ID",
+          "B1": "Customer",
+          "C1": "Shipped",
+          "D1": "Paid",
+          "E1": "Amount",
+          "A2": 1,
+          "B2": "Ann",
+          "C2": "2026-07-01",
+          "D2": true,
+          "E2": "1,200.50",
+          "A3": 2,
+          "B3": "Bo",
+          "C3": "2026-08-15",
+          "D3": false,
+          "E3": "(80)",
+          "A4": 3,
+          "B4": "Cy",
+          "E4": 300
+        },
+        "dates": [
+          "C2",
+          "C3"
+        ]
+      }
+    ]
+  },
+  "spec": {
+    "spec_version": "0.3",
+    "id": "orders_export",
+    "tables": [
+      {
+        "name": "orders",
+        "sheet": "Sheet1",
+        "header": {
+          "rows": [
+            1
+          ]
+        },
+        "data": {
+          "start": "A2",
+          "columns": "A:E"
+        },
+        "types": {
+          "order_id": "integer",
+          "shipped": "date",
+          "paid": "boolean",
+          "amount": "number"
+        },
+        "checks": [
+          {
+            "type": "not_null",
+            "columns": [
+              "shipped"
+            ]
+          },
+          {
+            "type": "row_count",
+            "min": 10
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "not_null_failed",
+      "row_count_failed"
+    ]
+  }
+}

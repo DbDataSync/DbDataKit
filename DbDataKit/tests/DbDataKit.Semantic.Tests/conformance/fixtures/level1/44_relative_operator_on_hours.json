@@ -1,0 +1,28 @@
+{
+  "name": "44_relative_operator_on_hours",
+  "level": 1,
+  "description": "Hours are buckets of a datetime but not periods a relative operator counts.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [],
+      "filters": [
+        {
+          "attribute": "orders.ordered_at_hour",
+          "operator": "current"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "period_operator_not_period_attribute"
+    ]
+  }
+}

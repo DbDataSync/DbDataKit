@@ -1,0 +1,78 @@
+{
+  "name": "19_rank_a_share",
+  "level": 5,
+  "description": "A rank can read a transform's output: each product's share of its region, ranked within the region.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "share",
+          "transform": "pct_of_total",
+          "measure": "orders.net_revenue",
+          "over": [
+            "products.product"
+          ]
+        },
+        {
+          "as": "share_rank",
+          "transform": "rank",
+          "measure": "share",
+          "within": [
+            "customers.region"
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "products_product": "A",
+        "orders_net_revenue": 100,
+        "share": 0.25,
+        "share_rank": 2
+      },
+      {
+        "customers_region": "East",
+        "products_product": "B",
+        "orders_net_revenue": 300,
+        "share": 0.75,
+        "share_rank": 1
+      },
+      {
+        "customers_region": "West",
+        "products_product": "A",
+        "orders_net_revenue": 300,
+        "share": 0.6,
+        "share_rank": 1
+      },
+      {
+        "customers_region": "West",
+        "products_product": "B",
+        "orders_net_revenue": 200,
+        "share": 0.4,
+        "share_rank": 2
+      }
+    ]
+  }
+}

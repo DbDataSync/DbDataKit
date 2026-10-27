@@ -36,6 +36,14 @@ on:
         description: Start the shared SQL Server and PostgreSQL engines (testenv/) for the live tests.
         type: boolean
         default: true
+      ssas:
+        description: Also run the semantic layer's DAX conformance on a real Analysis Services (Tabular) instance installed on a Windows runner (about 6 minutes).
+        type: boolean
+        default: false
+      ssas_probe:
+        description: With ssas, run only the DAX probe (SsasProbe) instead of the suite.
+        type: boolean
+        default: false
 
 # A newer push to a PR supersedes the older run; runs on main always complete.
 concurrency:
@@ -51,3 +59,125 @@ jobs:
     with:
       # The live tests run against the shared engines every time (a dispatch can still switch them off).
       engines: ${{ github.event_name != 'workflow_dispatch' || inputs.engines }}
+
+  # The semantic layer's conformance fixtures (plan 19, J02) on the shared engines, as a check of their own: the engine seeds a scratch
+  # database on SQL Server and PostgreSQL and runs every fixture through it. The tests also run in the job above whenever the engines
+  # are up; this one fails by name when the semantic layer breaks and requires both engines instead of skipping.
+  semantic-fixtures:
+    name: Semantic fixtures (SQL Server, PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "DbDataKit/**/*.csproj"
+      - name: Start the shared engines (SQL Server, PostgreSQL)
+        run: testenv/testenv.sh up mssql postgres
+      - name: Point the suite at the engines
+        run: |
+          testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
+          echo "DBDATA_REQUIRE_SQLSERVER=true" >> "$GITHUB_ENV"
+          echo "DBDATA_REQUIRE_POSTGRES=true" >> "$GITHUB_ENV"
+      - name: Fetch the pinned DuckDB engine
+        run: scripts/fetch-duckdb.sh
+      - name: Test
+        working-directory: DbDataKit
+        run: dotnet test --project tests/DbDataKit.Semantic.Tests
+      - name: Stop the shared engines
+        if: always()
+        run: testenv/testenv.sh down
+
+  # Whether a pull request touches what the SSAS job tests: the DAX emitter, the sample model, or the SSAS executor. Only then does the Windows job run on a pull request.
+  ssas-changes:
+    name: Does the pull request touch the DAX path?
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.diff.outputs.run }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" \
+            | grep -E '^DbDataKit/src/DbDataKit\.Semantic/Emit/DaxEmitter\.cs$|^DbDataKit/tests/DbDataKit\.Semantic\.Tests/conformance/ssas/|^DbDataKit/src/DbDataKit\.Semantic\.Ssas/'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # The semantic layer's DAX path against a real SQL Server Analysis Services (Tabular), the one thing the Linux jobs cannot run (the ADOMD.NET client
+  # is Windows-only). On a pull request that touches the DAX emitter, the model or the SSAS executor (ssas-changes), or by hand: it installs Analysis Services with Chocolatey (about 3 minutes), deploys
+  # DbDataKit/tests/DbDataKit.Semantic.Tests/conformance/ssas/model.tmsl.json, and runs the semantic suite with DBDATA_TEST_SSAS set so the SSAS source of every fixture runs
+  # as real DAX. Run it after a change to the DAX emitter, the catalog's DAX bindings, the model or SsasExecutor (docs/semantic/ssas-ci.md).
+  semantic-ssas:
+    name: Semantic DAX on Analysis Services (Windows)
+    needs: ssas-changes
+    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.ssas) || needs.ssas-changes.outputs.run == 'true') }}
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+      - name: Fetch the pinned DuckDB engine
+        shell: pwsh
+        run: ./scripts/fetch-duckdb.ps1
+      - name: Install Analysis Services (Tabular) with Chocolatey
+        shell: pwsh
+        timeout-minutes: 30
+        run: |
+          # Only Analysis Services is asked for, instance QIS. The Developer bootstrapper (SQL2022-SSEI-Dev.exe) hung in three tries; Chocolatey works.
+          choco install sql-server-2022 -y --no-progress --params "'/FEATURES=AS /ASSERVERMODE=TABULAR /INSTANCENAME=QIS /ASSYSADMINACCOUNTS=BUILTIN\Administrators'"
+          $code = $LASTEXITCODE
+          "choco exit code: $code"
+          Get-Service MSOLAP*
+          if ($code -ne 0) {
+            Get-ChildItem 'C:\Program Files\Microsoft SQL Server\*\Setup Bootstrap\Log' -Recurse -Filter Summary.txt -ErrorAction SilentlyContinue | ForEach-Object { "--- $($_.FullName)"; Get-Content $_.FullName -Tail 60 }
+            Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log -Tail 80
+            exit $code
+          }
+      - name: Find the Analysis Services port
+        shell: pwsh
+        run: |
+          # A named instance is found through the SQL Browser service (not running here) or on the dynamic port it writes to msmdsrv.port.txt: use the port.
+          $portFile = Get-ChildItem 'C:\Program Files\Microsoft SQL Server' -Recurse -Filter msmdsrv.port.txt -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($portFile) {
+            $port = (Get-Content $portFile.FullName -Raw) -replace '\D', ''
+            "Port file $($portFile.FullName): $port"
+            "DBDATA_TEST_SSAS=Data Source=localhost:$port" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          } else {
+            "No port file; starting SQL Browser and connecting by name"
+            Set-Service SQLBrowser -StartupType Manual -ErrorAction SilentlyContinue
+            Start-Service SQLBrowser -ErrorAction SilentlyContinue
+            "DBDATA_TEST_SSAS=Data Source=localhost\QIS" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          }
+          "DBDATA_REQUIRE_SSAS=true" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - name: DAX probe (what does the server accept?)
+        if: inputs.ssas_probe
+        working-directory: DbDataKit
+        env:
+          DBDATA_TEST_SSAS_PROBE: "1"
+        run: dotnet test --project tests/DbDataKit.Semantic.Tests --filter-class "*SsasProbe"
+      - name: Semantic suite against Analysis Services
+        if: ${{ !inputs.ssas_probe }}
+        working-directory: DbDataKit
+        run: dotnet test --project tests/DbDataKit.Semantic.Tests --report-xunit-trx --report-xunit-trx-filename ssas.trx
+      - name: Failures grouped by cause
+        if: always() && !inputs.ssas_probe
+        shell: pwsh
+        run: |
+          $trx = Get-ChildItem -Recurse -Filter ssas.trx | Select-Object -First 1
+          if (-not $trx) { 'No results file'; exit 0 }
+          $xml = [xml](Get-Content $trx.FullName)
+          $ns = @{ t = 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010' }
+          $failed = Select-Xml -Xml $xml -XPath "//t:UnitTestResult[@outcome='Failed']" -Namespace $ns
+          "Failed: $(@($failed).Count)"
+          $failed | ForEach-Object { [pscustomobject]@{ Test = $_.Node.testName; Message = ($_.Node.Output.ErrorInfo.Message -split "`n" | Select-Object -First 4) -join ' | ' } } |
+            Group-Object Message | Sort-Object Count -Descending | Select-Object -First 25 | ForEach-Object {
+              "[$($_.Count)] $($_.Name)"; "     e.g. " + (($_.Group | Select-Object -First 3).Test -join '; ') }

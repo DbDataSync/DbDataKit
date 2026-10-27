@@ -1,0 +1,61 @@
+{
+  "name": "07_filtered_measure",
+  "level": 2,
+  "description": "A filtered measure sits beside the unfiltered one: it aggregates only the rows that pass its own filter (a conditional aggregate).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "measure": "orders.net_revenue",
+          "as": "completed_revenue",
+          "filters": [
+            {
+              "attribute": "orders.status",
+              "operator": "equals",
+              "values": [
+                "Completed"
+              ]
+            }
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "orders_net_revenue": 400,
+        "completed_revenue": 300
+      },
+      {
+        "customers_region": "West",
+        "orders_net_revenue": 500,
+        "completed_revenue": 420
+      }
+    ],
+    "native_query_contains": {
+      "d1": [
+        "CASE WHEN"
+      ]
+    }
+  }
+}

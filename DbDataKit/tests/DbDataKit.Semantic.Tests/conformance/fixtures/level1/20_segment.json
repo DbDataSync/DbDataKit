@@ -1,0 +1,44 @@
+{
+  "name": "20_segment",
+  "level": 1,
+  "description": "A segment is a named filter from the catalog, added to the query's own: completed orders only (East 300, West 420).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "segments": [
+        "orders.completed"
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "orders_net_revenue": 300
+      },
+      {
+        "customers_region": "West",
+        "orders_net_revenue": 420
+      }
+    ]
+  }
+}

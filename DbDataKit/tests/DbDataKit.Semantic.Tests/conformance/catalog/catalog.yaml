@@ -1,0 +1,346 @@
+# The sample semantic model, in the catalog format described in docs/catalog.md: a physical model
+# (tables, columns, relationships) plus QIS blocks for sources, dimensions and their attributes, measures, and hierarchies.
+version: "0.3"
+name: sales_catalog
+description: Governed sales and budget model for the conformance data.
+
+timezone: America/Chicago   # the business zone: a day or a month of a datetime is read here unless a request says otherwise
+
+# A source may say how it computes subtotals (totals: native | engine | auto); a request can override it with totals.compute.
+# datetime_zone says how it stores datetimes: UTC (the default) or the IANA zone its columns' wall-clock values are in.
+sources:
+  sqlserver_sales: {kind: sqlserver, dialects: [TSQL, DUCKDB]}
+  ssas_finance:    {kind: ssas, dialects: [DAX, DUCKDB]}   # DUCKDB: the test stand-in, since DAX can't run here
+
+tables:
+  - name: fact_sales
+    x_source: sqlserver_sales
+    source: fact_sales
+    primary_key: [order_id]
+    columns:
+      - {name: order_id, datatype: Integer, expression: {dialects: [{dialect: ANSI_SQL, expression: order_id}]}}
+      - {name: customer_key, datatype: Integer, expression: {dialects: [{dialect: ANSI_SQL, expression: customer_key}]}}
+      - {name: product_key, datatype: Integer, expression: {dialects: [{dialect: ANSI_SQL, expression: product_key}]}}
+      - {name: date_key, datatype: Integer, expression: {dialects: [{dialect: ANSI_SQL, expression: date_key}]}}
+      - {name: net_amount, datatype: Decimal, expression: {dialects: [{dialect: ANSI_SQL, expression: net_amount}]}}
+      - {name: ordered_at, datatype: DateTime, expression: {dialects: [{dialect: ANSI_SQL, expression: ordered_at}]}}
+      - {name: status, datatype: String, expression: {dialects: [{dialect: ANSI_SQL, expression: status}]}}
+      - {name: ship_date_key, datatype: Integer, expression: {dialects: [{dialect: ANSI_SQL, expression: ship_date_key}]}}
+  - name: dim_customer
+    x_source: sqlserver_sales
+    source: dim_customer
+    primary_key: [customer_key]
+    columns:
+      - {name: customer_key, datatype: Integer, expression: {dialects: [{dialect: ANSI_SQL, expression: customer_key}]}}
+      - {name: customer, datatype: String, expression: {dialects: [{dialect: ANSI_SQL, expression: customer}]}}
+      - {name: region, datatype: String, expression: {dialects: [{dialect: ANSI_SQL, expression: region}]}}
+  - name: dim_product
+    x_source: sqlserver_sales
+    source: dim_product
+    primary_key: [product_key]
+    columns:
+      - {name: product_key, datatype: Integer, expression: {dialects: [{dialect: ANSI_SQL, expression: product_key}]}}
+      - {name: product, datatype: String, expression: {dialects: [{dialect: ANSI_SQL, expression: product}]}}
+      - {name: category, datatype: String, expression: {dialects: [{dialect: ANSI_SQL, expression: category}]}}
+      - {name: category_key, datatype: Integer, expression: {dialects: [{dialect: ANSI_SQL, expression: category_key}]}}
+  - name: dim_date
+    x_source: sqlserver_sales
+    source: dim_date
+    primary_key: [date_key]
+    columns:
+      - {name: date_key, datatype: Integer, expression: {dialects: [{dialect: ANSI_SQL, expression: date_key}]}}
+      - {name: fiscal_month, datatype: String, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: fiscal_month}]}}
+      - {name: fiscal_quarter, datatype: String, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: fiscal_quarter}]}}
+      - {name: fiscal_year, datatype: String, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: fiscal_year}]}}
+      - {name: prior_year_fiscal_month, datatype: String, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: prior_year_fiscal_month}]}}
+      - {name: prior_year_fiscal_quarter, datatype: String, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: prior_year_fiscal_quarter}]}}
+      - {name: prior_year_calendar_date, datatype: Date, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: prior_year_calendar_date}]}}
+      - {name: calendar_date, datatype: Date, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: calendar_date}]}}
+  - name: dim_category
+    x_source: sqlserver_sales
+    source: dim_category
+    primary_key: [category_key]
+    columns:
+      - {name: category_key, datatype: Integer, expression: {dialects: [{dialect: ANSI_SQL, expression: category_key}]}}
+      - {name: category_group, datatype: String, expression: {dialects: [{dialect: ANSI_SQL, expression: category_group}]}}
+  - name: fact_returns
+    x_source: sqlserver_sales
+    source: fact_returns
+    primary_key: [return_id]
+    columns:
+      - {name: return_id, datatype: Integer, expression: {dialects: [{dialect: ANSI_SQL, expression: return_id}]}}
+      - {name: customer_key, datatype: Integer, expression: {dialects: [{dialect: ANSI_SQL, expression: customer_key}]}}
+      - {name: product_key, datatype: Integer, expression: {dialects: [{dialect: ANSI_SQL, expression: product_key}]}}
+      - {name: date_key, datatype: Integer, expression: {dialects: [{dialect: ANSI_SQL, expression: date_key}]}}
+      - {name: return_amount, datatype: Decimal, expression: {dialects: [{dialect: ANSI_SQL, expression: return_amount}]}}
+  - name: fact_budget
+    x_source: ssas_finance
+    source: fact_budget
+    columns:
+      - {name: region, datatype: String, expression: {dialects: [{dialect: ANSI_SQL, expression: region}]}}
+      - {name: fiscal_month, datatype: String, expression: {dialects: [{dialect: ANSI_SQL, expression: fiscal_month}]}}
+      - {name: amount, datatype: Decimal, expression: {dialects: [{dialect: ANSI_SQL, expression: amount}, {dialect: DAX, expression: "'Budget'[Amount]"}]}}
+  - name: dim_month
+    x_source: ssas_finance
+    source: dim_month
+    primary_key: [fiscal_month]
+    columns:
+      - {name: fiscal_month, datatype: String, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: fiscal_month}]}}
+      - {name: fiscal_quarter, datatype: String, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: fiscal_quarter}]}}
+      - {name: fiscal_year, datatype: String, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: fiscal_year}]}}
+      - {name: prior_year_fiscal_month, datatype: String, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: prior_year_fiscal_month}]}}
+      - {name: prior_year_fiscal_quarter, datatype: String, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: prior_year_fiscal_quarter}]}}
+
+relationships:
+  - {name: sales_to_customer, from: fact_sales, to: dim_customer, from_columns: [customer_key], to_columns: [customer_key]}
+  - {name: sales_to_product,  from: fact_sales, to: dim_product,  from_columns: [product_key],  to_columns: [product_key]}
+  - {name: sales_to_date,     from: fact_sales, to: dim_date,     from_columns: [date_key],     to_columns: [date_key], x_role: order_date}
+  - {name: sales_to_ship_date, from: fact_sales, to: dim_date,    from_columns: [ship_date_key], to_columns: [date_key], x_role: ship_date}
+  - {name: product_to_category, from: dim_product, to: dim_category, from_columns: [category_key], to_columns: [category_key]}
+  - {name: returns_to_customer, from: fact_returns, to: dim_customer, from_columns: [customer_key], to_columns: [customer_key]}
+  - {name: returns_to_product,  from: fact_returns, to: dim_product,  from_columns: [product_key],  to_columns: [product_key]}
+  - {name: returns_to_date,     from: fact_returns, to: dim_date,     from_columns: [date_key],     to_columns: [date_key], x_role: order_date}
+  - {name: budget_to_month,   from: fact_budget, to: dim_month,   from_columns: [fiscal_month], to_columns: [fiscal_month]}
+
+dimensions:
+  customers:
+    attributes:
+      region:
+        type: string
+        synonyms: [region, sales region]
+        members: {from: sqlserver_sales}   # read from dim_customer, so North counts although it has no sales
+        bindings:
+          sqlserver_sales: {table: dim_customer, column: region}
+          ssas_finance:    {table: fact_budget, column: region, native: {DAX: "'Customer'[Region]"}}
+      customer:
+        type: string
+        synonyms: [customer, customer name]
+        bindings:
+          sqlserver_sales: {table: dim_customer, column: customer}
+  products:
+    attributes:
+      product:
+        type: string
+        synonyms: [product, item]
+        bindings:
+          sqlserver_sales: {table: dim_product, column: product}
+      category:
+        type: string
+        synonyms: [category, product category]
+        bindings:
+          sqlserver_sales: {table: dim_product, column: category}
+      category_group:
+        type: string
+        synonyms: [category group, product group]
+        bindings:
+          sqlserver_sales: {table: dim_category, column: category_group}
+  orders:
+    attributes:
+      ordered_at:
+        type: datetime
+        date: date.calendar_date        # its local date is a member of the date dimension, so fiscal months and the like work on it
+        synonyms: [order time, ordered at, order timestamp]
+        bindings:
+          sqlserver_sales: {table: fact_sales, column: ordered_at}
+      status:
+        type: string
+        synonyms: [status, order status]
+        bindings:
+          sqlserver_sales: {table: fact_sales, column: status}
+  date:
+    default_role: order_date
+    attributes:
+      calendar_date:
+        type: date
+        synonyms: [date, day, calendar date]
+        bindings:
+          sqlserver_sales: {table: dim_date, column: calendar_date}
+      calendar_date_prior_year:
+        type: date
+        bindings:
+          sqlserver_sales: {table: dim_date, column: prior_year_calendar_date}
+      fiscal_month:
+        type: string
+        sort_key: fiscal_month
+        synonyms: [month, fiscal month]
+        bindings:
+          sqlserver_sales: {table: dim_date, column: fiscal_month}
+          ssas_finance:    {table: fact_budget, column: fiscal_month, native: {DAX: "'Date'[Fiscal Month]"}}
+      fiscal_quarter:
+        type: string
+        synonyms: [quarter, fiscal quarter]
+        bindings:
+          sqlserver_sales: {table: dim_date, column: fiscal_quarter}
+          ssas_finance:    {table: dim_month, column: fiscal_quarter, native: {DAX: "'Date'[Fiscal Quarter]"}}
+      fiscal_year:
+        type: string
+        synonyms: [year, fiscal year]
+        bindings:
+          sqlserver_sales: {table: dim_date, column: fiscal_year}
+          ssas_finance:    {table: dim_month, column: fiscal_year, native: {DAX: "'Date'[Fiscal Year]"}}
+      fiscal_month_prior_year:
+        type: string
+        synonyms: [month a year ago]
+        bindings:
+          sqlserver_sales: {table: dim_date, column: prior_year_fiscal_month}
+          ssas_finance:    {table: dim_month, column: prior_year_fiscal_month, native: {DAX: "'Date'[Fiscal Month Prior Year]"}}
+      fiscal_quarter_prior_year:
+        type: string
+        synonyms: [quarter a year ago]
+        bindings:
+          sqlserver_sales: {table: dim_date, column: prior_year_fiscal_quarter}
+          ssas_finance:    {table: dim_month, column: prior_year_fiscal_quarter, native: {DAX: "'Date'[Fiscal Quarter Prior Year]"}}
+
+measures:
+  orders.net_revenue:
+    type: number
+    source: sqlserver_sales
+    agg: sum
+    of: {table: fact_sales, column: net_amount}
+    synonyms: [revenue, sales, net revenue]
+    native: {DAX: "[Net Revenue]"}
+    semantics:
+      grain: [customers.region, products.product, products.category, date.fiscal_month, date.fiscal_quarter]
+      rollup: {default: sum}
+      spread: blank
+      status: governed
+  orders.shipped_revenue:
+    type: number
+    source: sqlserver_sales
+    agg: sum
+    of: {table: fact_sales, column: net_amount}
+    synonyms: [shipped revenue, revenue by ship date]
+    native: {DAX: "[Shipped Revenue]"}
+    roles: {date: ship_date}   # its dates are the dates it shipped, unless a request names a role
+    semantics:
+      grain: [customers.region, products.product, products.category, date.fiscal_month, date.fiscal_quarter]
+      rollup: {default: sum}
+      spread: blank
+      status: governed
+  orders.completed_revenue:
+    type: number
+    source: sqlserver_sales
+    agg: sum
+    of: {table: fact_sales, column: net_amount}
+    synonyms: [completed revenue, completed sales]
+    native: {DAX: "[Completed Revenue]"}
+    filters:
+      - {attribute: orders.status, operator: equals, values: [Completed]}
+    semantics:
+      grain: [customers.region, products.product, products.category, date.fiscal_month, date.fiscal_quarter]
+      rollup: {default: sum}
+      spread: blank
+      status: governed
+  orders.order_count:
+    type: integer
+    source: sqlserver_sales
+    agg: count_distinct
+    of: {table: fact_sales, column: order_id}
+    synonyms: [orders, number of orders]
+    native: {DAX: "[Order Count]"}
+    semantics:
+      grain: [customers.region, products.product, products.category, date.fiscal_month, date.fiscal_quarter]
+      rollup: {default: none}
+      spread: blank
+      status: governed
+  orders.customer_count:
+    type: integer
+    source: sqlserver_sales
+    agg: count_distinct
+    of: {table: fact_sales, column: customer_key}
+    synonyms: [customers, active customers, buyers]
+    semantics:
+      grain: [customers.region, products.product, products.category, date.fiscal_month, date.fiscal_quarter]
+      rollup: {default: none}
+      spread: blank
+      status: governed
+  returns.return_amount:
+    type: number
+    source: sqlserver_sales
+    agg: sum
+    of: {table: fact_returns, column: return_amount}
+    synonyms: [returns, returned amount]
+    format: {style: currency, currency: USD, decimals: 2}
+    semantics:
+      grain: [customers.region, products.product, products.category, products.category_group, date.fiscal_month, date.fiscal_quarter]
+      rollup: {default: sum}
+      spread: blank
+      status: governed
+  budget.budget_amount:
+    type: number
+    source: ssas_finance
+    agg: sum
+    of: {table: fact_budget, column: amount}
+    synonyms: [budget, plan]
+    native: {DAX: "[Budget Amount]"}
+    format: {style: currency, currency: USD, decimals: 0}
+    semantics:
+      grain: [customers.region, date.fiscal_month, date.fiscal_quarter]
+      rollup: {default: sum}
+      spread: repeat
+      status: governed
+  budget.budget_lines:
+    type: integer
+    source: ssas_finance
+    agg: count
+    of: {table: fact_budget, column: amount}
+    synonyms: [budget lines, plan lines]
+    native: {DAX: "[Budget Lines]"}
+    semantics:
+      grain: [customers.region, date.fiscal_month, date.fiscal_quarter]
+      rollup: {default: none}
+      spread: blank
+      status: governed
+
+  # Derived measures: operations over other measures, evaluated after rollup at every grain, so a ratio is never summed and a
+  # total is a ratio of totals. They can read measures from different sources.
+  orders.avg_order_value:
+    type: number
+    compute: {op: divide, args: [orders.net_revenue, orders.order_count]}
+    synonyms: [average order value, aov]
+  finance.pct_to_budget:
+    type: number
+    compute: {op: divide, args: [orders.net_revenue, budget.budget_amount]}
+    synonyms: [percent to budget, budget attainment]
+  orders.net_after_returns:
+    type: number
+    compute: {op: subtract, args: [orders.net_revenue, {op: coalesce, args: [returns.return_amount, 0]}]}
+    synonyms: [net of returns]
+
+# Segments are named filters. A query that names one gets its filters added to its own.
+segments:
+  orders.completed:
+    filters:
+      - {attribute: orders.status, operator: equals, values: [Completed]}
+    synonyms: [completed orders]
+  customers.west:
+    filters:
+      - {attribute: customers.region, operator: equals, values: [West]}
+
+hierarchies:
+  date.by_fiscal_quarter:
+    levels: [date.fiscal_quarter, date.fiscal_month]
+  products.by_category:
+    levels: [products.category, products.product]
+
+# A calendar names its date attribute (one value per day) and its levels, each the attribute holding that level's
+# member for every day. The levels are the periods of a query: a relative operator on one (last_complete, current,
+# period_to_date) is resolved to that level's members from the date table, and a level in the query's attributes
+# breaks the rows down by it. Fiscal and calendar levels are alike here; nothing is computed from the date arithmetic.
+#
+# It also says how to move a time attribute back: for each unit, the attribute that holds each member's counterpart
+# one unit earlier. A shifted scan (prior_period, allocation by an earlier period) moves the query's time filters back
+# through these, scans the source, and relabels the rows to the current members.
+calendars:
+  fiscal:
+    date: date.calendar_date
+    levels:
+      day: date.calendar_date
+      fiscal_month: date.fiscal_month
+      fiscal_quarter: date.fiscal_quarter
+      fiscal_year: date.fiscal_year
+    shifts:
+      fiscal_year:
+        date.calendar_date: date.calendar_date_prior_year   # a day's counterpart, so a range of dates can move back too
+        date.fiscal_month: date.fiscal_month_prior_year
+        date.fiscal_quarter: date.fiscal_quarter_prior_year

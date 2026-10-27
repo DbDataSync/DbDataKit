@@ -1,0 +1,47 @@
+{
+  "name": "16_snowflake_dimension",
+  "level": 2,
+  "description": "The category group lives in a table that hangs off the product dimension (fact, product, category). The query joins the chain: Computing is product A (300 + 100), Peripherals product B (200 + 300).",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 100,
+      "attributes": [
+        "products.category_group"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "products_category_group": "Computing",
+        "orders_net_revenue": 400
+      },
+      {
+        "products_category_group": "Peripherals",
+        "orders_net_revenue": 500
+      }
+    ],
+    "native_query_contains": {
+      "d1": [
+        "JOIN dim_product p",
+        "JOIN dim_category c"
+      ]
+    }
+  }
+}

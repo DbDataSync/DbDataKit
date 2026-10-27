@@ -1,0 +1,58 @@
+{
+  "name": "14_duplicate_alias",
+  "level": 2,
+  "description": "Output names must be unique.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "measure": "orders.net_revenue",
+          "as": "completed_revenue",
+          "filters": [
+            {
+              "attribute": "orders.status",
+              "operator": "equals",
+              "values": [
+                "Completed"
+              ]
+            }
+          ]
+        },
+        {
+          "measure": "orders.net_revenue",
+          "as": "completed_revenue",
+          "filters": [
+            {
+              "attribute": "orders.status",
+              "operator": "equals",
+              "values": [
+                "Cancelled"
+              ]
+            }
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "duplicate_measure"
+    ]
+  }
+}

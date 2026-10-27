@@ -1,0 +1,51 @@
+{
+  "name": "33_post_filter_must_name_an_alias",
+  "level": 4,
+  "description": "A post-filter filters a transform's output, so it must name a transform alias that the query defines.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "as": "share",
+          "transform": "pct_of_total",
+          "measure": "orders.net_revenue",
+          "over": [
+            "products.product"
+          ]
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ],
+      "post_filters": [
+        {
+          "measure": "revenue_rank",
+          "operator": "gt",
+          "values": [
+            100
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "alias_invalid"
+    ]
+  }
+}

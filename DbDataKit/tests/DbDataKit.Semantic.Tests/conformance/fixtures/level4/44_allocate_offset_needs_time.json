@@ -1,0 +1,39 @@
+{
+  "name": "44_allocate_offset_needs_time",
+  "level": 4,
+  "description": "Weights from an earlier period need a period: with no time filter or dimension there is nothing to move back.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "measure": "budget.budget_amount",
+          "spread": {
+            "allocate": {
+              "by": "measure",
+              "measure": "orders.net_revenue",
+              "period": {
+                "unit": "fiscal_year",
+                "offset": -1
+              }
+            }
+          }
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region",
+        "products.product"
+      ],
+      "filters": []
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "shift_needs_time"
+    ]
+  }
+}

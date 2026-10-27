@@ -1,0 +1,37 @@
+{
+  "name": "14_empty_needs_rollup",
+  "level": 5,
+  "description": "'empty' belongs to a rollup override.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "measure": "orders.net_revenue",
+          "as": "x",
+          "empty": "zero"
+        }
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "errors": [
+      "empty_needs_rollup"
+    ]
+  }
+}
