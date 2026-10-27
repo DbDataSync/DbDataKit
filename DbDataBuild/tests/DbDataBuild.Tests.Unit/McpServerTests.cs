@@ -223,7 +223,7 @@ public class McpServerTests : IDisposable
         Directory.CreateDirectory(plan);
         var id = "2026-10-05-eeee0005";
         File.WriteAllText(Path.Combine(plan, id + ".plan.yml"), DbDataBuild.Planning.PlanDocument.Serialize(new DbDataBuild.Planning.Plan(id, "postgres", null, false, "0.1.0",
-            [new DbDataBuild.Planning.ObjectBase("marts.fct", DbDataBuild.State.ObjectState.InSync, new string('a', 64), new string('a', 64))], [],
+            [new DbDataBuild.Planning.ObjectBase("marts.fct", DbDataKit.Schema.ObjectState.InSync, new string('a', 64), new string('a', 64))], [],
             [new DbDataBuild.Planning.PlanStep("1", DbDataBuild.Planning.StepType.Ddl, "marts.fct", "drop column x", "ALTER TABLE marts.fct DROP COLUMN x;", DbDataBuild.Planning.RiskClass.Destructive, ["col.dropped"], new string('b', 64), [])], [])));
         var host = new ApplyHost(); var feed = new Feed(); var output = new SyncWriter();
         var server = new McpServer(dir, true, feed, output, host) { AnswerTimeout = TimeSpan.FromSeconds(20) };
@@ -426,7 +426,7 @@ public class McpServerTests : IDisposable
         Directory.CreateDirectory(plan);
         var id = "2026-10-05-eeee0005";
         File.WriteAllText(Path.Combine(plan, id + ".plan.yml"), DbDataBuild.Planning.PlanDocument.Serialize(new DbDataBuild.Planning.Plan(id, "postgres", null, false, "0.1.0",
-            [new DbDataBuild.Planning.ObjectBase("marts.fct", DbDataBuild.State.ObjectState.InSync, new string('a', 64), new string('a', 64))], [],
+            [new DbDataBuild.Planning.ObjectBase("marts.fct", DbDataKit.Schema.ObjectState.InSync, new string('a', 64), new string('a', 64))], [],
             [new DbDataBuild.Planning.PlanStep("1", DbDataBuild.Planning.StepType.Ddl, "marts.fct", "add column", "ALTER TABLE marts.fct ADD x int;", DbDataBuild.Planning.RiskClass.Safe, ["col.added"], new string('b', 64), [])], [])));
         var relative = $"plans/postgres/{id}.plan.yml";
         var confirm = new JsonObject { ["connection"] = "postgres", ["plan_id"] = id };

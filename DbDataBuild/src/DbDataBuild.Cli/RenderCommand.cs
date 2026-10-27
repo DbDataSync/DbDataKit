@@ -76,7 +76,7 @@ internal static class RenderCommand
                 return CliApp.ExitFindings;
             }
             var (wrote, removed) = Write(root, files, scopeDirs: Scope(files, selected, targets, wholeProject, root, ctx.Config.Connections.Keys));
-            output.Payload("files", files.Select(f => new { path = $"{RenderedDir}/{f.Path}", hash = DbDataBuild.State.Hashing.ScriptHash(f.Content) }).ToList());
+            output.Payload("files", files.Select(f => new { path = $"{RenderedDir}/{f.Path}", hash = DbDataKit.Schema.Hashing.ScriptHash(f.Content) }).ToList());
             output.Payload("wrote", wrote); output.Payload("removed", removed);
             foreach (var f in wrote) output.WriteLine($"wrote {RenderedDir}/{f}");
             foreach (var f in removed) output.WriteLine($"removed {RenderedDir}/{f}");
@@ -84,8 +84,8 @@ internal static class RenderCommand
             return CliApp.ExitOk;
         }
 
-        if (content) output.Payload("files", files.Select(f => new { path = $"{RenderedDir}/{f.Path}", hash = DbDataBuild.State.Hashing.ScriptHash(f.Content), content = f.Content }).ToList());
-        else output.Payload("files", files.Select(f => new { path = $"{RenderedDir}/{f.Path}", hash = DbDataBuild.State.Hashing.ScriptHash(f.Content) }).ToList());
+        if (content) output.Payload("files", files.Select(f => new { path = $"{RenderedDir}/{f.Path}", hash = DbDataKit.Schema.Hashing.ScriptHash(f.Content), content = f.Content }).ToList());
+        else output.Payload("files", files.Select(f => new { path = $"{RenderedDir}/{f.Path}", hash = DbDataKit.Schema.Hashing.ScriptHash(f.Content) }).ToList());
         output.Payload("operations", files.Count);
 
         // default: print
@@ -181,7 +181,7 @@ internal static class RenderCommand
             }
         }
         foreach (var d in differences) error.Diag(d);
-        output.Payload("files", desired.Select(d => new { path = $"{RenderedDir}/{d.Key}", hash = DbDataBuild.State.Hashing.ScriptHash(d.Value) }).ToList());
+        output.Payload("files", desired.Select(d => new { path = $"{RenderedDir}/{d.Key}", hash = DbDataKit.Schema.Hashing.ScriptHash(d.Value) }).ToList());
         output.Payload("out_of_date", differences.Select(d => d.Location.File).ToList());
         if (differences.Count == 0 && renderErrors == 0)
         {

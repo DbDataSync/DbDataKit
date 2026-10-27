@@ -236,11 +236,11 @@ ORDER BY kcu.table_name, kcu.constraint_name, kcu.ordinal_position";
     /// give theirs with the columns (<see cref="CatalogReader"/>); a Flight SQL server has no metadata call for indexes and `information_schema` has no indexes view, so those say so in <see cref="ReadSession.CatalogNotes"/>
     /// instead of guessing.
     /// </summary>
-    public static async Task<IReadOnlyDictionary<string, IReadOnlyList<State.PhysicalItem>>?> IndexesAsync(ReadSession read, string target, string schema, CancellationToken ct = default)
+    public static async Task<IReadOnlyDictionary<string, IReadOnlyList<DbDataKit.Schema.PhysicalItem>>?> IndexesAsync(ReadSession read, string target, string schema, CancellationToken ct = default)
     {
-        static IReadOnlyDictionary<string, IReadOnlyList<State.PhysicalItem>> Items(IEnumerable<(string Table, string Name, bool Unique, IReadOnlyList<string> Columns, IReadOnlyList<string> Include)> indexes) =>
+        static IReadOnlyDictionary<string, IReadOnlyList<DbDataKit.Schema.PhysicalItem>> Items(IEnumerable<(string Table, string Name, bool Unique, IReadOnlyList<string> Columns, IReadOnlyList<string> Include)> indexes) =>
             indexes.GroupBy(i => i.Table, StringComparer.Ordinal).ToDictionary(g => g.Key,
-                g => (IReadOnlyList<State.PhysicalItem>)g.Select(i => new State.PhysicalItem("index", i.Name, State.IndexText.Canonical(i.Unique, i.Columns, i.Include))).ToList(), StringComparer.Ordinal);
+                g => (IReadOnlyList<DbDataKit.Schema.PhysicalItem>)g.Select(i => new DbDataKit.Schema.PhysicalItem("index", i.Name, DbDataKit.Schema.IndexText.Canonical(i.Unique, i.Columns, i.Include))).ToList(), StringComparer.Ordinal);
 
         if (target == "duckdb")
         {

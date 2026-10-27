@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DbDataBuild.Core\DbDataBuild.Core.csproj" />
+    <DbDataKitReference Include="Schema" />
     <ProjectReference Include="..\DbDataBuild.Models\DbDataBuild.Models.csproj" />
     <ProjectReference Include="..\DbDataBuild.Sql\DbDataBuild.Sql.csproj" />
     <ProjectReference Include="..\DbDataBuild.Define\DbDataBuild.Define.csproj" />
@@ -12,5 +13,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="DbDataKit.Schema" />   <!-- the structure model moved to the shared library; the types keep their names (plan 19, H02) -->
+  </ItemGroup>
 
 </Project>

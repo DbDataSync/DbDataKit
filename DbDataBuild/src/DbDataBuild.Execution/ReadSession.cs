@@ -131,7 +131,7 @@ public sealed class ReadSession : IAsyncDisposable
     /// The columns a SELECT would return, asked of the engine without running it (the driver's schema-only mode: `sp_describe_first_result_set` on SQL Server, a parse-and-describe on PostgreSQL). Guarded like
     /// every read. Null when the engine cannot say (dynamic SQL, a temporary table); the caller says it was not checked.
     /// </summary>
-    public async Task<IReadOnlyList<DbDataBuild.State.ColumnShape>?> DescribeAsync(string sql, string engine, IReadOnlyList<GateParameter>? parameters = null, CancellationToken ct = default)
+    public async Task<IReadOnlyList<DbDataKit.Schema.ColumnShape>?> DescribeAsync(string sql, string engine, IReadOnlyList<GateParameter>? parameters = null, CancellationToken ct = default)
     {
         if (ReadGuard.Check(sql) is { } refused) throw new GateRefusedException(refused);
         return await source.DescribeAsync(sql, parameters ?? [], ct);

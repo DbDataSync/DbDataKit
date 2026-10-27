@@ -50,4 +50,8 @@
     <Using Include="DbDataKit.Cli" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Using Include="DbDataKit.Schema" />   <!-- the structure model moved to the shared library; the types keep their names (plan 19, H02) -->
+  </ItemGroup>
+
 </Project>

@@ -382,7 +382,7 @@ public class ReadOriginsTests
         }
 
         public Task<IRowReader> ExecuteCommandAsync(string text, IReadOnlyList<GateParameter> parameters, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyList<DbDataBuild.State.ColumnShape>?> DescribeAsync(string sql, IReadOnlyList<GateParameter> parameters, CancellationToken ct) => Task.FromResult<IReadOnlyList<DbDataBuild.State.ColumnShape>?>(null);
+        public Task<IReadOnlyList<DbDataKit.Schema.ColumnShape>?> DescribeAsync(string sql, IReadOnlyList<GateParameter> parameters, CancellationToken ct) => Task.FromResult<IReadOnlyList<DbDataKit.Schema.ColumnShape>?>(null);
         public ValueTask DisposeAsync() { Disposed = true; return ValueTask.CompletedTask; }
     }
 
