@@ -16,6 +16,9 @@
   color-scheme: light;
 }
 .vz[data-vz-theme='dark'] {
+  --vz-ground: #0d1117;
+  padding: 12px;
+  border-radius: 6px;
   --vz-text: #e6edf3;
   --vz-muted: #9da7b3;
   --vz-head: #1f262e;

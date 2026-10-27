@@ -83,6 +83,10 @@ jobs:
         run: |
           npm ci
           npm run build -w @dbdatakit/console
+      # The shared visuals (plan 19, Y01-Y02): the view schema's validator and the renderer's component tests, on the semantic library's view fixtures. Plain Node, no browser.
+      - name: Test the shared visuals
+        working-directory: DbDataKit/web
+        run: npm test -w @dbdatakit/visuals
       - run: dotnet build DbDataConsole.slnf -c Debug
       # A real Build server for the console to pair with (the pairing, the version and the health the console shows are its own).
       - name: Build a Build server
