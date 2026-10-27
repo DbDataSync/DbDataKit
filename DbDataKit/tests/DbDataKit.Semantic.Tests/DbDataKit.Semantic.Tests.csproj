@@ -11,6 +11,8 @@
     <ProjectReference Include="..\..\src\DbDataKit.Semantic.Extraction\DbDataKit.Semantic.Extraction.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.Semantic.Ssas\DbDataKit.Semantic.Ssas.csproj" />
     <PackageReference Include="ClosedXML" />
+    <!-- the XMLA recording forwarder, run in front of a real Analysis Services by SsasRecordingTests (plan 19, J20) -->
+    <ProjectReference Include="..\..\tools\DbDataKit.Tools.XmlaForwarder\DbDataKit.Tools.XmlaForwarder.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.Connections.SqlServer\DbDataKit.Connections.SqlServer.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.Connections.DuckDb\DbDataKit.Connections.DuckDb.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.Connections.Postgres\DbDataKit.Connections.Postgres.csproj" />

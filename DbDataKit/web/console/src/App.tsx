@@ -6,6 +6,7 @@ import { HomePage } from './pages/HomePage'
 import { InstancesPage } from './pages/InstancesPage'
 import { MonitoringPage } from './pages/MonitoringPage'
 import { ServerModule } from './pages/ServerModule'
+import { ViewsPage } from './pages/ViewsPage'
 
 export default function App() {
   const { data: status, isLoading } = useAuthStatus()
@@ -25,6 +26,7 @@ export default function App() {
       <Route path="/" element={<HomePage />} />
       <Route path="/instances" element={<InstancesPage />} />
       <Route path="/servers/:instance/*" element={<ServerModule />} />
+      <Route path="/views" element={<ViewsPage />} />
       <Route path="/monitoring" element={<MonitoringPage />} />
       <Route path="/users" element={<UsersPage />} />
       <Route path="*" element={<HomePage />} />

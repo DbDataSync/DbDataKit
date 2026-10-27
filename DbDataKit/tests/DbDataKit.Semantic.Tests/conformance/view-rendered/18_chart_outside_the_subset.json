@@ -1,0 +1,45 @@
+{
+  "kind": "rendered_view",
+  "status": "failed",
+  "views": null,
+  "errors": [
+    {
+      "spec": "presentation",
+      "code": "vega_disallowed",
+      "path": "$.views[0].vega_lite.data",
+      "message": "\u0027data\u0027 isn\u0027t allowed in a chart spec: it fetches data or computes values, and the renderer supplies the data from the result."
+    },
+    {
+      "spec": "presentation",
+      "code": "vega_disallowed",
+      "path": "$.views[0].vega_lite.transform",
+      "message": "\u0027transform\u0027 isn\u0027t allowed in a chart spec: it fetches data or computes values, and the renderer supplies the data from the result."
+    },
+    {
+      "spec": "presentation",
+      "code": "vega_disallowed",
+      "path": "$.views[0].vega_lite.encoding.y.aggregate",
+      "message": "\u0027aggregate\u0027 isn\u0027t allowed in a chart spec: it fetches data or computes values, and the renderer supplies the data from the result."
+    },
+    {
+      "spec": "presentation",
+      "code": "vega_disallowed",
+      "path": "$.views[0].vega_lite.mark",
+      "message": "Mark \u0027arc\u0027 isn\u0027t allowed; use one of area, bar, line, point, rule, text.",
+      "suggestions": [
+        "area",
+        "bar",
+        "line",
+        "point",
+        "rule",
+        "text"
+      ]
+    },
+    {
+      "spec": "presentation",
+      "code": "vega_disallowed",
+      "path": "$.views[0].vega_lite.encoding.size",
+      "message": "Channel \u0027size\u0027 isn\u0027t allowed; use one of color, column, row, tooltip, x, y."
+    }
+  ]
+}

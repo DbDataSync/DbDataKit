@@ -1,0 +1,13 @@
+{
+  "kind": "rendered_view",
+  "status": "failed",
+  "views": null,
+  "errors": [
+    {
+      "spec": "presentation",
+      "code": "other_not_additive",
+      "path": "$.views[0].column_limit",
+      "message": "orders.order_count can\u0027t be added up, so the columns past the limit can\u0027t be combined into Other."
+    }
+  ]
+}

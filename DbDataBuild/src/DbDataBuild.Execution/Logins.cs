@@ -67,6 +67,20 @@ public sealed class LoginSettings
         return (settings.With(kind.ReadOnly, dialect ?? connection.Profile ?? DialectProfiles.BuiltIn.GetValueOrDefault(kind.Dialect) ?? DialectProfiles.Ansi), null);
     }
 
+    private static readonly HashSet<string> AddressKeys = new(StringComparer.OrdinalIgnoreCase)
+        { "server", "data source", "host", "address", "addr", "network address", "port", "database", "initial catalog", "dbname" };
+
+    /// <summary>
+    /// The connection as lineage names a table's home (`LineageIdentity`): the engine and only the address keys of the connection string (server, port, database). The login's user and password are left out, so nothing secret is held
+    /// by what the identity is worked out from.
+    /// </summary>
+    public ConnectionDefinition AddressOnlyDefinition() => new()
+    {
+        Name = Connection, Engine = Engine,
+        ConnectionString = string.Join(';', ConnectionString.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(p => p.Split('=', 2) is [var key, _] && AddressKeys.Contains(key.Trim()))),
+    };
+
     private LoginSettings With(bool readOnly, DialectProfile dialect) => new(Connection, Engine, Login, Variable, ConnectionString) { ReadOnly = readOnly, Dialect = dialect };
 
     /// <summary>Reads the read or write login of a connection by name: the project's own connection (with its dialect) when it has one, else the connection named after an engine.</summary>

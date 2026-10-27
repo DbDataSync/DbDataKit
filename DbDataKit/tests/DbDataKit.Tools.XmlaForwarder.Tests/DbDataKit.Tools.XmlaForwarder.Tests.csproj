@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\tools\DbDataKit.Tools.XmlaForwarder\DbDataKit.Tools.XmlaForwarder.csproj" />
+  </ItemGroup>
+</Project>

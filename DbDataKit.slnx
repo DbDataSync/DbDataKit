@@ -77,6 +77,7 @@
     <Project Path="DbDataKit/src/DbDataKit.Odbc.Metadata/DbDataKit.Odbc.Metadata.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Schema/DbDataKit.Schema.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Scheduling/DbDataKit.Scheduling.csproj" />
+    <Project Path="DbDataKit/src/DbDataKit.Scripting/DbDataKit.Scripting.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.State/DbDataKit.State.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Secrets.Abstractions/DbDataKit.Secrets.Abstractions.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Secrets.Cli/DbDataKit.Secrets.Cli.csproj" />
@@ -97,7 +98,11 @@
     <Project Path="DbDataKit/src/DbDataKit.Update/DbDataKit.Update.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Web/DbDataKit.Web.csproj" />
   </Folder>
+  <Folder Name="/DbDataKit/tools/">
+    <Project Path="DbDataKit/tools/DbDataKit.Tools.XmlaForwarder/DbDataKit.Tools.XmlaForwarder.csproj" />
+  </Folder>
   <Folder Name="/DbDataKit/tests/">
+    <Project Path="DbDataKit/tests/DbDataKit.Tools.XmlaForwarder.Tests/DbDataKit.Tools.XmlaForwarder.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Config.Git.Tests/DbDataKit.Config.Git.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Config.Hosting.Tests/DbDataKit.Config.Hosting.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Config.Testing.Tests/DbDataKit.Config.Testing.Tests.csproj" />
@@ -142,6 +147,7 @@
     <Project Path="DbDataKit/tests/DbDataKit.State.Tests/DbDataKit.State.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Schema.Tests/DbDataKit.Schema.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Scheduling.Tests/DbDataKit.Scheduling.Tests.csproj" />
+    <Project Path="DbDataKit/tests/DbDataKit.Scripting.Tests/DbDataKit.Scripting.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Secrets.Abstractions.Tests/DbDataKit.Secrets.Abstractions.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Secrets.Cli.Tests/DbDataKit.Secrets.Cli.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Secrets.Store.Tests/DbDataKit.Secrets.Store.Tests.csproj" />

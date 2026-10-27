@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>dbdata-xmla-forwarder</AssemblyName>
+    <RootNamespace>DbDataKit.Tools.XmlaForwarder</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <Description>Recording forwarder for XMLA traffic (plan 19, J20): a TCP pass-through in front of Analysis Services that writes what each client and server sent to files.</Description>
+  </PropertyGroup>
+</Project>

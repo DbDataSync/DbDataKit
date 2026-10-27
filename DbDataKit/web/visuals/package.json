@@ -1,0 +1,32 @@
+{
+  "name": "@dbdatakit/visuals",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./svg": "./src/chartSvg.ts",
+    "./styles.css": "./src/styles.css"
+  },
+  "scripts": {
+    "lint": "oxlint",
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "vega": "6.4.0",
+    "vega-embed": "7.3.0",
+    "vega-interpreter": "2.3.2",
+    "vega-lite": "6.5.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "oxlint": "^1.79.0",
+    "typescript": "~6.0.2",
+    "vitest": "^5.0.1"
+  }
+}

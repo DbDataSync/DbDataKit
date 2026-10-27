@@ -1,0 +1,192 @@
+{
+  "kind": "rendered_view",
+  "status": "complete",
+  "views": [
+    {
+      "id": "m1",
+      "type": "matrix",
+      "columns": [
+        {
+          "labels": [
+            "FY27-Q1",
+            "orders.net_revenue"
+          ],
+          "total": false,
+          "other": false
+        },
+        {
+          "labels": [
+            "FY27-Q1",
+            "Orders"
+          ],
+          "total": false,
+          "other": false
+        },
+        {
+          "labels": [
+            "FY27-Q2",
+            "orders.net_revenue"
+          ],
+          "total": false,
+          "other": false
+        },
+        {
+          "labels": [
+            "FY27-Q2",
+            "Orders"
+          ],
+          "total": false,
+          "other": false
+        },
+        {
+          "labels": [
+            "Total",
+            "orders.net_revenue"
+          ],
+          "total": true,
+          "other": false
+        },
+        {
+          "labels": [
+            "Total",
+            "Orders"
+          ],
+          "total": true,
+          "other": false
+        }
+      ],
+      "rows": [
+        {
+          "labels": [
+            "West"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 4200000,
+              "text": "4.2M"
+            },
+            {
+              "v": 40,
+              "text": "40"
+            },
+            {
+              "v": 4600000,
+              "text": "4.6M"
+            },
+            {
+              "v": 44,
+              "text": "44"
+            },
+            {
+              "v": 8800000,
+              "text": "8.8M"
+            },
+            {
+              "v": 70,
+              "text": "70"
+            }
+          ]
+        },
+        {
+          "labels": [
+            "Central"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 3100000,
+              "text": "3.1M"
+            },
+            {
+              "v": 30,
+              "text": "30"
+            },
+            {
+              "v": 3300000,
+              "text": "3.3M"
+            },
+            {
+              "v": 31,
+              "text": "31"
+            },
+            {
+              "v": 6400000,
+              "text": "6.4M"
+            },
+            {
+              "v": 52,
+              "text": "52"
+            }
+          ]
+        },
+        {
+          "labels": [
+            "East"
+          ],
+          "total": false,
+          "cells": [
+            {
+              "v": 3800000,
+              "text": "3.8M"
+            },
+            {
+              "v": 35,
+              "text": "35"
+            },
+            {
+              "v": 3900000,
+              "text": "3.9M"
+            },
+            {
+              "v": 34,
+              "text": "34"
+            },
+            {
+              "v": 7700000,
+              "text": "7.7M"
+            },
+            {
+              "v": 62,
+              "text": "62"
+            }
+          ]
+        },
+        {
+          "labels": [
+            "Total"
+          ],
+          "total": true,
+          "cells": [
+            {
+              "v": 11100000,
+              "text": "11.1M"
+            },
+            {
+              "v": 95,
+              "text": "95"
+            },
+            {
+              "v": 11800000,
+              "text": "11.8M"
+            },
+            {
+              "v": 96,
+              "text": "96"
+            },
+            {
+              "v": 22900000,
+              "text": "22.9M"
+            },
+            {
+              "v": 150,
+              "text": "150"
+            }
+          ]
+        }
+      ],
+      "notice": null
+    }
+  ],
+  "errors": null
+}
