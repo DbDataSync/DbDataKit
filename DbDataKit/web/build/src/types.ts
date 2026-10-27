@@ -104,12 +104,18 @@ export interface DeployResult {
   outcomes?: { step?: string; status?: string; description?: string }[]
 }
 
+/** `project compile --content`: each file the compiler would write, with its text. */
+export interface RenderedFiles {
+  files: { path: string; hash: string; content: string }[]
+}
+
 export interface SampleTable {
   name: string
   kind: string
   columns: { name: string; type: string }[]
   row_count: number
   rows: (string | null)[][]
+  error?: string | null
 }
 
 export interface SampleResult {

@@ -1,5 +1,5 @@
 import { request } from '@dbdatakit/shell'
-import type { BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
+import type { RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
 
 const project = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}`
 
@@ -53,4 +53,8 @@ export const buildApi = {
   checkDraft: (id: string, workspace: string) => run<CompileSummary>(id, 'project_compile', { check: true }, workspace),
   /** Runs the models on generated rows, offline: what they would produce. */
   sample: (id: string, rows?: number) => run<SampleResult>(id, 'project_sample', rows ? { rows } : {}),
+  /** The lowered and rendered text of one model file of a workspace (the compiler's own files, not written anywhere). */
+  rendered: (id: string, workspace: string, path: string) => run<RenderedFiles>(id, 'project_compile', { content: true, models: [path] }, workspace),
+  /** A few rows of what one model file of a workspace returns on generated data, offline. */
+  sampleOf: (id: string, workspace: string, path: string) => run<SampleResult>(id, 'project_sample', { models: [path], rows: 8, limit: 8 }, workspace),
 }
