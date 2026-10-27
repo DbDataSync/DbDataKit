@@ -46,6 +46,14 @@
             "columns": [
               {
                 "type": "calculatedTableColumn",
+                "name": "Date",
+                "dataType": "dateTime",
+                "isNameInferred": true,
+                "isDataTypeInferred": true,
+                "sourceColumn": "[Date]"
+              },
+              {
+                "type": "calculatedTableColumn",
                 "name": "Fiscal Month",
                 "dataType": "string",
                 "isNameInferred": true,
@@ -83,6 +91,14 @@
                 "isNameInferred": true,
                 "isDataTypeInferred": true,
                 "sourceColumn": "[Fiscal Quarter Prior Year]"
+              },
+              {
+                "type": "calculatedTableColumn",
+                "name": "Date Prior Year",
+                "dataType": "dateTime",
+                "isNameInferred": true,
+                "isDataTypeInferred": true,
+                "sourceColumn": "[Date Prior Year]"
               }
             ],
             "partitions": [
@@ -93,14 +109,20 @@
                   "type": "calculated",
                   "expression": [
                     "DATATABLE(",
-                    "    \"Fiscal Month\", STRING, \"Fiscal Quarter\", STRING, \"Fiscal Year\", STRING, \"Fiscal Month Prior Year\", STRING, \"Fiscal Quarter Prior Year\", STRING,",
+                    "    \"Date\", DATETIME, \"Fiscal Month\", STRING, \"Fiscal Quarter\", STRING, \"Fiscal Year\", STRING, \"Fiscal Month Prior Year\", STRING, \"Fiscal Quarter Prior Year\", STRING, \"Date Prior Year\", DATETIME,",
                     "    {",
-                    "        { \"2025-07\", \"FY26-Q1\", \"FY26\", \"2024-07\", \"FY25-Q1\" },",
-                    "        { \"2025-08\", \"FY26-Q1\", \"FY26\", \"2024-08\", \"FY25-Q1\" },",
-                    "        { \"2025-09\", \"FY26-Q1\", \"FY26\", \"2024-09\", \"FY25-Q1\" },",
-                    "        { \"2026-07\", \"FY27-Q1\", \"FY27\", \"2025-07\", \"FY26-Q1\" },",
-                    "        { \"2026-08\", \"FY27-Q1\", \"FY27\", \"2025-08\", \"FY26-Q1\" },",
-                    "        { \"2026-09\", \"FY27-Q1\", \"FY27\", \"2025-09\", \"FY26-Q1\" }",
+                    "        { \"2025-07-01\", \"2025-07\", \"FY26-Q1\", \"FY26\", \"2024-07\", \"FY25-Q1\", \"2024-07-01\" },",
+                    "        { \"2025-07-15\", \"2025-07\", \"FY26-Q1\", \"FY26\", \"2024-07\", \"FY25-Q1\", \"2024-07-15\" },",
+                    "        { \"2025-08-01\", \"2025-08\", \"FY26-Q1\", \"FY26\", \"2024-08\", \"FY25-Q1\", \"2024-08-01\" },",
+                    "        { \"2025-08-15\", \"2025-08\", \"FY26-Q1\", \"FY26\", \"2024-08\", \"FY25-Q1\", \"2024-08-15\" },",
+                    "        { \"2025-09-01\", \"2025-09\", \"FY26-Q1\", \"FY26\", \"2024-09\", \"FY25-Q1\", \"2024-09-01\" },",
+                    "        { \"2025-09-15\", \"2025-09\", \"FY26-Q1\", \"FY26\", \"2024-09\", \"FY25-Q1\", \"2024-09-15\" },",
+                    "        { \"2026-07-01\", \"2026-07\", \"FY27-Q1\", \"FY27\", \"2025-07\", \"FY26-Q1\", \"2025-07-01\" },",
+                    "        { \"2026-07-15\", \"2026-07\", \"FY27-Q1\", \"FY27\", \"2025-07\", \"FY26-Q1\", \"2025-07-15\" },",
+                    "        { \"2026-08-01\", \"2026-08\", \"FY27-Q1\", \"FY27\", \"2025-08\", \"FY26-Q1\", \"2025-08-01\" },",
+                    "        { \"2026-08-15\", \"2026-08\", \"FY27-Q1\", \"FY27\", \"2025-08\", \"FY26-Q1\", \"2025-08-15\" },",
+                    "        { \"2026-09-01\", \"2026-09\", \"FY27-Q1\", \"FY27\", \"2025-09\", \"FY26-Q1\", \"2025-09-01\" },",
+                    "        { \"2026-09-15\", \"2026-09\", \"FY27-Q1\", \"FY27\", \"2025-09\", \"FY26-Q1\", \"2025-09-15\" }",
                     "    }",
                     ")"
                   ]
@@ -134,6 +156,14 @@
                 "isNameInferred": true,
                 "isDataTypeInferred": true,
                 "sourceColumn": "[Amount]"
+              },
+              {
+                "type": "calculatedTableColumn",
+                "name": "Month Start",
+                "dataType": "dateTime",
+                "isNameInferred": true,
+                "isDataTypeInferred": true,
+                "sourceColumn": "[Month Start]"
               }
             ],
             "partitions": [
@@ -144,20 +174,20 @@
                   "type": "calculated",
                   "expression": [
                     "DATATABLE(",
-                    "    \"Region\", STRING, \"Fiscal Month\", STRING, \"Amount\", CURRENCY,",
+                    "    \"Region\", STRING, \"Fiscal Month\", STRING, \"Amount\", CURRENCY, \"Month Start\", DATETIME,",
                     "    {",
-                    "        { \"West\", \"2026-07\", 200 },",
-                    "        { \"West\", \"2026-08\", 200 },",
-                    "        { \"West\", \"2026-09\", 200 },",
-                    "        { \"East\", \"2026-07\", 150 },",
-                    "        { \"East\", \"2026-08\", 150 },",
-                    "        { \"East\", \"2026-09\", 200 },",
-                    "        { \"West\", \"2025-07\", 120 },",
-                    "        { \"West\", \"2025-08\", 120 },",
-                    "        { \"West\", \"2025-09\", 140 },",
-                    "        { \"East\", \"2025-07\", 100 },",
-                    "        { \"East\", \"2025-08\", 110 },",
-                    "        { \"East\", \"2025-09\", 130 }",
+                    "        { \"West\", \"2026-07\", 200, \"2026-07-01\" },",
+                    "        { \"West\", \"2026-08\", 200, \"2026-08-01\" },",
+                    "        { \"West\", \"2026-09\", 200, \"2026-09-01\" },",
+                    "        { \"East\", \"2026-07\", 150, \"2026-07-01\" },",
+                    "        { \"East\", \"2026-08\", 150, \"2026-08-01\" },",
+                    "        { \"East\", \"2026-09\", 200, \"2026-09-01\" },",
+                    "        { \"West\", \"2025-07\", 120, \"2025-07-01\" },",
+                    "        { \"West\", \"2025-08\", 120, \"2025-08-01\" },",
+                    "        { \"West\", \"2025-09\", 140, \"2025-09-01\" },",
+                    "        { \"East\", \"2025-07\", 100, \"2025-07-01\" },",
+                    "        { \"East\", \"2025-08\", 110, \"2025-08-01\" },",
+                    "        { \"East\", \"2025-09\", 130, \"2025-09-01\" }",
                     "    }",
                     ")"
                   ]
@@ -189,9 +219,9 @@
           {
             "name": "Budget_Date",
             "fromTable": "Budget",
-            "fromColumn": "Fiscal Month",
+            "fromColumn": "Month Start",
             "toTable": "Date",
-            "toColumn": "Fiscal Month"
+            "toColumn": "Date"
           }
         ]
       }

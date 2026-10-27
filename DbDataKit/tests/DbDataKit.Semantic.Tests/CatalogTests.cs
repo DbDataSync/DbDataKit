@@ -40,7 +40,8 @@ public class CatalogTests
         Assert.Matches(@"^\w+\.category_key = \w+\.category_key$", src.Joins["dim_category"].Condition);
         Assert.Equal("dim_date#ship_date", cat.Doc.Attributes["ship_date.fiscal_month"].Bindings["sqlserver_sales"].Join);
         Assert.Null(cat.Doc.Attributes["orders.status"].Bindings["sqlserver_sales"].Join);   // a fact column
-        Assert.Equal("m", cat.Doc.Sources["ssas_finance"].Joins["dim_month"].Alias);
+        // the budget meets the day-grain date table on the month's first day
+        Assert.Matches(@"^\w+\.calendar_date = \w+\.month_start$", cat.Doc.Sources["ssas_finance"].Joins["dim_budget_date"].Condition);
     }
 
     public static IEnumerable<object[]> Broken() =>
@@ -53,7 +54,7 @@ public class CatalogTests
         ["binding_type_mismatch", "        type: string\n        synonyms: [region, sales region]", "        type: integer\n        synonyms: [region, sales region]"],
         ["column_expression_unsupported", "{name: region, datatype: String, expression: {dialects: [{dialect: ANSI_SQL, expression: region}]}}", "{name: region, datatype: String, expression: {dialects: [{dialect: ANSI_SQL, expression: UPPER(region)}]}}"],
         ["measure_table_source_mismatch", "of: {table: fact_budget, column: amount}\n    synonyms: [budget, plan]", "of: {table: fact_sales, column: net_amount}\n    synonyms: [budget, plan]"],
-        ["unreachable_attribute", "sqlserver_sales: {table: dim_product, column: category}", "sqlserver_sales: {table: dim_month, column: fiscal_quarter}"],
+        ["unreachable_attribute", "sqlserver_sales: {table: dim_product, column: category}", "sqlserver_sales: {table: dim_budget_date, column: fiscal_quarter}"],
         ["unknown_rollup_attribute", "rollup: {default: sum}\n      spread: blank\n      status: governed\n  orders.completed_revenue", "rollup: {default: sum, date.nope: sum}\n      spread: blank\n      status: governed\n  orders.completed_revenue"],
         ["rollup_first_last_not_time", "rollup: {default: sum}\n      spread: blank\n      status: governed\n  orders.completed_revenue", "rollup: {default: sum, customers.region: last}\n      spread: blank\n      status: governed\n  orders.completed_revenue"],
         ["hierarchy_unknown_level", "levels: [products.category, products.product]", "levels: [products.category, products.sku]"],

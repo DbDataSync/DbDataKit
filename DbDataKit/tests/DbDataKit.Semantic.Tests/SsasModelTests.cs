@@ -35,9 +35,9 @@ public partial class SsasModelTests
     [Fact]
     public void TheModelHoldsTheSeedDataOfTheSsasSource()
     {
-        Assert.Equal(Seed("SELECT region, fiscal_month, CAST(amount AS DOUBLE) FROM fact_budget ORDER BY region DESC, fiscal_month").Select(r => string.Join("|", r)).ToList(),
+        Assert.Equal(Seed("SELECT region, fiscal_month, CAST(amount AS DOUBLE), month_start FROM fact_budget ORDER BY region DESC, fiscal_month").Select(r => string.Join("|", r)).ToList(),
             Rows("Budget").OrderByDescending(r => r[0]).ThenBy(r => r[1]).Select(r => string.Join("|", r)).ToList());
-        Assert.Equal(Seed("SELECT fiscal_month, fiscal_quarter, fiscal_year, prior_year_fiscal_month, prior_year_fiscal_quarter FROM dim_month ORDER BY fiscal_month").Select(r => string.Join("|", r)).ToList(),
+        Assert.Equal(Seed("SELECT calendar_date, fiscal_month, fiscal_quarter, fiscal_year, prior_year_fiscal_month, prior_year_fiscal_quarter, prior_year_calendar_date FROM dim_date ORDER BY calendar_date").Select(r => string.Join("|", r)).ToList(),
             Rows("Date").OrderBy(r => r[0]).Select(r => string.Join("|", r)).ToList());
         Assert.Equal(Seed("SELECT DISTINCT region FROM dim_customer ORDER BY region").Select(r => r[0]).ToList(), Rows("Customer").Select(r => r[0]).Order().ToList());
     }

@@ -85,12 +85,13 @@ public static class Sandbox
             var fields = ds.Descriptor["schema"]!["fields"]!.AsArray()
                 .Select(f => (Name: f!["name"]!.GetValue<string>(), Type: f["type"]!.GetValue<string>())).ToList();
             Exec(con, $"CREATE TABLE \"{ds.Id}\" ({string.Join(", ", fields.Select(f => $"\"{f.Name}\" {TypeSql.GetValueOrDefault(f.Type, "VARCHAR")}"))})");
+            // The appender writes the rows in bulk; one parameterized INSERT per row took about 1.5 ms each (plan 19 J21).
+            using var appender = con.CreateAppender(ds.Id);
             foreach (var row in ds.Rows)
             {
-                using var ins = con.CreateCommand();
-                ins.CommandText = $"INSERT INTO \"{ds.Id}\" VALUES ({string.Join(", ", fields.Select(_ => "?"))})";
-                foreach (var f in fields) ins.Parameters.Add(new DuckDBParameter(row.GetValueOrDefault(f.Name) ?? DBNull.Value));
-                ins.ExecuteNonQuery();
+                var line = appender.CreateRow();
+                foreach (var f in fields) Append(line, row.GetValueOrDefault(f.Name), f.Type);
+                line.EndRow();
             }
         }
         Exec(con, "SET enable_external_access = false");
@@ -98,6 +99,19 @@ public static class Sandbox
         using var cmd = con.CreateCommand();
         cmd.CommandText = sql;
         return QueryRowReader.Read(cmd, maxRows);
+    }
+
+    /// <summary>One value into the appender row as the column's type (the table is created from the descriptor: string, number, integer, boolean, else VARCHAR).</summary>
+    private static void Append(IDuckDBAppenderRow row, object? value, string type)
+    {
+        if (value is null or DBNull) { row.AppendNullValue(); return; }
+        switch (type)
+        {
+            case "integer": row.AppendValue(Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture)); break;
+            case "number": row.AppendValue(Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture)); break;
+            case "boolean": row.AppendValue(Convert.ToBoolean(value, System.Globalization.CultureInfo.InvariantCulture)); break;
+            default: row.AppendValue(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)); break;
+        }
     }
 
     private static void Exec(DuckDBConnection con, string sql)

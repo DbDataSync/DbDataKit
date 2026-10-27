@@ -204,23 +204,22 @@ public sealed partial class QisEngine
 
     /// <summary>
     /// Every member of a calendar level with its first and last day, in date order, read from the date table itself, so a
-    /// period with no sales is still there. It needs a SQL source where the level and the date dimension are columns of the same table.
+    /// period with no sales is still there. It needs a source (SQL Server, or an Analysis Services model) where the level and the date dimension are columns of the same table.
     /// </summary>
     private (List<(string Member, DateOnly Start, DateOnly End)> Members, QisError? Error) LevelRanges(CalendarDef cal, string levelAttr, string path)
     {
         foreach (var (source, def) in cat.Doc.Sources)
         {
-            if (def.Kind != "sqlserver") continue;
             var level = cat.Binding(levelAttr, source);
             var date = cat.Binding(cal.Date, source);
             if (level is null || date is null || level.Join != date.Join || level.Join is null) continue;
-            var text = Emit.SqlEmitter.BuildLevelRanges(cat, source, levelAttr, cal.Date);
-            var rows = executor.Execute(new CompiledQuery(source, new NativeQuery("tsql", text), text, []), rowCap + 1).Rows;
+            if (!CanReadDimension(def, level, date)) continue;
+            var rows = ReadDimension(source, Emit.SqlEmitter.BuildLevelRanges(cat, source, levelAttr, cal.Date), () => Emit.DaxEmitter.BuildLevelRanges(cat, source, levelAttr, cal.Date));
             var members = rows.Select(r => (Member: r["lvl"]!.ToString()!, Start: ParseDate(r["lo"]!.ToString()!), End: ParseDate(r["hi"]!.ToString()!)))
                 .OrderBy(m => m.Start).ToList();
             return (members, null);
         }
         return ([], new QisError("mashup", "calendar_unavailable", path,
-            $"No SQL source has {levelAttr} and {cal.Date} as columns of one date table, so a relative range can't be resolved."));
+            $"No source has {levelAttr} and {cal.Date} as columns of one date table, so a relative range can't be resolved."));
     }
 }

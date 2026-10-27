@@ -28,10 +28,9 @@ public sealed partial class QisEngine
 
                 var (pb, cb) = (cat.Binding(parent, source)!, cat.Binding(child, source)!);
                 List<Dictionary<string, object?>> rows;
-                if (cat.Doc.Sources[source].Kind == "sqlserver" && pb.Join is not null && pb.Join == cb.Join)
+                if (pb.Join is not null && pb.Join == cb.Join && CanReadDimension(cat.Doc.Sources[source], pb, cb))
                 {
-                    var text = SqlEmitter.BuildPairs(cat, source, parent, child);
-                    rows = executor.Execute(new CompiledQuery(source, new NativeQuery("tsql", text), text, []), rowCap + 1).Rows
+                    rows = ReadDimension(source, SqlEmitter.BuildPairs(cat, source, parent, child), () => DaxEmitter.BuildPairs(cat, source, parent, child))
                         .Select(r => new Dictionary<string, object?> { ["p"] = r[Catalog.ColName(parent)], ["c"] = r[Catalog.ColName(child)] }).ToList();
                 }
                 else

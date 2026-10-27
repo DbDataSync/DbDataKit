@@ -80,16 +80,20 @@ tables:
       - {name: region, datatype: String, expression: {dialects: [{dialect: ANSI_SQL, expression: region}]}}
       - {name: fiscal_month, datatype: String, expression: {dialects: [{dialect: ANSI_SQL, expression: fiscal_month}]}}
       - {name: amount, datatype: Decimal, expression: {dialects: [{dialect: ANSI_SQL, expression: amount}, {dialect: DAX, expression: "'Budget'[Amount]"}]}}
-  - name: dim_month
+      # a month's budget is dated on the month's first day, which is how it meets the day-grain date table
+      - {name: month_start, datatype: Date, expression: {dialects: [{dialect: ANSI_SQL, expression: month_start}, {dialect: DAX, expression: "'Budget'[Month Start]"}]}}
+  - name: dim_budget_date
     x_source: ssas_finance
-    source: dim_month
-    primary_key: [fiscal_month]
+    source: dim_date
+    primary_key: [calendar_date]
     columns:
+      - {name: calendar_date, datatype: Date, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: calendar_date}]}}
       - {name: fiscal_month, datatype: String, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: fiscal_month}]}}
       - {name: fiscal_quarter, datatype: String, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: fiscal_quarter}]}}
       - {name: fiscal_year, datatype: String, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: fiscal_year}]}}
       - {name: prior_year_fiscal_month, datatype: String, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: prior_year_fiscal_month}]}}
       - {name: prior_year_fiscal_quarter, datatype: String, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: prior_year_fiscal_quarter}]}}
+      - {name: prior_year_calendar_date, datatype: Date, is_time: true, expression: {dialects: [{dialect: ANSI_SQL, expression: prior_year_calendar_date}]}}
 
 relationships:
   - {name: sales_to_customer, from: fact_sales, to: dim_customer, from_columns: [customer_key], to_columns: [customer_key]}
@@ -100,7 +104,7 @@ relationships:
   - {name: returns_to_customer, from: fact_returns, to: dim_customer, from_columns: [customer_key], to_columns: [customer_key]}
   - {name: returns_to_product,  from: fact_returns, to: dim_product,  from_columns: [product_key],  to_columns: [product_key]}
   - {name: returns_to_date,     from: fact_returns, to: dim_date,     from_columns: [date_key],     to_columns: [date_key], x_role: order_date}
-  - {name: budget_to_month,   from: fact_budget, to: dim_month,   from_columns: [fiscal_month], to_columns: [fiscal_month]}
+  - {name: budget_to_date,    from: fact_budget, to: dim_budget_date, from_columns: [month_start], to_columns: [calendar_date]}
 
 dimensions:
   customers:
@@ -155,41 +159,43 @@ dimensions:
         synonyms: [date, day, calendar date]
         bindings:
           sqlserver_sales: {table: dim_date, column: calendar_date}
+          ssas_finance:    {table: dim_budget_date, column: calendar_date, native: {DAX: "'Date'[Date]"}}
       calendar_date_prior_year:
         type: date
         bindings:
           sqlserver_sales: {table: dim_date, column: prior_year_calendar_date}
+          ssas_finance:    {table: dim_budget_date, column: prior_year_calendar_date, native: {DAX: "'Date'[Date Prior Year]"}}
       fiscal_month:
         type: string
         sort_key: fiscal_month
         synonyms: [month, fiscal month]
         bindings:
           sqlserver_sales: {table: dim_date, column: fiscal_month}
-          ssas_finance:    {table: fact_budget, column: fiscal_month, native: {DAX: "'Date'[Fiscal Month]"}}
+          ssas_finance:    {table: dim_budget_date, column: fiscal_month, native: {DAX: "'Date'[Fiscal Month]"}}
       fiscal_quarter:
         type: string
         synonyms: [quarter, fiscal quarter]
         bindings:
           sqlserver_sales: {table: dim_date, column: fiscal_quarter}
-          ssas_finance:    {table: dim_month, column: fiscal_quarter, native: {DAX: "'Date'[Fiscal Quarter]"}}
+          ssas_finance:    {table: dim_budget_date, column: fiscal_quarter, native: {DAX: "'Date'[Fiscal Quarter]"}}
       fiscal_year:
         type: string
         synonyms: [year, fiscal year]
         bindings:
           sqlserver_sales: {table: dim_date, column: fiscal_year}
-          ssas_finance:    {table: dim_month, column: fiscal_year, native: {DAX: "'Date'[Fiscal Year]"}}
+          ssas_finance:    {table: dim_budget_date, column: fiscal_year, native: {DAX: "'Date'[Fiscal Year]"}}
       fiscal_month_prior_year:
         type: string
         synonyms: [month a year ago]
         bindings:
           sqlserver_sales: {table: dim_date, column: prior_year_fiscal_month}
-          ssas_finance:    {table: dim_month, column: prior_year_fiscal_month, native: {DAX: "'Date'[Fiscal Month Prior Year]"}}
+          ssas_finance:    {table: dim_budget_date, column: prior_year_fiscal_month, native: {DAX: "'Date'[Fiscal Month Prior Year]"}}
       fiscal_quarter_prior_year:
         type: string
         synonyms: [quarter a year ago]
         bindings:
           sqlserver_sales: {table: dim_date, column: prior_year_fiscal_quarter}
-          ssas_finance:    {table: dim_month, column: prior_year_fiscal_quarter, native: {DAX: "'Date'[Fiscal Quarter Prior Year]"}}
+          ssas_finance:    {table: dim_budget_date, column: prior_year_fiscal_quarter, native: {DAX: "'Date'[Fiscal Quarter Prior Year]"}}
 
 measures:
   orders.net_revenue:

@@ -17,6 +17,7 @@ is ahead.
 | [core.md](core.md) | Names, table descriptor, filter grammar, types, errors, result contract, completions, scopes, versioning |
 | [catalog.md](catalog.md) | The semantic model: Ossie documents for physical models plus a QIS layer for logical members and semantics |
 | [query.md](query.md) | The semantic query an agent writes: measures, overrides, filters, time, transforms, clarify and unsupported |
+| [semantic-sql.md](semantic-sql.md) | The SQL form of a semantic query (a subset of DuckDB SQL with `MEASURE()`), the mapping to and from the request, and its refusals. **Approved** |
 | [combine.md](combine.md) | Ad hoc tables, bindings, value maps, relations, and the combine stages (union, rollup, spread, join, allocate, compute, totals) |
 | [extraction.md](extraction.md) | Spreadsheet to clean tables: the extraction spec, fingerprints and drift, typing, checks against the sheet's own totals |
 | [ssas.md](ssas.md) | Running Analysis Services for tests: what was found, what is in the repo, the plan for CI or a VM |

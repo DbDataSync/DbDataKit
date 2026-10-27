@@ -143,12 +143,23 @@ public sealed partial class QisEngine
     private List<Dictionary<string, object?>> PairRows(string source, string a, string b)
     {
         var (ba, bb) = (cat.Binding(a, source)!, cat.Binding(b, source)!);
-        if (cat.Doc.Sources[source].Kind == "sqlserver" && ba.Join is not null && ba.Join == bb.Join)
-        {
-            var text = SqlEmitter.BuildPairs(cat, source, a, b);
-            return executor.Execute(new CompiledQuery(source, new NativeQuery("tsql", text), text, []), rowCap + 1).Rows;
-        }
+        if (ba.Join is not null && ba.Join == bb.Join && CanReadDimension(cat.Doc.Sources[source], ba, bb))
+            return ReadDimension(source, SqlEmitter.BuildPairs(cat, source, a, b), () => DaxEmitter.BuildPairs(cat, source, a, b));
         return Scan(source, [a, b], []);
+    }
+
+    /// <summary>True when a source can be asked for a whole dimension (its own table, not the fact rows): SQL Server, or an Analysis Services model whose columns have DAX.</summary>
+    private static bool CanReadDimension(SourceDef source, params BindingDef[] bindings) =>
+        source.Kind == "sqlserver" || (source.Kind == "ssas" && bindings.All(b => b.Dax is not null));
+
+    /// <summary>
+    /// Reads a dimension with no parameters: T-SQL on SQL Server; on Analysis Services the DAX, with the SQL text as the twin the test stand-in runs. The rows are what the
+    /// columns hold, so a member with no fact rows is there.
+    /// </summary>
+    private List<Dictionary<string, object?>> ReadDimension(string source, string sql, Func<string> dax)
+    {
+        var native = cat.Doc.Sources[source].Kind == "ssas" ? new NativeQuery("dax", dax()) : new NativeQuery("tsql", sql);
+        return executor.Execute(new CompiledQuery(source, native, sql, []), rowCap + 1).Rows;
     }
 
     private static bool FilteredBeyondEquals(Filter f, string attr) => f switch

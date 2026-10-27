@@ -9,11 +9,11 @@ public static class QueryRowReader
     /// DuckDB returns HUGEINT (for example SUM over BIGINT) as BigInteger, which doesn't serialize as a JSON number.
     /// A date column becomes an ISO 8601 date string, whichever .NET type the driver used for it.
     /// </summary>
-    private static object Normalize(object v, string typeName) => v switch
+    private static object Normalize(object v, bool dateColumn) => v switch
     {
         System.Numerics.BigInteger b => b >= long.MinValue && b <= long.MaxValue ? (long)b : (decimal)b,
         DateOnly d => d.ToString("yyyy-MM-dd"),
-        DateTime t when typeName.Equals("date", StringComparison.OrdinalIgnoreCase) => t.ToString("yyyy-MM-dd"),
+        DateTime t when dateColumn => t.ToString("yyyy-MM-dd"),
         _ => v,
     };
 
@@ -22,12 +22,14 @@ public static class QueryRowReader
     {
         using var reader = cmd.ExecuteReader();
         var cols = Enumerable.Range(0, reader.FieldCount).Select(reader.GetName).ToList();
+        // the type name is a property of the column, not of each cell: asking for it per value cost more than the rest of the read
+        var dateColumn = Enumerable.Range(0, cols.Count).Select(i => reader.GetDataTypeName(i).Equals("date", StringComparison.OrdinalIgnoreCase)).ToArray();
         var rows = new List<Dictionary<string, object?>>();
         while (rows.Count < maxRows && reader.Read())
         {
-            var row = new Dictionary<string, object?>();
+            var row = new Dictionary<string, object?>(cols.Count);
             for (int i = 0; i < cols.Count; i++)
-                row[cols[i]] = reader.IsDBNull(i) ? null : Normalize(reader.GetValue(i), reader.GetDataTypeName(i));
+                row[cols[i]] = reader.IsDBNull(i) ? null : Normalize(reader.GetValue(i), dateColumn[i]);
             rows.Add(row);
         }
         return new QueryRows(cols, rows);

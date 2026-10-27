@@ -1,0 +1,49 @@
+{
+  "name": "30_starts_with_on_an_ssas_source",
+  "level": 2,
+  "description": "Budget by region for regions that start with E.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            "FY27-Q1"
+          ]
+        },
+        {
+          "attribute": "customers.region",
+          "operator": "starts_with",
+          "values": [
+            "E"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "budget_budget_amount": 500
+      }
+    ],
+    "native_query_contains": {
+      "d1": [
+        "LEFT ( 'Customer'[Region], 1 ) = \"E\""
+      ]
+    }
+  }
+}

@@ -1,0 +1,7 @@
+SELECT customers.region,
+       customers.customer,
+       per_entity(MEASURE(orders.net_revenue), entity := 'customers.customer', agg := 'avg') AS avg_rev_per_customer
+FROM sales_catalog
+WHERE date.fiscal_quarter = 'FY27-Q1'
+GROUP BY ALL
+LIMIT 100

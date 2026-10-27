@@ -1,0 +1,4 @@
+SELECT MEASURE(orders.net_revenue)
+FROM sales_catalog
+WHERE date.calendar_date BETWEEN '2026-09-01' AND '2026-07-01'
+LIMIT 100
