@@ -39,10 +39,3 @@ public sealed class FileStatementLog : IStatementLog, IDisposable
 
     public void Dispose() => stream.Dispose();
 }
-
-/// <summary>For tests and dry runs that must not touch the disk.</summary>
-public sealed class MemoryStatementLog : IStatementLog
-{
-    public List<StatementLogEntry> Entries { get; } = [];
-    public void Append(StatementLogEntry entry) { lock (Entries) Entries.Add(entry); }
-}

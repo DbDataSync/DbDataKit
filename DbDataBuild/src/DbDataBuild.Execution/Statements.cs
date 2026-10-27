@@ -51,13 +51,5 @@ public sealed class GateStatement
         new(stepId, StatementKind.Tracking, text, parameters ?? []);
 }
 
-/// <summary>What the statement log records about one execution. Error detail is a type name and a number, never driver text, which can contain data.</summary>
-public sealed record StatementLogEntry(
-    Guid RunId, int Ordinal, DateTime Utc, string Command, string Phase, string StepId, string Kind, string StatementHash, string? Text,
-    IReadOnlyList<(string Name, string Value)>? Parameters, string? Outcome);
-
-public interface IStatementLog
-{
-    /// <summary>Must be durable when it returns: the gate calls it before the statement runs, and does not run the statement if it throws.</summary>
-    void Append(StatementLogEntry entry);
-}
+// The statement log's entry and interface are the shared ones (DbDataKit.Transfer, plan 13, B06): what the log records about one execution, with error detail a type name and a number, never driver text, which can
+// contain data. The csproj aliases them as IStatementLog, StatementLogEntry and MemoryStatementLog for this tool's projects.

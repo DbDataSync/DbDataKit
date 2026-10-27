@@ -190,6 +190,119 @@ public class WriteGateTests
         Assert.DoesNotContain("secret", outcome);
     }
 
+    // ---------------------------------------------------------------- siblings, refusal reasons, bulk values, lock text (plan 13, B06)
+
+    [Fact]
+    public async Task Sibling_gates_share_the_ordinal_and_the_log_but_each_runs_on_its_own_executor()
+    {
+        var (gate, exec, log) = Make();
+        var other = new FakeExecutor();
+        var sibling = gate.Sibling(other);
+        await gate.ExecuteAsync(Stmt(WriteKind.Insert, "a"), TestContext.Current.CancellationToken);
+        await sibling.ExecuteAsync(Stmt(WriteKind.Insert, "b"), TestContext.Current.CancellationToken);
+        await gate.ExecuteAsync(Stmt(WriteKind.Insert, "c"), TestContext.Current.CancellationToken);
+        Assert.Equal([1, 1, 2, 2, 3, 3], log.Entries.Select(e => e.Ordinal));
+        Assert.Equal(["exec:a", "exec:c"], exec.Calls);
+        Assert.Equal(["exec:b"], other.Calls);
+        Assert.Equal(gate.RunId, sibling.RunId);
+    }
+
+    [Fact]
+    public async Task Siblings_running_side_by_side_keep_the_log_one_ordered_sequence()
+    {
+        var (gate, _, log) = Make();
+        var siblings = Enumerable.Range(0, 8).Select(_ => gate.Sibling(new FakeExecutor())).ToList();
+        await Task.WhenAll(siblings.Select((g, i) => Task.Run(async () =>
+        {
+            for (var k = 0; k < 25; k++) await g.ExecuteAsync(Stmt(WriteKind.Insert, $"s{i}-{k}"), TestContext.Current.CancellationToken);
+        }, TestContext.Current.CancellationToken)));
+        var begins = log.Entries.Where(e => e.Phase == "begin").Select(e => e.Ordinal).ToList();
+        Assert.Equal(begins.OrderBy(n => n), begins);          // an opening line takes its ordinal and is written as one step, so those lines are in ordinal order whichever session wrote them
+        Assert.Equal(Enumerable.Range(1, 8 * 25), begins);     // and no ordinal is used twice or skipped
+    }
+
+    [Fact]
+    public async Task A_sibling_may_be_given_other_permissions_and_a_dry_run_gate_has_none()
+    {
+        var (gate, _, _) = Make(o => o with { Permitted = WriteKind.Tracking });
+        var data = gate.Sibling(new FakeExecutor(), WriteKind.Data);
+        await data.ExecuteAsync(Stmt(WriteKind.Insert), TestContext.Current.CancellationToken);
+        await Assert.ThrowsAsync<GateRefusedException>(() => gate.ExecuteAsync(Stmt(WriteKind.Insert), TestContext.Current.CancellationToken));
+        var dry = new WriteGate(null, new WriteGateOptions("plan", new MemoryStatementLog()) { DryRun = true });
+        Assert.Throws<InvalidOperationException>(() => dry.Sibling(new FakeExecutor()));
+    }
+
+    [Theory]
+    [InlineData(AccessMode.ReadOnly, WriteKind.Any, WriteKind.Insert, GateRefusal.ReadOnly)]
+    [InlineData(AccessMode.ReadWrite, WriteKind.Tracking, WriteKind.Insert, GateRefusal.NotPermitted)]
+    public async Task A_refusal_says_why(AccessMode access, WriteKind permitted, WriteKind kind, GateRefusal reason)
+    {
+        var (gate, exec, _) = Make(o => o with { Access = access, Permitted = permitted });
+        var ex = await Assert.ThrowsAsync<GateRefusedException>(() => gate.ExecuteAsync(Stmt(kind), TestContext.Current.CancellationToken));
+        Assert.Equal(reason, ex.Reason);
+        Assert.Empty(exec.Calls);
+    }
+
+    [Fact]
+    public async Task An_unwritable_log_is_a_refusal_with_its_own_reason()
+    {
+        var gate = new WriteGate(new FakeExecutor(), new WriteGateOptions("apply", new ThrowingLog()));
+        var ex = await Assert.ThrowsAsync<GateRefusedException>(() => gate.ExecuteAsync(Stmt(WriteKind.Insert), TestContext.Current.CancellationToken));
+        Assert.Equal(GateRefusal.LogUnavailable, ex.Reason);
+    }
+
+    [Fact]
+    public async Task The_parameters_of_a_bulk_load_are_counted_in_the_log_never_listed()
+    {
+        var parameters = Enumerable.Range(0, 3).Select(i => new SqlParameter($"@p{i}", $"p{i}", CanonicalType.String(), "TOP-SECRET")).ToList();
+        var s = new SqlStatement("b", "INSERT INTO t VALUES (@p0), (@p1), (@p2)", parameters, new WriteIntent("b", WriteKind.Insert, "t"), ParametersAreRows: true);
+
+        var (gate, _, log) = Make(o => o with { Detail = StatementLogDetail.WithValues });
+        await gate.ExecuteAsync(s, TestContext.Current.CancellationToken);
+        var logged = Assert.Single(log.Entries[0].Parameters!);
+        Assert.Equal("(bulk values)", logged.Name);
+        Assert.Equal("3 values, not logged", logged.Value);
+        Assert.DoesNotContain("TOP-SECRET", string.Join(" ", log.Entries.Select(e => e.Text + e.Parameters?.FirstOrDefault()?.Value)));
+
+        var (quiet, _, quietLog) = Make();
+        await quiet.ExecuteAsync(s, TestContext.Current.CancellationToken);
+        Assert.Null(Assert.Single(quietLog.Entries[0].Parameters!).Value);      // below the full-value level not even the count is a value
+    }
+
+    [Fact]
+    public async Task The_lock_resource_is_in_the_logged_text_only_when_the_gate_says_so()
+    {
+        var (quiet, _, quietLog) = Make(o => o with { Detail = StatementLogDetail.WithText });
+        await quiet.AcquireLockAsync("dbdatabuild:warehouse", shared: true, ct: TestContext.Current.CancellationToken);
+        Assert.Equal("acquire application lock (shared)", quietLog.Entries[0].Text);
+
+        var (open, _, openLog) = Make(o => o with { Detail = StatementLogDetail.WithText, LogLockResource = true });
+        await open.AcquireLockAsync("dbdatabuild:warehouse", shared: true, ct: TestContext.Current.CancellationToken);
+        await open.ReleaseLockAsync("dbdatabuild:warehouse", shared: true, TestContext.Current.CancellationToken);
+        Assert.Equal("acquire application lock dbdatabuild:warehouse (shared)", openLog.Entries[0].Text);
+        Assert.Equal("release application lock dbdatabuild:warehouse (shared)", openLog.Entries.Single(e => e.StepId == "unlock" && e.Phase == "begin").Text);
+    }
+
+    [Fact]
+    public async Task A_statement_hashes_the_same_whatever_the_line_endings()
+    {
+        var (gate, _, log) = Make();
+        await gate.ExecuteAsync(new SqlStatement("a", "SELECT 1\r\nFROM t", [], new WriteIntent("a", WriteKind.Insert, "t")), TestContext.Current.CancellationToken);
+        await gate.ExecuteAsync(new SqlStatement("b", "SELECT 1\nFROM t", [], new WriteIntent("b", WriteKind.Insert, "t")), TestContext.Current.CancellationToken);
+        Assert.Equal(log.Entries[0].StatementHash, log.Entries[2].StatementHash);
+    }
+
+    [Fact]
+    public async Task The_payload_reaches_the_executor_and_is_never_logged()
+    {
+        var seen = new List<object?>();
+        var exec = new FakeExecutor { Rows = s => { seen.Add(s.Payload); return 1; } };
+        var (gate, _, log) = Make(o => o with { Detail = StatementLogDetail.WithValues }, exec);
+        await gate.ExecuteAsync(Stmt(WriteKind.Insert) with { Payload = "the caller's own statement" }, TestContext.Current.CancellationToken);
+        Assert.Equal(["the caller's own statement"], seen);
+        Assert.DoesNotContain("the caller's own statement", System.Text.Json.JsonSerializer.Serialize(log.Entries));
+    }
+
     // ---------------------------------------------------------------- apply runner
 
     private static StatementSet Set(bool transactional, DeleteGuard? guard = null) => new("x",

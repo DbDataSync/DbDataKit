@@ -13,5 +13,7 @@
     <PackageVersion Include="DbDataKit.Connections.SqlServer" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Connections.Postgres" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Dialect" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Transfer" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Transfer.Abstractions" Version="$(DbDataKitVersion)" />
   </ItemGroup>
 </Project>

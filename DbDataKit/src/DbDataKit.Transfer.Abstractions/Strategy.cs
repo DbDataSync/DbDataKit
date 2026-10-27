@@ -15,7 +15,11 @@ public enum StatementRole
     Scalar,
 }
 
-public sealed record SqlStatement(string Id, string Text, IReadOnlyList<SqlParameter> Parameters, WriteIntent Intent, StatementRole Role = StatementRole.Apply);
+/// <summary>
+/// One statement and what the gate needs to check and log it. <c>Payload</c> is whatever the caller's own executor needs beyond the portable parameters (Build keeps its driver parameter types there): the gate never
+/// reads it and never logs it. <c>ParametersAreRows</c> says the parameters are the rows of a bulk load, so the log records how many values were sent, never the values.
+/// </summary>
+public sealed record SqlStatement(string Id, string Text, IReadOnlyList<SqlParameter> Parameters, WriteIntent Intent, StatementRole Role = StatementRole.Apply, object? Payload = null, bool ParametersAreRows = false);
 
 /// <summary>Guard evaluated after the delete statement of a key-reconcile: a breach rolls the transaction back.</summary>
 public sealed record DeleteGuard(double MaxRatio = 0.5, bool Disabled = false)

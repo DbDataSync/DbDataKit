@@ -24,8 +24,22 @@ public sealed class DeleteGuardExceededException(long scopeCount, long deleted, 
     public long Deleted { get; } = deleted;
 }
 
+/// <summary>Why the write gate refused a statement, so a product can word it in its own terms.</summary>
+public enum GateRefusal
+{
+    /// <summary>The statement's effect class is not one the running command permits.</summary>
+    NotPermitted,
+    /// <summary>The gate is read-only and the statement writes.</summary>
+    ReadOnly,
+    /// <summary>The statement log could not be written, so nothing was executed.</summary>
+    LogUnavailable,
+}
+
 /// <summary>The write gate refused a statement before it reached a driver.</summary>
-public sealed class GateRefusedException(string message) : TransferException(message);
+public sealed class GateRefusedException(string message, GateRefusal reason = GateRefusal.NotPermitted) : TransferException(message)
+{
+    public GateRefusal Reason { get; } = reason;
+}
 
 /// <summary>The strategy/engine combination is not valid (see the capability matrix).</summary>
 public sealed class StrategyNotSupportedException(string strategy, string engine, string reason)

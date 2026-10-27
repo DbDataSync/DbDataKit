@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using DbDataKit.Transfer;
 
 namespace DbDataBuild.Tests.Unit;
 
@@ -27,12 +28,10 @@ public class GateInvariantTests
     [Fact]
     public void Commands_are_created_and_executed_only_in_the_gate_and_the_read_session()
     {
-        var pattern = new Regex(@"\b(ExecuteNonQuery(Async)?|ExecuteScalar(Async)?|ExecuteReader(Async)?|CreateCommand|SqlCommand|NpgsqlCommand|DbCommand|NpgsqlBatch|SqlBatch|DbBatch|SqlBulkCopy|BeginBinaryImport(Async)?|BeginBinaryExport(Async)?|BeginTextImport(Async)?|BeginTextExport(Async)?|BeginRawBinaryCopy(Async)?)\b");
-        var offenders = SourceFiles()
-            .Where(f => !Rel(f).StartsWith("DbDataBuild.Targets.DuckDb/") && !Rel(f).StartsWith("DbDataBuild.Sample/")) // the in-memory DuckDB describer and sample runner have no target connection
-            .Where(f => !DriverFiles.Contains(Rel(f)) && pattern.IsMatch(File.ReadAllText(f)))
-            .Select(Rel).ToList();
-        Assert.True(offenders.Count == 0, "Statements must go through MutationGate or ReadSession. Found driver calls in: " + string.Join(", ", offenders));
+        // the scan is the shared one (DbDataKit.Transfer.SourceInvariants), which the shared suite also runs on this source (DbDataKit/tests/DbDataKit.Transfer.Tests/GateInvariantTests.cs): one rule, two suites
+        var offenders = SourceInvariants.FindOffenders(Path.Combine(Root(), "src"), SourceInvariants.DriverCalls,
+            [.. DriverFiles, "DbDataBuild.Targets.DuckDb/", "DbDataBuild.Sample/"]);       // the in-memory DuckDB describer and sample runner have no target connection
+        Assert.True(offenders.Count == 0, "Statements must go through the write gate (MutationGate, the front of DbDataKit.Transfer.WriteGate) or ReadSession. Found driver calls in: " + string.Join(", ", offenders));
     }
 
     [Fact]
