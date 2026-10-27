@@ -1,0 +1,27 @@
+# Where the models are built, and how text behaves there (docs/operations.md, DESIGN.md 7.4). This template is set up for SQL Server. For PostgreSQL, replace the next lines with:
+#   defaults: {connections: [postgres]}
+#   tracking: { connection: postgres }
+#   string_semantics: { case: sensitive, trailing_space: significant, collations: { default: { duckdb: NFC, postgres: C } } }
+# The semantic model (semantic/calendar.yml) says `default` for its connection, so it follows.
+title: Fiscal calendar
+description: "A fiscal calendar model and the semantic model over it."
+defaults: {connections: [sqlserver]}
+tracking: { connection: sqlserver }
+
+# The month the fiscal year starts in (7: July, so July 2024 is in FY2025). The calendar model reads it as ${project.fiscal_start_month}.
+parameters:
+  fiscal_start_month: 7
+
+string_semantics:
+  case: sensitive
+  trailing_space: ignored
+  collations:
+    default: { duckdb: NFC, sqlserver: Latin1_General_100_CS_AS }
+
+# `validate` says where a construct behaves slightly differently on the engine than in DuckDB (DDB-302); the calendar's date arithmetic is checked, so they are notes here.
+policy:
+  severity:
+    approximated: note
+
+connections:
+  sqlserver: { version: 16 }

@@ -286,6 +286,14 @@ public static class CliApp
                     cmd.Arguments.Add(reportTarget); cmd.Arguments.Add(reportPlan); cmd.Options.Add(reportProject); cmd.Options.Add(reportLast); cmd.Options.Add(reportLane); cmd.Options.Add(reportEvent); cmd.Options.Add(reportAttention);
                     cmd.SetAction(pr => { var (reportConn, reportRest) = SplitConnection(pr.GetValue(reportProject)!.FullName, pr.GetValue(reportTarget), pr.GetValue(reportPlan) is { } rpn ? [rpn] : []); return Reported(pr, spec, (o, e) => ReportCommand.Run(spec, pr.GetValue(reportProject)!.FullName, reportConn, pr.GetValue(reportLast), pr.GetValue(reportLane), pr.GetValue(reportEvent), pr.GetValue(reportAttention), reportRest.FirstOrDefault(), o, e, environment ?? Environment.GetEnvironmentVariable)); });
                     break;
+                case "connection check":
+                    var semCheckProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
+                    var semCheckTarget = ConnectionArgument("Connection to check", spec.Name);
+                    var semCheckValues = new Option<bool>("--show-values") { Description = "Read and show values: up to --limit of the keys or members that break each check (without it only counts are read)" };
+                    var semCheckLimit = new Option<int>("--limit") { Description = "With --show-values, how many violating keys or members of each check", DefaultValueFactory = _ => 10 };
+                    cmd.Arguments.Add(semCheckTarget); cmd.Options.Add(semCheckProject); cmd.Options.Add(semCheckValues); cmd.Options.Add(semCheckLimit);
+                    cmd.SetAction(pr => Reported(pr, spec, (o, e) => CheckCommand.Run(spec, pr.GetValue(semCheckProject)!.FullName, pr.GetValue(semCheckTarget), pr.GetValue(semCheckValues), pr.GetValue(semCheckLimit), o, e, environment ?? Environment.GetEnvironmentVariable)));
+                    break;
                 case "connection compare":
                     var diffTable = new Argument<string?>("table") { Description = "The table or view to compare, as schema_name.table_name (a model's table, for example). Required; the connection comes before it", Arity = ArgumentArity.ZeroOrOne };
                     GuardOptionLike(diffTable, spec.Name);
@@ -337,7 +345,7 @@ public static class CliApp
                 case "project tests list":
                     var tlistProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
                     var tlistTag = new Option<string[]>("--tag") { Description = "List only tests with this tag (repeat for several: any of them)", AllowMultipleArgumentsPerToken = false, DefaultValueFactory = _ => [] };
-                    var tlistKind = new Option<string?>("--kind") { Description = "List only tests of this kind: metadata (tests/metadata) or model (tests/models)" };
+                    var tlistKind = new Option<string?>("--kind") { Description = "List only tests of this kind: metadata (tests/metadata), model (tests/models) or semantic (the data checks generated from semantic/, run by `connection check`)" };
                     cmd.Options.Add(tlistProject); cmd.Options.Add(tlistTag); cmd.Options.Add(tlistKind);
                     cmd.SetAction(pr => Reported(pr, spec, (o, e) => TestListCommand.Run(spec, pr.GetValue(tlistProject)!.FullName, pr.GetValue(tlistKind), pr.GetValue(tlistTag) ?? [], o, e)));
                     break;
