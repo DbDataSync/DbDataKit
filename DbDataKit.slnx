@@ -36,6 +36,7 @@
     <Project Path="DbDataKit/src/DbDataKit.Config.Hosting/DbDataKit.Config.Hosting.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Config.Testing/DbDataKit.Config.Testing.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Config.Yaml/DbDataKit.Config.Yaml.csproj" />
+    <Project Path="DbDataKit/src/DbDataKit.DataModel/DbDataKit.DataModel.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Config/DbDataKit.Config.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Connections.Abstractions/DbDataKit.Connections.Abstractions.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Connections.Descriptor/DbDataKit.Connections.Descriptor.csproj" />
@@ -95,6 +96,7 @@
     <Project Path="DbDataKit/tests/DbDataKit.Config.Testing.Tests/DbDataKit.Config.Testing.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Config.Tests/DbDataKit.Config.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Config.Yaml.Tests/DbDataKit.Config.Yaml.Tests.csproj" />
+    <Project Path="DbDataKit/tests/DbDataKit.DataModel.Tests/DbDataKit.DataModel.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Connections.Abstractions.Tests/DbDataKit.Connections.Abstractions.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Connections.Descriptor.Tests/DbDataKit.Connections.Descriptor.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Connections.DuckDb.Tests/DbDataKit.Connections.DuckDb.Tests.csproj" />
