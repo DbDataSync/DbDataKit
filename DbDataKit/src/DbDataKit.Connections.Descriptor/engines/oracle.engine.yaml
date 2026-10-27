@@ -1,0 +1,11 @@
+schema: engine/1
+id: oracle
+display_name: Oracle Database
+library: Oracle.ManagedDataAccess.Client
+dialect: oracle
+default_port: 1521
+provider: oracle
+catalog_reader: oracle
+roles:
+  sync_source: { status: supported, note: "Flashback Version Query, or a watermark column; TriggerAudit" }
+  sync_target: { status: supported, note: "batched insert staging" }

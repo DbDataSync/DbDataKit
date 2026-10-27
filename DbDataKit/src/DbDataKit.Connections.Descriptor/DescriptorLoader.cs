@@ -39,6 +39,8 @@ public static class DescriptorLoader
     public const string BadOverridable = "DBD-ENG-004";
     public const string BadKeys = "DBD-ENG-005";
     public const string UnknownLibrary = "DBD-ENG-006";
+    public const string UnknownRole = "DBD-ENG-007";
+    public const string RoleNeedsNote = "DBD-ENG-008";
 
     /// <summary>Fixed properties that name <em>which</em> driver to use are the point of the feature; every other denied key is refused.</summary>
     private static readonly HashSet<string> AllowedIdentityKeys = new(StringComparer.Ordinal) { "driver", "dsn" };
@@ -102,6 +104,14 @@ public static class DescriptorLoader
             if (string.IsNullOrWhiteSpace(value)) Err(BadKeys, "connection_string_keys." + name, $"`{name}` needs a key spelling.");
         foreach (var (name, value) in new[] { ("host", k2.Host), ("port", k2.Port), ("database", k2.Database), ("username", k2.Username), ("password", k2.Password), ("connect_timeout", k2.ConnectTimeout), ("command_timeout", k2.CommandTimeout), ("integrated_security", k2.IntegratedSecurity), ("encrypt_key", k2.EncryptKey), ("trust_key", k2.TrustKey) })
             if (value.AsSpan().IndexOfAny(";={}\0\r\n") >= 0) Err(BadKeys, "connection_string_keys." + name, $"`{name}` is not a plain key name.");
+
+        foreach (var (role, spec) in d.Roles)
+        {
+            if (!EngineRoles.All.Contains(role))
+                Err(UnknownRole, "roles." + role, $"`{role}` is not a role of an engine.", $"Roles: {string.Join(", ", EngineRoles.All)}.");
+            else if (spec.Status is EngineSupport.Planned or EngineSupport.Unverified && string.IsNullOrWhiteSpace(spec.Note))
+                Err(RoleNeedsNote, "roles." + role, $"`{role}` is {spec.Status.ToString().ToLowerInvariant()}: say what it waits on or what is missing in `note`.");
+        }
 
         foreach (var (key, _) in d.ReadOnly.Keys)
             if (key.AsSpan().IndexOfAny(";={}\0\r\n") >= 0) Err(BadKeys, "read_only.keys." + key, "Not a plain key name.");

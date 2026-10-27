@@ -36,6 +36,51 @@ public sealed class ReadOnlySpec
     public string? Notes { get; set; }
 }
 
+/// <summary>How far an engine is supported in one role of the suite.</summary>
+public enum EngineSupport
+{
+    /// <summary>Not supported, and not planned.</summary>
+    No,
+    /// <summary>Planned in a named slice; the note says which.</summary>
+    Planned,
+    /// <summary>Built, but never run against a real engine of this kind.</summary>
+    Unverified,
+    /// <summary>Built and run against a real engine.</summary>
+    Supported,
+}
+
+/// <summary>One role of an engine in the suite (see <see cref="EngineRoles"/>): how far it is supported, and why that is true.</summary>
+[ConfigSchema(Naming = KeyNaming.SnakeCase)]
+public sealed class EngineRoleSpec
+{
+    public EngineSupport Status { get; set; } = EngineSupport.No;
+    /// <summary>The fact behind the status: a limit, the slice that plans it, where it is verified. Required for everything but a plain yes.</summary>
+    public string? Note { get; set; }
+}
+
+/// <summary>The roles an engine can have in the suite (plan 14, R5), in the order the support table lists them.</summary>
+public static class EngineRoles
+{
+    public const string SyncSource = "sync_source";
+    public const string SyncTarget = "sync_target";
+    public const string BuildTarget = "build_target";
+    public const string BuildOrigin = "build_origin";
+    public const string ProxySource = "proxy_source";
+    public const string SemanticEmitter = "semantic_emitter";
+    public const string MasterDataStore = "master_data_store";
+
+    /// <summary>Every role, in table order.</summary>
+    public static IReadOnlyList<string> All { get; } = [SyncSource, SyncTarget, BuildTarget, BuildOrigin, ProxySource, SemanticEmitter, MasterDataStore];
+
+    /// <summary>The heading of a role in the support table.</summary>
+    public static string Title(string role) => role switch
+    {
+        SyncSource => "Sync source", SyncTarget => "Sync target", BuildTarget => "Build target", BuildOrigin => "Build origin",
+        ProxySource => "Proxy source", SemanticEmitter => "Semantic emitter", MasterDataStore => "Master data store",
+        _ => role,
+    };
+}
+
 /// <summary>
 /// A YAML described ADO.NET engine, schema <c>engine/1</c> (the port of Sync's <c>driver.yaml</c>, minus type maps, catalogs and
 /// capability lists, which now come from the dialect). SQL facts are a dialect id from <c>dialect.yaml</c> (built in or supplied alongside).
@@ -67,4 +112,18 @@ public sealed class EngineDescriptor
     public List<string> OverridableProperties { get; set; } = [];
     public ReadOnlySpec ReadOnly { get; set; } = new();
     public string? TestQuery { get; set; }
+
+    // ---- the registry (plan 14, R5): what the suite knows about the engine, beyond how to connect to it ----
+
+    /// <summary>The ids other than <see cref="Id"/> an engine is also called (<c>mssql</c>, <c>pg</c>).</summary>
+    public List<string> Aliases { get; set; } = [];
+    /// <summary>The <c>DbDataKit.Connections</c> provider id that serves the engine; empty for an engine with no provider of its own (a base dialect).</summary>
+    public string? Provider { get; set; }
+    /// <summary>The <c>DbDataKit.Metadata</c> catalog reader: sqlserver, postgres, mysql, oracle, duckdb, odbc or information_schema; empty when there is none.</summary>
+    public string? CatalogReader { get; set; }
+    /// <summary>Role (see <see cref="EngineRoles"/>) to support. A role left out is not supported.</summary>
+    public Dictionary<string, EngineRoleSpec> Roles { get; set; } = [];
+
+    /// <summary>The support in one role; a role the descriptor does not list is <see cref="EngineSupport.No"/>.</summary>
+    public EngineRoleSpec Role(string role) => Roles.GetValueOrDefault(role) ?? new EngineRoleSpec();
 }

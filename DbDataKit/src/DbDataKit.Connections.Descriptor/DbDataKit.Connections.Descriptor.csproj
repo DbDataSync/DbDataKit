@@ -8,6 +8,8 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
+    <!-- the registry of the engines the suite knows (engine/1 descriptors with their roles) -->
+    <EmbeddedResource Include="engines\*.engine.yaml" LogicalName="DbDataKit.Connections.Descriptor.engines.%(Filename)%(Extension)" />
     <ProjectReference Include="..\DbDataKit.Connections\DbDataKit.Connections.csproj" />
   </ItemGroup>
 </Project>

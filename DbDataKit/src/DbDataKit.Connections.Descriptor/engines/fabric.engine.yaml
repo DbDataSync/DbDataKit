@@ -1,0 +1,9 @@
+schema: engine/1
+id: fabric
+display_name: Microsoft Fabric warehouse
+library: Microsoft.Data.SqlClient
+dialect: fabric
+default_port: 1433
+roles:
+  build_target: { status: unverified, note: "built, never run against a real engine" }
+  build_origin: { status: unverified, note: "the same catalog reads as SQL Server; never run against a real engine" }
