@@ -98,7 +98,11 @@
     <Project Path="DbDataKit/src/DbDataKit.Update/DbDataKit.Update.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Web/DbDataKit.Web.csproj" />
   </Folder>
+  <Folder Name="/DbDataKit/tools/">
+    <Project Path="DbDataKit/tools/DbDataKit.Tools.XmlaForwarder/DbDataKit.Tools.XmlaForwarder.csproj" />
+  </Folder>
   <Folder Name="/DbDataKit/tests/">
+    <Project Path="DbDataKit/tests/DbDataKit.Tools.XmlaForwarder.Tests/DbDataKit.Tools.XmlaForwarder.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Config.Git.Tests/DbDataKit.Config.Git.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Config.Hosting.Tests/DbDataKit.Config.Hosting.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Config.Testing.Tests/DbDataKit.Config.Testing.Tests.csproj" />
