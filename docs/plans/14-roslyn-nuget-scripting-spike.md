@@ -1,6 +1,6 @@
 # 14. Roslyn scripting with NuGet libraries (spike result and plan)
 
-Status: **adopted** (2026-10-23) as the plan for workstream W2 in place of dotnet-script: D9 is decided (Roslyn scripting plus the NuGet libraries, embedded) and slices S02-S04 follow section 5. The spike code is in `spikes/roslyn-nuget-scripting/` (its README has the commands and the real output). The Windows pass and section 7's follow-up are still to do, and the S-series is low priority until the owner picks it up.
+Status: **adopted** (2026-10-23) as the plan for workstream W2 in place of dotnet-script: D9 is decided (Roslyn scripting plus the NuGet libraries, embedded) and slices S02-S04 follow section 5. The spike code is in `spikes/roslyn-nuget-scripting/` (its README has the commands and the real output). The Windows pass and section 7's follow-up are still to do, and the S-series is built by Claude, in dependency order (owner, 2026-10-27).
 
 Why: dotnet-script resolves `#r "nuget:"` with `dotnet restore` on a generated project, which needs the SDK and MSBuild at run time. The
 owner wants `#r "nuget: Some.Package, 1.2.3"` with only the .NET runtime installed. This spike builds that from `Microsoft.CodeAnalysis.CSharp.Scripting`
