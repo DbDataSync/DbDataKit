@@ -1,0 +1,699 @@
+# retail on postgres: 23 model(s)
+
+## create
+1. Ddl staging.country_regions [Safe] create schema staging
+   reason: obj.missing.view
+   | CREATE SCHEMA IF NOT EXISTS "staging";
+2. Ddl staging.country_regions [Safe] create view staging.country_regions
+   reason: obj.missing.view
+   | DROP VIEW IF EXISTS "staging"."country_regions";
+   | CREATE VIEW "staging"."country_regions" ("country_code", "country_name", "region", "currency") AS
+   | SELECT country_code, country_name, region, currency FROM ref.country_regions;
+3. Ddl staging.customers [Safe] create view staging.customers
+   reason: obj.missing.view
+   | DROP VIEW IF EXISTS "staging"."customers";
+   | CREATE VIEW "staging"."customers" ("customer_id", "first_name", "last_name", "email", "email_domain", "country_code", "signup_date", "marketing_opt_in") AS
+   | /* Staging splits the one text column a mapped model gave us into the two the rest of the project wants. */ /* The first name is everything before the first space, the last name everything after it ("van Dijk" stays whole). */ SELECT customer_id, SUBSTRING(full_name FROM 1 FOR POSITION(' ' IN full_name) - 1) AS first_name, SUBSTRING(full_name FROM POSITION(' ' IN full_name) + 1) AS last_name, email, SUBSTRING(email FROM POSITION('@' IN email) + 1) AS email_domain, country_code, signup_date, marketing_opt_in FROM shop.customers;
+4. Ddl marts.dim_customer [Safe] create schema marts
+   reason: obj.missing.table
+   | CREATE SCHEMA IF NOT EXISTS "marts";
+5. Ddl marts.dim_customer [Safe] create table marts.dim_customer
+   reason: obj.missing.table
+   | CREATE TABLE "marts"."dim_customer" (
+   |   "customer_id" integer NOT NULL,
+   |   "first_name" varchar(80) COLLATE "C" NULL,
+   |   "last_name" varchar(80) COLLATE "C" NULL,
+   |   "email_domain" varchar(100) COLLATE "C" NULL,
+   |   "country_code" varchar(2) COLLATE "C" NOT NULL,
+   |   "region" varchar(20) COLLATE "C" NOT NULL,
+   |   "signup_date" date NOT NULL,
+   |   "signup_month" bigint NOT NULL,
+   |   "marketing_opt_in" boolean NOT NULL
+   | );
+6. Ddl marts.dim_customer [Safe] create index ux_dim_customer_customer_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_customer_customer_id" ON "marts"."dim_customer" ("customer_id");
+7. Ddl staging.order_lines [Safe] create view staging.order_lines
+   reason: obj.missing.view
+   | DROP VIEW IF EXISTS "staging"."order_lines";
+   | CREATE VIEW "staging"."order_lines" ("order_id", "line_no", "product_id", "quantity", "unit_price", "line_amount") AS
+   | SELECT order_id, line_no, product_id, quantity, unit_price, quantity * unit_price AS line_amount FROM shop.order_lines;
+8. Ddl staging.orders [Safe] create view staging.orders
+   reason: obj.missing.view
+   | DROP VIEW IF EXISTS "staging"."orders";
+   | CREATE VIEW "staging"."orders" ("order_id", "customer_id", "store_id", "order_ts", "order_date", "order_month", "status", "discount_amount", "shipping_fee", "used_coupon") AS
+   | /* Staging maps the source's two-letter status to words, and cuts the timestamp into the date and the month key everything downstream joins on. */ SELECT order_id, customer_id, store_id, order_ts, CAST(order_ts AS DATE) AS order_date, YEAR(order_ts) * 100 + MONTH(order_ts) AS order_month, CASE status_code WHEN 'OP' THEN 'open' WHEN 'SH' THEN 'shipped' WHEN 'DL' THEN 'delivered' WHEN 'CX' THEN 'cancelled' ELSE 'unknown' END AS status, discount_amount, shipping_fee, coupon_code IS NOT NULL AS used_coupon FROM shop.orders;
+9. Ddl staging.products [Safe] create view staging.products
+   reason: obj.missing.view
+   | DROP VIEW IF EXISTS "staging"."products";
+   | CREATE VIEW "staging"."products" ("product_id", "sku", "product_name", "category_code", "unit_price", "unit_cost", "weight_grams", "weight_kg", "active") AS
+   | SELECT product_id, sku, product_name, category_code, unit_price, unit_cost, weight_grams, weight_grams * 0.001 AS weight_kg, active FROM shop.products;
+10. Ddl marts.fct_sales_lines [Safe] create table marts.fct_sales_lines
+   reason: obj.missing.table
+   | CREATE TABLE "marts"."fct_sales_lines" (
+   |   "order_id" integer NOT NULL,
+   |   "line_no" integer NOT NULL,
+   |   "date_key" bigint NOT NULL,
+   |   "customer_id" integer NOT NULL,
+   |   "product_id" integer NOT NULL,
+   |   "store_id" integer NOT NULL,
+   |   "quantity" integer NOT NULL,
+   |   "gross_amount" numeric(18, 2) NOT NULL,
+   |   "allocated_discount" numeric(18, 2) NOT NULL,
+   |   "allocated_shipping" numeric(18, 2) NOT NULL,
+   |   "net_amount" numeric(18, 2) NOT NULL,
+   |   "margin_amount" numeric(18, 2) NOT NULL
+   | );
+11. Ddl marts.fct_sales_lines [Safe] create index ux_fct_sales_lines
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_sales_lines" ON "marts"."fct_sales_lines" ("order_id", "line_no");
+12. Ddl marts.fct_sales_lines [Safe] create index ix_fct_sales_lines_date
+   reason: index.added
+   | CREATE INDEX "ix_fct_sales_lines_date" ON "marts"."fct_sales_lines" ("date_key");
+13. Ddl marts.agg_customer_value [Safe] create table marts.agg_customer_value
+   reason: obj.missing.table
+   | CREATE TABLE "marts"."agg_customer_value" (
+   |   "customer_id" integer NOT NULL,
+   |   "region" varchar(20) COLLATE "C" NOT NULL,
+   |   "orders" bigint NOT NULL,
+   |   "net_amount" numeric(18, 2) NULL,
+   |   "average_order_value" numeric(18, 2) NULL,
+   |   "first_date_key" bigint NULL,
+   |   "last_date_key" bigint NULL,
+   |   "segment" varchar(8) COLLATE "C" NOT NULL,
+   |   "revenue_rank" bigint NOT NULL
+   | );
+14. Ddl marts.agg_customer_value [Safe] create index ux_agg_customer_value
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_agg_customer_value" ON "marts"."agg_customer_value" ("customer_id");
+15. Ddl staging.channels [Safe] create view staging.channels
+   reason: obj.missing.view
+   | DROP VIEW IF EXISTS "staging"."channels";
+   | CREATE VIEW "staging"."channels" ("channel_code", "channel_name", "channel_group") AS
+   | SELECT channel_code, channel_name, channel_group FROM ref.channels;
+16. Ddl staging.stores [Safe] create view staging.stores
+   reason: obj.missing.view
+   | DROP VIEW IF EXISTS "staging"."stores";
+   | CREATE VIEW "staging"."stores" ("store_id", "store_name", "country_code", "channel_code", "floor_area_m2", "opened_date") AS
+   | SELECT store_id, store_name, country_code, channel_code, floor_area_m2, opened_date FROM shop.stores;
+17. Ddl marts.dim_store [Safe] create table marts.dim_store
+   reason: obj.missing.table
+   | CREATE TABLE "marts"."dim_store" (
+   |   "store_id" integer NOT NULL,
+   |   "store_name" varchar(60) COLLATE "C" NOT NULL,
+   |   "country_code" varchar(2) COLLATE "C" NOT NULL,
+   |   "region" varchar(20) COLLATE "C" NOT NULL,
+   |   "channel_code" varchar(4) COLLATE "C" NOT NULL,
+   |   "channel_group" varchar(10) COLLATE "C" NOT NULL,
+   |   "floor_area_m2" integer NULL,
+   |   "size_band" varchar(6) COLLATE "C" NOT NULL,
+   |   "opened_date" date NOT NULL
+   | );
+18. Ddl marts.dim_store [Safe] create index ux_dim_store_store_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_store_store_id" ON "marts"."dim_store" ("store_id");
+19. Ddl marts.agg_daily_sales [Safe] create table marts.agg_daily_sales
+   reason: obj.missing.table
+   | CREATE TABLE "marts"."agg_daily_sales" (
+   |   "date_key" bigint NOT NULL,
+   |   "region" varchar(20) COLLATE "C" NOT NULL,
+   |   "channel_group" varchar(10) COLLATE "C" NOT NULL,
+   |   "orders" bigint NOT NULL,
+   |   "units" bigint NULL,
+   |   "gross_amount" numeric(18, 2) NULL,
+   |   "net_amount" numeric(18, 2) NULL,
+   |   "margin_amount" numeric(18, 2) NULL,
+   |   "region_net_to_date" numeric(18, 2) NULL
+   | );
+20. Ddl marts.agg_daily_sales [Safe] create index ux_agg_daily_sales
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_agg_daily_sales" ON "marts"."agg_daily_sales" ("date_key", "region", "channel_group");
+21. Ddl staging.returns [Safe] create view staging.returns
+   reason: obj.missing.view
+   | DROP VIEW IF EXISTS "staging"."returns";
+   | CREATE VIEW "staging"."returns" ("return_id", "order_id", "line_no", "return_date", "reason_code", "quantity") AS
+   | SELECT return_id, order_id, line_no, return_date, reason_code, quantity FROM shop.returns;
+22. Ddl staging.shipments [Safe] create view staging.shipments
+   reason: obj.missing.view
+   | DROP VIEW IF EXISTS "staging"."shipments";
+   | CREATE VIEW "staging"."shipments" ("shipment_id", "order_id", "shipped_date", "carrier_code", "packages", "total_weight_grams", "freight_cost") AS
+   | SELECT shipment_id, order_id, shipped_date, carrier_code, packages, total_weight_grams, freight_cost FROM shop.shipments;
+23. Ddl marts.dim_date [Safe] create table marts.dim_date
+   reason: obj.missing.table
+   | CREATE TABLE "marts"."dim_date" (
+   |   "date_key" bigint NOT NULL,
+   |   "date" date NOT NULL,
+   |   "year" bigint NOT NULL,
+   |   "quarter" bigint NOT NULL,
+   |   "month" bigint NOT NULL,
+   |   "year_month" bigint NOT NULL,
+   |   "month_name" varchar(3) COLLATE "C" NOT NULL,
+   |   "iso_weekday" bigint NOT NULL,
+   |   "weekday_name" varchar(3) COLLATE "C" NOT NULL,
+   |   "is_weekend" boolean NOT NULL
+   | );
+24. Ddl marts.dim_date [Safe] create index ux_dim_date_date_key
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_date_date_key" ON "marts"."dim_date" ("date_key");
+25. Ddl staging.categories [Safe] create view staging.categories
+   reason: obj.missing.view
+   | DROP VIEW IF EXISTS "staging"."categories";
+   | CREATE VIEW "staging"."categories" ("category_code", "category_name", "department") AS
+   | SELECT category_code, category_name, department FROM ref.categories;
+26. Ddl marts.dim_product [Safe] create table marts.dim_product
+   reason: obj.missing.table
+   | CREATE TABLE "marts"."dim_product" (
+   |   "product_id" integer NOT NULL,
+   |   "sku" varchar(20) COLLATE "C" NOT NULL,
+   |   "product_name" varchar(80) COLLATE "C" NOT NULL,
+   |   "category_code" varchar(10) COLLATE "C" NOT NULL,
+   |   "category_name" varchar(40) COLLATE "C" NOT NULL,
+   |   "department" varchar(20) COLLATE "C" NOT NULL,
+   |   "unit_price" numeric(10, 2) NOT NULL,
+   |   "unit_cost" numeric(10, 2) NOT NULL,
+   |   "unit_margin" numeric(11, 2) NOT NULL,
+   |   "margin_percent" numeric(5, 1) NULL,
+   |   "price_band" varchar(8) COLLATE "C" NOT NULL,
+   |   "weight_kg" numeric(14, 3) NOT NULL,
+   |   "active" boolean NOT NULL
+   | );
+27. Ddl marts.dim_product [Safe] create index ux_dim_product_product_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_product_product_id" ON "marts"."dim_product" ("product_id");
+28. Ddl staging.budgets [Safe] create view staging.budgets
+   reason: obj.missing.view
+   | DROP VIEW IF EXISTS "staging"."budgets";
+   | CREATE VIEW "staging"."budgets" ("budget_month", "region", "category_code", "budget_amount") AS
+   | SELECT budget_month, region, category_code, budget_amount FROM finance.budgets;
+29. Ddl marts.fct_budget_allocation [Safe] create table marts.fct_budget_allocation
+   reason: obj.missing.table
+   | CREATE TABLE "marts"."fct_budget_allocation" (
+   |   "budget_month" integer NOT NULL,
+   |   "region" varchar(20) COLLATE "C" NOT NULL,
+   |   "category_code" varchar(10) COLLATE "C" NOT NULL,
+   |   "store_id" integer NOT NULL,
+   |   "allocated_budget" numeric(18, 2) NULL
+   | );
+30. Ddl marts.fct_budget_allocation [Safe] create index ux_fct_budget_allocation
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_budget_allocation" ON "marts"."fct_budget_allocation" ("budget_month", "region", "category_code", "store_id");
+31. Ddl staging.return_reasons [Safe] create view staging.return_reasons
+   reason: obj.missing.view
+   | DROP VIEW IF EXISTS "staging"."return_reasons";
+   | CREATE VIEW "staging"."return_reasons" ("reason_code", "reason_name", "reason_group", "is_our_fault") AS
+   | SELECT reason_code, reason_name, reason_group, is_our_fault FROM ref.return_reasons;
+32. Ddl marts.fct_returns [Safe] create table marts.fct_returns
+   reason: obj.missing.table
+   | CREATE TABLE "marts"."fct_returns" (
+   |   "return_id" integer NOT NULL,
+   |   "order_id" integer NOT NULL,
+   |   "line_no" integer NOT NULL,
+   |   "date_key" bigint NOT NULL,
+   |   "product_id" integer NOT NULL,
+   |   "quantity" integer NOT NULL,
+   |   "refund_amount" numeric(18, 2) NOT NULL,
+   |   "reason_code" varchar(4) COLLATE "C" NOT NULL,
+   |   "reason_group" varchar(20) COLLATE "C" NOT NULL,
+   |   "is_our_fault" boolean NOT NULL
+   | );
+33. Ddl marts.fct_returns [Safe] create index ux_fct_returns_return_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_returns_return_id" ON "marts"."fct_returns" ("return_id");
+34. Ddl marts.fct_shipment_packages [Safe] create table marts.fct_shipment_packages
+   reason: obj.missing.table
+   | CREATE TABLE "marts"."fct_shipment_packages" (
+   |   "shipment_id" integer NOT NULL,
+   |   "package_no" bigint NOT NULL,
+   |   "order_id" integer NOT NULL,
+   |   "shipped_date_key" bigint NOT NULL,
+   |   "carrier_code" varchar(4) COLLATE "C" NOT NULL,
+   |   "weight_grams" integer NULL,
+   |   "freight_cost" numeric(15, 2) NULL
+   | );
+35. Ddl marts.fct_shipment_packages [Safe] create index ux_fct_shipment_packages
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_shipment_packages" ON "marts"."fct_shipment_packages" ("shipment_id", "package_no");
+36. Ddl marts.rpt_budget_vs_actual [Safe] create table marts.rpt_budget_vs_actual
+   reason: obj.missing.table
+   | CREATE TABLE "marts"."rpt_budget_vs_actual" (
+   |   "budget_month" integer NOT NULL,
+   |   "region" varchar(20) COLLATE "C" NOT NULL,
+   |   "category_code" varchar(10) COLLATE "C" NOT NULL,
+   |   "store_id" integer NOT NULL,
+   |   "allocated_budget" numeric(18, 2) NULL,
+   |   "net_sales" numeric(18, 2) NULL,
+   |   "variance" numeric(18, 2) NULL
+   | );
+37. Ddl marts.rpt_budget_vs_actual [Safe] create index ux_rpt_budget_vs_actual
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_rpt_budget_vs_actual" ON "marts"."rpt_budget_vs_actual" ("budget_month", "region", "category_code", "store_id");
+
+## columns as declared (no index or view recorded)
+1. Ddl staging.country_regions [Safe] alter view staging.country_regions
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."country_regions";
+   | CREATE VIEW "staging"."country_regions" ("country_code", "country_name", "region", "currency") AS
+   | SELECT country_code, country_name, region, currency FROM ref.country_regions;
+2. Ddl staging.customers [Safe] alter view staging.customers
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."customers";
+   | CREATE VIEW "staging"."customers" ("customer_id", "first_name", "last_name", "email", "email_domain", "country_code", "signup_date", "marketing_opt_in") AS
+   | /* Staging splits the one text column a mapped model gave us into the two the rest of the project wants. */ /* The first name is everything before the first space, the last name everything after it ("van Dijk" stays whole). */ SELECT customer_id, SUBSTRING(full_name FROM 1 FOR POSITION(' ' IN full_name) - 1) AS first_name, SUBSTRING(full_name FROM POSITION(' ' IN full_name) + 1) AS last_name, email, SUBSTRING(email FROM POSITION('@' IN email) + 1) AS email_domain, country_code, signup_date, marketing_opt_in FROM shop.customers;
+3. Ddl marts.dim_customer [Safe] create index ux_dim_customer_customer_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_customer_customer_id" ON "marts"."dim_customer" ("customer_id");
+4. Ddl staging.order_lines [Safe] alter view staging.order_lines
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."order_lines";
+   | CREATE VIEW "staging"."order_lines" ("order_id", "line_no", "product_id", "quantity", "unit_price", "line_amount") AS
+   | SELECT order_id, line_no, product_id, quantity, unit_price, quantity * unit_price AS line_amount FROM shop.order_lines;
+5. Ddl staging.orders [Safe] alter view staging.orders
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."orders";
+   | CREATE VIEW "staging"."orders" ("order_id", "customer_id", "store_id", "order_ts", "order_date", "order_month", "status", "discount_amount", "shipping_fee", "used_coupon") AS
+   | /* Staging maps the source's two-letter status to words, and cuts the timestamp into the date and the month key everything downstream joins on. */ SELECT order_id, customer_id, store_id, order_ts, CAST(order_ts AS DATE) AS order_date, YEAR(order_ts) * 100 + MONTH(order_ts) AS order_month, CASE status_code WHEN 'OP' THEN 'open' WHEN 'SH' THEN 'shipped' WHEN 'DL' THEN 'delivered' WHEN 'CX' THEN 'cancelled' ELSE 'unknown' END AS status, discount_amount, shipping_fee, coupon_code IS NOT NULL AS used_coupon FROM shop.orders;
+6. Ddl staging.products [Safe] alter view staging.products
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."products";
+   | CREATE VIEW "staging"."products" ("product_id", "sku", "product_name", "category_code", "unit_price", "unit_cost", "weight_grams", "weight_kg", "active") AS
+   | SELECT product_id, sku, product_name, category_code, unit_price, unit_cost, weight_grams, weight_grams * 0.001 AS weight_kg, active FROM shop.products;
+7. Ddl marts.fct_sales_lines [Safe] create index ux_fct_sales_lines
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_sales_lines" ON "marts"."fct_sales_lines" ("order_id", "line_no");
+8. Ddl marts.fct_sales_lines [Safe] create index ix_fct_sales_lines_date
+   reason: index.added
+   | CREATE INDEX "ix_fct_sales_lines_date" ON "marts"."fct_sales_lines" ("date_key");
+9. Ddl marts.agg_customer_value [Safe] create index ux_agg_customer_value
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_agg_customer_value" ON "marts"."agg_customer_value" ("customer_id");
+10. Ddl staging.channels [Safe] alter view staging.channels
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."channels";
+   | CREATE VIEW "staging"."channels" ("channel_code", "channel_name", "channel_group") AS
+   | SELECT channel_code, channel_name, channel_group FROM ref.channels;
+11. Ddl staging.stores [Safe] alter view staging.stores
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."stores";
+   | CREATE VIEW "staging"."stores" ("store_id", "store_name", "country_code", "channel_code", "floor_area_m2", "opened_date") AS
+   | SELECT store_id, store_name, country_code, channel_code, floor_area_m2, opened_date FROM shop.stores;
+12. Ddl marts.dim_store [Safe] create index ux_dim_store_store_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_store_store_id" ON "marts"."dim_store" ("store_id");
+13. Ddl marts.agg_daily_sales [Safe] create index ux_agg_daily_sales
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_agg_daily_sales" ON "marts"."agg_daily_sales" ("date_key", "region", "channel_group");
+14. Ddl staging.returns [Safe] alter view staging.returns
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."returns";
+   | CREATE VIEW "staging"."returns" ("return_id", "order_id", "line_no", "return_date", "reason_code", "quantity") AS
+   | SELECT return_id, order_id, line_no, return_date, reason_code, quantity FROM shop.returns;
+15. Ddl staging.shipments [Safe] alter view staging.shipments
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."shipments";
+   | CREATE VIEW "staging"."shipments" ("shipment_id", "order_id", "shipped_date", "carrier_code", "packages", "total_weight_grams", "freight_cost") AS
+   | SELECT shipment_id, order_id, shipped_date, carrier_code, packages, total_weight_grams, freight_cost FROM shop.shipments;
+16. Ddl marts.dim_date [Safe] create index ux_dim_date_date_key
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_date_date_key" ON "marts"."dim_date" ("date_key");
+17. Ddl staging.categories [Safe] alter view staging.categories
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."categories";
+   | CREATE VIEW "staging"."categories" ("category_code", "category_name", "department") AS
+   | SELECT category_code, category_name, department FROM ref.categories;
+18. Ddl marts.dim_product [Safe] create index ux_dim_product_product_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_product_product_id" ON "marts"."dim_product" ("product_id");
+19. Ddl staging.budgets [Safe] alter view staging.budgets
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."budgets";
+   | CREATE VIEW "staging"."budgets" ("budget_month", "region", "category_code", "budget_amount") AS
+   | SELECT budget_month, region, category_code, budget_amount FROM finance.budgets;
+20. Ddl marts.fct_budget_allocation [Safe] create index ux_fct_budget_allocation
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_budget_allocation" ON "marts"."fct_budget_allocation" ("budget_month", "region", "category_code", "store_id");
+21. Ddl staging.return_reasons [Safe] alter view staging.return_reasons
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."return_reasons";
+   | CREATE VIEW "staging"."return_reasons" ("reason_code", "reason_name", "reason_group", "is_our_fault") AS
+   | SELECT reason_code, reason_name, reason_group, is_our_fault FROM ref.return_reasons;
+22. Ddl marts.fct_returns [Safe] create index ux_fct_returns_return_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_returns_return_id" ON "marts"."fct_returns" ("return_id");
+23. Ddl marts.fct_shipment_packages [Safe] create index ux_fct_shipment_packages
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_shipment_packages" ON "marts"."fct_shipment_packages" ("shipment_id", "package_no");
+24. Ddl marts.rpt_budget_vs_actual [Safe] create index ux_rpt_budget_vs_actual
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_rpt_budget_vs_actual" ON "marts"."rpt_budget_vs_actual" ("budget_month", "region", "category_code", "store_id");
+
+## a column is missing
+1. Ddl staging.country_regions [Safe] alter view staging.country_regions
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."country_regions";
+   | CREATE VIEW "staging"."country_regions" ("country_code", "country_name", "region", "currency") AS
+   | SELECT country_code, country_name, region, currency FROM ref.country_regions;
+2. Ddl staging.customers [Safe] alter view staging.customers
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."customers";
+   | CREATE VIEW "staging"."customers" ("customer_id", "first_name", "last_name", "email", "email_domain", "country_code", "signup_date", "marketing_opt_in") AS
+   | /* Staging splits the one text column a mapped model gave us into the two the rest of the project wants. */ /* The first name is everything before the first space, the last name everything after it ("van Dijk" stays whole). */ SELECT customer_id, SUBSTRING(full_name FROM 1 FOR POSITION(' ' IN full_name) - 1) AS first_name, SUBSTRING(full_name FROM POSITION(' ' IN full_name) + 1) AS last_name, email, SUBSTRING(email FROM POSITION('@' IN email) + 1) AS email_domain, country_code, signup_date, marketing_opt_in FROM shop.customers;
+3. Ddl marts.dim_customer [Safe] create index ux_dim_customer_customer_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_customer_customer_id" ON "marts"."dim_customer" ("customer_id");
+4. Ddl staging.order_lines [Safe] alter view staging.order_lines
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."order_lines";
+   | CREATE VIEW "staging"."order_lines" ("order_id", "line_no", "product_id", "quantity", "unit_price", "line_amount") AS
+   | SELECT order_id, line_no, product_id, quantity, unit_price, quantity * unit_price AS line_amount FROM shop.order_lines;
+5. Ddl staging.orders [Safe] alter view staging.orders
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."orders";
+   | CREATE VIEW "staging"."orders" ("order_id", "customer_id", "store_id", "order_ts", "order_date", "order_month", "status", "discount_amount", "shipping_fee", "used_coupon") AS
+   | /* Staging maps the source's two-letter status to words, and cuts the timestamp into the date and the month key everything downstream joins on. */ SELECT order_id, customer_id, store_id, order_ts, CAST(order_ts AS DATE) AS order_date, YEAR(order_ts) * 100 + MONTH(order_ts) AS order_month, CASE status_code WHEN 'OP' THEN 'open' WHEN 'SH' THEN 'shipped' WHEN 'DL' THEN 'delivered' WHEN 'CX' THEN 'cancelled' ELSE 'unknown' END AS status, discount_amount, shipping_fee, coupon_code IS NOT NULL AS used_coupon FROM shop.orders;
+6. Ddl staging.products [Safe] alter view staging.products
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."products";
+   | CREATE VIEW "staging"."products" ("product_id", "sku", "product_name", "category_code", "unit_price", "unit_cost", "weight_grams", "weight_kg", "active") AS
+   | SELECT product_id, sku, product_name, category_code, unit_price, unit_cost, weight_grams, weight_grams * 0.001 AS weight_kg, active FROM shop.products;
+7. Ddl marts.fct_sales_lines [Safe] create index ux_fct_sales_lines
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_sales_lines" ON "marts"."fct_sales_lines" ("order_id", "line_no");
+8. Ddl marts.fct_sales_lines [Safe] create index ix_fct_sales_lines_date
+   reason: index.added
+   | CREATE INDEX "ix_fct_sales_lines_date" ON "marts"."fct_sales_lines" ("date_key");
+9. Ddl staging.channels [Safe] alter view staging.channels
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."channels";
+   | CREATE VIEW "staging"."channels" ("channel_code", "channel_name", "channel_group") AS
+   | SELECT channel_code, channel_name, channel_group FROM ref.channels;
+10. Ddl staging.stores [Safe] alter view staging.stores
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."stores";
+   | CREATE VIEW "staging"."stores" ("store_id", "store_name", "country_code", "channel_code", "floor_area_m2", "opened_date") AS
+   | SELECT store_id, store_name, country_code, channel_code, floor_area_m2, opened_date FROM shop.stores;
+11. Ddl marts.dim_store [Safe] create index ux_dim_store_store_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_store_store_id" ON "marts"."dim_store" ("store_id");
+12. Ddl staging.returns [Safe] alter view staging.returns
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."returns";
+   | CREATE VIEW "staging"."returns" ("return_id", "order_id", "line_no", "return_date", "reason_code", "quantity") AS
+   | SELECT return_id, order_id, line_no, return_date, reason_code, quantity FROM shop.returns;
+13. Ddl staging.shipments [Safe] alter view staging.shipments
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."shipments";
+   | CREATE VIEW "staging"."shipments" ("shipment_id", "order_id", "shipped_date", "carrier_code", "packages", "total_weight_grams", "freight_cost") AS
+   | SELECT shipment_id, order_id, shipped_date, carrier_code, packages, total_weight_grams, freight_cost FROM shop.shipments;
+14. Ddl marts.dim_date [Safe] create index ux_dim_date_date_key
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_date_date_key" ON "marts"."dim_date" ("date_key");
+15. Ddl staging.categories [Safe] alter view staging.categories
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."categories";
+   | CREATE VIEW "staging"."categories" ("category_code", "category_name", "department") AS
+   | SELECT category_code, category_name, department FROM ref.categories;
+16. Ddl marts.dim_product [Safe] create index ux_dim_product_product_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_product_product_id" ON "marts"."dim_product" ("product_id");
+17. Ddl staging.budgets [Safe] alter view staging.budgets
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."budgets";
+   | CREATE VIEW "staging"."budgets" ("budget_month", "region", "category_code", "budget_amount") AS
+   | SELECT budget_month, region, category_code, budget_amount FROM finance.budgets;
+18. Ddl staging.return_reasons [Safe] alter view staging.return_reasons
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."return_reasons";
+   | CREATE VIEW "staging"."return_reasons" ("reason_code", "reason_name", "reason_group", "is_our_fault") AS
+   | SELECT reason_code, reason_name, reason_group, is_our_fault FROM ref.return_reasons;
+19. Ddl marts.fct_returns [Safe] create index ux_fct_returns_return_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_returns_return_id" ON "marts"."fct_returns" ("return_id");
+20. Ddl marts.fct_shipment_packages [Safe] create index ux_fct_shipment_packages
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_shipment_packages" ON "marts"."fct_shipment_packages" ("shipment_id", "package_no");
+? Q-history-marts.dim_customer.marketing_opt_in: marts.dim_customer gains column `marketing_opt_in`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.dim_date.is_weekend: marts.dim_date gains column `is_weekend`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.dim_product.active: marts.dim_product gains column `active`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.dim_store.opened_date: marts.dim_store gains column `opened_date`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.fct_returns.is_our_fault: marts.fct_returns gains column `is_our_fault`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.fct_sales_lines.margin_amount: marts.fct_sales_lines gains column `margin_amount`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.fct_shipment_packages.freight_cost: marts.fct_shipment_packages gains column `freight_cost`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+
+## the first sized column is wider
+1. Ddl staging.country_regions [Safe] alter view staging.country_regions
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."country_regions";
+   | CREATE VIEW "staging"."country_regions" ("country_code", "country_name", "region", "currency") AS
+   | SELECT country_code, country_name, region, currency FROM ref.country_regions;
+2. Ddl staging.customers [Safe] alter view staging.customers
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."customers";
+   | CREATE VIEW "staging"."customers" ("customer_id", "first_name", "last_name", "email", "email_domain", "country_code", "signup_date", "marketing_opt_in") AS
+   | /* Staging splits the one text column a mapped model gave us into the two the rest of the project wants. */ /* The first name is everything before the first space, the last name everything after it ("van Dijk" stays whole). */ SELECT customer_id, SUBSTRING(full_name FROM 1 FOR POSITION(' ' IN full_name) - 1) AS first_name, SUBSTRING(full_name FROM POSITION(' ' IN full_name) + 1) AS last_name, email, SUBSTRING(email FROM POSITION('@' IN email) + 1) AS email_domain, country_code, signup_date, marketing_opt_in FROM shop.customers;
+3. Ddl marts.dim_customer [Destructive] alter column first_name
+   reason: col.type.other
+   | ALTER TABLE "marts"."dim_customer" ALTER COLUMN "first_name" TYPE varchar(80) COLLATE "C", ALTER COLUMN "first_name" DROP NOT NULL;
+4. Ddl marts.dim_customer [Safe] create index ux_dim_customer_customer_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_customer_customer_id" ON "marts"."dim_customer" ("customer_id");
+5. Ddl staging.order_lines [Safe] alter view staging.order_lines
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."order_lines";
+   | CREATE VIEW "staging"."order_lines" ("order_id", "line_no", "product_id", "quantity", "unit_price", "line_amount") AS
+   | SELECT order_id, line_no, product_id, quantity, unit_price, quantity * unit_price AS line_amount FROM shop.order_lines;
+6. Ddl staging.orders [Safe] alter view staging.orders
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."orders";
+   | CREATE VIEW "staging"."orders" ("order_id", "customer_id", "store_id", "order_ts", "order_date", "order_month", "status", "discount_amount", "shipping_fee", "used_coupon") AS
+   | /* Staging maps the source's two-letter status to words, and cuts the timestamp into the date and the month key everything downstream joins on. */ SELECT order_id, customer_id, store_id, order_ts, CAST(order_ts AS DATE) AS order_date, YEAR(order_ts) * 100 + MONTH(order_ts) AS order_month, CASE status_code WHEN 'OP' THEN 'open' WHEN 'SH' THEN 'shipped' WHEN 'DL' THEN 'delivered' WHEN 'CX' THEN 'cancelled' ELSE 'unknown' END AS status, discount_amount, shipping_fee, coupon_code IS NOT NULL AS used_coupon FROM shop.orders;
+7. Ddl staging.products [Safe] alter view staging.products
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."products";
+   | CREATE VIEW "staging"."products" ("product_id", "sku", "product_name", "category_code", "unit_price", "unit_cost", "weight_grams", "weight_kg", "active") AS
+   | SELECT product_id, sku, product_name, category_code, unit_price, unit_cost, weight_grams, weight_grams * 0.001 AS weight_kg, active FROM shop.products;
+8. Ddl marts.fct_sales_lines [Safe] create index ux_fct_sales_lines
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_sales_lines" ON "marts"."fct_sales_lines" ("order_id", "line_no");
+9. Ddl marts.fct_sales_lines [Safe] create index ix_fct_sales_lines_date
+   reason: index.added
+   | CREATE INDEX "ix_fct_sales_lines_date" ON "marts"."fct_sales_lines" ("date_key");
+10. Ddl marts.agg_customer_value [Destructive] alter column region
+   reason: col.type.other
+   | ALTER TABLE "marts"."agg_customer_value" ALTER COLUMN "region" TYPE varchar(20) COLLATE "C", ALTER COLUMN "region" SET NOT NULL;
+11. Ddl marts.agg_customer_value [Safe] create index ux_agg_customer_value
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_agg_customer_value" ON "marts"."agg_customer_value" ("customer_id");
+12. Ddl staging.channels [Safe] alter view staging.channels
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."channels";
+   | CREATE VIEW "staging"."channels" ("channel_code", "channel_name", "channel_group") AS
+   | SELECT channel_code, channel_name, channel_group FROM ref.channels;
+13. Ddl staging.stores [Safe] alter view staging.stores
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."stores";
+   | CREATE VIEW "staging"."stores" ("store_id", "store_name", "country_code", "channel_code", "floor_area_m2", "opened_date") AS
+   | SELECT store_id, store_name, country_code, channel_code, floor_area_m2, opened_date FROM shop.stores;
+14. Ddl marts.dim_store [Destructive] alter column store_name
+   reason: col.type.other
+   | ALTER TABLE "marts"."dim_store" ALTER COLUMN "store_name" TYPE varchar(60) COLLATE "C", ALTER COLUMN "store_name" SET NOT NULL;
+15. Ddl marts.dim_store [Safe] create index ux_dim_store_store_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_store_store_id" ON "marts"."dim_store" ("store_id");
+16. Ddl marts.agg_daily_sales [Destructive] alter column region
+   reason: col.type.other
+   | ALTER TABLE "marts"."agg_daily_sales" ALTER COLUMN "region" TYPE varchar(20) COLLATE "C", ALTER COLUMN "region" SET NOT NULL;
+17. Ddl marts.agg_daily_sales [Safe] create index ux_agg_daily_sales
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_agg_daily_sales" ON "marts"."agg_daily_sales" ("date_key", "region", "channel_group");
+18. Ddl staging.returns [Safe] alter view staging.returns
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."returns";
+   | CREATE VIEW "staging"."returns" ("return_id", "order_id", "line_no", "return_date", "reason_code", "quantity") AS
+   | SELECT return_id, order_id, line_no, return_date, reason_code, quantity FROM shop.returns;
+19. Ddl staging.shipments [Safe] alter view staging.shipments
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."shipments";
+   | CREATE VIEW "staging"."shipments" ("shipment_id", "order_id", "shipped_date", "carrier_code", "packages", "total_weight_grams", "freight_cost") AS
+   | SELECT shipment_id, order_id, shipped_date, carrier_code, packages, total_weight_grams, freight_cost FROM shop.shipments;
+20. Ddl marts.dim_date [Destructive] alter column month_name
+   reason: col.type.other
+   | ALTER TABLE "marts"."dim_date" ALTER COLUMN "month_name" TYPE varchar(3) COLLATE "C", ALTER COLUMN "month_name" SET NOT NULL;
+21. Ddl marts.dim_date [Safe] create index ux_dim_date_date_key
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_date_date_key" ON "marts"."dim_date" ("date_key");
+22. Ddl staging.categories [Safe] alter view staging.categories
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."categories";
+   | CREATE VIEW "staging"."categories" ("category_code", "category_name", "department") AS
+   | SELECT category_code, category_name, department FROM ref.categories;
+23. Ddl marts.dim_product [Destructive] alter column sku
+   reason: col.type.other
+   | ALTER TABLE "marts"."dim_product" ALTER COLUMN "sku" TYPE varchar(20) COLLATE "C", ALTER COLUMN "sku" SET NOT NULL;
+24. Ddl marts.dim_product [Safe] create index ux_dim_product_product_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_product_product_id" ON "marts"."dim_product" ("product_id");
+25. Ddl staging.budgets [Safe] alter view staging.budgets
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."budgets";
+   | CREATE VIEW "staging"."budgets" ("budget_month", "region", "category_code", "budget_amount") AS
+   | SELECT budget_month, region, category_code, budget_amount FROM finance.budgets;
+26. Ddl marts.fct_budget_allocation [Destructive] alter column region
+   reason: col.type.other
+   | ALTER TABLE "marts"."fct_budget_allocation" ALTER COLUMN "region" TYPE varchar(20) COLLATE "C", ALTER COLUMN "region" SET NOT NULL;
+27. Ddl marts.fct_budget_allocation [Safe] create index ux_fct_budget_allocation
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_budget_allocation" ON "marts"."fct_budget_allocation" ("budget_month", "region", "category_code", "store_id");
+28. Ddl staging.return_reasons [Safe] alter view staging.return_reasons
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."return_reasons";
+   | CREATE VIEW "staging"."return_reasons" ("reason_code", "reason_name", "reason_group", "is_our_fault") AS
+   | SELECT reason_code, reason_name, reason_group, is_our_fault FROM ref.return_reasons;
+29. Ddl marts.fct_returns [Destructive] alter column reason_code
+   reason: col.type.other
+   | ALTER TABLE "marts"."fct_returns" ALTER COLUMN "reason_code" TYPE varchar(4) COLLATE "C", ALTER COLUMN "reason_code" SET NOT NULL;
+30. Ddl marts.fct_returns [Safe] create index ux_fct_returns_return_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_returns_return_id" ON "marts"."fct_returns" ("return_id");
+31. Ddl marts.fct_shipment_packages [Destructive] alter column carrier_code
+   reason: col.type.other
+   | ALTER TABLE "marts"."fct_shipment_packages" ALTER COLUMN "carrier_code" TYPE varchar(4) COLLATE "C", ALTER COLUMN "carrier_code" SET NOT NULL;
+32. Ddl marts.fct_shipment_packages [Safe] create index ux_fct_shipment_packages
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_shipment_packages" ON "marts"."fct_shipment_packages" ("shipment_id", "package_no");
+33. Ddl marts.rpt_budget_vs_actual [Destructive] alter column region
+   reason: col.type.other
+   | ALTER TABLE "marts"."rpt_budget_vs_actual" ALTER COLUMN "region" TYPE varchar(20) COLLATE "C", ALTER COLUMN "region" SET NOT NULL;
+34. Ddl marts.rpt_budget_vs_actual [Safe] create index ux_rpt_budget_vs_actual
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_rpt_budget_vs_actual" ON "marts"."rpt_budget_vs_actual" ("budget_month", "region", "category_code", "store_id");
+
+## the last column's nullability is flipped
+1. Ddl staging.country_regions [Safe] alter view staging.country_regions
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."country_regions";
+   | CREATE VIEW "staging"."country_regions" ("country_code", "country_name", "region", "currency") AS
+   | SELECT country_code, country_name, region, currency FROM ref.country_regions;
+2. Ddl staging.customers [Safe] alter view staging.customers
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."customers";
+   | CREATE VIEW "staging"."customers" ("customer_id", "first_name", "last_name", "email", "email_domain", "country_code", "signup_date", "marketing_opt_in") AS
+   | /* Staging splits the one text column a mapped model gave us into the two the rest of the project wants. */ /* The first name is everything before the first space, the last name everything after it ("van Dijk" stays whole). */ SELECT customer_id, SUBSTRING(full_name FROM 1 FOR POSITION(' ' IN full_name) - 1) AS first_name, SUBSTRING(full_name FROM POSITION(' ' IN full_name) + 1) AS last_name, email, SUBSTRING(email FROM POSITION('@' IN email) + 1) AS email_domain, country_code, signup_date, marketing_opt_in FROM shop.customers;
+3. Ddl marts.dim_customer [Risky] alter column marketing_opt_in
+   reason: col.null.tighten
+   | ALTER TABLE "marts"."dim_customer" ALTER COLUMN "marketing_opt_in" TYPE boolean, ALTER COLUMN "marketing_opt_in" SET NOT NULL;
+4. Ddl marts.dim_customer [Safe] create index ux_dim_customer_customer_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_customer_customer_id" ON "marts"."dim_customer" ("customer_id");
+5. Ddl staging.order_lines [Safe] alter view staging.order_lines
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."order_lines";
+   | CREATE VIEW "staging"."order_lines" ("order_id", "line_no", "product_id", "quantity", "unit_price", "line_amount") AS
+   | SELECT order_id, line_no, product_id, quantity, unit_price, quantity * unit_price AS line_amount FROM shop.order_lines;
+6. Ddl staging.orders [Safe] alter view staging.orders
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."orders";
+   | CREATE VIEW "staging"."orders" ("order_id", "customer_id", "store_id", "order_ts", "order_date", "order_month", "status", "discount_amount", "shipping_fee", "used_coupon") AS
+   | /* Staging maps the source's two-letter status to words, and cuts the timestamp into the date and the month key everything downstream joins on. */ SELECT order_id, customer_id, store_id, order_ts, CAST(order_ts AS DATE) AS order_date, YEAR(order_ts) * 100 + MONTH(order_ts) AS order_month, CASE status_code WHEN 'OP' THEN 'open' WHEN 'SH' THEN 'shipped' WHEN 'DL' THEN 'delivered' WHEN 'CX' THEN 'cancelled' ELSE 'unknown' END AS status, discount_amount, shipping_fee, coupon_code IS NOT NULL AS used_coupon FROM shop.orders;
+7. Ddl staging.products [Safe] alter view staging.products
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."products";
+   | CREATE VIEW "staging"."products" ("product_id", "sku", "product_name", "category_code", "unit_price", "unit_cost", "weight_grams", "weight_kg", "active") AS
+   | SELECT product_id, sku, product_name, category_code, unit_price, unit_cost, weight_grams, weight_grams * 0.001 AS weight_kg, active FROM shop.products;
+8. Ddl marts.fct_sales_lines [Risky] alter column margin_amount
+   reason: col.null.tighten
+   | ALTER TABLE "marts"."fct_sales_lines" ALTER COLUMN "margin_amount" TYPE numeric(18, 2), ALTER COLUMN "margin_amount" SET NOT NULL;
+9. Ddl marts.fct_sales_lines [Safe] create index ux_fct_sales_lines
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_sales_lines" ON "marts"."fct_sales_lines" ("order_id", "line_no");
+10. Ddl marts.fct_sales_lines [Safe] create index ix_fct_sales_lines_date
+   reason: index.added
+   | CREATE INDEX "ix_fct_sales_lines_date" ON "marts"."fct_sales_lines" ("date_key");
+11. Ddl marts.agg_customer_value [Risky] alter column revenue_rank
+   reason: col.null.tighten
+   | ALTER TABLE "marts"."agg_customer_value" ALTER COLUMN "revenue_rank" TYPE bigint, ALTER COLUMN "revenue_rank" SET NOT NULL;
+12. Ddl marts.agg_customer_value [Safe] create index ux_agg_customer_value
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_agg_customer_value" ON "marts"."agg_customer_value" ("customer_id");
+13. Ddl staging.channels [Safe] alter view staging.channels
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."channels";
+   | CREATE VIEW "staging"."channels" ("channel_code", "channel_name", "channel_group") AS
+   | SELECT channel_code, channel_name, channel_group FROM ref.channels;
+14. Ddl staging.stores [Safe] alter view staging.stores
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."stores";
+   | CREATE VIEW "staging"."stores" ("store_id", "store_name", "country_code", "channel_code", "floor_area_m2", "opened_date") AS
+   | SELECT store_id, store_name, country_code, channel_code, floor_area_m2, opened_date FROM shop.stores;
+15. Ddl marts.dim_store [Risky] alter column opened_date
+   reason: col.null.tighten
+   | ALTER TABLE "marts"."dim_store" ALTER COLUMN "opened_date" TYPE date, ALTER COLUMN "opened_date" SET NOT NULL;
+16. Ddl marts.dim_store [Safe] create index ux_dim_store_store_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_store_store_id" ON "marts"."dim_store" ("store_id");
+17. Ddl marts.agg_daily_sales [Safe] alter column region_net_to_date
+   reason: col.null.relax
+   | ALTER TABLE "marts"."agg_daily_sales" ALTER COLUMN "region_net_to_date" TYPE numeric(18, 2), ALTER COLUMN "region_net_to_date" DROP NOT NULL;
+18. Ddl marts.agg_daily_sales [Safe] create index ux_agg_daily_sales
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_agg_daily_sales" ON "marts"."agg_daily_sales" ("date_key", "region", "channel_group");
+19. Ddl staging.returns [Safe] alter view staging.returns
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."returns";
+   | CREATE VIEW "staging"."returns" ("return_id", "order_id", "line_no", "return_date", "reason_code", "quantity") AS
+   | SELECT return_id, order_id, line_no, return_date, reason_code, quantity FROM shop.returns;
+20. Ddl staging.shipments [Safe] alter view staging.shipments
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."shipments";
+   | CREATE VIEW "staging"."shipments" ("shipment_id", "order_id", "shipped_date", "carrier_code", "packages", "total_weight_grams", "freight_cost") AS
+   | SELECT shipment_id, order_id, shipped_date, carrier_code, packages, total_weight_grams, freight_cost FROM shop.shipments;
+21. Ddl marts.dim_date [Risky] alter column is_weekend
+   reason: col.null.tighten
+   | ALTER TABLE "marts"."dim_date" ALTER COLUMN "is_weekend" TYPE boolean, ALTER COLUMN "is_weekend" SET NOT NULL;
+22. Ddl marts.dim_date [Safe] create index ux_dim_date_date_key
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_date_date_key" ON "marts"."dim_date" ("date_key");
+23. Ddl staging.categories [Safe] alter view staging.categories
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."categories";
+   | CREATE VIEW "staging"."categories" ("category_code", "category_name", "department") AS
+   | SELECT category_code, category_name, department FROM ref.categories;
+24. Ddl marts.dim_product [Risky] alter column active
+   reason: col.null.tighten
+   | ALTER TABLE "marts"."dim_product" ALTER COLUMN "active" TYPE boolean, ALTER COLUMN "active" SET NOT NULL;
+25. Ddl marts.dim_product [Safe] create index ux_dim_product_product_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_dim_product_product_id" ON "marts"."dim_product" ("product_id");
+26. Ddl staging.budgets [Safe] alter view staging.budgets
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."budgets";
+   | CREATE VIEW "staging"."budgets" ("budget_month", "region", "category_code", "budget_amount") AS
+   | SELECT budget_month, region, category_code, budget_amount FROM finance.budgets;
+27. Ddl marts.fct_budget_allocation [Safe] alter column allocated_budget
+   reason: col.null.relax
+   | ALTER TABLE "marts"."fct_budget_allocation" ALTER COLUMN "allocated_budget" TYPE numeric(18, 2), ALTER COLUMN "allocated_budget" DROP NOT NULL;
+28. Ddl marts.fct_budget_allocation [Safe] create index ux_fct_budget_allocation
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_budget_allocation" ON "marts"."fct_budget_allocation" ("budget_month", "region", "category_code", "store_id");
+29. Ddl staging.return_reasons [Safe] alter view staging.return_reasons
+   reason: view.changed
+   | DROP VIEW IF EXISTS "staging"."return_reasons";
+   | CREATE VIEW "staging"."return_reasons" ("reason_code", "reason_name", "reason_group", "is_our_fault") AS
+   | SELECT reason_code, reason_name, reason_group, is_our_fault FROM ref.return_reasons;
+30. Ddl marts.fct_returns [Risky] alter column is_our_fault
+   reason: col.null.tighten
+   | ALTER TABLE "marts"."fct_returns" ALTER COLUMN "is_our_fault" TYPE boolean, ALTER COLUMN "is_our_fault" SET NOT NULL;
+31. Ddl marts.fct_returns [Safe] create index ux_fct_returns_return_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_returns_return_id" ON "marts"."fct_returns" ("return_id");
+32. Ddl marts.fct_shipment_packages [Safe] alter column freight_cost
+   reason: col.null.relax
+   | ALTER TABLE "marts"."fct_shipment_packages" ALTER COLUMN "freight_cost" TYPE numeric(15, 2), ALTER COLUMN "freight_cost" DROP NOT NULL;
+33. Ddl marts.fct_shipment_packages [Safe] create index ux_fct_shipment_packages
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_fct_shipment_packages" ON "marts"."fct_shipment_packages" ("shipment_id", "package_no");
+34. Ddl marts.rpt_budget_vs_actual [Safe] alter column variance
+   reason: col.null.relax
+   | ALTER TABLE "marts"."rpt_budget_vs_actual" ALTER COLUMN "variance" TYPE numeric(18, 2), ALTER COLUMN "variance" DROP NOT NULL;
+35. Ddl marts.rpt_budget_vs_actual [Safe] create index ux_rpt_budget_vs_actual
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_rpt_budget_vs_actual" ON "marts"."rpt_budget_vs_actual" ("budget_month", "region", "category_code", "store_id");

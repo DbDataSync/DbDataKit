@@ -1,0 +1,898 @@
+# adventureworks on sqlserver: 47 model(s)
+
+## create
+1. Ddl staging.bom [Safe] create schema staging
+   reason: obj.missing.view
+   | IF SCHEMA_ID(N'staging') IS NULL EXEC(N'CREATE SCHEMA [staging]');
+2. Ddl staging.bom [Safe] create view staging.bom
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[bom] ([bill_of_materials_id], [product_assembly_id], [component_id], [per_assembly_qty], [unit_measure_code]) AS
+   | SELECT bill_of_materials_id, product_assembly_id, component_id, per_assembly_qty, unit_measure_code FROM production.bill_of_materials;
+3. Ddl marts.fct_bom_explosion [Safe] create schema marts
+   reason: obj.missing.table
+   | IF SCHEMA_ID(N'marts') IS NULL EXEC(N'CREATE SCHEMA [marts]');
+4. Ddl marts.fct_bom_explosion [Safe] create table marts.fct_bom_explosion
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[fct_bom_explosion] (
+   |   [finished_product_id] int NOT NULL,
+   |   [component_id] int NOT NULL,
+   |   [bom_level] int NULL,
+   |   [path] nvarchar(max) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [quantity_per_finished] decimal(8, 2) NULL,
+   |   [is_leaf] bit NULL
+   | );
+5. Ddl staging.products [Safe] create view staging.products
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[products] ([product_id], [product_name], [product_number], [is_made_in_house], [color], [size], [weight], [standard_cost], [list_price], [product_subcategory_id], [sell_start_date], [sell_end_date], [attributes]) AS
+   | SELECT product_id, name AS product_name, product_number, make_flag AS is_made_in_house, ISNULL(color, 'N/A') AS color, size, weight, standard_cost, list_price, product_subcategory_id, sell_start_date, sell_end_date, attributes FROM production.product;
+6. Ddl marts.agg_bom_rolled_cost [Safe] create table marts.agg_bom_rolled_cost
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[agg_bom_rolled_cost] (
+   |   [product_id] int NOT NULL,
+   |   [leaf_parts] bigint NOT NULL,
+   |   [rolled_up_cost] decimal(19, 4) NULL,
+   |   [standard_cost] decimal(19, 4) NOT NULL,
+   |   [variance] decimal(19, 4) NULL
+   | );
+7. Ddl staging.currency_rates [Safe] create view staging.currency_rates
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[currency_rates] ([rate_date], [currency_code], [average_rate], [end_of_day_rate]) AS
+   | SELECT currency_rate_date AS rate_date, to_currency_code AS currency_code, average_rate, end_of_day_rate FROM sales.currency_rate;
+8. Ddl staging.order_lines [Safe] create view staging.order_lines
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[order_lines] ([sales_order_id], [sales_order_detail_id], [product_id], [order_qty], [unit_price], [unit_price_discount], [special_offer_id], [line_total]) AS
+   | SELECT sales_order_id, sales_order_detail_id, product_id, order_qty, unit_price, unit_price_discount, special_offer_id, order_qty * unit_price * (1 - unit_price_discount) AS line_total FROM sales.sales_order_detail;
+9. Ddl staging.orders [Safe] create view staging.orders
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[orders] ([sales_order_id], [order_date], [due_date], [ship_date], [status], [status_name], [is_online], [customer_id], [sales_person_id], [territory_id], [currency_code], [sub_total], [tax_amt], [freight], [total_due]) AS
+   | /* The status number as words, the online flag as a boolean, and the total the customer owes. */ SELECT sales_order_id, order_date, due_date, ship_date, status, CASE status WHEN 1 THEN 'in process' WHEN 2 THEN 'approved' WHEN 3 THEN 'backordered' WHEN 4 THEN 'rejected' WHEN 5 THEN 'shipped' WHEN 6 THEN 'cancelled' ELSE 'unknown' END AS status_name, online_order_flag AS is_online, customer_id, sales_person_id, territory_id, currency_code, sub_total, tax_amt, freight, sub_total + tax_amt + freight AS total_due FROM sales.sales_order_header;
+10. Ddl staging.product_cost_history [Safe] create view staging.product_cost_history
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[product_cost_history] ([product_id], [valid_from], [valid_to], [standard_cost]) AS
+   | SELECT product_id, start_date AS valid_from, end_date AS valid_to, standard_cost FROM production.product_cost_history;
+11. Ddl marts.fct_sales_lines [Safe] create table marts.fct_sales_lines
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[fct_sales_lines] (
+   |   [sales_order_id] int NOT NULL,
+   |   [sales_order_detail_id] int NOT NULL,
+   |   [date_key] bigint NULL,
+   |   [customer_id] int NOT NULL,
+   |   [sales_person_id] int NULL,
+   |   [territory_id] int NOT NULL,
+   |   [product_id] int NOT NULL,
+   |   [special_offer_id] int NOT NULL,
+   |   [order_qty] smallint NOT NULL,
+   |   [currency_code] nvarchar(3) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [rate_to_usd] decimal(10, 4) NOT NULL,
+   |   [gross_usd] decimal(19, 4) NULL,
+   |   [discount_usd] decimal(19, 4) NULL,
+   |   [revenue_usd] decimal(19, 4) NULL,
+   |   [cost_usd] decimal(19, 4) NULL,
+   |   [margin_usd] decimal(19, 4) NULL
+   | );
+12. Ddl marts.fct_sales_lines [Safe] create index ux_fct_sales_lines_sales_order_id_sales_order_detail_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_fct_sales_lines_sales_order_id_sales_order_detail_id] ON [marts].[fct_sales_lines] ([sales_order_id], [sales_order_detail_id]);
+13. Ddl marts.agg_product_abc [Safe] create table marts.agg_product_abc
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[agg_product_abc] (
+   |   [product_id] int NOT NULL,
+   |   [revenue_rank] bigint NULL,
+   |   [revenue] decimal(19, 2) NULL,
+   |   [units] bigint NULL,
+   |   [cumulative_share] decimal(9, 4) NULL,
+   |   [abc_class] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL
+   | );
+14. Ddl marts.dim_date [Safe] create table marts.dim_date
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[dim_date] (
+   |   [date_key] bigint NOT NULL,
+   |   [date] date NULL,
+   |   [year] bigint NULL,
+   |   [quarter] bigint NULL,
+   |   [month] bigint NULL,
+   |   [year_month] bigint NULL,
+   |   [month_name] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [iso_weekday] bigint NULL,
+   |   [is_weekend] bit NULL,
+   |   [fiscal_year] bigint NULL,
+   |   [fiscal_quarter] int NULL
+   | );
+15. Ddl marts.agg_sales_territory_quarter [Safe] create table marts.agg_sales_territory_quarter
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[agg_sales_territory_quarter] (
+   |   [territory_id] int NOT NULL,
+   |   [year] bigint NOT NULL,
+   |   [quarter] bigint NOT NULL,
+   |   [revenue] decimal(19, 2) NULL,
+   |   [margin] decimal(19, 2) NULL,
+   |   [orders] bigint NOT NULL,
+   |   [revenue_year_to_date] decimal(19, 2) NULL,
+   |   [revenue_prior_year] decimal(19, 2) NULL,
+   |   [growth_percent] decimal(9, 1) NULL
+   | );
+16. Ddl staging.customers [Safe] create view staging.customers
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[customers] ([customer_id], [customer_name], [email], [territory_id], [store_name], [customer_type]) AS
+   | SELECT customer_id, first_name + ' ' + last_name AS customer_name, email, territory_id, store_name, CASE WHEN store_name IS NULL THEN 'individual' ELSE 'store' END AS customer_type FROM sales.customer;
+17. Ddl staging.territories [Safe] create view staging.territories
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[territories] ([territory_id], [territory_name], [country_region_code], [territory_group], [currency_code]) AS
+   | SELECT territory_id, name AS territory_name, country_region_code, group_name AS territory_group, currency_code FROM sales.sales_territory;
+18. Ddl marts.dim_customer [Safe] create table marts.dim_customer
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[dim_customer] (
+   |   [customer_id] int NOT NULL,
+   |   [customer_name] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [email] nvarchar(80) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [email_domain] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [customer_type] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [store_name] nvarchar(60) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [territory_name] nvarchar(50) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [country_region_code] nvarchar(3) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [territory_group] nvarchar(50) COLLATE Latin1_General_100_CS_AS NOT NULL
+   | );
+19. Ddl staging.department_history [Safe] create view staging.department_history
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[department_history] ([employee_id], [department_id], [start_date], [end_date]) AS
+   | SELECT employee_id, department_id, start_date, end_date FROM humanresources.employee_department_history;
+20. Ddl staging.departments [Safe] create view staging.departments
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[departments] ([department_id], [department_name], [department_group]) AS
+   | SELECT department_id, name AS department_name, group_name AS department_group FROM humanresources.department;
+21. Ddl staging.employees [Safe] create view staging.employees
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[employees] ([employee_id], [login_id], [user_name], [job_title], [birth_date], [marital_status], [gender], [hire_date], [is_salaried], [vacation_hours], [sick_leave_hours], [is_current]) AS
+   | /* The codes for marital status and gender as words; the login is `domain\name`, and the name is what comes after the backslash. */ SELECT employee_id, login_id, SUBSTRING(login_id, CHARINDEX('\', login_id) + 1) AS user_name, job_title, birth_date, CASE marital_status WHEN 'M' THEN 'married' WHEN 'S' THEN 'single' ELSE 'unknown' END AS marital_status, CASE gender WHEN 'M' THEN 'male' WHEN 'F' THEN 'female' ELSE 'unknown' END AS gender, hire_date, salaried_flag AS is_salaried, vacation_hours, sick_leave_hours, current_flag AS is_current FROM humanresources.employee;
+22. Ddl staging.pay_history [Safe] create view staging.pay_history
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[pay_history] ([employee_id], [rate_change_date], [rate], [pay_frequency]) AS
+   | SELECT employee_id, rate_change_date, rate, pay_frequency FROM humanresources.employee_pay_history;
+23. Ddl marts.dim_employee [Safe] create table marts.dim_employee
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[dim_employee] (
+   |   [employee_id] int NOT NULL,
+   |   [user_name] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [job_title] nvarchar(50) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [marital_status] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [gender] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [hire_date] date NOT NULL,
+   |   [tenure_years] bigint NULL,
+   |   [is_salaried] bit NOT NULL,
+   |   [department_name] nvarchar(50) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [department_group] nvarchar(50) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [current_pay_rate] decimal(10, 4) NOT NULL,
+   |   [pay_frequency] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL
+   | );
+24. Ddl staging.product_categories [Safe] create view staging.product_categories
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[product_categories] ([product_category_id], [category_name]) AS
+   | SELECT product_category_id, name AS category_name FROM production.product_category;
+25. Ddl staging.product_subcategories [Safe] create view staging.product_subcategories
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[product_subcategories] ([product_subcategory_id], [product_category_id], [subcategory_name]) AS
+   | SELECT product_subcategory_id, product_category_id, name AS subcategory_name FROM production.product_subcategory;
+26. Ddl marts.dim_product [Safe] create table marts.dim_product
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[dim_product] (
+   |   [product_id] int NOT NULL,
+   |   [product_name] nvarchar(60) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [product_number] nvarchar(25) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [category_name] nvarchar(50) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [subcategory_name] nvarchar(50) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [is_made_in_house] bit NOT NULL,
+   |   [color] nvarchar(max) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [color_group] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [size] nvarchar(5) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [weight] decimal(8, 2) NULL,
+   |   [standard_cost] decimal(19, 4) NOT NULL,
+   |   [list_price] decimal(19, 4) NOT NULL,
+   |   [margin] decimal(19, 4) NULL,
+   |   [margin_percent] decimal(5, 1) NULL,
+   |   [price_band] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [sell_start_date] date NOT NULL,
+   |   [sell_end_date] date NULL,
+   |   [is_discontinued] bit NULL
+   | );
+27. Ddl marts.dim_product_attributes [Safe] create table marts.dim_product_attributes
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[dim_product_attributes] (
+   |   [product_id] int NOT NULL,
+   |   [frame_material] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [gears] int NULL,
+   |   [first_tag] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [has_attributes] bit NULL
+   | );
+28. Ddl staging.product_price_history [Safe] create view staging.product_price_history
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[product_price_history] ([product_id], [valid_from], [valid_to], [list_price]) AS
+   | SELECT product_id, start_date AS valid_from, end_date AS valid_to, list_price FROM production.product_list_price_history;
+29. Ddl marts.dim_product_history [Safe] create table marts.dim_product_history
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[dim_product_history] (
+   |   [product_id] int NOT NULL,
+   |   [valid_from] date NOT NULL,
+   |   [valid_to] date NULL,
+   |   [standard_cost] decimal(19, 4) NOT NULL,
+   |   [list_price] decimal(19, 4) NOT NULL,
+   |   [margin] decimal(19, 4) NULL,
+   |   [is_current] bit NULL
+   | );
+30. Ddl staging.sales_people [Safe] create view staging.sales_people
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[sales_people] ([sales_person_id], [territory_id], [sales_quota], [bonus], [commission_pct]) AS
+   | SELECT sales_person_id, territory_id, sales_quota, bonus, commission_pct FROM sales.sales_person;
+31. Ddl marts.dim_sales_person [Safe] create table marts.dim_sales_person
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[dim_sales_person] (
+   |   [sales_person_id] int NOT NULL,
+   |   [user_name] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [job_title] nvarchar(50) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [territory_name] nvarchar(50) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [yearly_quota] decimal(19, 4) NULL,
+   |   [bonus] decimal(19, 4) NOT NULL,
+   |   [commission_pct] decimal(10, 4) NOT NULL
+   | );
+32. Ddl marts.dim_territory [Safe] create table marts.dim_territory
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[dim_territory] (
+   |   [territory_id] int NOT NULL,
+   |   [territory_name] nvarchar(50) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [country_region_code] nvarchar(3) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [territory_group] nvarchar(50) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [currency_code] nvarchar(3) COLLATE Latin1_General_100_CS_AS NOT NULL
+   | );
+33. Ddl staging.inventory_snapshots [Safe] create view staging.inventory_snapshots
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[inventory_snapshots] ([snapshot_date], [product_id], [quantity]) AS
+   | SELECT snapshot_date, product_id, quantity FROM production.inventory_snapshot;
+34. Ddl marts.fct_inventory_snapshot [Safe] create table marts.fct_inventory_snapshot
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[fct_inventory_snapshot] (
+   |   [snapshot_date] date NOT NULL,
+   |   [year_month] bigint NULL,
+   |   [product_id] int NOT NULL,
+   |   [quantity] int NOT NULL,
+   |   [units_sold] bigint NOT NULL,
+   |   [units_sold_3m_avg] decimal(12, 2) NULL,
+   |   [months_of_supply] decimal(12, 2) NULL
+   | );
+35. Ddl staging.purchase_lines [Safe] create view staging.purchase_lines
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[purchase_lines] ([purchase_order_id], [purchase_order_detail_id], [product_id], [order_qty], [unit_price], [received_qty], [rejected_qty], [due_date], [line_total]) AS
+   | SELECT purchase_order_id, purchase_order_detail_id, product_id, order_qty, unit_price, received_qty, rejected_qty, due_date, order_qty * unit_price AS line_total FROM purchasing.purchase_order_detail;
+36. Ddl staging.purchase_orders [Safe] create view staging.purchase_orders
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[purchase_orders] ([purchase_order_id], [vendor_id], [order_date], [ship_date], [status], [sub_total], [tax_amt], [freight]) AS
+   | SELECT purchase_order_id, vendor_id, order_date, ship_date, status, sub_total, tax_amt, freight FROM purchasing.purchase_order_header;
+37. Ddl marts.fct_purchase_lines [Safe] create table marts.fct_purchase_lines
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[fct_purchase_lines] (
+   |   [purchase_order_id] int NOT NULL,
+   |   [purchase_order_detail_id] int NOT NULL,
+   |   [vendor_id] int NOT NULL,
+   |   [product_id] int NOT NULL,
+   |   [order_date] date NOT NULL,
+   |   [ship_date] date NULL,
+   |   [due_date] date NOT NULL,
+   |   [order_qty] smallint NOT NULL,
+   |   [received_qty] decimal(8, 2) NOT NULL,
+   |   [rejected_qty] decimal(8, 2) NOT NULL,
+   |   [line_total] decimal(19, 4) NULL,
+   |   [received_percent] decimal(5, 1) NULL,
+   |   [rejected_percent] decimal(6, 2) NULL,
+   |   [lead_days] bigint NULL,
+   |   [shipped_on_time] bit NULL
+   | );
+38. Ddl staging.work_orders [Safe] create view staging.work_orders
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[work_orders] ([work_order_id], [product_id], [order_qty], [scrapped_qty], [start_date], [end_date], [due_date]) AS
+   | SELECT work_order_id, product_id, order_qty, scrapped_qty, start_date, end_date, due_date FROM production.work_order;
+39. Ddl marts.fct_work_orders [Safe] create table marts.fct_work_orders
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[fct_work_orders] (
+   |   [work_order_id] int NOT NULL,
+   |   [product_id] int NOT NULL,
+   |   [order_qty] int NOT NULL,
+   |   [scrapped_qty] int NOT NULL,
+   |   [scrap_rate] decimal(9, 4) NULL,
+   |   [start_date] date NOT NULL,
+   |   [end_date] date NULL,
+   |   [due_date] date NOT NULL,
+   |   [days_to_complete] bigint NULL,
+   |   [days_late] bigint NULL,
+   |   [delivery] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL
+   | );
+40. Ddl marts.rpt_customer_last_order [Safe] create table marts.rpt_customer_last_order
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[rpt_customer_last_order] (
+   |   [customer_id] int NOT NULL,
+   |   [sales_order_id] int NOT NULL,
+   |   [order_date] date NOT NULL,
+   |   [status_name] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL,
+   |   [total_due] decimal(21, 4) NULL
+   | );
+41. Ddl marts.rpt_customer_rfm [Safe] create table marts.rpt_customer_rfm
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[rpt_customer_rfm] (
+   |   [customer_id] int NOT NULL,
+   |   [recency_days] bigint NULL,
+   |   [orders] bigint NOT NULL,
+   |   [revenue] decimal(19, 2) NULL,
+   |   [r_score] bigint NULL,
+   |   [f_score] bigint NULL,
+   |   [m_score] bigint NULL,
+   |   [segment] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL
+   | );
+42. Ddl marts.rpt_product_revenue_spread [Safe] create table marts.rpt_product_revenue_spread
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[rpt_product_revenue_spread] (
+   |   [product_id] int NOT NULL,
+   |   [lines] bigint NOT NULL,
+   |   [median_revenue] decimal(19, 4) NULL,
+   |   [p90_revenue] decimal(19, 4) NULL,
+   |   [p25_revenue] decimal(19, 4) NULL,
+   |   [min_revenue] decimal(19, 4) NULL,
+   |   [max_revenue] decimal(19, 4) NULL
+   | );
+43. Ddl staging.sales_quotas [Safe] create view staging.sales_quotas
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[sales_quotas] ([sales_person_id], [quota_date], [sales_quota]) AS
+   | SELECT sales_person_id, quota_date, sales_quota FROM sales.sales_person_quota_history;
+44. Ddl marts.rpt_sales_person_quota [Safe] create table marts.rpt_sales_person_quota
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[rpt_sales_person_quota] (
+   |   [sales_person_id] int NOT NULL,
+   |   [year] bigint NOT NULL,
+   |   [quarter] bigint NOT NULL,
+   |   [sales_quota] decimal(19, 4) NOT NULL,
+   |   [revenue] decimal(19, 2) NOT NULL,
+   |   [attainment] decimal(9, 4) NULL,
+   |   [attainment_rank] bigint NULL,
+   |   [percentile] decimal(9, 4) NULL,
+   |   [met_quota] bit NULL
+   | );
+45. Ddl marts.rpt_quota_long [Safe] create table marts.rpt_quota_long
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[rpt_quota_long] (
+   |   [sales_person_id] int NOT NULL,
+   |   [year] bigint NOT NULL,
+   |   [quarter] bigint NOT NULL,
+   |   [measure] nvarchar(max) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [amount] decimal(21, 4) NULL
+   | );
+46. Ddl marts.rpt_revenue_by_color_year [Safe] create table marts.rpt_revenue_by_color_year
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[rpt_revenue_by_color_year] (
+   |   [color_group] nvarchar(max) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [revenue_2022] decimal(38, 4) NULL,
+   |   [revenue_2023] decimal(38, 4) NULL,
+   |   [revenue_2024] decimal(38, 4) NULL
+   | );
+47. Ddl marts.rpt_territory_top_products [Safe] create table marts.rpt_territory_top_products
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[rpt_territory_top_products] (
+   |   [territory_id] int NOT NULL,
+   |   [territory_name] nvarchar(50) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [product_id] int NOT NULL,
+   |   [revenue] decimal(19, 2) NULL
+   | );
+48. Ddl staging.vendors [Safe] create view staging.vendors
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[vendors] ([vendor_id], [vendor_name], [credit_rating], [is_preferred], [is_active]) AS
+   | SELECT vendor_id, name AS vendor_name, credit_rating, preferred_vendor AS is_preferred, active AS is_active FROM purchasing.vendor;
+49. Ddl marts.rpt_vendor_scorecard [Safe] create table marts.rpt_vendor_scorecard
+   reason: obj.missing.table
+   | CREATE TABLE [marts].[rpt_vendor_scorecard] (
+   |   [vendor_id] int NOT NULL,
+   |   [vendor_name] nvarchar(60) COLLATE Latin1_General_100_CS_AS NOT NULL,
+   |   [credit_rating] smallint NOT NULL,
+   |   [is_preferred] bit NOT NULL,
+   |   [lines] bigint NOT NULL,
+   |   [spend] decimal(19, 2) NULL,
+   |   [on_time_percent] decimal(5, 1) NULL,
+   |   [average_lead_days] decimal(9, 1) NULL,
+   |   [rejected_units] decimal(12, 2) NULL,
+   |   [spend_rank] bigint NULL
+   | );
+50. Ddl staging.special_offers [Safe] create view staging.special_offers
+   reason: obj.missing.view
+   | CREATE OR ALTER VIEW [staging].[special_offers] ([special_offer_id], [description], [discount_pct], [offer_type], [category], [start_date], [end_date], [min_qty], [max_qty]) AS
+   | SELECT special_offer_id, description, discount_pct, offer_type, category, start_date, end_date, min_qty, max_qty FROM sales.special_offer;
+
+## columns as declared (no index or view recorded)
+1. Ddl staging.bom [Safe] alter view staging.bom
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[bom] ([bill_of_materials_id], [product_assembly_id], [component_id], [per_assembly_qty], [unit_measure_code]) AS
+   | SELECT bill_of_materials_id, product_assembly_id, component_id, per_assembly_qty, unit_measure_code FROM production.bill_of_materials;
+2. Ddl staging.products [Safe] alter view staging.products
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[products] ([product_id], [product_name], [product_number], [is_made_in_house], [color], [size], [weight], [standard_cost], [list_price], [product_subcategory_id], [sell_start_date], [sell_end_date], [attributes]) AS
+   | SELECT product_id, name AS product_name, product_number, make_flag AS is_made_in_house, ISNULL(color, 'N/A') AS color, size, weight, standard_cost, list_price, product_subcategory_id, sell_start_date, sell_end_date, attributes FROM production.product;
+3. Ddl staging.currency_rates [Safe] alter view staging.currency_rates
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[currency_rates] ([rate_date], [currency_code], [average_rate], [end_of_day_rate]) AS
+   | SELECT currency_rate_date AS rate_date, to_currency_code AS currency_code, average_rate, end_of_day_rate FROM sales.currency_rate;
+4. Ddl staging.order_lines [Safe] alter view staging.order_lines
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[order_lines] ([sales_order_id], [sales_order_detail_id], [product_id], [order_qty], [unit_price], [unit_price_discount], [special_offer_id], [line_total]) AS
+   | SELECT sales_order_id, sales_order_detail_id, product_id, order_qty, unit_price, unit_price_discount, special_offer_id, order_qty * unit_price * (1 - unit_price_discount) AS line_total FROM sales.sales_order_detail;
+5. Ddl staging.orders [Safe] alter view staging.orders
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[orders] ([sales_order_id], [order_date], [due_date], [ship_date], [status], [status_name], [is_online], [customer_id], [sales_person_id], [territory_id], [currency_code], [sub_total], [tax_amt], [freight], [total_due]) AS
+   | /* The status number as words, the online flag as a boolean, and the total the customer owes. */ SELECT sales_order_id, order_date, due_date, ship_date, status, CASE status WHEN 1 THEN 'in process' WHEN 2 THEN 'approved' WHEN 3 THEN 'backordered' WHEN 4 THEN 'rejected' WHEN 5 THEN 'shipped' WHEN 6 THEN 'cancelled' ELSE 'unknown' END AS status_name, online_order_flag AS is_online, customer_id, sales_person_id, territory_id, currency_code, sub_total, tax_amt, freight, sub_total + tax_amt + freight AS total_due FROM sales.sales_order_header;
+6. Ddl staging.product_cost_history [Safe] alter view staging.product_cost_history
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[product_cost_history] ([product_id], [valid_from], [valid_to], [standard_cost]) AS
+   | SELECT product_id, start_date AS valid_from, end_date AS valid_to, standard_cost FROM production.product_cost_history;
+7. Ddl marts.fct_sales_lines [Safe] create index ux_fct_sales_lines_sales_order_id_sales_order_detail_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_fct_sales_lines_sales_order_id_sales_order_detail_id] ON [marts].[fct_sales_lines] ([sales_order_id], [sales_order_detail_id]);
+8. Ddl staging.customers [Safe] alter view staging.customers
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[customers] ([customer_id], [customer_name], [email], [territory_id], [store_name], [customer_type]) AS
+   | SELECT customer_id, first_name + ' ' + last_name AS customer_name, email, territory_id, store_name, CASE WHEN store_name IS NULL THEN 'individual' ELSE 'store' END AS customer_type FROM sales.customer;
+9. Ddl staging.territories [Safe] alter view staging.territories
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[territories] ([territory_id], [territory_name], [country_region_code], [territory_group], [currency_code]) AS
+   | SELECT territory_id, name AS territory_name, country_region_code, group_name AS territory_group, currency_code FROM sales.sales_territory;
+10. Ddl staging.department_history [Safe] alter view staging.department_history
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[department_history] ([employee_id], [department_id], [start_date], [end_date]) AS
+   | SELECT employee_id, department_id, start_date, end_date FROM humanresources.employee_department_history;
+11. Ddl staging.departments [Safe] alter view staging.departments
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[departments] ([department_id], [department_name], [department_group]) AS
+   | SELECT department_id, name AS department_name, group_name AS department_group FROM humanresources.department;
+12. Ddl staging.employees [Safe] alter view staging.employees
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[employees] ([employee_id], [login_id], [user_name], [job_title], [birth_date], [marital_status], [gender], [hire_date], [is_salaried], [vacation_hours], [sick_leave_hours], [is_current]) AS
+   | /* The codes for marital status and gender as words; the login is `domain\name`, and the name is what comes after the backslash. */ SELECT employee_id, login_id, SUBSTRING(login_id, CHARINDEX('\', login_id) + 1) AS user_name, job_title, birth_date, CASE marital_status WHEN 'M' THEN 'married' WHEN 'S' THEN 'single' ELSE 'unknown' END AS marital_status, CASE gender WHEN 'M' THEN 'male' WHEN 'F' THEN 'female' ELSE 'unknown' END AS gender, hire_date, salaried_flag AS is_salaried, vacation_hours, sick_leave_hours, current_flag AS is_current FROM humanresources.employee;
+13. Ddl staging.pay_history [Safe] alter view staging.pay_history
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[pay_history] ([employee_id], [rate_change_date], [rate], [pay_frequency]) AS
+   | SELECT employee_id, rate_change_date, rate, pay_frequency FROM humanresources.employee_pay_history;
+14. Ddl staging.product_categories [Safe] alter view staging.product_categories
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[product_categories] ([product_category_id], [category_name]) AS
+   | SELECT product_category_id, name AS category_name FROM production.product_category;
+15. Ddl staging.product_subcategories [Safe] alter view staging.product_subcategories
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[product_subcategories] ([product_subcategory_id], [product_category_id], [subcategory_name]) AS
+   | SELECT product_subcategory_id, product_category_id, name AS subcategory_name FROM production.product_subcategory;
+16. Ddl staging.product_price_history [Safe] alter view staging.product_price_history
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[product_price_history] ([product_id], [valid_from], [valid_to], [list_price]) AS
+   | SELECT product_id, start_date AS valid_from, end_date AS valid_to, list_price FROM production.product_list_price_history;
+17. Ddl staging.sales_people [Safe] alter view staging.sales_people
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[sales_people] ([sales_person_id], [territory_id], [sales_quota], [bonus], [commission_pct]) AS
+   | SELECT sales_person_id, territory_id, sales_quota, bonus, commission_pct FROM sales.sales_person;
+18. Ddl staging.inventory_snapshots [Safe] alter view staging.inventory_snapshots
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[inventory_snapshots] ([snapshot_date], [product_id], [quantity]) AS
+   | SELECT snapshot_date, product_id, quantity FROM production.inventory_snapshot;
+19. Ddl staging.purchase_lines [Safe] alter view staging.purchase_lines
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[purchase_lines] ([purchase_order_id], [purchase_order_detail_id], [product_id], [order_qty], [unit_price], [received_qty], [rejected_qty], [due_date], [line_total]) AS
+   | SELECT purchase_order_id, purchase_order_detail_id, product_id, order_qty, unit_price, received_qty, rejected_qty, due_date, order_qty * unit_price AS line_total FROM purchasing.purchase_order_detail;
+20. Ddl staging.purchase_orders [Safe] alter view staging.purchase_orders
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[purchase_orders] ([purchase_order_id], [vendor_id], [order_date], [ship_date], [status], [sub_total], [tax_amt], [freight]) AS
+   | SELECT purchase_order_id, vendor_id, order_date, ship_date, status, sub_total, tax_amt, freight FROM purchasing.purchase_order_header;
+21. Ddl staging.work_orders [Safe] alter view staging.work_orders
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[work_orders] ([work_order_id], [product_id], [order_qty], [scrapped_qty], [start_date], [end_date], [due_date]) AS
+   | SELECT work_order_id, product_id, order_qty, scrapped_qty, start_date, end_date, due_date FROM production.work_order;
+22. Ddl staging.sales_quotas [Safe] alter view staging.sales_quotas
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[sales_quotas] ([sales_person_id], [quota_date], [sales_quota]) AS
+   | SELECT sales_person_id, quota_date, sales_quota FROM sales.sales_person_quota_history;
+23. Ddl staging.vendors [Safe] alter view staging.vendors
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[vendors] ([vendor_id], [vendor_name], [credit_rating], [is_preferred], [is_active]) AS
+   | SELECT vendor_id, name AS vendor_name, credit_rating, preferred_vendor AS is_preferred, active AS is_active FROM purchasing.vendor;
+24. Ddl staging.special_offers [Safe] alter view staging.special_offers
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[special_offers] ([special_offer_id], [description], [discount_pct], [offer_type], [category], [start_date], [end_date], [min_qty], [max_qty]) AS
+   | SELECT special_offer_id, description, discount_pct, offer_type, category, start_date, end_date, min_qty, max_qty FROM sales.special_offer;
+
+## a column is missing
+1. Ddl staging.bom [Safe] alter view staging.bom
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[bom] ([bill_of_materials_id], [product_assembly_id], [component_id], [per_assembly_qty], [unit_measure_code]) AS
+   | SELECT bill_of_materials_id, product_assembly_id, component_id, per_assembly_qty, unit_measure_code FROM production.bill_of_materials;
+2. Ddl staging.products [Safe] alter view staging.products
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[products] ([product_id], [product_name], [product_number], [is_made_in_house], [color], [size], [weight], [standard_cost], [list_price], [product_subcategory_id], [sell_start_date], [sell_end_date], [attributes]) AS
+   | SELECT product_id, name AS product_name, product_number, make_flag AS is_made_in_house, ISNULL(color, 'N/A') AS color, size, weight, standard_cost, list_price, product_subcategory_id, sell_start_date, sell_end_date, attributes FROM production.product;
+3. Ddl staging.currency_rates [Safe] alter view staging.currency_rates
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[currency_rates] ([rate_date], [currency_code], [average_rate], [end_of_day_rate]) AS
+   | SELECT currency_rate_date AS rate_date, to_currency_code AS currency_code, average_rate, end_of_day_rate FROM sales.currency_rate;
+4. Ddl staging.order_lines [Safe] alter view staging.order_lines
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[order_lines] ([sales_order_id], [sales_order_detail_id], [product_id], [order_qty], [unit_price], [unit_price_discount], [special_offer_id], [line_total]) AS
+   | SELECT sales_order_id, sales_order_detail_id, product_id, order_qty, unit_price, unit_price_discount, special_offer_id, order_qty * unit_price * (1 - unit_price_discount) AS line_total FROM sales.sales_order_detail;
+5. Ddl staging.orders [Safe] alter view staging.orders
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[orders] ([sales_order_id], [order_date], [due_date], [ship_date], [status], [status_name], [is_online], [customer_id], [sales_person_id], [territory_id], [currency_code], [sub_total], [tax_amt], [freight], [total_due]) AS
+   | /* The status number as words, the online flag as a boolean, and the total the customer owes. */ SELECT sales_order_id, order_date, due_date, ship_date, status, CASE status WHEN 1 THEN 'in process' WHEN 2 THEN 'approved' WHEN 3 THEN 'backordered' WHEN 4 THEN 'rejected' WHEN 5 THEN 'shipped' WHEN 6 THEN 'cancelled' ELSE 'unknown' END AS status_name, online_order_flag AS is_online, customer_id, sales_person_id, territory_id, currency_code, sub_total, tax_amt, freight, sub_total + tax_amt + freight AS total_due FROM sales.sales_order_header;
+6. Ddl staging.product_cost_history [Safe] alter view staging.product_cost_history
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[product_cost_history] ([product_id], [valid_from], [valid_to], [standard_cost]) AS
+   | SELECT product_id, start_date AS valid_from, end_date AS valid_to, standard_cost FROM production.product_cost_history;
+7. Ddl marts.fct_sales_lines [Safe] create index ux_fct_sales_lines_sales_order_id_sales_order_detail_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_fct_sales_lines_sales_order_id_sales_order_detail_id] ON [marts].[fct_sales_lines] ([sales_order_id], [sales_order_detail_id]);
+8. Ddl staging.customers [Safe] alter view staging.customers
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[customers] ([customer_id], [customer_name], [email], [territory_id], [store_name], [customer_type]) AS
+   | SELECT customer_id, first_name + ' ' + last_name AS customer_name, email, territory_id, store_name, CASE WHEN store_name IS NULL THEN 'individual' ELSE 'store' END AS customer_type FROM sales.customer;
+9. Ddl staging.territories [Safe] alter view staging.territories
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[territories] ([territory_id], [territory_name], [country_region_code], [territory_group], [currency_code]) AS
+   | SELECT territory_id, name AS territory_name, country_region_code, group_name AS territory_group, currency_code FROM sales.sales_territory;
+10. Ddl staging.department_history [Safe] alter view staging.department_history
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[department_history] ([employee_id], [department_id], [start_date], [end_date]) AS
+   | SELECT employee_id, department_id, start_date, end_date FROM humanresources.employee_department_history;
+11. Ddl staging.departments [Safe] alter view staging.departments
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[departments] ([department_id], [department_name], [department_group]) AS
+   | SELECT department_id, name AS department_name, group_name AS department_group FROM humanresources.department;
+12. Ddl staging.employees [Safe] alter view staging.employees
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[employees] ([employee_id], [login_id], [user_name], [job_title], [birth_date], [marital_status], [gender], [hire_date], [is_salaried], [vacation_hours], [sick_leave_hours], [is_current]) AS
+   | /* The codes for marital status and gender as words; the login is `domain\name`, and the name is what comes after the backslash. */ SELECT employee_id, login_id, SUBSTRING(login_id, CHARINDEX('\', login_id) + 1) AS user_name, job_title, birth_date, CASE marital_status WHEN 'M' THEN 'married' WHEN 'S' THEN 'single' ELSE 'unknown' END AS marital_status, CASE gender WHEN 'M' THEN 'male' WHEN 'F' THEN 'female' ELSE 'unknown' END AS gender, hire_date, salaried_flag AS is_salaried, vacation_hours, sick_leave_hours, current_flag AS is_current FROM humanresources.employee;
+13. Ddl staging.pay_history [Safe] alter view staging.pay_history
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[pay_history] ([employee_id], [rate_change_date], [rate], [pay_frequency]) AS
+   | SELECT employee_id, rate_change_date, rate, pay_frequency FROM humanresources.employee_pay_history;
+14. Ddl staging.product_categories [Safe] alter view staging.product_categories
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[product_categories] ([product_category_id], [category_name]) AS
+   | SELECT product_category_id, name AS category_name FROM production.product_category;
+15. Ddl staging.product_subcategories [Safe] alter view staging.product_subcategories
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[product_subcategories] ([product_subcategory_id], [product_category_id], [subcategory_name]) AS
+   | SELECT product_subcategory_id, product_category_id, name AS subcategory_name FROM production.product_subcategory;
+16. Ddl staging.product_price_history [Safe] alter view staging.product_price_history
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[product_price_history] ([product_id], [valid_from], [valid_to], [list_price]) AS
+   | SELECT product_id, start_date AS valid_from, end_date AS valid_to, list_price FROM production.product_list_price_history;
+17. Ddl staging.sales_people [Safe] alter view staging.sales_people
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[sales_people] ([sales_person_id], [territory_id], [sales_quota], [bonus], [commission_pct]) AS
+   | SELECT sales_person_id, territory_id, sales_quota, bonus, commission_pct FROM sales.sales_person;
+18. Ddl staging.inventory_snapshots [Safe] alter view staging.inventory_snapshots
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[inventory_snapshots] ([snapshot_date], [product_id], [quantity]) AS
+   | SELECT snapshot_date, product_id, quantity FROM production.inventory_snapshot;
+19. Ddl staging.purchase_lines [Safe] alter view staging.purchase_lines
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[purchase_lines] ([purchase_order_id], [purchase_order_detail_id], [product_id], [order_qty], [unit_price], [received_qty], [rejected_qty], [due_date], [line_total]) AS
+   | SELECT purchase_order_id, purchase_order_detail_id, product_id, order_qty, unit_price, received_qty, rejected_qty, due_date, order_qty * unit_price AS line_total FROM purchasing.purchase_order_detail;
+20. Ddl staging.purchase_orders [Safe] alter view staging.purchase_orders
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[purchase_orders] ([purchase_order_id], [vendor_id], [order_date], [ship_date], [status], [sub_total], [tax_amt], [freight]) AS
+   | SELECT purchase_order_id, vendor_id, order_date, ship_date, status, sub_total, tax_amt, freight FROM purchasing.purchase_order_header;
+21. Ddl staging.work_orders [Safe] alter view staging.work_orders
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[work_orders] ([work_order_id], [product_id], [order_qty], [scrapped_qty], [start_date], [end_date], [due_date]) AS
+   | SELECT work_order_id, product_id, order_qty, scrapped_qty, start_date, end_date, due_date FROM production.work_order;
+22. Ddl staging.sales_quotas [Safe] alter view staging.sales_quotas
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[sales_quotas] ([sales_person_id], [quota_date], [sales_quota]) AS
+   | SELECT sales_person_id, quota_date, sales_quota FROM sales.sales_person_quota_history;
+23. Ddl staging.vendors [Safe] alter view staging.vendors
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[vendors] ([vendor_id], [vendor_name], [credit_rating], [is_preferred], [is_active]) AS
+   | SELECT vendor_id, name AS vendor_name, credit_rating, preferred_vendor AS is_preferred, active AS is_active FROM purchasing.vendor;
+24. Ddl staging.special_offers [Safe] alter view staging.special_offers
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[special_offers] ([special_offer_id], [description], [discount_pct], [offer_type], [category], [start_date], [end_date], [min_qty], [max_qty]) AS
+   | SELECT special_offer_id, description, discount_pct, offer_type, category, start_date, end_date, min_qty, max_qty FROM sales.special_offer;
+? Q-history-marts.dim_customer.territory_group: marts.dim_customer gains column `territory_group`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.dim_date.fiscal_quarter: marts.dim_date gains column `fiscal_quarter`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.dim_employee.pay_frequency: marts.dim_employee gains column `pay_frequency`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.dim_product.is_discontinued: marts.dim_product gains column `is_discontinued`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.dim_product_attributes.has_attributes: marts.dim_product_attributes gains column `has_attributes`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.dim_product_history.is_current: marts.dim_product_history gains column `is_current`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.dim_sales_person.commission_pct: marts.dim_sales_person gains column `commission_pct`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.dim_territory.currency_code: marts.dim_territory gains column `currency_code`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.fct_bom_explosion.is_leaf: marts.fct_bom_explosion gains column `is_leaf`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.fct_purchase_lines.shipped_on_time: marts.fct_purchase_lines gains column `shipped_on_time`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.fct_sales_lines.margin_usd: marts.fct_sales_lines gains column `margin_usd`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.fct_work_orders.delivery: marts.fct_work_orders gains column `delivery`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.rpt_customer_last_order.total_due: marts.rpt_customer_last_order gains column `total_due`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+
+## the first sized column is wider
+1. Ddl staging.bom [Safe] alter view staging.bom
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[bom] ([bill_of_materials_id], [product_assembly_id], [component_id], [per_assembly_qty], [unit_measure_code]) AS
+   | SELECT bill_of_materials_id, product_assembly_id, component_id, per_assembly_qty, unit_measure_code FROM production.bill_of_materials;
+2. Ddl staging.products [Safe] alter view staging.products
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[products] ([product_id], [product_name], [product_number], [is_made_in_house], [color], [size], [weight], [standard_cost], [list_price], [product_subcategory_id], [sell_start_date], [sell_end_date], [attributes]) AS
+   | SELECT product_id, name AS product_name, product_number, make_flag AS is_made_in_house, ISNULL(color, 'N/A') AS color, size, weight, standard_cost, list_price, product_subcategory_id, sell_start_date, sell_end_date, attributes FROM production.product;
+3. Ddl staging.currency_rates [Safe] alter view staging.currency_rates
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[currency_rates] ([rate_date], [currency_code], [average_rate], [end_of_day_rate]) AS
+   | SELECT currency_rate_date AS rate_date, to_currency_code AS currency_code, average_rate, end_of_day_rate FROM sales.currency_rate;
+4. Ddl staging.order_lines [Safe] alter view staging.order_lines
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[order_lines] ([sales_order_id], [sales_order_detail_id], [product_id], [order_qty], [unit_price], [unit_price_discount], [special_offer_id], [line_total]) AS
+   | SELECT sales_order_id, sales_order_detail_id, product_id, order_qty, unit_price, unit_price_discount, special_offer_id, order_qty * unit_price * (1 - unit_price_discount) AS line_total FROM sales.sales_order_detail;
+5. Ddl staging.orders [Safe] alter view staging.orders
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[orders] ([sales_order_id], [order_date], [due_date], [ship_date], [status], [status_name], [is_online], [customer_id], [sales_person_id], [territory_id], [currency_code], [sub_total], [tax_amt], [freight], [total_due]) AS
+   | /* The status number as words, the online flag as a boolean, and the total the customer owes. */ SELECT sales_order_id, order_date, due_date, ship_date, status, CASE status WHEN 1 THEN 'in process' WHEN 2 THEN 'approved' WHEN 3 THEN 'backordered' WHEN 4 THEN 'rejected' WHEN 5 THEN 'shipped' WHEN 6 THEN 'cancelled' ELSE 'unknown' END AS status_name, online_order_flag AS is_online, customer_id, sales_person_id, territory_id, currency_code, sub_total, tax_amt, freight, sub_total + tax_amt + freight AS total_due FROM sales.sales_order_header;
+6. Ddl staging.product_cost_history [Safe] alter view staging.product_cost_history
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[product_cost_history] ([product_id], [valid_from], [valid_to], [standard_cost]) AS
+   | SELECT product_id, start_date AS valid_from, end_date AS valid_to, standard_cost FROM production.product_cost_history;
+7. Ddl marts.fct_sales_lines [Destructive] alter column currency_code
+   reason: col.type.other
+   | ALTER TABLE [marts].[fct_sales_lines] ALTER COLUMN [currency_code] nvarchar(3) COLLATE Latin1_General_100_CS_AS NOT NULL;
+8. Ddl marts.fct_sales_lines [Safe] create index ux_fct_sales_lines_sales_order_id_sales_order_detail_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_fct_sales_lines_sales_order_id_sales_order_detail_id] ON [marts].[fct_sales_lines] ([sales_order_id], [sales_order_detail_id]);
+9. Ddl staging.customers [Safe] alter view staging.customers
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[customers] ([customer_id], [customer_name], [email], [territory_id], [store_name], [customer_type]) AS
+   | SELECT customer_id, first_name + ' ' + last_name AS customer_name, email, territory_id, store_name, CASE WHEN store_name IS NULL THEN 'individual' ELSE 'store' END AS customer_type FROM sales.customer;
+10. Ddl staging.territories [Safe] alter view staging.territories
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[territories] ([territory_id], [territory_name], [country_region_code], [territory_group], [currency_code]) AS
+   | SELECT territory_id, name AS territory_name, country_region_code, group_name AS territory_group, currency_code FROM sales.sales_territory;
+11. Ddl marts.dim_customer [Destructive] alter column email
+   reason: col.type.other
+   | ALTER TABLE [marts].[dim_customer] ALTER COLUMN [email] nvarchar(80) COLLATE Latin1_General_100_CS_AS NOT NULL;
+12. Ddl staging.department_history [Safe] alter view staging.department_history
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[department_history] ([employee_id], [department_id], [start_date], [end_date]) AS
+   | SELECT employee_id, department_id, start_date, end_date FROM humanresources.employee_department_history;
+13. Ddl staging.departments [Safe] alter view staging.departments
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[departments] ([department_id], [department_name], [department_group]) AS
+   | SELECT department_id, name AS department_name, group_name AS department_group FROM humanresources.department;
+14. Ddl staging.employees [Safe] alter view staging.employees
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[employees] ([employee_id], [login_id], [user_name], [job_title], [birth_date], [marital_status], [gender], [hire_date], [is_salaried], [vacation_hours], [sick_leave_hours], [is_current]) AS
+   | /* The codes for marital status and gender as words; the login is `domain\name`, and the name is what comes after the backslash. */ SELECT employee_id, login_id, SUBSTRING(login_id, CHARINDEX('\', login_id) + 1) AS user_name, job_title, birth_date, CASE marital_status WHEN 'M' THEN 'married' WHEN 'S' THEN 'single' ELSE 'unknown' END AS marital_status, CASE gender WHEN 'M' THEN 'male' WHEN 'F' THEN 'female' ELSE 'unknown' END AS gender, hire_date, salaried_flag AS is_salaried, vacation_hours, sick_leave_hours, current_flag AS is_current FROM humanresources.employee;
+15. Ddl staging.pay_history [Safe] alter view staging.pay_history
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[pay_history] ([employee_id], [rate_change_date], [rate], [pay_frequency]) AS
+   | SELECT employee_id, rate_change_date, rate, pay_frequency FROM humanresources.employee_pay_history;
+16. Ddl marts.dim_employee [Destructive] alter column job_title
+   reason: col.type.other
+   | ALTER TABLE [marts].[dim_employee] ALTER COLUMN [job_title] nvarchar(50) COLLATE Latin1_General_100_CS_AS NOT NULL;
+17. Ddl staging.product_categories [Safe] alter view staging.product_categories
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[product_categories] ([product_category_id], [category_name]) AS
+   | SELECT product_category_id, name AS category_name FROM production.product_category;
+18. Ddl staging.product_subcategories [Safe] alter view staging.product_subcategories
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[product_subcategories] ([product_subcategory_id], [product_category_id], [subcategory_name]) AS
+   | SELECT product_subcategory_id, product_category_id, name AS subcategory_name FROM production.product_subcategory;
+19. Ddl marts.dim_product [Destructive] alter column product_name
+   reason: col.type.other
+   | ALTER TABLE [marts].[dim_product] ALTER COLUMN [product_name] nvarchar(60) COLLATE Latin1_General_100_CS_AS NOT NULL;
+20. Ddl staging.product_price_history [Safe] alter view staging.product_price_history
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[product_price_history] ([product_id], [valid_from], [valid_to], [list_price]) AS
+   | SELECT product_id, start_date AS valid_from, end_date AS valid_to, list_price FROM production.product_list_price_history;
+21. Ddl staging.sales_people [Safe] alter view staging.sales_people
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[sales_people] ([sales_person_id], [territory_id], [sales_quota], [bonus], [commission_pct]) AS
+   | SELECT sales_person_id, territory_id, sales_quota, bonus, commission_pct FROM sales.sales_person;
+22. Ddl marts.dim_sales_person [Destructive] alter column job_title
+   reason: col.type.other
+   | ALTER TABLE [marts].[dim_sales_person] ALTER COLUMN [job_title] nvarchar(50) COLLATE Latin1_General_100_CS_AS NOT NULL;
+23. Ddl marts.dim_territory [Destructive] alter column territory_name
+   reason: col.type.other
+   | ALTER TABLE [marts].[dim_territory] ALTER COLUMN [territory_name] nvarchar(50) COLLATE Latin1_General_100_CS_AS NOT NULL;
+24. Ddl staging.inventory_snapshots [Safe] alter view staging.inventory_snapshots
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[inventory_snapshots] ([snapshot_date], [product_id], [quantity]) AS
+   | SELECT snapshot_date, product_id, quantity FROM production.inventory_snapshot;
+25. Ddl staging.purchase_lines [Safe] alter view staging.purchase_lines
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[purchase_lines] ([purchase_order_id], [purchase_order_detail_id], [product_id], [order_qty], [unit_price], [received_qty], [rejected_qty], [due_date], [line_total]) AS
+   | SELECT purchase_order_id, purchase_order_detail_id, product_id, order_qty, unit_price, received_qty, rejected_qty, due_date, order_qty * unit_price AS line_total FROM purchasing.purchase_order_detail;
+26. Ddl staging.purchase_orders [Safe] alter view staging.purchase_orders
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[purchase_orders] ([purchase_order_id], [vendor_id], [order_date], [ship_date], [status], [sub_total], [tax_amt], [freight]) AS
+   | SELECT purchase_order_id, vendor_id, order_date, ship_date, status, sub_total, tax_amt, freight FROM purchasing.purchase_order_header;
+27. Ddl staging.work_orders [Safe] alter view staging.work_orders
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[work_orders] ([work_order_id], [product_id], [order_qty], [scrapped_qty], [start_date], [end_date], [due_date]) AS
+   | SELECT work_order_id, product_id, order_qty, scrapped_qty, start_date, end_date, due_date FROM production.work_order;
+28. Ddl staging.sales_quotas [Safe] alter view staging.sales_quotas
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[sales_quotas] ([sales_person_id], [quota_date], [sales_quota]) AS
+   | SELECT sales_person_id, quota_date, sales_quota FROM sales.sales_person_quota_history;
+29. Ddl marts.rpt_territory_top_products [Destructive] alter column territory_name
+   reason: col.type.other
+   | ALTER TABLE [marts].[rpt_territory_top_products] ALTER COLUMN [territory_name] nvarchar(50) COLLATE Latin1_General_100_CS_AS NOT NULL;
+30. Ddl staging.vendors [Safe] alter view staging.vendors
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[vendors] ([vendor_id], [vendor_name], [credit_rating], [is_preferred], [is_active]) AS
+   | SELECT vendor_id, name AS vendor_name, credit_rating, preferred_vendor AS is_preferred, active AS is_active FROM purchasing.vendor;
+31. Ddl marts.rpt_vendor_scorecard [Destructive] alter column vendor_name
+   reason: col.type.other
+   | ALTER TABLE [marts].[rpt_vendor_scorecard] ALTER COLUMN [vendor_name] nvarchar(60) COLLATE Latin1_General_100_CS_AS NOT NULL;
+32. Ddl staging.special_offers [Safe] alter view staging.special_offers
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[special_offers] ([special_offer_id], [description], [discount_pct], [offer_type], [category], [start_date], [end_date], [min_qty], [max_qty]) AS
+   | SELECT special_offer_id, description, discount_pct, offer_type, category, start_date, end_date, min_qty, max_qty FROM sales.special_offer;
+
+## the last column's nullability is flipped
+1. Ddl staging.bom [Safe] alter view staging.bom
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[bom] ([bill_of_materials_id], [product_assembly_id], [component_id], [per_assembly_qty], [unit_measure_code]) AS
+   | SELECT bill_of_materials_id, product_assembly_id, component_id, per_assembly_qty, unit_measure_code FROM production.bill_of_materials;
+2. Ddl marts.fct_bom_explosion [Safe] alter column is_leaf
+   reason: col.null.relax
+   | ALTER TABLE [marts].[fct_bom_explosion] ALTER COLUMN [is_leaf] bit NULL;
+3. Ddl staging.products [Safe] alter view staging.products
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[products] ([product_id], [product_name], [product_number], [is_made_in_house], [color], [size], [weight], [standard_cost], [list_price], [product_subcategory_id], [sell_start_date], [sell_end_date], [attributes]) AS
+   | SELECT product_id, name AS product_name, product_number, make_flag AS is_made_in_house, ISNULL(color, 'N/A') AS color, size, weight, standard_cost, list_price, product_subcategory_id, sell_start_date, sell_end_date, attributes FROM production.product;
+4. Ddl marts.agg_bom_rolled_cost [Safe] alter column variance
+   reason: col.null.relax
+   | ALTER TABLE [marts].[agg_bom_rolled_cost] ALTER COLUMN [variance] decimal(19, 4) NULL;
+5. Ddl staging.currency_rates [Safe] alter view staging.currency_rates
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[currency_rates] ([rate_date], [currency_code], [average_rate], [end_of_day_rate]) AS
+   | SELECT currency_rate_date AS rate_date, to_currency_code AS currency_code, average_rate, end_of_day_rate FROM sales.currency_rate;
+6. Ddl staging.order_lines [Safe] alter view staging.order_lines
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[order_lines] ([sales_order_id], [sales_order_detail_id], [product_id], [order_qty], [unit_price], [unit_price_discount], [special_offer_id], [line_total]) AS
+   | SELECT sales_order_id, sales_order_detail_id, product_id, order_qty, unit_price, unit_price_discount, special_offer_id, order_qty * unit_price * (1 - unit_price_discount) AS line_total FROM sales.sales_order_detail;
+7. Ddl staging.orders [Safe] alter view staging.orders
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[orders] ([sales_order_id], [order_date], [due_date], [ship_date], [status], [status_name], [is_online], [customer_id], [sales_person_id], [territory_id], [currency_code], [sub_total], [tax_amt], [freight], [total_due]) AS
+   | /* The status number as words, the online flag as a boolean, and the total the customer owes. */ SELECT sales_order_id, order_date, due_date, ship_date, status, CASE status WHEN 1 THEN 'in process' WHEN 2 THEN 'approved' WHEN 3 THEN 'backordered' WHEN 4 THEN 'rejected' WHEN 5 THEN 'shipped' WHEN 6 THEN 'cancelled' ELSE 'unknown' END AS status_name, online_order_flag AS is_online, customer_id, sales_person_id, territory_id, currency_code, sub_total, tax_amt, freight, sub_total + tax_amt + freight AS total_due FROM sales.sales_order_header;
+8. Ddl staging.product_cost_history [Safe] alter view staging.product_cost_history
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[product_cost_history] ([product_id], [valid_from], [valid_to], [standard_cost]) AS
+   | SELECT product_id, start_date AS valid_from, end_date AS valid_to, standard_cost FROM production.product_cost_history;
+9. Ddl marts.fct_sales_lines [Safe] alter column margin_usd
+   reason: col.null.relax
+   | ALTER TABLE [marts].[fct_sales_lines] ALTER COLUMN [margin_usd] decimal(19, 4) NULL;
+10. Ddl marts.fct_sales_lines [Safe] create index ux_fct_sales_lines_sales_order_id_sales_order_detail_id
+   reason: index.added
+   | CREATE UNIQUE INDEX [ux_fct_sales_lines_sales_order_id_sales_order_detail_id] ON [marts].[fct_sales_lines] ([sales_order_id], [sales_order_detail_id]);
+11. Ddl marts.agg_product_abc [Safe] alter column abc_class
+   reason: col.null.relax
+   | ALTER TABLE [marts].[agg_product_abc] ALTER COLUMN [abc_class] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL;
+12. Ddl marts.dim_date [Safe] alter column fiscal_quarter
+   reason: col.null.relax
+   | ALTER TABLE [marts].[dim_date] ALTER COLUMN [fiscal_quarter] int NULL;
+13. Ddl marts.agg_sales_territory_quarter [Safe] alter column growth_percent
+   reason: col.null.relax
+   | ALTER TABLE [marts].[agg_sales_territory_quarter] ALTER COLUMN [growth_percent] decimal(9, 1) NULL;
+14. Ddl staging.customers [Safe] alter view staging.customers
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[customers] ([customer_id], [customer_name], [email], [territory_id], [store_name], [customer_type]) AS
+   | SELECT customer_id, first_name + ' ' + last_name AS customer_name, email, territory_id, store_name, CASE WHEN store_name IS NULL THEN 'individual' ELSE 'store' END AS customer_type FROM sales.customer;
+15. Ddl staging.territories [Safe] alter view staging.territories
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[territories] ([territory_id], [territory_name], [country_region_code], [territory_group], [currency_code]) AS
+   | SELECT territory_id, name AS territory_name, country_region_code, group_name AS territory_group, currency_code FROM sales.sales_territory;
+16. Ddl marts.dim_customer [Risky] alter column territory_group
+   reason: col.null.tighten
+   | ALTER TABLE [marts].[dim_customer] ALTER COLUMN [territory_group] nvarchar(50) COLLATE Latin1_General_100_CS_AS NOT NULL;
+17. Ddl staging.department_history [Safe] alter view staging.department_history
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[department_history] ([employee_id], [department_id], [start_date], [end_date]) AS
+   | SELECT employee_id, department_id, start_date, end_date FROM humanresources.employee_department_history;
+18. Ddl staging.departments [Safe] alter view staging.departments
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[departments] ([department_id], [department_name], [department_group]) AS
+   | SELECT department_id, name AS department_name, group_name AS department_group FROM humanresources.department;
+19. Ddl staging.employees [Safe] alter view staging.employees
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[employees] ([employee_id], [login_id], [user_name], [job_title], [birth_date], [marital_status], [gender], [hire_date], [is_salaried], [vacation_hours], [sick_leave_hours], [is_current]) AS
+   | /* The codes for marital status and gender as words; the login is `domain\name`, and the name is what comes after the backslash. */ SELECT employee_id, login_id, SUBSTRING(login_id, CHARINDEX('\', login_id) + 1) AS user_name, job_title, birth_date, CASE marital_status WHEN 'M' THEN 'married' WHEN 'S' THEN 'single' ELSE 'unknown' END AS marital_status, CASE gender WHEN 'M' THEN 'male' WHEN 'F' THEN 'female' ELSE 'unknown' END AS gender, hire_date, salaried_flag AS is_salaried, vacation_hours, sick_leave_hours, current_flag AS is_current FROM humanresources.employee;
+20. Ddl staging.pay_history [Safe] alter view staging.pay_history
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[pay_history] ([employee_id], [rate_change_date], [rate], [pay_frequency]) AS
+   | SELECT employee_id, rate_change_date, rate, pay_frequency FROM humanresources.employee_pay_history;
+21. Ddl marts.dim_employee [Safe] alter column pay_frequency
+   reason: col.null.relax
+   | ALTER TABLE [marts].[dim_employee] ALTER COLUMN [pay_frequency] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL;
+22. Ddl staging.product_categories [Safe] alter view staging.product_categories
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[product_categories] ([product_category_id], [category_name]) AS
+   | SELECT product_category_id, name AS category_name FROM production.product_category;
+23. Ddl staging.product_subcategories [Safe] alter view staging.product_subcategories
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[product_subcategories] ([product_subcategory_id], [product_category_id], [subcategory_name]) AS
+   | SELECT product_subcategory_id, product_category_id, name AS subcategory_name FROM production.product_subcategory;
+24. Ddl marts.dim_product [Safe] alter column is_discontinued
+   reason: col.null.relax
+   | ALTER TABLE [marts].[dim_product] ALTER COLUMN [is_discontinued] bit NULL;
+25. Ddl marts.dim_product_attributes [Safe] alter column has_attributes
+   reason: col.null.relax
+   | ALTER TABLE [marts].[dim_product_attributes] ALTER COLUMN [has_attributes] bit NULL;
+26. Ddl staging.product_price_history [Safe] alter view staging.product_price_history
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[product_price_history] ([product_id], [valid_from], [valid_to], [list_price]) AS
+   | SELECT product_id, start_date AS valid_from, end_date AS valid_to, list_price FROM production.product_list_price_history;
+27. Ddl marts.dim_product_history [Safe] alter column is_current
+   reason: col.null.relax
+   | ALTER TABLE [marts].[dim_product_history] ALTER COLUMN [is_current] bit NULL;
+28. Ddl staging.sales_people [Safe] alter view staging.sales_people
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[sales_people] ([sales_person_id], [territory_id], [sales_quota], [bonus], [commission_pct]) AS
+   | SELECT sales_person_id, territory_id, sales_quota, bonus, commission_pct FROM sales.sales_person;
+29. Ddl marts.dim_sales_person [Risky] alter column commission_pct
+   reason: col.null.tighten
+   | ALTER TABLE [marts].[dim_sales_person] ALTER COLUMN [commission_pct] decimal(10, 4) NOT NULL;
+30. Ddl marts.dim_territory [Risky] alter column currency_code
+   reason: col.null.tighten
+   | ALTER TABLE [marts].[dim_territory] ALTER COLUMN [currency_code] nvarchar(3) COLLATE Latin1_General_100_CS_AS NOT NULL;
+31. Ddl staging.inventory_snapshots [Safe] alter view staging.inventory_snapshots
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[inventory_snapshots] ([snapshot_date], [product_id], [quantity]) AS
+   | SELECT snapshot_date, product_id, quantity FROM production.inventory_snapshot;
+32. Ddl marts.fct_inventory_snapshot [Safe] alter column months_of_supply
+   reason: col.null.relax
+   | ALTER TABLE [marts].[fct_inventory_snapshot] ALTER COLUMN [months_of_supply] decimal(12, 2) NULL;
+33. Ddl staging.purchase_lines [Safe] alter view staging.purchase_lines
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[purchase_lines] ([purchase_order_id], [purchase_order_detail_id], [product_id], [order_qty], [unit_price], [received_qty], [rejected_qty], [due_date], [line_total]) AS
+   | SELECT purchase_order_id, purchase_order_detail_id, product_id, order_qty, unit_price, received_qty, rejected_qty, due_date, order_qty * unit_price AS line_total FROM purchasing.purchase_order_detail;
+34. Ddl staging.purchase_orders [Safe] alter view staging.purchase_orders
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[purchase_orders] ([purchase_order_id], [vendor_id], [order_date], [ship_date], [status], [sub_total], [tax_amt], [freight]) AS
+   | SELECT purchase_order_id, vendor_id, order_date, ship_date, status, sub_total, tax_amt, freight FROM purchasing.purchase_order_header;
+35. Ddl marts.fct_purchase_lines [Safe] alter column shipped_on_time
+   reason: col.null.relax
+   | ALTER TABLE [marts].[fct_purchase_lines] ALTER COLUMN [shipped_on_time] bit NULL;
+36. Ddl staging.work_orders [Safe] alter view staging.work_orders
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[work_orders] ([work_order_id], [product_id], [order_qty], [scrapped_qty], [start_date], [end_date], [due_date]) AS
+   | SELECT work_order_id, product_id, order_qty, scrapped_qty, start_date, end_date, due_date FROM production.work_order;
+37. Ddl marts.fct_work_orders [Safe] alter column delivery
+   reason: col.null.relax
+   | ALTER TABLE [marts].[fct_work_orders] ALTER COLUMN [delivery] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL;
+38. Ddl marts.rpt_customer_last_order [Safe] alter column total_due
+   reason: col.null.relax
+   | ALTER TABLE [marts].[rpt_customer_last_order] ALTER COLUMN [total_due] decimal(21, 4) NULL;
+39. Ddl marts.rpt_customer_rfm [Safe] alter column segment
+   reason: col.null.relax
+   | ALTER TABLE [marts].[rpt_customer_rfm] ALTER COLUMN [segment] nvarchar(max) COLLATE Latin1_General_100_CS_AS NULL;
+40. Ddl marts.rpt_product_revenue_spread [Safe] alter column max_revenue
+   reason: col.null.relax
+   | ALTER TABLE [marts].[rpt_product_revenue_spread] ALTER COLUMN [max_revenue] decimal(19, 4) NULL;
+41. Ddl staging.sales_quotas [Safe] alter view staging.sales_quotas
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[sales_quotas] ([sales_person_id], [quota_date], [sales_quota]) AS
+   | SELECT sales_person_id, quota_date, sales_quota FROM sales.sales_person_quota_history;
+42. Ddl marts.rpt_sales_person_quota [Safe] alter column met_quota
+   reason: col.null.relax
+   | ALTER TABLE [marts].[rpt_sales_person_quota] ALTER COLUMN [met_quota] bit NULL;
+43. Ddl marts.rpt_quota_long [Safe] alter column amount
+   reason: col.null.relax
+   | ALTER TABLE [marts].[rpt_quota_long] ALTER COLUMN [amount] decimal(21, 4) NULL;
+44. Ddl marts.rpt_revenue_by_color_year [Safe] alter column revenue_2024
+   reason: col.null.relax
+   | ALTER TABLE [marts].[rpt_revenue_by_color_year] ALTER COLUMN [revenue_2024] decimal(38, 4) NULL;
+45. Ddl marts.rpt_territory_top_products [Safe] alter column revenue
+   reason: col.null.relax
+   | ALTER TABLE [marts].[rpt_territory_top_products] ALTER COLUMN [revenue] decimal(19, 2) NULL;
+46. Ddl staging.vendors [Safe] alter view staging.vendors
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[vendors] ([vendor_id], [vendor_name], [credit_rating], [is_preferred], [is_active]) AS
+   | SELECT vendor_id, name AS vendor_name, credit_rating, preferred_vendor AS is_preferred, active AS is_active FROM purchasing.vendor;
+47. Ddl marts.rpt_vendor_scorecard [Safe] alter column spend_rank
+   reason: col.null.relax
+   | ALTER TABLE [marts].[rpt_vendor_scorecard] ALTER COLUMN [spend_rank] bigint NULL;
+48. Ddl staging.special_offers [Safe] alter view staging.special_offers
+   reason: view.changed
+   | CREATE OR ALTER VIEW [staging].[special_offers] ([special_offer_id], [description], [discount_pct], [offer_type], [category], [start_date], [end_date], [min_qty], [max_qty]) AS
+   | SELECT special_offer_id, description, discount_pct, offer_type, category, start_date, end_date, min_qty, max_qty FROM sales.special_offer;

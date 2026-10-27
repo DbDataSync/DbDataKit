@@ -1,0 +1,77 @@
+# macro_examples on postgres: 3 model(s)
+
+## create
+1. Ddl marts.orders [Safe] create schema marts
+   reason: obj.missing.table
+   | CREATE SCHEMA IF NOT EXISTS "marts";
+2. Ddl marts.orders [Safe] create table marts.orders
+   reason: obj.missing.table
+   | CREATE TABLE "marts"."orders" (
+   |   "order_id" integer NOT NULL,
+   |   "customer_id" integer NOT NULL,
+   |   "status" varchar(20) COLLATE "C" NOT NULL,
+   |   "status_group" varchar(10) COLLATE "C" NOT NULL,
+   |   "amount" numeric(12, 2) NOT NULL,
+   |   "size_band" varchar(6) COLLATE "C" NOT NULL,
+   |   "ordered_on" date NOT NULL
+   | );
+3. Ddl marts.orders [Safe] create index ux_orders_order_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_orders_order_id" ON "marts"."orders" ("order_id");
+4. Ddl marts.status_totals_history [Safe] create table marts.status_totals_history
+   reason: obj.missing.table
+   | CREATE TABLE "marts"."status_totals_history" (
+   |   "as_of_date" date NOT NULL,
+   |   "status" varchar(20) COLLATE "C" NOT NULL,
+   |   "orders" bigint NOT NULL,
+   |   "total" numeric(38, 2) NULL
+   | );
+5. Ddl marts.status_totals_live [Safe] create table marts.status_totals_live
+   reason: obj.missing.table
+   | CREATE TABLE "marts"."status_totals_live" (
+   |   "as_of_date" date NOT NULL,
+   |   "status" varchar(20) COLLATE "C" NOT NULL,
+   |   "orders" bigint NOT NULL,
+   |   "total" numeric(38, 2) NULL
+   | );
+
+## columns as declared (no index or view recorded)
+1. Ddl marts.orders [Safe] create index ux_orders_order_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_orders_order_id" ON "marts"."orders" ("order_id");
+
+## a column is missing
+1. Ddl marts.orders [Safe] create index ux_orders_order_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_orders_order_id" ON "marts"."orders" ("order_id");
+? Q-history-marts.orders.ordered_on: marts.orders gains column `ordered_on`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.status_totals_history.total: marts.status_totals_history gains column `total`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+? Q-history-marts.status_totals_live.total: marts.status_totals_live gains column `total`. What about the rows that are already loaded? [not_backfilled, backfill_later]
+
+## the first sized column is wider
+1. Ddl marts.orders [Destructive] alter column status
+   reason: col.type.other
+   | ALTER TABLE "marts"."orders" ALTER COLUMN "status" TYPE varchar(20) COLLATE "C", ALTER COLUMN "status" SET NOT NULL;
+2. Ddl marts.orders [Safe] create index ux_orders_order_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_orders_order_id" ON "marts"."orders" ("order_id");
+3. Ddl marts.status_totals_history [Destructive] alter column status
+   reason: col.type.other
+   | ALTER TABLE "marts"."status_totals_history" ALTER COLUMN "status" TYPE varchar(20) COLLATE "C", ALTER COLUMN "status" SET NOT NULL;
+4. Ddl marts.status_totals_live [Destructive] alter column status
+   reason: col.type.other
+   | ALTER TABLE "marts"."status_totals_live" ALTER COLUMN "status" TYPE varchar(20) COLLATE "C", ALTER COLUMN "status" SET NOT NULL;
+
+## the last column's nullability is flipped
+1. Ddl marts.orders [Risky] alter column ordered_on
+   reason: col.null.tighten
+   | ALTER TABLE "marts"."orders" ALTER COLUMN "ordered_on" TYPE date, ALTER COLUMN "ordered_on" SET NOT NULL;
+2. Ddl marts.orders [Safe] create index ux_orders_order_id
+   reason: index.added
+   | CREATE UNIQUE INDEX "ux_orders_order_id" ON "marts"."orders" ("order_id");
+3. Ddl marts.status_totals_history [Safe] alter column total
+   reason: col.null.relax
+   | ALTER TABLE "marts"."status_totals_history" ALTER COLUMN "total" TYPE numeric(38, 2), ALTER COLUMN "total" DROP NOT NULL;
+4. Ddl marts.status_totals_live [Safe] alter column total
+   reason: col.null.relax
+   | ALTER TABLE "marts"."status_totals_live" ALTER COLUMN "total" TYPE numeric(38, 2), ALTER COLUMN "total" DROP NOT NULL;
