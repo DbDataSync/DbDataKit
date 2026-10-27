@@ -37,6 +37,7 @@
     <Project Path="src/DbDataKit.Serving.Abstractions/DbDataKit.Serving.Abstractions.csproj" />
     <Project Path="src/DbDataKit.Semantic/DbDataKit.Semantic.csproj" />
     <Project Path="src/DbDataKit.Semantic.Abstractions/DbDataKit.Semantic.Abstractions.csproj" />
+    <Project Path="src/DbDataKit.Semantic.Connections/DbDataKit.Semantic.Connections.csproj" />
     <Project Path="src/DbDataKit.Metadata/DbDataKit.Metadata.csproj" />
     <Project Path="src/DbDataKit.Lineage/DbDataKit.Lineage.csproj" />
     <Project Path="src/DbDataKit.Monitoring/DbDataKit.Monitoring.csproj" />

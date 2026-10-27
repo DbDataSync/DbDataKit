@@ -65,6 +65,7 @@
     <Project Path="DbDataKit/src/DbDataKit.Metadata.Abstractions/DbDataKit.Metadata.Abstractions.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Serving.Abstractions/DbDataKit.Serving.Abstractions.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Semantic.Abstractions/DbDataKit.Semantic.Abstractions.csproj" />
+    <Project Path="DbDataKit/src/DbDataKit.Semantic.Connections/DbDataKit.Semantic.Connections.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Semantic/DbDataKit.Semantic.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Metadata/DbDataKit.Metadata.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Lineage/DbDataKit.Lineage.csproj" />

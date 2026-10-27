@@ -8,36 +8,25 @@ using Npgsql;
 namespace DbDataKit.Semantic.Tests;
 
 /// <summary>
-/// Runs the T-SQL the engine emits (and agent-written T-SQL) on a real SQL Server, for the fixture job. Sources that are not
-/// T-SQL, such as the SSAS model, go to the fallback (the DuckDB stand-in). Test code: J03 replaces it with the executor over
-/// <c>DbDataKit.Connections</c>.
+/// Adds agent-written T-SQL (the level 0 fixtures) to an executor that does not run native text: the queries the engine plans go to
+/// <paramref name="inner"/> (the connections executor), the agent's text runs straight on SQL Server. Test code only; a host puts its
+/// statement classifier in front of native text instead.
 /// </summary>
-public sealed class SqlServerFixtureExecutor(string connectionString, ISourceExecutor fallback) : ISourceExecutor
+public sealed class NativeTextTestExecutor(ISourceExecutor inner, string sqlServerConnectionString) : ISourceExecutor
 {
     public bool RunsNativeText => true;
 
-    public QueryRows Execute(CompiledQuery query, int maxRows)
-    {
-        if (query.Native.Dialect != "tsql") return fallback.Execute(query, maxRows);
-        using var con = new SqlConnection(connectionString);
-        con.Open();
-        using var cmd = con.CreateCommand();
-        cmd.CommandText = query.ExecText ?? query.Native.Text;
-        // Emitted text uses @p1..@pN in the same order as the positional DuckDB parameters.
-        for (int i = 0; i < query.DuckDbParameters.Count; i++)
-            cmd.Parameters.AddWithValue($"@p{i + 1}", query.DuckDbParameters[i] ?? DBNull.Value);
-        return DuckDbRows.Read(cmd, maxRows);
-    }
+    public QueryRows Execute(CompiledQuery query, int maxRows) => inner.Execute(query, maxRows);
 
     public QueryRows ExecuteNativeText(string source, NativeQuery native, int maxRows)
     {
         if (native.Dialect != "tsql")
             throw new NotSupportedException($"{native.Dialect} execution isn't available on this executor.");
-        using var con = new SqlConnection(connectionString);
+        using var con = new SqlConnection(sqlServerConnectionString);
         con.Open();
         using var cmd = con.CreateCommand();
         cmd.CommandText = native.Text;
-        return DuckDbRows.Read(cmd, maxRows);
+        return QueryRowReader.Read(cmd, maxRows);
     }
 
     /// <summary>Loads a T-SQL seed script: DROP statements first, then everything else (SQL Server compiles a whole batch before running any of it).</summary>
@@ -76,7 +65,7 @@ public sealed class PostgresTwinExecutor(string connectionString, ISourceExecuto
         using var cmd = con.CreateCommand();
         cmd.CommandText = Positional(query.DuckDbSql);
         foreach (var p in query.DuckDbParameters) cmd.Parameters.Add(new NpgsqlParameter { Value = p ?? DBNull.Value });
-        return DuckDbRows.Read(cmd, maxRows);
+        return QueryRowReader.Read(cmd, maxRows);
     }
 
     public QueryRows ExecuteNativeText(string source, NativeQuery native, int maxRows) =>

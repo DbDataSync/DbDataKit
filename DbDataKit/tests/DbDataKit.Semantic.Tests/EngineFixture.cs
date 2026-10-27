@@ -12,11 +12,14 @@ public sealed class EngineFixture : IAsyncLifetime
 {
     public const string SqlServer = "mssql";
     public const string Postgres = "postgres";
+    /// <summary>DuckDB needs no server: the fixtures run on a seeded file, opened read-only through <c>DbDataKit.Connections.DuckDb</c>.</summary>
+    public const string DuckDb = "duckdb";
 
     private readonly string _name = $"dbdatakit_semantic_{Guid.NewGuid():N}";
     private readonly Dictionary<string, string> _databases = [];
+    private DirectoryInfo? _directory;
 
-    public static TheoryData<string> Engines => [SqlServer, Postgres];
+    public static TheoryData<string> Engines => [SqlServer, DuckDb, Postgres];
 
     private static string? Server(string engine) =>
         Environment.GetEnvironmentVariable(engine == SqlServer ? "DBDATA_TEST_SQLSERVER" : "DBDATA_TEST_POSTGRES");
@@ -27,11 +30,21 @@ public sealed class EngineFixture : IAsyncLifetime
     public ValueTask InitializeAsync()
     {
         var root = ConformanceTests.Root;
+        _directory = Directory.CreateTempSubdirectory("dbdatakit-semantic-");
+        var file = Path.Combine(_directory.FullName, "seed.duckdb");
+        using (var duck = new DuckDB.NET.Data.DuckDBConnection($"DataSource={file}"))
+        {
+            duck.Open();
+            using var cmd = duck.CreateCommand();
+            cmd.CommandText = ConformanceTests.Seed;
+            cmd.ExecuteNonQuery();
+        }
+        _databases[DuckDb] = file;
         if (Server(SqlServer) is { } mssql)
         {
             using (var con = new SqlConnection(mssql)) { con.Open(); Execute(con, $"CREATE DATABASE [{_name}]"); }
             var db = new SqlConnectionStringBuilder(mssql) { InitialCatalog = _name }.ConnectionString;
-            SqlServerFixtureExecutor.LoadSeed(db, File.ReadAllText(Path.Combine(root, "data", "seed.tsql.sql")));
+            NativeTextTestExecutor.LoadSeed(db, File.ReadAllText(Path.Combine(root, "data", "seed.tsql.sql")));
             _databases[SqlServer] = db;
         }
         if (Server(Postgres) is { } postgres)
@@ -46,6 +59,7 @@ public sealed class EngineFixture : IAsyncLifetime
 
     public ValueTask DisposeAsync()
     {
+        try { _directory?.Delete(recursive: true); } catch (IOException) { /* a file DuckDB still holds is the temp folder's to clean */ }
         if (Server(SqlServer) is { } mssql && _databases.ContainsKey(SqlServer))
         {
             SqlConnection.ClearAllPools();
@@ -63,7 +77,7 @@ public sealed class EngineFixture : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    /// <summary>The connection string of the seeded scratch database on the engine; skips the test when the engine is not provided, fails it when it is required.</summary>
+    /// <summary>The connection string of the seeded scratch database on the engine (the file, for DuckDB); skips the test when the engine is not provided, fails it when it is required.</summary>
     public string Database(string engine)
     {
         if (_databases.TryGetValue(engine, out var db)) return db;

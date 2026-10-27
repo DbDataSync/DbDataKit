@@ -1,10 +1,13 @@
 using System.Text.Json.Nodes;
+using DbDataKit.Connections;
 using DbDataKit.Semantic.Abstractions;
+using DbDataKit.Semantic.Connections;
 
 namespace DbDataKit.Semantic.Tests;
 
 /// <summary>
-/// The conformance fixtures on the shared engines. SQL Server runs the T-SQL the engine emits (and the level 0 agent-written queries);
+/// The conformance fixtures on the shared engines. SQL Server and DuckDB run through <c>DbDataKit.Semantic.Connections</c> (the shared connections:
+/// the T-SQL the engine emits on SQL Server, its DuckDB twin on a read-only DuckDB file; the level 0 agent-written queries run on SQL Server in test code);
 /// PostgreSQL runs the DuckDB-dialect twin until the engine has its own emitter (J05). The same checks as the stand-in run:
 /// the expected rows, the result schema, replay from the run record, and the other subtotal modes.
 /// </summary>
@@ -30,7 +33,7 @@ public class EngineConformanceTests(EngineFixture engines) : IClassFixture<Engin
     public static TheoryData<string, string> Fixtures()
     {
         var data = new TheoryData<string, string>();
-        foreach (var engine in new[] { EngineFixture.SqlServer, EngineFixture.Postgres })
+        foreach (var engine in new[] { EngineFixture.SqlServer, EngineFixture.DuckDb, EngineFixture.Postgres })
             foreach (var f in ConformanceTests.Fixtures()) data.Add(engine, (string)f[0]);
         return data;
     }
@@ -38,7 +41,7 @@ public class EngineConformanceTests(EngineFixture engines) : IClassFixture<Engin
     public static TheoryData<string, string> TotalsFixtures()
     {
         var data = new TheoryData<string, string>();
-        foreach (var engine in new[] { EngineFixture.SqlServer, EngineFixture.Postgres })
+        foreach (var engine in new[] { EngineFixture.SqlServer, EngineFixture.DuckDb, EngineFixture.Postgres })
             foreach (var f in ConformanceTests.TotalsFixtures()) data.Add(engine, (string)f[0]);
         return data;
     }
@@ -55,15 +58,23 @@ public class EngineConformanceTests(EngineFixture engines) : IClassFixture<Engin
     [MemberData(nameof(TotalsFixtures))]
     public void FixtureWithAutoSubtotals(string engine, string relativePath) => Run(engine, relativePath, "auto");
 
+    private static string DatabaseName(string connectionString) => new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connectionString).InitialCatalog;
+
     private void Run(string engine, string relativePath, string totalsCompute)
     {
         var database = engines.Database(engine);
         if (engine == EngineFixture.Postgres && PostgresGaps.TryGetValue(relativePath.Replace('\\', '/'), out var gap))
             Assert.Skip($"needs the PostgreSQL emitter (J05): the DuckDB twin uses {gap}");
         using var standIn = new DuckDbStandInExecutor(ConformanceTests.Seed);
-        ISourceExecutor executor = engine == EngineFixture.SqlServer
-            ? new SqlServerFixtureExecutor(database, standIn)
-            : new PostgresTwinExecutor(database, standIn);
+        // the catalog's SQL Server source runs through the shared connections; its SSAS source stays on the stand-in
+        ISourceExecutor executor = engine switch
+        {
+            EngineFixture.SqlServer => new NativeTextTestExecutor(
+                new ConnectionsSourceExecutor(new Dictionary<string, SemanticSource> { ["sqlserver_sales"] = ConnectionContexts.SqlServer(DatabaseName(database)) }, standIn), database),
+            EngineFixture.DuckDb => new ConnectionsSourceExecutor(
+                new Dictionary<string, SemanticSource> { ["sqlserver_sales"] = ConnectionContexts.DuckDb(database) }, standIn),
+            _ => new PostgresTwinExecutor(database, standIn),
+        };
         ConformanceTests.RunFixture(relativePath, totalsCompute, executor);
     }
 }

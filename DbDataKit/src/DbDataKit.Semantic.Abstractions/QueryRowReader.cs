@@ -1,10 +1,9 @@
 using System.Data.Common;
-using DbDataKit.Semantic.Abstractions;
 
-namespace DbDataKit.Semantic;
+namespace DbDataKit.Semantic.Abstractions;
 
-/// <summary>Reads a DuckDB command's rows the way the engine wants them: whole numbers as <c>long</c>, dates as ISO 8601 text.</summary>
-public static class DuckDbRows
+/// <summary>Reads a command's rows the way the engine wants them, whichever engine ran it: whole numbers as <c>long</c>, dates as ISO 8601 text.</summary>
+public static class QueryRowReader
 {
     /// <summary>
     /// DuckDB returns HUGEINT (for example SUM over BIGINT) as BigInteger, which doesn't serialize as a JSON number.

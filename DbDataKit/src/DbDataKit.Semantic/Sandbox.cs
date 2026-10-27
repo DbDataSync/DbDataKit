@@ -97,7 +97,7 @@ public static class Sandbox
         Exec(con, "SET lock_configuration = true");
         using var cmd = con.CreateCommand();
         cmd.CommandText = sql;
-        return DuckDbRows.Read(cmd, maxRows);
+        return QueryRowReader.Read(cmd, maxRows);
     }
 
     private static void Exec(DuckDBConnection con, string sql)

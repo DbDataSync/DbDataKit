@@ -28,7 +28,7 @@ public sealed class DuckDbStandInExecutor : ISourceExecutor, IDisposable
         cmd.CommandText = query.DuckDbSql;
         foreach (var p in query.DuckDbParameters)
             cmd.Parameters.Add(new DuckDBParameter(DuckDbValue(p) ?? DBNull.Value));
-        return DuckDbRows.Read(cmd, maxRows);
+        return QueryRowReader.Read(cmd, maxRows);
     }
 
     /// <summary>
