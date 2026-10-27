@@ -43,7 +43,8 @@ public abstract record ServingRequest(string Source, ServingLimits? Asked = null
 /// <param name="Canonical">The query as it ran: the text itself for SQL, the canonical semantic SQL for a request in another language.</param>
 /// <param name="DefinitionVersion">The published definition version the request was pinned to; null for a source with no published definition.</param>
 /// <param name="Channel">The channel it was answered from.</param>
-public sealed record ServingProvenance(string Canonical, string? DefinitionVersion, string Channel);
+/// <param name="Source">The source it ran against, by name, when the request left the choice to the core (an empty name is the caller's default); null when the core does not say.</param>
+public sealed record ServingProvenance(string Canonical, string? DefinitionVersion, string Channel, string? Source = null);
 
 /// <summary>A query's answer: an Arrow result and where it came from.</summary>
 public interface IServingAnswer : IServingResult
@@ -87,7 +88,8 @@ public enum ServingObjectKind { Catalog, Schema, Table, View, Column, Model, Dim
 /// <param name="PrimaryKey">The columns of a table's primary key in key order; null where the source cannot say, empty where there is none.</param>
 /// <param name="Catalog">For a schema, table or view: the catalog it is in, or null when the source has none (<see cref="Path"/> leaves out a part a source does not have, so a path alone cannot say which part is missing).</param>
 /// <param name="SchemaName">For a table or view: the schema it is in, or null when the source has none.</param>
-public sealed record ServingObject(ServingObjectKind Kind, IReadOnlyList<string> Path, string? Description = null, Schema? Columns = null, IReadOnlyDictionary<string, string>? Properties = null, IReadOnlyList<string>? PrimaryKey = null, string? Catalog = null, string? SchemaName = null)
+/// <param name="PrimaryKeyName">The name of the primary key constraint, or null when the source has none to name.</param>
+public sealed record ServingObject(ServingObjectKind Kind, IReadOnlyList<string> Path, string? Description = null, Schema? Columns = null, IReadOnlyDictionary<string, string>? Properties = null, IReadOnlyList<string>? PrimaryKey = null, string? Catalog = null, string? SchemaName = null, string? PrimaryKeyName = null)
 {
     public string Name => Path[^1];
 }
@@ -107,8 +109,10 @@ public interface IServingCatalog
     Task<ServingSourceFacts> FactsAsync(ServingContext context, string source, CancellationToken cancellationToken = default);
 
     /// <summary>The objects under <paramref name="under"/> (the whole catalog when empty) that the caller may see. A caller sees nothing they could not query.</summary>
+    /// <param name="withPrimaryKeys">Fill in <see cref="ServingObject.PrimaryKey"/>; reading keys can cost a catalog call per table, so a protocol asks with <paramref name="under"/> naming the one table it wants them for.</param>
+    /// <param name="source">The source whose objects are listed; empty is the caller's default source, as for <see cref="FactsAsync"/>. A host with one catalog for every source ignores it.</param>
     /// <param name="withColumns">Fill in <see cref="ServingObject.Columns"/> of tables and views; reading them can cost a query each, so they are asked for only when the protocol needs them (Flight SQL's <c>GetTables</c> with <c>include_schema</c>).</param>
-    IAsyncEnumerable<ServingObject> DescribeAsync(ServingContext context, IReadOnlyList<string> under, bool withColumns = false, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<ServingObject> DescribeAsync(ServingContext context, IReadOnlyList<string> under, bool withColumns = false, bool withPrimaryKeys = false, string source = "", CancellationToken cancellationToken = default);
 }
 
 /// <summary>What a client is told when it prepares a statement.</summary>
@@ -221,7 +225,7 @@ public sealed class HostServices(IServingHost host) : IServingServices, IServing
     {
         if (request is not ServingRequest.Sql sql) throw new ServingInvalidException($"This host does not run {request.GetType().Name.ToLowerInvariant()} requests.");
         var result = await host.QueryAsync(context.Caller, QueryOf(sql), cancellationToken).ConfigureAwait(false);
-        return new Answer(result, new ServingProvenance(sql.Text, null, context.Channel));
+        return new Answer(result, new ServingProvenance(sql.Text, null, context.Channel, sql.Source));
     }
 
     // the host's query takes parameters by name; a positional one is named by its position (1-based), as the markers are counted
@@ -251,7 +255,7 @@ public sealed class HostServices(IServingHost host) : IServingServices, IServing
         return Task.FromResult(new ServingStatementInfo(count));
     }
 
-    public async IAsyncEnumerable<ServingObject> DescribeAsync(ServingContext context, IReadOnlyList<string> under, bool withColumns = false, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<ServingObject> DescribeAsync(ServingContext context, IReadOnlyList<string> under, bool withColumns = false, bool withPrimaryKeys = false, string source = "", [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await foreach (var table in host.DescribeAsync(context.Caller, new ServingCatalogRequest(), cancellationToken).ConfigureAwait(false))
         {

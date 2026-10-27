@@ -70,7 +70,7 @@ public sealed partial class ServingFlightServer(ILoggerFactory loggerFactory, Fl
         try { answer = await Services.Queries.RunAsync(serving, new ServingRequest.Sql(source, sql, parameters), context.CancellationToken).ConfigureAwait(false); }
         catch (Exception ex) when (ex is not RpcException and not OperationCanceledException) { throw Fail(ex); }
 
-        byte[] handle = module.Pending.Add(serving.Caller.Name, source, answer);
+        byte[] handle = module.Pending.Add(serving.Caller.Name, answer.Provenance.Source ?? source, answer);
         var ticket = new TicketStatementQuery { StatementHandle = ByteString.CopyFrom(handle) };
         var endpoint = new FlightEndpoint(new FlightTicket(Any.Pack(ticket).ToByteString()), []);
         return new FlightInfo(answer.Schema, descriptor, [endpoint], -1, -1);

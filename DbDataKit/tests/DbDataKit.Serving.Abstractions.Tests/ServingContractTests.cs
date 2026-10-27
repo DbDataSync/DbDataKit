@@ -19,7 +19,7 @@ public class ServingContractTests
         await foreach (var batch in answer.ReadBatchesAsync()) rows += batch.Length;
 
         Assert.Equal(5, rows);
-        Assert.Equal(new ServingProvenance("public.items", null, "prod"), answer.Provenance);
+        Assert.Equal(new ServingProvenance("public.items", null, "prod", "main"), answer.Provenance);
     }
 
     [Fact]

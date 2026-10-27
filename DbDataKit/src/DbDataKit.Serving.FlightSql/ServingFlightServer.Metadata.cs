@@ -42,13 +42,13 @@ public sealed partial class ServingFlightServer
 
     // ---- The catalog, as the core describes it ----
 
-    private async Task<List<ServingObject>> ObjectsAsync(ServerCallContext context, bool withColumns = false)
+    private async Task<List<ServingObject>> ObjectsAsync(ServerCallContext context, bool withColumns = false, IReadOnlyList<string>? under = null, bool withPrimaryKeys = false)
     {
         var serving = context.GetServingContext();
         var objects = new List<ServingObject>();
         try
         {
-            await foreach (var o in Services.Catalog.DescribeAsync(serving, [], withColumns, context.CancellationToken).ConfigureAwait(false)) objects.Add(o);
+            await foreach (var o in Services.Catalog.DescribeAsync(serving, under ?? [], withColumns, withPrimaryKeys, context.RequestedSource(), context.CancellationToken).ConfigureAwait(false)) objects.Add(o);
         }
         catch (Exception ex) when (ex is not RpcException and not OperationCanceledException) { throw Fail(ex); }
         return objects;
@@ -91,7 +91,7 @@ public sealed partial class ServingFlightServer
         var wantedTypes = command.TableTypes.Count == 0 ? null : command.TableTypes.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var tables = (await ObjectsAsync(context, withColumns: command.IncludeSchema).ConfigureAwait(false)).Where(IsTable)
-            .Select(o => (Object: o, Type: o.Kind == ServingObjectKind.View ? "VIEW" : "TABLE"))
+            .Select(o => (Object: o, Type: o.Properties?.GetValueOrDefault("type") ?? (o.Kind == ServingObjectKind.View ? "VIEW" : "TABLE")))
             .Where(r => (!command.HasCatalog || r.Object.Catalog == command.Catalog)
                         && schemaFilter(r.Object.SchemaName ?? "") && tableFilter(r.Object.Name)
                         && (wantedTypes is null || wantedTypes.Contains(r.Type)))
@@ -119,8 +119,10 @@ public sealed partial class ServingFlightServer
 
     protected override async Task DoGetPrimaryKeys(CommandGetPrimaryKeys command, FlightServerRecordBatchStreamWriter writer, ServerCallContext context)
     {
-        var table = (await ObjectsAsync(context).ConfigureAwait(false)).Where(IsTable)
+        var named = (await ObjectsAsync(context).ConfigureAwait(false)).Where(IsTable)
             .FirstOrDefault(o => o.Name == command.Table && (!command.HasCatalog || o.Catalog == command.Catalog) && (!command.HasDbSchema || o.SchemaName == command.DbSchema));
+        // the keys are read for the one table, by its own path
+        var table = named is null ? null : (await ObjectsAsync(context, under: named.Path, withPrimaryKeys: true).ConfigureAwait(false)).FirstOrDefault(o => IsTable(o) && o.Path.SequenceEqual(named.Path));
         var keys = table?.PrimaryKey ?? [];
 
         var sequence = new Int32Array.Builder();
@@ -128,7 +130,7 @@ public sealed partial class ServingFlightServer
         await WriteAsync(writer, PrimaryKeysSchema,
         [
             Strings(keys.Select(_ => table!.Catalog)), Strings(keys.Select(_ => table!.SchemaName)), Strings(keys.Select(_ => (string?)table!.Name)),
-            Strings(keys.Select(k => (string?)k)), Strings(keys.Select(_ => (string?)null)), sequence.Build(),
+            Strings(keys.Select(k => (string?)k)), Strings(keys.Select(_ => table!.PrimaryKeyName)), sequence.Build(),
         ], keys.Count).ConfigureAwait(false);
     }
 
