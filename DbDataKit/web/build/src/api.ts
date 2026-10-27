@@ -58,7 +58,7 @@ export const buildApi = {
   /** A few rows of what one model file of a workspace returns on generated data, offline. */
   sampleOf: (id: string, workspace: string, path: string) => run<SampleResult>(id, 'project_sample', { models: [path], rows: 8, limit: 8 }, workspace),
   /** What the draft changes from where it started, with the patch of each file. */
-  changes: (id: string, workspace: string) => request<{ changes: GitChange[] }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/changes`).then((r) => r.changes),
+  changes: (id: string, workspace: string) => request<{ changes: GitChange[]; uncommitted: boolean }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/changes`),
   history: (id: string, workspace: string) => request<{ commits: GitCommit[] }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/history`).then((r) => r.commits),
   commit: (id: string, workspace: string, message: string) => request<{ committed: boolean; sha: string | null }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/commit`, { method: 'POST', body: JSON.stringify({ message }) }),
   /** For a project that follows a git remote: sends the draft's branch there. */

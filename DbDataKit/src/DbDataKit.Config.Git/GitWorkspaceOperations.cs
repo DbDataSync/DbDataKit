@@ -31,6 +31,17 @@ public static class GitWorkspaceOperations
         catch (LibGit2SharpException ex) { throw new GitOperationException($"The changes could not be read: {ex.Message}", ex); }
     }
 
+    /// <summary>Whether the worktree holds changes that no commit has taken (staged, edited or new files): a merge would leave them behind.</summary>
+    public static bool HasUncommitted(string worktree)
+    {
+        try
+        {
+            using var repo = new Repository(worktree);
+            return repo.RetrieveStatus(new StatusOptions { IncludeUntracked = true }).IsDirty;
+        }
+        catch (LibGit2SharpException ex) { throw new GitOperationException($"The changes could not be read: {ex.Message}", ex); }
+    }
+
     /// <summary>Commits everything changed in the worktree. The new commit's sha, or null when nothing changed.</summary>
     public static string? Commit(string worktree, string message, GitAuthor author)
     {

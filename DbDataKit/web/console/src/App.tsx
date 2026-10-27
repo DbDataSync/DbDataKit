@@ -4,6 +4,7 @@ import { SignInScreen, useAuthStatus } from '@dbdatakit/shell'
 import { PRODUCT } from './ConsoleShell'
 import { HomePage } from './pages/HomePage'
 import { InstancesPage } from './pages/InstancesPage'
+import { MonitoringPage } from './pages/MonitoringPage'
 import { ServerModule } from './pages/ServerModule'
 
 export default function App() {
@@ -24,6 +25,7 @@ export default function App() {
       <Route path="/" element={<HomePage />} />
       <Route path="/instances" element={<InstancesPage />} />
       <Route path="/servers/:instance/*" element={<ServerModule />} />
+      <Route path="/monitoring" element={<MonitoringPage />} />
       <Route path="/users" element={<UsersPage />} />
       <Route path="*" element={<HomePage />} />
     </Routes>

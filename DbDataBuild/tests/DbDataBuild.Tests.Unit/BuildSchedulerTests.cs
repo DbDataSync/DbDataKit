@@ -207,4 +207,110 @@ public sealed class BuildSchedulerTests : IDisposable
             await app.DisposeAsync();
         }
     }
+
+    [Fact]
+    public async Task A_paused_plan_passes_its_times_by_and_resuming_does_not_run_what_was_missed()
+    {
+        var hosted = projects.Find("sales")!;
+        var job = scheduler.Find(hosted, "sqlserver", "hourly")!;
+        scheduler.Tick();                                      // 12:00 noted
+        scheduler.Pause(hosted, job, "ada");
+        Assert.Equal("ada", scheduler.PausedBy(hosted, job)!.Value.By);
+
+        clock.To(At(12, 16));
+        Assert.Empty(scheduler.Tick());                        // due, and passed over
+        scheduler.Resume(hosted, job);
+        Assert.Null(scheduler.PausedBy(hosted, job));
+        Assert.Empty(scheduler.Tick());                        // resuming does not start the plan for 12:15
+
+        clock.To(At(13, 16));
+        Assert.Single(scheduler.Tick());                       // the next time runs
+        Assert.True(await RunNext());
+    }
+
+    [Fact]
+    public async Task Run_now_queues_the_plan_apart_from_its_schedule_even_when_paused_and_not_twice()
+    {
+        var hosted = projects.Find("sales")!;
+        var job = scheduler.Find(hosted, "sqlserver", "hourly")!;
+        scheduler.Pause(hosted, job, "ada");
+
+        Assert.True(scheduler.RunNow(hosted, job));
+        Assert.False(scheduler.RunNow(hosted, job));           // one is queued already
+
+        Assert.True(await RunNext());
+        Assert.Equal(["connection", "refresh", "sqlserver", "hourly", "--project", project], Assert.Single(runner.Calls));
+        Assert.True(scheduler.RunNow(hosted, job));            // finished, so another may be asked for
+        Assert.Null(scheduler.Find(hosted, "sqlserver", "quiet"));    // only a plan with a schedule is a job
+    }
+
+    [Fact]
+    public async Task The_server_pauses_resumes_and_runs_a_plan_for_an_operator_only_and_only_when_it_runs_schedules()
+    {
+        var serverDir = Path.Combine(root, "server2");
+        Directory.CreateDirectory(serverDir);
+        var serverProjects = new ProjectsFile(serverDir);
+        serverProjects.Add(new HostedProject("sales", project, null, null));
+        var settings = new BuildServerSettings(serverDir, new Uri("https://127.0.0.1:0"));
+        var ownScheduler = new BuildScheduler(serverProjects, runner, BuildSchedulerSchema.Open(serverDir), clock, log.Add);
+        var withScheduler = BuildServer.Build(settings, BuildServer.Certificate(serverDir), runner, serverProjects, new TuiCommand.CliHost(_ => null).Commands, log.Add, scheduler: ownScheduler);
+        await withScheduler.StartAsync();
+        try
+        {
+            var console = new ConsoleIdentity("console-1", ConsoleSigningKey.Generate());
+            var url = new Uri(withScheduler.Urls.First());
+            var code = new PairingFiles(settings.ServerYaml).Codes().Create(ServerRoles.Close(ServerRole.Operator));
+            var paired = await PairingClient.PairAsync(url, code.Code, console, ClientKind.Console, "test console");
+            async Task<HttpResponseMessage> Send(HttpMethod method, string path, ServerRole role)
+            {
+                using var http = new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint)) { BaseAddress = url };
+                using var request = new HttpRequestMessage(method, path);
+                request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, console.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, "ada", "Ada", role)));
+                return await http.SendAsync(request);
+            }
+            const string plan = "/api/v1/projects/sales/schedule/sqlserver/hourly/";
+
+            Assert.Equal(HttpStatusCode.Forbidden, (await Send(HttpMethod.Post, plan + "pause", ServerRole.Viewer)).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await Send(HttpMethod.Post, "/api/v1/projects/sales/schedule/sqlserver/quiet/pause", ServerRole.Operator)).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Post, plan + "pause", ServerRole.Operator)).StatusCode);
+
+            var listed = JsonNode.Parse(await (await Send(HttpMethod.Get, "/api/v1/projects/sales/schedule", ServerRole.Viewer)).Content.ReadAsStringAsync())!["jobs"]![0]!;
+            Assert.True((bool)listed["paused"]!);
+            Assert.Equal("Ada", (string)listed["paused_by"]!);
+
+            Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Post, plan + "run", ServerRole.Operator)).StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict, (await Send(HttpMethod.Post, plan + "run", ServerRole.Operator)).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Post, plan + "resume", ServerRole.Operator)).StatusCode);
+        }
+        finally
+        {
+            await withScheduler.StopAsync();
+            await withScheduler.DisposeAsync();
+        }
+
+        // a server that does not run schedules says so, and changes nothing
+        var plainDir = Path.Combine(root, "server3");
+        Directory.CreateDirectory(plainDir);
+        var plainProjects = new ProjectsFile(plainDir);
+        plainProjects.Add(new HostedProject("sales", project, null, null));
+        var plainSettings = new BuildServerSettings(plainDir, new Uri("https://127.0.0.1:0"));
+        var plain = BuildServer.Build(plainSettings, BuildServer.Certificate(plainDir), runner, plainProjects, new TuiCommand.CliHost(_ => null).Commands, log.Add);
+        await plain.StartAsync();
+        try
+        {
+            var console = new ConsoleIdentity("console-2", ConsoleSigningKey.Generate());
+            var url = new Uri(plain.Urls.First());
+            var code = new PairingFiles(plainSettings.ServerYaml).Codes().Create(ServerRoles.Close(ServerRole.Operator));
+            var paired = await PairingClient.PairAsync(url, code.Code, console, ClientKind.Console, "test console");
+            using var http = new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint)) { BaseAddress = url };
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/projects/sales/schedule/sqlserver/hourly/pause");
+            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, console.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, "ada", "Ada", ServerRole.Operator)));
+            Assert.Equal(HttpStatusCode.Conflict, (await http.SendAsync(request)).StatusCode);
+        }
+        finally
+        {
+            await plain.StopAsync();
+            await plain.DisposeAsync();
+        }
+    }
 }

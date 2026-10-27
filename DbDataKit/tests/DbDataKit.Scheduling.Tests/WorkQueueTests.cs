@@ -308,6 +308,27 @@ public sealed class WorkQueueTests : IDisposable
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public void A_pause_is_kept_per_service_owner_and_job_and_cleared_by_resuming(string engine)
+    {
+        var database = _engines.Open(engine, new StateSchema([WorkQueueSchema.Queue, JobStateSchema.Table, JobPauseSchema.Table]));
+        var pauses = new JobPauseStore(database, Sync);
+        var other = new JobPauseStore(database, "dbdatabuild");
+        var at = new DateTimeOffset(2026, 10, 27, 9, 0, 0, TimeSpan.Zero);
+
+        Assert.False(pauses.IsPaused("sales", "sqlserver/hourly"));
+        pauses.Set("sales", "sqlserver/hourly", "Ada", at);
+        pauses.Set("sales", "sqlserver/hourly", "Bob", at.AddHours(1));       // already paused: the first stays
+
+        Assert.Equal(("Ada", at), pauses.Get("sales", "sqlserver/hourly"));
+        Assert.False(pauses.IsPaused("sales", "sqlserver/daily"));
+        Assert.False(other.IsPaused("sales", "sqlserver/hourly"));
+
+        pauses.Clear("sales", "sqlserver/hourly");
+        Assert.Null(pauses.Get("sales", "sqlserver/hourly"));
+        pauses.Clear("sales", "sqlserver/hourly");                             // resuming what is not paused is nothing
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public void A_schedulers_job_record_is_kept_per_service_owner_and_job(string engine)
     {
         var database = _engines.Open(engine, new StateSchema([WorkQueueSchema.Queue, JobStateSchema.Table]));
