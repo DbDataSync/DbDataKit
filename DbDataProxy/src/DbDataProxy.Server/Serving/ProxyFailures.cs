@@ -7,13 +7,14 @@ namespace DbDataProxy.Server.Serving;
 
 /// <summary>
 /// What Proxy's data layer throws, said as the serving layer's exceptions, so a protocol turns each into its own words: the gRPC statuses the catalog of data sources raises, a message Proxy wrote for the client, an ODBC policy violation
-/// and a catalog larger than the configured limit. A database failure (<c>ConnectionFailureException</c>) and anything unrecognised pass through unchanged for the protocol to classify.
+/// and a catalog larger than the configured limit. A database failure (<c>ConnectionFailureException</c>) becomes a <c>ServingBackendException</c> carrying the classified failure; anything unrecognised passes through unchanged for the protocol to classify.
 /// </summary>
 public static class ProxyFailures
 {
     public static Exception ToServing(Exception ex) => ex switch
     {
         ServingException => ex,
+        DbDataKit.Connections.ConnectionFailureException failure => new ServingBackendException(failure.Failure),
         IClientVisible or OdbcPolicyViolationException => new ServingInvalidException(ex.Message),
         OdbcResultTruncatedException => new ServingLimitException("The data source's catalog is larger than the configured limit.", "catalog"),
         RpcException { StatusCode: StatusCode.NotFound } rpc => new ServingNotFoundException(rpc.Status.Detail),
