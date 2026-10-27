@@ -1439,3 +1439,8 @@ Operator decision: correlated subqueries are a hard requirement.
 - **Tests**: `BuildServerTests` (offers with roles, read-only, viewer refused and approver applies with the actor, ceiling); conformance `A_plan_applied_for_a_person_names_that_person_in_the_events_and_the_ddl_log` on SQL Server and PostgreSQL.
 - **Not done**: separate approver and console columns, an approve step apart from applying, a rule that the author of a plan cannot apply it (all for the security review).
 
+## 191. Build's lineage in the shared graph (plan 18, G05 and G06)
+
+- **Built**: `BuildLineage.Design` (the model graph and the query analysis's column lineage as `DbDataKit.Lineage` nodes and edges; table level for native models and copies), `BuildLineage.Runs` and `AuditLog.LastLoadsAsync` (the last run of each model from `run_log`, laid along its load edges), `BuildLineage.IdentityOf` and `LoginSettings.AddressOnlyDefinition` (the connection's address for `LineageIdentity`, never the user or password), `BuildLineage.Source` (the function for `LineageNoun.Create`). Design section 9.9.
+- **Tests**: `BuildLineageTests` (every template's lineage equals its `project show graph --columns`; copies, identity, the address of a login, runs laid on edges). Conformance `After_a_refresh_each_load_edge_carries_its_last_run_from_the_tracking_tables` (SQL Server and PostgreSQL) was compiled but not run: no container engine was available when it was written.
+- **Not done**: the `lineage` verbs on Build's own command line and server (a seam only); run lineage for column edges and for a model that reads nothing; a job node per load; copies at column level.
