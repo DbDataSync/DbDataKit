@@ -7,7 +7,7 @@ namespace DbDataKit.Semantic.Tests;
 /// Conformance stand-in: runs the DuckDB equivalent of each compiled query against the seed data. The engines
 /// run <c>CompiledQuery.Native</c> instead, through the executors over <c>DbDataKit.Connections</c>.
 /// </summary>
-public sealed class DuckDbStandInExecutor : ISourceExecutor, IDisposable
+public sealed class DuckDbStandInExecutor : IColumnarSourceExecutor, IDisposable
 {
     private readonly DuckDBConnection _con;
 
@@ -24,11 +24,23 @@ public sealed class DuckDbStandInExecutor : ISourceExecutor, IDisposable
 
     public QueryRows Execute(CompiledQuery query, int maxRows)
     {
-        using var cmd = _con.CreateCommand();
+        using var cmd = Command(query);
+        return QueryRowReader.Read(cmd, maxRows);
+    }
+
+    public ColumnarOutcome ExecuteColumnar(CompiledQuery query, int maxRows)
+    {
+        using var cmd = Command(query);
+        return QueryRowReader.ReadColumnar(cmd, maxRows);
+    }
+
+    private DuckDBCommand Command(CompiledQuery query)
+    {
+        var cmd = _con.CreateCommand();
         cmd.CommandText = query.DuckDbSql;
         foreach (var p in query.DuckDbParameters)
             cmd.Parameters.Add(new DuckDBParameter(DuckDbValue(p) ?? DBNull.Value));
-        return QueryRowReader.Read(cmd, maxRows);
+        return cmd;
     }
 
     /// <summary>
