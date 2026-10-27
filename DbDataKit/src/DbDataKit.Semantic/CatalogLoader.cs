@@ -66,7 +66,7 @@ public static partial class CatalogLoader
     /// </summary>
     public static JsonObject YamlToJson(string yaml) => ToJson(ReadYaml(yaml, "catalog"));
 
-    private static YamlMapping ReadYaml(string yaml, string file)
+    internal static YamlMapping ReadYaml(string yaml, string file)
     {
         var diagnostics = new List<ConfigDiagnostic>();
         var root = StrictYamlReader.Read(yaml, file, diagnostics);
@@ -78,7 +78,7 @@ public static partial class CatalogLoader
         return (YamlMapping)root!;
     }
 
-    private static JsonObject ToJson(YamlMapping root) => (JsonObject)Convert(root)!;
+    internal static JsonObject ToJson(YamlMapping root) => (JsonObject)Convert(root)!;
 
     private static JsonNode? Convert(YamlNode node) => node switch
     {
@@ -92,19 +92,8 @@ public static partial class CatalogLoader
     /// <summary>An error with the file, line and column of the node its path names (the deepest one that exists), as <c>file:line:column</c> in front of the message.</summary>
     private static QisError Locate(YamlNode root, string file, QisError error)
     {
-        var node = root;
-        foreach (var step in error.Path.Split(['$', '.', '/', '[', ']'], StringSplitOptions.RemoveEmptyEntries))
-        {
-            var next = node switch
-            {
-                YamlMapping m => m.Get(step),
-                YamlSequence q when int.TryParse(step, out var i) && i >= 0 && i < q.Items.Count => q.Items[i],
-                _ => null,
-            };
-            if (next is null) break;
-            node = next;
-        }
-        return error with { Message = $"{file}:{node.Line}:{node.Column}: {error.Message}" };
+        var at = Authoring.PathLocator.Find(root, error.Path);
+        return error with { Message = $"{file}:{at.Line}:{at.Column}: {error.Message}" };
     }
 
     private static JsonNode? Plain(string? v)

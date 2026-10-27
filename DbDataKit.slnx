@@ -12,6 +12,7 @@
     <Project Path="DbDataBuild/src/DbDataBuild.Models/DbDataBuild.Models.csproj" />
     <Project Path="DbDataBuild/src/DbDataBuild.Planning/DbDataBuild.Planning.csproj" />
     <Project Path="DbDataBuild/src/DbDataBuild.Sample/DbDataBuild.Sample.csproj" />
+    <Project Path="DbDataBuild/src/DbDataBuild.Semantic/DbDataBuild.Semantic.csproj" />
     <Project Path="DbDataBuild/src/DbDataBuild.Sql/DbDataBuild.Sql.csproj" />
     <Project Path="DbDataBuild/src/DbDataBuild.State/DbDataBuild.State.csproj" />
     <Project Path="DbDataBuild/src/DbDataBuild.Targets.DuckDb/DbDataBuild.Targets.DuckDb.csproj" />

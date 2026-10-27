@@ -13,6 +13,7 @@ internal sealed class ToolSurface
     private static readonly Dictionary<string, string[]> WithheldOptions = new()
     {
         ["connection compare"] = ["--show-values"],
+        ["connection check"] = ["--show-values"],
         ["project sample"] = ["--data"],
     };
 

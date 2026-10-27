@@ -1,0 +1,8 @@
+name: marts.fct_sales
+kind: full
+grain: [sale_id]
+columns:
+  - {name: sale_id, type: BIGINT, nullable: false}
+  - {name: sold_on, type: DATE, nullable: false}
+  - {name: units, type: INTEGER, nullable: false}
+  - {name: amount, type: "DECIMAL(12, 2)", nullable: false}
