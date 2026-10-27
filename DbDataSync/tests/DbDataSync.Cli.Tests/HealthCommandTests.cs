@@ -43,17 +43,21 @@ public sealed class HealthCommandTests : IDisposable
     /// HttpClient call rather than mocking it away.</summary>
     private sealed class AnsweringServer : IDisposable
     {
-        private readonly HttpListener _listener = new();
+        private HttpListener _listener = new();
         private readonly CancellationTokenSource _cts = new();
         public bool WasHit { get; private set; }
         public string Url { get; }
 
         public AnsweringServer()
         {
-            var port = GetFreePort();
-            Url = $"http://127.0.0.1:{port}/";
-            _listener.Prefixes.Add(Url);
-            _listener.Start();
+            // the port is looked up and released before the listener binds it, so another process can take it in between: a failed bind chooses another
+            for (var attempt = 0; ; attempt++)
+            {
+                Url = $"http://127.0.0.1:{GetFreePort()}/";
+                _listener.Prefixes.Add(Url);
+                try { _listener.Start(); break; }
+                catch (HttpListenerException) when (attempt < 5) { _listener.Close(); _listener = new HttpListener(); }
+            }
             _ = ServeAsync(_cts.Token);
         }
 
