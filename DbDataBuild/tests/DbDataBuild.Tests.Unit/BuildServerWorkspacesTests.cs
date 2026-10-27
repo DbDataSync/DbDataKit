@@ -180,7 +180,9 @@ public sealed class BuildServerWorkspacesTests : IAsyncLifetime
         var folder = Path.Combine(ServerDir, "workspaces", "sales", id);
         File.AppendAllText(ModelIn(folder), "\n-- a draft\n");
 
-        var changes = (await Json(await Send("vic", ServerRole.Viewer, HttpMethod.Get, $"/api/v1/projects/sales/workspaces/{id}/changes")))["changes"]!.AsArray();
+        var shown = await Json(await Send("vic", ServerRole.Viewer, HttpMethod.Get, $"/api/v1/projects/sales/workspaces/{id}/changes"));
+        var changes = shown["changes"]!.AsArray();
+        Assert.True((bool)shown["uncommitted"]!);
         Assert.Single(changes);
         Assert.Contains("+-- a draft", (string)changes[0]!["patch"]!);
 
@@ -190,6 +192,9 @@ public sealed class BuildServerWorkspacesTests : IAsyncLifetime
         var committed = await Json(await AsAda(HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/commit", """{"message":"Note the draft"}"""));
         Assert.True((bool)committed["committed"]!);
         Assert.False((bool)(await Json(await AsAda(HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/commit", """{"message":"again"}""")))["committed"]!);
+        var after = await Json(await Send("vic", ServerRole.Viewer, HttpMethod.Get, $"/api/v1/projects/sales/workspaces/{id}/changes"));
+        Assert.False((bool)after["uncommitted"]!);                  // the commit took everything, though the change still shows against where the draft started
+        Assert.Single(after["changes"]!.AsArray());
 
         var commits = (await Json(await AsAda(HttpMethod.Get, $"/api/v1/projects/sales/workspaces/{id}/history")))["commits"]!.AsArray();
         Assert.Equal(("Note the draft", "ada"), ((string)commits.Single()!["message"]!, (string)commits[0]!["author"]!));

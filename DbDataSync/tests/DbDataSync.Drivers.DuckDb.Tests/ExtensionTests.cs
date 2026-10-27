@@ -22,10 +22,8 @@ public sealed class ExtensionTests : IDisposable
     [NetworkFact]
     public async Task Httpfs_InstallsForTheEngineVersion_AndReadsAFileOverHttp()
     {
-        using var listener = new HttpListener();
-        var port = FreePort();
-        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-        listener.Start();
+        var (listener, port) = StartListener();
+        using var _ = listener;
         var served = Task.Run(async () =>
         {
             // httpfs asks for the size first (HEAD) and then for the bytes (GET): answer every request until stopped.
@@ -58,12 +56,23 @@ public sealed class ExtensionTests : IDisposable
         await served;
     }
 
-    private static int FreePort()
+    /// <summary>
+    /// A listener on a free port. The port is looked up and released before the listener binds it, so another process can take it in between;
+    /// a failed bind chooses another port and tries again.
+    /// </summary>
+    private static (HttpListener Listener, int Port) StartListener()
     {
-        var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
-        probe.Start();
-        try { return ((IPEndPoint)probe.LocalEndpoint).Port; }
-        finally { probe.Stop(); }
+        for (var attempt = 0; ; attempt++)
+        {
+            var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+            probe.Start();
+            var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+            probe.Stop();
+            var listener = new HttpListener();
+            listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+            try { listener.Start(); return (listener, port); }
+            catch (HttpListenerException) when (attempt < 5) { listener.Close(); }
+        }
     }
 
     private static void Execute(DuckDBConnection connection, string sql)

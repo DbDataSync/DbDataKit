@@ -32,9 +32,13 @@ public sealed partial class ProxyDataSources(
 
     public async Task<ManagementResult> HandleAsync(string method, string[] rest, string? body, string? expectedVersion, ManagementCaller caller, CancellationToken cancellationToken)
     {
-        if (rest.Length == 0) return method == "GET" ? ManagementResult.Ok(List()) : ManagementResult.Problem(405, "Data sources are listed with GET.");
+        if (rest.Length == 0) return method == "GET" ? ManagementResult.Ok(List(OwnedBy(caller))) : ManagementResult.Problem(405, "Data sources are listed with GET.");
         var name = Uri.UnescapeDataString(rest[0]);
         if (!NamePattern().IsMatch(name)) return ManagementResult.Problem(400, "A data source name is a letter followed by letters, digits, '.', '_' or '-' (up to 64).");
+
+        // a publishing client reaches only the data sources it made (the owner rules, plan 13 W12); an administrator reaches all
+        var action = method switch { "GET" or "POST" => ObjectAction.Change, "DELETE" => ObjectAction.Delete, _ => File.Exists(FileOf(name)) ? ObjectAction.Change : ObjectAction.Create };
+        if (Scope(caller, action, name) is { } refused) { Record(caller, $"data-source {method.ToLowerInvariant()}", name, "refused"); return refused; }
 
         if (rest.Length == 2 && rest[1] == "test") return method == "POST" ? await TestAsync(name, cancellationToken) : ManagementResult.Problem(405, "A data source is tested with POST.");
         if (rest.Length != 1) return ManagementResult.Problem(404, "There is no such call.");
@@ -47,7 +51,7 @@ public sealed partial class ProxyDataSources(
         };
     }
 
-    private JsonObject List()
+    private JsonObject List(string? owner)
     {
         var items = new JsonArray();
         if (Directory.Exists(Folder))
@@ -55,10 +59,11 @@ public sealed partial class ProxyDataSources(
             {
                 var text = File.ReadAllText(file);
                 var loaded = DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, file);
+                if (owner is not null && loaded.Definition?.ManagedBy != owner) continue;
                 items.Add(new JsonObject
                 {
                     ["name"] = Path.GetFileNameWithoutExtension(file), ["version"] = VersionOf(text), ["valid"] = loaded.Ok,
-                    ["engine"] = loaded.Definition?.Engine, ["access"] = loaded.Definition?.Access.ToString().ToLowerInvariant(),
+                    ["engine"] = loaded.Definition?.Engine, ["access"] = loaded.Definition?.Access.ToString().ToLowerInvariant(), ["managed_by"] = loaded.Definition?.ManagedBy,
                 });
             }
         return new JsonObject { ["data_sources"] = items };
@@ -86,6 +91,24 @@ public sealed partial class ProxyDataSources(
         var candidate = validation.ValidateFiles(new Dictionary<string, string> { [$"connections/{name}.yaml"] = text });
         if (candidate.Body["valid"]?.GetValue<bool>() != true)
             return new ManagementResult(400, new JsonObject { ["error"] = "The data source is not valid, so nothing was written.", ["valid"] = false, ["diagnostics"] = candidate.Body["diagnostics"]!.DeepClone() });
+
+        if (!IsAdministrator(caller))
+        {
+            // what a publishing client may send: no serving policy (extensions.proxy), and the file says whose it is (stamped here when it does not)
+            var sent = DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, $"{name}.yaml").Definition;
+            var client = OwnerScope.Stamp(caller.Token!);
+            if (sent?.Extensions.Items.ContainsKey("proxy") == true)
+            {
+                Record(caller, "data-source write", name, "refused");
+                return ManagementResult.Problem(403, "The server's own policy (extensions.proxy) is not something a publishing client sets; an administrator does.");
+            }
+            if (!string.IsNullOrEmpty(sent?.ManagedBy) && sent.ManagedBy != client)
+            {
+                Record(caller, "data-source write", name, "refused");
+                return ManagementResult.Problem(403, "The file names another client in managed_by.");
+            }
+            if (string.IsNullOrEmpty(sent?.ManagedBy)) text = (text.EndsWith('\n') ? text : text + "\n") + $"managed_by: {client}\n";
+        }
 
         var file = FileOf(name);
         var created = !File.Exists(file);
@@ -163,6 +186,22 @@ public sealed partial class ProxyDataSources(
                 ["elapsed_ms"] = (long)_clock.GetElapsedTime(started).TotalMilliseconds,
             });
         }
+    }
+
+    private static bool IsAdministrator(ManagementCaller caller) => caller.Holds(ServerRole.Admin);
+
+    /// <summary>The client whose data sources a call may see: its own id for a publishing client, null (all) for an administrator.</summary>
+    private static string? OwnedBy(ManagementCaller caller) => IsAdministrator(caller) ? null : OwnerScope.Stamp(caller.Token!);
+
+    /// <summary>The owner rules for a call by a client that is not an administrator; null when the call may go on, else the refusal.</summary>
+    private ManagementResult? Scope(ManagementCaller caller, ObjectAction action, string name)
+    {
+        if (IsAdministrator(caller)) return null;
+        var file = FileOf(name);
+        if (action != ObjectAction.Create && !File.Exists(file)) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
+        ManagedObject? target = action == ObjectAction.Create ? null : new ManagedObject(DbDataKit.Connections.ConnectionDefinitionLoader.Load(File.ReadAllText(file), file).Definition?.ManagedBy);
+        var decision = OwnerScope.Authorize(caller.Token!, action, target);
+        return decision.Allowed ? null : ManagementResult.Problem(403, decision.Reason ?? "This client may not do this to that data source.");
     }
 
     private void Committed(ManagementCaller caller, string message, IReadOnlyCollection<string> files)

@@ -259,4 +259,9 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   // The user made above is a commit by the person who made it.
   await page.getByTestId('rail-config').click()
   await expect(page.getByTestId('commits-table').locator('[data-testid^="commit-"]').first()).toBeVisible()
+
+  // One view across the servers: the Build, Sync and Proxy servers all answer, and none has a replication or a scheduled plan yet (a failed run and a lagging replication need real runs, so the rows themselves are tested on what the servers return)
+  await page.goto('/monitoring')   // the rail inside a server's screens is that product's own
+  await expect(page.getByTestId('monitoring-none')).toBeVisible()
+  await expect(page.getByTestId('monitoring-problem')).toHaveCount(0)
 })

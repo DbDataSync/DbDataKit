@@ -17,7 +17,7 @@ namespace DbDataProxy.Server.Management;
 /// refused with the diagnostics if invalid, checked against the version the caller read, committed as the person, audited, applied at once).
 /// <para>
 /// <b>A password is accepted and never returned.</b> It arrives over the pinned, signed channel, is hashed here with the proxy's own PBKDF2 and only the hash is written; no answer carries a hash, a password or the JWT
-/// signing key, only whether there is one. The JWT mappings and the pass-through switch are shown as they are in effect; the mappings are changed in <c>proxy/auth.yaml</c> for now.
+/// signing key, only whether there is one. The JWT mappings and the pass-through switch are shown as they are in effect, and written through <c>PUT /api/v1/auth</c>.
 /// </para>
 /// </summary>
 public sealed partial class ProxyIdentities(

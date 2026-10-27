@@ -53,6 +53,21 @@ public sealed class GitWorkspaceOperationsTests : IDisposable
     }
 
     [Fact]
+    public void Uncommitted_changes_are_reported_until_a_commit_takes_them()
+    {
+        Assert.False(GitWorkspaceOperations.HasUncommitted(Draft));
+        File.WriteAllText(Path.Combine(Draft, "a.txt"), "two\n");
+        File.WriteAllText(Path.Combine(Draft, "new.txt"), "new\n");
+        Assert.True(GitWorkspaceOperations.HasUncommitted(Draft));
+
+        GitWorkspaceOperations.Commit(Draft, "Take them", _ada);
+        Assert.False(GitWorkspaceOperations.HasUncommitted(Draft));
+
+        File.WriteAllText(Path.Combine(Draft, "a.txt"), "three\n");      // saved again after the commit
+        Assert.True(GitWorkspaceOperations.HasUncommitted(Draft));
+    }
+
+    [Fact]
     public void A_commit_records_everything_in_the_authors_name_and_an_unchanged_draft_has_nothing_to_commit()
     {
         Assert.Null(GitWorkspaceOperations.Commit(Draft, "nothing", _ada));
