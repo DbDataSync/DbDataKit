@@ -1,6 +1,6 @@
 # Semantic SQL
 
-**Status: draft for the owner's approval (plan 19, J17).** Implemented and tested: `DbDataKit.Semantic.Sql` (`SemanticSqlRenderer`, `SemanticSqlTranslator`, `RequestNormalizer`); every query fixture has its SQL form checked in (`DbDataKit/tests/DbDataKit.Semantic.Tests/golden/semantic-sql/`) and reads back to its request. Plan 14 R6 is the design this follows; section 6 lists what it settles beyond R6 and what it leaves for later.
+**Status: approved by the owner on 2026-10-27 (plan 19, J17).** Implemented and tested: `DbDataKit.Semantic.Sql` (`SemanticSqlRenderer`, `SemanticSqlTranslator`, `RequestNormalizer`); every query fixture has its SQL form checked in (`DbDataKit/tests/DbDataKit.Semantic.Tests/golden/semantic-sql/`) and reads back to its request. Plan 14 R6 is the design this follows; section 6 lists what it settles beyond R6 and what it leaves for later.
 
 Semantic SQL is **a subset of DuckDB SQL, translated to and from the JSON semantic request** ([query.md](query.md)). There is no grammar of our own: DuckDB's parser (`json_serialize_sql`, the one the sandbox already uses) reads the text, and every accepted query is exactly one request. Anything outside the subset is refused with a named code, never approximated. Agents may write either form; people mostly read SQL. Nothing here is executed by DuckDB as written: the engine runs the request.
 
