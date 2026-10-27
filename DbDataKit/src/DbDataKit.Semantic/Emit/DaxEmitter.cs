@@ -181,4 +181,27 @@ public static class DaxEmitter
             text += "\nORDER BY " + string.Join(", ", orderCols.Select(c => $"[{c.Column}] {c.Direction}"));
         return text;
     }
+
+    /// <summary>
+    /// The first and last day of every member of a calendar level, read from the model's date table: the same rows as <see cref="SqlEmitter.BuildLevelRanges"/>. The level
+    /// and the date are columns of one model table (the caller checks they are bound to one join and both have DAX). Columns: <c>lvl</c>, <c>lo</c>, <c>hi</c>.
+    /// </summary>
+    public static string BuildLevelRanges(Catalog cat, string source, string level, string date)
+    {
+        var (levelDax, dateDax) = (Col(cat, source, level), Col(cat, source, date));
+        return "EVALUATE\nSELECTCOLUMNS (\n"
+             + $"    SUMMARIZECOLUMNS ( {levelDax}, \"lo\", MIN ( {dateDax} ), \"hi\", MAX ( {dateDax} ) ),\n"
+             + $"    \"lvl\", {levelDax},\n    \"lo\", [lo],\n    \"hi\", [hi]\n)";
+    }
+
+    /// <summary>
+    /// The distinct pairs of two attributes that are columns of one model table, from the table itself (so a member with no fact rows is there), as
+    /// <see cref="SqlEmitter.BuildPairs"/> reads them. Columns are named as the attributes are (<see cref="Catalog.ColName"/>).
+    /// </summary>
+    public static string BuildPairs(Catalog cat, string source, string a, string b)
+    {
+        var (da, db) = (Col(cat, source, a), Col(cat, source, b));
+        var table = System.Text.RegularExpressions.Regex.Match(da, @"^\s*('[^']+'|[A-Za-z_]\w*)\s*\[").Groups[1].Value;
+        return $"EVALUATE\nDISTINCT (\n    SELECTCOLUMNS ( {table}, {Lit(Catalog.ColName(a))}, {da}, {Lit(Catalog.ColName(b))}, {db} )\n)";
+    }
 }

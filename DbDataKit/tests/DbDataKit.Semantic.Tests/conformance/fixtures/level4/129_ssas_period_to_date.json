@@ -1,0 +1,39 @@
+{
+  "name": "129_ssas_period_to_date",
+  "level": 4,
+  "description": "Quarter to date on the SSAS source, on a pinned day in the quarter: the days of the quarter up to that day hold the first days of July and August.",
+  "today": "2026-08-20",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "period_to_date"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "budget_budget_amount": 300
+      },
+      {
+        "customers_region": "West",
+        "budget_budget_amount": 400
+      }
+    ]
+  }
+}

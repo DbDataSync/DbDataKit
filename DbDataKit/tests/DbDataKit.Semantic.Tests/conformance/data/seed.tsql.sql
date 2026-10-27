@@ -2,7 +2,6 @@
 DROP TABLE IF EXISTS dim_customer;
 DROP TABLE IF EXISTS dim_product;
 DROP TABLE IF EXISTS dim_date;
-DROP TABLE IF EXISTS dim_month;
 DROP TABLE IF EXISTS fact_sales;
 DROP TABLE IF EXISTS fact_budget;
 DROP TABLE IF EXISTS dim_category;
@@ -38,9 +37,6 @@ INSERT INTO dim_date VALUES
   (20260815, '2026-08', 'FY27-Q1', 'FY27', '2025-08', 'FY26-Q1', '2026-08-15', '2025-08-15'),
   (20260915, '2026-09', 'FY27-Q1', 'FY27', '2025-09', 'FY26-Q1', '2026-09-15', '2025-09-15');
 
-CREATE TABLE dim_month (fiscal_month VARCHAR(100), fiscal_quarter VARCHAR(100), fiscal_year VARCHAR(100));
-INSERT INTO dim_month SELECT DISTINCT fiscal_month, fiscal_quarter, fiscal_year FROM dim_date;
-
 CREATE TABLE fact_sales (order_id INTEGER, customer_key INTEGER, product_key INTEGER, date_key INTEGER, net_amount DECIMAL(19,4), status VARCHAR(100), ship_date_key INTEGER);
 INSERT INTO fact_sales VALUES
   -- FY27-Q1
@@ -57,10 +53,13 @@ INSERT INTO fact_sales VALUES
 ALTER TABLE fact_sales ADD ordered_at datetime2;
 UPDATE fact_sales SET ordered_at = CASE order_id WHEN 1 THEN CAST('2026-07-01 03:30:00' AS datetime2) WHEN 2 THEN CAST('2026-08-01 02:00:00' AS datetime2) WHEN 3 THEN CAST('2026-09-01 15:00:00' AS datetime2) WHEN 4 THEN CAST('2026-07-01 18:00:00' AS datetime2) WHEN 5 THEN CAST('2026-08-01 12:00:00' AS datetime2) WHEN 6 THEN CAST('2026-09-01 04:59:59' AS datetime2) WHEN 7 THEN CAST('2026-08-01 05:00:00' AS datetime2) WHEN 8 THEN CAST('2026-07-01 12:00:00' AS datetime2) WHEN 9 THEN CAST('2026-08-01 20:00:00' AS datetime2) WHEN 10 THEN CAST('2026-09-01 10:00:00' AS datetime2) WHEN 11 THEN CAST('2025-07-01 03:00:00' AS datetime2) WHEN 12 THEN CAST('2025-08-01 12:00:00' AS datetime2) WHEN 13 THEN CAST('2025-07-01 12:00:00' AS datetime2) WHEN 14 THEN CAST('2025-09-01 12:00:00' AS datetime2) END;
 
-CREATE TABLE fact_budget (region VARCHAR(100), fiscal_month VARCHAR(100), amount DECIMAL(19,4));
-INSERT INTO fact_budget VALUES
+-- A month's budget is dated on the month's first day (month_start), which is how the SSAS model relates it to the day-grain date table.
+CREATE TABLE fact_budget (region VARCHAR(100), fiscal_month VARCHAR(100), amount DECIMAL(19,4), month_start DATE);
+INSERT INTO fact_budget SELECT region, fiscal_month, amount, CAST(fiscal_month + '-01' AS date) FROM (VALUES
   ('West', '2026-07', 200), ('West', '2026-08', 200), ('West', '2026-09', 200),
-  ('East', '2026-07', 150), ('East', '2026-08', 150), ('East', '2026-09', 200);
+  ('East', '2026-07', 150), ('East', '2026-08', 150), ('East', '2026-09', 200),
+  ('West', '2025-07', 120), ('West', '2025-08', 120), ('West', '2025-09', 140),
+  ('East', '2025-07', 100), ('East', '2025-08', 110), ('East', '2025-09', 130)) AS v(region, fiscal_month, amount);
 
 -- Returns share the customer, product and date dimensions with sales. FY27-Q1: West A 30, West B 10, East B 50.
 CREATE TABLE fact_returns (return_id INTEGER, customer_key INTEGER, product_key INTEGER, date_key INTEGER, return_amount DECIMAL(19,4));

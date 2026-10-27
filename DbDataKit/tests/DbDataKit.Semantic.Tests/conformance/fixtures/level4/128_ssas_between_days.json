@@ -1,0 +1,47 @@
+{
+  "name": "128_ssas_between_days",
+  "level": 4,
+  "description": "A written range of days on the SSAS source: the budget of a month is dated on the month's first day, so a range that holds the first days of July and August holds those two months.",
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "budget.budget_amount"
+      ],
+      "limit": 100,
+      "attributes": [
+        "customers.region"
+      ],
+      "filters": [
+        {
+          "attribute": "date.calendar_date",
+          "operator": "between",
+          "values": [
+            "2026-07-01",
+            "2026-08-31"
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "ordered": true,
+    "rows": [
+      {
+        "customers_region": "East",
+        "budget_budget_amount": 300
+      },
+      {
+        "customers_region": "West",
+        "budget_budget_amount": 400
+      }
+    ],
+    "native_query_contains": {
+      "d1": [
+        "'Date'[Date] >= DATE ( 2026, 7, 1 )"
+      ]
+    }
+  }
+}

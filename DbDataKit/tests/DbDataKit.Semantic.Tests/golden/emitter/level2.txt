@@ -46,8 +46,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -98,8 +98,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -157,8 +157,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -215,8 +215,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -274,8 +274,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        COUNT(f.amount) AS budget_budget_lines
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -332,8 +332,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        COUNT(f.amount) AS budget_budget_lines
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -391,8 +391,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -449,8 +449,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -472,8 +472,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -494,8 +494,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -728,8 +728,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -780,8 +780,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -839,8 +839,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        COUNT(f.amount) AS budget_budget_lines
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -897,8 +897,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        COUNT(f.amount) AS budget_budget_lines
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -991,8 +991,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(CASE WHEN f.region = $1 THEN f.amount END) AS west_budget
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $2
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $2
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -1018,8 +1018,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(CASE WHEN f.region = $1 THEN f.amount END) AS west_budget
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $2
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $2
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 101;
@@ -1618,11 +1618,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:2026-07, String:2026-08
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month,
+SELECT b.fiscal_month AS date_fiscal_month,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-WHERE f.fiscal_month IN ($1, $2)
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month IN ($1, $2)
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
 --- sqlserver_sales tsql
@@ -1675,11 +1676,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:2026-07, String:2026-08
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month,
+SELECT b.fiscal_month AS date_fiscal_month,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-WHERE f.fiscal_month IN ($1, $2)
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month IN ($1, $2)
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
 === level2/23_having_across_sources.json
@@ -1730,8 +1732,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -1782,8 +1784,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -2109,8 +2111,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
   AND f.region <> $2
 GROUP BY f.region
 ORDER BY customers_region ASC
@@ -2144,8 +2146,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
   AND f.region <> $2
 GROUP BY f.region
 ORDER BY customers_region ASC
@@ -2173,8 +2175,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
   AND f.region NOT LIKE $2 ESCAPE '\'
 GROUP BY f.region
 ORDER BY customers_region ASC
@@ -2201,8 +2203,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
   AND f.region NOT LIKE $2 ESCAPE '\'
 GROUP BY f.region
 ORDER BY customers_region ASC
@@ -2230,8 +2232,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
   AND f.region LIKE $2 ESCAPE '\'
 GROUP BY f.region
 ORDER BY customers_region ASC
@@ -2258,8 +2260,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
   AND f.region LIKE $2 ESCAPE '\'
 GROUP BY f.region
 ORDER BY customers_region ASC

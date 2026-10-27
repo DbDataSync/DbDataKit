@@ -317,8 +317,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -375,8 +375,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -434,8 +434,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -497,8 +497,8 @@ SELECT f.region AS customers_region,
        (GROUPING(f.region)) AS _rollup_level,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY ROLLUP(f.region)
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -555,8 +555,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -618,8 +618,8 @@ SELECT f.region AS customers_region,
        (GROUPING(f.region)) AS _rollup_level,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY ROLLUP(f.region)
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -1456,8 +1456,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -1514,8 +1514,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -2082,8 +2082,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -2143,8 +2143,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -2454,12 +2454,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month,
+SELECT b.fiscal_month AS date_fiscal_month,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
 --- ssas_finance dax
@@ -2476,12 +2476,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC, [date_fiscal_month_prior_year] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month,
-       m.prior_year_fiscal_month AS date_fiscal_month_prior_year
+SELECT b.fiscal_month AS date_fiscal_month,
+       b.prior_year_fiscal_month AS date_fiscal_month_prior_year
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month, m.prior_year_fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month, b.prior_year_fiscal_month
 ORDER BY date_fiscal_month ASC, date_fiscal_month_prior_year ASC;
 --- ssas_finance dax
 EVALUATE
@@ -2497,12 +2497,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_quarter] ASC, [date_fiscal_quarter_prior_year] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT m.fiscal_quarter AS date_fiscal_quarter,
-       m.prior_year_fiscal_quarter AS date_fiscal_quarter_prior_year
+SELECT b.fiscal_quarter AS date_fiscal_quarter,
+       b.prior_year_fiscal_quarter AS date_fiscal_quarter_prior_year
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY m.fiscal_quarter, m.prior_year_fiscal_quarter
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_quarter, b.prior_year_fiscal_quarter
 ORDER BY date_fiscal_quarter ASC, date_fiscal_quarter_prior_year ASC;
 --- ssas_finance dax
 EVALUATE
@@ -2518,12 +2518,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:FY26-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month,
+SELECT b.fiscal_month AS date_fiscal_month,
        SUM(f.amount) AS chg__prior
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
 --- ssas_finance dax
@@ -2540,12 +2540,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month,
+SELECT b.fiscal_month AS date_fiscal_month,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
 --- ssas_finance dax
@@ -2562,12 +2562,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC, [date_fiscal_month_prior_year] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month,
-       m.prior_year_fiscal_month AS date_fiscal_month_prior_year
+SELECT b.fiscal_month AS date_fiscal_month,
+       b.prior_year_fiscal_month AS date_fiscal_month_prior_year
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month, m.prior_year_fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month, b.prior_year_fiscal_month
 ORDER BY date_fiscal_month ASC, date_fiscal_month_prior_year ASC;
 --- ssas_finance dax
 EVALUATE
@@ -2583,12 +2583,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_quarter] ASC, [date_fiscal_quarter_prior_year] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT m.fiscal_quarter AS date_fiscal_quarter,
-       m.prior_year_fiscal_quarter AS date_fiscal_quarter_prior_year
+SELECT b.fiscal_quarter AS date_fiscal_quarter,
+       b.prior_year_fiscal_quarter AS date_fiscal_quarter_prior_year
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY m.fiscal_quarter, m.prior_year_fiscal_quarter
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_quarter, b.prior_year_fiscal_quarter
 ORDER BY date_fiscal_quarter ASC, date_fiscal_quarter_prior_year ASC;
 --- ssas_finance dax
 EVALUATE
@@ -2604,12 +2604,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:FY26-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month,
+SELECT b.fiscal_month AS date_fiscal_month,
        SUM(f.amount) AS chg__prior
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
 === level4/123_window_year_to_date_on_ssas.json
@@ -2627,12 +2627,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month,
+SELECT b.fiscal_month AS date_fiscal_month,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
 --- sqlserver_sales tsql
@@ -2646,23 +2646,13 @@ FROM dim_date d
 GROUP BY d.fiscal_month;
 --- ssas_finance dax
 EVALUATE
-SELECTCOLUMNS (
-    SUMMARIZECOLUMNS (
-        'Date'[Fiscal Month],
-        'Date'[Fiscal Year]
-    ),
-    "date_fiscal_month", 'Date'[Fiscal Month],
-    "date_fiscal_year", 'Date'[Fiscal Year]
+DISTINCT (
+    SELECTCOLUMNS ( 'Date', "date_fiscal_month", 'Date'[Fiscal Month], "date_fiscal_year", 'Date'[Fiscal Year] )
 )
-ORDER BY [date_fiscal_month] ASC, [date_fiscal_year] ASC
 --- parameters 
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month,
-       m.fiscal_year AS date_fiscal_year
-FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-GROUP BY f.fiscal_month, m.fiscal_year
-ORDER BY date_fiscal_month ASC, date_fiscal_year ASC;
+SELECT DISTINCT b.fiscal_month AS date_fiscal_month, b.fiscal_year AS date_fiscal_year
+FROM dim_date b;
 --- ssas_finance dax
 EVALUATE
 SELECTCOLUMNS (
@@ -2675,11 +2665,11 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month
+SELECT b.fiscal_month AS date_fiscal_month
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC;
 --- ssas_finance dax
 EVALUATE
@@ -2694,7 +2684,8 @@ SELECTCOLUMNS (
 --- duckdb
 SELECT SUM(f.amount) AS ytd__prior
 FROM fact_budget f
-WHERE f.fiscal_month = $1;
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month = $1;
 --- ssas_finance dax
 EVALUATE
 SELECTCOLUMNS (
@@ -2708,7 +2699,8 @@ SELECTCOLUMNS (
 --- duckdb
 SELECT SUM(f.amount) AS ytd__prior
 FROM fact_budget f
-WHERE f.fiscal_month IN ($1, $2);
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month IN ($1, $2);
 --- ssas_finance dax
 EVALUATE
 SELECTCOLUMNS (
@@ -2722,7 +2714,8 @@ SELECTCOLUMNS (
 --- duckdb
 SELECT SUM(f.amount) AS ytd__prior
 FROM fact_budget f
-WHERE f.fiscal_month IN ($1, $2, $3);
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month IN ($1, $2, $3);
 --- ssas_finance dax
 EVALUATE
 SELECTCOLUMNS (
@@ -2737,12 +2730,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month,
+SELECT b.fiscal_month AS date_fiscal_month,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
 --- sqlserver_sales tsql
@@ -2756,23 +2749,13 @@ FROM dim_date d
 GROUP BY d.fiscal_month;
 --- ssas_finance dax
 EVALUATE
-SELECTCOLUMNS (
-    SUMMARIZECOLUMNS (
-        'Date'[Fiscal Month],
-        'Date'[Fiscal Year]
-    ),
-    "date_fiscal_month", 'Date'[Fiscal Month],
-    "date_fiscal_year", 'Date'[Fiscal Year]
+DISTINCT (
+    SELECTCOLUMNS ( 'Date', "date_fiscal_month", 'Date'[Fiscal Month], "date_fiscal_year", 'Date'[Fiscal Year] )
 )
-ORDER BY [date_fiscal_month] ASC, [date_fiscal_year] ASC
 --- parameters 
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month,
-       m.fiscal_year AS date_fiscal_year
-FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-GROUP BY f.fiscal_month, m.fiscal_year
-ORDER BY date_fiscal_month ASC, date_fiscal_year ASC;
+SELECT DISTINCT b.fiscal_month AS date_fiscal_month, b.fiscal_year AS date_fiscal_year
+FROM dim_date b;
 --- ssas_finance dax
 EVALUATE
 SELECTCOLUMNS (
@@ -2785,11 +2768,11 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month
+SELECT b.fiscal_month AS date_fiscal_month
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC;
 --- ssas_finance dax
 EVALUATE
@@ -2804,7 +2787,8 @@ SELECTCOLUMNS (
 --- duckdb
 SELECT SUM(f.amount) AS ytd__prior
 FROM fact_budget f
-WHERE f.fiscal_month = $1;
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month = $1;
 --- ssas_finance dax
 EVALUATE
 SELECTCOLUMNS (
@@ -2818,7 +2802,8 @@ SELECTCOLUMNS (
 --- duckdb
 SELECT SUM(f.amount) AS ytd__prior
 FROM fact_budget f
-WHERE f.fiscal_month IN ($1, $2);
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month IN ($1, $2);
 --- ssas_finance dax
 EVALUATE
 SELECTCOLUMNS (
@@ -2832,7 +2817,8 @@ SELECTCOLUMNS (
 --- duckdb
 SELECT SUM(f.amount) AS ytd__prior
 FROM fact_budget f
-WHERE f.fiscal_month IN ($1, $2, $3);
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month IN ($1, $2, $3);
 === level4/124_window_trailing_three_on_ssas.json
 --- ssas_finance dax
 EVALUATE
@@ -2848,12 +2834,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month,
+SELECT b.fiscal_month AS date_fiscal_month,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
 --- sqlserver_sales tsql
@@ -2877,11 +2863,11 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month
+SELECT b.fiscal_month AS date_fiscal_month
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC;
 --- ssas_finance dax
 EVALUATE
@@ -2896,7 +2882,8 @@ SELECTCOLUMNS (
 --- duckdb
 SELECT SUM(f.amount) AS r3__prior
 FROM fact_budget f
-WHERE f.fiscal_month IN ($1, $2, $3);
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month IN ($1, $2, $3);
 --- ssas_finance dax
 EVALUATE
 SELECTCOLUMNS (
@@ -2910,7 +2897,8 @@ SELECTCOLUMNS (
 --- duckdb
 SELECT SUM(f.amount) AS r3__prior
 FROM fact_budget f
-WHERE f.fiscal_month IN ($1, $2, $3);
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month IN ($1, $2, $3);
 --- ssas_finance dax
 EVALUATE
 SELECTCOLUMNS (
@@ -2924,7 +2912,8 @@ SELECTCOLUMNS (
 --- duckdb
 SELECT SUM(f.amount) AS r3__prior
 FROM fact_budget f
-WHERE f.fiscal_month IN ($1, $2, $3);
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month IN ($1, $2, $3);
 --- ssas_finance dax
 EVALUATE
 SELECTCOLUMNS (
@@ -2939,12 +2928,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month,
+SELECT b.fiscal_month AS date_fiscal_month,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
 --- sqlserver_sales tsql
@@ -2968,11 +2957,11 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month
+SELECT b.fiscal_month AS date_fiscal_month
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC;
 --- ssas_finance dax
 EVALUATE
@@ -2987,7 +2976,8 @@ SELECTCOLUMNS (
 --- duckdb
 SELECT SUM(f.amount) AS r3__prior
 FROM fact_budget f
-WHERE f.fiscal_month IN ($1, $2, $3);
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month IN ($1, $2, $3);
 --- ssas_finance dax
 EVALUATE
 SELECTCOLUMNS (
@@ -3001,7 +2991,8 @@ SELECTCOLUMNS (
 --- duckdb
 SELECT SUM(f.amount) AS r3__prior
 FROM fact_budget f
-WHERE f.fiscal_month IN ($1, $2, $3);
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month IN ($1, $2, $3);
 --- ssas_finance dax
 EVALUATE
 SELECTCOLUMNS (
@@ -3015,7 +3006,8 @@ SELECTCOLUMNS (
 --- duckdb
 SELECT SUM(f.amount) AS r3__prior
 FROM fact_budget f
-WHERE f.fiscal_month IN ($1, $2, $3);
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month IN ($1, $2, $3);
 === level4/125_index_to_a_month_outside_the_filter_on_ssas.json
 --- ssas_finance dax
 EVALUATE
@@ -3031,12 +3023,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month,
+SELECT b.fiscal_month AS date_fiscal_month,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
 --- sqlserver_sales tsql
@@ -3060,11 +3052,11 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month
+SELECT b.fiscal_month AS date_fiscal_month
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC;
 --- ssas_finance dax
 EVALUATE
@@ -3079,7 +3071,8 @@ SELECTCOLUMNS (
 --- duckdb
 SELECT SUM(f.amount) AS ix__prior
 FROM fact_budget f
-WHERE f.fiscal_month = $1;
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month = $1;
 --- ssas_finance dax
 EVALUATE
 SELECTCOLUMNS (
@@ -3094,12 +3087,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month,
+SELECT b.fiscal_month AS date_fiscal_month,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC
 LIMIT 1000001;
 --- sqlserver_sales tsql
@@ -3123,11 +3116,11 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_month] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT f.fiscal_month AS date_fiscal_month
+SELECT b.fiscal_month AS date_fiscal_month
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY f.fiscal_month
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_month
 ORDER BY date_fiscal_month ASC;
 --- ssas_finance dax
 EVALUATE
@@ -3142,7 +3135,8 @@ SELECTCOLUMNS (
 --- duckdb
 SELECT SUM(f.amount) AS ix__prior
 FROM fact_budget f
-WHERE f.fiscal_month = $1;
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month = $1;
 === level4/126_last_complete_fiscal_year_on_ssas.json
 --- sqlserver_sales tsql
 SELECT d.fiscal_year AS lvl, MIN(d.calendar_date) AS lo, MAX(d.calendar_date) AS hi
@@ -3171,12 +3165,12 @@ TOPN (
 ORDER BY [date_fiscal_year] ASC
 --- parameters String:FY26
 --- duckdb
-SELECT m.fiscal_year AS date_fiscal_year,
+SELECT b.fiscal_year AS date_fiscal_year,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_year = $1
-GROUP BY m.fiscal_year
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_year = $1
+GROUP BY b.fiscal_year
 ORDER BY date_fiscal_year ASC
 LIMIT 101;
 --- sqlserver_sales tsql
@@ -3206,12 +3200,12 @@ TOPN (
 ORDER BY [date_fiscal_year] ASC
 --- parameters String:FY26
 --- duckdb
-SELECT m.fiscal_year AS date_fiscal_year,
+SELECT b.fiscal_year AS date_fiscal_year,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_year = $1
-GROUP BY m.fiscal_year
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_year = $1
+GROUP BY b.fiscal_year
 ORDER BY date_fiscal_year ASC
 LIMIT 101;
 === level4/127_current_fiscal_year_on_ssas.json
@@ -3242,12 +3236,12 @@ TOPN (
 ORDER BY [date_fiscal_year] ASC
 --- parameters String:FY27
 --- duckdb
-SELECT m.fiscal_year AS date_fiscal_year,
+SELECT b.fiscal_year AS date_fiscal_year,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_year = $1
-GROUP BY m.fiscal_year
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_year = $1
+GROUP BY b.fiscal_year
 ORDER BY date_fiscal_year ASC
 LIMIT 101;
 --- sqlserver_sales tsql
@@ -3277,12 +3271,12 @@ TOPN (
 ORDER BY [date_fiscal_year] ASC
 --- parameters String:FY27
 --- duckdb
-SELECT m.fiscal_year AS date_fiscal_year,
+SELECT b.fiscal_year AS date_fiscal_year,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_year = $1
-GROUP BY m.fiscal_year
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_year = $1
+GROUP BY b.fiscal_year
 ORDER BY date_fiscal_year ASC
 LIMIT 101;
 === level4/13_allocate_equal_catalog.json
@@ -3342,8 +3336,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -3416,8 +3410,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -3494,8 +3488,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -3559,8 +3553,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -3623,8 +3617,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -5045,12 +5039,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_quarter] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT m.fiscal_quarter AS date_fiscal_quarter,
+SELECT b.fiscal_quarter AS date_fiscal_quarter,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY m.fiscal_quarter
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_quarter
 ORDER BY date_fiscal_quarter ASC
 LIMIT 1000001;
 --- ssas_finance dax
@@ -5067,12 +5061,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_quarter] ASC, [date_fiscal_quarter_prior_year] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT m.fiscal_quarter AS date_fiscal_quarter,
-       m.prior_year_fiscal_quarter AS date_fiscal_quarter_prior_year
+SELECT b.fiscal_quarter AS date_fiscal_quarter,
+       b.prior_year_fiscal_quarter AS date_fiscal_quarter_prior_year
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY m.fiscal_quarter, m.prior_year_fiscal_quarter
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_quarter, b.prior_year_fiscal_quarter
 ORDER BY date_fiscal_quarter ASC, date_fiscal_quarter_prior_year ASC;
 --- ssas_finance dax
 EVALUATE
@@ -5088,12 +5082,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_quarter] ASC
 --- parameters String:FY26-Q1
 --- duckdb
-SELECT m.fiscal_quarter AS date_fiscal_quarter,
+SELECT b.fiscal_quarter AS date_fiscal_quarter,
        SUM(f.amount) AS x__prior
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY m.fiscal_quarter
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_quarter
 ORDER BY date_fiscal_quarter ASC
 LIMIT 1000001;
 --- ssas_finance dax
@@ -5110,12 +5104,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_quarter] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT m.fiscal_quarter AS date_fiscal_quarter,
+SELECT b.fiscal_quarter AS date_fiscal_quarter,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY m.fiscal_quarter
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_quarter
 ORDER BY date_fiscal_quarter ASC
 LIMIT 1000001;
 --- ssas_finance dax
@@ -5132,12 +5126,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_quarter] ASC, [date_fiscal_quarter_prior_year] ASC
 --- parameters String:FY27-Q1
 --- duckdb
-SELECT m.fiscal_quarter AS date_fiscal_quarter,
-       m.prior_year_fiscal_quarter AS date_fiscal_quarter_prior_year
+SELECT b.fiscal_quarter AS date_fiscal_quarter,
+       b.prior_year_fiscal_quarter AS date_fiscal_quarter_prior_year
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY m.fiscal_quarter, m.prior_year_fiscal_quarter
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_quarter, b.prior_year_fiscal_quarter
 ORDER BY date_fiscal_quarter ASC, date_fiscal_quarter_prior_year ASC;
 --- ssas_finance dax
 EVALUATE
@@ -5153,12 +5147,12 @@ SELECTCOLUMNS (
 ORDER BY [date_fiscal_quarter] ASC
 --- parameters String:FY26-Q1
 --- duckdb
-SELECT m.fiscal_quarter AS date_fiscal_quarter,
+SELECT b.fiscal_quarter AS date_fiscal_quarter,
        SUM(f.amount) AS x__prior
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
-GROUP BY m.fiscal_quarter
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
+GROUP BY b.fiscal_quarter
 ORDER BY date_fiscal_quarter ASC
 LIMIT 1000001;
 === level4/42_allocate_by_prior_year_mix.json
@@ -5215,8 +5209,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -5326,8 +5320,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -5438,8 +5432,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -5501,8 +5495,8 @@ SELECT f.region AS customers_region,
        (GROUPING(f.region)) AS _rollup_level,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY ROLLUP(f.region)
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -5612,8 +5606,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -5675,8 +5669,8 @@ SELECT f.region AS customers_region,
        (GROUPING(f.region)) AS _rollup_level,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY ROLLUP(f.region)
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -5837,8 +5831,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -6910,7 +6904,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-WHERE f.fiscal_month = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -6991,7 +6986,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-WHERE f.fiscal_month = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_month = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -7103,8 +7099,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -7155,8 +7151,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -7208,8 +7204,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -7265,8 +7261,8 @@ SELECT f.region AS customers_region,
        (GROUPING(f.region)) AS _rollup_level,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY ROLLUP(f.region)
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -7317,8 +7313,8 @@ ORDER BY [customers_region] ASC
 SELECT f.region AS customers_region,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY f.region
 ORDER BY customers_region ASC
 LIMIT 1000001;
@@ -7374,8 +7370,8 @@ SELECT f.region AS customers_region,
        (GROUPING(f.region)) AS _rollup_level,
        SUM(f.amount) AS budget_budget_amount
 FROM fact_budget f
-JOIN dim_month m ON m.fiscal_month = f.fiscal_month
-WHERE m.fiscal_quarter = $1
+JOIN dim_date b ON b.calendar_date = f.month_start
+WHERE b.fiscal_quarter = $1
 GROUP BY ROLLUP(f.region)
 ORDER BY customers_region ASC
 LIMIT 1000001;

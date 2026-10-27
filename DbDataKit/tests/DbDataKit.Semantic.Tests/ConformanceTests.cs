@@ -45,7 +45,7 @@ public class ConformanceTests
     }
 
     /// <summary>Runs one fixture through the executor: the engine's result must match the fixture's expectations, validate against the result schema and replay from its run record.</summary>
-    internal static void RunFixture(string relativePath, string totalsCompute, ISourceExecutor executor, Func<JsonObject, JsonObject>? rewrite = null)
+    internal static void RunFixture(string relativePath, string totalsCompute, ISourceExecutor executor, Func<JsonObject, JsonObject>? rewrite = null, Func<Catalog>? catalog = null)
     {
         var fx = JsonNode.Parse(File.ReadAllText(Path.Combine(Root, "fixtures", relativePath)))!.AsObject();
         var request = fx["request"]!.AsObject();
@@ -60,7 +60,7 @@ public class ConformanceTests
         if (request["kind"]!.GetValue<string>() == "native_batch" && !executor.RunsNativeText)
             return; // Needs an executor that runs agent-written text: the engine fixture job (J02).
 
-        var cat = Cat.Clone();   // ad hoc dimensions are registered on this fixture's copy only
+        var cat = catalog?.Invoke() ?? Cat.Clone();   // ad hoc dimensions are registered on this fixture's copy only
         var validator = new Validator(cat);
         var runDir = Path.Combine(Path.GetTempPath(), "qis-runs-" + Guid.NewGuid().ToString("N"));
         var level = fx["level"]!.GetValue<int>();
@@ -92,22 +92,22 @@ public class ConformanceTests
             failures.AddRange(FixtureChecker.Check(fx["expect_after_completion"]!.AsObject(), after).Select(f => "after completion: " + f));
 
             if (after["status"]!.GetValue<string>() == "complete")
-                failures.AddRange(CheckReplay(runDir, result["request_hash"]!.GetValue<string>(), after, executor, level));
+                failures.AddRange(CheckReplay(runDir, result["request_hash"]!.GetValue<string>(), after, executor, level, catalog));
         }
         else if (request["kind"]!.GetValue<string>() == "query" && result["status"]!.GetValue<string>() == "complete")
             // Computed by the engine alone: the record carries the tables, bindings and maps, and replays in a new session.
-            failures.AddRange(CheckReplay(runDir, result["request_hash"]!.GetValue<string>(), result, executor, level));
+            failures.AddRange(CheckReplay(runDir, result["request_hash"]!.GetValue<string>(), result, executor, level, catalog));
         if (Directory.Exists(runDir)) Directory.Delete(runDir, true);
 
         Assert.True(failures.Count == 0, string.Join("\n", failures));
     }
 
     /// <summary>The run was saved, and replaying it in a fresh session (a new catalog copy, nothing registered) gives the same rows.</summary>
-    private static List<string> CheckReplay(string runDir, string hash, JsonObject original, ISourceExecutor executor, int level)
+    private static List<string> CheckReplay(string runDir, string hash, JsonObject original, ISourceExecutor executor, int level, Func<Catalog>? catalog = null)
     {
         var saved = Path.Combine(runDir, hash + ".json");
         if (!File.Exists(saved)) return ["replay: run record wasn't saved"];
-        var fresh = Cat.Clone();
+        var fresh = catalog?.Invoke() ?? Cat.Clone();
         var replayed = ToNode(new QisEngine(fresh, executor, new Validator(fresh), level).Replay(saved));
         return JsonNode.DeepEquals(replayed["combined"]?["rows"], original["combined"]?["rows"]) ? [] : ["replay: rows differ from the original run"];
     }
