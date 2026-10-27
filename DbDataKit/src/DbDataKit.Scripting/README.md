@@ -1,6 +1,6 @@
 # DbDataKit.Scripting
 
-Our own scripting (plan 14; decision D9): `.csx` scripts and libraries that ask for NuGet packages with `#r "nuget: Id, 1.2.3"` and run with only the .NET runtime installed, no SDK and no MSBuild. The resolver (S02) and the loader (S03) are here; the compiler (S04) follows.
+Our own scripting (plan 14; decision D9): `.csx` scripts and libraries that ask for NuGet packages with `#r "nuget: Id, 1.2.3"` and run with only the .NET runtime installed, no SDK and no MSBuild. The resolver (S02), the loader (S03) and the compiler (S04) are here; Sync, Proxy and Build adopt them slice by slice (S05-S07).
 
 | Type | What it does |
 | --- | --- |
@@ -11,6 +11,8 @@ Our own scripting (plan 14; decision D9): `.csx` scripts and libraries that ask 
 | `LockFile` | `library.lock`: the hash of every package; the first download is trusted and recorded, every later one must match. `RequirePinned` refuses a package with no pin |
 | `ClosureLoadContext` | a collectible load context for one closure: managed assemblies from the closure, native libraries by the file names a DllImport can mean, a name the host shares answered by the default context so the types are the same on both sides |
 | `ClosureLoader` | what a host holds per library, driver or script: load under a key (loading again replaces and unloads the earlier one), unload, and `UnloadedAsync` to ask whether the managed side was collected. Unloading is best effort: it needs every reference to the context's types dropped, and a native library stays loaded for the life of the process, so a changed native package needs a restart |
+| `CsxCompiler` | a `.csx` source to a cached assembly with Roslyn scripting, against the shared framework, the host's contract assemblies and the script's own closure. `#load` only through `RestrictedSourceResolver` (`.csx` files inside one root; absolute paths, `..` and links out are refused), a file `#r` is refused, diagnostics carry the script's own file and line (directive lines are blanked, never removed), and `ScriptSyntaxGuard` runs before anything is emitted. The cache key covers the text, the loaded files, the compile references and Roslyn's version. `RunAsync` loads the image into the caller's load context and calls Roslyn's `Submission#0.<Factory>` (an undocumented convention, pinned by a test) so no package assembly lands in the default context |
+| `ScriptSyntaxGuard` | a lint that refuses banned namespaces (default `System.IO`, `System.Net`, `System.Diagnostics`, `System.Reflection`, `System.Runtime.InteropServices`) with the reason; not a security boundary |
 | `LibraryValidation` | the checks of the hostile-input corpus (H1) for package ids, exact versions, names and type names, moved here from `Connections.Libraries` |
 
 Nothing here runs package code: no install scripts exist, no MSBuild runs, analyzers are not loaded. Loading a package into a process is code execution in that process; the controls are the allow-list, the pinned lock file and who may edit the configuration.
