@@ -3,7 +3,7 @@ using Apache.Arrow.Flight;
 using Apache.Arrow.Flight.Server;
 using Apache.Arrow.Ipc;
 
-namespace DbDataProxy.Server.Flight;
+namespace DbDataKit.Serving.FlightSql;
 
 /// <summary>
 /// Apache.Arrow.Flight 23.0.0 builds its internal <see cref="ArrowStreamWriter"/> with default options and exposes no way
@@ -12,7 +12,7 @@ namespace DbDataProxy.Server.Flight;
 /// tests; if a package update moves those members the server refuses to enable Arrow data compression instead of silently
 /// sending uncompressed data.
 /// </summary>
-internal static class FlightIpcCompression
+public static class FlightIpcCompression
 {
     private static readonly FieldInfo? FlightDataStreamField =
         typeof(FlightRecordBatchStreamWriter).GetField("_flightDataStream", BindingFlags.NonPublic | BindingFlags.Instance);

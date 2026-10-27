@@ -3,10 +3,9 @@ using Apache.Arrow.Compression;
 using Apache.Arrow.Flight;
 using Apache.Arrow.Flight.Server;
 using Apache.Arrow.Ipc;
-using DbDataProxy.Server.Configuration;
 using Grpc.Core;
 
-namespace DbDataProxy.Server.Flight;
+namespace DbDataKit.Serving.FlightSql;
 
 /// <summary>The compression applied to one result stream.</summary>
 public sealed record CompressionPlan(CompressionMode Mode, string Codec, int? Level)
@@ -63,7 +62,7 @@ public sealed record CompressionPlan(CompressionMode Mode, string Codec, int? Le
         switch (Mode)
         {
             case CompressionMode.Grpc:
-                // The server compresses all responses with gzip when the client accepts it (see ProxyHost); this plan keeps that.
+                // The server compresses all responses with gzip when the client accepts it (the host turns that on); this plan keeps that.
                 await writer.SetupStream(schema).ConfigureAwait(false);
                 break;
             case CompressionMode.Arrow:
