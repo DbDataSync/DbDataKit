@@ -97,11 +97,16 @@ public class SqlServerCatalogReader(DbConnection connection, ISqlDialect? dialec
     {
         string p = Prefix(t.Catalog);
         var (where, args) = Of(t);
-        return ("SELECT i.name, i.is_unique, ic.key_ordinal, c.name, ic.is_descending_key "
+        // Layout: name, unique, ordinal, column, descending, included, backs constraint, compression, partitions. An included column has key_ordinal 0, so its ordinal is its place in the index.
+        var primaryKeys = Options.IncludeConstraintIndexes ? "" : "i.is_primary_key = 0 AND ";
+        return ("SELECT i.name, i.is_unique, CASE WHEN ic.is_included_column = 1 THEN ic.index_column_id ELSE ic.key_ordinal END, c.name, ic.is_descending_key, ic.is_included_column, "
+            + "CASE WHEN i.is_unique_constraint = 1 OR i.is_primary_key <> 0 THEN 1 ELSE 0 END, "
+            + $"(SELECT MIN(pt.data_compression_desc) FROM {p}sys.partitions pt WHERE pt.object_id = i.object_id AND pt.index_id = i.index_id), "
+            + $"(SELECT COUNT(*) FROM {p}sys.partitions pt WHERE pt.object_id = i.object_id AND pt.index_id = i.index_id) "
             + $"FROM {p}sys.indexes i JOIN {p}sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id "
             + $"JOIN {p}sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
             + $"JOIN {p}sys.objects o ON o.object_id = i.object_id JOIN {p}sys.schemas s ON s.schema_id = o.schema_id "
-            + $"WHERE i.is_primary_key = 0 AND i.type > 0 AND i.name IS NOT NULL AND ic.is_included_column = 0 AND ic.key_ordinal > 0 AND {where} ORDER BY i.name, ic.key_ordinal", args);
+            + $"WHERE {primaryKeys}i.type > 0 AND i.name IS NOT NULL AND (ic.is_included_column = 1 OR ic.key_ordinal > 0) AND {where} ORDER BY i.name, ic.is_included_column, ic.key_ordinal, ic.index_column_id", args);
     }
 
     protected override (string Sql, object?[] Args)? RowEstimateQuery(TableRef t)

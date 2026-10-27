@@ -39,7 +39,16 @@ public sealed record ForeignKeyInfo(
 
 public sealed record IndexColumn(string Name, bool Descending = false);
 
-public sealed record IndexInfo(string Name, bool Unique, IReadOnlyList<IndexColumn> Columns);
+/// <summary>
+/// An index: its name, uniqueness and key columns in order. <see cref="Include"/> are the non-key columns it carries (SQL Server <c>INCLUDE</c>, PostgreSQL 11+); <see cref="BacksConstraint"/> is true for the index behind a PRIMARY KEY or UNIQUE
+/// constraint; <see cref="Compression"/> and <see cref="Partitions"/> are what the engine says about its storage (SQL Server), null where it says nothing. The last three are filled by the readers that can, and are null or false elsewhere.
+/// </summary>
+public sealed record IndexInfo(
+    string Name, bool Unique, IReadOnlyList<IndexColumn> Columns,
+    IReadOnlyList<string>? Include = null, bool BacksConstraint = false, string? Compression = null, int? Partitions = null)
+{
+    public IReadOnlyList<string> IncludeList => Include ?? [];
+}
 
 /// <summary>
 /// Which parts of a <see cref="TableShape"/> the source could actually answer. False means "unknown", never "none": a driver

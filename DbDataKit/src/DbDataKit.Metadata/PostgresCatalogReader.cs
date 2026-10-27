@@ -84,11 +84,14 @@ public class PostgresCatalogReader(DbConnection connection, ISqlDialect? dialect
     protected override (string Sql, object?[] Args)? IndexesQuery(TableRef t)
     {
         var (where, args) = Of(t);
-        // Key columns only (INCLUDE columns are not part of the key); attnum 0 is an expression, reported with a null name.
-        return ("SELECT ic.relname::text, i.indisunique, k.ord::int, a.attname::text, (i.indoption[k.ord - 1] & 1) <> 0 "
+        // Layout: name, unique, ordinal, column, descending, included, backs constraint (compression and partitions: PostgreSQL has neither). The key columns come first (ord <= indnkeyatts), then the INCLUDE ones; attnum 0 is an
+        // expression, reported with a null name.
+        var primaryKeys = Options.IncludeConstraintIndexes ? "" : "NOT i.indisprimary AND ";
+        return ("SELECT ic.relname::text, i.indisunique, k.ord::int, a.attname::text, k.ord <= i.indnkeyatts AND (i.indoption[k.ord - 1] & 1) <> 0, k.ord > i.indnkeyatts, "
+            + "EXISTS (SELECT 1 FROM pg_constraint pc WHERE pc.conindid = i.indexrelid), NULL::text, NULL::int "
             + "FROM pg_index i JOIN pg_class ic ON ic.oid = i.indexrelid JOIN pg_class c ON c.oid = i.indrelid JOIN pg_namespace n ON n.oid = c.relnamespace "
             + "CROSS JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord) LEFT JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum "
-            + $"WHERE NOT i.indisprimary AND k.ord <= i.indnkeyatts AND {where} ORDER BY ic.relname, k.ord", args);
+            + $"WHERE {primaryKeys}{where} ORDER BY ic.relname, k.ord", args);
     }
 
     protected override (string Sql, object?[] Args)? RowEstimateQuery(TableRef t)

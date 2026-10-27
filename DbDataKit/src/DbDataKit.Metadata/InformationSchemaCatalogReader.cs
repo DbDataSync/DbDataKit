@@ -10,6 +10,12 @@ public sealed record CatalogReaderOptions
 {
     /// <summary>Command timeout for every catalog query. Zero means the provider default.</summary>
     public TimeSpan CommandTimeout { get; init; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// Also report the index behind a PRIMARY KEY (and the unique-constraint ones, flagged <see cref="IndexInfo.BacksConstraint"/>). Off by default: a consumer that creates indexes from a shape does not want the key's own index in the list;
+    /// one that compares a live structure with a declared one (Build) does.
+    /// </summary>
+    public bool IncludeConstraintIndexes { get; init; }
 }
 
 /// <summary>
@@ -22,13 +28,16 @@ public sealed record CatalogReaderOptions
 /// Row layouts the SQL members must return:
 /// columns (name, ordinal, data_type, nullable, default, char_length, precision, scale, collation[, is_identity, is_computed]);
 /// primary key (constraint, column, ordinal); foreign key (constraint, ordinal, column, ref_catalog, ref_schema, ref_table, ref_column, update_rule, delete_rule);
-/// index (name, unique, ordinal, column, descending). Rules are text: CASCADE, SET NULL, SET DEFAULT, RESTRICT, NO ACTION.
+/// index (name, unique, ordinal, column, descending[, included, backs_constraint, compression, partitions]; a row with <c>included</c> true is an INCLUDE column, not a key column). Rules are text: CASCADE, SET NULL, SET DEFAULT, RESTRICT, NO ACTION.
 /// A DbException while reading keys, foreign keys or indexes does not fail the shape: the matching <see cref="ShapeSupport"/> flag is
 /// false and a warning carries the provider's message (so permission errors are visible, not silent).
 /// </remarks>
 public class InformationSchemaCatalogReader : ICatalogReader
 {
     private readonly CatalogReaderOptions options;
+
+    /// <summary>The options this reader was made with, for the engine readers' own queries.</summary>
+    protected CatalogReaderOptions Options => options;
 
     public InformationSchemaCatalogReader(DbConnection connection, ISqlDialect dialect, CatalogReaderOptions? options = null)
     {
@@ -256,7 +265,13 @@ public class InformationSchemaCatalogReader : ICatalogReader
         if (IndexesQuery(table) is not var (sql, args)) return null;
         var rows = await QueryAsync(sql, args, cancellationToken).ConfigureAwait(false);
         return rows.GroupBy(r => r.Text(0) ?? "").OrderBy(g => g.Key, StringComparer.Ordinal)
-            .Select(g => new IndexInfo(g.Key, g.First().Bool(1), g.OrderBy(r => r.Int(2) ?? 0).Select(r => new IndexColumn(r.Text(3) ?? "<expression>", r.Bool(4))).ToList()))
+            .Select(g =>
+            {
+                var first = g.First();
+                var keys = g.Where(r => !r.Bool(5)).OrderBy(r => r.Int(2) ?? 0).Select(r => new IndexColumn(r.Text(3) ?? "<expression>", r.Bool(4))).ToList();
+                var include = g.Where(r => r.Bool(5)).OrderBy(r => r.Int(2) ?? 0).Select(r => r.Text(3) ?? "<expression>").ToList();
+                return new IndexInfo(g.Key, first.Bool(1), keys, include.Count == 0 ? null : include, first.Bool(6), first.Text(7), first.Int(8));
+            })
             .ToList();
     }
 
@@ -288,7 +303,7 @@ public class InformationSchemaCatalogReader : ICatalogReader
     /// Runs a catalog query. <c>{0}</c>, <c>{1}</c>... in the text become the dialect's parameter markers for <paramref name="args"/>
     /// (<c>@p0</c>, <c>$1</c>, <c>?</c>, <c>:p0</c>); values always travel as parameters, never as text.
     /// </summary>
-    protected async Task<IReadOnlyList<CatalogRow>> QueryAsync(string sql, object?[] args, CancellationToken cancellationToken, CommandBehavior behavior = CommandBehavior.Default)
+    protected virtual async Task<IReadOnlyList<CatalogRow>> QueryAsync(string sql, object?[] args, CancellationToken cancellationToken, CommandBehavior behavior = CommandBehavior.Default)
     {
         await EnsureOpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = Connection.CreateCommand();
