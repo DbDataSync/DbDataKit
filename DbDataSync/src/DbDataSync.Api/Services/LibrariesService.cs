@@ -12,8 +12,8 @@ public sealed record PackageRefSummary(string Id, string Version);
 /// privately, not through a shared library.</param>
 /// <param name="Curated">Whether this id matches a bundled <see cref="KnownLibraries"/> entry, by
 /// either its catalog id or its package id — an installed library can be keyed by either shape.</param>
-/// <param name="PendingRestore">Phase 121: true when <c>library.json</c> exists but <c>lib/</c> does
-/// not — an install that ran with no SDK available and no in-image catalog cache hit for it. Distinct
+/// <param name="PendingRestore">True when <c>library.csx</c> exists but <c>lib/</c> does
+/// not — a fresh checkout of the configuration repository, where <c>lib/</c> (the package store) is not tracked in git. Distinct
 /// from <paramref name="Resolves"/> being false: that also covers a library whose <c>lib/</c> is
 /// present but broken, which <c>config library sync</c> fixes the same way, but which isn't "waiting
 /// on an SDK" the way this is.</param>

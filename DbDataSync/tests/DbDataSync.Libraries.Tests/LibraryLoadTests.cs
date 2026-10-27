@@ -94,9 +94,10 @@ public sealed class LibraryLoadTests : IAsyncLifetime
         Assert.True(File.Exists(LibraryPaths.ManifestPath(libraryDir)));
 
         var libDir = LibraryPaths.LibDir(libraryDir);
-        var dlls = Directory.EnumerateFiles(libDir, "*.dll").Select(Path.GetFileName).ToList();
+        var dlls = Directory.EnumerateFiles(libDir, "*.dll", SearchOption.AllDirectories).Select(Path.GetFileName).ToList();
         Assert.Contains("MySqlConnector.dll", dlls);
-        Assert.True(Directory.EnumerateFiles(libDir, "*.deps.json").Any());
+        Assert.True(File.Exists(LibraryResolution.LockPath(libraryDir)));
+        Assert.Contains("mysqlconnector/2.4.0", File.ReadAllText(LibraryResolution.LockPath(libraryDir)));
     }
 
     /// <summary>

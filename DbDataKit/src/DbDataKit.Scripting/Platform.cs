@@ -53,5 +53,7 @@ public static class Platform
     {
         "NETStandard.Library", "Microsoft.NETCore.Platforms", "Microsoft.NETCore.Targets", "Microsoft.NETCore.App", "Microsoft.NETCore.App.Ref", "Microsoft.AspNetCore.App", "Microsoft.AspNetCore.App.Ref",
         "Microsoft.NETFramework.ReferenceAssemblies", "Microsoft.NETFramework.ReferenceAssemblies.net461",
+        // the polyfills a netstandard2.0 package asks for; every one of them is inbox on the runtimes this host runs on, so downloading them would only fetch assemblies that are then ignored (and fail offline)
+        "System.Memory", "System.Buffers", "System.Numerics.Vectors", "System.Runtime.CompilerServices.Unsafe", "System.Threading.Tasks.Extensions", "System.ValueTuple", "Microsoft.Bcl.AsyncInterfaces",
     };
 }
