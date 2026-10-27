@@ -36,6 +36,7 @@
     <DbDataKitReference Include="Secrets.Windows" />
     <DbDataKitReference Include="Connections.Abstractions" />
     <DbDataKitReference Include="Lineage" />   <!-- the lineage graph and the identity of a dataset; plan 18, G05 -->
+    <DbDataKitReference Include="Lineage.Cli" />   <!-- the lineage noun on the server command line; plan 18, G05 -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="System.CommandLine" />
   </ItemGroup>

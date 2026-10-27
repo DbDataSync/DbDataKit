@@ -175,8 +175,7 @@ internal static class BuildLineage
         AuditLog.LastLoadsAsync(read, scope, HookEvents.All.Select(e => e.Name).ToList(), ct: ct);
 
     /// <summary>
-    /// The seam for the <c>lineage</c> noun (<c>LineageNoun.Create(source)</c>): the design graph of one project. Build's command line is not a <c>NounRouter</c> (only its server is, and a server hosts several projects), so no
-    /// <c>lineage</c> verb is wired yet; a host calls this with the project it means.
+    /// The design graph of one project, in the shape <c>LineageNoun.Create(source)</c> takes. The server's <c>lineage</c> noun (<see cref="Server.ServerLineage"/>) merges one of these per hosted project; Build's per-project command line has no <c>lineage</c> verb.
     /// </summary>
     public static Func<CancellationToken, Task<LineageGraph>> Source(string projectRoot, Func<string, string?> environment) => _ =>
     {
