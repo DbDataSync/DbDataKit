@@ -36,6 +36,7 @@
     <Project Path="src/DbDataKit.Metadata.Abstractions/DbDataKit.Metadata.Abstractions.csproj" />
     <Project Path="src/DbDataKit.Serving.Abstractions/DbDataKit.Serving.Abstractions.csproj" />
     <Project Path="src/DbDataKit.Metadata/DbDataKit.Metadata.csproj" />
+    <Project Path="src/DbDataKit.Lineage/DbDataKit.Lineage.csproj" />
     <Project Path="src/DbDataKit.Monitoring/DbDataKit.Monitoring.csproj" />
     <Project Path="src/DbDataKit.Odbc.Metadata/DbDataKit.Odbc.Metadata.csproj" />
     <Project Path="src/DbDataKit.Scheduling/DbDataKit.Scheduling.csproj" />
@@ -95,6 +96,7 @@
     <Project Path="tests/DbDataKit.Metadata.Abstractions.Tests/DbDataKit.Metadata.Abstractions.Tests.csproj" />
     <Project Path="tests/DbDataKit.Serving.Abstractions.Tests/DbDataKit.Serving.Abstractions.Tests.csproj" />
     <Project Path="tests/DbDataKit.Metadata.Tests/DbDataKit.Metadata.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Lineage.Tests/DbDataKit.Lineage.Tests.csproj" />
     <Project Path="tests/DbDataKit.Monitoring.Tests/DbDataKit.Monitoring.Tests.csproj" />
     <Project Path="tests/DbDataKit.Odbc.Metadata.Tests/DbDataKit.Odbc.Metadata.Tests.csproj" />
     <Project Path="tests/DbDataKit.State.Tests/DbDataKit.State.Tests.csproj" />
