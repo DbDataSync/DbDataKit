@@ -617,7 +617,7 @@ see [Installing → Running in a container](install.md#running-in-a-container) f
 
 ## `tools/dev-harness` — development and testing only
 
-Not application configuration — a separate tool for standing up local SQL Server/Postgres containers,
+Not application configuration — a separate tool for standing up the shared test engines (`testenv/`: two SQL Servers and PostgreSQL),
 seeding data, generating live traffic, and verifying/corrupting a running replication for testing.
 Run `tools/dev-harness help` for the full, current, self-documented list of verbs and per-verb flags
 (`--tables`, `--rows`, `--rate`, `--duration`, `--parallelism`, `--target-engine`, and more).
@@ -626,8 +626,8 @@ Its environment variables:
 
 | env var | default | meaning |
 | --- | --- | --- |
-| `DBDATASYNC_MSSQL_SA_PASSWORD` | `DbDataSync_Test_Pw1` | SA password for both SQL Server containers |
-| `DBDATASYNC_POSTGRES_PASSWORD` | `DbDataSync_Test_Pw1` | PostgreSQL container password |
+| `DBKIT_TEST_PASSWORD` | `DbKit_Test_Pw1` | password of the shared test engines in `testenv/` (SQL Server's `sa`, PostgreSQL's `dbdatasync`); the same variable `testenv/testenv.sh up` reads |
+| ~~`DBDATASYNC_MSSQL_SA_PASSWORD`~~, ~~`DBDATASYNC_POSTGRES_PASSWORD`~~ | | retired with `DbDataSync/docker-compose.yml`: the harness refuses to start while either is set, and says to use `DBKIT_TEST_PASSWORD` |
 | `DBDATASYNC_HARNESS_TARGET_ENGINE` | `mssql` | or `postgres` — must agree across `up`/`verify`/`drift` |
 | `DBDATASYNC_HARNESS_TABLES` | `1` | how many generated tables — same rule |
 

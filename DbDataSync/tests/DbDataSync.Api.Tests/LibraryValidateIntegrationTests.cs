@@ -26,8 +26,7 @@ namespace DbDataSync.Api.Tests;
 [Trait("Category", "Integration")]
 public sealed class LibraryValidateIntegrationTests(TestApiFactory factory) : IClassFixture<TestApiFactory>
 {
-    private const string ServerConnectionString =
-        "Data Source=localhost,14330;User ID=sa;Password=DbDataSync_Test_Pw1;TrustServerCertificate=True";
+    private static string ServerConnectionString => TestSupport.TestEngines.MsSql.ConnectionString;
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
@@ -45,7 +44,7 @@ public sealed class LibraryValidateIntegrationTests(TestApiFactory factory) : IC
             Name = name,
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = "master",
             AuthMode = AuthMode.SqlAuth,
@@ -78,8 +77,8 @@ public sealed class LibraryValidateIntegrationTests(TestApiFactory factory) : IC
     [Fact]
     public async Task Validate_AgainstARealServer_SucceedsAndLeavesNoScratchTableBehind()
     {
-        var name = await CreateConnectionAsync("sa", "DbDataSync_Test_Pw1");
-        var envVar = await ExposeCredentialToChildProcessAsync(name, "DbDataSync_Test_Pw1");
+        var name = await CreateConnectionAsync("sa", TestSupport.TestEngines.MsSql.Password);
+        var envVar = await ExposeCredentialToChildProcessAsync(name, TestSupport.TestEngines.MsSql.Password);
         try
         {
             var response = await _client.PostAsync($"/api/connections/{name}/validate-library", null);
@@ -128,7 +127,7 @@ public sealed class LibraryValidateIntegrationTests(TestApiFactory factory) : IC
         // and installed for this suite is expected to be clean — proving the static check's own
         // real-world "no false positives against real, current usage" bar through the same endpoint an
         // operator actually uses, not just through LibrarySurfaceChecker directly.
-        var name = await CreateConnectionAsync("sa", "DbDataSync_Test_Pw1");
+        var name = await CreateConnectionAsync("sa", TestSupport.TestEngines.MsSql.Password);
 
         var response = await _client.PostAsync($"/api/connections/{name}/test", null);
         response.EnsureSuccessStatusCode();

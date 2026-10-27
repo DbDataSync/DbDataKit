@@ -12,9 +12,9 @@ namespace DbDataSync.Drivers.Generic.Tests;
 public sealed class GenericDriverTestDatabase : IAsyncLifetime
 {
     public static string Host { get; } = "localhost";
-    public static int Port { get; } = 15432;
+    public static int Port { get; } = TestSupport.TestEngines.Postgres.Port;
     public static string User { get; } = "dbdatasync";
-    public static string Password { get; } = "DbDataSync_Test_Pw1";
+    public static string Password { get; } = TestSupport.TestEngines.Postgres.Password;
 
     private static string ServerConnectionString =>
         Environment.GetEnvironmentVariable("DBDATASYNC_TEST_POSTGRES_SERVER")

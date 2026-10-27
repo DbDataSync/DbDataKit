@@ -182,7 +182,7 @@ async Task UpAsync(HarnessArgs options, string root, CancellationToken cancellat
     Log.Warn(reason ?? "a child process exited");
 }
 
-// The harness runs `docker compose` and locates build output relative to the repository root, so it
+// The harness runs `docker compose` (on testenv/) and locates build output relative to the repository root, so it
 // has to work from any working directory — walking up to the solution file is how every other tool in
 // this repo that needs the same thing (see TestApiFactory) does it.
 static string FindRepoRoot()
@@ -263,8 +263,9 @@ static void PrintUsage()
           passing the flag to every verb — `verify` and `drift` must agree with what `up` configured.
 
         Environment:
-          DBDATASYNC_MSSQL_SA_PASSWORD      SA password for both SQL Server instances (default DbDataSync_Test_Pw1)
-          DBDATASYNC_POSTGRES_PASSWORD      PostgreSQL password (default DbDataSync_Test_Pw1)
+          DBKIT_TEST_PASSWORD               password of the shared test engines in testenv/ (SQL Server's sa, PostgreSQL's dbdatasync);
+                                            default DbKit_Test_Pw1. DBDATASYNC_MSSQL_SA_PASSWORD and DBDATASYNC_POSTGRES_PASSWORD are
+                                            retired and refused.
           DBDATASYNC_HARNESS_TARGET_ENGINE  mssql (default) or postgres
           DBDATASYNC_HARNESS_TABLES         how many tables to generate (default 1)
         """);

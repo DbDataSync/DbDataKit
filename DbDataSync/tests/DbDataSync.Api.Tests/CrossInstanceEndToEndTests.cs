@@ -79,11 +79,11 @@ public sealed class CrossInstanceEndToEndTests : IClassFixture<TestApiFactory>, 
         await using (var tgtConnection = OpenDatabaseConnection(TargetServerConnectionString))
             await ExecuteAsync(tgtConnection, $"CREATE TABLE dbo.[{_targetTable}] (Id INT NOT NULL PRIMARY KEY, Name NVARCHAR(50) NOT NULL);");
 
-        SetSecretEnvVar(_srcConnectionName, "DbDataSync_Test_Pw1");
-        SetSecretEnvVar(_tgtConnectionName, "DbDataSync_Test_Pw1");
+        SetSecretEnvVar(_srcConnectionName, TestSupport.TestEngines.MsSql.Password);
+        SetSecretEnvVar(_tgtConnectionName, TestSupport.TestEngines.MsSqlTarget.Password);
 
-        await CreateConnectionAsync(_srcConnectionName, host: "localhost", port: 14330);
-        await CreateConnectionAsync(_tgtConnectionName, host: "localhost", port: 14331);
+        await CreateConnectionAsync(_srcConnectionName, host: "localhost", port: TestSupport.TestEngines.MsSql.Port);
+        await CreateConnectionAsync(_tgtConnectionName, host: "localhost", port: TestSupport.TestEngines.MsSqlTarget.Port);
         await CreateReplicationAsync();
     }
 
@@ -240,7 +240,7 @@ public sealed class CrossInstanceEndToEndTests : IClassFixture<TestApiFactory>, 
             Database = _databaseName,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = port == TestSupport.TestEngines.MsSqlTarget.Port ? TestSupport.TestEngines.MsSqlTarget.Password : TestSupport.TestEngines.MsSql.Password,
         }, JsonOptions)).EnsureSuccessStatusCode();
 
     private async Task CreateReplicationAsync()

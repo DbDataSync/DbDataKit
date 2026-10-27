@@ -3,21 +3,30 @@ using Microsoft.Data.SqlClient;
 
 namespace DbDataSync.DevHarness;
 
-/// <summary>Drives docker-compose.yml, and waits for the servers the way a client actually needs
-/// them.</summary>
+/// <summary>Drives the shared test engines (<c>testenv/docker-compose.yml</c>, the same file <c>testenv/testenv.sh</c> uses), and waits
+/// for the servers the way a client actually needs them.</summary>
 public static class DockerCompose
 {
+    /// <summary>The compose file's profiles the harness needs: both SQL Servers, and the PostgreSQL with logical decoding.</summary>
+    private static readonly string[] Profiles = ["mssql", "mssql-target", "postgres-logical"];
+
+    private static string[] Compose(string repoRoot, params string[] args)
+    {
+        var file = Path.GetFullPath(Path.Combine(repoRoot, "..", "testenv", "docker-compose.yml"));
+        return ["compose", "-f", file, .. Profiles.SelectMany(p => new[] { "--profile", p }), .. args];
+    }
+
     public static void Up(string repoRoot)
     {
-        Log.Step("Starting SQL Server containers");
-        Run(repoRoot, "compose", "up", "-d");
+        Log.Step("Starting the shared test engines (testenv/): both SQL Servers and PostgreSQL");
+        Run(repoRoot, Compose(repoRoot, "up", "-d", "--build", "--wait"));
     }
 
     public static void Down(string repoRoot, bool removeVolumes)
     {
         Log.Step(removeVolumes ? "Stopping containers and discarding their data" : "Stopping containers");
-        string[] args = removeVolumes ? ["compose", "down", "-v"] : ["compose", "down"];
-        Run(repoRoot, args);
+        // The engines keep no data between runs (testenv has no volumes), so there is nothing for removeVolumes to keep or discard.
+        Run(repoRoot, Compose(repoRoot, "down", "-v"));
     }
 
     /// <summary>

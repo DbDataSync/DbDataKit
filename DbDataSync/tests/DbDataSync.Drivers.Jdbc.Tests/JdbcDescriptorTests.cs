@@ -98,7 +98,7 @@ public sealed class JdbcDescriptorTests(JdbcTestDatabase db) : IClassFixture<Jdb
             AuthMode = AuthMode.SqlAuth,
             UserId = "dbdatasync",
         };
-        await using var connection = driver.CreateConnection(config, "DbDataSync_Test_Pw1");
+        await using var connection = driver.CreateConnection(config, TestSupport.TestEngines.Postgres.Password);
         connection.Open();
 
         var reader = (BatchReloadReader)driver.Readers.Single(r => r.Kind == GenericDriverKinds.BatchReload);
@@ -168,13 +168,13 @@ public sealed class JdbcDescriptorTests(JdbcTestDatabase db) : IClassFixture<Jdb
         var config = new ConnectionConfig
         {
             Name = "jdbc-descriptor-url-template-test", DriverType = "postgres-via-jdbc-templated",
-            Host = "localhost", Port = 15432, Database = db.DatabaseName,
+            Host = "localhost", Port = TestSupport.TestEngines.Postgres.Port, Database = db.DatabaseName,
             AuthMode = AuthMode.SqlAuth, UserId = "dbdatasync",
         };
 
         var preview = driver.PreviewConnection(config);
 
-        Assert.Equal("jdbc:postgresql://localhost:15432/" + db.DatabaseName, preview.JdbcUri);
+        Assert.Equal($"jdbc:postgresql://localhost:{TestSupport.TestEngines.Postgres.Port}/" + db.DatabaseName, preview.JdbcUri);
         Assert.Equal("dbdatasync", preview.Properties["pguser"]);
     }
 
@@ -225,7 +225,7 @@ public sealed class JdbcDescriptorTests(JdbcTestDatabase db) : IClassFixture<Jdb
         var config = new ConnectionConfig
         {
             Name = "jdbc-descriptor-partial-keys-test", DriverType = "postgres-via-jdbc-partial-keys",
-            Host = "localhost", Port = 15432, Database = db.DatabaseName,
+            Host = "localhost", Port = TestSupport.TestEngines.Postgres.Port, Database = db.DatabaseName,
             AuthMode = AuthMode.SqlAuth, UserId = "dbdatasync",
         };
 
@@ -235,7 +235,7 @@ public sealed class JdbcDescriptorTests(JdbcTestDatabase db) : IClassFixture<Jdb
         // under JDBC's own default key spellings, not the ADO.NET ones a naive reuse of
         // DescriptorConnectionStringKeysYaml would have silently applied to everything except username.
         Assert.Equal("localhost", preview.Properties["host"]);
-        Assert.Equal("15432", preview.Properties["port"]);
+        Assert.Equal(TestSupport.TestEngines.Postgres.Port.ToString(), preview.Properties["port"]);
         Assert.Equal(db.DatabaseName, preview.Properties["database"]);
         Assert.Equal("dbdatasync", preview.Properties["pguser"]);
         Assert.False(preview.Properties.ContainsKey("Host"));
@@ -300,7 +300,7 @@ public sealed class JdbcDescriptorTests(JdbcTestDatabase db) : IClassFixture<Jdb
             AuthMode = AuthMode.SqlAuth,
             UserId = "dbdatasync",
         };
-        await using var connection = driver.CreateConnection(config, "DbDataSync_Test_Pw1");
+        await using var connection = driver.CreateConnection(config, TestSupport.TestEngines.Postgres.Password);
         connection.Open();
 
         var reader = (BatchReloadReader)driver.Readers.Single(r => r.Kind == GenericDriverKinds.BatchReload);
@@ -386,7 +386,7 @@ public sealed class JdbcDescriptorTests(JdbcTestDatabase db) : IClassFixture<Jdb
             AuthMode = AuthMode.SqlAuth,
             UserId = "dbdatasync",
         };
-        await using var connection = driver.CreateConnection(config, "DbDataSync_Test_Pw1");
+        await using var connection = driver.CreateConnection(config, TestSupport.TestEngines.Postgres.Password);
         connection.Open();
 
         using var cmd = connection.CreateCommand();

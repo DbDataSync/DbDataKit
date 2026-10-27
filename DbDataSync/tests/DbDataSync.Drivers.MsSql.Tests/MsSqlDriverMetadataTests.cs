@@ -44,14 +44,14 @@ public sealed class MsSqlDriverMetadataTests(MsSqlTestDatabase db) : IClassFixtu
             Name = "test",
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = db.DatabaseName,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
         };
 
-        using var connection = _driver.CreateConnection(config, "DbDataSync_Test_Pw1");
+        using var connection = _driver.CreateConnection(config, TestSupport.TestEngines.MsSql.Password);
         await connection.OpenAsync();
 
         Assert.Equal(System.Data.ConnectionState.Open, connection.State);

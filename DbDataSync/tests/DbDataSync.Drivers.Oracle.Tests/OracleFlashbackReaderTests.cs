@@ -7,11 +7,11 @@ using DbDataSync.Core.Sql;
 namespace DbDataSync.Drivers.Oracle.Tests;
 
 /// <summary>
-/// Requires <c>docker/oracle-init/10-grants.sql</c>'s <c>EXECUTE ON DBMS_FLASHBACK</c> grant to have
+/// Requires <c>testenv/oracle-init/10-grants.sql</c>'s <c>EXECUTE ON DBMS_FLASHBACK</c> grant to have
 /// actually run — confirmed by testing that it fails outright (<c>ORA-00904</c>) without it, which is
 /// exactly why that grant exists and is checked in rather than left as a manual setup step.
 /// <para>
-/// Runs against <c>docker/oracle-init/20-flashback-probe-table.sql</c>'s pre-provisioned
+/// Runs against <c>testenv/oracle-init/20-flashback-probe-table.sql</c>'s pre-provisioned
 /// <c>fb_probe_shared</c> table, **not** a table created fresh per test — confirmed by extensive live
 /// testing that Oracle's Flashback Version Query cannot produce <c>VERSIONS BETWEEN SCN</c> history for
 /// a table whose own <c>CREATE TABLE</c> is very recent (<c>ORA-01466</c>, "table definition has
@@ -25,7 +25,7 @@ namespace DbDataSync.Drivers.Oracle.Tests;
 [Trait("Category", "Integration")]
 public sealed class OracleFlashbackReaderTests(OracleTestDatabase db) : IClassFixture<OracleTestDatabase>, IAsyncLifetime
 {
-    // Uppercase to match the unquoted CREATE TABLE in docker/oracle-init/20-flashback-probe-table.sql,
+    // Uppercase to match the unquoted CREATE TABLE in testenv/oracle-init/20-flashback-probe-table.sql,
     // which Oracle folds to FB_PROBE_SHARED — this driver's own dialect.QualifyTable quotes whatever
     // case it's given, so a lowercase reference here would look for a table that doesn't exist.
     private const string TableName = "FB_PROBE_SHARED";

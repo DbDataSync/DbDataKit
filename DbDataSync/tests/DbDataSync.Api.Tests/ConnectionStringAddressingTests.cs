@@ -38,19 +38,19 @@ public sealed class ConnectionStringAddressingTests(TestApiFactory factory) : IC
         {
             Name = name,
             DriverType = DriverIds.MsSql,
-            ConnectionString = "Server=localhost,14330;TrustServerCertificate=True",
+            ConnectionString = $"Server=localhost,{TestSupport.TestEngines.MsSql.Port};TrustServerCertificate=True",
             Database = "master",
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
         });
         response.EnsureSuccessStatusCode();
 
         var saved = await _client.GetFromJsonAsync<ConnectionConfig>($"/api/connections/{name}", JsonOptions);
         Assert.Null(saved!.Host);
-        Assert.Contains("Server=localhost,14330", saved.ConnectionString);
+        Assert.Contains($"Server=localhost,{TestSupport.TestEngines.MsSql.Port}", saved.ConnectionString);
         // The credential went to the secret store, not into the file that gets committed.
-        Assert.DoesNotContain("DbDataSync_Test_Pw1", saved.ConnectionString);
+        Assert.DoesNotContain(TestSupport.TestEngines.MsSql.Password, saved.ConnectionString);
 
         var test = await _client.PostAsync($"/api/connections/{name}/test", null);
         test.EnsureSuccessStatusCode();
@@ -70,10 +70,10 @@ public sealed class ConnectionStringAddressingTests(TestApiFactory factory) : IC
         {
             Name = name,
             DriverType = DriverIds.MsSql,
-            ConnectionString = "Server=localhost,14330;TrustServerCertificate=True;Application Name=DbDataSyncTest",
+            ConnectionString = $"Server=localhost,{TestSupport.TestEngines.MsSql.Port};TrustServerCertificate=True;Application Name=DbDataSyncTest",
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
         })).EnsureSuccessStatusCode();
 
         var report = await (await _client.PostAsync($"/api/connections/{name}/test", null))
@@ -91,10 +91,10 @@ public sealed class ConnectionStringAddressingTests(TestApiFactory factory) : IC
         {
             Name = name,
             DriverType = DriverIds.MsSql,
-            ConnectionString = "Server=localhost,14330;User Id=sa;Password=DbDataSync_Test_Pw1",
+            ConnectionString = $"Server=localhost,{TestSupport.TestEngines.MsSql.Port};User Id=sa;Password={TestSupport.TestEngines.MsSql.Password}",
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -129,12 +129,12 @@ public sealed class ConnectionStringAddressingTests(TestApiFactory factory) : IC
             Name = name,
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = "master",
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
         })).EnsureSuccessStatusCode();
 
         var saved = await _client.GetFromJsonAsync<ConnectionConfig>($"/api/connections/{name}", JsonOptions);
@@ -154,11 +154,11 @@ public sealed class ConnectionStringAddressingTests(TestApiFactory factory) : IC
         {
             Name = name,
             DriverType = DriverIds.Postgres,
-            ConnectionString = "Host=localhost;Port=15432;Timeout=5;SSL Mode=Disable",
+            ConnectionString = $"Host=localhost;Port={TestSupport.TestEngines.Postgres.Port};Timeout=5;SSL Mode=Disable",
             Database = "postgres",
             AuthMode = AuthMode.SqlAuth,
             UserId = "dbdatasync",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.Postgres.Password,
         })).EnsureSuccessStatusCode();
 
         var report = await (await _client.PostAsync($"/api/connections/{name}/test", null))

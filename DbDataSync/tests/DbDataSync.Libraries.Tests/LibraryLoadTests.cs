@@ -137,7 +137,7 @@ public sealed class LibraryLoadTests : IAsyncLifetime
         var factory = registry.GetFactory("MySqlConnector");
         await using DbConnection connection = factory.CreateConnection()!;
         connection.ConnectionString =
-            "Server=localhost;Port=13306;User ID=root;Password=DbDataSync_Test_Pw1;Database=dbdatasync;";
+            TestSupport.TestEngines.MySql.ConnectionString;
         await connection.OpenAsync();
 
         var command = connection.CreateCommand();
@@ -165,7 +165,7 @@ public sealed class LibraryLoadTests : IAsyncLifetime
         var factory = registry.GetFactory("MySqlConnector");
         await using DbConnection connection = factory.CreateConnection()!;
         connection.ConnectionString =
-            "Server=localhost;Port=13306;User ID=root;Password=DbDataSync_Test_Pw1;Database=dbdatasync;";
+            TestSupport.TestEngines.MySql.ConnectionString;
         await connection.OpenAsync();
 
         var command = connection.CreateCommand();

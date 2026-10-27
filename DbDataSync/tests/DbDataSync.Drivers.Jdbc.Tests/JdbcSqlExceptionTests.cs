@@ -34,7 +34,7 @@ public sealed class JdbcSqlExceptionTests(JdbcTestDatabase db) : IClassFixture<J
             AuthMode = AuthMode.SqlAuth,
             UserId = "dbdatasync",
         };
-        _connection = _driver.CreateConnection(config, "DbDataSync_Test_Pw1");
+        _connection = _driver.CreateConnection(config, TestSupport.TestEngines.Postgres.Password);
         _connection.Open();
         return Task.CompletedTask;
     }

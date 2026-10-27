@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { SA_PASSWORD } from './test-db'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '../..')
@@ -75,8 +76,8 @@ const authEnv = {
 
 // The environment variables the API's SecretStore falls back to when its encrypted store has no password for the connection.
 const secretEnv = {
-  DBDATA_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_SRC: 'DbDataSync_Test_Pw1',
-  DBDATA_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_TGT: 'DbDataSync_Test_Pw1',
+  DBDATA_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_SRC: SA_PASSWORD,
+  DBDATA_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_TGT: SA_PASSWORD,
 }
 
 export default defineConfig({

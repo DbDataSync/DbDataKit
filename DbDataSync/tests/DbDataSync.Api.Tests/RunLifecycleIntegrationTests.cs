@@ -71,8 +71,8 @@ public sealed class RunLifecycleIntegrationTests : IClassFixture<TestApiFactory>
         // inherits the current process's environment by default, so setting the env-var fallback
         // here reaches the child too. Mirrors how Phase 4's manual CLI run resolved this in the same
         // sandbox (no OS keychain available here).
-        SetSecretEnvVar(_srcConnectionName, "DbDataSync_Test_Pw1");
-        SetSecretEnvVar(_tgtConnectionName, "DbDataSync_Test_Pw1");
+        SetSecretEnvVar(_srcConnectionName, TestSupport.TestEngines.MsSql.Password);
+        SetSecretEnvVar(_tgtConnectionName, TestSupport.TestEngines.MsSql.Password);
 
         await CreateConnectionAsync(_srcConnectionName);
         await CreateConnectionAsync(_tgtConnectionName);
@@ -111,12 +111,12 @@ public sealed class RunLifecycleIntegrationTests : IClassFixture<TestApiFactory>
             Name = name,
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = _databaseName,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
         }, JsonOptions)).EnsureSuccessStatusCode();
 
     private async Task CreateReplicationAsync()

@@ -42,7 +42,7 @@ public sealed class ConnectionTestIntegrationTests(TestApiFactory factory) : ICl
             Database = "master",
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
         }, JsonOptions);
         response.EnsureSuccessStatusCode();
         return name;
@@ -51,7 +51,7 @@ public sealed class ConnectionTestIntegrationTests(TestApiFactory factory) : ICl
     [Fact]
     public async Task Test_AgainstAReachableServer_ReportsSuccessWithAVersionAndATiming()
     {
-        var name = await CreateConnectionAsync(14330);
+        var name = await CreateConnectionAsync(TestSupport.TestEngines.MsSql.Port);
 
         var response = await _client.PostAsync($"/api/connections/{name}/test", null);
         response.EnsureSuccessStatusCode();
@@ -90,12 +90,12 @@ public sealed class ConnectionTestIntegrationTests(TestApiFactory factory) : ICl
             Name = name,
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = "master",
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
             TestQuery = "SELECT 1 AS one, 2 AS two;",
         }, JsonOptions);
         response.EnsureSuccessStatusCode();
@@ -122,7 +122,7 @@ public sealed class ConnectionTestIntegrationTests(TestApiFactory factory) : ICl
     [Fact]
     public async Task CredentialSource_NamesTheExactEnvironmentVariableTheProcessLooksFor()
     {
-        var name = await CreateConnectionAsync(14330);
+        var name = await CreateConnectionAsync(TestSupport.TestEngines.MsSql.Port);
 
         var source = await _client.GetFromJsonAsync<Source>($"/api/connections/{name}/credential-source", JsonOptions);
 

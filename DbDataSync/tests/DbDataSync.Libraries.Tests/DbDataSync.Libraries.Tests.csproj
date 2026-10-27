@@ -23,4 +23,9 @@
     <ProjectReference Include="..\..\src\DbDataSync.Cli\DbDataSync.Cli.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Where the test engines are (DBDATASYNC_TEST_* variables); see its doc comment. -->
+    <Compile Include="..\Shared\TestEngines.cs" Link="Shared\TestEngines.cs" />
+  </ItemGroup>
+
 </Project>

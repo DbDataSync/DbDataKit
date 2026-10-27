@@ -58,7 +58,7 @@ public sealed class ReconcileDeletesIntegrationTests : IClassFixture<TestApiFact
         await ExecuteAsync(db, "CREATE TABLE dbo.[Tgt] (Id INT NOT NULL PRIMARY KEY, Name NVARCHAR(50) NOT NULL);");
         await ExecuteAsync(db, "INSERT INTO dbo.[Src] (Id, Name) VALUES (1, 'One'), (2, 'Two'), (3, 'Three');");
 
-        SetSecretEnvVar(_connectionName, "DbDataSync_Test_Pw1");
+        SetSecretEnvVar(_connectionName, TestSupport.TestEngines.MsSql.Password);
         await CreateConnectionAsync();
         await CreateReplicationAsync();
         await CreateMappingAsync();
@@ -232,12 +232,12 @@ public sealed class ReconcileDeletesIntegrationTests : IClassFixture<TestApiFact
             Name = _connectionName,
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = _databaseName,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
         }, JsonOptions)).EnsureSuccessStatusCode();
 
     private async Task CreateReplicationAsync() =>

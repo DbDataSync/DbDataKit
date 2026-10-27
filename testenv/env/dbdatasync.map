@@ -1,0 +1,13 @@
+# DbDataSync's integration suites read their connection strings from DBDATASYNC_TEST_* (literal defaults in the tests are the values of
+# the old DbDataSync/docker-compose.yml, which is gone: password DbDataSync_Test_Pw1, user dbdatasync / root / sa). Start the engines
+# the suites need and `eval "$(testenv/testenv.sh env dbdatasync)"`:
+#   testenv/testenv.sh up mssql mssql-target postgres-logical mysql mariadb oracle
+# Sync's PostgreSQL is the postgres-logical engine (wal_level=logical, wal2json), not the plain `postgres` the other suites use.
+DBDATASYNC_TEST_MSSQL_SERVER          <- DBKIT_TEST_MSSQL
+DBDATASYNC_TEST_MSSQL_SOURCE_SERVER   <- DBKIT_TEST_MSSQL
+DBDATASYNC_TEST_MSSQL_TARGET_SERVER   <- DBKIT_TEST_MSSQL_TARGET
+DBDATASYNC_TEST_POSTGRES_SERVER       <- DBKIT_TEST_POSTGRES_LOGICAL
+DBDATASYNC_TEST_POSTGRES_JDBC_URL     <- DBKIT_TEST_POSTGRES_LOGICAL_JDBC_URL
+DBDATASYNC_TEST_MYSQL_SERVER          <- DBKIT_TEST_MYSQL
+DBDATASYNC_TEST_MARIADB_SERVER        <- DBKIT_TEST_MARIADB
+DBDATASYNC_TEST_ORACLE_SERVER         <- DBKIT_TEST_ORACLE

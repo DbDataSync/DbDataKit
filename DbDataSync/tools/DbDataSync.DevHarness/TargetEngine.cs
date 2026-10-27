@@ -215,10 +215,9 @@ public abstract class TargetEngine
         public override string Name => "postgres";
         public override string DriverType => DriverIds.Postgres;
         public override string Host => "localhost";
-        public override int Port => 15432;
+        public override int Port => 15433;
         public override string UserId => "dbdatasync";
-        public override string Password =>
-            Environment.GetEnvironmentVariable("DBDATASYNC_POSTGRES_PASSWORD") ?? "DbDataSync_Test_Pw1";
+        public override string Password => Scenario.SaPassword;
         public override string AdminDatabase => "postgres";
         public override string SchemaName => "public";
 
