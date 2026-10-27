@@ -147,3 +147,63 @@ Same rules as plan 13a. The letter is **O** (outer layer); slice IDs O01 onwards
 and highly available. Sequence them in Proxy's host files (O01 after N02, or N02 written against O01's module interface). O06–O07 follow
 13a U13. O08–O10 follow plan 19's Z lane, which builds `DbDataKit.Store.*` as libraries so they can be hosted here. O11–O12 wait for
 plan 16's design.
+
+## 10. The serving contract (design, owner decisions 2026-10-27)
+
+N01's `IServingHost` is the first, small version: one interface that authenticates, describes, queries and optionally writes. The
+modules in section 4 need more, so N02 is designed against the contract below. It records seven decisions and what each module takes.
+
+### 10.1 Decisions
+
+1. **Placement: libraries plus a thin host.** Each module's protocol code is a `DbDataKit.Serving.*` library with no reference to Proxy.
+   The Proxy host loads modules, configures them from `server.yaml` and supplies the core services. N02 and O01 are designed together.
+2. **The core owns the duties; adapters are thin.** An adapter reads credentials and speaks its wire format. The core authenticates,
+   holds sessions, applies access rules and limits, audits, caches and traces. A module is never handed a raw executor.
+3. **Services per capability, not one request union.** A module takes only the services it needs (10.3).
+4. **Sessions are core sessions in shared state** (`DbDataKit.State`), valid on any instance. Protocol-specific state (a Postgres
+   prepared statement, an XMLA session) is an opaque blob the adapter owns, kept with a time-to-live.
+5. **A query result is an Arrow stream plus provenance:** the schema, counts, the canonical query that ran, the definition version
+   and the channel. Adapters convert it (Postgres rows, an XMLA cell set, JSON). MDX cell sets are produced by the semantic service from
+   the request's axes, still as Arrow.
+6. **Access rules (plan 22) are applied inside the core,** on the plan: the caller's attributes are resolved, the row filter is added
+   before execution, and columns are hidden or masked in the result. Adapters only see filtered data. The cache key includes the attribute values.
+7. **One rich catalog model.** The core returns the objects a caller may see: datasets with columns, types, keys and descriptions;
+   for semantic models, dimensions, hierarchies, and measures with format strings; for entities, as-of support. Each adapter renders its
+   own catalog views (Flight metadata, XMLA `Discover`, `pg_catalog`) from it, using `DbDataKit.Metadata` types where they fit.
+
+### 10.2 The module contract
+
+A module is a listener (or a set of routes) with: a name, the options it reads from `server.yaml` (an unknown name fails naming the
+file), start and stop, a health report, drain (stop taking new work, finish running work; plan 24), and a subscription to the
+published definitions it serves. Modules are enabled per instance.
+
+### 10.3 Core services
+
+| Service | What a module can ask | Used by |
+| --- | --- | --- |
+| Identity | authenticate credentials (password, bearer, Windows where the transport allows, SCRAM); resolve the caller's roles and attributes | every module |
+| Sessions | create, resume and close a session; hold the adapter's opaque state | `flightsql`, `pgwire`, `xmla`, `mcp` |
+| Query | run a typed request (SQL pass-through, semantic request, semantic SQL, MDX) under the caller's limits, rules, channel and draft; cancel | `flightsql`, `semantic`, `pgwire`, `xmla`, `feeds`, `apps` |
+| Catalog | describe what the caller may see (7 above) | the protocol modules |
+| Entities | as-of reads, validated writes, change requests, drafts | `store`, `apps`, `mcp` |
+| Documents | versioned documents, extraction on save | `webdav`, `apps` |
+| Definitions | the current published version per channel; a request is pinned to one version while it runs | all |
+| Platform | audit, limits, cancellation, the result cache, OpenTelemetry, child processes for heavy work | all |
+
+`identity`, `apps` and `mcp` use Identity and Platform and call Query, Entities and Documents in process, as the signed-in user.
+
+### 10.4 The caller context
+
+Every call carries one context: the identity, roles and attributes; the channel and any preview draft (plan 21); the session; a
+cancellation token; and a trace ID. Services take it as their first argument, so no module can leave it out.
+
+### 10.5 What N01 becomes
+
+`IServingHost` is kept as the small host a fake or a test can implement. N02's first step maps it onto the services above (its
+`AuthenticateAsync`, `DescribeAsync`, `LimitsFor`, `QueryAsync` and `Writes` become Identity, Catalog, Platform, Query and Entities).
+J10 stays behind its adapter until that mapping lands.
+
+### 10.6 Sequencing
+
+N02 is the first module on this contract: a design review of 10.1 to 10.4 against all ten modules, then the contract in
+`DbDataKit.Serving.Abstractions`, then Flight SQL moved onto it with no behaviour change. Proxy's Flight SQL suite is the safety net.

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Lineage.Cli</RootNamespace>
+    <PackageId>DbDataKit.Lineage.Cli</PackageId>
+    <Description>The lineage noun of the shared command surface (lineage graph, impact, provenance) over any source of a LineageGraph, with JSON documents and their schemas.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Cli\DbDataKit.Cli.csproj" />
+    <ProjectReference Include="..\DbDataKit.Lineage\DbDataKit.Lineage.csproj" />
+  </ItemGroup>
+</Project>

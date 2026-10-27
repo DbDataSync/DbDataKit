@@ -56,6 +56,21 @@ public interface ICatalogReader
         foreach (var t in tables) yield return await GetShapeAsync(t, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// The tables and views of one schema (or just <paramref name="table"/>) with their columns and, where the engine offers them, their indexes, in a fixed number of queries rather than a few per table. Keys, foreign keys and row estimates
+    /// are not read here (their <see cref="ShapeSupport"/> flags say so). The default asks for each table's whole shape; readers that can read a schema at once override it.
+    /// </summary>
+    async Task<IReadOnlyList<TableShape>> ReadSchemaAsync(string? catalog, string schema, string? table = null, CancellationToken cancellationToken = default)
+    {
+        var shapes = new List<TableShape>();
+        var filter = table is not null
+            ? TableFilter.Exactly(catalog, schema, table) with { Kinds = new HashSet<TableKind> { TableKind.Table, TableKind.View } }
+            : new TableFilter(catalog, LikePattern.Escape(schema), null, new HashSet<TableKind> { TableKind.Table, TableKind.View });
+        await foreach (var t in ListTablesAsync(filter, cancellationToken).ConfigureAwait(false))
+            shapes.Add(await GetShapeAsync(t, cancellationToken).ConfigureAwait(false));
+        return shapes;
+    }
+
     /// <summary>Result column names and types of a query without fetching rows. The strategy used is in <see cref="QueryShape.Strategy"/>.</summary>
     /// <exception cref="NotSupportedException">The reader has no way to describe a query on this server.</exception>
     /// <exception cref="InvalidOperationException">The read-only policy refused the text.</exception>

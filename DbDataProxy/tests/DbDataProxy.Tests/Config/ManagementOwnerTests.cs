@@ -38,6 +38,25 @@ public sealed partial class ManagementTests
     private static string Plain(string name) => Conn.Yaml(name, "duckdb", "Data Source=:memory:");
 
     [Fact]
+    public async Task An_administrator_has_the_proxy_make_a_publisher_code_that_pairs_a_server_once_and_a_publisher_cannot_make_one()
+    {
+        await StartAsync();
+        var admin = await PairAsync();
+
+        var made = await CallAsync(admin, HttpMethod.Post, "/api/v1/pairing-codes", ServerRole.Admin, "{\"name\":\"build\",\"minutes\":5}");
+        Assert.Equal(HttpStatusCode.OK, made.StatusCode);
+        var code = (string)JsonNode.Parse(await made.Content.ReadAsStringAsync())!["code"]!;
+
+        var publisher = await PairingClient.PairAsync(ManagementUrl, code, build1, ClientKind.Server, build1.Id);
+        Assert.Equal(ServerRole.Publisher, publisher.Ceiling);
+        await Assert.ThrowsAsync<PairingFailedException>(() => PairingClient.PairAsync(ManagementUrl, code, build2, ClientKind.Server, build2.Id));   // single use
+
+        // a publisher may not make codes (only an administrator, who asked through a console)
+        var refused = await CallAsAsync(build1, publisher, HttpMethod.Post, "/api/v1/pairing-codes", ServerRole.Publisher);
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+    }
+
+    [Fact]
     public async Task A_publishing_client_creates_data_sources_stamped_with_its_id_and_changes_and_removes_only_those()
     {
         await StartAsync();
@@ -120,5 +139,58 @@ public sealed partial class ManagementTests
         var read = JsonNode.Parse(await (await CallAsync(admin, HttpMethod.Get, "/api/v1/data-sources/semantic", ServerRole.Admin)).Content.ReadAsStringAsync())!;
         var changed = await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/semantic", ServerRole.Admin, Put((string)read["text"]! + "\n# reviewed\n", (string)read["version"]!));
         Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+    }
+
+    private static string SecretBody(string value) => JsonSerializer(new { value });
+
+    [Fact]
+    public async Task A_publishing_client_stores_its_secrets_under_its_own_name_and_they_are_never_read_back_or_seen_by_another_client()
+    {
+        const string password = "SENTINEL-warehouse-pw-5d1e";
+        await StartAsync();
+        var first = await PairPublisherAsync(build1);
+        var second = await PairPublisherAsync(build2);
+
+        var stored = await CallAsAsync(build1, first, HttpMethod.Put, "/api/v1/secrets/warehouse", ServerRole.Publisher, SecretBody(password));
+        Assert.Equal(HttpStatusCode.OK, stored.StatusCode);
+        var answer = await stored.Content.ReadAsStringAsync();
+        Assert.Equal("secret:dbdata:proxy:managed-build-1:warehouse", (string)JsonNode.Parse(answer)!["reference"]!);
+        Assert.DoesNotContain(password, answer);
+
+        string Names(string body) => string.Join(",", JsonNode.Parse(body)!["secrets"]!.AsArray().Select(n => (string)n!));
+        Assert.Equal("warehouse", Names(await (await CallAsAsync(build1, first, HttpMethod.Get, "/api/v1/secrets", ServerRole.Publisher)).Content.ReadAsStringAsync()));
+        Assert.Equal("", Names(await (await CallAsAsync(build2, second, HttpMethod.Get, "/api/v1/secrets", ServerRole.Publisher)).Content.ReadAsStringAsync()));
+
+        // the same name from another client is another secret, and removing it does not touch the first's
+        await CallAsAsync(build2, second, HttpMethod.Put, "/api/v1/secrets/warehouse", ServerRole.Publisher, SecretBody("another"));
+        Assert.Equal(HttpStatusCode.OK, (await CallAsAsync(build2, second, HttpMethod.Delete, "/api/v1/secrets/warehouse", ServerRole.Publisher)).StatusCode);
+        Assert.Equal("warehouse", Names(await (await CallAsAsync(build1, first, HttpMethod.Get, "/api/v1/secrets", ServerRole.Publisher)).Content.ReadAsStringAsync()));
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsAsync(build1, first, HttpMethod.Put, "/api/v1/secrets/..%2Fx", ServerRole.Publisher, SecretBody("x"))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsAsync(build1, first, HttpMethod.Put, "/api/v1/secrets/empty", ServerRole.Publisher, "{}")).StatusCode);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, (await CallAsAsync(build1, first, HttpMethod.Get, "/api/v1/secrets/warehouse", ServerRole.Publisher)).StatusCode);
+
+        // the value is in the encrypted store and nowhere that is written in clear
+        var audit = File.ReadAllText(Path.Combine(dataDirectory, "management-audit.log"));
+        Assert.Contains("secret write", audit);
+        Assert.DoesNotContain(password, audit);
+        foreach (var file in Directory.EnumerateFiles(dataDirectory, "*", SearchOption.AllDirectories).Where(f => !f.Contains(Path.DirectorySeparatorChar + "secrets" + Path.DirectorySeparatorChar)))
+            Assert.DoesNotContain(password, File.ReadAllText(file));
+    }
+
+    [Fact]
+    public async Task A_data_source_a_publisher_makes_can_use_the_secret_it_stored_without_a_restart()
+    {
+        await StartAsync();
+        var publisher = await PairPublisherAsync(build1);
+        var reference = (string)JsonNode.Parse(await (await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/secrets/connection", ServerRole.Publisher, SecretBody("Data Source=:memory:"))).Content.ReadAsStringAsync())!["reference"]!;
+
+        var text = $"schema: connection/1\nname: viaSecret\nengine: duckdb\nconnection_string_secret: '{reference}'\n";
+        var created = await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/data-sources/viaSecret", ServerRole.Publisher, Put(text, null));
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+
+        var catalog = app.Services.GetRequiredService<DataSourceCatalog>();
+        await using var result = await catalog.Resolve(Anyone, "viaSecret").Executor.ExecuteQueryAsync(new QueryRequest("SELECT 42 AS answer"), CancellationToken.None);
+        Assert.Single(result.Schema.FieldsList);
     }
 }

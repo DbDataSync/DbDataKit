@@ -33,7 +33,7 @@ internal sealed class PairableServer : IAsyncDisposable
         Codes = new PairingCodes(Path.Combine(directory, "pairing-codes.json"));
     }
 
-    public static async Task<PairableServer> StartAsync(int port = 0, string? directory = null)
+    public static async Task<PairableServer> StartAsync(int port = 0, string? directory = null, string product = "fake-server", string instanceId = InstanceId, Action<WebApplication, PairingCodes, PairedClientsFile>? map = null)
     {
         directory ??= System.IO.Directory.CreateTempSubdirectory("ddk-pairable").FullName;
         var certificate = DirectoryCertificate.Load(directory);
@@ -45,7 +45,7 @@ internal sealed class PairableServer : IAsyncDisposable
         builder.Logging.ClearProviders();
         builder.UseDbDataHost(host =>
         {
-            host.Product = "fake-server";
+            host.Product = product;
             host.Version = "9.9.9";
         });
         builder.WebHost.ConfigureKestrel(o => o.Listen(IPAddress.Loopback, port, listen => listen.UseHttps(certificate)));
@@ -53,11 +53,11 @@ internal sealed class PairableServer : IAsyncDisposable
         app.UseManagementApiVersion();
         app.UseDbDataPipeline();
         app.MapDbDataEndpoints();
-        app.MapPairing(new PairingService(InstanceId, fingerprint, clients, codes));
-        app.MapKeyRotation(new KeyRotationService(InstanceId, clients, new MemoryReplayCache()));
+        app.MapPairing(new PairingService(instanceId, fingerprint, clients, codes));
+        app.MapKeyRotation(new KeyRotationService(instanceId, clients, new MemoryReplayCache()));
 
         // A management API behind the token check, as a real server has: /api/echo says who is calling and what they sent, /api/admin-only needs the admin role.
-        var validator = new ConsoleTokenValidator(InstanceId, clients, new MemoryReplayCache());
+        var validator = new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache());
         app.UseWebSockets();
         app.UseManagementAuthentication(validator);
         app.UseManagementAuthentication(validator, prefix: "/hubs/");
@@ -90,6 +90,7 @@ internal sealed class PairableServer : IAsyncDisposable
         });
         app.MapGet("/api/admin-only", (HttpContext context) =>
             ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin).Allowed ? Results.Json(new { ok = true }) : Results.Json(new { error = "needs admin" }, statusCode: 403));
+        map?.Invoke(app, codes, clients);
         await app.StartAsync();
         return new PairableServer(app, new Uri(app.Urls.First().Replace("[::1]", "127.0.0.1")), directory, fingerprint);
     }

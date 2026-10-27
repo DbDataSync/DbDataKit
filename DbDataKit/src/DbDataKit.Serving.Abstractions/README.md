@@ -12,3 +12,10 @@ its wire format and nothing about where the data comes from; a host knows its da
 | `Writes` | `null` unless the host accepts writes; a protocol never writes a table itself |
 
 Failures a protocol must answer in its own words are exceptions of `ServingException`: `ServingDeniedException` (not allowed), `ServingNotFoundException`, `ServingLimitException`, `ServingInvalidException` (the request is not valid).
+
+## The serving contract (plan 20, section 10; plan 19, N02a)
+
+`IServingHost` is the small host a test or a single data source implements. The modules of the serving layer are written against the core services, which a host offers through `IServingServices`:
+`IServingIdentity`, `IServingSessions` (core sessions; the adapter's state is opaque), `IServingQueries` (a `ServingRequest`: SQL, semantic, semantic SQL or MDX; the answer is Arrow plus `ServingProvenance`),
+`IServingCatalog` (`ServingObject`: tables, models, dimensions, hierarchies, measures, entities) and `IServingEntities` (null unless offered). Every call takes a `ServingContext` (caller, channel, preview, session, trace).
+An `IServingModule` has a name, start, drain, stop and health. `HostServices` offers an `IServingHost` as these services.
