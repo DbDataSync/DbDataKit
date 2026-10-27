@@ -274,7 +274,7 @@ public class ProjectUpdateDialectTests : IDisposable
         var (_, spec) = DbDataBuild.Planning.Planner.CopyTransfer(ctx.Config, copy, DbDataBuild.Targets.TargetRegistry.Get("sqlserver").CreateDdl(ctx.Config.ForConnection("sqlserver")), origin);
         Assert.Equal("postgres", spec.Dialect);
         Assert.Equal(DialectDiscovery.Hash(ctx.Config.DialectOf("proxy_erp")), spec.DialectHash);
-        var step = new DbDataBuild.Planning.PlanStep("", DbDataBuild.Planning.StepType.Transfer, copy.Name, "copy", "SELECT 1", DbDataBuild.Planning.RiskClass.Safe, ["copy.transfer"], null, [], Transfer: spec);
+        var step = new DbDataBuild.Planning.PlanStep("", DbDataBuild.Planning.StepType.Transfer, copy.Name, "copy", "SELECT 1", DbDataKit.Schema.Planning.RiskClass.Safe, ["copy.transfer"], null, [], Transfer: spec);
         // a connection that is not a Flight SQL one carries neither
         var plain = DbDataBuild.Planning.Planner.CopyTransfer(ctx.Config, copy, DbDataBuild.Targets.TargetRegistry.Get("sqlserver").CreateDdl(ctx.Config.ForConnection("sqlserver")), origin with { Connection = "files", Engine = "duckdb" }).Spec;
         Assert.Null(plain.Dialect);

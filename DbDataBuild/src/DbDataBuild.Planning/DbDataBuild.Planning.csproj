@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <Using Include="DbDataKit.Schema" />   <!-- the structure model moved to the shared library; the types keep their names (plan 19, H02) -->
+    <Using Include="DbDataKit.Schema.Planning" />
     <Using Include="DbDataKit.Schema.Ddl" />
     <Using Include="DbDataKit.Schema.Questions" />
   </ItemGroup>

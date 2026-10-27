@@ -22,4 +22,8 @@
     <Using Include="DbDataKit.Schema.Questions" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Using Include="DbDataKit.Schema.Planning" />
+  </ItemGroup>
+
 </Project>

@@ -21,6 +21,9 @@ public abstract partial class DdlGenerator(string target, ProjectConfig config, 
 {
     public string Target => target;
 
+    /// <summary>The engine's statements, shared (plan 19, H03): the structure planner writes its DDL with these.</summary>
+    public TableDdl Statements => statements;
+
     protected abstract (string Declaration, string CatalogType, int? Length, int? Precision, int? Scale)? MapType(string normalized);
 
     [GeneratedRegex(@"^[A-Za-z0-9_.\-]+$")]
