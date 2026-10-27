@@ -221,7 +221,7 @@ public sealed class PackageResolver(PackageResolverOptions options)
         // Native files: the first rid in the chain that ships a file name wins. build/ props and targets are never evaluated.
         foreach (var rid in rids)
             foreach (var rel in reader.GetFiles($"runtimes/{rid}/native"))
-                closure.Native.TryAdd(Path.GetFileName(rel), Path.Combine(package.Directory, rel));
+                closure.Native.TryAdd(Path.GetFileName(rel), Path.GetFullPath(Path.Combine(package.Directory, rel)));
     }
 
     private static IEnumerable<string> Dll(IEnumerable<string>? items) => (items ?? []).Where(i => i.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
@@ -235,7 +235,7 @@ public sealed class PackageResolver(PackageResolverOptions options)
 
     private void AddAssembly(Closure closure, Dictionary<string, string> into, ResolvedPackage package, string relative, string what)
     {
-        var path = Path.Combine(package.Directory, relative);
+        var path = Path.GetFullPath(Path.Combine(package.Directory, relative));       // a package lists its files with / on every platform
         var name = Path.GetFileNameWithoutExtension(path);
         // The shared framework wins over a package's copy (the SDK does the same by default); loading both would split every type.
         if (options.HostProvides(name))
