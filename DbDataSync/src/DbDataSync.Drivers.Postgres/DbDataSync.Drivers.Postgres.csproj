@@ -7,6 +7,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <DbDataKitReference Include="Transfer.Postgres" />   <!-- binary COPY staging; plan 13, A15 -->
     <DbDataKitReference Include="Connections.Postgres" />   <!-- the Npgsql composer; plan 13, A08 -->
   </ItemGroup>
 
