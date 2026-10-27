@@ -29,6 +29,15 @@ public class SsasProbe
         ("L blank row fix: ADDCOLUMNS over the dimension values", "EVALUATE ADDCOLUMNS ( CALCULATETABLE ( VALUES ( 'Customer'[Region] ), TREATAS ( { \"FY27-Q1\" }, 'Date'[Fiscal Quarter] ) ), \"w\", CALCULATE ( [Budget Amount], KEEPFILTERS ( TREATAS ( { \"West\" }, 'Customer'[Region] ) ) ) )"),
         ("M blank row fix: IGNORE-style, +0 on the measure", "EVALUATE SUMMARIZECOLUMNS ( 'Customer'[Region], TREATAS ( { \"FY27-Q1\" }, 'Date'[Fiscal Quarter] ), \"w\", CALCULATE ( [Budget Amount], KEEPFILTERS ( TREATAS ( { \"West\" }, 'Customer'[Region] ) ) ) + 0 )"),
         ("N Customer rows in that quarter, to see what East has", "EVALUATE SUMMARIZECOLUMNS ( 'Customer'[Region], TREATAS ( { \"FY27-Q1\" }, 'Date'[Fiscal Quarter] ), \"all\", [Budget Amount], \"n\", [Budget Lines] )"),
+        // how blanks behave in the filters the emitter writes (SQL drops a NULL from <>, NOT IN, NOT LIKE and every comparison)
+        ("O1 NOT IN over a blank (West made blank)", "EVALUATE FILTER ( ADDCOLUMNS ( 'Customer', \"r\", IF ( [Region] = \"West\", BLANK (), [Region] ) ), NOT ( [r] IN { \"East\" } ) )"),
+        ("O2 > over a blank", "EVALUATE FILTER ( ADDCOLUMNS ( 'Customer', \"r\", IF ( [Region] = \"West\", BLANK (), [Region] ) ), [r] > \"A\" )"),
+        ("O3 NOT CONTAINSSTRING over a blank", "EVALUATE FILTER ( ADDCOLUMNS ( 'Customer', \"r\", IF ( [Region] = \"West\", BLANK (), [Region] ) ), NOT CONTAINSSTRING ( [r], \"zzz\" ) )"),
+        ("O4 = over a blank and the empty string", "EVALUATE FILTER ( ADDCOLUMNS ( 'Customer', \"r\", IF ( [Region] = \"West\", BLANK (), [Region] ) ), [r] = \"\" )"),
+        ("O5 the guarded form", "EVALUATE FILTER ( ADDCOLUMNS ( 'Customer', \"r\", IF ( [Region] = \"West\", BLANK (), [Region] ) ), NOT ISBLANK ( [r] ) && NOT ( [r] IN { \"East\" } ) )"),
+        // what EXECUTE would do with text that is not a DAX query: the executor runs agent text as it is
+        ("P1 MDX through the same command", "SELECT [Measures].[Budget Amount] ON 0 FROM [Model]"),
+        ("P2 a DMV query", "SELECT [DATABASE_NAME] FROM $SYSTEM.DBSCHEMA_CATALOGS"),
     ];
 
     [Fact]

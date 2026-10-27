@@ -164,6 +164,10 @@ jobs:
         env:
           DBDATA_TEST_SSAS_PROBE: "1"
         run: dotnet test --project tests/DbDataKit.Semantic.Tests --filter-class "*SsasProbe"
+      - name: What the probe got
+        if: inputs.ssas_probe
+        shell: pwsh
+        run: Get-ChildItem -Recurse -Filter ssas-probe.txt | ForEach-Object { Get-Content $_.FullName }
       - name: Semantic suite against Analysis Services
         if: ${{ !inputs.ssas_probe }}
         working-directory: DbDataKit
