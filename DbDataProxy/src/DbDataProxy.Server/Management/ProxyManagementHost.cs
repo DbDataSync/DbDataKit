@@ -94,7 +94,7 @@ public static class ProxyManagementHost
             app.Services.GetRequiredService<DbDataKit.State.NotificationStore>(), app.Services.GetRequiredService<RecentFailures>(), instanceId, ProxyHost.Version);
         var certificate = new ProxyCertificate(holder, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, dataDirectory, app.Services.GetRequiredService<RecentFailures>(), audit);
         management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version, dataSources, identities, activity, certificate, git,
-            new ProxySecrets(SecretsRuntime.OpenStore(options), audit));
+            new ProxySecrets(SecretsRuntime.OpenStore(options), audit), files.Codes());
         var validator = new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache());
         var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management");
 

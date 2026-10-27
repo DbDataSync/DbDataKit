@@ -58,6 +58,18 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
     /// <summary>The engines the Proxy serves that a Build connection can be: SQL Server.</summary>
     private static string? ProxyEngineOf(ConnectionConfig connection) => connection.Engine == "sqlserver" && !connection.ReadOnly ? "sqlserver" : null;
 
+    /// <summary>
+    /// Pairs this server with the Proxy at <paramref name="url"/> as a server client, with the code its administrator made (or a console asked it for, T11), and remembers it as <paramref name="name"/>. The key this server signs with is its own, kept in its secret store.
+    /// </summary>
+    public async Task<(PairedProxy Proxy, ServerRole Ceiling)> PairAsync(string name, Uri url, string code, string clientName, CancellationToken ct)
+    {
+        var self = await identity.GetOrCreateAsync(ct);
+        var paired = await PairingClient.PairAsync(url, code, self, ClientKind.Server, clientName, ct);
+        var proxy = new PairedProxy(name, paired.Url.ToString().TrimEnd('/'), paired.InstanceId, paired.CertificateFingerprint, DateTimeOffset.UtcNow);
+        proxies.Add(proxy);
+        return (proxy, paired.Ceiling);
+    }
+
     public async Task<PublishResult> PublishAsync(string proxyName, ProjectConfig project, string connection, string dataSource, ValidatedToken person, CancellationToken ct)
     {
         if (proxies.Find(proxyName) is not { } proxy) return Fail(404, $"This server is not paired with a proxy called '{proxyName}'.");
