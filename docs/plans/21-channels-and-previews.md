@@ -63,7 +63,7 @@ What is decided:
 
 | Slice | Change |
 | --- | --- |
-| Plan 20 O03 (published definitions) | the definition store's key includes the channel from the start; one channel (`prod`) is enough until channels are built, but the key, the publish command and the switch take it |
+| Plan 20 O03 (published definitions) | the definition store's key includes the channel from the start; one channel (`prod`) is enough until channels are built, but the key, the publish command and the switch take it. Each published version also records what it depends on (name and version of each package, model or data source it reads), so dependency checks (section 2a) need no format change later |
 | Plan 19 Z05 (DbDataStore history) | the history design (native temporal tables and app-managed) leaves room for a draft layer per channel or preview: draft rows are kept apart from history, never become history unless promoted, and reads can be asked to include one draft layer; the conformance suite gets a placeholder case that fails until the draft layer is built |
 
 ## 4. Open, for design conversations
