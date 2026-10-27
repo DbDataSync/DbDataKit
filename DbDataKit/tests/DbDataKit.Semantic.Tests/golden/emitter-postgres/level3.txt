@@ -1,0 +1,1121 @@
+=== level3/01_totals_single_source.json
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(c.region) + GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY ROLLUP(c.region, p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(c.region) + GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY ROLLUP(c.region, p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/02_totals_repeat_not_double_counted.json
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/03_blank_shows_on_totals.json
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(c.region) + GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY ROLLUP(c.region, p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(c.region) + GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY ROLLUP(c.region, p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/04_grand_total_only.json
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       (GROUPING(c.region)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY ROLLUP(c.region)
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       (GROUPING(c.region)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY ROLLUP(c.region)
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/05_limit_counts_total_rows.json
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(c.region) + GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY ROLLUP(c.region, p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(c.region) + GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY ROLLUP(c.region, p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/06_totals_below_level_stay_remaining.json
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/07_totals_member_not_an_attribute.json
+=== level3/08_totals_order_by_measure_rejected.json
+=== level3/09_adhoc_territories_catalog_map.json
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/10_adhoc_unmapped_rolls_into_unmapped.json
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/11_adhoc_on_unmatched_drop.json
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/12_adhoc_on_unmatched_fail.json
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/13_adhoc_bridge_not_many_to_one.json
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/14_adhoc_unconfirmed_binding.json
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+=== level3/15_adhoc_none_measure_refused.json
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/16_adhoc_with_region.json
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/17_adhoc_totals.json
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/18_adhoc_filter_rejected.json
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+=== level3/19_adhoc_below_level_stays_remaining.json
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/20_fuzzy_map_needs_level_4.json
+=== level3/21_catalog_map_needs_reviewed_scope.json
+=== level3/22_spread_override_blank_with_totals.json
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/23_weighted_relation_splits_values.json
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/24_weighted_relation_totals_match_source.json
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/25_weighted_relation_with_region.json
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/26_weights_must_sum_to_one.json
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/27_weighted_relation_refuses_distinct_count.json
+--- sqlserver_sales
+SELECT DISTINCT c.region AS customers_region
+FROM dim_customer c;
+--- parameters 
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/28_transform_below_level_stays_remaining.json
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/29_prior_period_below_level_stays_remaining.json
+--- sqlserver_sales
+SELECT d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY d.fiscal_month
+ORDER BY date_fiscal_month ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/30_derived_measure_needs_level_4.json
+=== level3/31_native_subtotals_keep_a_partition.json
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, ROLLUP(p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/32_native_subtotals_in_dax.json
+=== level3/33_having_with_totals.json
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       (GROUPING(c.region)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY ROLLUP(c.region)
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       (GROUPING(c.region)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY ROLLUP(c.region)
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/33_totals_compute_engine.json
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region
+ORDER BY customers_region ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1;
+--- parameters String:FY27-Q1
+=== level3/34_cube_totals.json
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (CASE GROUPING(c.region) * 2 + GROUPING(p.product) * 1 WHEN 0 THEN 0 WHEN 2 THEN 1 WHEN 1 THEN 2 WHEN 3 THEN 3 END) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY CUBE(c.region, p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (CASE GROUPING(c.region) * 2 + GROUPING(p.product) * 1 WHEN 0 THEN 0 WHEN 2 THEN 1 WHEN 1 THEN 2 WHEN 3 THEN 3 END) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY CUBE(c.region, p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/34_totals_compute_auto.json
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(c.region) + GROUPING(p.product)) AS _rollup_level,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY ROLLUP(c.region, p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(c.region) + GROUPING(p.product)) AS _rollup_level,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY ROLLUP(c.region, p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/35_cube_totals_in_dax.json
+=== level3/35_totals_compute_native.json
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(c.region) + GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY ROLLUP(c.region, p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY c.region, p.product
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       p.product AS products_product,
+       (GROUPING(c.region) + GROUPING(p.product)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue,
+       COUNT(DISTINCT f.order_id) AS orders_order_count
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_product p ON p.product_key = f.product_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.fiscal_quarter = $1
+GROUP BY ROLLUP(c.region, p.product)
+ORDER BY customers_region ASC, products_product ASC
+LIMIT 1000001;
+--- parameters String:FY27-Q1
+=== level3/36_period_attribute_with_totals_and_having.json
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+LIMIT 1000001;
+--- parameters String:2026-07-01, String:2026-08-31
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       (GROUPING(d.fiscal_month)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
+GROUP BY c.region, ROLLUP(d.fiscal_month)
+ORDER BY customers_region ASC, date_fiscal_month ASC
+LIMIT 1000001;
+--- parameters String:2026-07-01, String:2026-08-31
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
+GROUP BY c.region, d.fiscal_month
+ORDER BY customers_region ASC, date_fiscal_month ASC
+LIMIT 1000001;
+--- parameters String:2026-07-01, String:2026-08-31
+--- sqlserver_sales
+SELECT c.region AS customers_region,
+       d.fiscal_month AS date_fiscal_month,
+       (GROUPING(d.fiscal_month)) AS _rollup_level,
+       SUM(f.net_amount) AS orders_net_revenue
+FROM fact_sales f
+JOIN dim_customer c ON c.customer_key = f.customer_key
+JOIN dim_date d ON d.date_key = f.date_key
+WHERE d.calendar_date BETWEEN CAST($1 AS DATE) AND CAST($2 AS DATE)
+GROUP BY c.region, ROLLUP(d.fiscal_month)
+ORDER BY customers_region ASC, date_fiscal_month ASC
+LIMIT 1000001;
+--- parameters String:2026-07-01, String:2026-08-31

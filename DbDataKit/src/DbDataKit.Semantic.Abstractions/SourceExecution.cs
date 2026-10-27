@@ -1,8 +1,13 @@
 namespace DbDataKit.Semantic.Abstractions;
 
 /// <summary>One compiled source query: the native text for the real source, plus a DuckDB equivalent.
-/// ExecText is the native text with the limit raised by one so truncation can be detected; it defaults to Native.Text.</summary>
-public sealed record CompiledQuery(string Source, NativeQuery Native, string DuckDbSql, List<object?> DuckDbParameters, string? ExecText = null);
+/// ExecText is the native text with the limit raised by one so truncation can be detected; it defaults to Native.Text.
+/// Postgres is the same query written for PostgreSQL, with the limit raised like ExecText; it is null for a DAX source. An executor on a PostgreSQL connection runs it,
+/// whatever kind the catalog gives the source, so the catalog's tables must exist there.</summary>
+public sealed record CompiledQuery(string Source, NativeQuery Native, string DuckDbSql, List<object?> DuckDbParameters, string? ExecText = null, ParameterizedSql? Postgres = null);
+
+/// <summary>SQL text with the values its numbered markers (<c>$1</c>, <c>$2</c>, ...) stand for, in order.</summary>
+public sealed record ParameterizedSql(string Text, List<object?> Parameters);
 
 /// <summary>The rows a source returned: column names, and one dictionary per row.</summary>
 public sealed record QueryRows(List<string> Columns, List<Dictionary<string, object?>> Rows);
