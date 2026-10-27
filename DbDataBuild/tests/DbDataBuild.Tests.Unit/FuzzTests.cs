@@ -221,9 +221,9 @@ public class FuzzTests
     [Fact]
     public void A_damaged_dialects_lock_file_is_answered_with_a_diagnostic_never_an_exception()
     {
-        var facts = new ServerFacts("PostgreSQL", "16.4", "\"", "case_insensitive", "case_insensitive", true);
+        var facts = FlightServerFacts.Of("PostgreSQL", "16.4", "\"", "case_insensitive", "case_insensitive", true);
         var chosen = DialectDiscovery.Choose(facts, new Dictionary<string, DialectProfile>());
-        var text = DialectLockFile.Render([DialectLockEntry.From("proxy_erp", facts, chosen), DialectLockEntry.From("proxy_two", ServerFacts.Nothing, DialectDiscovery.Choose(ServerFacts.Nothing, new Dictionary<string, DialectProfile>()))]);
+        var text = DialectLockFile.Render([DialectLockEntry.From("proxy_erp", facts, chosen), DialectLockEntry.From("proxy_two", FlightServerFacts.Nothing, DialectDiscovery.Choose(FlightServerFacts.Nothing, new Dictionary<string, DialectProfile>()))]);
         var clean = new List<Diagnostic>();
         Assert.Equal(2, DialectLockFile.Parse(text, ProductInfo.DialectLockFile, clean, new Dictionary<string, DialectProfile>())!.Count);
         Assert.Empty(clean);

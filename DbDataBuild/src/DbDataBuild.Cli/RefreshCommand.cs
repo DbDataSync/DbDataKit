@@ -649,7 +649,7 @@ internal sealed record OriginAccess(ProjectConfig Config, Func<string, string?> 
             // a Flight SQL server whose dialect was committed (`project update`) is asked again: the committed read text is right only for that dialect, and it is never changed silently (DDB-460)
             if (Config.Connections[name] is { Kind.DialectIsDiscoverable: true, DialectLock: { } committed })
             {
-                var facts = await session.ServerFactsAsync(ct) ?? ServerFacts.Nothing;
+                var facts = await session.ServerFactsAsync(ct) ?? FlightServerFacts.Nothing;
                 var differences = DialectLockComparison.Differences(committed, DialectDiscovery.Choose(facts, Config.Dialects), facts);
                 if (differences.Count > 0)
                     return $"the server now reports a different dialect than the one committed in {ProductInfo.DialectLockFile} ({string.Join("; ", differences)}). The committed reads were written for the old one ({DiagnosticCatalog.OriginDialectChanged.Code}); run `{ProductInfo.Cli} project update` and review the change.";

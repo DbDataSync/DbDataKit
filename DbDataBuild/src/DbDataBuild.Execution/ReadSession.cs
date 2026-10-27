@@ -1,3 +1,4 @@
+using ServerFacts = DbDataKit.Metadata.ServerFacts;
 using System.Data;
 using System.Data.Common;
 using System.Globalization;

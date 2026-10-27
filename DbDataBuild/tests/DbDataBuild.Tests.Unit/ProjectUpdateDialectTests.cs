@@ -22,11 +22,11 @@ public class ProjectUpdateDialectTests : IDisposable
     public void Dispose() { try { Directory.Delete(dir, true); } catch (IOException) { } }
 
     /// <summary>A Flight SQL server that answers `GetSqlInfo` with the facts it is given and counts how often it was asked.</summary>
-    internal sealed class FakeServer(ServerFacts? facts) : IRowSource, IServerFacts
+    internal sealed class FakeServer(DbDataKit.Metadata.ServerFacts? facts) : IRowSource, IServerFacts
     {
         public int Asked;
-        public ServerFacts? Facts { get; set; } = facts;
-        public Task<ServerFacts?> ServerFactsAsync(CancellationToken ct) { Interlocked.Increment(ref Asked); return Task.FromResult(Facts); }
+        public DbDataKit.Metadata.ServerFacts? Facts { get; set; } = facts;
+        public Task<DbDataKit.Metadata.ServerFacts?> ServerFactsAsync(CancellationToken ct) { Interlocked.Increment(ref Asked); return Task.FromResult(Facts); }
         public Task<IRowReader> ExecuteAsync(string sql, IReadOnlyList<GateParameter> parameters, int? timeoutSeconds, bool streaming, CancellationToken ct) => Task.FromResult<IRowReader>(new One());
         public Task<IRowReader> ExecuteCommandAsync(string text, IReadOnlyList<GateParameter> parameters, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyList<ColumnShape>?> DescribeAsync(string sql, IReadOnlyList<GateParameter> parameters, CancellationToken ct) => Task.FromResult<IReadOnlyList<ColumnShape>?>(null);
@@ -43,8 +43,8 @@ public class ProjectUpdateDialectTests : IDisposable
         }
     }
 
-    private static readonly ServerFacts Postgres = new("PostgreSQL", "16.4", "\"", "case_insensitive", "case_insensitive", true);
-    private static readonly ServerFacts SqlServer = new("Microsoft SQL Server", "16.0.4135", "\"", "case_insensitive", "case_insensitive", false);
+    private static readonly DbDataKit.Metadata.ServerFacts Postgres = FlightServerFacts.Of("PostgreSQL", "16.4", "\"", "case_insensitive", "case_insensitive", true);
+    private static readonly DbDataKit.Metadata.ServerFacts SqlServer = FlightServerFacts.Of("Microsoft SQL Server", "16.0.4135", "\"", "case_insensitive", "case_insensitive", false);
 
     private void Write(string rel, string text)
     {
@@ -148,7 +148,7 @@ public class ProjectUpdateDialectTests : IDisposable
     {
         Project();
         Update(new FakeServer(Postgres));
-        var upgraded = Postgres with { ServerVersion = "16.5" };
+        var upgraded = Postgres with { ProductVersion = "16.5" };
         var (checkExit, doc, _, _) = Update(new FakeServer(upgraded), null, "--check");
         Assert.Equal(0, checkExit);
         Assert.Equal("version_changed", (string)Row(doc, "proxy_erp")["status"]!);
@@ -248,7 +248,7 @@ public class ProjectUpdateDialectTests : IDisposable
     public void Compile_writes_the_read_in_the_committed_dialect_and_carries_its_name_and_hash()
     {
         Project();
-        Update(new FakeServer(new ServerFacts("ClickHouse", "24.1", "`", "case_insensitive")));
+        Update(new FakeServer(FlightServerFacts.Of("ClickHouse", "24.1", "`", "case_insensitive")));
         Assert.Contains("dialect: ansi", LockText);                                                 // a product the tool does not know: ansi, with the quote the server reported
         Assert.Contains("quote: \"`\"", LockText);
         var (exit, output, err) = Compile();
@@ -296,7 +296,7 @@ public class ProjectUpdateDialectTests : IDisposable
         Project();
         Update(new FakeServer(Postgres));
         Assert.Null(await Check(new FakeServer(Postgres)));
-        Assert.Null(await Check(new FakeServer(Postgres with { ServerVersion = "17.0" })));          // a new version changes no text
+        Assert.Null(await Check(new FakeServer(Postgres with { ProductVersion = "17.0" })));          // a new version changes no text
         var changed = await Check(new FakeServer(SqlServer));
         Assert.NotNull(changed);
         Assert.Contains("a different dialect than the one committed in dialects.lock.yml", changed);

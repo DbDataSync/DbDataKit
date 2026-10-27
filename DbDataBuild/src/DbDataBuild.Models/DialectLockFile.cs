@@ -1,3 +1,4 @@
+using ServerFacts = DbDataKit.Metadata.ServerFacts;
 using DbDataBuild.Core;
 using DbDataBuild.Models.Yaml;
 
@@ -46,15 +47,15 @@ public static class DialectLockFile
         foreach (var e in list)
         {
             sb.Append("  ").Append(YamlText.Scalar(e.Connection)).AppendLineLf(":");
-            if (e.Reported.ServerName != null) sb.Append("    server: ").AppendLineLf(YamlText.Scalar(e.Reported.ServerName));
-            if (e.Reported.ServerVersion != null) sb.Append("    server_version: ").AppendLineLf(YamlText.Scalar(e.Reported.ServerVersion));
+            if (e.Reported.ProductName != null) sb.Append("    server: ").AppendLineLf(YamlText.Scalar(e.Reported.ProductName));
+            if (e.Reported.ProductVersion != null) sb.Append("    server_version: ").AppendLineLf(YamlText.Scalar(e.Reported.ProductVersion));
             var r = e.Reported;
-            if (r.IdentifierQuote != null || r.IdentifierCase != null || r.QuotedIdentifierCase != null || r.ReadOnly != null)
+            if (r.QuoteOpen != null || r.StoredCaseWord != null || r.QuotedCaseWord != null || r.ReadOnly != null)
             {
                 sb.AppendLineLf("    reported:");
-                if (r.IdentifierQuote != null) sb.Append("      identifier_quote: ").AppendLineLf(YamlText.Scalar(r.IdentifierQuote));
-                if (r.IdentifierCase != null) sb.Append("      identifier_case: ").AppendLineLf(YamlText.Scalar(r.IdentifierCase));
-                if (r.QuotedIdentifierCase != null) sb.Append("      quoted_identifier_case: ").AppendLineLf(YamlText.Scalar(r.QuotedIdentifierCase));
+                if (r.QuoteOpen != null) sb.Append("      identifier_quote: ").AppendLineLf(YamlText.Scalar(r.QuoteOpen));
+                if (r.StoredCaseWord != null) sb.Append("      identifier_case: ").AppendLineLf(YamlText.Scalar(r.StoredCaseWord));
+                if (r.QuotedCaseWord != null) sb.Append("      quoted_identifier_case: ").AppendLineLf(YamlText.Scalar(r.QuotedCaseWord));
                 if (r.ReadOnly != null) sb.Append("      read_only: ").AppendLineLf(r.ReadOnly.Value ? "true" : "false");
             }
             sb.Append("    dialect: ").AppendLineLf(YamlText.Scalar(e.Dialect));
@@ -149,7 +150,7 @@ public static class DialectLockFile
                 (pQuote, pParameters, pPing, pCatalog, pCase, pLimit) = (Text(pm, "quote", at), Text(pm, "parameters", at), Text(pm, "ping", at), Text(pm, "catalog", at), Text(pm, "identifier_case", at), Text(pm, "limit", at));
             }
             if (dialect == null || hash == null || pQuote == null || pParameters == null || pPing == null || pCatalog == null || pCase == null || pLimit == null) return null;
-            var entry = new DialectLockEntry(connection, new ServerFacts(server, version, quote, idCase, quotedCase, readOnly), dialect, pQuote, pParameters, pPing, pCatalog, pCase, pLimit, hash, at.Line);
+            var entry = new DialectLockEntry(connection, FlightServerFacts.Of(server, version, quote, idCase, quotedCase, readOnly), dialect, pQuote, pParameters, pPing, pCatalog, pCase, pLimit, hash, at.Line);
             var profile = ProfileOf(entry, userDialects, out var problems);
             if (profile == null) { foreach (var p in problems) Bad(at, $"The entry for `{connection}`: {p}"); return null; }
             if (DialectDiscovery.Hash(profile) != hash) { Bad(m.Get("profile_hash") ?? at, $"The entry for `{connection}`: `profile_hash` is not the hash of its `profile`, so the entry was edited by hand."); return null; }
