@@ -66,7 +66,11 @@ public sealed class ChainedBatchReader : DbDataReader
     public override string GetDataTypeName(int ordinal) => _schema[ordinal].Type.ToString();
     public override Type GetFieldType(int ordinal) => ParameterValues.ClrTypeFor(_engine, _schema[ordinal].Type);
     public override bool IsDBNull(int ordinal) => Row().IsDBNull(ordinal);
-    public override object GetValue(int ordinal) => Row().IsDBNull(ordinal) ? DBNull.Value : ParameterValues.Adapt(_engine, Row().GetValue(ordinal))!;
+    public override object GetValue(int ordinal)
+    {
+        var v = Row().GetValue(ordinal);   // one virtual call for the common case; NULL is null or DBNull
+        return v is null or DBNull ? DBNull.Value : ParameterValues.Adapt(_engine, v)!;
+    }
     public override int GetValues(object[] values)
     {
         var n = Math.Min(values.Length, FieldCount);
