@@ -23,7 +23,7 @@ public sealed class JoinDef
 
 public sealed class SourceDef
 {
-    public string Kind { get; set; } = "";                 // sqlserver | ssas
+    public string Kind { get; set; } = "";                 // sqlserver | postgres | ssas
     public JoinDef Fact { get; set; } = new();
     /// <summary>How this source computes subtotals (native, engine or auto) unless a request says otherwise; null leaves it to the engine.</summary>
     public string? Totals { get; set; }
