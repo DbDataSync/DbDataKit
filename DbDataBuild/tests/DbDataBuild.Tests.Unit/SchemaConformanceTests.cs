@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataBuild.Core;
+using DbDataBuild.Cli.Server;
 using DbDataBuild.Models;
 using Json.Schema;
 using YamlDotNet.Core;
@@ -20,9 +21,10 @@ public class SchemaConformanceTests
     {
         // output.schema.json refers to metadata.schema.json by its $id, so that one is loaded (and registered) first
         var schema = JsonSchema.FromFile(Path.Combine(RepoRoot(), "schemas", name + ".schema.json"));
-        if (name is "metadata" or "declared-model") SchemaRegistry.Global.Register(schema);
+        if (name is "metadata" or "declared-model" or "model" or "config") SchemaRegistry.Global.Register(schema);
         if (name == "output") LoadSchema("metadata");
-        if (name == "model") LoadSchema("declared-model");     // a model file that says `kind: mapped` or `kind: native` is handed to the declared-model schema
+        if (name == "model") LoadSchema("declared-model");       // a model file that says `kind: mapped` or `kind: native` is handed to the declared-model schema
+        if (name is "config" or "folder") LoadSchema("model");   // the `defaults:` of the project and folder files are the model's own settings
         return schema;
     }
 
@@ -228,7 +230,7 @@ public class SchemaConformanceTests
     [Fact]
     public void Schemas_are_valid_json_schema_documents_with_descriptions()
     {
-        foreach (var name in new[] { "model", "config", "answers", "declared-model" })
+        foreach (var name in new[] { "model", "config", "answers", "declared-model", "folder", "model-test" })
         {
             var schema = LoadSchema(name);
             Assert.NotNull(schema);
@@ -248,11 +250,116 @@ public class EditorAssociationTests
         var root = PolyglotBindingTests.RepoRoot();
         using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".vscode", "settings.json")));
         var map = doc.RootElement.GetProperty("yaml.schemas").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.ValueKind == System.Text.Json.JsonValueKind.String ? p.Value.GetString()! : "");
-        Assert.Equal("models/**/*.yml", map["schemas/model.schema.json"]);
+        var settings = doc.RootElement.GetProperty("yaml.schemas");
+        Assert.Contains("models/**/*.yml", settings.GetProperty("schemas/model.schema.json").EnumerateArray().Select(e => e.GetString()));
+        Assert.Equal("models/**/_dbdatabuild.yml", map["schemas/folder.schema.json"]);
+        Assert.Equal("tests/models/**/*.yml", map["schemas/model-test.schema.json"]);
         Assert.Equal(DbDataBuild.Core.ProductInfo.ConfigFile, map["schemas/config.schema.json"]);
         Assert.False(map.ContainsKey("schemas/declared-model.schema.json"));       // mapped models are in models/ too: model.schema.json hands them to it
         Assert.Contains("answers.yml", doc.RootElement.GetProperty("yaml.schemas").GetProperty("schemas/answers.schema.json").EnumerateArray().Select(e => e.GetString()));
         foreach (var schema in map.Keys) Assert.True(File.Exists(Path.Combine(root, schema)), schema);
+    }
+}
+
+public class FileSchemaTests
+{
+    private static JsonSchema Load(string name)
+    {
+        SchemaConformanceTests.LoadSchema("config");       // registers it, and the model schema it refers to, which the folder schema refers to in turn
+        return SchemaConformanceTests.LoadSchema(name);
+    }
+
+    [Fact]
+    public void The_console_is_told_the_same_files_and_schemas_the_editor_settings_name()
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot(), ".vscode", "settings.json")));
+        var configured = doc.RootElement.GetProperty("yaml.schemas").EnumerateObject()
+            .SelectMany(p => (p.Value.ValueKind == JsonValueKind.String ? [p.Value.GetString()!] : p.Value.EnumerateArray().Select(e => e.GetString()!).ToArray()).Where(g => !g.StartsWith('!')).Select(g => (Glob: g, Schema: p.Name["schemas/".Length..])))
+            .Where(x => !x.Glob.Contains("answers") || x.Glob == "answers.yml").ToHashSet();
+        var served = FileSchemas.All.Select(a => (Glob: a.Pattern, Schema: a.Schema)).ToHashSet();
+
+        Assert.Equal(configured, served);
+        Assert.True(FileSchemas.All.ToList().FindIndex(a => a.Schema == "folder.schema.json") < FileSchemas.All.ToList().FindIndex(a => a.Schema == "model.schema.json"), "the folder file is matched before the model glob");
+    }
+
+    [Fact]
+    public void The_served_document_has_every_schema_an_association_names_and_the_ones_they_refer_to()
+    {
+        var document = FileSchemas.Document();
+        var schemas = document["schemas"]!.AsObject();
+
+        foreach (var a in document["associations"]!.AsArray()) Assert.True(schemas.ContainsKey(a!["schema"]!.GetValue<string>()), a["schema"]!.ToString());
+        Assert.True(schemas.ContainsKey("declared-model.schema.json"));
+        Assert.False(schemas.ContainsKey("output.schema.json"));       // 5,000 lines the console has no form for
+    }
+
+    public static readonly TheoryData<string, string, bool> ModelTests = new()
+    {
+        { "minimal expect", "cases:\n  - name: a\n    expect: []\n", true },
+        { "given, expect and assert", "model: marts.fct_orders\ncases:\n  - name: keeps nulls\n    given:\n      staging.orders:\n        - {order_id: 1, amount: 10.00}\n        - {order_id: 2, amount: null}\n    expect:\n      rows:\n        - {order_id: 1, amount: 10.00}\n      ordered: true\n    assert: SELECT * FROM result WHERE amount < 0\n", true },
+        { "assert only", "cases:\n  - name: a\n    assert: SELECT 1 WHERE false\n", true },
+        { "no cases", "model: x\n", false },
+        { "empty cases", "cases: []\n", false },
+        { "case without expect or assert", "cases:\n  - name: a\n    given: {t: []}\n", false },
+        { "case without a name", "cases:\n  - expect: []\n", false },
+        { "unknown key in a case", "cases:\n  - name: a\n    expect: []\n    why: x\n", false },
+        { "given rows not a list", "cases:\n  - name: a\n    given: {t: 5}\n    expect: []\n", false },
+        { "expect mapping without rows", "cases:\n  - name: a\n    expect: {ordered: true}\n", false },
+        { "a row with a nested value", "cases:\n  - name: a\n    expect:\n      - {a: [1]}\n", false },
+    };
+
+    [Theory, MemberData(nameof(ModelTests))]
+    public void Model_test_files_are_judged_the_same_by_the_schema_and_the_loader(string name, string yaml, bool valid)
+    {
+        var diagnostics = new List<DbDataBuild.Core.Diagnostic>();
+        var loaded = ModelTestLoader.Load(yaml, "tests/models/marts/fct_orders.yml", diagnostics);
+
+        Assert.True(SchemaConformanceTests.SchemaAccepts(Load("model-test"), yaml) == valid, $"{name}: the schema");
+        Assert.True((loaded is not null && diagnostics.Count == 0) == valid, $"{name}: the loader said {string.Join("; ", diagnostics.Select(d => d.Code))}");
+    }
+
+    public static readonly TheoryData<string, string, bool> FolderFiles = new()
+    {
+        { "defaults with tags and a connection", "defaults:\n  connections: [postgres]\n  tags: [finance]\n  properties: {owner: finance}\n", true },
+        { "a replacing key", "defaults:\n  connections=: [postgres]\n  tags-: [old]\n", true },
+        { "empty file", "defaults: {}\n", true },
+        { "a project-only section", "tracking: {schema: t}\n", false },
+        { "an unknown setting", "defaults:\n  colour: red\n", false },
+        { "connections not a list", "defaults:\n  connections: postgres\n", false },
+    };
+
+    [Theory, MemberData(nameof(FolderFiles))]
+    public void Folder_files_are_judged_by_the_schema_as_the_project_file_s_defaults_are(string name, string yaml, bool valid)
+    {
+        Assert.True(SchemaConformanceTests.SchemaAccepts(Load("folder"), yaml) == valid, name);
+    }
+}
+
+public class TemplateFilesMatchTheirSchemasTests
+{
+    public static IEnumerable<object[]> Files()
+    {
+        var root = Path.Combine(PolyglotBindingTests.RepoRoot(), "templates");
+        foreach (var file in Directory.EnumerateFiles(root, "*.yml", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+        {
+            var path = Path.GetRelativePath(root, file).Replace('\\', '/');
+            var inside = path[(path.IndexOf('/') + 1)..];
+            var schema = FileSchemas.All.FirstOrDefault(a => Glob(a.Pattern, inside));
+            if (schema is not null) yield return [path, schema.Schema[..^".schema.json".Length]];
+        }
+    }
+
+    private static bool Glob(string pattern, string path) =>
+        System.Text.RegularExpressions.Regex.IsMatch(path, "^" + System.Text.RegularExpressions.Regex.Escape(pattern).Replace("\\*\\*/", "(.*/)?").Replace("\\*", "[^/]*") + "$");
+
+    /// <summary>The templates are what people start from and what the console's forms are first shown, so a schema that says something is wrong in them is a schema that has drifted from the loader.</summary>
+    [Theory, MemberData(nameof(Files))]
+    public void A_template_file_is_valid_for_the_schema_the_console_and_editors_give_it(string path, string schema)
+    {
+        var yaml = File.ReadAllText(Path.Combine(PolyglotBindingTests.RepoRoot(), "templates", path));
+        var result = SchemaConformanceTests.LoadSchema(schema).Evaluate(SchemaConformanceTests.EditorView(yaml), new EvaluationOptions { OutputFormat = OutputFormat.List });
+
+        Assert.True(result.IsValid, $"{path} against {schema}: " + string.Join("; ", (result.Details ?? []).Where(d => d.Errors is not null).SelectMany(d => d.Errors!.Select(e => $"{d.InstanceLocation} {e.Value}")).Take(5)));
     }
 }
 

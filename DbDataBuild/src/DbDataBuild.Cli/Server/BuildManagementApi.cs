@@ -51,6 +51,9 @@ internal static class BuildManagementApi
             projects = projects.All().Select(p => new { id = p.Id, name = p.Id, source = p.IsRemote ? "git" : "path", branch = p.Branch }),
         }));
 
+        // The schemas of the project's files and which file each describes, for the console's forms (the viewer role may read them: they are the tool's own, not the project's)
+        app.MapGet("/api/v1/schemas", () => Results.Text(FileSchemas.Document().ToJsonString(), "application/json"));
+
         app.MapGet("/api/v1/projects/{project}/commands", (string project, HttpContext context) =>
         {
             if (projects.Find(project) is not { } hosted) return Results.NotFound();

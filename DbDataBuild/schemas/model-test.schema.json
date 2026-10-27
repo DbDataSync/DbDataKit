@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "model-test.schema.json",
+  "title": "DbDataBuild model test file",
+  "description": "A model test file (tests/models/<name>.yml): cases of given rows and what the model's query must return for them, run in an in-memory DuckDB. The file's name is the test and, unless `model` says otherwise, the model it tests. Severity, tags and description are `#` comments at the top of the file, not keys. Values are read as text and cast by DuckDB to the column's declared type; a plain null or empty value is NULL. This schema is for editors; `dbdatabuild project validate` applies the same rules plus the semantic ones (the tables and columns given exist).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cases"],
+  "properties": {
+    "model": { "description": "The model this file tests, when it is not the one the file's path names.", "type": "string", "minLength": 1 },
+    "cases": {
+      "description": "At least one case. A case needs `expect`, `assert`, or both.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "anyOf": [{ "required": ["expect"] }, { "required": ["assert"] }],
+        "properties": {
+          "name": { "description": "Unique within the file.", "type": "string", "minLength": 1 },
+          "given": {
+            "description": "Rows for each table the model's query reads, by table name. A column left out of a row is NULL; a table not given is empty.",
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/rows" }
+          },
+          "expect": {
+            "description": "The rows the query must return, as a list, or as a mapping with `rows` and `ordered: true` when the order matters. Duplicates count.",
+            "oneOf": [
+              { "$ref": "#/$defs/rows" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["rows"],
+                "properties": {
+                  "rows": { "$ref": "#/$defs/rows" },
+                  "ordered": { "description": "The rows must come back in this order.", "type": ["boolean", "string"], "enum": [true, false, "true", "false"] }
+                }
+              }
+            ]
+          },
+          "assert": { "description": "A single SELECT over the table `result` that returns the violating rows; no rows means the case passes.", "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "rows": {
+      "type": "array",
+      "items": {
+        "description": "One row: column name to value.",
+        "type": "object",
+        "additionalProperties": { "type": ["string", "number", "boolean", "null"] }
+      }
+    }
+  }
+}

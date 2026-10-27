@@ -13,13 +13,15 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.4",
+    "ajv": "^8.20.0",
     "monaco-editor": "^0.56.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.18.2",
     "rehype-slug": "^6.0.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",
