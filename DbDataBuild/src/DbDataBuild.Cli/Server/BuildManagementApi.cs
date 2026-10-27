@@ -41,7 +41,7 @@ internal static class BuildManagementApi
     /// <param name="projects">The projects served, read again on every call so one added or removed is served or gone at once.</param>
     /// <param name="commands">All the commands there are; each project is offered the read-only ones.</param>
     /// <param name="surfaceFor">Which of them a project is offered and how their inputs are checked; the read-only rules unless a test or a later slice says otherwise.</param>
-    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null)
+    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null)
     {
         surfaceFor ??= FullSurface;
         var specs = CommandSpecs.All.ToDictionary(s => s.Name);
@@ -72,6 +72,7 @@ internal static class BuildManagementApi
         });
 
         if (workspaces is not null) MapWorkspaces(app, projects, workspaces, workspaceRunner);
+        if (proxies is not null && publisher is not null) MapProxies(app, projects, proxies, publisher);
 
         // the scheduled plans of a project, whether or not this server runs them (the scheduler is opt-in): their schedule, the next time each is due and how the last run went
         app.MapGet("/api/v1/projects/{project}/schedule", (string project) =>
@@ -215,6 +216,34 @@ internal static class BuildManagementApi
         });
 
         MapWorkspaceGit(app, projects, workspaces, sessions);
+    }
+
+    /// <summary>
+    /// The proxies this server is paired with, and publishing a connection to one (plan 13, T10): <c>GET /api/v1/proxies</c> (viewer) and <c>POST /api/v1/projects/{project}/proxies/{proxy}/publish</c> (<c>{"connection", "data_source"?}</c>; the approver role, because it
+    /// puts a database login on a server people outside reach). Only the connection's read login is sent; the call to the proxy carries the Publisher role and the name of the person who asked.
+    /// </summary>
+    private static void MapProxies(IEndpointRouteBuilder app, ProjectsFile projects, ProxiesFile proxies, ProxyPublisher publisher)
+    {
+        app.MapGet("/api/v1/proxies", () => Results.Json(new { proxies = proxies.All().Select(p => new { name = p.Name, url = p.Url, instance_id = p.InstanceId, paired_at = p.PairedAt }) }));
+
+        app.MapPost("/api/v1/projects/{project}/proxies/{proxy}/publish", async (string project, string proxy, HttpContext context) =>
+        {
+            if (projects.Find(project) is not { } hosted) return Results.NotFound();
+            var token = context.ManagementToken();
+            if (!ManagementAuthorization.Authorize(token, ServerRole.Approver, hosted.Id).Allowed) return Results.Json(new { error = "This needs the approver role." }, statusCode: StatusCodes.Status403Forbidden);
+            string? connection, dataSource;
+            try
+            {
+                var body = await JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body, cancellationToken: context.RequestAborted);
+                (connection, dataSource) = (body?["connection"]?.GetValue<string>(), body?["data_source"]?.GetValue<string>());
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException) { connection = dataSource = null; }
+            if (string.IsNullOrWhiteSpace(connection)) return Results.Json(new { error = "The body is a JSON object with the \"connection\" to publish (and, if it should be called otherwise on the proxy, a \"data_source\")." }, statusCode: StatusCodes.Status400BadRequest);
+
+            var config = ProjectContext.Load(projects.RootOf(hosted)).Config;
+            var result = await publisher.PublishAsync(proxy, config, connection, string.IsNullOrWhiteSpace(dataSource) ? connection : dataSource, token, context.RequestAborted);
+            return Results.Json(result.Body, statusCode: result.Status);
+        });
     }
 
     /// <summary>

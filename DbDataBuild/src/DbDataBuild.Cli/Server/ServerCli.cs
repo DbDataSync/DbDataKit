@@ -31,7 +31,7 @@ internal static class ServerCli
 
     private static NounRouter Router(string[] invocation) => new("dbdatabuild",
     [
-        ServerNoun.Create(RunServerAsync).With([.. PairingVerbs.Create(args => new PairingFiles(Path.Combine(DirectoryOf(args), "server.yaml"))), new Verb("project", "The projects this server hosts: add, remove, list, pull", EffectClass.RepoFilesOnly, ProjectUsage, ProjectAsync, DataSchemas.None)]),
+        ServerNoun.Create(RunServerAsync).With([.. PairingVerbs.Create(args => new PairingFiles(Path.Combine(DirectoryOf(args), "server.yaml"))), new Verb("project", "The projects this server hosts: add, remove, list, pull", EffectClass.RepoFilesOnly, ProjectUsage, ProjectAsync, DataSchemas.None), new Verb("proxy", "The proxies this server publishes data sources to: add, remove, list", EffectClass.RepoFilesOnly, ProxyUsage, ProxyAsync, DataSchemas.None)]),
         // the store is opened (and its key made on first use) only for the secret verbs
         .. invocation is ["secret", ..] ? new[] { SecretVerbs(invocation) } : Array.Empty<Noun>(),
         .. invocation is ["health", ..] ? new[] { HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl) } : Array.Empty<Noun>(),
@@ -113,11 +113,76 @@ internal static class ServerCli
         BuildScheduler? scheduler = parsed.Has("scheduler")
             ? new BuildScheduler(projects, runner, BuildSchedulerSchema.Open(settings.Directory), TimeProvider.System, line => context.Error.WriteLine(line))
             : null;
-        var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, projects, host.Commands, line => context.Error.WriteLine(line), parsed.Has("read-only") ? BuildManagementApi.ReadOnlySurface : null, scheduler, sessions);
+        var publisher = new ProxyPublisher(new ProxiesFile(settings.Directory), new ConsoleKeyStore(secrets, secrets), secrets);
+        var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, projects, host.Commands, line => context.Error.WriteLine(line), parsed.Has("read-only") ? BuildManagementApi.ReadOnlySurface : null, scheduler, sessions, publisher);
         await context.Out.WriteLineAsync($"Serving {projects.All().Count} project(s) on {listen} (instance {BuildServer.InstanceId(settings.ServerYaml)}){(scheduler is null ? "" : ", running scheduled refresh plans")}. Pair a client with: dbdatabuild server pair");
         // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
         await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);
         return CliExit.Ok;
+    }
+
+    private const string ProxyUsage = "add <name> <https://address:port> --code <pairing code> | remove <name> | list   [--repo <server directory>]";
+
+    /// <summary>
+    /// <c>server proxy add|remove|list</c> (plan 13, T10): the Proxies this server publishes data sources to. <c>add</c> pairs with the Proxy using the code its administrator made with the Proxy's <c>server pair --max-role publisher</c>, as a server client
+    /// (not a console): the Proxy applies its owner rules to everything this server sends. The key it signs with is kept in this server's secret store.
+    /// </summary>
+    private static async Task<int> ProxyAsync(string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "code" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count == 0)
+        {
+            await context.Error.WriteLineAsync($"Usage: server proxy {ProxyUsage}");
+            return CliExit.Usage;
+        }
+
+        var directory = DirectoryOf(args);
+        var proxies = new ProxiesFile(directory);
+        var (action, name) = (parsed.Words[0], parsed.Words.Count > 1 ? parsed.Words[1] : null);
+        switch (action)
+        {
+            case "list" when parsed.Words.Count == 1:
+                if (proxies.All().Count == 0) await context.Out.WriteLineAsync("No proxy is paired. Add one with 'server proxy add'.");
+                foreach (var p in proxies.All()) await context.Out.WriteLineAsync($"{p.Name,-20} {p.Url}  (instance {p.InstanceId})");
+                context.Data["proxies"] = proxies.All().Select(p => new Dictionary<string, object?> { ["name"] = p.Name, ["url"] = p.Url, ["instance_id"] = p.InstanceId }).ToList();
+                return CliExit.Ok;
+
+            case "add" when name is not null && parsed.Words.Count == 3 && parsed.Get("code") is { } code:
+                if (!ProjectsFile.IsValidId(name) || !Uri.TryCreate(parsed.Words[2], UriKind.Absolute, out var url))
+                {
+                    await context.Error.WriteLineAsync("A proxy is called by lower-case letters, digits, '-' and '_', and its address is an https address such as https://proxy.example:8470.");
+                    return CliExit.Usage;
+                }
+                try
+                {
+                    var store = ServerSecrets.Open(directory);
+                    var self = await new ConsoleKeyStore(store, store).GetOrCreateAsync(context.Cancellation);
+                    var paired = await PairingClient.PairAsync(url, code, self, ClientKind.Server, $"Build server {BuildServer.InstanceId(Path.Combine(directory, "server.yaml"))}", context.Cancellation);
+                    proxies.Add(new PairedProxy(name, paired.Url.ToString().TrimEnd('/'), paired.InstanceId, paired.CertificateFingerprint, DateTimeOffset.UtcNow));
+                    await context.Out.WriteLineAsync($"Paired with the proxy '{name}' ({paired.InstanceId}); it lets this server publish as {string.Join(", ", paired.Ceiling.ToString().ToLowerInvariant())}.");
+                    context.Data["added"] = name;
+                    return CliExit.Ok;
+                }
+                catch (Exception ex) when (ex is PairingFailedException or IncompatibleServerException)
+                {
+                    await context.Error.WriteLineAsync(ex.Message);
+                    return CliExit.Failure;
+                }
+
+            case "remove" when name is not null && parsed.Words.Count == 2:
+                if (!proxies.Remove(name))
+                {
+                    await context.Error.WriteLineAsync($"No proxy '{name}' is paired.");
+                    return CliExit.Failure;
+                }
+                await context.Out.WriteLineAsync($"'{name}' is forgotten here. End the pairing on the proxy with its own 'server unpair'.");
+                context.Data["removed"] = name;
+                return CliExit.Ok;
+
+            default:
+                await context.Error.WriteLineAsync($"Usage: server proxy {ProxyUsage}");
+                return CliExit.Usage;
+        }
     }
 
     private const string ProjectUsage = "add <id> (--path <folder> | --git <address> [--branch <name>]) | remove <id> | list | pull <id>   [--repo <server directory>]";
