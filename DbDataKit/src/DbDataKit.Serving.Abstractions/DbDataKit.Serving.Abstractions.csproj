@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Serving</RootNamespace>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <Description>The host interface the protocol front ends of the serving layer are written against: authenticate a caller, describe what can be queried, run a query under the caller's limits, and accept writes only if the host offers them.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <PackageReference Include="Apache.Arrow" />
+    <InternalsVisibleTo Include="DbDataKit.Serving.Abstractions.Tests" />
+  </ItemGroup>
+</Project>
