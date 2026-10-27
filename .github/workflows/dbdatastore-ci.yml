@@ -1,0 +1,52 @@
+name: DbDataStore CI
+
+# DbDataStore on the trunk model (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md): a pull request into `main` runs this.
+# A `changes` job skips the suite when nothing of the store's, of the shared DbDataKit/ code it builds against, or of the build
+# settings changed; the run then still reports success. The shared libraries' own suite is dbdatakit-ci.yml, run once, not per product.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  # Everything, whatever changed.
+  workflow_dispatch:
+  workflow_call:
+
+# A newer push to a PR supersedes the older run; runs on main always complete.
+concurrency:
+  group: dbdatastore-ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: DbDataStore
+
+jobs:
+  changes:
+    uses: ./.github/workflows/_changes.yml
+    with:
+      paths: '^(DbDataStore/|DbDataKit/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatastore-|_)|actions/setup-product))'
+
+  # The server, its pairing and its command line run on both systems; the Windows service registration is only exercised here against fakes.
+  test:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-product
+        with:
+          product: DbDataStore
+          global-json: DbDataStore/global.json
+          duckdb: 'false'
+      - run: dotnet build DbDataStore.slnf -c Release
+      - run: dotnet test --project tests/DbDataStore.Tests -c Release --no-build --minimum-expected-tests 5
