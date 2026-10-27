@@ -5,10 +5,12 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./svg": "./src/chartSvg.ts",
     "./styles.css": "./src/styles.css"
   },
   "scripts": {
     "lint": "oxlint",
+    "typecheck": "tsc -p .",
     "test": "vitest run"
   },
   "dependencies": {

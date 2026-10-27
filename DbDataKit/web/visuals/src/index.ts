@@ -1,3 +1,12 @@
 // @dbdatakit/visuals: the shared visuals of the suite (plan 16 section 2a, plan 19 lane Y). Imports nothing from any product (a test checks).
 export { validateRenderedView, validateVegaLiteSubset, validateViewDocument } from './validate'
 export type { ViewIssue } from './validate'
+export { RenderedViews } from './RenderedViews'
+export type { RenderedViewsProps } from './RenderedViews'
+export { MatrixGrid } from './MatrixGrid'
+export { DataTable } from './DataTable'
+export type { DataTableProps } from './DataTable'
+export { VegaChart } from './VegaChart'
+export { chartConfig, useTheme } from './theme'
+export type { Theme, ThemeChoice } from './theme'
+export type { DataValue, RenderedChart, RenderedError, RenderedMatrix, RenderedViewDocument } from './types'
