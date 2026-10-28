@@ -14,7 +14,7 @@ namespace DbDataSync.Api.Tests;
 /// <summary>
 /// Phase 7's end-to-end validation (architecture/implementation-plan.md § Phase 7,
 /// architecture/implementation/done/phase-007-e2e-validation.md): source and target connections point at
-/// two genuinely separate SQL Server *instances* (docker-compose.yml's mssql-source/mssql-target,
+/// two genuinely separate SQL Server *instances* (testenv's mssql and mssql-target,
 /// distinct containers on distinct ports) rather than two databases sharing one server, and the whole
 /// scenario — initial full load, then two full insert/update/delete cycles — is confirmed by querying
 /// the real target database directly rather than trusting the API's own reported row counts.

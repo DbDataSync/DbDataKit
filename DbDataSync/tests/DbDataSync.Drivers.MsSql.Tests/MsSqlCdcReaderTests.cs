@@ -8,7 +8,7 @@ namespace DbDataSync.Drivers.MsSql.Tests;
 /// <summary>
 /// CDC against a real SQL Server with Agent running, because that is the only place it exists: the
 /// capture is an Agent job, and without one <c>sp_cdc_enable_table</c> succeeds and then nothing is
-/// ever captured. The container ships Agent stopped, so <c>docker-compose.yml</c> turns it on.
+/// ever captured. The container ships Agent stopped, so testenv/docker-compose.yml turns it on.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class MsSqlCdcReaderTests(MsSqlTestDatabase db) : IClassFixture<MsSqlTestDatabase>, IAsyncLifetime

@@ -60,7 +60,7 @@ if (!isWorker) {
   )
 }
 
-// The password used for the real SQL Server test database (started via docker-compose.yml's mssql-source service —
+// The password used for the real SQL Server test database (started via testenv's mssql profile —
 // see architecture/implementation/done/phase-003-mssql-driver.md). This sandbox has no OS keychain, so the
 // API's SecretStore falls back to environment variables — presetting these lets the *spawned
 // TaskRunner child process* resolve the connection credentials it needs to actually run a
