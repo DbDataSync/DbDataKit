@@ -1478,3 +1478,10 @@ Operator decision: correlated subqueries are a hard requirement.
 - **Built**: `TransferValues` reads a declared logical type through the shared DuckDB dialect (`ToCanonical`) and makes each value that canonical type with the shared `ValueConverter` (planned once per copy, `TransferValues.Plan`); a value that does not fit is a `TransferException` naming the column, never the value. `AdoWriteExecutor.BulkCopyAsync` hands the converted rows, in batches of 20,000, to `SqlServerBulkWriter` or `PostgresBulkWriter`; the `DataTable` buffer, the Npgsql loop and Build's own type switches are gone. The gate's log entries for a bulk copy are unchanged.
 - **Behaviour changes** (release note): a `DateTime` with a time of day into a `DATE` column and a string longer than `VARCHAR(n)` are now errors at the copy; the CLR forms the converter produces are canonical (`DateOnly`, `TimeOnly`, `sbyte` for `TINYINT`).
 - **Verified**: the unit suite; on SQL Server 2022 and PostgreSQL 17 the apply and templates conformance groups and the `fan_in_fan_out` and origin conformance cases. Not run: SQL Server 2025, Oracle, Fabric.
+
+### A19: the Flight SQL origin on the shared client (plan 13a)
+
+- **Built**: `FlightSqlRowSource.ConnectAsync` makes a `FlightSqlSettings` from the login (`FlightSqlLogin` keeps its grammar) and opens a `FlightSqlConnection`; the channel, TLS options (including `ca_file` as the only trusted roots), the handshake, the headers, the deadline of each call, the prepared-statement exchange and the reading of a ticket (which also reads compressed batches now) are the shared client's. The metadata, describe and server-fact calls stay in Build, made on `connection.Client` with `connection.CallOptions`.
+- **Moved into the shared client** (and so also Sync's): the tolerant prepared-statement exchange, `CaFile` and `Headers`, the deadline interceptor.
+- **Verified**: the Flight conformance classes against both sqlflite servers (plain; TLS with the CA file), 20 of 20.
+- **Not done**: Build's `ArrowConversions` and the catalog calls still duplicate the Arrow reading and the Flight SQL metadata calls that Sync has too.

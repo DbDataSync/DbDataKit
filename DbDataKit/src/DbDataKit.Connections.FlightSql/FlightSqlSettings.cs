@@ -25,7 +25,7 @@ public enum FlightSqlParameterMode
 }
 
 /// <summary>
-/// Everything a Flight SQL connection needs. A product reads it out of its own connection settings, with the already-resolved credential; the property keys it may use are the constants below.
+/// Everything a Flight SQL connection needs. <c>CaFile</c> is a PEM file of certificate authorities trusted instead of the machine's (the host name is still checked); <c>Headers</c> are sent with every call. A product reads it out of its own connection settings, with the already-resolved credential; the property keys it may use are the constants below.
 /// </summary>
 public sealed record FlightSqlSettings(
     Uri Address,
@@ -38,7 +38,9 @@ public sealed record FlightSqlSettings(
     TimeSpan CommandTimeout,
     FlightSqlParameterMode ParameterMode,
     string? DataSource = null,
-    string? Compression = null)
+    string? Compression = null,
+    string? CaFile = null,
+    IReadOnlyList<KeyValuePair<string, string>>? Headers = null)
 {
     public const string AuthMethodKey = "authMethod";
     public const string UseTlsKey = "useTls";
