@@ -110,7 +110,7 @@ public sealed class CrossInstanceEndToEndTests : IClassFixture<TestApiFactory>, 
     {
         // --- Run 1: initial full load ---
         var run1 = await TriggerAndWaitAsync(expectLoad: true);
-        Assert.Equal("Succeeded", run1.GetProperty("status").GetString());
+        AssertSucceeded(run1);
         Assert.Equal(3, run1.GetProperty("rowsRead").GetInt64());
         Assert.Equal(3, run1.GetProperty("rowsWritten").GetInt64());
         await AssertTargetRowsAsync(new Dictionary<int, string> { [1] = "Alice", [2] = "Bob", [3] = "Carol" });
@@ -124,7 +124,7 @@ public sealed class CrossInstanceEndToEndTests : IClassFixture<TestApiFactory>, 
         }
 
         var run2 = await TriggerAndWaitAsync();
-        Assert.Equal("Succeeded", run2.GetProperty("status").GetString());
+        AssertSucceeded(run2);
         Assert.Equal(3, run2.GetProperty("rowsRead").GetInt64());
         Assert.Equal(3, run2.GetProperty("rowsWritten").GetInt64());
         await AssertTargetRowsAsync(new Dictionary<int, string> { [2] = "Bobby", [3] = "Carol", [4] = "Dave" });
@@ -138,11 +138,15 @@ public sealed class CrossInstanceEndToEndTests : IClassFixture<TestApiFactory>, 
         }
 
         var run3 = await TriggerAndWaitAsync();
-        Assert.Equal("Succeeded", run3.GetProperty("status").GetString());
+        AssertSucceeded(run3);
         Assert.Equal(3, run3.GetProperty("rowsRead").GetInt64());
         Assert.Equal(3, run3.GetProperty("rowsWritten").GetInt64());
         await AssertTargetRowsAsync(new Dictionary<int, string> { [2] = "Bobby", [3] = "Caroline", [5] = "Eve" });
     }
+
+    /// <summary>A run that did not succeed is shown whole, so a failure seen only in CI says what the run itself reported.</summary>
+    private static void AssertSucceeded(JsonElement run) =>
+        Assert.True(run.GetProperty("status").GetString() == "Succeeded", "The run did not succeed: " + run.GetRawText());
 
     private async Task<JsonElement> TriggerAndWaitAsync(bool expectLoad = false)
     {
