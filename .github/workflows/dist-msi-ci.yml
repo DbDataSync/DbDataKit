@@ -42,7 +42,9 @@ jobs:
             unzip -q "$work/$product-v$version-win-x64.zip" -d "$work/payload"
             # Transitional (plan 13, C03): Proxy's executable is lower case from now on, and the newest published package still has the old
             # file name. Rename it in the unpacked copy so the MSI is built from dist.json as it is now; delete this once a release has the new name.
+            # retired-name-ok: the old file name is what the newest published package still has
             if [ "$product" = dbdataproxy ] && [ -f "$work/payload/DbDataProxy.exe" ] && [ ! -f "$work/payload/dbdataproxy.exe" ]; then
+              # retired-name-ok
               mv "$work/payload/DbDataProxy.exe" "$work/payload/dbdataproxy.exe"
             fi
             python3 dist/msi.py build --meta "${META[$product]}/dist.json" --version 2026.1.1.0 --payload "$work/payload" --out "out/$product/v1.msi"
