@@ -284,4 +284,4 @@ change; T04 (in progress) only takes the subject and roles from the home; new sl
 | 6 | The app host's name | **decided** (for now): DbDataApps |
 | 7 | Visuals | **decided direction**: a shared feature (one view format, one renderer) for the console, apps, assistants and reports |
 | 8 | Reports | **decided first step**: our own report spec on the shared visuals, and SSRS and Power BI Report Server on a separate server, embedded in apps and reading the semantic models (plan 17); Majorsilence Reporting a documented option, FastReport a documented alternative |
-| 9 | Identity with several consoles | **decided**: one identity home per install, a shared component hosted by a console by default (section 2b) |
+| 9 | Identity with several consoles | **decided**: one identity home per install, a shared component hosted by the serving layer by default (amended by plan 20; section 2b) |
