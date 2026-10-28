@@ -1,4 +1,5 @@
 using System.Data.Common;
+using DbDataKit.Transfer;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Core.Sql;
@@ -81,60 +82,105 @@ public sealed record SegmentScope(string Predicate, IReadOnlyList<DbParameter> P
         IReadOnlyList<ColumnMetadata> columns,
         IReadOnlyList<ColumnMapping>? columnMappings = null,
         Func<string, string>? reference = null,
-        IReadOnlyDictionary<string, IReadOnlyList<ColumnMetadata>>? relationshipColumns = null) =>
-        segment switch
-        {
-            null or FullSegment => All,
-            ListSegment list => BuildList(dialect, binder, list,
-                ResolveColumn(list.Column, list.Relationship, columns, columnMappings, relationshipColumns), reference),
-            RangeSegment range => BuildRange(dialect, binder, range,
-                ResolveColumn(range.Column, range.Relationship, columns, columnMappings, relationshipColumns), reference),
-            AutoSegment auto => throw new InvalidOperationException(
-                $"Auto segment on '{auto.Column}' reached execution unexpanded. Auto segments must be " +
-                "expanded into concrete ranges (ISegmentExpandingReader.ExpandAutoSegmentsAsync) when " +
-                "the work is enqueued, never carried through as a runtime segment."),
-            _ => throw new ArgumentOutOfRangeException(nameof(segment), segment, "Unknown segment mode."),
-        };
-
-    // Every generated parameter name below (seg0, seg1, ..., segMin, segMax) starts with a letter, not
-    // an underscore — Oracle's bind-variable grammar rejects a leading underscore outright
-    // (ORA-00911), confirmed by running this against a live server (phase 148). Dropping the leading
-    // underscores this used to carry bought nothing on any other engine, so it is a portability fix.
-
-    private static SegmentScope BuildList(
-        SqlDialect dialect, ISegmentValueBinder binder, ListSegment list, ColumnMetadata column,
-        Func<string, string>? reference = null)
+        IReadOnlyDictionary<string, IReadOnlyList<ColumnMetadata>>? relationshipColumns = null)
     {
-        if (list.Values.Count == 0)
-            throw new InvalidOperationException(
-                $"List segment on '{list.Column}' has no values. An empty list matches nothing, which " +
-                "for a reconciling writer would delete the target's entire scope — reject it rather " +
-                "than render 'IN ()' (which isn't valid SQL anyway).");
+        var resolved = Resolve(segment, columns, columnMappings, relationshipColumns);
+        if (resolved.Filter is ScopeFilter.AllRows) return All;
 
-        var parameters = list.Values
-            .Select((value, i) => binder.CreateParameter(dialect.ParameterName($"seg{i}"), value, column))
-            .ToList();
-
-        // Placeholders come from the dialect rather than from each parameter's own name: the two are
-        // the same string on SQL Server, but not on an engine whose bound parameter name drops the
-        // sigil its statement text requires.
-        var placeholders = string.Join(", ", Enumerable.Range(0, parameters.Count).Select(i => dialect.ParameterReference($"seg{i}")));
-        var columnRef = (reference ?? dialect.QuoteIdentifier)(column.Name);
-        return new SegmentScope($"{columnRef} IN ({placeholders})", parameters);
+        // The shared builder owns the predicate's shape and its placeholder text; binding each value stays here.
+        var rendered = ScopedStatements.RenderScope(SharedStatementSyntax.For(dialect), resolved.Filter, reference);
+        return new SegmentScope(rendered.Predicate, Bind(dialect, binder, rendered.Slots, resolved.Column));
     }
 
-    private static SegmentScope BuildRange(
-        SqlDialect dialect, ISegmentValueBinder binder, RangeSegment range, ColumnMetadata column,
-        Func<string, string>? reference = null)
+    /// <summary>
+    /// A segment resolved against a table's columns: the structured <see cref="ScopeFilter"/> the shared statement builders
+    /// render (<see cref="ScopedStatements"/>), and the column its values are compared with, which the caller needs to type
+    /// the parameters (<see cref="Bind"/>). <see cref="Column"/> is null for a scope over every row.
+    /// </summary>
+    public sealed record ResolvedScope(ScopeFilter Filter, ColumnMetadata? Column);
+
+    /// <summary>
+    /// The first half of <see cref="Build"/>: resolves the segment's column (see the parameters of <see cref="Build"/>) and
+    /// turns the segment into a <see cref="ScopeFilter"/>. Nothing is rendered or bound.
+    /// </summary>
+    public static ResolvedScope Resolve(
+        BatchReloadSegment? segment,
+        IReadOnlyList<ColumnMetadata> columns,
+        IReadOnlyList<ColumnMapping>? columnMappings = null,
+        IReadOnlyDictionary<string, IReadOnlyList<ColumnMetadata>>? relationshipColumns = null)
     {
-        var quoted = (reference ?? dialect.QuoteIdentifier)(column.Name);
-        // Half-open: consecutive ranges tile a value space with no gap and no row processed twice.
-        return new SegmentScope(
-            $"{quoted} >= {dialect.ParameterReference("segMin")} AND {quoted} < {dialect.ParameterReference("segMax")}",
-            [
-                binder.CreateParameter(dialect.ParameterName("segMin"), range.RangeMin, column),
-                binder.CreateParameter(dialect.ParameterName("segMax"), range.RangeMax, column),
-            ]);
+        switch (segment)
+        {
+            case null or FullSegment:
+                return new ResolvedScope(ScopeFilter.All, null);
+            case ListSegment list:
+            {
+                var column = ResolveColumn(list.Column, list.Relationship, columns, columnMappings, relationshipColumns);
+                return new ResolvedScope(ScopeFilter.List(column.Name, [.. list.Values]), column);
+            }
+            case RangeSegment range:
+            {
+                var column = ResolveColumn(range.Column, range.Relationship, columns, columnMappings, relationshipColumns);
+                // Half-open: consecutive ranges tile a value space with no gap and no row processed twice.
+                return new ResolvedScope(ScopeFilter.Range(column.Name, range.RangeMin, range.RangeMax), column);
+            }
+            case AutoSegment auto:
+                throw new InvalidOperationException(
+                    $"Auto segment on '{auto.Column}' reached execution unexpanded. Auto segments must be " +
+                    "expanded into concrete ranges (ISegmentExpandingReader.ExpandAutoSegmentsAsync) when " +
+                    "the work is enqueued, never carried through as a runtime segment.");
+            default:
+                throw new ArgumentOutOfRangeException(nameof(segment), segment, "Unknown segment mode.");
+        }
+    }
+
+    // Every generated parameter name (seg0, seg1, ..., segMin, segMax, afterOrdinal, upToOrdinal) starts with a
+    // letter, not an underscore — Oracle's bind-variable grammar rejects a leading underscore outright
+    // (ORA-00911), confirmed by running this against a live server (phase 148). The names are the shared
+    // builder's (ScopedStatements); this is where the caller turns them into typed parameters.
+
+    /// <summary>
+    /// Creates the typed parameters of a built statement's scope slots, in slot order: each value goes through the
+    /// driver's <see cref="ISegmentValueBinder"/> against <paramref name="column"/>, named the way this dialect's
+    /// provider wants a parameter name (<see cref="SqlDialect.ParameterName"/>). Ordinal slots are not scope slots; see
+    /// <see cref="AddTo(DbCommand, SqlDialect, ISegmentValueBinder, IReadOnlyList{ParameterSlot}, ColumnMetadata?, long, long)"/>.
+    /// </summary>
+    public static IReadOnlyList<DbParameter> Bind(
+        SqlDialect dialect, ISegmentValueBinder binder, IReadOnlyList<ParameterSlot> slots, ColumnMetadata? column) =>
+        [.. slots
+            .Where(slot => slot.Role is ParameterRole.ScopeValue or ParameterRole.ScopeMin or ParameterRole.ScopeMax)
+            .Select(slot => binder.CreateParameter(
+                dialect.ParameterName(slot.Name),
+                (string)slot.Value!,
+                column ?? throw new InvalidOperationException("a scope slot needs the column it is compared with")))];
+
+    /// <summary>
+    /// Adds every parameter of a built statement to <paramref name="command"/>, in slot order: scope slots typed by the
+    /// binder, ordinal slots as 64-bit integers carrying <paramref name="after"/> and <paramref name="upTo"/>. The statement's
+    /// text is built once; a chunked apply calls this once per chunk with that chunk's bounds.
+    /// </summary>
+    public static void AddTo(
+        DbCommand command, SqlDialect dialect, ISegmentValueBinder binder, IReadOnlyList<ParameterSlot> slots,
+        ColumnMetadata? column, long after = 0, long upTo = 0)
+    {
+        foreach (var slot in slots)
+        {
+            switch (slot.Role)
+            {
+                case ParameterRole.OrdinalAfter:
+                    command.AddParameter(dialect.ParameterName(slot.Name), after);
+                    break;
+                case ParameterRole.OrdinalUpTo:
+                    command.AddParameter(dialect.ParameterName(slot.Name), upTo);
+                    break;
+                default:
+                    command.Parameters.Add(binder.CreateParameter(
+                        dialect.ParameterName(slot.Name),
+                        (string)slot.Value!,
+                        column ?? throw new InvalidOperationException("a scope slot needs the column it is compared with")));
+                    break;
+            }
+        }
     }
 
     /// <summary>

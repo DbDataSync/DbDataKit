@@ -38,6 +38,17 @@ Limits not modelled: text length counts UTF-16 units (engines count code points 
 | `watermark_append` | optional delete of the window, insert rows `> watermark` (`>=` with lookback) | The host resolves the watermark with `ResolverStatement` and subtracts any lookback. |
 | `key_reconcile_delete` | count scope, delete keys absent from the stage | `DeleteGuard` (ratio, default 0.5, empty scope passes) is evaluated by `WriteGate.RunAsync` after the delete; a breach rolls back. |
 
+| `delete_insert_by_scope` | delete a scope (`ScopeFilter`: all rows, a list, or a half-open range of one column), then insert the stage rows without delete-marked ones | Keyless. `ScopedOptions.Marker` (`__Operation`, `D` deletes), `Ordinal` (refill one slice of the stage's `__Ordinal`). |
+| `merge_staged_changes` | one `MERGE` by key: delete-marked stage rows delete, others upsert; optional ordinal slice; optional delete-unmatched within a scope | Delete-unmatched is a `MERGE` into a CTE (`WHEN NOT MATCHED BY SOURCE`): SQL Server only. PostgreSQL 15+ without it. |
+
+### Scope-shaped statements and callbacks (plan 13, A16a)
+
+`ScopedStatements` (`ScopeDelete`, `Refill`, `Merge`, `RenderScope`) is the dialect-free core under those two strategies: it takes a `ScopedApplySpec` and a `StatementSyntax` and returns a `BuiltStatement`: the text plus an ordered list of `ParameterSlot`s (position, logical name, marker text, role, the scope column, the value to bind). Values never reach the text; the **caller binds each slot to its own typed parameter** (Sync: `varchar` against a `varchar` column, `date` against `date`, so the index is still seeked). Three choices are fixed:
+
+1. **A structured scope**, not an opaque predicate: the builder owns the shape (`1 = 1`, `IN (...)`, `>= min AND < max`) and the placeholder names (`seg0..`, `segMin`, `segMax`, `afterOrdinal`, `upToOrdinal`).
+2. **The generated-column override is a style the request carries** (`GeneratedColumnOverride`: `None`, `Clause` = the caller renders the INSERT head via `StatementSyntax.InsertInto`, `Bracketed` = the statement comes back with `NeedsOverrideBracket` and the caller wraps it, e.g. SQL Server `SET IDENTITY_INSERT`). `ISqlDialect` has no new member; its `IdentityInsert` capability stays the "engine supports it" signal.
+3. **Markers and quoting are callbacks** (`StatementSyntax.QuoteIdentifier`, `ParameterReference(position, name)`); `StatementSyntax.From(dialect)` is the shared-dialect way in, and `ApplyRequest.Scoped.Syntax` lets a strategy caller supply its own. `TransactSql` selects the T-SQL spelling of MERGE (`;`, `BY TARGET`, qualified update targets). `AdoWriteExecutor` binds by the marker (`@x`/`:x` named, `$1`/`?` unnamed), so a caller's style binds as it reads.
+
 Sync kind names resolve through `StrategyMatrix.Resolve` (`MsSqlMerge` to `merge_by_key`, ...). `Snapshot`, `Scd2` and `KeyReconcileScd2Close` stay Sync-only.
 
 ## Capability matrix

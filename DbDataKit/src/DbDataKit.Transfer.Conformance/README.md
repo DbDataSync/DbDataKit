@@ -8,9 +8,9 @@ Runs the shared strategy SQL against an engine and compares the target table wit
 
 | Engine | Status | How |
 |---|---|---|
-| DuckDB | verified here (all 6 strategies, 11 cases, with re-run) | in-process; `merge_by_key` runs as `ON CONFLICT` with a primary key |
+| DuckDB | verified here (7 of 8 strategies, 15 cases, with re-run; `merge_staged_changes` is unsupported on DuckDB) | in-process; `merge_by_key` runs as `ON CONFLICT` with a primary key |
 | SQL Server | cases and live runner exist; **not run** (no server in the build environment) | set `DBDATA_TEST_SQLSERVER`; Build's own conformance verified the same SQL shapes for four strategies |
-| PostgreSQL | cases and live runner exist; **not run** | set `DBDATA_TEST_POSTGRES` |
+| PostgreSQL | cases and live runner exist; the A16a cases ran on PostgreSQL 16 (dialect syntax and a caller-supplied syntax) | set `DBDATA_TEST_POSTGRES` |
 | MySQL, Oracle | builder output only (text tests), never executed | no runner |
 | Fabric | unverified, as in Build | no runner |
 

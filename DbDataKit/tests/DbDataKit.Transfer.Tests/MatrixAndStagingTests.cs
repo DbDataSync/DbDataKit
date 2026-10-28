@@ -15,7 +15,7 @@ public class MatrixTests
         foreach (var s in M.Strategies)
             foreach (var e in new[] { "duckdb", "sqlserver", "postgres", "mysql", "oracle", "fabric" })
                 Assert.NotNull(M.Entry(s, new EngineId(e)));
-        Assert.Equal(6, StrategyCatalog.Strategies.Count);
+        Assert.Equal(8, StrategyCatalog.Strategies.Count);
         Assert.Equal(M.Strategies.Order(), StrategyCatalog.Strategies.Select(s => s.Name).Order());
     }
 
@@ -24,7 +24,8 @@ public class MatrixTests
     {
         foreach (var s in M.Strategies)
         {
-            Assert.Equal(MatrixStatus.Reference, M.Entry(s, EngineId.DuckDb)!.Status);
+            // merge_staged_changes needs a MERGE with a delete marker, which DuckDB has no form of: unsupported there, not unverified
+            Assert.Equal(s == StrategyNames.MergeStagedChanges ? MatrixStatus.Unsupported : MatrixStatus.Reference, M.Entry(s, EngineId.DuckDb)!.Status);
             Assert.Equal(MatrixStatus.Unverified, M.Entry(s, EngineId.Fabric)!.Status);
         }
     }

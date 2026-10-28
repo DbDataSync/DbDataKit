@@ -95,7 +95,31 @@ public class PostgresLiveTests
     }
 
     public static IEnumerable<TheoryDataRow<string>> Names() =>
-        StrategyCases.All.Select(c => new TheoryDataRow<string>(c.Name));
+        StrategyCases.All.Where(c => c.AppliesTo(EngineId.Postgres)).Select(c => new TheoryDataRow<string>(c.Name));
+
+    /// <summary>The scope-shaped cases, which are the ones that take a caller's own syntax.</summary>
+    public static IEnumerable<TheoryDataRow<string>> ScopedNames() =>
+        StrategyCases.All.Where(c => c.AppliesTo(EngineId.Postgres) && c.Strategy is StrategyNames.DeleteInsertByScope or StrategyNames.MergeStagedChanges)
+            .Select(c => new TheoryDataRow<string>(c.Name));
+
+    /// <summary>Not the dialect's text: named <c>@p_name</c> markers where the shared dialect numbers them (<c>$1</c>), and the caller's own quoting function (Sync's PostgreSQL dialect does the same).</summary>
+    private static StatementSyntax CallerSyntax() => new()
+    {
+        QuoteIdentifier = id => "\"" + id.Replace("\"", "\"\"") + "\"",
+        ParameterReference = (_, name) => "@p_" + name,
+        ParameterStyle = ParameterStyle.NamedAt,
+    };
+
+    [Theory]
+    [MemberData(nameof(ScopedNames))]
+    public async Task Caller_supplied_quoting_and_markers_conform_on_postgres(string name)
+    {
+        Assert.SkipUnless(ConnectionString is not null, "set DBDATA_TEST_POSTGRES to run");
+        var engine = (await EngineAsync(TestContext.Current.CancellationToken)) with { Syntax = CallerSyntax() };
+        var c = StrategyCases.All.Single(x => x.Name == name);
+        var result = await ConformanceRunner.RunAsync(engine, c, TestContext.Current.CancellationToken);
+        Assert.True(result.Passed, string.Join("\n", result.Differences));
+    }
 
     [Theory]
     [MemberData(nameof(Names))]

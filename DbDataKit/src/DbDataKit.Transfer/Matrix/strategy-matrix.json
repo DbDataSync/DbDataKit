@@ -66,12 +66,36 @@
         "oracle":    { "status": "unverified" },
         "fabric":    { "status": "unverified" }
       }
+    },
+    "delete_insert_by_scope": {
+      "needs": ["transaction"],
+      "engines": {
+        "duckdb":    { "status": "reference", "note": "delete a scope (all rows, a list or a half-open range of one column), refill from the stage without delete-marked rows" },
+        "sqlserver": { "status": "product-verified", "note": "Sync MsSqlDeleteInsert" },
+        "postgres":  { "status": "product-verified", "note": "Sync DeleteInsert" },
+        "mysql":     { "status": "product-verified", "note": "Sync DeleteInsert" },
+        "oracle":    { "status": "product-verified", "note": "Sync DeleteInsert" },
+        "fabric":    { "status": "unverified" }
+      }
+    },
+    "merge_staged_changes": {
+      "needs": ["transaction", "key_columns", "merge_or_upsert"],
+      "engines": {
+        "duckdb":    { "status": "unsupported", "note": "no MERGE that honours an operation marker; use merge_by_key" },
+        "sqlserver": { "status": "product-verified", "note": "Sync MsSqlMerge and MsSqlMergeReconcile; delete-unmatched-in-scope is a MERGE into a CTE (SQL Server only)" },
+        "postgres":  { "status": "product-verified", "min_version": "15", "note": "MERGE with a delete marker and an ordinal slice; no delete-unmatched-in-scope (a MERGE target cannot be a CTE)" },
+        "mysql":     { "status": "unsupported", "note": "no MERGE" },
+        "oracle":    { "status": "unsupported", "note": "MERGE has no WHEN NOT MATCHED BY TARGET and no matched-delete condition in this form" },
+        "fabric":    { "status": "unverified" }
+      }
     }
   },
   "aliases": {
     "DeleteInsert": "full_replace",
     "Snapshot": null,
     "MsSqlMerge": "merge_by_key",
+    "MsSqlMergeReconcile": "merge_staged_changes",
+    "MsSqlDeleteInsert": "delete_insert_by_scope",
     "Merge": "merge_by_key",
     "KeyReconcileDelete": "key_reconcile_delete",
     "Watermark": "watermark_append"

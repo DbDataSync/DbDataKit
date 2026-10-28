@@ -1,4 +1,5 @@
 using System.Data.Common;
+using DbDataKit.Transfer;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
@@ -53,15 +54,15 @@ public sealed class MsSqlMergeWriter : IChangeWriter, IStatementPreview
             targetConnection, transaction: null, shape.QuotedTarget, shape.RequiresIdentityInsert,
             async () =>
             {
+                // The text is the same for every chunk, so it is built once (on the first, as before: a staged set with
+                // no rows never needs a primary key); each chunk binds its own ordinal bounds.
+                BuiltStatement? merge = null;
                 foreach (var (after, upTo) in ApplyBatch.Ranges(staged.RowCount, batchSize))
                 {
+                    merge ??= BuildMerge(shape, staged.StagingLocation, chunked: batchSize is not null);
                     using var cmd = targetConnection.CreateTimedCommand();
-                    cmd.CommandText = BuildMerge(shape, staged.StagingLocation, chunked: batchSize is not null);
-                    if (batchSize is not null)
-                    {
-                        cmd.AddParameter($"@{AfterOrdinalParameter}", after);
-                        cmd.AddParameter($"@{UpToOrdinalParameter}", upTo);
-                    }
+                    cmd.CommandText = merge.Text;
+                    SegmentScope.AddTo(cmd, MsSqlDialect.Instance, MsSqlValueBinding.Instance, merge.Slots, column: null, after, upTo);
 
                     rowsAffected += await cmd.ExecuteNonQueryAsync(cancellationToken);
                 }
@@ -73,37 +74,20 @@ public sealed class MsSqlMergeWriter : IChangeWriter, IStatementPreview
         return new WriteResult(rowsAffected);
     }
 
-    public const string AfterOrdinalParameter = "afterOrdinal";
-    public const string UpToOrdinalParameter = "upToOrdinal";
-
-    /// <summary>The statement itself, so the preview shows what runs rather than a reconstruction of
-    /// it.</summary>
+    /// <summary>The statement itself (built by the shared <see cref="ScopedStatements.Merge"/>), so the
+    /// preview shows what runs rather than a reconstruction of it.</summary>
     /// <param name="chunked">
     /// When set, the staged set is read through a bounded subquery rather than directly. The bound is
     /// a range over the staging table's clustered ordinal, so each chunk seeks its own slice instead
     /// of re-scanning the whole staged set — without which chunking would be quadratic in the number
-    /// of chunks.
+    /// of chunks. The statement's slots say where the bounds go; the text is the same for every chunk.
     /// </param>
-    internal static string BuildMerge(MsSqlTargetShape shape, string stagingLocation, bool chunked = false)
-    {
-        var source = chunked
-            ? $"""
-              (SELECT * FROM {stagingLocation}
-                   WHERE {MsSqlTargetShape.OrdinalColumn} > @{AfterOrdinalParameter}
-                     AND {MsSqlTargetShape.OrdinalColumn} <= @{UpToOrdinalParameter})
-              """
-            : stagingLocation;
-
-        return $"""
-            MERGE INTO {shape.QuotedTarget} AS tgt
-            USING {source} AS src
-            ON {shape.BuildMergeOnClause()}
-            WHEN MATCHED AND src.{MsSqlTargetShape.OperationColumn} = 'D' THEN DELETE
-            {shape.BuildUpdateClause()}
-            WHEN NOT MATCHED BY TARGET AND src.{MsSqlTargetShape.OperationColumn} <> 'D'
-                THEN INSERT ({shape.InsertColumnList}) VALUES ({shape.SourceValueList});
-            """;
-    }
+    internal static BuiltStatement BuildMerge(MsSqlTargetShape shape, string stagingLocation, bool chunked = false) =>
+        ScopedStatements.Merge(MsSqlTargetShape.Syntax, shape.ToSpec(stagingLocation) with
+        {
+            KeyColumns = shape.RequireMergeKey(),
+            Ordinal = chunked ? new OrdinalRange(0, 0, MsSqlTargetShape.OrdinalColumn) : null,
+        });
 
     public async Task<IReadOnlyList<PreviewStatement>> DescribeAsync(
         PreviewRequest request, CancellationToken cancellationToken)
@@ -126,7 +110,7 @@ public sealed class MsSqlMergeWriter : IChangeWriter, IStatementPreview
         [
             new PreviewStatement(
                 PreviewStages.Write, "Merge the staged rows into the target",
-                BuildMerge(shape, "#Staging_<per pass>", chunked: batchSize is not null), PreviewOrigin.BuiltIn,
+                BuildMerge(shape, "#Staging_<per pass>", chunked: batchSize is not null).Text, PreviewOrigin.BuiltIn,
                 notes.Count == 0 ? null : string.Join(" ", notes)),
         ];
     }

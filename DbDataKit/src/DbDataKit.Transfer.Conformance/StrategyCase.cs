@@ -22,11 +22,27 @@ public sealed record StrategyCase(
     public Func<ApplyRequest, ISqlDialect, Func<SqlStatement, Task<object?>>, Task<ApplyRequest>>? Resolve { get; init; }
     /// <summary>The apply must fail with this exception type and leave the target unchanged (guard breach). Expected is then the seeded target.</summary>
     public Type? ExpectedFailure { get; init; }
+    /// <summary>Columns the stage has beyond <see cref="Schema"/> (the operation marker, the ordinal); each stage row carries their values after the schema's.</summary>
+    public IReadOnlyList<TransferColumn>? StageExtraColumns { get; init; }
+    /// <summary>Engines the case is meaningful on (an engine id); null: every engine the matrix allows. A MERGE into a CTE is SQL Server only.</summary>
+    public IReadOnlyList<string>? OnlyEngines { get; init; }
     /// <summary>When false the second run is not compared with Expected (non-idempotent strategies only; none ship today).</summary>
     public bool Idempotent { get; init; } = true;
+}
+
+public static class StrategyCaseExtensions
+{
+    public static bool AppliesTo(this StrategyCase c, EngineId engine) => c.OnlyEngines is null || c.OnlyEngines.Contains(engine.Value);
 }
 
 public sealed record ConformanceResult(string Case, string Strategy, bool Passed, IReadOnlyList<string> Differences, bool SecondRunIdempotent);
 
 /// <summary>An engine the suite can run on. <see cref="OpenAsync"/> must return a fresh, open connection to an empty database/schema each call.</summary>
-public sealed record ConformanceEngine(string Name, ISqlDialect Dialect, EngineVersion? Version, Func<CancellationToken, Task<System.Data.Common.DbConnection>> OpenAsync);
+public sealed record ConformanceEngine(string Name, ISqlDialect Dialect, EngineVersion? Version, Func<CancellationToken, Task<System.Data.Common.DbConnection>> OpenAsync)
+{
+    /// <summary>
+    /// A caller's own quoting and placeholder text, used by the scope-shaped strategies instead of the dialect's. The suite then runs the same cases with
+    /// that style, proving a statement built from a caller's callbacks is correct on the engine. The other strategies ignore it.
+    /// </summary>
+    public StatementSyntax? Syntax { get; init; }
+}
