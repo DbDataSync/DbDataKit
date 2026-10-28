@@ -58,6 +58,11 @@ public static class SyncCli
             Cert("discover", "Find the CA and template (Windows only)", EffectClass.RepoFilesOnly, "[--repo <path>]"),
             Cert("bind", "Bind a thumbprint to the listener (Windows only)", EffectClass.RepoFilesOnly, "--thumbprint <thumbprint> [--location LocalMachine|CurrentUser] [--allow-invalid|--no-allow-invalid]"),
         ]),
+        new Noun("script", "The .csx scripts of the configuration",
+        [
+            Forward("list", "The scripts and the slot each fills", EffectClass.OfflineOnly, "[--repo <path>]", a => ScriptCommand.RunAsync(["list", .. a])),
+            Forward("test", "Run a script against generated sample input and show what it did", EffectClass.RepoFilesOnly, "<name> [--rows <n>] [--repo <path>]", a => ScriptCommand.RunAsync(["test", .. a])),
+        ]),
         new Noun("secret", "The encrypted secret store",
         [
             Forward("set", "Store a secret under a dbdata:sync:... name", EffectClass.RepoFilesOnly, "<ref> <value> [--repo <path>]", a => Task.FromResult(SecretCommand.Run(["set", .. a]))),

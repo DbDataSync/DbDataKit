@@ -21,7 +21,7 @@ public sealed class SyncCliTests
 
     [Fact]
     public void TheNounsAreTheSuiteGrammar() =>
-        Assert.Equal(["server", "service", "cert", "secret", "library", "driver", "config", "health", "ui"], SyncCli.Router().Nouns.Select(n => n.Name));
+        Assert.Equal(["server", "service", "cert", "script", "secret", "library", "driver", "config", "health", "ui"], SyncCli.Router().Nouns.Select(n => n.Name));
 
     [Fact]
     public void TheCommandsOutsideTheRouterAreTheOnesThatStayUnchanged() =>

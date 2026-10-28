@@ -1,0 +1,40 @@
+boolean	Boolean	Boolean	bool:true
+smallint	Int16	Int16	Int16:-300
+integer	Int32	Int32	Int32:70000
+bigint	Int64	Int64	Int64:5000000000
+numeric(18,2)	Decimal	Decimal	decimal:12345.67
+numeric unbounded	Decimal	-	GetValue THROWS OverflowException
+numeric NaN	Decimal	-	GetValue THROWS InvalidCastException
+money	Decimal	Decimal	decimal:12.34
+real	Single	Single	float:1.5
+double precision	Double	Double	double:1.5
+text	String	String	string:text
+character varying(50)	String	String	string:text
+character(5)	String	String	string:ab   
+"char"	Char	Char	Char:a
+name	String	String	string:text
+bytea	Byte[]	Byte[]	byte[]:010203
+uuid	Guid	Guid	Guid:6f9619ff-8b86-d011-b42d-00c04fc964ff
+date	DateOnly	DateOnly	DateOnly:2024-03-17
+date infinity	DateOnly	DateOnly	DateOnly:9999-12-31
+time	TimeOnly	TimeOnly	TimeOnly:09:41:22.1234560
+timetz	DateTimeOffset	DateTimeOffset	DateTimeOffset:0001-01-02T09:41:22.1234560+02:00
+timestamp	DateTime	DateTime	DateTime:2024-03-17T09:41:22.1234560
+timestamptz	DateTime	DateTime	DateTime:2024-03-17T07:41:22.1234560Z
+timestamp infinity	DateTime	DateTime	DateTime:9999-12-31T23:59:59.9999999
+interval	TimeSpan	TimeSpan	TimeSpan:1.02:03:04
+interval months	TimeSpan	-	GetValue THROWS InvalidCastException
+json	String	String	string:{"a":1}
+jsonb	String	String	string:{"a": 1}
+xml	String	String	string:<a>1</a>
+inet	IPAddress	IPAddress	IPAddress:192.168.0.1
+cidr	IPNetwork	IPNetwork	IPNetwork:192.168.0.0/24
+macaddr	PhysicalAddress	PhysicalAddress	PhysicalAddress:08002B010203
+bit(3)	BitArray	BitArray	BitArray:System.Collections.BitArray
+bit varying(5)	BitArray	BitArray	BitArray:System.Collections.BitArray
+integer[]	Array	Int32[]	Int32[]:System.Int32[]
+text[]	Array	String[]	String[]:System.String[]
+point	NpgsqlPoint	NpgsqlPoint	NpgsqlPoint:(1,2)
+oid	UInt32	UInt32	UInt32:42
+tsvector	NpgsqlTsVector	NpgsqlTsVector	NpgsqlTsVector:'a' 'b'
+int4range	NpgsqlRange`1	NpgsqlRange`1	NpgsqlRange`1:[1,5)

@@ -1,0 +1,1000 @@
+bit	bool	STORED bool:true
+bit	sbyte	STORED bool:true
+bit	byte	STORED bool:true
+bit	short	STORED bool:true
+bit	ushort	STORED bool:true
+bit	int	STORED bool:true
+bit	uint	STORED bool:true
+bit	long	STORED bool:true
+bit	ulong	STORED bool:true
+bit	BigInteger	REFUSED StagingValueException (names the column and value type)
+bit	int:300	STORED bool:true
+bit	long:2^40	STORED bool:true
+bit	int:-1	STORED bool:true
+bit	ulong:max	STORED bool:true
+bit	float	STORED bool:true
+bit	double	STORED bool:true
+bit	decimal	STORED bool:true
+bit	decimal:fraction	STORED bool:true
+bit	double:NaN	STORED bool:true
+bit	double:Infinity	STORED bool:true
+bit	decimal:18digits	STORED bool:true
+bit	char	REFUSED StagingValueException (names the column and value type)
+bit	string	REFUSED InvalidOperationException (names the column and value type)
+bit	string:1	REFUSED InvalidOperationException (names the column and value type)
+bit	string:1.5	REFUSED InvalidOperationException (names the column and value type)
+bit	string:true	STORED bool:true
+bit	string:date	REFUSED InvalidOperationException (names the column and value type)
+bit	string:datetime	REFUSED InvalidOperationException (names the column and value type)
+bit	string:time	REFUSED InvalidOperationException (names the column and value type)
+bit	string:guid	REFUSED InvalidOperationException (names the column and value type)
+bit	string:json	REFUSED InvalidOperationException (names the column and value type)
+bit	string:xml	REFUSED InvalidOperationException (names the column and value type)
+bit	string:NUL	REFUSED InvalidOperationException (names the column and value type)
+bit	string:60chars	REFUSED InvalidOperationException (names the column and value type)
+bit	string:non-BMP	REFUSED InvalidOperationException (names the column and value type)
+bit	byte[]	REFUSED StagingValueException (names the column and value type)
+bit	byte[]:16	REFUSED StagingValueException (names the column and value type)
+bit	Guid	REFUSED StagingValueException (names the column and value type)
+bit	DateTime	REFUSED StagingValueException (names the column and value type)
+bit	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
+bit	DateTime:midnight	REFUSED StagingValueException (names the column and value type)
+bit	DateTime:1500	REFUSED StagingValueException (names the column and value type)
+bit	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+bit	DateOnly	REFUSED StagingValueException (names the column and value type)
+bit	TimeOnly	REFUSED StagingValueException (names the column and value type)
+bit	TimeSpan	REFUSED StagingValueException (names the column and value type)
+bit	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+bit	Stream	REFUSED StagingValueException (names the column and value type)
+bit	int[]	REFUSED StagingValueException (names the column and value type)
+bit	List<int>	REFUSED StagingValueException (names the column and value type)
+tinyint	bool	STORED Byte:1
+tinyint	sbyte	STORED Byte:1
+tinyint	byte	STORED Byte:1
+tinyint	short	STORED Byte:1
+tinyint	ushort	STORED Byte:1
+tinyint	int	STORED Byte:1
+tinyint	uint	STORED Byte:1
+tinyint	long	STORED Byte:1
+tinyint	ulong	STORED Byte:1
+tinyint	BigInteger	REFUSED StagingValueException (names the column and value type)
+tinyint	int:300	REFUSED InvalidOperationException (names the column and value type)
+tinyint	long:2^40	REFUSED InvalidOperationException (names the column and value type)
+tinyint	int:-1	REFUSED InvalidOperationException (names the column and value type)
+tinyint	ulong:max	REFUSED InvalidOperationException (names the column)
+tinyint	float	STORED Byte:2
+tinyint	double	STORED Byte:2
+tinyint	decimal	STORED Byte:2
+tinyint	decimal:fraction	STORED Byte:1
+tinyint	double:NaN	REFUSED InvalidOperationException (names the column and value type)
+tinyint	double:Infinity	REFUSED InvalidOperationException (names the column and value type)
+tinyint	decimal:18digits	REFUSED InvalidOperationException (names the column and value type)
+tinyint	char	STORED Byte:97
+tinyint	string	REFUSED InvalidOperationException (names the column and value type)
+tinyint	string:1	STORED Byte:1
+tinyint	string:1.5	REFUSED InvalidOperationException (names the column and value type)
+tinyint	string:true	REFUSED InvalidOperationException (names the column and value type)
+tinyint	string:date	REFUSED InvalidOperationException (names the column and value type)
+tinyint	string:datetime	REFUSED InvalidOperationException (names the column and value type)
+tinyint	string:time	REFUSED InvalidOperationException (names the column and value type)
+tinyint	string:guid	REFUSED InvalidOperationException (names the column and value type)
+tinyint	string:json	REFUSED InvalidOperationException (names the column and value type)
+tinyint	string:xml	REFUSED InvalidOperationException (names the column and value type)
+tinyint	string:NUL	REFUSED InvalidOperationException (names the column and value type)
+tinyint	string:60chars	REFUSED InvalidOperationException (names the column and value type)
+tinyint	string:non-BMP	REFUSED InvalidOperationException (names the column and value type)
+tinyint	byte[]	REFUSED StagingValueException (names the column and value type)
+tinyint	byte[]:16	REFUSED StagingValueException (names the column and value type)
+tinyint	Guid	REFUSED StagingValueException (names the column and value type)
+tinyint	DateTime	REFUSED StagingValueException (names the column and value type)
+tinyint	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
+tinyint	DateTime:midnight	REFUSED StagingValueException (names the column and value type)
+tinyint	DateTime:1500	REFUSED StagingValueException (names the column and value type)
+tinyint	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+tinyint	DateOnly	REFUSED StagingValueException (names the column and value type)
+tinyint	TimeOnly	REFUSED StagingValueException (names the column and value type)
+tinyint	TimeSpan	REFUSED StagingValueException (names the column and value type)
+tinyint	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+tinyint	Stream	REFUSED StagingValueException (names the column and value type)
+tinyint	int[]	REFUSED StagingValueException (names the column and value type)
+tinyint	List<int>	REFUSED StagingValueException (names the column and value type)
+smallint	bool	STORED Int16:1
+smallint	sbyte	STORED Int16:1
+smallint	byte	STORED Int16:1
+smallint	short	STORED Int16:1
+smallint	ushort	STORED Int16:1
+smallint	int	STORED Int16:1
+smallint	uint	STORED Int16:1
+smallint	long	STORED Int16:1
+smallint	ulong	STORED Int16:1
+smallint	BigInteger	REFUSED StagingValueException (names the column and value type)
+smallint	int:300	STORED Int16:300
+smallint	long:2^40	REFUSED InvalidOperationException (names the column and value type)
+smallint	int:-1	STORED Int16:-1
+smallint	ulong:max	REFUSED InvalidOperationException (names the column)
+smallint	float	STORED Int16:2
+smallint	double	STORED Int16:2
+smallint	decimal	STORED Int16:2
+smallint	decimal:fraction	STORED Int16:1
+smallint	double:NaN	REFUSED InvalidOperationException (names the column and value type)
+smallint	double:Infinity	REFUSED InvalidOperationException (names the column and value type)
+smallint	decimal:18digits	REFUSED InvalidOperationException (names the column and value type)
+smallint	char	STORED Int16:97
+smallint	string	REFUSED InvalidOperationException (names the column and value type)
+smallint	string:1	STORED Int16:1
+smallint	string:1.5	REFUSED InvalidOperationException (names the column and value type)
+smallint	string:true	REFUSED InvalidOperationException (names the column and value type)
+smallint	string:date	REFUSED InvalidOperationException (names the column and value type)
+smallint	string:datetime	REFUSED InvalidOperationException (names the column and value type)
+smallint	string:time	REFUSED InvalidOperationException (names the column and value type)
+smallint	string:guid	REFUSED InvalidOperationException (names the column and value type)
+smallint	string:json	REFUSED InvalidOperationException (names the column and value type)
+smallint	string:xml	REFUSED InvalidOperationException (names the column and value type)
+smallint	string:NUL	REFUSED InvalidOperationException (names the column and value type)
+smallint	string:60chars	REFUSED InvalidOperationException (names the column and value type)
+smallint	string:non-BMP	REFUSED InvalidOperationException (names the column and value type)
+smallint	byte[]	REFUSED StagingValueException (names the column and value type)
+smallint	byte[]:16	REFUSED StagingValueException (names the column and value type)
+smallint	Guid	REFUSED StagingValueException (names the column and value type)
+smallint	DateTime	REFUSED StagingValueException (names the column and value type)
+smallint	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
+smallint	DateTime:midnight	REFUSED StagingValueException (names the column and value type)
+smallint	DateTime:1500	REFUSED StagingValueException (names the column and value type)
+smallint	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+smallint	DateOnly	REFUSED StagingValueException (names the column and value type)
+smallint	TimeOnly	REFUSED StagingValueException (names the column and value type)
+smallint	TimeSpan	REFUSED StagingValueException (names the column and value type)
+smallint	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+smallint	Stream	REFUSED StagingValueException (names the column and value type)
+smallint	int[]	REFUSED StagingValueException (names the column and value type)
+smallint	List<int>	REFUSED StagingValueException (names the column and value type)
+int	bool	STORED Int32:1
+int	sbyte	STORED Int32:1
+int	byte	STORED Int32:1
+int	short	STORED Int32:1
+int	ushort	STORED Int32:1
+int	int	STORED Int32:1
+int	uint	STORED Int32:1
+int	long	STORED Int32:1
+int	ulong	STORED Int32:1
+int	BigInteger	REFUSED StagingValueException (names the column and value type)
+int	int:300	STORED Int32:300
+int	long:2^40	REFUSED InvalidOperationException (names the column and value type)
+int	int:-1	STORED Int32:-1
+int	ulong:max	REFUSED InvalidOperationException (names the column)
+int	float	STORED Int32:2
+int	double	STORED Int32:2
+int	decimal	STORED Int32:2
+int	decimal:fraction	STORED Int32:1
+int	double:NaN	REFUSED InvalidOperationException (names the column and value type)
+int	double:Infinity	REFUSED InvalidOperationException (names the column and value type)
+int	decimal:18digits	REFUSED InvalidOperationException (names the column and value type)
+int	char	STORED Int32:97
+int	string	REFUSED InvalidOperationException (names the column and value type)
+int	string:1	STORED Int32:1
+int	string:1.5	REFUSED InvalidOperationException (names the column and value type)
+int	string:true	REFUSED InvalidOperationException (names the column and value type)
+int	string:date	REFUSED InvalidOperationException (names the column and value type)
+int	string:datetime	REFUSED InvalidOperationException (names the column and value type)
+int	string:time	REFUSED InvalidOperationException (names the column and value type)
+int	string:guid	REFUSED InvalidOperationException (names the column and value type)
+int	string:json	REFUSED InvalidOperationException (names the column and value type)
+int	string:xml	REFUSED InvalidOperationException (names the column and value type)
+int	string:NUL	REFUSED InvalidOperationException (names the column and value type)
+int	string:60chars	REFUSED InvalidOperationException (names the column and value type)
+int	string:non-BMP	REFUSED InvalidOperationException (names the column and value type)
+int	byte[]	REFUSED StagingValueException (names the column and value type)
+int	byte[]:16	REFUSED StagingValueException (names the column and value type)
+int	Guid	REFUSED StagingValueException (names the column and value type)
+int	DateTime	REFUSED StagingValueException (names the column and value type)
+int	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
+int	DateTime:midnight	REFUSED StagingValueException (names the column and value type)
+int	DateTime:1500	REFUSED StagingValueException (names the column and value type)
+int	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+int	DateOnly	REFUSED StagingValueException (names the column and value type)
+int	TimeOnly	REFUSED StagingValueException (names the column and value type)
+int	TimeSpan	REFUSED StagingValueException (names the column and value type)
+int	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+int	Stream	REFUSED StagingValueException (names the column and value type)
+int	int[]	REFUSED StagingValueException (names the column and value type)
+int	List<int>	REFUSED StagingValueException (names the column and value type)
+bigint	bool	STORED Int64:1
+bigint	sbyte	STORED Int64:1
+bigint	byte	STORED Int64:1
+bigint	short	STORED Int64:1
+bigint	ushort	STORED Int64:1
+bigint	int	STORED Int64:1
+bigint	uint	STORED Int64:1
+bigint	long	STORED Int64:1
+bigint	ulong	STORED Int64:1
+bigint	BigInteger	REFUSED StagingValueException (names the column and value type)
+bigint	int:300	STORED Int64:300
+bigint	long:2^40	STORED Int64:1099511627776
+bigint	int:-1	STORED Int64:-1
+bigint	ulong:max	REFUSED InvalidOperationException (names the column)
+bigint	float	STORED Int64:2
+bigint	double	STORED Int64:2
+bigint	decimal	STORED Int64:2
+bigint	decimal:fraction	STORED Int64:1
+bigint	double:NaN	REFUSED InvalidOperationException (names the column and value type)
+bigint	double:Infinity	REFUSED InvalidOperationException (names the column and value type)
+bigint	decimal:18digits	STORED Int64:12345678901234568
+bigint	char	STORED Int64:97
+bigint	string	REFUSED InvalidOperationException (names the column and value type)
+bigint	string:1	STORED Int64:1
+bigint	string:1.5	REFUSED InvalidOperationException (names the column and value type)
+bigint	string:true	REFUSED InvalidOperationException (names the column and value type)
+bigint	string:date	REFUSED InvalidOperationException (names the column and value type)
+bigint	string:datetime	REFUSED InvalidOperationException (names the column and value type)
+bigint	string:time	REFUSED InvalidOperationException (names the column and value type)
+bigint	string:guid	REFUSED InvalidOperationException (names the column and value type)
+bigint	string:json	REFUSED InvalidOperationException (names the column and value type)
+bigint	string:xml	REFUSED InvalidOperationException (names the column and value type)
+bigint	string:NUL	REFUSED InvalidOperationException (names the column and value type)
+bigint	string:60chars	REFUSED InvalidOperationException (names the column and value type)
+bigint	string:non-BMP	REFUSED InvalidOperationException (names the column and value type)
+bigint	byte[]	REFUSED StagingValueException (names the column and value type)
+bigint	byte[]:16	REFUSED StagingValueException (names the column and value type)
+bigint	Guid	REFUSED StagingValueException (names the column and value type)
+bigint	DateTime	REFUSED StagingValueException (names the column and value type)
+bigint	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
+bigint	DateTime:midnight	REFUSED StagingValueException (names the column and value type)
+bigint	DateTime:1500	REFUSED StagingValueException (names the column and value type)
+bigint	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+bigint	DateOnly	REFUSED StagingValueException (names the column and value type)
+bigint	TimeOnly	REFUSED StagingValueException (names the column and value type)
+bigint	TimeSpan	REFUSED StagingValueException (names the column and value type)
+bigint	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+bigint	Stream	REFUSED StagingValueException (names the column and value type)
+bigint	int[]	REFUSED StagingValueException (names the column and value type)
+bigint	List<int>	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	bool	STORED decimal:1.00
+decimal(18,2)	sbyte	STORED decimal:1.00
+decimal(18,2)	byte	STORED decimal:1.00
+decimal(18,2)	short	STORED decimal:1.00
+decimal(18,2)	ushort	STORED decimal:1.00
+decimal(18,2)	int	STORED decimal:1.00
+decimal(18,2)	uint	STORED decimal:1.00
+decimal(18,2)	long	STORED decimal:1.00
+decimal(18,2)	ulong	STORED decimal:1.00
+decimal(18,2)	BigInteger	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	int:300	STORED decimal:300.00
+decimal(18,2)	long:2^40	STORED decimal:1099511627776.00
+decimal(18,2)	int:-1	STORED decimal:-1.00
+decimal(18,2)	ulong:max	REFUSED InvalidOperationException (names the column)
+decimal(18,2)	float	STORED decimal:1.50
+decimal(18,2)	double	STORED decimal:1.50
+decimal(18,2)	decimal	STORED decimal:1.50
+decimal(18,2)	decimal:fraction	STORED decimal:1.24
+decimal(18,2)	double:NaN	REFUSED InvalidOperationException (names the column and value type)
+decimal(18,2)	double:Infinity	REFUSED InvalidOperationException (names the column and value type)
+decimal(18,2)	decimal:18digits	REFUSED InvalidOperationException (names the column and value type)
+decimal(18,2)	char	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	string	REFUSED InvalidOperationException (names the column and value type)
+decimal(18,2)	string:1	STORED decimal:1.00
+decimal(18,2)	string:1.5	STORED decimal:1.50
+decimal(18,2)	string:true	REFUSED InvalidOperationException (names the column and value type)
+decimal(18,2)	string:date	REFUSED InvalidOperationException (names the column and value type)
+decimal(18,2)	string:datetime	REFUSED InvalidOperationException (names the column and value type)
+decimal(18,2)	string:time	REFUSED InvalidOperationException (names the column and value type)
+decimal(18,2)	string:guid	REFUSED InvalidOperationException (names the column and value type)
+decimal(18,2)	string:json	REFUSED InvalidOperationException (names the column and value type)
+decimal(18,2)	string:xml	REFUSED InvalidOperationException (names the column and value type)
+decimal(18,2)	string:NUL	REFUSED InvalidOperationException (names the column and value type)
+decimal(18,2)	string:60chars	REFUSED InvalidOperationException (names the column and value type)
+decimal(18,2)	string:non-BMP	REFUSED InvalidOperationException (names the column and value type)
+decimal(18,2)	byte[]	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	byte[]:16	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	Guid	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	DateTime	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	DateTime:midnight	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	DateTime:1500	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	DateOnly	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	TimeOnly	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	TimeSpan	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	Stream	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	int[]	REFUSED StagingValueException (names the column and value type)
+decimal(18,2)	List<int>	REFUSED StagingValueException (names the column and value type)
+real	bool	STORED float:1
+real	sbyte	STORED float:1
+real	byte	STORED float:1
+real	short	STORED float:1
+real	ushort	STORED float:1
+real	int	STORED float:1
+real	uint	STORED float:1
+real	long	STORED float:1
+real	ulong	STORED float:1
+real	BigInteger	REFUSED StagingValueException (names the column and value type)
+real	int:300	STORED float:300
+real	long:2^40	STORED float:1.0995116E+12
+real	int:-1	STORED float:-1
+real	ulong:max	STORED float:1.8446744E+19
+real	float	STORED float:1.5
+real	double	STORED float:1.5
+real	decimal	STORED float:1.5
+real	decimal:fraction	STORED float:1.239
+real	double:NaN	REFUSED SqlException (names the column)
+real	double:Infinity	REFUSED SqlException (names the column)
+real	decimal:18digits	STORED float:1.2345678E+16
+real	char	REFUSED StagingValueException (names the column and value type)
+real	string	REFUSED InvalidOperationException (names the column and value type)
+real	string:1	STORED float:1
+real	string:1.5	STORED float:1.5
+real	string:true	REFUSED InvalidOperationException (names the column and value type)
+real	string:date	REFUSED InvalidOperationException (names the column and value type)
+real	string:datetime	REFUSED InvalidOperationException (names the column and value type)
+real	string:time	REFUSED InvalidOperationException (names the column and value type)
+real	string:guid	REFUSED InvalidOperationException (names the column and value type)
+real	string:json	REFUSED InvalidOperationException (names the column and value type)
+real	string:xml	REFUSED InvalidOperationException (names the column and value type)
+real	string:NUL	REFUSED InvalidOperationException (names the column and value type)
+real	string:60chars	REFUSED InvalidOperationException (names the column and value type)
+real	string:non-BMP	REFUSED InvalidOperationException (names the column and value type)
+real	byte[]	REFUSED StagingValueException (names the column and value type)
+real	byte[]:16	REFUSED StagingValueException (names the column and value type)
+real	Guid	REFUSED StagingValueException (names the column and value type)
+real	DateTime	REFUSED StagingValueException (names the column and value type)
+real	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
+real	DateTime:midnight	REFUSED StagingValueException (names the column and value type)
+real	DateTime:1500	REFUSED StagingValueException (names the column and value type)
+real	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+real	DateOnly	REFUSED StagingValueException (names the column and value type)
+real	TimeOnly	REFUSED StagingValueException (names the column and value type)
+real	TimeSpan	REFUSED StagingValueException (names the column and value type)
+real	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+real	Stream	REFUSED StagingValueException (names the column and value type)
+real	int[]	REFUSED StagingValueException (names the column and value type)
+real	List<int>	REFUSED StagingValueException (names the column and value type)
+float	bool	STORED double:1
+float	sbyte	STORED double:1
+float	byte	STORED double:1
+float	short	STORED double:1
+float	ushort	STORED double:1
+float	int	STORED double:1
+float	uint	STORED double:1
+float	long	STORED double:1
+float	ulong	STORED double:1
+float	BigInteger	REFUSED StagingValueException (names the column and value type)
+float	int:300	STORED double:300
+float	long:2^40	STORED double:1099511627776
+float	int:-1	STORED double:-1
+float	ulong:max	STORED double:1.8446744073709552E+19
+float	float	STORED double:1.5
+float	double	STORED double:1.5
+float	decimal	STORED double:1.5
+float	decimal:fraction	STORED double:1.239
+float	double:NaN	REFUSED SqlException (names the column)
+float	double:Infinity	REFUSED SqlException (names the column)
+float	decimal:18digits	STORED double:12345678901234568
+float	char	REFUSED StagingValueException (names the column and value type)
+float	string	REFUSED InvalidOperationException (names the column and value type)
+float	string:1	STORED double:1
+float	string:1.5	STORED double:1.5
+float	string:true	REFUSED InvalidOperationException (names the column and value type)
+float	string:date	REFUSED InvalidOperationException (names the column and value type)
+float	string:datetime	REFUSED InvalidOperationException (names the column and value type)
+float	string:time	REFUSED InvalidOperationException (names the column and value type)
+float	string:guid	REFUSED InvalidOperationException (names the column and value type)
+float	string:json	REFUSED InvalidOperationException (names the column and value type)
+float	string:xml	REFUSED InvalidOperationException (names the column and value type)
+float	string:NUL	REFUSED InvalidOperationException (names the column and value type)
+float	string:60chars	REFUSED InvalidOperationException (names the column and value type)
+float	string:non-BMP	REFUSED InvalidOperationException (names the column and value type)
+float	byte[]	REFUSED StagingValueException (names the column and value type)
+float	byte[]:16	REFUSED StagingValueException (names the column and value type)
+float	Guid	REFUSED StagingValueException (names the column and value type)
+float	DateTime	REFUSED StagingValueException (names the column and value type)
+float	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
+float	DateTime:midnight	REFUSED StagingValueException (names the column and value type)
+float	DateTime:1500	REFUSED StagingValueException (names the column and value type)
+float	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+float	DateOnly	REFUSED StagingValueException (names the column and value type)
+float	TimeOnly	REFUSED StagingValueException (names the column and value type)
+float	TimeSpan	REFUSED StagingValueException (names the column and value type)
+float	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+float	Stream	REFUSED StagingValueException (names the column and value type)
+float	int[]	REFUSED StagingValueException (names the column and value type)
+float	List<int>	REFUSED StagingValueException (names the column and value type)
+money	bool	STORED decimal:1.0000
+money	sbyte	STORED decimal:1.0000
+money	byte	STORED decimal:1.0000
+money	short	STORED decimal:1.0000
+money	ushort	STORED decimal:1.0000
+money	int	STORED decimal:1.0000
+money	uint	STORED decimal:1.0000
+money	long	STORED decimal:1.0000
+money	ulong	STORED decimal:1.0000
+money	BigInteger	REFUSED StagingValueException (names the column and value type)
+money	int:300	STORED decimal:300.0000
+money	long:2^40	STORED decimal:1099511627776.0000
+money	int:-1	STORED decimal:-1.0000
+money	ulong:max	REFUSED OverflowException
+money	float	STORED decimal:1.5000
+money	double	STORED decimal:1.5000
+money	decimal	STORED decimal:1.5000
+money	decimal:fraction	STORED decimal:1.2390
+money	double:NaN	REFUSED InvalidOperationException (names the column and value type)
+money	double:Infinity	REFUSED InvalidOperationException (names the column and value type)
+money	decimal:18digits	REFUSED OverflowException
+money	char	REFUSED StagingValueException (names the column and value type)
+money	string	REFUSED InvalidOperationException (names the column and value type)
+money	string:1	STORED decimal:1.0000
+money	string:1.5	STORED decimal:1.5000
+money	string:true	REFUSED InvalidOperationException (names the column and value type)
+money	string:date	REFUSED InvalidOperationException (names the column and value type)
+money	string:datetime	REFUSED InvalidOperationException (names the column and value type)
+money	string:time	REFUSED InvalidOperationException (names the column and value type)
+money	string:guid	REFUSED InvalidOperationException (names the column and value type)
+money	string:json	REFUSED InvalidOperationException (names the column and value type)
+money	string:xml	REFUSED InvalidOperationException (names the column and value type)
+money	string:NUL	REFUSED InvalidOperationException (names the column and value type)
+money	string:60chars	REFUSED InvalidOperationException (names the column and value type)
+money	string:non-BMP	REFUSED InvalidOperationException (names the column and value type)
+money	byte[]	REFUSED StagingValueException (names the column and value type)
+money	byte[]:16	REFUSED StagingValueException (names the column and value type)
+money	Guid	REFUSED StagingValueException (names the column and value type)
+money	DateTime	REFUSED StagingValueException (names the column and value type)
+money	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
+money	DateTime:midnight	REFUSED StagingValueException (names the column and value type)
+money	DateTime:1500	REFUSED StagingValueException (names the column and value type)
+money	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+money	DateOnly	REFUSED StagingValueException (names the column and value type)
+money	TimeOnly	REFUSED StagingValueException (names the column and value type)
+money	TimeSpan	REFUSED StagingValueException (names the column and value type)
+money	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+money	Stream	REFUSED StagingValueException (names the column and value type)
+money	int[]	REFUSED StagingValueException (names the column and value type)
+money	List<int>	REFUSED StagingValueException (names the column and value type)
+nvarchar(50)	bool	STORED string:True
+nvarchar(50)	sbyte	STORED string:1
+nvarchar(50)	byte	STORED string:1
+nvarchar(50)	short	STORED string:1
+nvarchar(50)	ushort	STORED string:1
+nvarchar(50)	int	STORED string:1
+nvarchar(50)	uint	STORED string:1
+nvarchar(50)	long	STORED string:1
+nvarchar(50)	ulong	STORED string:1
+nvarchar(50)	BigInteger	REFUSED StagingValueException (names the column and value type)
+nvarchar(50)	int:300	STORED string:300
+nvarchar(50)	long:2^40	STORED string:1099511627776
+nvarchar(50)	int:-1	STORED string:-1
+nvarchar(50)	ulong:max	STORED string:18446744073709551615
+nvarchar(50)	float	STORED string:1.5
+nvarchar(50)	double	STORED string:1.5
+nvarchar(50)	decimal	STORED string:1.5
+nvarchar(50)	decimal:fraction	STORED string:1.239
+nvarchar(50)	double:NaN	STORED string:NaN
+nvarchar(50)	double:Infinity	STORED string:Infinity
+nvarchar(50)	decimal:18digits	STORED string:12345678901234567.89
+nvarchar(50)	char	STORED string:a
+nvarchar(50)	string	STORED string:text
+nvarchar(50)	string:1	STORED string:1
+nvarchar(50)	string:1.5	STORED string:1.5
+nvarchar(50)	string:true	STORED string:true
+nvarchar(50)	string:date	STORED string:2024-03-17
+nvarchar(50)	string:datetime	STORED string:2024-03-17 09:41:22
+nvarchar(50)	string:time	STORED string:09:41:22
+nvarchar(50)	string:guid	STORED string:6f9619ff-8b86-d011-b42d-00c04fc964ff
+nvarchar(50)	string:json	STORED string:{"a":1}
+nvarchar(50)	string:xml	STORED string:<a>1</a>
+nvarchar(50)	string:NUL	STORED string:a\u0000b
+nvarchar(50)	string:60chars	REFUSED InvalidOperationException (names the column and value type)
+nvarchar(50)	string:non-BMP	STORED string:a\ud83d\ude00b
+nvarchar(50)	byte[]	REFUSED StagingValueException (names the column and value type)
+nvarchar(50)	byte[]:16	REFUSED StagingValueException (names the column and value type)
+nvarchar(50)	Guid	REFUSED StagingValueException (names the column and value type)
+nvarchar(50)	DateTime	STORED string:03/17/2024 09:41:22
+nvarchar(50)	DateTime:Utc	STORED string:03/17/2024 09:41:22
+nvarchar(50)	DateTime:midnight	STORED string:03/17/2024 00:00:00
+nvarchar(50)	DateTime:1500	STORED string:01/01/1500 00:00:00
+nvarchar(50)	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+nvarchar(50)	DateOnly	STORED string:03/17/2024 00:00:00
+nvarchar(50)	TimeOnly	REFUSED StagingValueException (names the column and value type)
+nvarchar(50)	TimeSpan	REFUSED StagingValueException (names the column and value type)
+nvarchar(50)	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+nvarchar(50)	Stream	REFUSED StagingValueException (names the column and value type)
+nvarchar(50)	int[]	REFUSED StagingValueException (names the column and value type)
+nvarchar(50)	List<int>	REFUSED StagingValueException (names the column and value type)
+nvarchar(5)	bool	STORED string:True
+nvarchar(5)	sbyte	STORED string:1
+nvarchar(5)	byte	STORED string:1
+nvarchar(5)	short	STORED string:1
+nvarchar(5)	ushort	STORED string:1
+nvarchar(5)	int	STORED string:1
+nvarchar(5)	uint	STORED string:1
+nvarchar(5)	long	STORED string:1
+nvarchar(5)	ulong	STORED string:1
+nvarchar(5)	BigInteger	REFUSED StagingValueException (names the column and value type)
+nvarchar(5)	int:300	STORED string:300
+nvarchar(5)	long:2^40	REFUSED InvalidOperationException (names the column)
+nvarchar(5)	int:-1	STORED string:-1
+nvarchar(5)	ulong:max	REFUSED InvalidOperationException (names the column)
+nvarchar(5)	float	STORED string:1.5
+nvarchar(5)	double	STORED string:1.5
+nvarchar(5)	decimal	STORED string:1.5
+nvarchar(5)	decimal:fraction	STORED string:1.239
+nvarchar(5)	double:NaN	STORED string:NaN
+nvarchar(5)	double:Infinity	REFUSED InvalidOperationException (names the column)
+nvarchar(5)	decimal:18digits	REFUSED InvalidOperationException (names the column)
+nvarchar(5)	char	STORED string:a
+nvarchar(5)	string	STORED string:text
+nvarchar(5)	string:1	STORED string:1
+nvarchar(5)	string:1.5	STORED string:1.5
+nvarchar(5)	string:true	STORED string:true
+nvarchar(5)	string:date	REFUSED InvalidOperationException (names the column and value type)
+nvarchar(5)	string:datetime	REFUSED InvalidOperationException (names the column and value type)
+nvarchar(5)	string:time	REFUSED InvalidOperationException (names the column and value type)
+nvarchar(5)	string:guid	REFUSED InvalidOperationException (names the column and value type)
+nvarchar(5)	string:json	REFUSED InvalidOperationException (names the column and value type)
+nvarchar(5)	string:xml	REFUSED InvalidOperationException (names the column and value type)
+nvarchar(5)	string:NUL	STORED string:a\u0000b
+nvarchar(5)	string:60chars	REFUSED InvalidOperationException (names the column and value type)
+nvarchar(5)	string:non-BMP	STORED string:a\ud83d\ude00b
+nvarchar(5)	byte[]	REFUSED StagingValueException (names the column and value type)
+nvarchar(5)	byte[]:16	REFUSED StagingValueException (names the column and value type)
+nvarchar(5)	Guid	REFUSED StagingValueException (names the column and value type)
+nvarchar(5)	DateTime	REFUSED InvalidOperationException (names the column)
+nvarchar(5)	DateTime:Utc	REFUSED InvalidOperationException (names the column)
+nvarchar(5)	DateTime:midnight	REFUSED InvalidOperationException (names the column)
+nvarchar(5)	DateTime:1500	REFUSED InvalidOperationException (names the column)
+nvarchar(5)	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+nvarchar(5)	DateOnly	REFUSED InvalidOperationException (names the column)
+nvarchar(5)	TimeOnly	REFUSED StagingValueException (names the column and value type)
+nvarchar(5)	TimeSpan	REFUSED StagingValueException (names the column and value type)
+nvarchar(5)	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+nvarchar(5)	Stream	REFUSED StagingValueException (names the column and value type)
+nvarchar(5)	int[]	REFUSED StagingValueException (names the column and value type)
+nvarchar(5)	List<int>	REFUSED StagingValueException (names the column and value type)
+varchar(50)	bool	STORED string:True
+varchar(50)	sbyte	STORED string:1
+varchar(50)	byte	STORED string:1
+varchar(50)	short	STORED string:1
+varchar(50)	ushort	STORED string:1
+varchar(50)	int	STORED string:1
+varchar(50)	uint	STORED string:1
+varchar(50)	long	STORED string:1
+varchar(50)	ulong	STORED string:1
+varchar(50)	BigInteger	REFUSED StagingValueException (names the column and value type)
+varchar(50)	int:300	STORED string:300
+varchar(50)	long:2^40	STORED string:1099511627776
+varchar(50)	int:-1	STORED string:-1
+varchar(50)	ulong:max	STORED string:18446744073709551615
+varchar(50)	float	STORED string:1.5
+varchar(50)	double	STORED string:1.5
+varchar(50)	decimal	STORED string:1.5
+varchar(50)	decimal:fraction	STORED string:1.239
+varchar(50)	double:NaN	STORED string:NaN
+varchar(50)	double:Infinity	STORED string:Infinity
+varchar(50)	decimal:18digits	STORED string:12345678901234567.89
+varchar(50)	char	STORED string:a
+varchar(50)	string	STORED string:text
+varchar(50)	string:1	STORED string:1
+varchar(50)	string:1.5	STORED string:1.5
+varchar(50)	string:true	STORED string:true
+varchar(50)	string:date	STORED string:2024-03-17
+varchar(50)	string:datetime	STORED string:2024-03-17 09:41:22
+varchar(50)	string:time	STORED string:09:41:22
+varchar(50)	string:guid	STORED string:6f9619ff-8b86-d011-b42d-00c04fc964ff
+varchar(50)	string:json	STORED string:{"a":1}
+varchar(50)	string:xml	STORED string:<a>1</a>
+varchar(50)	string:NUL	STORED string:a\u0000b
+varchar(50)	string:60chars	REFUSED SqlException
+varchar(50)	string:non-BMP	STORED string:a??b
+varchar(50)	byte[]	REFUSED StagingValueException (names the column and value type)
+varchar(50)	byte[]:16	REFUSED StagingValueException (names the column and value type)
+varchar(50)	Guid	REFUSED StagingValueException (names the column and value type)
+varchar(50)	DateTime	STORED string:03/17/2024 09:41:22
+varchar(50)	DateTime:Utc	STORED string:03/17/2024 09:41:22
+varchar(50)	DateTime:midnight	STORED string:03/17/2024 00:00:00
+varchar(50)	DateTime:1500	STORED string:01/01/1500 00:00:00
+varchar(50)	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+varchar(50)	DateOnly	STORED string:03/17/2024 00:00:00
+varchar(50)	TimeOnly	REFUSED StagingValueException (names the column and value type)
+varchar(50)	TimeSpan	REFUSED StagingValueException (names the column and value type)
+varchar(50)	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+varchar(50)	Stream	REFUSED StagingValueException (names the column and value type)
+varchar(50)	int[]	REFUSED StagingValueException (names the column and value type)
+varchar(50)	List<int>	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	bool	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	sbyte	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	byte	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	short	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	ushort	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	int	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	uint	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	long	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	ulong	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	BigInteger	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	int:300	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	long:2^40	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	int:-1	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	ulong:max	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	float	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	double	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	decimal	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	decimal:fraction	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	double:NaN	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	double:Infinity	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	decimal:18digits	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	char	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	string	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	string:1	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	string:1.5	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	string:true	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	string:date	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	string:datetime	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	string:time	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	string:guid	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	string:json	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	string:xml	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	string:NUL	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	string:60chars	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	string:non-BMP	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	byte[]	STORED byte[]:010203
+varbinary(50)	byte[]:16	STORED byte[]:FF19966F868B11D0B42D00C04FC964FF
+varbinary(50)	Guid	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	DateTime	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	DateTime:midnight	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	DateTime:1500	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	DateOnly	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	TimeOnly	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	TimeSpan	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	Stream	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	int[]	REFUSED StagingValueException (names the column and value type)
+varbinary(50)	List<int>	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	bool	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	sbyte	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	byte	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	short	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	ushort	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	int	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	uint	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	long	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	ulong	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	BigInteger	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	int:300	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	long:2^40	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	int:-1	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	ulong:max	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	float	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	double	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	decimal	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	decimal:fraction	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	double:NaN	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	double:Infinity	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	decimal:18digits	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	char	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	string	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	string:1	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	string:1.5	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	string:true	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	string:date	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	string:datetime	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	string:time	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	string:guid	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	string:json	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	string:xml	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	string:NUL	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	string:60chars	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	string:non-BMP	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	byte[]	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	byte[]:16	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	Guid	STORED Guid:6f9619ff-8b86-d011-b42d-00c04fc964ff
+uniqueidentifier	DateTime	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	DateTime:midnight	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	DateTime:1500	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	DateOnly	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	TimeOnly	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	TimeSpan	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	Stream	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	int[]	REFUSED StagingValueException (names the column and value type)
+uniqueidentifier	List<int>	REFUSED StagingValueException (names the column and value type)
+date	bool	REFUSED StagingValueException (names the column and value type)
+date	sbyte	REFUSED StagingValueException (names the column and value type)
+date	byte	REFUSED StagingValueException (names the column and value type)
+date	short	REFUSED StagingValueException (names the column and value type)
+date	ushort	REFUSED StagingValueException (names the column and value type)
+date	int	REFUSED StagingValueException (names the column and value type)
+date	uint	REFUSED StagingValueException (names the column and value type)
+date	long	REFUSED StagingValueException (names the column and value type)
+date	ulong	REFUSED StagingValueException (names the column and value type)
+date	BigInteger	REFUSED StagingValueException (names the column and value type)
+date	int:300	REFUSED StagingValueException (names the column and value type)
+date	long:2^40	REFUSED StagingValueException (names the column and value type)
+date	int:-1	REFUSED StagingValueException (names the column and value type)
+date	ulong:max	REFUSED StagingValueException (names the column and value type)
+date	float	REFUSED StagingValueException (names the column and value type)
+date	double	REFUSED StagingValueException (names the column and value type)
+date	decimal	REFUSED StagingValueException (names the column and value type)
+date	decimal:fraction	REFUSED StagingValueException (names the column and value type)
+date	double:NaN	REFUSED StagingValueException (names the column and value type)
+date	double:Infinity	REFUSED StagingValueException (names the column and value type)
+date	decimal:18digits	REFUSED StagingValueException (names the column and value type)
+date	char	REFUSED StagingValueException (names the column and value type)
+date	string	REFUSED InvalidOperationException (names the column and value type)
+date	string:1	REFUSED InvalidOperationException (names the column and value type)
+date	string:1.5	STORED DateTime:2026-01-05T00:00:00.0000000
+date	string:true	REFUSED InvalidOperationException (names the column and value type)
+date	string:date	STORED DateTime:2024-03-17T00:00:00.0000000
+date	string:datetime	STORED DateTime:2024-03-17T00:00:00.0000000
+date	string:time	STORED DateTime:2026-10-28T00:00:00.0000000
+date	string:guid	REFUSED InvalidOperationException (names the column and value type)
+date	string:json	REFUSED InvalidOperationException (names the column and value type)
+date	string:xml	REFUSED InvalidOperationException (names the column and value type)
+date	string:NUL	REFUSED InvalidOperationException (names the column and value type)
+date	string:60chars	REFUSED InvalidOperationException (names the column and value type)
+date	string:non-BMP	REFUSED InvalidOperationException (names the column and value type)
+date	byte[]	REFUSED StagingValueException (names the column and value type)
+date	byte[]:16	REFUSED StagingValueException (names the column and value type)
+date	Guid	REFUSED StagingValueException (names the column and value type)
+date	DateTime	STORED DateTime:2024-03-17T00:00:00.0000000
+date	DateTime:Utc	STORED DateTime:2024-03-17T00:00:00.0000000
+date	DateTime:midnight	STORED DateTime:2024-03-17T00:00:00.0000000
+date	DateTime:1500	STORED DateTime:1500-01-01T00:00:00.0000000
+date	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+date	DateOnly	STORED DateTime:2024-03-17T00:00:00.0000000
+date	TimeOnly	REFUSED StagingValueException (names the column and value type)
+date	TimeSpan	REFUSED StagingValueException (names the column and value type)
+date	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+date	Stream	REFUSED StagingValueException (names the column and value type)
+date	int[]	REFUSED StagingValueException (names the column and value type)
+date	List<int>	REFUSED StagingValueException (names the column and value type)
+time(7)	bool	REFUSED StagingValueException (names the column and value type)
+time(7)	sbyte	REFUSED StagingValueException (names the column and value type)
+time(7)	byte	REFUSED StagingValueException (names the column and value type)
+time(7)	short	REFUSED StagingValueException (names the column and value type)
+time(7)	ushort	REFUSED StagingValueException (names the column and value type)
+time(7)	int	REFUSED StagingValueException (names the column and value type)
+time(7)	uint	REFUSED StagingValueException (names the column and value type)
+time(7)	long	REFUSED StagingValueException (names the column and value type)
+time(7)	ulong	REFUSED StagingValueException (names the column and value type)
+time(7)	BigInteger	REFUSED StagingValueException (names the column and value type)
+time(7)	int:300	REFUSED StagingValueException (names the column and value type)
+time(7)	long:2^40	REFUSED StagingValueException (names the column and value type)
+time(7)	int:-1	REFUSED StagingValueException (names the column and value type)
+time(7)	ulong:max	REFUSED StagingValueException (names the column and value type)
+time(7)	float	REFUSED StagingValueException (names the column and value type)
+time(7)	double	REFUSED StagingValueException (names the column and value type)
+time(7)	decimal	REFUSED StagingValueException (names the column and value type)
+time(7)	decimal:fraction	REFUSED StagingValueException (names the column and value type)
+time(7)	double:NaN	REFUSED StagingValueException (names the column and value type)
+time(7)	double:Infinity	REFUSED StagingValueException (names the column and value type)
+time(7)	decimal:18digits	REFUSED StagingValueException (names the column and value type)
+time(7)	char	REFUSED StagingValueException (names the column and value type)
+time(7)	string	REFUSED InvalidOperationException (names the column and value type)
+time(7)	string:1	REFUSED OverflowException
+time(7)	string:1.5	REFUSED InvalidOperationException (names the column and value type)
+time(7)	string:true	REFUSED InvalidOperationException (names the column and value type)
+time(7)	string:date	REFUSED InvalidOperationException (names the column and value type)
+time(7)	string:datetime	REFUSED InvalidOperationException (names the column and value type)
+time(7)	string:time	STORED TimeSpan:09:41:22
+time(7)	string:guid	REFUSED InvalidOperationException (names the column and value type)
+time(7)	string:json	REFUSED InvalidOperationException (names the column and value type)
+time(7)	string:xml	REFUSED InvalidOperationException (names the column and value type)
+time(7)	string:NUL	REFUSED InvalidOperationException (names the column and value type)
+time(7)	string:60chars	REFUSED InvalidOperationException (names the column and value type)
+time(7)	string:non-BMP	REFUSED InvalidOperationException (names the column and value type)
+time(7)	byte[]	REFUSED StagingValueException (names the column and value type)
+time(7)	byte[]:16	REFUSED StagingValueException (names the column and value type)
+time(7)	Guid	REFUSED StagingValueException (names the column and value type)
+time(7)	DateTime	REFUSED StagingValueException (names the column and value type)
+time(7)	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
+time(7)	DateTime:midnight	REFUSED StagingValueException (names the column and value type)
+time(7)	DateTime:1500	REFUSED StagingValueException (names the column and value type)
+time(7)	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+time(7)	DateOnly	REFUSED StagingValueException (names the column and value type)
+time(7)	TimeOnly	STORED TimeSpan:09:41:22.1230000
+time(7)	TimeSpan	STORED TimeSpan:09:41:22
+time(7)	TimeSpan:3days	REFUSED OverflowException
+time(7)	Stream	REFUSED StagingValueException (names the column and value type)
+time(7)	int[]	REFUSED StagingValueException (names the column and value type)
+time(7)	List<int>	REFUSED StagingValueException (names the column and value type)
+datetime	bool	REFUSED StagingValueException (names the column and value type)
+datetime	sbyte	REFUSED StagingValueException (names the column and value type)
+datetime	byte	REFUSED StagingValueException (names the column and value type)
+datetime	short	REFUSED StagingValueException (names the column and value type)
+datetime	ushort	REFUSED StagingValueException (names the column and value type)
+datetime	int	REFUSED StagingValueException (names the column and value type)
+datetime	uint	REFUSED StagingValueException (names the column and value type)
+datetime	long	REFUSED StagingValueException (names the column and value type)
+datetime	ulong	REFUSED StagingValueException (names the column and value type)
+datetime	BigInteger	REFUSED StagingValueException (names the column and value type)
+datetime	int:300	REFUSED StagingValueException (names the column and value type)
+datetime	long:2^40	REFUSED StagingValueException (names the column and value type)
+datetime	int:-1	REFUSED StagingValueException (names the column and value type)
+datetime	ulong:max	REFUSED StagingValueException (names the column and value type)
+datetime	float	REFUSED StagingValueException (names the column and value type)
+datetime	double	REFUSED StagingValueException (names the column and value type)
+datetime	decimal	REFUSED StagingValueException (names the column and value type)
+datetime	decimal:fraction	REFUSED StagingValueException (names the column and value type)
+datetime	double:NaN	REFUSED StagingValueException (names the column and value type)
+datetime	double:Infinity	REFUSED StagingValueException (names the column and value type)
+datetime	decimal:18digits	REFUSED StagingValueException (names the column and value type)
+datetime	char	REFUSED StagingValueException (names the column and value type)
+datetime	string	REFUSED InvalidOperationException (names the column and value type)
+datetime	string:1	REFUSED InvalidOperationException (names the column and value type)
+datetime	string:1.5	STORED DateTime:2026-01-05T00:00:00.0000000
+datetime	string:true	REFUSED InvalidOperationException (names the column and value type)
+datetime	string:date	STORED DateTime:2024-03-17T00:00:00.0000000
+datetime	string:datetime	STORED DateTime:2024-03-17T09:41:22.0000000
+datetime	string:time	STORED DateTime:2026-10-28T09:41:22.0000000
+datetime	string:guid	REFUSED InvalidOperationException (names the column and value type)
+datetime	string:json	REFUSED InvalidOperationException (names the column and value type)
+datetime	string:xml	REFUSED InvalidOperationException (names the column and value type)
+datetime	string:NUL	REFUSED InvalidOperationException (names the column and value type)
+datetime	string:60chars	REFUSED InvalidOperationException (names the column and value type)
+datetime	string:non-BMP	REFUSED InvalidOperationException (names the column and value type)
+datetime	byte[]	REFUSED StagingValueException (names the column and value type)
+datetime	byte[]:16	REFUSED StagingValueException (names the column and value type)
+datetime	Guid	REFUSED StagingValueException (names the column and value type)
+datetime	DateTime	STORED DateTime:2024-03-17T09:41:22.1230000
+datetime	DateTime:Utc	STORED DateTime:2024-03-17T09:41:22.0000000
+datetime	DateTime:midnight	STORED DateTime:2024-03-17T00:00:00.0000000
+datetime	DateTime:1500	REFUSED SqlTypeException (names the value type)
+datetime	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+datetime	DateOnly	STORED DateTime:2024-03-17T00:00:00.0000000
+datetime	TimeOnly	REFUSED StagingValueException (names the column and value type)
+datetime	TimeSpan	REFUSED StagingValueException (names the column and value type)
+datetime	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+datetime	Stream	REFUSED StagingValueException (names the column and value type)
+datetime	int[]	REFUSED StagingValueException (names the column and value type)
+datetime	List<int>	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	bool	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	sbyte	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	byte	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	short	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	ushort	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	int	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	uint	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	long	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	ulong	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	BigInteger	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	int:300	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	long:2^40	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	int:-1	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	ulong:max	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	float	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	double	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	decimal	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	decimal:fraction	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	double:NaN	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	double:Infinity	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	decimal:18digits	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	char	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	string	REFUSED InvalidOperationException (names the column and value type)
+datetime2(7)	string:1	REFUSED InvalidOperationException (names the column and value type)
+datetime2(7)	string:1.5	STORED DateTime:2026-01-05T00:00:00.0000000
+datetime2(7)	string:true	REFUSED InvalidOperationException (names the column and value type)
+datetime2(7)	string:date	STORED DateTime:2024-03-17T00:00:00.0000000
+datetime2(7)	string:datetime	STORED DateTime:2024-03-17T09:41:22.0000000
+datetime2(7)	string:time	STORED DateTime:2026-10-28T09:41:22.0000000
+datetime2(7)	string:guid	REFUSED InvalidOperationException (names the column and value type)
+datetime2(7)	string:json	REFUSED InvalidOperationException (names the column and value type)
+datetime2(7)	string:xml	REFUSED InvalidOperationException (names the column and value type)
+datetime2(7)	string:NUL	REFUSED InvalidOperationException (names the column and value type)
+datetime2(7)	string:60chars	REFUSED InvalidOperationException (names the column and value type)
+datetime2(7)	string:non-BMP	REFUSED InvalidOperationException (names the column and value type)
+datetime2(7)	byte[]	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	byte[]:16	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	Guid	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	DateTime	STORED DateTime:2024-03-17T09:41:22.1234567
+datetime2(7)	DateTime:Utc	STORED DateTime:2024-03-17T09:41:22.0000000
+datetime2(7)	DateTime:midnight	STORED DateTime:2024-03-17T00:00:00.0000000
+datetime2(7)	DateTime:1500	STORED DateTime:1500-01-01T00:00:00.0000000
+datetime2(7)	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	DateOnly	STORED DateTime:2024-03-17T00:00:00.0000000
+datetime2(7)	TimeOnly	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	TimeSpan	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	Stream	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	int[]	REFUSED StagingValueException (names the column and value type)
+datetime2(7)	List<int>	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	bool	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	sbyte	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	byte	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	short	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	ushort	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	int	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	uint	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	long	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	ulong	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	BigInteger	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	int:300	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	long:2^40	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	int:-1	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	ulong:max	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	float	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	double	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	decimal	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	decimal:fraction	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	double:NaN	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	double:Infinity	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	decimal:18digits	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	char	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	string	REFUSED InvalidOperationException (names the column and value type)
+datetimeoffset(7)	string:1	REFUSED InvalidOperationException (names the column and value type)
+datetimeoffset(7)	string:1.5	STORED DateTimeOffset:2026-01-05T00:00:00.0000000+00:00
+datetimeoffset(7)	string:true	REFUSED InvalidOperationException (names the column and value type)
+datetimeoffset(7)	string:date	STORED DateTimeOffset:2024-03-17T00:00:00.0000000+00:00
+datetimeoffset(7)	string:datetime	STORED DateTimeOffset:2024-03-17T09:41:22.0000000+00:00
+datetimeoffset(7)	string:time	STORED DateTimeOffset:2026-10-28T09:41:22.0000000+00:00
+datetimeoffset(7)	string:guid	REFUSED InvalidOperationException (names the column and value type)
+datetimeoffset(7)	string:json	REFUSED InvalidOperationException (names the column and value type)
+datetimeoffset(7)	string:xml	REFUSED InvalidOperationException (names the column and value type)
+datetimeoffset(7)	string:NUL	REFUSED InvalidOperationException (names the column and value type)
+datetimeoffset(7)	string:60chars	REFUSED InvalidOperationException (names the column and value type)
+datetimeoffset(7)	string:non-BMP	REFUSED InvalidOperationException (names the column and value type)
+datetimeoffset(7)	byte[]	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	byte[]:16	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	Guid	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	DateTime	STORED DateTimeOffset:2024-03-17T09:41:22.1234567+00:00
+datetimeoffset(7)	DateTime:Utc	STORED DateTimeOffset:2024-03-17T09:41:22.0000000+00:00
+datetimeoffset(7)	DateTime:midnight	STORED DateTimeOffset:2024-03-17T00:00:00.0000000+00:00
+datetimeoffset(7)	DateTime:1500	STORED DateTimeOffset:1500-01-01T00:00:00.0000000+00:00
+datetimeoffset(7)	DateTimeOffset	STORED DateTimeOffset:2024-03-17T09:41:22.0000000+02:00
+datetimeoffset(7)	DateOnly	STORED DateTimeOffset:2024-03-17T00:00:00.0000000+00:00
+datetimeoffset(7)	TimeOnly	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	TimeSpan	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	Stream	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	int[]	REFUSED StagingValueException (names the column and value type)
+datetimeoffset(7)	List<int>	REFUSED StagingValueException (names the column and value type)
+xml	bool	REFUSED StagingValueException (names the column and value type)
+xml	sbyte	REFUSED StagingValueException (names the column and value type)
+xml	byte	REFUSED StagingValueException (names the column and value type)
+xml	short	REFUSED StagingValueException (names the column and value type)
+xml	ushort	REFUSED StagingValueException (names the column and value type)
+xml	int	REFUSED StagingValueException (names the column and value type)
+xml	uint	REFUSED StagingValueException (names the column and value type)
+xml	long	REFUSED StagingValueException (names the column and value type)
+xml	ulong	REFUSED StagingValueException (names the column and value type)
+xml	BigInteger	REFUSED StagingValueException (names the column and value type)
+xml	int:300	REFUSED StagingValueException (names the column and value type)
+xml	long:2^40	REFUSED StagingValueException (names the column and value type)
+xml	int:-1	REFUSED StagingValueException (names the column and value type)
+xml	ulong:max	REFUSED StagingValueException (names the column and value type)
+xml	float	REFUSED StagingValueException (names the column and value type)
+xml	double	REFUSED StagingValueException (names the column and value type)
+xml	decimal	REFUSED StagingValueException (names the column and value type)
+xml	decimal:fraction	REFUSED StagingValueException (names the column and value type)
+xml	double:NaN	REFUSED StagingValueException (names the column and value type)
+xml	double:Infinity	REFUSED StagingValueException (names the column and value type)
+xml	decimal:18digits	REFUSED StagingValueException (names the column and value type)
+xml	char	REFUSED StagingValueException (names the column and value type)
+xml	string	STORED string:text
+xml	string:1	STORED string:1
+xml	string:1.5	STORED string:1.5
+xml	string:true	STORED string:true
+xml	string:date	STORED string:2024-03-17
+xml	string:datetime	STORED string:2024-03-17 09:41:22
+xml	string:time	STORED string:09:41:22
+xml	string:guid	STORED string:6f9619ff-8b86-d011-b42d-00c04fc964ff
+xml	string:json	STORED string:{"a":1}
+xml	string:xml	STORED string:<a>1</a>
+xml	string:NUL	REFUSED SqlException
+xml	string:60chars	STORED string:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xml	string:non-BMP	STORED string:a\ud83d\ude00b
+xml	byte[]	REFUSED StagingValueException (names the column and value type)
+xml	byte[]:16	REFUSED StagingValueException (names the column and value type)
+xml	Guid	REFUSED StagingValueException (names the column and value type)
+xml	DateTime	REFUSED StagingValueException (names the column and value type)
+xml	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
+xml	DateTime:midnight	REFUSED StagingValueException (names the column and value type)
+xml	DateTime:1500	REFUSED StagingValueException (names the column and value type)
+xml	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
+xml	DateOnly	REFUSED StagingValueException (names the column and value type)
+xml	TimeOnly	REFUSED StagingValueException (names the column and value type)
+xml	TimeSpan	REFUSED StagingValueException (names the column and value type)
+xml	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
+xml	Stream	REFUSED StagingValueException (names the column and value type)
+xml	int[]	REFUSED StagingValueException (names the column and value type)
+xml	List<int>	REFUSED StagingValueException (names the column and value type)

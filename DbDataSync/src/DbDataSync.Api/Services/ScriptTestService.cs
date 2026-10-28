@@ -104,9 +104,13 @@ public sealed record ScriptTestRequest(
 public sealed class ScriptTestService(
     ConfigRepository configRepository,
     ScriptCompiler compiler,
-    DriverConnectionFactory connections,
-    MetadataService metadataService)
+    DriverConnectionFactory? connectionFactory = null,
+    MetadataService? metadataFactory = null)
 {
+    // Null for a test that touches no system (the command line's generated-input test); a live test, or a mapping's own connection, needs them.
+    private DriverConnectionFactory connections => connectionFactory ?? throw new InvalidOperationException("This test needs a connection, and none is available here.");
+    private MetadataService metadataService => metadataFactory ?? throw new InvalidOperationException("This test needs a connection's metadata, and none is available here.");
+
     private const int MaxLiveRows = 20;
 
     public async Task<ScriptTestResult> RunAsync(ScriptTestRequest request, CancellationToken cancellationToken)

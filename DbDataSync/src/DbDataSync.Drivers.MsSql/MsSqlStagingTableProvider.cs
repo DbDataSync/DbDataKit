@@ -75,7 +75,7 @@ public sealed class MsSqlStagingTableProvider : IStagingProvider, IStatementPrev
         }
 
         var rowCount = await BulkCopyAsync(
-            targetConnection, stagingTable, mappedTargetColumns, typeByName, columnMappings, effectiveRows, hasChangeOrdering, cancellationToken);
+            targetConnection, stagingTable, target, mappedTargetColumns, typeByName, columnMappings, effectiveRows, hasChangeOrdering, cancellationToken);
 
         return new StagedChangeSet(stagingTable, rowCount, hasChangeOrdering);
     }
@@ -155,6 +155,7 @@ public sealed class MsSqlStagingTableProvider : IStagingProvider, IStatementPrev
     private static async Task<long> BulkCopyAsync(
         DbConnection targetConnection,
         string stagingTable,
+        TableRef target,
         IReadOnlyList<string> mappedTargetColumns,
         IReadOnlyDictionary<string, string> typeByName,
         IReadOnlyList<ColumnMapping> columnMappings,
@@ -169,7 +170,8 @@ public sealed class MsSqlStagingTableProvider : IStagingProvider, IStatementPrev
         // reader's schema as in the staging table).
         var schema = StagingBatches.Schema(EngineId.SqlServer, mappedTargetColumns, typeByName, includeChangeOrdering, OperationColumn);
         var counter = new StagingBatches.Counter();
-        var batches = StagingBatches.Batch(rows, schema, mappedTargetColumns, sourceColumnByTarget, includeChangeOrdering, counter, cancellationToken);
+        var gate = StagingValueGate.For(EngineId.SqlServer, $"{target.Schema}.{target.Table}", mappedTargetColumns, typeByName, schema);
+        var batches = StagingBatches.Batch(rows, schema, mappedTargetColumns, sourceColumnByTarget, includeChangeOrdering, counter, gate, cancellationToken);
 
         var options = new BulkOptions
         {

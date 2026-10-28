@@ -109,6 +109,8 @@ public sealed partial class ServingFlightServer(ILoggerFactory loggerFactory, Fl
 
     protected override async Task PutStatementUpdate(CommandStatementUpdate command, FlightServerRecordBatchStreamReader requestStream, IAsyncStreamWriter<FlightPutResult> responseStream, ServerCallContext context)
     {
+        // The client's batch carries nothing for a plain update; it is read to the end first so a refusal does not end the call while the client is still writing (the client would see a cancelled write, not the status).
+        while (await requestStream.MoveNext(context.CancellationToken).ConfigureAwait(false)) { }
         long affected = await RunUpdateAsync(command.Query, context.RequestedSource(), context).ConfigureAwait(false);
         await responseStream.WriteAsync(new FlightPutResult(new DoPutUpdateResult { RecordCount = affected }.ToByteString())).ConfigureAwait(false);
     }
