@@ -20,16 +20,17 @@ public static class ProjectConnectionFiles
     public const string Folder = "connections";
 
     /// <summary>The keys of a file that Build reads. Any other key of `connection/1` is refused as not used by this tool; an unknown one is the shared loader's error.</summary>
-    private static readonly string[] Used = ["schema", "name", "engine", "dialect", "access", "extensions"];
+    private static readonly string[] Used = ["schema", "name", "engine", "dialect", "access", "tls", "extensions"];
 
     /// <summary>The connections read from the files (null when there is no folder or no file) and, for every node, the file it was read from.</summary>
-    public sealed record Loaded(YamlMapping? Connections, IReadOnlyDictionary<YamlNode, string> NodeFiles);
+    public sealed record Loaded(YamlMapping? Connections, IReadOnlyDictionary<YamlNode, string> NodeFiles, IReadOnlyDictionary<string, TlsSpec> Tls);
 
     public static Loaded Read(string projectRoot, List<Diagnostic> diags)
     {
         var folder = Path.Combine(projectRoot, Folder);
         var files = new Dictionary<YamlNode, string>(ReferenceEqualityComparer.Instance);
-        if (!Directory.Exists(folder)) return new(null, files);
+        var tls = new Dictionary<string, TlsSpec>(StringComparer.Ordinal);
+        if (!Directory.Exists(folder)) return new(null, files, tls);
         var entries = new List<YamlEntry>();
         foreach (var path in Directory.GetFiles(folder).OrderBy(p => p, StringComparer.Ordinal))
         {
@@ -42,13 +43,13 @@ public static class ProjectConnectionFiles
             string text;
             try { text = File.ReadAllText(path); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Report(diags, relative, 0, 0, "The file could not be read.", null); continue; }
-            if (ReadOne(text, relative, Path.GetFileNameWithoutExtension(path), diags, files) is { } entry) entries.Add(entry);
+            if (ReadOne(text, relative, Path.GetFileNameWithoutExtension(path), diags, files, tls) is { } entry) entries.Add(entry);
         }
-        return new(entries.Count == 0 ? null : Own(new YamlMapping(entries, 1, 1), null, files), files);
+        return new(entries.Count == 0 ? null : Own(new YamlMapping(entries, 1, 1), null, files), files, tls);
     }
 
     /// <summary>One file's text (for tests and for editors that hold the text): the entry the loader reads, or null with the problems in <paramref name="diags"/>.</summary>
-    public static YamlEntry? ReadOne(string text, string relative, string expectedName, List<Diagnostic> diags, IDictionary<YamlNode, string> files)
+    public static YamlEntry? ReadOne(string text, string relative, string expectedName, List<Diagnostic> diags, IDictionary<YamlNode, string> files, IDictionary<string, TlsSpec>? tls = null)
     {
         var before = diags.Count;
         var result = ConnectionDefinitionLoader.Load(text, relative, addressRequired: false);
@@ -65,7 +66,7 @@ public static class ProjectConnectionFiles
             Bad(root.Get("name") ?? root, $"The file is `{relative}` but `name` is `{definition.Name}`.", $"Name the file `{definition.Name}.yaml`, or set `name: {expectedName}`: the file name is the connection's name.");
         foreach (var e in root.Entries.Where(e => !Used.Contains(e.Key.Value)))
             Bad(e.Key, $"`{e.Key.Value}` is not used in a connection file of this tool.",
-                "A project's connection holds no address, login, TLS or timeout setting: the login is the environment variable `" + $"DBDATA_BUILD_{LoginEnvironment.Sanitize(definition.Name)}_<READ|WRITE>`, and the tool's own settings are under `extensions.build`.");
+                "A project's connection holds no address, login or timeout setting: the login is the environment variable `" + $"DBDATA_BUILD_{LoginEnvironment.Sanitize(definition.Name)}_<READ|WRITE>`, and the tool's own settings are under `extensions.build`.");
         if (root.Get("engine") is YamlScalar engine && engine.Value.Any(char.IsWhiteSpace))
             Bad(engine, "`engine` is the driver alone.", "Write `access: readonly` for a read-only connection and `dialect: <name>` for the SQL dialect, each on its own line.");
 
@@ -87,6 +88,8 @@ public static class ProjectConnectionFiles
         var settings = new List<YamlEntry> { new(new YamlScalar("engine", at.Line, 1), new YamlScalar(string.Join(' ', words), at.Line, at.Column)) };
         settings.AddRange(build?.Entries ?? []);
         var nameAt = root.Get("name") ?? root;
+        // how the login's connection is secured is the connection file's (encrypt, verify, trust_server_certificate, ca_file); a file with no `tls:` gets the shared default, which encrypts and verifies
+        if (root.Get("tls") is not null && tls is not null) tls[definition.Name] = definition.Tls;
         var entry = new YamlEntry(new YamlScalar(definition.Name, nameAt.Line, nameAt.Column), new YamlMapping(settings, nameAt.Line, 1));
         Own(entry.Key, relative, files); Own(entry.Value, relative, files);
         return entry;

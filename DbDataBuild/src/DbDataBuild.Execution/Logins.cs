@@ -5,6 +5,7 @@ using DbDataBuild.Models;
 using DuckDB.NET.Data;
 using Microsoft.Data.SqlClient;
 using Npgsql;
+using DbDataKit.Secrets;
 
 namespace DbDataBuild.Execution;
 
@@ -28,6 +29,15 @@ public sealed class LoginSettings
     public DialectProfile Dialect { get; private init; } = DialectProfiles.Ansi;
     public Login Login { get; }
     public string Variable { get; }
+
+    /// <summary>
+    /// How the connection is secured, from the connection file's `tls:` block; null is the shared default (encrypt, verify the certificate). It is applied over what the login's string says, so a string that turns encryption off or
+    /// trusts any certificate no longer does so by itself (plan 13, B02): the connection file says it, where a reader of the project can see it.
+    /// </summary>
+    public TlsSpec? Tls { get; private init; }
+
+    /// <summary>For tests of a harness whose engines have self-signed certificates: the TLS settings of a connection that has no `tls:` block. Null (always, in the product) is the shared default.</summary>
+    internal static TlsSpec? DefaultTls { get; set; }
     internal string ConnectionString { get; }
 
     private LoginSettings(string connection, string engine, Login login, string variable, string connectionString)
@@ -64,7 +74,7 @@ public sealed class LoginSettings
         var (settings, error) = FromEnvironment(connection.Name, connection.Engine, login, env);
         if (settings == null) return (null, error);
         var kind = connection.Kind;
-        return (settings.With(kind.ReadOnly, dialect ?? connection.Profile ?? DialectProfiles.BuiltIn.GetValueOrDefault(kind.Dialect) ?? DialectProfiles.Ansi), null);
+        return (settings.With(kind.ReadOnly, dialect ?? connection.Profile ?? DialectProfiles.BuiltIn.GetValueOrDefault(kind.Dialect) ?? DialectProfiles.Ansi, connection.Tls), null);
     }
 
     private static readonly HashSet<string> AddressKeys = new(StringComparer.OrdinalIgnoreCase)
@@ -81,7 +91,7 @@ public sealed class LoginSettings
             .Where(p => p.Split('=', 2) is [var key, _] && AddressKeys.Contains(key.Trim()))),
     };
 
-    private LoginSettings With(bool readOnly, DialectProfile dialect) => new(Connection, Engine, Login, Variable, ConnectionString) { ReadOnly = readOnly, Dialect = dialect };
+    private LoginSettings With(bool readOnly, DialectProfile dialect, TlsSpec? tls) => new(Connection, Engine, Login, Variable, ConnectionString) { ReadOnly = readOnly, Dialect = dialect, Tls = tls };
 
     /// <summary>Reads the read or write login of a connection by name: the project's own connection (with its dialect) when it has one, else the connection named after an engine.</summary>
     public static (LoginSettings? Settings, Diagnostic? Error) FromEnvironment(ProjectConfig project, string connection, Login login, Func<string, string?>? env = null) =>
@@ -154,16 +164,44 @@ public sealed class LoginSettings
     {
         if (Engine == "duckdb") return await OpenDuckDbAsync(ct);
         if (Engine == "odbc") return await OpenOdbcAsync(ct);
-        DbConnection c = Engine == "postgres"
-            ? new NpgsqlConnection(new NpgsqlConnectionStringBuilder(ConnectionString)
-            {
-                // a read login's session is also read-only at the session level (a second layer; the login's permissions are the real one)
-                Options = Login == Login.Read ? "-c default_transaction_read_only=on" : null,
-            }.ConnectionString)
-            : new SqlConnection(new SqlConnectionStringBuilder(ConnectionString) { ApplicationName = Login == Login.Read ? $"{ProductInfo.Cli}-read" : $"{ProductInfo.Cli}-write" }.ConnectionString);
-        await c.OpenAsync(ct);
+        // The connection string is composed by the engine's shared provider: the login's string with the connection file's TLS settings over it, and for a read login the session-level read-only recipe (a second layer; the login's
+        // permissions are the real one). The provider makes the connection; it is opened here so a failure reaches the tool's own failure sentences as the driver raised it.
+        var (provider, role, context, login) = Prepare();
+        using var _ = login;
+        var c = provider.Create(context);
+        try
+        {
+            await c.OpenAsync(ct);
+            if (Login == Login.Read) await provider.ReadOnly.ApplyAsync(c, ct);
+        }
+        catch { await c.DisposeAsync(); throw; }
         return c;
     }
+
+    private (IDbProvider Provider, LoginRole Role, ConnectionContext Context, ResolvedLogin Login) Prepare()
+    {
+        IDbProvider provider = Engine == "postgres" ? Postgres : SqlServer;
+        var role = Login == Login.Read ? LoginRole.Read : LoginRole.Write;
+        var definition = new ConnectionDefinition
+        {
+            Name = Connection, Engine = Engine == "postgres" ? "postgres" : "sqlserver", Access = ReadOnly ? AccessMode.Readonly : AccessMode.Readwrite,
+            Tls = Tls ?? DefaultTls ?? new TlsSpec(),
+            Properties = Engine == "postgres" ? [] : new() { ["Application Name"] = Login == Login.Read ? $"{ProductInfo.Cli}-read" : $"{ProductInfo.Cli}-write" },
+        };
+        var login = new ResolvedLogin(role, AuthMode.Sql, "env:" + Variable) { ConnectionString = SecretValue.From(ConnectionString) };
+        return (provider, role, new ConnectionContext { Definition = definition, Login = login, Role = role }, login);
+    }
+
+    /// <summary>The connection string the provider composes for this login (for a test of what TLS settings reach the driver). A secret: never logged.</summary>
+    internal string ComposedConnectionString()
+    {
+        var (provider, _, context, login) = Prepare();
+        using var _l = login;
+        return provider.Composer.Compose(context);
+    }
+
+    private static readonly IDbProvider SqlServer = new DbDataKit.Connections.SqlServer.SqlServerProvider();
+    private static readonly IDbProvider Postgres = new DbDataKit.Connections.Postgres.PostgresProvider();
 
     /// <summary>
     /// An ODBC origin: the login's value goes to the driver manager as written (unixODBC on Linux and macOS, the system's on Windows) and the vendor's driver it names; the tool ships neither. There is no write side to an ODBC

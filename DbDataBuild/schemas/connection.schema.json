@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "connection.schema.json",
   "title": "A dbdatabuild connection file",
-  "description": "connections/<name>.yaml, a connection/1 file (plan 13, E03). The file name is the connection's name. It holds no address and no login: the login is the environment variable DBDATA_BUILD_<NAME>_READ and _WRITE (the name in capitals, anything but a letter or digit an underscore). The driver is `engine`, `access: readonly` makes the connection only read (never a destination, a tracking connection or a deploy target, and no _WRITE login is read), `dialect` names the SQL dialect (a built-in or one under `dialects:` in dbdatabuild.yml), and the tool's own settings are under `extensions.build`.",
+  "description": "connections/<name>.yaml, a connection/1 file (plan 13, E03). The file name is the connection's name. It holds no address and no login (how the connection is secured is its `tls` block): the login is the environment variable DBDATA_BUILD_<NAME>_READ and _WRITE (the name in capitals, anything but a letter or digit an underscore). The driver is `engine`, `access: readonly` makes the connection only read (never a destination, a tracking connection or a deploy target, and no _WRITE login is read), `dialect` names the SQL dialect (a built-in or one under `dialects:` in dbdatabuild.yml), and the tool's own settings are under `extensions.build`.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -41,6 +41,25 @@
         "readwrite",
         "readonly"
       ]
+    },
+    "tls": {
+      "description": "How the connection is secured, applied over whatever the login's string says. The default encrypts and verifies the server's certificate; a development server with a self-signed certificate says `trust_server_certificate: true`, one without encryption `encrypt: false`.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "encrypt": {
+          "type": "boolean"
+        },
+        "verify": {
+          "type": "boolean"
+        },
+        "trust_server_certificate": {
+          "type": "boolean"
+        },
+        "ca_file": {
+          "type": "string"
+        }
+      }
     },
     "extensions": {
       "type": "object",
