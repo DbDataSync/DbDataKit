@@ -367,7 +367,9 @@ public class OdbcOriginConformanceTests
         {
             Ok(run.Cli("connection", "refresh", "sqlserver", "fan", "--parallel", "3"), "uncapped");
             Assert.Equal(3, seen!.MostInUse("legacy"));
-            run.Write("dbdatabuild.yml", File.ReadAllText(Path.Combine(run.Dir, "dbdatabuild.yml")).Replace("legacy: { engine: readonly odbc }", "legacy: { engine: readonly odbc, max_parallel: 1 }"));
+            var legacyFile = Path.Combine(run.Dir, "connections", "legacy.yaml");
+            Assert.DoesNotContain("extensions:", File.ReadAllText(legacyFile));       // the connection has no settings of its own yet: the cap is the first
+            File.AppendAllText(legacyFile, "extensions:\n  build:\n    max_parallel: 1\n");
             var clock = System.Diagnostics.Stopwatch.StartNew();
             var capped = run.Cli("connection", "refresh", "sqlserver", "fan", "--parallel", "3");
             Ok(capped, "capped");
