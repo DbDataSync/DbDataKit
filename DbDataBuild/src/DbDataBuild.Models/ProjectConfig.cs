@@ -52,6 +52,9 @@ public sealed record ConnectionConfig(string Name, string Engine, int? Version =
     /// <summary>What `engine` said, parsed once: access, driver and dialect. <see cref="Engine"/> is its driver (`sqlserver`, `postgres`, `fabric` for the engines the tool builds on; `duckdb`, `odbc`, `flightsql` for origins).</summary>
     public ConnectionKind? DeclaredKind { get; init; }
 
+    /// <summary>The connection file's `tls:` block (encrypt, verify, trust_server_certificate, ca_file); null when the file has none, which is the shared default: encrypt and verify the certificate.</summary>
+    public DbDataKit.Connections.TlsSpec? Tls { get; init; }
+
     public ConnectionKind Kind => DeclaredKind ?? ConnectionKind.OfEngine(Engine);
 
     /// <summary>The project's own dialect profile (`dialects:`) that this connection's `engine` names; null when the dialect is a built-in.</summary>

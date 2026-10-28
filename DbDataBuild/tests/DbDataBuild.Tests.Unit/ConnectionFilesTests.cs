@@ -54,6 +54,22 @@ public class ConnectionFilesTests
     }
 
     [Fact]
+    public void A_connection_file_may_say_how_its_login_is_secured()
+    {
+        var dir = Project("defaults: {connections: [warehouse]}\n", ("warehouse.yaml", Warehouse.Replace("engine: sqlserver\n", "engine: sqlserver\ntls: { encrypt: false, trust_server_certificate: true }\n")));
+        try
+        {
+            var (config, diags) = Load(dir);
+            Assert.DoesNotContain(diags, d => d.Severity == Severity.Error);
+            var tls = config.Connections["warehouse"].Tls;
+            Assert.NotNull(tls);
+            Assert.False(tls!.Encrypt);
+            Assert.True(tls.TrustServerCertificate);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
     public void A_project_file_that_still_declares_connections_is_refused_naming_the_file()
     {
         var dir = Project("defaults: {connections: [sqlserver]}\nconnections:\n  sqlserver: { version: 16 }\n  shop: { engine: readonly postgres }\n");
@@ -90,7 +106,8 @@ public class ConnectionFilesTests
         { "name is not the file's", "other.yaml", Warehouse },
         { "an address", "warehouse.yaml", Warehouse.Replace("engine: sqlserver\n", "engine: sqlserver\naddress: { host: db.example.com }\n") },
         { "a login", "warehouse.yaml", Warehouse.Replace("engine: sqlserver\n", "engine: sqlserver\nauth: { user: u, password_secret: \"env:P\" }\n") },
-        { "tls", "warehouse.yaml", Warehouse.Replace("engine: sqlserver\n", "engine: sqlserver\ntls: { verify: false }\n") },
+        { "a tls key that is not one", "warehouse.yaml", Warehouse.Replace("engine: sqlserver\n", "engine: sqlserver\ntls: { verfiy: false }\n") },
+        { "a timeout", "warehouse.yaml", Warehouse.Replace("engine: sqlserver\n", "engine: sqlserver\ntimeouts: { command_s: 10 }\n") },
         { "the old keywords in engine", "warehouse.yaml", Warehouse.Replace("engine: sqlserver", "engine: readonly sqlserver") },
         { "an unknown key", "warehouse.yaml", Warehouse.Replace("engine: sqlserver\n", "engine: sqlserver\nbogus: 1\n") },
         { "the old schema", "warehouse.yaml", Warehouse.Replace("connection/1", "connection/2") },

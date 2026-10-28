@@ -570,6 +570,7 @@ public partial class ApplyConformanceTests
         {
             var pg = name == "postgres";
             run.Write("hooks/pause.sql", pg ? "SELECT pg_sleep(6);\n" : "WAITFOR DELAY '00:00:06';\n");
+            run.Write($"connections/{name}.yaml", $"schema: connection/1\nname: {name}\nengine: {name}\ntls:\n  encrypt: false\n  trust_server_certificate: true\n");      // this test runs the executable, which does not have the harness's TLS default: the test engines say so in the connection file, as a user of a development server does
             run.Write("models/marts/fct_orders.yml", FctYaml + "hooks:\n  - {name: pause, event: post_create, script: hooks/pause.sql}\n");
             Ok(run.Cli("connection", "init", "--apply"), "init");
             Ok(run.Cli("project", "compile"), "render");
