@@ -1,6 +1,9 @@
 using System.Data.Common;
+using DbDataKit.Transfer;
 using DbDataSync.Core.Config;
+using DbDataSync.Core.Sql;
 using DbDataSync.Drivers.Abstractions;
+using DbDataSync.Drivers.Generic;
 
 namespace DbDataSync.Drivers.MsSql;
 
@@ -38,8 +41,6 @@ internal sealed class MsSqlTargetShape
         MappedTargetColumns = mappedTargetColumns;
         PrimaryKeyColumns = primaryKeyColumns;
         RequiresIdentityInsert = requiresIdentityInsert;
-        InsertColumnList = string.Join(", ", mappedTargetColumns.Select(SqlIdentifier.Quote));
-        SourceValueList = string.Join(", ", mappedTargetColumns.Select(c => $"src.{SqlIdentifier.Quote(c)}"));
     }
 
     public TableRef Target { get; }
@@ -54,8 +55,6 @@ internal sealed class MsSqlTargetShape
     /// operator had no reason to think was special.</summary>
     public bool RequiresIdentityInsert { get; }
 
-    public string InsertColumnList { get; }
-    public string SourceValueList { get; }
 
     public static async Task<MsSqlTargetShape> LoadAsync(
         DbConnection targetConnection,
@@ -105,10 +104,9 @@ internal sealed class MsSqlTargetShape
             mappedTargetColumns.Any(c => byName[c].IsIdentity));
     }
 
-    /// <summary>The MERGE join predicate on the target's primary key. Both MERGE-based writers match
-    /// rows this way, so the requirement (a PK, and column mappings that carry it) is enforced here
-    /// once with one message.</summary>
-    public string BuildMergeOnClause()
+    /// <summary>The target's primary key, which both MERGE-based writers match rows on. The requirement
+    /// (a PK, and column mappings that carry it) is enforced here once with one message.</summary>
+    public IReadOnlyList<string> RequireMergeKey()
     {
         if (PrimaryKeyColumns.Count == 0)
             throw new InvalidOperationException(
@@ -121,21 +119,28 @@ internal sealed class MsSqlTargetShape
             throw new InvalidOperationException(
                 $"Column mappings must include the target primary key column(s): {string.Join(", ", missing)}.");
 
-        return string.Join(" AND ", PrimaryKeyColumns.Select(pk => $"tgt.{SqlIdentifier.Quote(pk)} = src.{SqlIdentifier.Quote(pk)}"));
+        return PrimaryKeyColumns;
     }
 
-    /// <summary>The <c>WHEN MATCHED ... THEN UPDATE SET</c> clause, or an empty string when every
-    /// mapped column belongs to the primary key — there's nothing to update in that case, only insert
-    /// and delete apply, and an empty SET list isn't valid SQL.</summary>
-    public string BuildUpdateClause()
+    /// <summary>
+    /// What the shared statement builders (<see cref="ScopedStatements"/>) need to write this target from
+    /// <paramref name="stage"/>: the mapped columns, the staged operation marker, and the identity override as
+    /// a bracketed write (<see cref="MsSqlIdentityInsert"/> wraps it, since SQL Server wants a session flag around
+    /// the statement rather than a clause in it).
+    /// </summary>
+    public ScopedApplySpec ToSpec(string stage) => new()
     {
-        var nonPk = MappedTargetColumns
-            .Where(c => !PrimaryKeyColumns.Contains(c, StringComparer.OrdinalIgnoreCase))
-            .ToList();
+        Target = SqlRelation.Raw(QuotedTarget),
+        Stage = SqlRelation.Raw(stage),
+        Columns = MappedTargetColumns,
+        Marker = new OperationMarker(OperationColumn),
+        Override = RequiresIdentityInsert ? GeneratedColumnOverride.Bracketed : GeneratedColumnOverride.None,
+    };
 
-        return nonPk.Count == 0
-            ? ""
-            : $"WHEN MATCHED AND src.{OperationColumn} <> 'D' THEN UPDATE SET " +
-              string.Join(", ", nonPk.Select(c => $"tgt.{SqlIdentifier.Quote(c)} = src.{SqlIdentifier.Quote(c)}"));
-    }
+    /// <summary>
+    /// Brackets, <c>@name</c>, a trailing <c>;</c>, Transact-SQL's MERGE spelling and the staging table's bookkeeping columns
+    /// written bare: the text these writers have always sent.
+    /// </summary>
+    public static StatementSyntax Syntax { get; } =
+        SharedStatementSyntax.For(MsSqlDialect.Instance) with { TransactSql = true, QuoteBookkeepingColumns = false };
 }

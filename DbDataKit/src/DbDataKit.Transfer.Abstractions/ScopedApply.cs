@@ -151,9 +151,10 @@ public sealed record BuiltStatement(string Text, IReadOnlyList<ParameterSlot> Sl
 public sealed record ScopedApplySpec
 {
     public required SqlRelation Target { get; init; }
-    public required SqlRelation Stage { get; init; }
-    /// <summary>The columns written, in order (the insert list, the select list, the merge's insert and update columns).</summary>
-    public required IReadOnlyList<string> Columns { get; init; }
+    /// <summary>The staging table. Not needed by a scope delete.</summary>
+    public SqlRelation Stage { get; init; }
+    /// <summary>The columns written, in order (the insert list, the select list, the merge's insert and update columns). Not needed by a scope delete.</summary>
+    public IReadOnlyList<string> Columns { get; init; } = [];
     /// <summary>The key columns, a subset of <see cref="Columns"/>; needed by a merge.</summary>
     public IReadOnlyList<string> KeyColumns { get; init; } = [];
     public ScopeFilter Scope { get; init; } = ScopeFilter.All;

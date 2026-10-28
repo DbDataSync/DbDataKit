@@ -1,4 +1,5 @@
 using System.Data.Common;
+using DbDataKit.Transfer;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
@@ -39,11 +40,12 @@ public sealed class MsSqlMergeReconcileWriter : IChangeWriter, IStatementPreview
         targetConnection.ChangeDatabase(target.Database);
 
         var shape = MsSqlTargetShape.FromCachedColumns(mappingName, targetColumns, target, columnMappings);
-        var scope = SegmentScope.Build(MsSqlDialect.Instance, MsSqlValueBinding.Instance, SegmentSerializer.ReadOptional(options), shape.Columns, columnMappings);
+        var scope = SegmentScope.Resolve(SegmentSerializer.ReadOptional(options), shape.Columns, columnMappings);
+        var merge = BuildMerge(shape, scope.Filter, staged.StagingLocation);
 
         using var cmd = targetConnection.CreateTimedCommand();
-        cmd.CommandText = BuildMerge(shape, scope.Predicate, staged.StagingLocation);
-        scope.AddTo(cmd);
+        cmd.CommandText = merge.Text;
+        SegmentScope.AddTo(cmd, MsSqlDialect.Instance, MsSqlValueBinding.Instance, merge.Slots, scope.Column);
 
         var rowsAffected = await MsSqlIdentityInsert.RunAsync(
             targetConnection, transaction: null, shape.QuotedTarget, shape.RequiresIdentityInsert,
@@ -57,19 +59,13 @@ public sealed class MsSqlMergeReconcileWriter : IChangeWriter, IStatementPreview
     /// SELECT * rather than just the mapped columns: the CTE has to stay updatable for MERGE to use it
     /// as a target, and projecting a subset of columns is one of the things that stops it being.
     /// </summary>
-    private static string BuildMerge(MsSqlTargetShape shape, string scopePredicate, string stagingLocation) => $"""
-        ;WITH TargetScope AS (
-            SELECT * FROM {shape.QuotedTarget} WHERE {scopePredicate}
-        )
-        MERGE INTO TargetScope AS tgt
-        USING {stagingLocation} AS src
-        ON {shape.BuildMergeOnClause()}
-        WHEN MATCHED AND src.{MsSqlTargetShape.OperationColumn} = 'D' THEN DELETE
-        {shape.BuildUpdateClause()}
-        WHEN NOT MATCHED BY TARGET AND src.{MsSqlTargetShape.OperationColumn} <> 'D'
-            THEN INSERT ({shape.InsertColumnList}) VALUES ({shape.SourceValueList})
-        WHEN NOT MATCHED BY SOURCE THEN DELETE;
-        """;
+    internal static BuiltStatement BuildMerge(MsSqlTargetShape shape, ScopeFilter scope, string stagingLocation) =>
+        ScopedStatements.Merge(MsSqlTargetShape.Syntax, shape.ToSpec(stagingLocation) with
+        {
+            KeyColumns = shape.RequireMergeKey(),
+            Scope = scope,
+            DeleteUnmatchedInScope = true,
+        });
 
     public async Task<IReadOnlyList<PreviewStatement>> DescribeAsync(
         PreviewRequest request, CancellationToken cancellationToken)
@@ -79,13 +75,13 @@ public sealed class MsSqlMergeReconcileWriter : IChangeWriter, IStatementPreview
         var shape = await MsSqlTargetShape.LoadAsync(
             request.Connection, request.Target, request.ColumnMappings, cancellationToken);
         var segment = SegmentSerializer.ReadOptional(request.Options);
-        var scope = SegmentScope.Build(MsSqlDialect.Instance, MsSqlValueBinding.Instance, segment, shape.Columns, request.ColumnMappings);
+        var scope = SegmentScope.Resolve(segment, shape.Columns, request.ColumnMappings);
 
         return
         [
             new PreviewStatement(
                 PreviewStages.Write, "Merge the staged rows and remove anything else in scope",
-                BuildMerge(shape, scope.Predicate, "#Staging_<per pass>"), PreviewOrigin.BuiltIn,
+                BuildMerge(shape, scope.Filter, "#Staging_<per pass>").Text, PreviewOrigin.BuiltIn,
                 segment is null
                     ? "WHEN NOT MATCHED BY SOURCE deletes within the scope this writer was given — " +
                       "unsegmented, that scope is the whole table."

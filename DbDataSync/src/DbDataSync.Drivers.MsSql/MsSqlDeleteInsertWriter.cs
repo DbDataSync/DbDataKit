@@ -1,4 +1,5 @@
 using System.Data.Common;
+using DbDataKit.Transfer;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
@@ -36,7 +37,8 @@ public sealed class MsSqlDeleteInsertWriter : IChangeWriter, IStatementPreview
         targetConnection.ChangeDatabase(target.Database);
 
         var shape = MsSqlTargetShape.FromCachedColumns(mappingName, targetColumns, target, columnMappings);
-        var scope = SegmentScope.Build(MsSqlDialect.Instance, MsSqlValueBinding.Instance, SegmentSerializer.ReadOptional(options), shape.Columns, columnMappings);
+        var scope = SegmentScope.Resolve(SegmentSerializer.ReadOptional(options), shape.Columns, columnMappings);
+        var delete = BuildDelete(shape, scope.Filter);
 
         await using var transaction = await targetConnection.BeginTransactionAsync(cancellationToken);
         try
@@ -44,8 +46,8 @@ public sealed class MsSqlDeleteInsertWriter : IChangeWriter, IStatementPreview
             using (var deleteCmd = targetConnection.CreateTimedCommand())
             {
                 deleteCmd.Transaction = transaction;
-                deleteCmd.CommandText = BuildDelete(shape, scope.Predicate);
-                scope.AddTo(deleteCmd);
+                deleteCmd.CommandText = delete.Text;
+                SegmentScope.AddTo(deleteCmd, MsSqlDialect.Instance, MsSqlValueBinding.Instance, delete.Slots, scope.Column);
                 await deleteCmd.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -55,7 +57,7 @@ public sealed class MsSqlDeleteInsertWriter : IChangeWriter, IStatementPreview
                 {
                     using var insertCmd = targetConnection.CreateTimedCommand();
                     insertCmd.Transaction = transaction;
-                    insertCmd.CommandText = BuildInsert(shape, staged.StagingLocation);
+                    insertCmd.CommandText = BuildInsert(shape, staged.StagingLocation).Text;
                     return await insertCmd.ExecuteNonQueryAsync(cancellationToken);
                 },
                 cancellationToken);
@@ -73,18 +75,15 @@ public sealed class MsSqlDeleteInsertWriter : IChangeWriter, IStatementPreview
         }
     }
 
-    private static string BuildDelete(MsSqlTargetShape shape, string scopePredicate) =>
-        $"DELETE FROM {shape.QuotedTarget} WHERE {scopePredicate};";
+    internal static BuiltStatement BuildDelete(MsSqlTargetShape shape, ScopeFilter scope) =>
+        ScopedStatements.ScopeDelete(MsSqlTargetShape.Syntax, shape.ToSpec("") with { Scope = scope });
 
     /// <summary>
     /// Deletes in the change set are dropped rather than applied: the delete has already removed
     /// everything in scope, so a 'D' row would only be re-adding a row in order to say it isn't there.
     /// </summary>
-    private static string BuildInsert(MsSqlTargetShape shape, string stagingLocation) => $"""
-        INSERT INTO {shape.QuotedTarget} ({shape.InsertColumnList})
-        SELECT {shape.InsertColumnList} FROM {stagingLocation}
-        WHERE {MsSqlTargetShape.OperationColumn} <> 'D';
-        """;
+    internal static BuiltStatement BuildInsert(MsSqlTargetShape shape, string stagingLocation) =>
+        ScopedStatements.Refill(MsSqlTargetShape.Syntax, shape.ToSpec(stagingLocation));
 
     /// <inheritdoc cref="DeleteInsertWriter.DescribeAsync"/>
     public async Task<IReadOnlyList<PreviewStatement>> DescribeAsync(
@@ -95,19 +94,19 @@ public sealed class MsSqlDeleteInsertWriter : IChangeWriter, IStatementPreview
         var shape = await MsSqlTargetShape.LoadAsync(
             request.Connection, request.Target, request.ColumnMappings, cancellationToken);
         var segment = SegmentSerializer.ReadOptional(request.Options);
-        var scope = SegmentScope.Build(MsSqlDialect.Instance, MsSqlValueBinding.Instance, segment, shape.Columns, request.ColumnMappings);
+        var scope = SegmentScope.Resolve(segment, shape.Columns, request.ColumnMappings);
 
         return
         [
             new PreviewStatement(
-                PreviewStages.Write, "Empty the scope", BuildDelete(shape, scope.Predicate), PreviewOrigin.BuiltIn,
+                PreviewStages.Write, "Empty the scope", BuildDelete(shape, scope.Filter).Text, PreviewOrigin.BuiltIn,
                 segment is null
                     ? "Unsegmented, that scope is the whole table."
                     : $"Scoped to {segment.Describe()}; rows outside it are untouched."),
 
             new PreviewStatement(
                 PreviewStages.Write, "Refill it from the staged rows",
-                BuildInsert(shape, "#Staging_<per pass>"), PreviewOrigin.BuiltIn,
+                BuildInsert(shape, "#Staging_<per pass>").Text, PreviewOrigin.BuiltIn,
                 "Both statements run in one transaction."),
         ];
     }

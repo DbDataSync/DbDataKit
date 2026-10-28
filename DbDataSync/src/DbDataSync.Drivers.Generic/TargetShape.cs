@@ -35,7 +35,6 @@ public sealed class TargetShape
         MappedTargetColumns = mappedTargetColumns;
         PrimaryKeyColumns = columns.InKeyOrder().Select(c => c.Name).ToList();
         RequiresGeneratedColumnOverride = requiresGeneratedColumnOverride;
-        InsertColumnList = string.Join(", ", mappedTargetColumns.Select(dialect.QuoteIdentifier));
     }
 
     public TableRef Target { get; }
@@ -50,7 +49,6 @@ public sealed class TargetShape
     /// that errors out at apply time on a table the operator had no reason to think was special.</summary>
     public bool RequiresGeneratedColumnOverride { get; }
 
-    public string InsertColumnList { get; }
 
     public static async Task<TargetShape> LoadAsync(
         SqlDialect dialect,

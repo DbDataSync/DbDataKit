@@ -1,3 +1,4 @@
+using DbDataKit.Transfer;
 using DbDataSync.Core.Config;
 
 namespace DbDataSync.Drivers.Generic.Tests;
@@ -225,7 +226,7 @@ public sealed class PipelineStatementTests
     {
         Assert.Equal(
             "DELETE FROM [dbo].[Orders] WHERE [OrderId] >= @segMin AND [OrderId] < @segMax",
-            DeleteInsertStatement.BuildDelete("[dbo].[Orders]", "[OrderId] >= @segMin AND [OrderId] < @segMax"));
+            DeleteInsertStatement.BuildDelete(BracketDialect.Instance, "[dbo].[Orders]", ScopeFilter.Range("OrderId", "10", "20")).Text);
     }
 
     [Fact]
@@ -239,14 +240,14 @@ public sealed class PipelineStatementTests
             SELECT [Id], [Name] FROM [dbo].[DS_STG_x]
             WHERE [__Operation] <> 'D'
             """,
-            DeleteInsertStatement.BuildInsert(BracketDialect.Instance, "[dbo].[Orders]", "[Id], [Name]", "[dbo].[DS_STG_x]"));
+            DeleteInsertStatement.BuildInsert(BracketDialect.Instance, "[dbo].[Orders]", ["Id", "Name"], "[dbo].[DS_STG_x]").Text);
     }
 
     [Fact]
     public void Insert_FollowsTheDialectForTheMarkerColumnsQuoting()
     {
         Assert.Contains("\"__Operation\" <> 'D'",
-            DeleteInsertStatement.BuildInsert(ColonDialect.Instance, "t", "c", "s"));
+            DeleteInsertStatement.BuildInsert(ColonDialect.Instance, "t", ["c"], "s").Text);
     }
 
     [Fact]
@@ -261,8 +262,8 @@ public sealed class PipelineStatementTests
               AND [__Ordinal] <= @upToOrdinal
             """,
             DeleteInsertStatement.BuildInsert(
-                BracketDialect.Instance, "[dbo].[Orders]", "[Id], [Name]", "[dbo].[DS_STG_x]",
-                overrideGenerated: false, chunked: true));
+                BracketDialect.Instance, "[dbo].[Orders]", ["Id", "Name"], "[dbo].[DS_STG_x]",
+                overrideGenerated: false, chunked: true).Text);
     }
 
     [Fact]
@@ -272,7 +273,7 @@ public sealed class PipelineStatementTests
         // they mean. A 'D' row inside the range is still not something to insert.
         Assert.Contains("[__Operation] <> 'D'",
             DeleteInsertStatement.BuildInsert(
-                BracketDialect.Instance, "t", "c", "s", overrideGenerated: false, chunked: true));
+                BracketDialect.Instance, "t", ["c"], "s", overrideGenerated: false, chunked: true).Text);
     }
 
     [Fact]
@@ -280,6 +281,6 @@ public sealed class PipelineStatementTests
     {
         Assert.Contains(":afterOrdinal",
             DeleteInsertStatement.BuildInsert(
-                ColonDialect.Instance, "t", "c", "s", overrideGenerated: false, chunked: true));
+                ColonDialect.Instance, "t", ["c"], "s", overrideGenerated: false, chunked: true).Text);
     }
 }
