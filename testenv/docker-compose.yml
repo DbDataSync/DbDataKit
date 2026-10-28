@@ -17,7 +17,7 @@
 #
 # - `postgres-logical` is a separate engine on purpose, the one place where two engines of the same kind run side by side. Logical
 #   decoding needs `wal_level=logical`, a restart-requiring server setting, and the wal2json plugin, which no public image carries (it is
-#   built from testenv/postgres-logical/Dockerfile on a fresh `postgres:17`, `pull: true`). Turning that on for the plain `postgres`
+#   built from testenv/postgres-logical/Dockerfile on a freshly pulled `postgres:17`; DBKIT_TEST_PULL=false skips the pull, for a machine that is offline or rate-limited). Turning that on for the plain `postgres`
 #   would change the server every other suite tests against (TLS, default settings, the Debian build Build's conformance suite pins
 #   differences to) to suit one product, so Sync's slot tests get their own server on its own port.
 # - `oracle` mounts testenv/oracle-init: Sync's flashback reader needs EXECUTE on DBMS_FLASHBACK and FLASHBACK ANY TABLE for the app
@@ -102,7 +102,7 @@ services:
     profiles: [postgres-logical]
     build:
       context: ./postgres-logical
-      pull: true
+      pull: ${DBKIT_TEST_PULL:-true}
     image: dbkit-test-postgres-logical:17
     container_name: dbkit-test-postgres-logical
     # wal_level=logical is what lets a replication slot decode anything at all; it is a restart-requiring setting on a real server,
