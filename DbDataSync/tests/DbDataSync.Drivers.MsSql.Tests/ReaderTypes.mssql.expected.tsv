@@ -1,0 +1,37 @@
+bit	Boolean	Boolean	bool:true
+tinyint	Byte	Byte	Byte:200
+smallint	Int16	Int16	Int16:-300
+int	Int32	Int32	Int32:70000
+bigint	Int64	Int64	Int64:5000000000
+decimal(18,2)	Decimal	Decimal	decimal:12345.67
+decimal(38,10)	Decimal	Decimal	decimal:123456789012345678.1234567890
+numeric(5,0)	Decimal	Decimal	decimal:12345
+money	Decimal	Decimal	decimal:12.3456
+smallmoney	Decimal	Decimal	decimal:12.3400
+real	Single	Single	float:1.5
+float	Double	Double	double:1.5
+char(5)	String	String	string:ab   
+varchar(50)	String	String	string:text
+nchar(5)	String	String	string:ab   
+nvarchar(50)	String	String	string:text
+nvarchar(max)	String	String	string:text
+text	String	String	string:text
+ntext	String	String	string:text
+binary(4)	Byte[]	Byte[]	byte[]:01020304
+varbinary(50)	Byte[]	Byte[]	byte[]:010203
+varbinary(max)	Byte[]	Byte[]	byte[]:010203
+image	Byte[]	Byte[]	byte[]:010203
+uniqueidentifier	Guid	Guid	Guid:6f9619ff-8b86-d011-b42d-00c04fc964ff
+date	DateTime	DateTime	DateTime:2024-03-17T00:00:00.0000000
+time(7)	TimeSpan	TimeSpan	TimeSpan:09:41:22.1234567
+datetime	DateTime	DateTime	DateTime:2024-03-17T09:41:22.1230000
+smalldatetime	DateTime	DateTime	DateTime:2024-03-17T09:41:00.0000000
+datetime2(7)	DateTime	DateTime	DateTime:2024-03-17T09:41:22.1234567
+datetimeoffset(7)	DateTimeOffset	DateTimeOffset	DateTimeOffset:2024-03-17T09:41:22.1234567+02:00
+xml	String	String	string:<a>1</a>
+rowversion	Byte[]	Byte[]	byte[]:00000000000007D4
+sql_variant holding CAST(1 AS int)	Object	Int32	Int32:1
+sql_variant holding CAST('x' AS varchar(5))	Object	String	string:x
+hierarchyid	null	-	GetValue THROWS FileNotFoundException
+geography	null	-	GetValue THROWS FileNotFoundException
+geometry	null	-	GetValue THROWS FileNotFoundException

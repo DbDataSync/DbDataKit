@@ -229,7 +229,10 @@ public sealed class PgCopyStagingProvider(SqlDialect dialect, ITableCatalog cata
 
         var sourceColumnByTarget = columnMappings.ToDictionary(m => m.TargetColumn, m => m.SourceColumn);
         var counter = new StagingBatches.Counter();
-        var batches = StagingBatches.Batch(rows, schema, mappedTargetColumns, sourceColumnByTarget, includeChangeOrdering, counter, cancellationToken);
+        var gate = StagingValueGate.For(
+            EngineId.Postgres, $"{target.Schema}.{target.Table}", mappedTargetColumns, typeByName, schema,
+            $"Staging this mapping through '{PostgresDriverKinds.StagingTable}' instead sends parameters the server converts, at the cost of the bulk path.");
+        var batches = StagingBatches.Batch(rows, schema, mappedTargetColumns, sourceColumnByTarget, includeChangeOrdering, counter, gate, cancellationToken);
 
         // Timed the same way every other long-running target operation is: the importer is not a DbCommand, so it would otherwise run on Npgsql's own
         // default rather than on the operator's configured command timeout (the writer sets the importer's timeout from this).

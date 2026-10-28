@@ -55,7 +55,7 @@ public static class StagingBatches
     /// </summary>
     public static async IAsyncEnumerable<DataBatch> Batch(
         IAsyncEnumerable<ChangeRow> rows, TransferSchema schema, IReadOnlyList<string> mappedTargetColumns,
-        IReadOnlyDictionary<string, string> sourceColumnByTarget, bool includeChangeOrdering, Counter counter,
+        IReadOnlyDictionary<string, string> sourceColumnByTarget, bool includeChangeOrdering, Counter counter, StagingValueGate? gate = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         int[]? sourceOrdinals = null;
@@ -69,7 +69,7 @@ public static class StagingBatches
             if (count < BatchRows) continue;
 
             counter.Rows += count;
-            yield return new ChangeRowBatch(schema, buffer, count, sourceOrdinals);
+            yield return new ChangeRowBatch(schema, buffer, count, sourceOrdinals, gate);
             buffer = new ChangeRow[BatchRows];
             count = 0;
         }
@@ -77,7 +77,7 @@ public static class StagingBatches
         if (count > 0)
         {
             counter.Rows += count;
-            yield return new ChangeRowBatch(schema, buffer, count, sourceOrdinals!);
+            yield return new ChangeRowBatch(schema, buffer, count, sourceOrdinals!, gate);
         }
     }
 
@@ -110,16 +110,16 @@ public static class StagingBatches
         _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "Unknown change operation."),
     };
 
-    private sealed class ChangeRowBatch(TransferSchema schema, ChangeRow[] rows, int count, int[] sourceOrdinals) : DataBatch
+    private sealed class ChangeRowBatch(TransferSchema schema, ChangeRow[] rows, int count, int[] sourceOrdinals, StagingValueGate? gate) : DataBatch
     {
         public override int Rows => count;
         public override TransferSchema Schema => schema;
-        public override DbDataReader AsDataReader() => new Reader(schema, rows, count, sourceOrdinals);
+        public override DbDataReader AsDataReader() => new Reader(schema, rows, count, sourceOrdinals, gate);
         public override RecordBatch AsArrow() => throw new NotSupportedException("a staging batch is only ever written through a bulk route, never as Arrow");
     }
 
     /// <summary>Forward-only reader over a batch: the data columns by source ordinal, then the operation marker.</summary>
-    private sealed class Reader(TransferSchema schema, ChangeRow[] rows, int count, int[] sourceOrdinals) : DbDataReader
+    private sealed class Reader(TransferSchema schema, ChangeRow[] rows, int count, int[] sourceOrdinals, StagingValueGate? gate) : DbDataReader
     {
         private readonly int _operation = schema.Count - 1;
         private int _row = -1;
@@ -146,10 +146,14 @@ public static class StagingBatches
 
         public override bool IsDBNull(int ordinal) => ordinal != _operation && rows[_row].Values[sourceOrdinals[ordinal]] is null or DBNull;
 
-        public override object GetValue(int ordinal) =>
-            ordinal == _operation
-                ? OperationCode(rows[_row].Operation)
-                : rows[_row].Values[sourceOrdinals[ordinal]] ?? DBNull.Value;
+        public override object GetValue(int ordinal)
+        {
+            if (ordinal == _operation) return OperationCode(rows[_row].Operation);
+            var value = rows[_row].Values[sourceOrdinals[ordinal]];
+            if (value is null) return DBNull.Value;
+            if (gate is not null && ordinal < gate.Columns && value is not DBNull) gate.Check(ordinal, value);
+            return value;
+        }
 
         public override int GetValues(object[] values)
         {
