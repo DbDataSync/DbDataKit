@@ -1,8 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit.runner.visualstudio" />
-    <Using Include="Xunit" />
-    <ProjectReference Include="..\..\src\DbDataKit.Connections.Libraries\DbDataKit.Connections.Libraries.csproj" />
-  </ItemGroup>
-</Project>

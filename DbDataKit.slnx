@@ -42,7 +42,6 @@
     <Project Path="DbDataKit/src/DbDataKit.Connections.Abstractions/DbDataKit.Connections.Abstractions.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Connections.Descriptor/DbDataKit.Connections.Descriptor.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Connections.DuckDb/DbDataKit.Connections.DuckDb.csproj" />
-    <Project Path="DbDataKit/src/DbDataKit.Connections.Libraries/DbDataKit.Connections.Libraries.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Connections.Odbc/DbDataKit.Connections.Odbc.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Connections.Postgres/DbDataKit.Connections.Postgres.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Connections.FlightSql/DbDataKit.Connections.FlightSql.csproj" />
@@ -116,7 +115,6 @@
     <Project Path="DbDataKit/tests/DbDataKit.Connections.Abstractions.Tests/DbDataKit.Connections.Abstractions.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Connections.Descriptor.Tests/DbDataKit.Connections.Descriptor.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Connections.DuckDb.Tests/DbDataKit.Connections.DuckDb.Tests.csproj" />
-    <Project Path="DbDataKit/tests/DbDataKit.Connections.Libraries.Tests/DbDataKit.Connections.Libraries.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Connections.Odbc.Tests/DbDataKit.Connections.Odbc.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Connections.Postgres.Tests/DbDataKit.Connections.Postgres.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Connections.FlightSql.Tests/DbDataKit.Connections.FlightSql.Tests.csproj" />
