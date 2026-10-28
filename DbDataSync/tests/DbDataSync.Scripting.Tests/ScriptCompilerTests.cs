@@ -15,7 +15,7 @@ public sealed class ScriptCompilerTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_cacheRoot, recursive: true); } catch (IOException) { }
+        try { Directory.Delete(_cacheRoot, recursive: true); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }       // on Windows the package assembly a test loaded is locked until the process ends
     }
 
     /// <summary>A script is its code and a last expression that is the slot's implementation; <paramref name="entryType"/> is the type that expression builds (empty: the script ends with nothing).</summary>
