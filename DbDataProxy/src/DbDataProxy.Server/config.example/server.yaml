@@ -37,3 +37,11 @@ compression: { mode: arrow, codec: zstd, level: 3, allowClientOverride: true }
 # Pair a console with:  dbdataproxy server pair   (it prints a single-use code); list and remove pairings with  server clients  and  server unpair.
 # The localChannel is for the command line on this machine only: a named pipe (Windows) or a Unix socket reachable by the service's account and administrators.
 # management: { enabled: true, address: 127.0.0.1, port: 8816, localChannel: false }
+
+# Semantic models served as sources named semantic:<model> (the catalog's name); a client sends a JSON request or semantic SQL as a statement with x-datasource: semantic:<model>.
+# Each catalog source is mapped to the data source that holds its tables; clients need access to those data sources. Catalogs are read at start.
+# semantic:
+#   level: 5
+#   models:
+#     - catalog: semantic/sales.yaml
+#       sources: { sqlserver_sales: warehouse }

@@ -1,5 +1,6 @@
 using DbDataKit.Serving;
 using DbDataKit.Serving.FlightSql;
+using DbDataKit.Serving.Semantic;
 using System.Net;
 using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
@@ -162,7 +163,7 @@ public static class ProxyHost
         services.AddSingleton<ChainedCredentialValidator>();
         services.AddSingleton<IJwtValidator, JwtBearerValidator>();
         services.AddSingleton<ProxyServing>();
-        services.AddSingleton<IServingServices>(sp => sp.GetRequiredService<ProxyServing>());
+        services.AddSingleton<IServingServices>(sp => sp.GetRequiredService<ProxyServing>().WithSemantic(SemanticModelsLoader.Load(sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue, ResolveDataDirectory(sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue))));
         services.AddSingleton(sp =>
         {
             var current = sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>();
