@@ -1472,3 +1472,9 @@ Operator decision: correlated subqueries are a hard requirement.
 - **Tests**: `MutationGateTests` (kept, five added), `GateInvariantTests` (the shared scan; the shared suite runs it on Build's source too), the shared `WriteGateTests` (nine added). Run on real engines: see the slice row in plan 13a.
 - **Not done**: the front and `GateStatement` remain Build's types (a later slice moves the call sites); the lock and rollback log lines carry the shared kind and the rollback line has no text.
 
+
+### B08: a copy on the shared conversion and bulk writers (plan 13a)
+
+- **Built**: `TransferValues` reads a declared logical type through the shared DuckDB dialect (`ToCanonical`) and makes each value that canonical type with the shared `ValueConverter` (planned once per copy, `TransferValues.Plan`); a value that does not fit is a `TransferException` naming the column, never the value. `AdoWriteExecutor.BulkCopyAsync` hands the converted rows, in batches of 20,000, to `SqlServerBulkWriter` or `PostgresBulkWriter`; the `DataTable` buffer, the Npgsql loop and Build's own type switches are gone. The gate's log entries for a bulk copy are unchanged.
+- **Behaviour changes** (release note): a `DateTime` with a time of day into a `DATE` column and a string longer than `VARCHAR(n)` are now errors at the copy; the CLR forms the converter produces are canonical (`DateOnly`, `TimeOnly`, `sbyte` for `TINYINT`).
+- **Verified**: the unit suite; on SQL Server 2022 and PostgreSQL 17 the apply and templates conformance groups and the `fan_in_fan_out` and origin conformance cases. Not run: SQL Server 2025, Oracle, Fabric.

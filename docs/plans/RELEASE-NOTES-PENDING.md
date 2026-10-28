@@ -46,6 +46,7 @@ to it in the pull request that makes the change; a release moves the entries int
 
 ## DbDataBuild
 
+- **A copy now stops on two values it used to let through.** A copy converts values with the shared converter, and writes them with the shared bulk writers. A `DateTime` that has a time of day, copied into a column the model declares `DATE`, used to lose its time silently; it is now an error that names the column. A string longer than a declared `VARCHAR(n)` is refused at the copy, naming the column, where the destination used to refuse it. Declare the type the origin really holds (`TIMESTAMP`, a longer `VARCHAR`) or cut the value in the read. Nothing else changes: the same rows arrive in the same tables, and the statement log is as before. (B08)
 - **`dbdatabuild ui web` is gone.** The DbDataKit console replaces it: run `dbdatabuild server run --project .` (loopback by default), pair a console with it and open the project there. Scripts that started `ui web` fail with an unknown command. The MCP server's `show` tool still serves its page. (R09)
 - **Login variables are `DBDATA_BUILD_<CONNECTION>_<READ|WRITE>`.** The old `DBDATABUILD_*` names are not read, and the
   `secret:dbdata:build:connection:...` fallback is gone. A connection name with characters other than letters and digits has underscores in

@@ -111,7 +111,7 @@ public class CopyTransferTests
     [InlineData("BIGINT", 5, typeof(long))]
     [InlineData("INTEGER", 5L, typeof(int))]
     [InlineData("SMALLINT", 5, typeof(short))]
-    [InlineData("TINYINT", (byte)5, typeof(short))]
+    [InlineData("TINYINT", (byte)5, typeof(sbyte))]
     [InlineData("DOUBLE", 1.5f, typeof(double))]
     [InlineData("FLOAT", 1.5, typeof(float))]
     [InlineData("BOOLEAN", true, typeof(bool))]
@@ -128,10 +128,10 @@ public class CopyTransferTests
     [Fact]
     public void Dates_times_and_identifiers_come_out_in_one_form_whichever_driver_they_came_from()
     {
-        Assert.Equal(new DateTime(2024, 2, 29), TransferValues.Convert(new DateOnly(2024, 2, 29), new("d", "DATE")));              // Npgsql hands over a DateOnly
-        Assert.Equal(new DateTime(2024, 2, 29), TransferValues.Convert(new DateTime(2024, 2, 29, 13, 0, 0), new("d", "DATE")));     // SQL Server a DateTime
+        Assert.Equal(new DateOnly(2024, 2, 29), TransferValues.Convert(new DateOnly(2024, 2, 29), new("d", "DATE")));              // Npgsql hands over a DateOnly
+        Assert.Equal(new DateOnly(2024, 2, 29), TransferValues.Convert(new DateTime(2024, 2, 29), new("d", "DATE")));     // SQL Server a DateTime (midnight)
         Assert.Equal(DateTimeKind.Unspecified, ((DateTime)TransferValues.Convert(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), new("t", "TIMESTAMP"))!).Kind);
-        Assert.Equal(new TimeSpan(1, 2, 3), TransferValues.Convert(new TimeOnly(1, 2, 3), new("t", "TIME")));
+        Assert.Equal(new TimeOnly(1, 2, 3), TransferValues.Convert(new TimeOnly(1, 2, 3), new("t", "TIME")));
         var id = Guid.NewGuid();
         Assert.Equal(id, TransferValues.Convert(id.ToString(), new("u", "UUID")));
         Assert.Equal(new byte[] { 1, 2 }, TransferValues.Convert(new byte[] { 1, 2 }, new("b", "BLOB")));
@@ -139,6 +139,24 @@ public class CopyTransferTests
         Assert.Equal(12.5m, TransferValues.Convert(12.5, new("p", "DECIMAL(10, 2)")));
         Assert.Null(TransferValues.Convert(null, new("n", "BIGINT")));
         Assert.Null(TransferValues.Convert(DBNull.Value, new("n", "BIGINT")));
+    }
+
+    [Fact]
+    public void A_date_with_a_time_of_day_is_not_cut_to_a_date_in_silence()
+    {
+        // before the shared converter (plan 13, B08) the time was dropped; a column declared DATE that holds more is the model's mistake to hear about
+        var ex = Assert.Throws<TransferException>(() => TransferValues.Convert(new DateTime(2024, 2, 29, 13, 0, 0), new TransferColumn("d", "DATE")));
+        Assert.Contains("`d`", ex.Message);
+        Assert.DoesNotContain("13", ex.Message);
+    }
+
+    [Fact]
+    public void A_string_longer_than_the_declared_length_is_refused_at_the_copy_naming_the_column()
+    {
+        var ex = Assert.Throws<TransferException>(() => TransferValues.Convert("far too long", new TransferColumn("label", "VARCHAR(5)")));
+        Assert.Contains("`label`", ex.Message);
+        Assert.DoesNotContain("far too long", ex.Message);
+        Assert.Equal("short", TransferValues.Convert("short", new TransferColumn("label", "VARCHAR(5)")));
     }
 
     [Theory]

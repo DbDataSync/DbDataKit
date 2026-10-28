@@ -271,13 +271,13 @@ public class FlightSqlOriginTests
             ("time", new Time32Array.Builder(new Time32Type(TimeUnit.Second)).Append(45).Build()));
         object? Convert(string column, string type) => TransferValues.Convert(ArrowConversions.Value(batch.Column(column), 0), new TransferColumn(column, type));
         Assert.Equal(41L, Convert("n", "BIGINT"));
-        Assert.Equal(new DateTime(2024, 2, 29), Convert("d", "DATE"));
+        Assert.Equal(new DateOnly(2024, 2, 29), Convert("d", "DATE"));
         Assert.Equal(new DateTime(2024, 3, 5, 6, 7, 8), Convert("t", "TIMESTAMP"));
         Assert.Equal(new DateTimeOffset(2024, 3, 5, 6, 7, 8, TimeSpan.Zero), Convert("z", "TIMESTAMP WITH TIME ZONE"));
         Assert.Equal(3.14m, Convert("p", "DECIMAL(10, 2)"));
         Assert.Equal(new byte[] { 9 }, Convert("b", "BLOB"));
         Assert.Equal(false, Convert("flag", "BOOLEAN"));
-        Assert.Equal(TimeSpan.FromSeconds(45), Convert("time", "TIME"));
+        Assert.Equal(new TimeOnly(0, 0, 45), Convert("time", "TIME"));
         Assert.Equal("41", Convert("n", "VARCHAR"));
     }
 

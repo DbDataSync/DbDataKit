@@ -11,6 +11,8 @@
     <DbDataKitReference Include="Connections.SqlServer" />   <!-- the SQL Server failure mapper -->
     <DbDataKitReference Include="Metadata" />   <!-- the catalog readers of SQL Server and PostgreSQL, run through the read session; plan 13, B04 -->
     <DbDataKitReference Include="Connections.Postgres" />   <!-- the PostgreSQL failure mapper -->
+    <DbDataKitReference Include="Transfer.SqlServer" />   <!-- SqlBulkCopy from batches, the route of a copy to SQL Server; plan 13, B08 -->
+    <DbDataKitReference Include="Transfer.Postgres" />   <!-- binary COPY from batches, the route of a copy to PostgreSQL; plan 13, B08 -->
     <DbDataKitReference Include="Transfer" />   <!-- the write gate every product's writes go through, and its statement log; plan 13, B06 -->
   </ItemGroup>
 
