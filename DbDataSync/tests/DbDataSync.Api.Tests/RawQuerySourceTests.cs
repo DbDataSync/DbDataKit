@@ -67,19 +67,19 @@ public sealed class RawQuerySourceTests(TestApiFactory factory) : IClassFixture<
         // real OS environment, not this test host's in-memory one — RunLifecycleIntegrationTests' own
         // pattern.
         Environment.SetEnvironmentVariable(
-            _secrets.EnvName(SecretRefs.ForConnection(_connectionName)), "DbDataSync_Test_Pw1");
+            _secrets.EnvName(SecretRefs.ForConnection(_connectionName)), TestSupport.TestEngines.MsSql.Password);
 
         (await _client.PutAsJsonAsync($"/api/connections/{_connectionName}", new ConnectionInput
         {
             Name = _connectionName,
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = _databaseName,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
         }, JsonOptions)).EnsureSuccessStatusCode();
     }
 

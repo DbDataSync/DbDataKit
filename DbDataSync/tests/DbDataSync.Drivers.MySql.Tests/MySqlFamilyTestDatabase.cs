@@ -50,7 +50,7 @@ public abstract class MySqlFamilyTestDatabase : IAsyncLifetime
     }
 }
 
-/// <summary>Points at the local <c>mysql</c> Docker container from docker-compose.yml by default;
+/// <summary>Points at the local <c>mysql</c> Docker container from testenv/ by default;
 /// override via DBDATASYNC_TEST_MYSQL_SERVER.</summary>
 public sealed class MySqlTestDatabase : MySqlFamilyTestDatabase
 {
@@ -59,7 +59,7 @@ public sealed class MySqlTestDatabase : MySqlFamilyTestDatabase
         ?? "Server=localhost;Port=13306;UserID=root;Password=DbDataSync_Test_Pw1;AllowUserVariables=true;";
 }
 
-/// <summary>Points at the local <c>mariadb</c> Docker container from docker-compose.yml by default;
+/// <summary>Points at the local <c>mariadb</c> Docker container from testenv/ by default;
 /// override via DBDATASYNC_TEST_MARIADB_SERVER.</summary>
 public sealed class MariaDbTestDatabase : MySqlFamilyTestDatabase
 {

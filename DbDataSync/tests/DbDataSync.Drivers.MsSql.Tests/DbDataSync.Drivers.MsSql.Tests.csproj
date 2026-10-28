@@ -32,6 +32,7 @@
   <ItemGroup>
     <!-- One scratch-database teardown for every test project that makes one; see its doc comment. -->
     <Compile Include="..\Shared\MsSqlScratch.cs" Link="Shared\MsSqlScratch.cs" />
+    <Compile Include="..\Shared\TestEngines.cs" Link="Shared\TestEngines.cs" />
     <Compile Include="..\Shared\StagingMatrix.cs" Link="Shared\StagingMatrix.cs" />
     <Compile Include="..\Shared\ReaderTypeProbe.cs" Link="Shared\ReaderTypeProbe.cs" />
   </ItemGroup>

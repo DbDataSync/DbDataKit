@@ -54,17 +54,17 @@ public sealed class ConnectionTestFallbackTests : IClassFixture<TestApiFactory>
     public async Task Test_WhenTheGenericProbeFailsButTheTestQuerySucceeds_ReportsOverallSuccess()
     {
         var name = $"fallback-probe-conn-{Guid.NewGuid():N}";
-        Environment.SetEnvironmentVariable(_secrets.EnvName(SecretRefs.ForConnection(name)), "DbDataSync_Test_Pw1");
+        Environment.SetEnvironmentVariable(_secrets.EnvName(SecretRefs.ForConnection(name)), TestSupport.TestEngines.Postgres.Password);
         try
         {
             (await _client.PutAsJsonAsync($"/api/connections/{name}", new ConnectionInput
             {
                 Name = name,
                 DriverType = AlwaysFailingProbeDriver.Id,
-                ConnectionString = "Host=localhost;Port=15432;Database=postgres;SSL Mode=Disable",
+                ConnectionString = $"Host=localhost;Port={TestSupport.TestEngines.Postgres.Port};Database=postgres;SSL Mode=Disable",
                 AuthMode = AuthMode.SqlAuth,
                 UserId = "dbdatasync",
-                Password = "DbDataSync_Test_Pw1",
+                Password = TestSupport.TestEngines.Postgres.Password,
                 TestQuery = "SELECT current_database() AS db",
             }, JsonOptions)).EnsureSuccessStatusCode();
 
@@ -90,17 +90,17 @@ public sealed class ConnectionTestFallbackTests : IClassFixture<TestApiFactory>
     public async Task Test_WhenBothTheGenericProbeAndTheTestQueryFail_ReportsFailure()
     {
         var name = $"fallback-probe-conn-{Guid.NewGuid():N}";
-        Environment.SetEnvironmentVariable(_secrets.EnvName(SecretRefs.ForConnection(name)), "DbDataSync_Test_Pw1");
+        Environment.SetEnvironmentVariable(_secrets.EnvName(SecretRefs.ForConnection(name)), TestSupport.TestEngines.Postgres.Password);
         try
         {
             (await _client.PutAsJsonAsync($"/api/connections/{name}", new ConnectionInput
             {
                 Name = name,
                 DriverType = AlwaysFailingProbeDriver.Id,
-                ConnectionString = "Host=localhost;Port=15432;Database=postgres;SSL Mode=Disable",
+                ConnectionString = $"Host=localhost;Port={TestSupport.TestEngines.Postgres.Port};Database=postgres;SSL Mode=Disable",
                 AuthMode = AuthMode.SqlAuth,
                 UserId = "dbdatasync",
-                Password = "DbDataSync_Test_Pw1",
+                Password = TestSupport.TestEngines.Postgres.Password,
                 TestQuery = "SELECT * FROM this_table_does_not_exist_anywhere",
             }, JsonOptions)).EnsureSuccessStatusCode();
 

@@ -11,7 +11,7 @@
 -- the time DbDataSync.Drivers.Oracle.Tests.OracleFlashbackReaderTests runs against it — each test cleans
 -- its own rows out rather than the table being dropped and recreated per test.
 ALTER SESSION SET CONTAINER = FREEPDB1;
-ALTER SESSION SET CURRENT_SCHEMA = dbdatasync;
+ALTER SESSION SET CURRENT_SCHEMA = dbkit;
 
 CREATE TABLE fb_probe_shared (
     id   NUMBER PRIMARY KEY,

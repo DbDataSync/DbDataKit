@@ -74,7 +74,7 @@ public sealed class BulkLoadIntegrationTests : IClassFixture<TestApiFactory>, IA
             await ExecuteAsync(db, $"INSERT INTO dbo.[Src_{i}] (Id, Name) VALUES {values};");
         }
 
-        SetSecretEnvVar(_connectionName, "DbDataSync_Test_Pw1");
+        SetSecretEnvVar(_connectionName, TestSupport.TestEngines.MsSql.Password);
         await CreateConnectionAsync();
         await CreateReplicationAsync();
         await CreateMappingAsync(1);
@@ -589,12 +589,12 @@ public sealed class BulkLoadIntegrationTests : IClassFixture<TestApiFactory>, IA
             Name = _connectionName,
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = _databaseName,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
         }, JsonOptions)).EnsureSuccessStatusCode();
 
     private async Task CreateReplicationAsync() =>

@@ -24,11 +24,9 @@ namespace DbDataSync.Cli.Tests;
 [Trait("Category", "Integration")]
 public sealed class InviteCommandTests : IDisposable
 {
-    private const string Password = "DbDataSync_Test_Pw1";
+    private static string Password => TestSupport.TestEngines.MsSql.Password;
 
-    private static readonly string ServerConnectionString =
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_MSSQL_SERVER")
-        ?? $"Data Source=localhost,14330;User ID=sa;Password={Password};TrustServerCertificate=True";
+    private static readonly string ServerConnectionString = TestSupport.TestEngines.MsSql.ConnectionString;
 
     private readonly string _root = Directory.CreateTempSubdirectory("dbdatasync-invite-tests-").FullName;
     private readonly string _databaseName = $"DbDataSyncInviteTest_{Guid.NewGuid():N}";

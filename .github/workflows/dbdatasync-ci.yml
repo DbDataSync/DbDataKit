@@ -35,7 +35,7 @@ jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataSync/|DbDataKit/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatasync-|_)|actions/setup-product))'
+      paths: '^(DbDataSync/|DbDataKit/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatasync-|_)|actions/setup-product))'
 
   # ---- ported jobs ----
   dotnet:
@@ -54,8 +54,8 @@ jobs:
         run: dotnet build DbDataSync.slnf --no-restore --configuration Release
       - name: Test
         # Category=Integration tests need real database instances (SQL Server, Postgres, MySQL,
-        # MariaDB, Oracle) — see the dotnet-integration job below, which brings up docker-compose.yml's
-        # full topology (architecture/implementation/phase-7-e2e-validation.md, extended by phases
+        # MariaDB, Oracle) — see the dotnet-integration job below, which brings up the shared engines
+        # from testenv/ (architecture/implementation/phase-7-e2e-validation.md, extended by phases
         # 153/154).
         run: dotnet test DbDataSync.slnf --no-build --configuration Release --filter "Category!=Integration"
 
@@ -66,7 +66,7 @@ jobs:
   # so this is the only place any of them actually run and prove anything. Mirrors the `dotnet` job
   # exactly (same restore/build/test flow, same `Category!=Integration` filter — the DB-backed
   # integration suite needs the Linux-only containers `dotnet-integration` brings up via
-  # docker-compose.yml, which have no equivalent here) rather than hand-picking which projects to run:
+  # testenv/, which have no equivalent here) rather than hand-picking which projects to run:
   # any future Windows-only test anywhere in the solution is covered automatically, with no second list
   # to keep in sync.
   dotnet-windows:
@@ -117,11 +117,10 @@ jobs:
           path: DbDataSync/TestResults/
           retention-days: 7
 
-  # Phase 154: docker-compose.yml, the same file a developer runs locally, rather than a second,
-  # hand-maintained set of GitHub Actions `services:` container definitions. That duplication is what
-  # let phase 147/148's mariadb/oracle containers go missing from CI in the first place (phase 153's
-  # own retrospective) — one topology, defined once, used everywhere, closes that class of drift for
-  # good rather than patching this one instance of it.
+  # Phase 154, then F15: the shared test engines (testenv/docker-compose.yml, the file every product and a developer uses) rather than a
+  # second, hand-maintained set of GitHub Actions `services:` container definitions or a compose file of Sync's own. That duplication is
+  # what let phase 147/148's mariadb/oracle containers go missing from CI in the first place (phase 153's own retrospective) — one
+  # topology, defined once, used everywhere, closes that class of drift for good.
   dotnet-integration:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
@@ -134,18 +133,15 @@ jobs:
           product: DbDataSync
           duckdb: 'false'
       - name: Start the databases
-        # No explicit service names, unlike the playwright job below — this one genuinely needs every
-        # service docker-compose.yml defines, so naming a subset here would just be one more list to
-        # keep in sync with that file as engines get added. --wait blocks on each one's own healthcheck,
-        # already declared in that one file, so the suite never opens a connection too early.
-        #
-        # This also does what phase 153's "Provision Oracle" step above used to do by hand, for free:
-        # docker-compose.yml's oracle service bind-mounts docker/oracle-init/*.sql into the container's
-        # own init directory, and — unlike a GitHub Actions `services:` container, which is created
-        # before actions/checkout ever runs — this step runs after checkout, so those files genuinely
-        # exist on disk the moment the container looks for them. The image's own entrypoint runs them
-        # itself; no separate docker exec/sqlplus step needed any more.
-        run: docker compose up -d --wait
+        # Every engine Sync's suites use: both SQL Servers (the first with Agent on, for CDC), the PostgreSQL with logical decoding
+        # (built from testenv/postgres-logical, with a fresh postgres:17 base), MySQL, MariaDB, Oracle. `up` waits on each one's own
+        # healthcheck, so the suite never opens a connection too early. Oracle's init scripts (testenv/oracle-init: the flashback
+        # grants and the probe table) run on its first start; this step runs after checkout, so those files exist on disk by then.
+        working-directory: .
+        run: testenv/testenv.sh up mssql mssql-target postgres-logical mysql mariadb oracle
+      - name: Point the suites at them
+        working-directory: .
+        run: testenv/testenv.sh env dbdatasync --dotenv >> "$GITHUB_ENV"
       - name: Fetch the pinned DuckDB engine
         working-directory: .
         run: scripts/fetch-duckdb.sh
@@ -154,13 +150,16 @@ jobs:
       - name: Build
         run: dotnet build DbDataSync.slnf --no-restore --configuration Release
       - name: Test (Integration)
-        # Same topology as docker-compose.yml (SQL Server source: 14330, target: 14331; Postgres:
-        # 15432; MySQL: 13306; MariaDB: 13307; Oracle: 15210) because it *is* docker-compose.yml now —
-        # the tests' localhost-based defaults work unchanged in CI.
+        # The engines from testenv/ (SQL Server 14330 and 14331, PostgreSQL with logical decoding 15433, MySQL 13306,
+        # MariaDB 13307, Oracle 15210); the DBDATASYNC_TEST_* variables of the step above say where.
         run: dotnet test DbDataSync.slnf --no-build --configuration Release --filter "Category=Integration"
         env:
           # The DuckDB extension test downloads httpfs for the pinned engine from DuckDB's extension server (K06).
           DBDATASYNC_TEST_NETWORK: "true"
+      - name: Stop the databases
+        if: always()
+        working-directory: .
+        run: testenv/testenv.sh down
 
   web:
     needs: changes
@@ -201,10 +200,10 @@ jobs:
     if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    # docker-compose.yml, the same file dotnet-integration above now uses too. This job specifically
+    # testenv/docker-compose.yml, the same file dotnet-integration above uses too. This job specifically
     # needs one thing a GitHub Actions native `services:` container could never have given it, even
     # before phase 154: the suite's tests/DbDataSync.Web.Tests/test-db.ts reaches SQL Server by
-    # `docker exec dbdatasync-mssql-source sqlcmd ...` — by container *name*, not through a published
+    # `docker exec dbkit-test-mssql sqlcmd ...` — by container *name*, not through a published
     # port — and a `services:` container is named by the runner, not by this file. Compose's
     # container_name is what makes that name exist, and it is the same file the suite is already
     # written against locally, so CI runs the topology unchanged rather than a lookalike.
@@ -222,14 +221,17 @@ jobs:
             DbDataKit/web/package-lock.json
             DbDataSync/tests/DbDataSync.Web.Tests/package-lock.json
       - name: Start the databases
-        # --wait blocks on the healthchecks docker-compose.yml already declares, so the suite never
+        # `up` blocks on the healthchecks testenv/docker-compose.yml already declares, so the suite never
         # opens a connection to a SQL Server that is still coming up. mysql added alongside the
         # original three for connection-test-preview.spec.ts (phase 177M) — the only Playwright-level
         # proof that IConnectionPreviewer's redaction actually reaches the console, and the only
         # bundled catalog driver (mysql.generic) that exercises it, since every hand-written built-in
         # (MsSql/Postgres) doesn't implement that interface. Found missing by a real CI failure (three
         # in a row), not anticipated when that spec was added.
-        run: docker compose up -d --wait mssql-source mssql-target postgres mysql
+        working-directory: .
+        run: |
+          testenv/testenv.sh up mssql mssql-target postgres-logical mysql
+          testenv/testenv.sh env dbdatasync --dotenv >> "$GITHUB_ENV"
       - name: Build the API and the worker
         # Debug, deliberately: playwright.config.ts's webServer runs
         # src/DbDataSync.Api/bin/Debug/net10.0/DbDataSync.Api.dll through `dotnet exec`, so a Release
@@ -264,6 +266,10 @@ jobs:
         # globalSetup/globalTeardown build and drop the test database — nothing to orchestrate here.
         working-directory: DbDataSync/tests/DbDataSync.Web.Tests
         run: npx playwright test
+      - name: Stop the databases
+        if: always()
+        working-directory: .
+        run: testenv/testenv.sh down
       - name: Upload traces and screenshots from a failed run
         # trace: 'retain-on-failure' is already on; without this the trace of a CI-only failure is
         # thrown away with the runner, which is the one case it exists for.

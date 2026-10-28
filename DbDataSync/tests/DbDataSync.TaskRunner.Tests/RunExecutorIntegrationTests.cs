@@ -173,12 +173,12 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
         {
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = _databaseName,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
             Name = name,
         };
         _configRepository.SaveConnection(MakeConnectionInput("src-conn"), Author);

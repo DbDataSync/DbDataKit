@@ -128,7 +128,7 @@ and the NuGet cache are cached; the shared libraries' job runs once (`dbdatakit-
 
 ## Implemented: `testenv/` (phase 2, first slice)
 
-`testenv/docker-compose.yml` has a profile per engine; so far `mssql` (port 14330) and `postgres` (port 15432).
+`testenv/docker-compose.yml` has a profile per engine: `mssql` (port 14330), `mssql-target` (14331), `postgres` (15432), `postgres-logical` (15433), `mysql` (13306), `mariadb` (13307) and `oracle` (15210). DbDataSync's own compose file is gone (slice F15).
 `testenv/testenv.sh` drives it: `up [engines]`, `down`, `status`, and `env [product] [--dotenv]`.
 
 - **Canonical variables**, each emitted only while its engine is running: `DBKIT_TEST_MSSQL`, `DBKIT_TEST_MSSQL_SERVER`,

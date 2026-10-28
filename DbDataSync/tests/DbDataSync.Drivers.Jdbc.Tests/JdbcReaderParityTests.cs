@@ -65,7 +65,7 @@ public sealed class JdbcReaderParityTests(JdbcTestDatabase db) : IClassFixture<J
             AuthMode = AuthMode.SqlAuth,
             UserId = "dbdatasync",
         };
-        _jdbc = _jdbcDriver.CreateConnection(config, "DbDataSync_Test_Pw1");
+        _jdbc = _jdbcDriver.CreateConnection(config, TestSupport.TestEngines.Postgres.Password);
         _jdbc.Open();
     }
 

@@ -47,10 +47,13 @@ Per product, from its folder: `dotnet build`, then the suites below. Run the sui
 
 Test engines:
 
-- `testenv/testenv.sh up mssql postgres`, then `eval "$(testenv/testenv.sh env dbdataproxy)"` (also `dbdatakit`); `down` when finished.
-- Sync has its own `DbDataSync/docker-compose.yml` (SQL Server source and target, PostgreSQL with `wal_level=logical` and wal2json,
-  MySQL, MariaDB, Oracle). Its ports (14330, 14331, 15432, ...) are the tests' defaults. Its Postgres image needs a current
-  `postgres:17` base: build it with `--pull`. Both stacks use SQL Server on 14330, so run one at a time.
+- One environment for every suite, `testenv/docker-compose.yml`, one profile per engine: `testenv/testenv.sh up mssql postgres`, then
+  `eval "$(testenv/testenv.sh env dbdataproxy)"` (also `dbdatakit`, `dbdatabuild`, `dbdatasync`); `down` when finished. Profiles: `mssql`
+  (14330, SQL Server Agent on), `mssql-target` (14331), `postgres` (15432), `postgres-logical` (15433), `mysql` (13306), `mariadb`
+  (13307), `oracle` (15210). Sync: `testenv/testenv.sh up mssql mssql-target postgres-logical mysql mariadb oracle`, then
+  `eval "$(testenv/testenv.sh env dbdatasync)"`. `postgres-logical` is the one second engine of a kind (wal_level=logical and wal2json,
+  built from `testenv/postgres-logical` on a fresh `postgres:17`), kept apart so the plain `postgres` stays what the other suites test.
+  Run one stack at a time on a machine: the ports are fixed.
 - Tests with ODBC data sources (Proxy's SQL Server tests, Kit's ODBC projects) need unixODBC and Microsoft's "ODBC Driver 18 for SQL
   Server" installed on the machine.
 

@@ -46,7 +46,7 @@ public sealed class JdbcCatalogTests(JdbcTestDatabase db) : IClassFixture<JdbcTe
             AuthMode = AuthMode.SqlAuth,
             UserId = "dbdatasync",
         };
-        _jdbc = _jdbcDriver.CreateConnection(config, "DbDataSync_Test_Pw1");
+        _jdbc = _jdbcDriver.CreateConnection(config, TestSupport.TestEngines.Postgres.Password);
         _jdbc.Open();
     }
 
