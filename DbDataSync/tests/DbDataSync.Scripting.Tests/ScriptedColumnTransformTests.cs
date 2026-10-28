@@ -26,8 +26,8 @@ public sealed class ScriptedColumnTransformTests : IDisposable
     private ISqlColumnExpression Compile(string code, string entryType) =>
         _compiler.Compile(new ScriptDefinition
         {
-            Manifest = new ScriptConfig { Name = "x", Kind = ScriptSlots.SqlColumnExpression, EntryType = entryType },
-            Code = code,
+            Manifest = new ScriptConfig { Name = "x", Kind = ScriptSlots.SqlColumnExpression },
+            Code = code + $"\nnew {entryType}()\n",
         }).CreateInstance<ISqlColumnExpression>("x");
 
     private static ColumnMapping Map(

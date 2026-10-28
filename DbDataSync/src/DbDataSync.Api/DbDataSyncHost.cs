@@ -196,7 +196,7 @@ public static class DbDataSyncHost
 
         builder.Services.AddSingleton(sp =>
             ScriptCacheDirectory.BesideStateDatabase(sp.GetRequiredService<ApiOptions>().StateDbPath));
-        builder.Services.AddSingleton<ScriptCompiler>();
+        builder.Services.AddSingleton(sp => new ScriptCompiler(sp.GetRequiredService<ScriptCacheDirectory>(), sp.GetRequiredService<ConfigRepository>().ScriptsDirectory));
         builder.Services.AddSingleton<ScriptHost>();
 
         // Loaded before DriverRegistry: a descriptor or a compiled driver registered from 109d/109e

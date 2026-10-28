@@ -46,8 +46,8 @@ public sealed class ScriptHostTests : IDisposable
     private void Save(string name, string code, bool enabled = true) => _configRepository.SaveScript(
         new ScriptDefinition
         {
-            Manifest = new ScriptConfig { Name = name, Kind = ScriptSlots.SqlColumnExpression, EntryType = "Expr", Enabled = enabled },
-            Code = code,
+            Manifest = new ScriptConfig { Name = name, Kind = ScriptSlots.SqlColumnExpression, Enabled = enabled },
+            Code = code + "\nnew Expr()\n",
         },
         new DbDataKit.Config.Git.GitAuthor("t", "t@t"));
 

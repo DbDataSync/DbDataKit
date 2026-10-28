@@ -18,6 +18,9 @@ public sealed class ScriptCacheDirectory
 {
     private readonly string _root;
 
+    /// <summary>The folder everything derived from scripts lives in: compiled images, the package store.</summary>
+    public string Root => _root;
+
     public ScriptCacheDirectory(string root)
     {
         _root = root;

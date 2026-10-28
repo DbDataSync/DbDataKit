@@ -167,7 +167,7 @@ public sealed class PreviewIntegrationTests : IClassFixture<TestApiFactory>, IAs
         var scriptName = $"needs-metadata-{Guid.NewGuid():N}";
         (await _client.PutAsJsonAsync($"/api/scripts/{scriptName}", new ScriptDefinition
         {
-            Manifest = new ScriptConfig { Name = scriptName, Kind = "sqlColumnExpression", EntryType = "Expr" },
+            Manifest = new ScriptConfig { Name = scriptName, Kind = "sqlColumnExpression" },
             Code = """
                 using DbDataSync.Scripting.Abstractions;
 
@@ -183,6 +183,8 @@ public sealed class PreviewIntegrationTests : IClassFixture<TestApiFactory>, IAs
                             : $"CONCAT('HAS_METADATA:', '{c.Column.Name}', ':', '{(c.Column.IsNullable ? "Y" : "N")}')";
                     }
                 }
+
+                new Expr()
                 """,
         }, JsonOptions)).EnsureSuccessStatusCode();
 
@@ -297,7 +299,7 @@ public sealed class PreviewIntegrationTests : IClassFixture<TestApiFactory>, IAs
             {
                 Manifest = new ScriptConfig
                 {
-                    Name = scriptName, Kind = "valueColumnExpression", EntryType = "Upper",
+                    Name = scriptName, Kind = "valueColumnExpression",
                 },
                 Code = """
                     using System.Collections.Generic;
@@ -310,6 +312,8 @@ public sealed class PreviewIntegrationTests : IClassFixture<TestApiFactory>, IAs
                         public object? Evaluate(object? value, ValueColumnExpressionContext c) =>
                             value is string s ? s.ToUpperInvariant() : value;
                     }
+
+                    new Upper()
                     """,
             },
             replicationName = _replicationName,
@@ -693,7 +697,7 @@ public sealed class PreviewIntegrationTests : IClassFixture<TestApiFactory>, IAs
         const string scriptName = "fake-id-type";
         (await _client.PutAsJsonAsync($"/api/scripts/{scriptName}", new ScriptDefinition
         {
-            Manifest = new ScriptConfig { Name = scriptName, Kind = "metadataProvider", EntryType = "FakeIdType" },
+            Manifest = new ScriptConfig { Name = scriptName, Kind = "metadataProvider" },
             Code = """
                 using System.Collections.Generic;
                 using System.Linq;
@@ -722,6 +726,8 @@ public sealed class PreviewIntegrationTests : IClassFixture<TestApiFactory>, IAs
                             .ToList();
                     }
                 }
+
+                new FakeIdType()
                 """,
         }, JsonOptions)).EnsureSuccessStatusCode();
 

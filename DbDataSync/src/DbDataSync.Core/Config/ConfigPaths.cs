@@ -5,7 +5,7 @@ namespace DbDataSync.Core.Config;
 /// config/connections/&lt;name&gt;.yaml
 /// config/replications/&lt;name&gt;/task.yaml
 /// config/replications/&lt;name&gt;/table-mappings/&lt;mapping-name&gt;.yaml
-/// config/scripts/&lt;name&gt;.yaml + config/scripts/&lt;name&gt;.cs
+/// config/scripts/&lt;name&gt;.yaml + config/scripts/&lt;name&gt;.csx
 /// </summary>
 internal static class ConfigPaths
 {
@@ -36,7 +36,7 @@ internal static class ConfigPaths
     /// <summary>The code, beside the manifest. Two files rather than one because code embedded in YAML
     /// diffs badly, cannot be opened by an editor, and re-indents on every serializer round trip. The
     /// extension follows <see cref="ScriptLanguage"/> — a SQL hook is the same artifact with
-    /// <c>.sql</c> beside the manifest instead of <c>.cs</c>.</summary>
+    /// <c>.sql</c> beside the manifest instead of <c>.csx</c>.</summary>
     public static string ScriptCodeFile(string configRoot, string name, ScriptLanguage language = ScriptLanguage.CSharp) =>
-        Path.Combine(ScriptsDir(configRoot), $"{name}{(language == ScriptLanguage.Sql ? ".sql" : ".cs")}");
+        Path.Combine(ScriptsDir(configRoot), $"{name}{(language == ScriptLanguage.Sql ? ".sql" : ".csx")}");
 }

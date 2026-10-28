@@ -87,14 +87,18 @@ public sealed class CsxCompiler(CsxCompilerOptions options)
     /// Loads the image into <paramref name="context"/> and runs the script. Call it from a frame that keeps nothing of the result: a result object of a type from the context would keep the context alive, so a host that wants to unload
     /// reads what it needs as plain data before it lets go. The script may be async; it is awaited here.
     /// </summary>
-    public static async Task<object?> RunAsync(byte[] image, AssemblyLoadContext context, object? globals = null)
+    public static Task<object?> RunAsync(byte[] image, AssemblyLoadContext context, object? globals = null) => Load(image, context).RunAsync(globals);
+
+    /// <summary>
+    /// Loads the image into the context once, for a host that runs the script more than once (each run is a new instance of the script and of whatever its last expression builds). An assembly can be loaded into a context only once,
+    /// so a host that wants a fresh script object per use loads once and runs many times.
+    /// </summary>
+    public static LoadedCsx Load(byte[] image, AssemblyLoadContext context)
     {
         var assembly = context.LoadFromStream(new MemoryStream(image));
         var factory = assembly.GetType(SubmissionType)?.GetMethod(FactoryMethod)
             ?? throw new InvalidOperationException($"The compiled script has no {SubmissionType}.{FactoryMethod}: Roslyn's scripting output changed shape.");
-        var submissions = new object?[2];
-        submissions[0] = globals;
-        return await ((Task<object?>)factory.Invoke(null, [submissions])!).ConfigureAwait(false);
+        return new LoadedCsx(factory);
     }
 
     private IEnumerable<MetadataReference> References(Closure closure)
@@ -136,5 +140,20 @@ public sealed class CsxCompiler(CsxCompilerOptions options)
     {
         var span = diagnostic.Location.GetLineSpan();
         return new ScriptDiagnostic(span.Path, span.StartLinePosition.Line + 1, span.StartLinePosition.Character + 1, diagnostic.GetMessage(), diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+}
+
+/// <summary>A compiled script loaded into a context; <see cref="RunAsync"/> runs it and returns the value of its last expression.</summary>
+public sealed class LoadedCsx
+{
+    private readonly MethodInfo _factory;
+
+    internal LoadedCsx(MethodInfo factory) => _factory = factory;
+
+    public async Task<object?> RunAsync(object? globals = null)
+    {
+        var submissions = new object?[2];
+        submissions[0] = globals;
+        return await ((Task<object?>)_factory.Invoke(null, [submissions])!).ConfigureAwait(false);
     }
 }
