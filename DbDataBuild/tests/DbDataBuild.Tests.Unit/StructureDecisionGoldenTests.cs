@@ -46,7 +46,8 @@ public class StructureDecisionGoldenTests
         {
             var original = File.ReadAllText(Path.Combine(root, "dbdatabuild.yml"));
             var parameters = original.IndexOf("\nparameters:\n", StringComparison.Ordinal) is var at and >= 0 ? original[(at + 1)..original.IndexOf("\npolicy:", at, StringComparison.Ordinal)] : "";
-            File.WriteAllText(Path.Combine(root, "dbdatabuild.yml"), PostgresConfig + parameters);
+            TestFiles.WriteAllText(Path.Combine(root, "dbdatabuild.yml"), PostgresConfig + parameters);
+            if (Directory.Exists(Path.Combine(root, "connections"))) Directory.Delete(Path.Combine(root, "connections"), true);      // the replaced file declared none, so none stays
         }
         var ctx = ProjectContext.Load(root);
         var selected = ctx.Select([], TextWriter.Null) ?? throw new InvalidOperationException($"{template}: no models");

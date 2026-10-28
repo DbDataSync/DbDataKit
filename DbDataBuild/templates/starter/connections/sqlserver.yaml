@@ -1,0 +1,9 @@
+# Connections are files (connection/1), one per connection: this one is `sqlserver`. The login is not here: it is DBDATA_BUILD_SQLSERVER_READ / _WRITE in the environment.
+schema: connection/1
+name: sqlserver
+engine: sqlserver
+extensions:
+  build:
+    title: Warehouse
+    description: "The database the models are built on."
+    properties: {environment: dev}

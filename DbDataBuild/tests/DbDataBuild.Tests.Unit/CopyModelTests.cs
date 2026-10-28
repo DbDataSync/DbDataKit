@@ -14,7 +14,7 @@ public class CopyModelTests
     private static string Project(string config = Config)
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
         Write(dir, "models/crm/customers.yml", Customers);
         return dir;
     }
@@ -23,7 +23,7 @@ public class CopyModelTests
     {
         var full = Path.Combine(dir, path);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-        File.WriteAllText(full, text);
+        TestFiles.WriteAllText(full, text);
     }
 
     private static void Copy(string dir, string name, string from, string extra = "")

@@ -138,7 +138,7 @@ public sealed class BuildServerProjectsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Post, "/api/v1/projects/sales/commands/project_show_graph", "{}")).StatusCode);
         Assert.Equal("in:" + projects.RootOf(project), runner.Calls[0][^1]);
 
-        File.WriteAllText(Path.Combine(remote, "NOTES.md"), "new on the remote");
+        TestFiles.WriteAllText(Path.Combine(remote, "NOTES.md"), "new on the remote");
         using (var repo = new Repository(remote))
         {
             Commands.Stage(repo, "NOTES.md");

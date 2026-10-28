@@ -101,8 +101,11 @@ public sealed record ServerFacts(
     string? QuoteOpen = null, string? QuoteClose = null,
     IdentifierCase? StoredCase = null, IdentifierCase? QuotedCase = null, int? MaxIdentifierLength = null,
     string? CatalogSeparator = null, string? CatalogTerm = null, string? SchemaTerm = null, bool? ReadOnly = null,
-    bool? SupportsTop = null, bool? SupportsLimit = null, bool? SupportsOffsetFetch = null, bool? SupportsMultipleStatements = null)
+    bool? SupportsTop = null, bool? SupportsLimit = null, bool? SupportsOffsetFetch = null, bool? SupportsMultipleStatements = null,
+    string? StoredCaseWord = null, string? QuotedCaseWord = null)
 {
+    // StoredCaseWord and QuotedCaseWord are the source's own word for how it cases identifiers, for a source that answers in a protocol's words rather than ODBC's
+    // (Flight SQL: unknown, case_insensitive, uppercase, value_N); StoredCase is set from the word where it maps onto the enum. A consumer that records what a server said (Build's dialect lock) keeps the word.
     /// <summary>True when the server reports no way to quote identifiers (an ODBC driver answering a single space).</summary>
     public bool HasQuoteCharacter => !string.IsNullOrWhiteSpace(QuoteOpen);
 }

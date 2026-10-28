@@ -16,8 +16,8 @@ public class RenderCommandTests
     {
         var dir = NewProjectDir();
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), Orders);
-        if (config != null) File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), Orders);
+        if (config != null) TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
         return dir;
     }
 
@@ -25,8 +25,8 @@ public class RenderCommandTests
     {
         var stem = Path.Combine(dir, "models", name.Replace('.', '/'));
         Directory.CreateDirectory(Path.GetDirectoryName(stem)!);
-        File.WriteAllText(stem + ".yml", yaml);
-        File.WriteAllText(stem + ".sql", sql);
+        TestFiles.WriteAllText(stem + ".yml", yaml);
+        TestFiles.WriteAllText(stem + ".sql", sql);
     }
 
     private static (int Exit, string Out, string Err) Run(params string[] args)
@@ -157,11 +157,11 @@ public class RenderCommandTests
         Model(dir, "marts.fct_orders", FctYaml, FctSql);
         Render(dir, "--write");
         var modelDir = Path.Combine(dir, "rendered/sqlserver/marts.fct_orders");
-        File.WriteAllText(Path.Combine(modelDir, "load.removed_op.sql"), "-- an operation that no longer exists\n");
-        File.WriteAllText(Path.Combine(modelDir, "NOTES.md"), "hand-written\n");
+        TestFiles.WriteAllText(Path.Combine(modelDir, "load.removed_op.sql"), "-- an operation that no longer exists\n");
+        TestFiles.WriteAllText(Path.Combine(modelDir, "NOTES.md"), "hand-written\n");
         Directory.CreateDirectory(Path.Combine(dir, "rendered/sqlserver/marts.gone_model"));
-        File.WriteAllText(Path.Combine(dir, "rendered/sqlserver/marts.gone_model/load.default.sql"), "-- model was deleted\n");
-        File.WriteAllText(Path.Combine(dir, "rendered/sqlserver/marts.gone_model/manifest.yml"), "model: marts.gone_model\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "rendered/sqlserver/marts.gone_model/load.default.sql"), "-- model was deleted\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "rendered/sqlserver/marts.gone_model/manifest.yml"), "model: marts.gone_model\n");
 
         var (exit, output, _) = Render(dir, "--write");
         Assert.Equal(CliApp.ExitOk, exit);
@@ -211,7 +211,7 @@ public class RenderCommandTests
         var modelDir = Path.Combine(dir, "rendered/sqlserver/marts.fct_orders");
         File.Delete(Path.Combine(dir, "rendered/postgres/marts.fct_orders/manifest.yml"));
         File.AppendAllText(Path.Combine(modelDir, "load.default.sql"), "-- hand edit\n");
-        File.WriteAllText(Path.Combine(modelDir, "load.old.sql"), "-- stale\n");
+        TestFiles.WriteAllText(Path.Combine(modelDir, "load.old.sql"), "-- stale\n");
         var before = Snapshot(dir);
 
         var (exit, output, err) = Render(dir, "--check");
@@ -230,12 +230,12 @@ public class RenderCommandTests
         var dir = Project();
         Model(dir, "marts.fct_orders", FctYaml, FctSql);
         Render(dir, "--write");
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT o.order_id, o.amount FROM staging.orders o WHERE o.amount > 0\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT o.order_id, o.amount FROM staging.orders o WHERE o.amount > 0\n");
         Assert.Equal(CliApp.ExitFindings, Render(dir, "--check").Exit);
 
         Render(dir, "--write");
         Assert.Equal(CliApp.ExitOk, Render(dir, "--check").Exit);
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), FctYaml + "loads:\n  merge:\n    default: true\n    strategy: merge_by_key\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), FctYaml + "loads:\n  merge:\n    default: true\n    strategy: merge_by_key\n");
         var (exit, _, err) = Render(dir, "--check");
         Assert.Equal(CliApp.ExitFindings, exit);
         Assert.Contains("load.default.sql", err);                                      // the implicit operation is no longer rendered
@@ -248,7 +248,7 @@ public class RenderCommandTests
         var dir = Project();
         Model(dir, "marts.fct_orders", FctYaml, FctSql);
         var a = Render(dir).Out;
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "-- explained\nSELECT   o.order_id,\n  o.amount\nFROM staging.orders o\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "-- explained\nSELECT   o.order_id,\n  o.amount\nFROM staging.orders o\n");
         var b = Render(dir).Out;
         var hashLine = "-- definition hash: ";
         Assert.Equal(a.Split('\n').First(l => l.StartsWith(hashLine)), b.Split('\n').First(l => l.StartsWith(hashLine)));

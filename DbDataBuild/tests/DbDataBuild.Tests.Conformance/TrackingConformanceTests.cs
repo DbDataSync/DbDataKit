@@ -182,7 +182,7 @@ public class TrackingConformanceTests
         Directory.CreateDirectory(dir);
         try
         {
-            File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), $"defaults: {{connections: [{name}]}}\ntracking: {{ connection: {name}, schema: ddb_cli }}\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), $"defaults: {{connections: [{name}]}}\ntracking: {{ connection: {name}, schema: ddb_cli }}\n");
             Func<string, string?> env = v => v == LoginSettings.VariableName(name, DbDataBuild.Execution.Login.Write) ? engine.ConnectionString : null;
             for (var run = 1; run <= 2; run++) // the second run is a no-op, not an error
             {

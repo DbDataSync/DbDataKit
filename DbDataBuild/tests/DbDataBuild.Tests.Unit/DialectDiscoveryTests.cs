@@ -21,7 +21,7 @@ public class DialectDiscoveryTests
     [InlineData("MySQL", "'", null, "ansi", "\"", IdentifierCase.Preserve)]                           // a quote the tool does not write is kept out, and said
     public void The_product_picks_the_dialect_and_the_reported_facts_correct_it(string? product, string? quote, string? idCase, string dialect, string open, IdentifierCase folded)
     {
-        var chosen = DialectDiscovery.Choose(new ServerFacts(product, "1", quote, idCase), None);
+        var chosen = DialectDiscovery.Choose(FlightServerFacts.Of(product, "1", quote, idCase), None);
         Assert.Equal(dialect, chosen.Dialect);
         Assert.Equal(open, chosen.Profile.QuoteOpen);
         Assert.Equal(folded, chosen.Profile.Case);
@@ -33,7 +33,7 @@ public class DialectDiscoveryTests
     public void A_product_named_like_a_dialect_of_the_project_is_that_dialect()
     {
         var own = DialectProfiles.Build("clickhouse", DialectProfiles.Ansi, null, "`", null, "SELECT 1 FROM system.one", null, null, null, null).Profile!;
-        var chosen = DialectDiscovery.Choose(new ServerFacts("ClickHouse", "24", "`"), new Dictionary<string, DialectProfile> { ["clickhouse"] = own });
+        var chosen = DialectDiscovery.Choose(FlightServerFacts.Of("ClickHouse", "24", "`"), new Dictionary<string, DialectProfile> { ["clickhouse"] = own });
         Assert.Equal("clickhouse", chosen.Dialect);
         Assert.Equal("SELECT 1 FROM system.one", chosen.Profile.Ping);
         Assert.Contains("the project's dialect `clickhouse`", string.Join(' ', chosen.Reasons));
@@ -42,19 +42,19 @@ public class DialectDiscoveryTests
     [Fact]
     public void The_hash_covers_what_the_committed_text_depends_on_and_nothing_else()
     {
-        var a = DialectDiscovery.Choose(new ServerFacts("PostgreSQL", "16.4", "\""), None).Profile;
-        Assert.Equal(DialectDiscovery.Hash(a), DialectDiscovery.Hash(DialectDiscovery.Choose(new ServerFacts("PostgreSQL", "17.0", "\"", ReadOnly: true), None).Profile));
+        var a = DialectDiscovery.Choose(FlightServerFacts.Of("PostgreSQL", "16.4", "\""), None).Profile;
+        Assert.Equal(DialectDiscovery.Hash(a), DialectDiscovery.Hash(DialectDiscovery.Choose(FlightServerFacts.Of("PostgreSQL", "17.0", "\"", readOnly: true), None).Profile));
         Assert.NotEqual(DialectDiscovery.Hash(a), DialectDiscovery.Hash(a with { QuoteOpen = "`", QuoteClose = "`" }));
         Assert.NotEqual(DialectDiscovery.Hash(a), DialectDiscovery.Hash(a with { Limit = LimitStyle.Top }));
         Assert.Equal(64, DialectDiscovery.Hash(a).Length);
     }
 
-    private static DialectLockEntry Entry(string connection, ServerFacts facts) => DialectLockEntry.From(connection, facts, DialectDiscovery.Choose(facts, None));
+    private static DialectLockEntry Entry(string connection, DbDataKit.Metadata.ServerFacts facts) => DialectLockEntry.From(connection, facts, DialectDiscovery.Choose(facts, None));
 
     [Fact]
     public void The_file_is_deterministic_sorted_and_read_back_to_the_same_entries()
     {
-        var entries = new[] { Entry("zeta", new ServerFacts("DuckDB", "1.5", "\"", "case_insensitive", "case_insensitive", false)), Entry("alpha", new ServerFacts("ClickHouse", "24", "`")) };
+        var entries = new[] { Entry("zeta", FlightServerFacts.Of("DuckDB", "1.5", "\"", "case_insensitive", "case_insensitive", false)), Entry("alpha", FlightServerFacts.Of("ClickHouse", "24", "`")) };
         var text = DialectLockFile.Render(entries);
         Assert.Equal(text, DialectLockFile.Render(entries.Reverse()));
         Assert.True(text.IndexOf("  alpha:", StringComparison.Ordinal) < text.IndexOf("  zeta:", StringComparison.Ordinal));
@@ -85,7 +85,7 @@ public class DialectDiscoveryTests
     [Fact]
     public void An_entry_edited_by_hand_does_not_match_its_hash_and_a_bad_value_is_refused()
     {
-        var text = DialectLockFile.Render([Entry("p", new ServerFacts("PostgreSQL", "16", "\""))]);
+        var text = DialectLockFile.Render([Entry("p", FlightServerFacts.Of("PostgreSQL", "16", "\""))]);
         var edited = text.Replace("quote: '\"'", "quote: \"`\"").Replace("quote: \"\\\"\"", "quote: \"`\"");
         Assert.NotEqual(text, edited);
         var diags = new List<Diagnostic>();
@@ -106,26 +106,26 @@ public class DialectDiscoveryTests
         var config = ProjectConfigLoader.Load("connections:\n  a: { engine: readonly flightsql }\n  b: { engine: readonly flightsql postgres }\n  c: { engine: readonly odbc }\n  d: { engine: readonly flightsql }\n", "dbdatabuild.yml", diags)!;
         Assert.Empty(diags);
         Assert.Equal(["a", "d"], DialectLockFile.Missing(config, ["a", "b", "c", "d", "a", "nowhere"]));
-        var committed = DialectLockFile.Apply(config, [Entry("a", new ServerFacts("PostgreSQL", "16", "\""))], diags);
+        var committed = DialectLockFile.Apply(config, [Entry("a", FlightServerFacts.Of("PostgreSQL", "16", "\""))], diags);
         Assert.Equal(["d"], DialectLockFile.Missing(committed, ["a", "d"]));
         Assert.Equal("postgres", committed.DialectOf("a").Name);
         Assert.Equal("ansi", committed.DialectOf("d").Name);
         Assert.Empty(diags);
         var stale = new List<Diagnostic>();
-        DialectLockFile.Apply(config, [Entry("b", new ServerFacts("PostgreSQL", "16", "\"")), Entry("gone", ServerFacts.Nothing)], stale);
+        DialectLockFile.Apply(config, [Entry("b", FlightServerFacts.Of("PostgreSQL", "16", "\"")), Entry("gone", FlightServerFacts.Nothing)], stale);
         Assert.Equal(["DDB-459", "DDB-459"], stale.Select(d => d.Code));
     }
 
     [Fact]
     public void The_comparison_names_what_differs_and_ignores_a_new_version()
     {
-        var committed = Entry("p", new ServerFacts("PostgreSQL", "16.4", "\""));
-        var now = new ServerFacts("Microsoft SQL Server", "16.0", "[");
+        var committed = Entry("p", FlightServerFacts.Of("PostgreSQL", "16.4", "\""));
+        var now = FlightServerFacts.Of("Microsoft SQL Server", "16.0", "[");
         var differences = DialectLockComparison.Differences(committed, DialectDiscovery.Choose(now, None), now);
         Assert.Contains("the dialect was `postgres` and is now `sqlserver`", differences);
         Assert.Contains(differences, d => d.StartsWith("the identifier quote was `\"` and is now `[]`"));
         Assert.Contains("the server was `PostgreSQL` and now says `Microsoft SQL Server`", differences);
-        var upgraded = new ServerFacts("PostgreSQL", "17.1", "\"");
+        var upgraded = FlightServerFacts.Of("PostgreSQL", "17.1", "\"");
         Assert.Empty(DialectLockComparison.Differences(committed, DialectDiscovery.Choose(upgraded, None), upgraded));
     }
 }

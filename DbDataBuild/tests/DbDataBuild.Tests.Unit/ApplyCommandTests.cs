@@ -21,7 +21,7 @@ public class ApplyCommandTests
     {
         dir ??= NewProjectDir();
         var path = Path.Combine(dir, "p.plan.yml");
-        File.WriteAllText(path, PlanDocument.Serialize(plan));
+        TestFiles.WriteAllText(path, PlanDocument.Serialize(plan));
         return path;
     }
 
@@ -50,7 +50,7 @@ public class ApplyCommandTests
     public void An_edited_plan_is_refused_before_any_login_is_read()
     {
         var path = Write(PlanWith(Step("1", RiskClass.Safe)));
-        File.WriteAllText(path, File.ReadAllText(path).Replace("ALTER TABLE x1", "DROP TABLE x1"));
+        TestFiles.WriteAllText(path, File.ReadAllText(path).Replace("ALTER TABLE x1", "DROP TABLE x1"));
         var (exit, output, err) = Cli(BothLogins.GetValueOrDefault, "connection", "deploy", "--apply-plan", path, "--project", Path.GetDirectoryName(path)!);
         Assert.Equal(CliApp.ExitFindings, exit);
         Assert.Contains("DDB-435", err);
@@ -98,7 +98,7 @@ public class ApplyCommandTests
     public void Plan_and_check_without_a_read_login_stop_before_doing_anything()
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n");
         foreach (var command in new[] { new[] { "connection", "deploy", "--write-plan" }, new[] { "connection", "status" } })
         {
             var (exit, _, err) = Cli(null, [.. command, "--project", dir]);
@@ -113,9 +113,9 @@ public class ApplyCommandTests
     public void Plan_needs_an_answers_file_that_loads_before_it_looks_at_the_database()
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n");
         var answers = Path.Combine(dir, "answers.yml");
-        File.WriteAllText(answers, "answers:\n  - id: not-a-question-id\n    choice: x\n");
+        TestFiles.WriteAllText(answers, "answers:\n  - id: not-a-question-id\n    choice: x\n");
         var (exit, _, err) = Cli(BothLogins.GetValueOrDefault, "connection", "deploy", "--write-plan", "--project", dir, "--answers", answers);
         Assert.Equal(CliApp.ExitFindings, exit);
         Assert.Contains("DDB-106", err);
@@ -125,7 +125,7 @@ public class ApplyCommandTests
     public void Ack_needs_a_reason_and_a_known_kind()
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n");
         Assert.Equal(CliApp.ExitUsage, Cli(BothLogins.GetValueOrDefault, "connection", "deploy", "--ack", "drift:marts.fct", "--project", dir).Exit);
         var (exit, _, err) = Cli(BothLogins.GetValueOrDefault, "connection", "deploy", "--ack", "banana:marts.fct", "--reason", "x", "--project", dir);
         Assert.Equal(CliApp.ExitUsage, exit);
@@ -170,10 +170,10 @@ public class ApplyCommandTests
         var dir = NewProjectDir();
         void Git(string args) { using var p = Process.Start(new ProcessStartInfo("git", args) { WorkingDirectory = dir, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false })!; p.WaitForExit(); }
         Git("init -q");
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n");
         Git("add -A");
         Git("-c user.name=t -c user.email=t@example.com commit -q -m init");
-        File.WriteAllText(Path.Combine(dir, "uncommitted.txt"), "x");
+        TestFiles.WriteAllText(Path.Combine(dir, "uncommitted.txt"), "x");
         var path = Write(PlanWith(Step("1", RiskClass.Safe)), dir);
 
         var (exit, output, err) = Cli(BothLogins.GetValueOrDefault, "connection", "deploy", "--apply-plan", path, "--project", dir);

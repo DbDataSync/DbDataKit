@@ -53,11 +53,11 @@ public class SliceAdviceTests
     private static string Project(string sql, string loads = "", string extra = "", string config = "defaults: {connections: [sqlserver]}\nlint:\n  indexes: false\n")
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\ngrain: [order_id]\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n  - {name: order_date, type: DATE, nullable: false}\n  - {name: modified_at, type: TIMESTAMP}\n  - {name: amount, type: \"DECIMAL(14, 2)\"}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_daily.yml"), "name: marts.fct_daily\nkind: {incremental_by_time_range: {time_column: order_date}}\ngrain: [order_date]\n" + Cols + loads + extra);
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_daily.sql"), sql);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\ngrain: [order_id]\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n  - {name: order_date, type: DATE, nullable: false}\n  - {name: modified_at, type: TIMESTAMP}\n  - {name: amount, type: \"DECIMAL(14, 2)\"}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_daily.yml"), "name: marts.fct_daily\nkind: {incremental_by_time_range: {time_column: order_date}}\ngrain: [order_date]\n" + Cols + loads + extra);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_daily.sql"), sql);
         return dir;
     }
 
@@ -142,11 +142,11 @@ public class SliceAdviceTests
         Assert.DoesNotContain("DDB-239", Cli("project", "compile", "--project", withIndex).Err);
 
         var byGrain = Project(Simple);
-        File.WriteAllText(Path.Combine(byGrain, "models/staging/orders.yml"), File.ReadAllText(Path.Combine(byGrain, "models/staging/orders.yml")).Replace("grain: [order_id]", "grain: [order_date, order_id]"));
+        TestFiles.WriteAllText(Path.Combine(byGrain, "models/staging/orders.yml"), File.ReadAllText(Path.Combine(byGrain, "models/staging/orders.yml")).Replace("grain: [order_id]", "grain: [order_date, order_id]"));
         Assert.DoesNotContain("DDB-239", Cli("project", "compile", "--project", byGrain).Err);
 
         var nothing = Project(Simple);
-        File.WriteAllText(Path.Combine(nothing, "models/staging/orders.yml"), File.ReadAllText(Path.Combine(nothing, "models/staging/orders.yml")).Replace("grain: [order_id]\n", ""));
+        TestFiles.WriteAllText(Path.Combine(nothing, "models/staging/orders.yml"), File.ReadAllText(Path.Combine(nothing, "models/staging/orders.yml")).Replace("grain: [order_id]\n", ""));
         Assert.DoesNotContain("DDB-239", Cli("project", "compile", "--project", nothing).Err);
     }
 

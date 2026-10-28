@@ -46,10 +46,11 @@ if (!isWorker && warehouseConnection) {
   const project = path.join(os.tmpdir(), 'dbdatakit-console-e2e-warehouse')
   fs.rmSync(project, { recursive: true, force: true })
   execFileSync('dotnet', ['exec', buildDll, 'project', 'create', 'starter', project], { stdio: 'ignore' })
+  // the warehouse is PostgreSQL: a connection named after an engine needs no file, so the starter's sqlserver one is deleted
+  fs.rmSync(path.join(project, 'connections', 'sqlserver.yaml'))
   const file = path.join(project, 'dbdatabuild.yml')
   fs.writeFileSync(file, fs.readFileSync(file, 'utf8')
     .replace('defaults: {connections: [sqlserver]}', 'defaults: {connections: [postgres]}')
-    .replace('  sqlserver: {title', '  postgres: {title')
     .replace('tracking: { connection: sqlserver }', 'tracking: { connection: postgres }')
     .replace('trailing_space: ignored', 'trailing_space: significant')
     .replace('default: { duckdb: NFC, sqlserver: Latin1_General_100_CS_AS }', 'default: { duckdb: NFC, postgres: C }'))

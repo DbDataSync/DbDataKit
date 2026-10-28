@@ -13,13 +13,13 @@ public class ModelLayoutTests
     private static string Project(string layout, params (string Path, string Name)[] models)
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\ntracking: none\n" + (layout.Length == 0 ? "" : $"model_layout: {layout}\n"));
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\ntracking: none\n" + (layout.Length == 0 ? "" : $"model_layout: {layout}\n"));
         foreach (var (path, name) in models)
         {
             var full = Path.Combine(dir, "models", path + ".yml");
             Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-            File.WriteAllText(full, $"name: {name}\nkind: full\n{Cols}");
-            File.WriteAllText(Path.Combine(dir, "models", path + ".sql"), "SELECT 1 AS n\n");
+            TestFiles.WriteAllText(full, $"name: {name}\nkind: full\n{Cols}");
+            TestFiles.WriteAllText(Path.Combine(dir, "models", path + ".sql"), "SELECT 1 AS n\n");
         }
         return dir;
     }
@@ -69,7 +69,7 @@ public class ModelLayoutTests
 
         var dir = Project("none");
         Directory.CreateDirectory(Path.Combine(dir, "models", "elsewhere"));
-        File.WriteAllText(Path.Combine(dir, "models", "elsewhere", "orders.yml"), "name: erp.orders\nkind: mapped\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models", "elsewhere", "orders.yml"), "name: erp.orders\nkind: mapped\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
         var ctx = ProjectContext.Load(dir);
         Assert.Equal("models/elsewhere/orders.yml", ctx.Project.MappedModels.Single().File);
         Assert.Equal("models/elsewhere/orders.yml", MetadataBuilder.ModelFile(ctx.Project.MappedModels.Single()));
@@ -92,7 +92,7 @@ public class ModelLayoutTests
         Assert.Equal(0, CliApp.Run(["project", "model", "update", "--project", dir, "--check"], o, e, environment: _ => null));
 
         var objectDir = Project("object");
-        File.WriteAllText(Path.Combine(objectDir, "models", "fresh.sql"), "SELECT 1 AS n\n");
+        TestFiles.WriteAllText(Path.Combine(objectDir, "models", "fresh.sql"), "SELECT 1 AS n\n");
         var o2 = new StringWriter(); var e2 = new StringWriter();
         CliApp.Run(["project", "model", "update", "--project", objectDir, "--check"], o2, e2, environment: _ => null);
         Assert.Contains("its file name does not say the schema", e2.ToString() + o2.ToString());

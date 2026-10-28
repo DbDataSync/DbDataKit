@@ -67,7 +67,7 @@ public class TemplateConformanceTests
                 // the PostgreSQL profile replaces the file; what the template declares apart from the engine (the NAME parameters of `macros`) is kept
                 var original = File.ReadAllText(Path.Combine(dir, "dbdatabuild.yml"));
                 var parameters = original.IndexOf("\nparameters:\n", StringComparison.Ordinal) is var at and >= 0 ? original[(at + 1)..original.IndexOf("\npolicy:", at, StringComparison.Ordinal)] : "";
-                File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), PostgresConfig + parameters);
+                TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), PostgresConfig + parameters);
             }
             if (native) File.AppendAllText(Path.Combine(dir, "dbdatabuild.yml"), "\nrewrites:\n  fidelity: native\n");
 

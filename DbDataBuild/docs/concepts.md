@@ -104,8 +104,8 @@ Where plans are kept, and how much is recorded, is the project's choice:
 plans:
   deploy:  { keep: committed, audit: full }      # plans/ in git, text also in the database
   refresh: { keep: committed, audit: standard }  # compiled plan in git; each event stores the plan hash
-connections:
-  dev:  { plans: { deploy: { keep: ephemeral, audit: minimal } } }   # made and applied in one step
+# connections/dev.yaml, under extensions.build:
+#   plans: { deploy: { keep: ephemeral, audit: minimal } }           # made and applied in one step
 ```
 
 | `keep` | In the project | In the database |

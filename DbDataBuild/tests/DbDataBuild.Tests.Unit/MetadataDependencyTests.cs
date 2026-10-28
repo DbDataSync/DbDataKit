@@ -29,13 +29,13 @@ public class MetadataDependencyTests
     {
         var dir = NewProjectDir();
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "connections:\n  wh: { engine: sqlserver }\ndefaults:\n  connections: [wh]\n");
-        File.WriteAllText(Path.Combine(dir, "models/staging/t.yml"), "name: staging.t\nkind: mapped\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
-        File.WriteAllText(Path.Combine(dir, "models/staging/ext.yml"), "name: staging.ext\nkind: {native: {query: \"SELECT 1 AS id\"}}\nreads: [staging.t]\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/v1.yml"), "name: marts.v1\nkind: view\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/v1.sql"), "SELECT id FROM staging.ext\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/v2.yml"), "name: marts.v2\nkind: full\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/v2.sql"), "SELECT v1.id FROM marts.v1 v1 JOIN staging.t t ON t.id = v1.id\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "connections:\n  wh: { engine: sqlserver }\ndefaults:\n  connections: [wh]\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/t.yml"), "name: staging.t\nkind: mapped\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/ext.yml"), "name: staging.ext\nkind: {native: {query: \"SELECT 1 AS id\"}}\nreads: [staging.t]\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/v1.yml"), "name: marts.v1\nkind: view\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/v1.sql"), "SELECT id FROM staging.ext\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/v2.yml"), "name: marts.v2\nkind: full\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/v2.sql"), "SELECT v1.id FROM marts.v1 v1 JOIN staging.t t ON t.id = v1.id\n");
         return dir;
     }
 

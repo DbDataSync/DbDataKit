@@ -131,7 +131,7 @@ public partial class ApplyConformanceTests
             var withGraph = File.ReadAllText(loadsPath);
             var loadsFile = DbDataBuild.Planning.LoadsDocument.Parse(withGraph, loadsPath, []);
             Assert.NotNull(loadsFile?.Dependencies);
-            File.WriteAllText(loadsPath, DbDataBuild.Planning.LoadsDocument.Serialize(loadsFile! with { Dependencies = null }));
+            TestFiles.WriteAllText(loadsPath, DbDataBuild.Planning.LoadsDocument.Serialize(loadsFile! with { Dependencies = null }));
             try
             {
                 var oldFile = run.Cli("connection", "refresh", name, "par", "--parallel", "3", "--format", "json");
@@ -142,7 +142,7 @@ public partial class ApplyConformanceTests
                 Assert.Contains("the loads file has no dependency graph", oldDoc["warnings"]!.ToJsonString());
                 Assert.Equal(Shape(oneDoc), Shape(oldDoc));
             }
-            finally { File.WriteAllText(loadsPath, withGraph); }
+            finally { TestFiles.WriteAllText(loadsPath, withGraph); }
 
             // max_parallel on the connection caps the destination: asked for 3, the loads go one at a time
             run.Write("dbdatabuild.yml", File.ReadAllText(Path.Combine(run.Dir, "dbdatabuild.yml")) + $"connections:\n  {name}: {{ max_parallel: 1 }}\n");

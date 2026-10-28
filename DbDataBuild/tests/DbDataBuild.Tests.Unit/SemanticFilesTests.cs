@@ -135,7 +135,7 @@ public class SemanticFilesTests : IDisposable
         Assert.Contains("error DDB-616  semantic/sales.yml:", Run("project", "compile", "--project", dir).Err);
 
         var other = Retail();
-        Edit(Path.Combine(other, "dbdatabuild.yml"), "  sqlserver: { version: 16 }", "  sqlserver: { version: 16 }\n  postgres: {}");
+        File.WriteAllText(Path.Combine(other, "connections", "postgres.yaml"), "schema: connection/1\nname: postgres\nengine: postgres\n");
         Edit(SemanticFile(other), "default: {table: marts.dim_store, column: store_name}", "postgres: {table: marts.dim_store, column: store_name}");
         Assert.Contains("error DDB-612  semantic/sales.yml:", Run("project", "compile", "--project", other).Err);
     }

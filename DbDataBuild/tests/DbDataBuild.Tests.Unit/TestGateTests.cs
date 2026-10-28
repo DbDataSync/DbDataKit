@@ -9,14 +9,14 @@ public class TestGateTests
     private static string Project(string gate, string ruleBody)
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n" + gate);
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n" + gate);
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
         Directory.CreateDirectory(Path.Combine(dir, "models/marts"));
         Directory.CreateDirectory(Path.Combine(dir, "tests/metadata"));
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/o.yml"), "name: marts.o\nkind: view\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/o.sql"), "SELECT order_id FROM staging.orders\n");
-        File.WriteAllText(Path.Combine(dir, "tests/metadata/critical_rule.sql"), ruleBody);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/o.yml"), "name: marts.o\nkind: view\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/o.sql"), "SELECT order_id FROM staging.orders\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "tests/metadata/critical_rule.sql"), ruleBody);
         Assert.Equal(0, Cli(dir, "project", "compile").Exit);
         return dir;
     }
@@ -68,7 +68,7 @@ public class TestGateTests
     public void A_damaged_gate_setting_is_a_diagnostic(string gate, string message)
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n" + gate);
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n" + gate);
         Assert.Contains(message, Cli(dir, "project", "compile").Err);
     }
 }

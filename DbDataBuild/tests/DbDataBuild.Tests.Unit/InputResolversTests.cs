@@ -22,7 +22,7 @@ public class InputResolversTests
     private static string Project(string inputs, string refresh = "refresh: { daily: backfill }\n")
     {
         var dir = NewProjectDir();
-        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); File.WriteAllText(p, text); }
+        void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); TestFiles.WriteAllText(p, text); }
         Write("dbdatabuild.yml", Config);
         Write("models/staging/events.yml", Events);
         Write("models/marts/fct_events.yml", FctHead + Loads(inputs) + refresh);
@@ -193,7 +193,7 @@ public class InputResolversTests
         Assert.Contains("name: \"end\"", yaml);                                                                                    // the name of the input is beside its query
         Assert.Contains("MAX(", yaml, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, RenderFiles("--check", "--project", dir).Exit);
-        File.WriteAllText(loadsFile, yaml.Replace("MAX(", "MIN(", StringComparison.OrdinalIgnoreCase));
+        TestFiles.WriteAllText(loadsFile, yaml.Replace("MAX(", "MIN(", StringComparison.OrdinalIgnoreCase));
         Assert.NotEqual(0, RenderFiles("--check", "--project", dir).Exit);                                                           // the text is hashed with the plan: an edit is a refusal
     }
 
@@ -207,7 +207,7 @@ public class InputResolversTests
         var start = loads.Find("marts.fct_events", "backfill")!.Inputs.Single(i => i.Name == "start");
         Assert.Equal("current_date - ${project.window_days}", start.Resolver!.Text);
         Assert.Equal([new RefreshParameterRef("project.window_days", "INTEGER", "30")], start.Resolver.Parameters);
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), Config.Replace("\"30\"", "\"45\""));
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), Config.Replace("\"30\"", "\"45\""));
         Assert.Equal(0, RenderFiles("--write", "--project", dir).Exit);
         var (_, changed) = Read(dir, "daily");
         Assert.NotEqual(loads.Find("marts.fct_events", "backfill")!.Hash, changed.Find("marts.fct_events", "backfill")!.Hash);          // the value is part of the load plan
@@ -391,7 +391,7 @@ public class InputResolversTests
             Assert.Contains("not resolved here: it reads a database", shown.Out);                                         // `end` is a target resolver
 
             // the project's zone changes what today is: 23:30 UTC is already tomorrow in Berlin
-            File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), Config + "timezone: Europe/Berlin\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), Config + "timezone: Europe/Berlin\n");
             Assert.Equal(0, RenderFiles("--write", "--project", dir).Exit);
             Assert.Contains("now: 2026-01-31  (resolver:expression)", Show(dir, "daily", "--resolve").Out);
 

@@ -300,10 +300,13 @@ Dates at the engines' limits (0001-01-01, 9999-12-31) are copied as dates, not a
 of it then needs a `slice`, which says which rows are an origin's:
 
 ```yaml
-# dbdatabuild.yml
-connections:
-  store_017: { engine: postgres, parameters: { store_id: "017" } }     # a connection's parameters: what differs between the systems
-  store_018: { engine: postgres, parameters: { store_id: "018" } }
+# connections/store_017.yaml                   (one file per connection, connection/1: section 9.1)
+schema: connection/1
+name: store_017
+engine: postgres
+extensions:
+  build: { parameters: { store_id: "017" } }   # a connection's parameters: what differs between the systems
+# connections/store_018.yaml: the same with name: store_018 and store_id: "018"
 # models/warehouse/orders.yml
 name: warehouse.orders
 kind:
@@ -920,12 +923,7 @@ tags: [sales]
 properties: { owner: analytics, tier: 1 }
 defaults:                         # model settings every model inherits (section 9.4.1). Default connections: [sqlserver]
   connections: [sqlserver]
-connections:                      # named database endpoints; one named after an engine needs no entry (it may set the version)
-  sqlserver: { version: 16, title: Warehouse }      # the T-SQL level to generate for (see below); resolves matrix `min_version` rows. A connection may carry the four words too
-  # shop:      { engine: postgres, max_parallel: 2 }   # the most sessions one refresh opens here at once (an origin of copies: the reads; the destination: caps `parallel`). Default: no limit
-  # warehouse: { engine: postgres }   # any other name says its engine; its logins are DBDATA_BUILD_WAREHOUSE_READ and _WRITE
-  # shop:      { engine: readonly postgres }   # only read (a copy's origin, 9.4.2): no _WRITE login is read, never a destination; `engine` is keywords, see 9.4.2
-  postgres:  { version: 17 }
+# connections are not declared here: each is a file, connections/<name>.yaml (connection/1), shown below. A `connections:` here is DDB-621.
 tracking:                         # where the records of what the tool built are kept (section 12). Default: nowhere, with a warning
   connection: sqlserver           # a connection of the project, which may be another one than the data's (central tracking); or `tracking: none`
   schema: dbdatabuild             # default: dbdatabuild
@@ -944,6 +942,25 @@ policy:
     native_definition_changed: warning   # DDB-234
     history_inconsistency: warning       # DDB-240
 ```
+
+**Connection files (as built, plan 13 E03).** A project's connections are one file each, `connections/<name>.yaml`, in the `connection/1` format the console, Sync and Proxy share (`DbDataKit.Connections`), read by `ProjectConnectionFiles` and handed to `ProjectConfigLoader`; `schemas/connection.schema.json` describes the file for an editor and the console. The file name is the connection's name (letters, digits and underscores; it becomes the login's variable `DBDATA_BUILD_<NAME>_READ` and `_WRITE`). A connection named after an engine needs no file unless it sets something (a version).
+
+```yaml
+# connections/shop.yaml
+schema: connection/1
+name: shop                        # equal to the file name
+engine: postgres                  # the driver, one word: sqlserver | postgres | fabric | duckdb | odbc | flightsql
+# dialect: clickhouse             # optional, for odbc and flightsql: a built-in or a name under `dialects:` (what `engine: readonly flightsql clickhouse` said with a keyword)
+access: readonly                  # optional: only read (a copy's origin, 9.4.2): no _WRITE login is read, never a destination
+extensions:
+  build:                          # the tool's own settings: what `connections.<name>:` held in dbdatabuild.yml before
+    version: 16                   # the T-SQL level to generate for (see below); resolves matrix `min_version` rows
+    max_parallel: 2               # the most sessions one refresh opens here at once (an origin of copies: the reads; the destination: caps `parallel`). Default: no limit
+    parameters: { store_id: E01 }
+    title: East shop              # and tags, description, properties (6.5.8), tracking, allow_native_commands, string_semantics, timezone, plans, refresh
+```
+
+There is no address, login, TLS or timeout in a connection file of this tool (the shared loader would take them; this tool refuses them, DDB-620): the login is the environment variable, never a file. Everything the shared loader finds (unknown keys, plaintext credentials, a wrong `schema`) and what is Build's (the name is the file's, `engine` is one word, `extensions.build` is a mapping with the keys above) is **DDB-620**, naming the file and the line in it. A `dbdatabuild.yml` that still has a `connections:` mapping is **DDB-621**, naming `dbdatabuild.yml` and every connection in it: nothing is converted and the project is not loaded until the entries are moved (clean break). In this document `connections.<name>.x` is shorthand for `extensions.build.x` in `connections/<name>.yaml`. The loader is `ProjectConfigLoader.LoadFromProject`; `Load(text)` still reads a `connections:` mapping in the text it is given, which is how the unit tests and editors that hold one piece of text use it, and which the project on disk never reaches.
 
 - **What a SQL Server version means.** `targets.sqlserver.version` is the **T-SQL level the tool generates for**, which is the engine's major version unless the database runs at an older compatibility level: **16** is SQL Server 2022, and also a 2025 server whose database is at compatibility level 160; **17** is SQL Server 2025 with the database at its own level, 170. There is one setting, not a second one for the compatibility level, because a lower number is always safe: a 2025 server at level 160 runs everything that 2022 runs (checked: the probe suite and the loads agree on 2022 and on 2025 at 160), and what the newer engine adds is used only from the version that has it. Checked on a 2025 server at both levels: `REGEXP_LIKE` and `REGEXP_SUBSTR` exist at 170 only; `REGEXP_REPLACE` exists at 160 too, and a project at 16 does not use it. From 17 the target rules write the regular expression functions (`regexp-full-match`, `regexp-extract`, `regexp-replace-first`); at 16 (or with no version) a query that needs them is reported by the matrix (DDB-301 below the minimum, DDB-308 when no version is set). Fabric gets none of this: it has never been run.
 - **Target versions** settle `min_version` matrix rows: at or above the minimum there is no finding, below it the construct is an error (DDB-301), and with no version configured it stays a warning (DDB-308).

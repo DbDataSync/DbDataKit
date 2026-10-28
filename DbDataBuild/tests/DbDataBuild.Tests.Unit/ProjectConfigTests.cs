@@ -1,5 +1,6 @@
 using DbDataBuild.Core;
 using DbDataBuild.Models;
+using DbDataBuild.Models.Yaml;
 using static DbDataBuild.Tests.Unit.SchemaConformanceTests;
 
 namespace DbDataBuild.Tests.Unit;
@@ -91,10 +92,22 @@ public class ProjectConfigTests
         get { var d = new TheoryData<Case>(); foreach (var c in Cases) d.Add(c); return d; }
     }
 
+    /// <summary>
+    /// The project file's schema for the text, and for the connections in it the connection file's: the cases still write a `connections:` block in one text, which on disk is one `connection/1` file per entry
+    /// (<see cref="TestFiles.Split"/>), so the block is checked against the schema of those files and the rest against the project file's.
+    /// </summary>
+    private static bool SchemasAccept(string yaml)
+    {
+        var parsed = StrictYamlReader.Read(yaml, "dbdatabuild.yml", []) as YamlMapping;
+        if (parsed?.Get("connections") is null) return SchemaAccepts(LoadSchema("config"), yaml);
+        if (TestFiles.Split(yaml) is not { } split) return false;      // a block that cannot be written as files is not valid
+        return SchemaAccepts(LoadSchema("config"), split.Remaining.Trim().Length == 0 ? "{}" : split.Remaining) && split.Files.All(f => SchemaAccepts(LoadSchema("connection"), f.Text));
+    }
+
     [Theory, MemberData(nameof(Data))]
     public void Config_schema_and_loader_agree(Case c)
     {
-        Assert.Equal(c.SchemaValid, SchemaAccepts(LoadSchema("config"), c.Yaml));
+        Assert.Equal(c.SchemaValid, SchemasAccept(c.Yaml));
         var diags = new List<Diagnostic>();
         var cfg = ProjectConfigLoader.Load(c.Yaml, "dbdatabuild.yml", diags);
         if (c.Codes.Length == 0)
@@ -191,7 +204,7 @@ public class ProjectConfigTests
     public void Broken_file_reports_errors_and_falls_back_to_defaults()
     {
         var dir = TestSupport.NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [oracle]}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [oracle]}\n");
         var diags = new List<Diagnostic>();
         Assert.Equal(ProjectConfig.Default, ProjectConfigLoader.LoadFromProject(dir, diags));
         Assert.Contains(diags, d => d.Code == "DDB-106" && d.Location.File == "dbdatabuild.yml");

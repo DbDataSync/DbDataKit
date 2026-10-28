@@ -1,3 +1,4 @@
+using ServerFacts = DbDataKit.Metadata.ServerFacts;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -421,12 +422,12 @@ internal sealed class FlightSqlRowSource : IRowSource, IMetadataCatalog, IServer
                         case VersionId: version = text; break;
                         case ReadOnlyId: readOnly = values.Fields[child] is BooleanArray flags ? flags.GetValue(offset) : null; break;
                         case IdentifierQuoteId: quote = text; break;
-                        case IdentifierCaseId: idCase = number is { } c1 ? ServerFacts.CaseName(c1) : null; break;
-                        case QuotedIdentifierCaseId: quotedCase = number is { } c2 ? ServerFacts.CaseName(c2) : null; break;
+                        case IdentifierCaseId: idCase = number is { } c1 ? FlightServerFacts.CaseName(c1) : null; break;
+                        case QuotedIdentifierCaseId: quotedCase = number is { } c2 ? FlightServerFacts.CaseName(c2) : null; break;
                     }
                 }
             }
-            return new ServerFacts(name, version, quote, idCase, quotedCase, readOnly);
+            return FlightServerFacts.Of(name, version, quote, idCase, quotedCase, readOnly);
         }
         catch (Exception ex) when (NotOffered(ex)) { return null; }
     }

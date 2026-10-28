@@ -10,13 +10,12 @@ properties: {owner: analytics, tier: 2}
 #
 # SQL Server ignores trailing spaces when it compares text and PostgreSQL does not, so one project profile cannot
 # be exact on both: the engine the profile does not fit is reported (DDB-310) when you validate. This template is set
-# up for SQL Server. For PostgreSQL, replace the next lines with:
+# up for SQL Server. For PostgreSQL, delete connections/sqlserver.yaml and replace the next lines with:
 #   defaults: {connections: [postgres]}
 #   tracking: { connection: postgres }
 #   string_semantics: { case: sensitive, trailing_space: significant, collations: { default: { duckdb: NFC, postgres: C } } }
 defaults: {connections: [sqlserver]}
-connections:
-  sqlserver: {title: Warehouse, description: "The database the models are built on.", properties: {environment: dev}}
+# The connections are files: connections/sqlserver.yaml (schema: connection/1). A connection named after an engine needs no file, so for PostgreSQL delete it.
 # where the records of what the tool builds are kept (drift, history, acknowledgements): nothing is tracked without it
 tracking: { connection: sqlserver }
 

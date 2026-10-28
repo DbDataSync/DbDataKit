@@ -35,8 +35,8 @@ public class ProjectUpdateConformanceTests
                 foreach (var sql in new[] { "CREATE SCHEMA src", "CREATE TABLE src.parent (id BIGINT NOT NULL PRIMARY KEY)", "CREATE TABLE src.child (id BIGINT NOT NULL PRIMARY KEY, parent_id BIGINT, label VARCHAR, amount DECIMAL(18,2))", "CREATE INDEX ix_child_label ON src.child (label)" })
                 { using var cmd = c.CreateCommand(); cmd.CommandText = sql; cmd.ExecuteNonQuery(); }
             }
-            File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\nconnections:\n  analytics: { engine: readonly duckdb }\n");
-            File.WriteAllText(Path.Combine(dir, "models", "src", "child.yml"), "name: src.child\nkind: mapped\nconnections=: [analytics]\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n  - {name: label, type: VARCHAR}\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\nconnections:\n  analytics: { engine: readonly duckdb }\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "models", "src", "child.yml"), "name: src.child\nkind: mapped\nconnections=: [analytics]\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n  - {name: label, type: VARCHAR}\n");
             (int, string, string) Cli(params string[] args)
             {
                 var o = new StringWriter(); var e = new StringWriter();
@@ -76,8 +76,8 @@ public class ProjectUpdateConformanceTests
         try
         {
             await from.ExecAsync("CREATE SCHEMA upd; CREATE TABLE upd.parent (id BIGINT NOT NULL PRIMARY KEY); CREATE TABLE upd.child (id BIGINT NOT NULL PRIMARY KEY, parent_id BIGINT REFERENCES upd.parent (id), label VARCHAR(40), amount NUMERIC(18,2)); CREATE INDEX ix_child_label ON upd.child (label)");
-            File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\nconnections:\n  legacy: { engine: readonly odbc }\n");
-            File.WriteAllText(Path.Combine(dir, "models", "upd", "child.yml"), "name: upd.child\nkind: mapped\nconnections=: [legacy]\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n  - {name: label, type: \"VARCHAR(40)\"}\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\nconnections:\n  legacy: { engine: readonly odbc }\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "models", "upd", "child.yml"), "name: upd.child\nkind: mapped\nconnections=: [legacy]\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n  - {name: label, type: \"VARCHAR(40)\"}\n");
             (int Exit, string Out, string Err) Cli(params string[] args)
             {
                 var o = new StringWriter(); var e = new StringWriter();

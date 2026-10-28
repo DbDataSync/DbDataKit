@@ -106,7 +106,7 @@ public class SampleTests
     public void Supplied_csv_rows_replace_generated_ones_and_a_bad_file_is_explained()
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "staging.orders.csv"), "order_id,customer,amount,placed,score,paid,at\n1,ann,10.50,2024-02-29,1.5,true,2024-02-29 10:00:00\n2,,0.005,2024-03-01,,false,\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "staging.orders.csv"), "order_id,customer,amount,placed,score,paid,at\n1,ann,10.50,2024-02-29,1.5,true,2024-02-29 10:00:00\n2,,0.005,2024-03-01,,false,\n");
         var model = Model("marts.m", "SELECT order_id, customer, amount FROM staging.orders ORDER BY order_id", "staging.orders");
         var r = SampleRun.Run([Orders("order_id")], [model], ["marts.m"], new SampleOptions(DataDir: dir));
         Assert.Equal("staging.orders.csv", r.Tables.Single(t => t.Name == "staging.orders").Origin);
@@ -114,7 +114,7 @@ public class SampleTests
         Assert.Equal(["1", "ann", "10.50"], rows[0]);
         Assert.Equal(["2", null, "0.01"], rows[1].Select((v, i) => i == 2 ? "0.01" : v).ToList());   // NULLs stay NULL
 
-        File.WriteAllText(Path.Combine(dir, "staging.orders.csv"), "order_id,customer\nnot-a-number,x\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "staging.orders.csv"), "order_id,customer\nnot-a-number,x\n");
         var bad = SampleRun.Run([Orders("order_id")], [model], ["marts.m"], new SampleOptions(DataDir: dir));
         Assert.Contains("could not be read as `staging.orders`", bad.Tables.Single(t => t.Name == "staging.orders").Error);
     }
@@ -132,11 +132,11 @@ public class SampleTests
     private static string Project()
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\nlint:\n  indexes: false\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\nlint:\n  indexes: false\n");
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\ngrain: [order_id]\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n  - {name: customer, type: \"VARCHAR(20)\"}\n  - {name: amount, type: \"DECIMAL(14, 2)\"}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/by_customer.yml"), "name: marts.by_customer\nkind: full\ncolumns:\n  - {name: customer, type: \"VARCHAR(20)\"}\n  - {name: n, type: BIGINT}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/by_customer.sql"), "SELECT customer, COUNT(*) AS n FROM staging.orders GROUP BY customer\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\ngrain: [order_id]\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n  - {name: customer, type: \"VARCHAR(20)\"}\n  - {name: amount, type: \"DECIMAL(14, 2)\"}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/by_customer.yml"), "name: marts.by_customer\nkind: full\ncolumns:\n  - {name: customer, type: \"VARCHAR(20)\"}\n  - {name: n, type: BIGINT}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/by_customer.sql"), "SELECT customer, COUNT(*) AS n FROM staging.orders GROUP BY customer\n");
         return dir;
     }
 
@@ -178,7 +178,7 @@ public class SampleTests
     public void A_failing_model_makes_the_command_fail_with_the_reason()
     {
         var dir = Project();
-        File.WriteAllText(Path.Combine(dir, "models/marts/by_customer.sql"), "SELECT CAST(customer AS INTEGER) AS customer, COUNT(*) AS n FROM staging.orders WHERE customer <> '' GROUP BY 1\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/by_customer.sql"), "SELECT CAST(customer AS INTEGER) AS customer, COUNT(*) AS n FROM staging.orders WHERE customer <> '' GROUP BY 1\n");
         var (exit, output, err) = Cli("project", "sample", "--project", dir);
         Assert.Equal(CliApp.ExitFindings, exit);
         Assert.Contains("failed", output);

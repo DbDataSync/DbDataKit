@@ -584,6 +584,16 @@ public static class DiagnosticCatalog
         "Check the path with `project file list`; binary or large files are not edited through these commands.",
         "The file is missing, is a directory, is not UTF-8 text, is larger than the limit, or the destination of a move already exists.");
 
+    // 62x: connection files (`connections/<name>.yaml`, schema connection/1; plan 13, E03)
+    public static readonly DiagnosticDescriptor ConnectionFileInvalid = E("620", "A connection file is not valid",
+        "`connections/<name>.yaml` with `schema: connection/1`, a `name` equal to the file name, an `engine` (sqlserver, postgres, fabric, duckdb, odbc or flightsql), optionally `dialect` and `access: readonly`, and the tool's own settings under `extensions.build`",
+        "Correct the file at the reported line (`dbdatabuild project agent-kit` writes `schemas/connection.schema.json` for an editor). A login is never in the file: it is the environment variable `DBDATA_BUILD_<NAME>_<READ|WRITE>`.",
+        "A project's connections are one file each, in the format every DbData product shares. The shared loader reports unknown keys, plaintext credentials and a wrong `schema`; this tool also refuses what it does not use (an address, a connection string, a login, TLS or timeout settings, which belong to the environment of the person running it) and a name that is not the file's.");
+    public static readonly DiagnosticDescriptor ConnectionsInProjectFile = E("621", "Connections are declared in the project file",
+        "no `connections:` in dbdatabuild.yml: each connection is `connections/<name>.yaml` (schema: connection/1)",
+        "Move each entry of `connections:` to its own file: `connections/<name>.yaml` with `schema: connection/1`, `name`, `engine` (the driver), `dialect`, `access: readonly` where the entry said `readonly`, and the rest under `extensions.build`. The templates show the form.",
+        "Connections moved out of dbdatabuild.yml so the console, Sync and Proxy read the same file format. Nothing was converted: the project is not loaded until the entries are moved.");
+
     public static readonly IReadOnlyList<DiagnosticDescriptor> All =
     [
         YamlSyntax, DuplicateKey, UnsupportedYamlFeature, UnknownKey, MissingKey, InvalidValue, NameMismatch, OrphanFile, ConfigNotFound, CopyOriginDiffers, ModelReadsAnotherConnection, NativeReadsNotDeclared, StringsCompareDifferently, TrimmedColumnHasTrailingSpaces, QueryHeadInvalid, LoadSliceSourceNotIndexed, ReadsInconsistentHistory, NameTooLongForEngine, DatabaseErrorUnhandled, InfoOutOfBounds, NativeDefinitionChanged, NativeDefinitionNotChecked, TrackingNotConfigured,
@@ -597,6 +607,7 @@ public static class DiagnosticCatalog
         SemanticFileInvalid, SemanticUnknownModel, SemanticModelNotOnConnection, SemanticUnknownColumn, SemanticBindingTypeMismatch, SemanticRelationshipInvalid, SemanticUnknownConnection, SemanticModelInvalid,
         LoginNotConfigured, GateRefused, StatementLogUnavailable, ReadStatementRefused, TrackingNotInitialized,
         InternalError, ProjectFilePathRefused, ProjectFileHashStale, ProjectFileUnusable,
+        ConnectionFileInvalid, ConnectionsInProjectFile,
     ];
 
     public static DiagnosticDescriptor? Find(string code) =>

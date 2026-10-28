@@ -116,10 +116,10 @@ public class ObjectInfoTests
     public void A_diagnostic_names_the_file_of_a_property_that_came_from_a_folder()
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults:\n  connections: [sqlserver]\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/_dbdatabuild.yml"), "defaults:\n  properties: {\"bad key\": 1}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), ModelWith(""));
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT 1 AS order_id\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults:\n  connections: [sqlserver]\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/_dbdatabuild.yml"), "defaults:\n  properties: {\"bad key\": 1}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), ModelWith(""));
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT 1 AS order_id\n");
         var r = Cli("project", "compile", "--project", dir);
         Assert.Contains("DDB-243", r.Err);
         Assert.Contains("models/marts/_dbdatabuild.yml", r.Err);
@@ -128,14 +128,14 @@ public class ObjectInfoTests
     private static string LayeredProject()
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults:\n  connections: [sqlserver]\n  tags: [everywhere]\n  properties: {owner: data, tier: 3, zone: raw}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults:\n  connections: [sqlserver]\n  tags: [everywhere]\n  properties: {owner: data, tier: 3, zone: raw}\n");
         Directory.CreateDirectory(Path.Combine(dir, "models/finance"));
         Directory.CreateDirectory(Path.Combine(dir, "models/ops"));
-        File.WriteAllText(Path.Combine(dir, "models/finance/_dbdatabuild.yml"), "defaults:\n  tags: [finance]\n  properties: {owner: finance, tier: 1}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/finance/_dbdatabuild.yml"), "defaults:\n  tags: [finance]\n  properties: {owner: finance, tier: 1}\n");
         void Model(string path, string name, string words)
         {
-            File.WriteAllText(Path.Combine(dir, "models", path + ".yml"), $"name: {name}\nkind: view\n{words}columns:\n  - {{name: order_id, type: BIGINT, nullable: false}}\n");
-            File.WriteAllText(Path.Combine(dir, "models", path + ".sql"), "SELECT 1 AS order_id\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "models", path + ".yml"), $"name: {name}\nkind: view\n{words}columns:\n  - {{name: order_id, type: BIGINT, nullable: false}}\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "models", path + ".sql"), "SELECT 1 AS order_id\n");
         }
         Model("finance/revenue", "finance.revenue", "title: Revenue\ndescription: Money in\nproperties: {reviewed: true}\n");
         Model("finance/costs", "finance.costs", "properties=: {only: mine}\n");
@@ -177,7 +177,7 @@ public class ObjectInfoTests
     public void A_title_or_a_description_in_a_defaults_section_is_an_unknown_key()
     {
         var dir = LayeredProject();
-        File.WriteAllText(Path.Combine(dir, "models/finance/_dbdatabuild.yml"), "defaults:\n  title: Everything\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/finance/_dbdatabuild.yml"), "defaults:\n  title: Everything\n");
         var r = Cli("project", "compile", "--project", dir);
         Assert.Contains("DDB-104", r.Err);
         Assert.Contains("title", r.Err);
@@ -209,7 +209,7 @@ public class ObjectInfoTests
     public void The_project_and_a_connection_carry_the_four_and_the_project_document_says_so()
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"),
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"),
             "title: Sales\ndescription: \"Sales analytics\"\ntags: [sales, \"team:data\"]\nproperties: {owner: data, tier: 1}\nconnections:\n  sqlserver: {version: 16, title: Warehouse, description: Main, tags: [prod], properties: {region: eu}}\n  reporting: {engine: postgres}\n");
         var r = Cli("project", "show", "metadata", "--project", dir, "--format", "json");
         Assert.Equal(0, r.Exit);
@@ -311,9 +311,9 @@ public class ObjectInfoTests
 
         // a document with no words at all has no such key
         var bare = NewProjectDir();
-        File.WriteAllText(Path.Combine(bare, "dbdatabuild.yml"), "defaults:\n  connections: [sqlserver]\n");
-        File.WriteAllText(Path.Combine(bare, "models/marts/fct_orders.yml"), ModelWith(""));
-        File.WriteAllText(Path.Combine(bare, "models/marts/fct_orders.sql"), "SELECT 1 AS order_id\n");
+        TestFiles.WriteAllText(Path.Combine(bare, "dbdatabuild.yml"), "defaults:\n  connections: [sqlserver]\n");
+        TestFiles.WriteAllText(Path.Combine(bare, "models/marts/fct_orders.yml"), ModelWith(""));
+        TestFiles.WriteAllText(Path.Combine(bare, "models/marts/fct_orders.sql"), "SELECT 1 AS order_id\n");
         foreach (var d in MetadataPublisher.Collect(ProjectContext.Load(bare), null, null))
         {
             Assert.DoesNotContain("\"title\"", d.Json);
@@ -327,10 +327,10 @@ public class ObjectInfoTests
     public void The_rows_of_a_project_document_name_the_connection_and_those_of_a_model_name_the_column_and_the_index()
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "title: Sales\nconnections:\n  sqlserver: {title: Warehouse, tags: [prod]}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"),
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "title: Sales\nconnections:\n  sqlserver: {title: Warehouse, tags: [prod]}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"),
             "name: marts.fct_orders\nkind: full\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false, title: Id, properties: {pk: true}}\nindexes:\n  - {name: ix_order, columns: [order_id], description: By id}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT 1 AS order_id\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT 1 AS order_id\n");
         var docs = MetadataPublisher.Collect(ProjectContext.Load(dir), null, null);
         var project = MetadataInfoRows.From("project", docs.Single(d => d.SubjectKind == "project").Json);
         Assert.Contains(new InfoRow("", "title", "", null, "Sales"), project);
@@ -347,10 +347,10 @@ public class ObjectInfoTests
     public void A_metadata_rule_can_ask_for_the_words_the_view_has_the_rows_of_the_tracking_table()
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "title: Sales\nconnections:\n  sqlserver: {title: Warehouse, tags: [prod]}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"),
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "title: Sales\nconnections:\n  sqlserver: {title: Warehouse, tags: [prod]}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"),
             "name: marts.fct_orders\ntitle: Orders\ntags: [finance]\nproperties: {tier: 2, live: true, owner: me}\nkind: full\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false, title: Id}\nindexes:\n  - {name: ix_order, columns: [order_id], description: By id}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT 1 AS order_id\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT 1 AS order_id\n");
         var ctx = ProjectContext.Load(dir);
         var documents = MetadataPublisher.Collect(ctx, null, null);
         using var db = DbDataBuild.Targets.DuckDb.MetadataDatabase.Open(documents.Select(d => new DbDataBuild.Targets.DuckDb.MetadataDocument(d.SubjectKind, d.Subject, d.Json, d.Hash)), "x");

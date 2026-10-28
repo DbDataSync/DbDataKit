@@ -22,6 +22,3 @@ string_semantics:
 policy:
   severity:
     approximated: note
-
-connections:
-  sqlserver: { version: 16 }
