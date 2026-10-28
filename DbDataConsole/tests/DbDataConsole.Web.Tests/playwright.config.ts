@@ -46,8 +46,10 @@ if (!isWorker && warehouseConnection) {
   const project = path.join(os.tmpdir(), 'dbdatakit-console-e2e-warehouse')
   fs.rmSync(project, { recursive: true, force: true })
   execFileSync('dotnet', ['exec', buildDll, 'project', 'create', 'starter', project], { stdio: 'ignore' })
-  // the warehouse is PostgreSQL: a connection named after an engine needs no file, so the starter's sqlserver one is deleted
+  // the warehouse is PostgreSQL: the starter's sqlserver connection file is replaced
   fs.rmSync(path.join(project, 'connections', 'sqlserver.yaml'))
+  // the test database has no certificate to verify: a connection secures itself as its file says, and a file with no tls block encrypts and verifies
+  fs.writeFileSync(path.join(project, 'connections', 'postgres.yaml'), 'schema: connection/1\nname: postgres\nengine: postgres\ntls:\n  encrypt: false\n  trust_server_certificate: true\n')
   const file = path.join(project, 'dbdatabuild.yml')
   fs.writeFileSync(file, fs.readFileSync(file, 'utf8')
     .replace('defaults: {connections: [sqlserver]}', 'defaults: {connections: [postgres]}')
