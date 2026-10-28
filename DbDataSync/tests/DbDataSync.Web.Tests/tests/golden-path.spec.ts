@@ -930,6 +930,8 @@ public sealed class Shout : IValueColumnExpression
     public object? Evaluate(object? value, ValueColumnExpressionContext c) =>
         value is string s ? s + "!" : value;
 }
+
+new Shout()
 `)
     await page.getByTestId('run-script-test-button').click()
     await expect(cases).toContainText("'sample!'", { timeout: 20_000 })
@@ -944,6 +946,8 @@ public sealed class Shout : IValueColumnExpression
 
     public object? Evaluate(object? value, ValueColumnExpressionContext c) => ((string)value!).Substring(3);
 }
+
+new Shout()
 `)
     await page.getByTestId('run-script-test-button').click()
     await expect(page.getByTestId('script-test-error')).toBeVisible({ timeout: 20_000 })
