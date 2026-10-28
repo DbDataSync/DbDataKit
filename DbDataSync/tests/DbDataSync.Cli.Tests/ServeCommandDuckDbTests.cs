@@ -33,7 +33,7 @@ public sealed class ServeCommandDuckDbTests : IDisposable
     /// <summary>
     /// The idempotency check is a plain directory check (see the method's own doc comment), not a
     /// registry load — asserted here by dropping a marker file into an already-"installed" <c>lib/</c>
-    /// and confirming it survives. <see cref="LibraryInstaller.RestorePackagesAsync"/> always deletes
+    /// and confirming it survives. the install always deletes
     /// and fully recreates the target <c>lib/</c> directory when it actually runs, so a marker file
     /// surviving the call is proof no restore happened — the acceptance bar the phase doc set for "a
     /// second `serve` start does no restore work".
