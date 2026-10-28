@@ -121,6 +121,26 @@
       }
     },
     {
+      "name": "script_list",
+      "description": "The scripts and the slot each fills. [Offline only] Usage: script list [--repo <path>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
       "name": "secret_list",
       "description": "Whether each given reference is set, never the value. [Offline only] Usage: secret list [<ref> ...] [--repo <path>]",
       "inputSchema": {
