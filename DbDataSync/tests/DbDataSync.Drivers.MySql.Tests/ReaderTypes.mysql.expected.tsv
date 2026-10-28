@@ -1,0 +1,43 @@
+tinyint	SByte	SByte	SByte:-5
+tinyint(1) TreatTinyAsBoolean	Boolean	Boolean	bool:true
+tinyint unsigned	Byte	Byte	Byte:200
+smallint	Int16	Int16	Int16:-300
+smallint unsigned	UInt16	UInt16	UInt16:60000
+mediumint	Int32	Int32	Int32:-70000
+mediumint unsigned	UInt32	UInt32	UInt32:70000
+int	Int32	Int32	Int32:-70000
+int unsigned	UInt32	UInt32	UInt32:4000000000
+bigint	Int64	Int64	Int64:5000000000
+bigint unsigned	UInt64	UInt64	UInt64:18446744073709551615
+decimal(18,2)	Decimal	Decimal	decimal:12345.67
+decimal(38,10)	Decimal	Decimal	decimal:123456789012345678.1234567890
+decimal(65,30)	Decimal	Decimal	decimal:1.5000000000000000000000000000
+float	Single	Single	float:1.5
+double	Double	Double	double:1.5
+bit(8)	UInt64	UInt64	UInt64:170
+bit(1)	UInt64	UInt64	UInt64:1
+boolean	Boolean	Boolean	bool:true
+year	Int32	Int32	Int32:2024
+char(5)	String	String	string:ab
+char(36)	Guid	Guid	Guid:6f9619ff-8b86-d011-b42d-00c04fc964ff
+varchar(50)	String	String	string:text
+tinytext	String	String	string:text
+text	String	String	string:text
+longtext	String	String	string:text
+json	String	String	string:{"a": 1}
+enum('a','b')	String	String	string:a
+set('a','b')	String	String	string:a,b
+binary(4)	Byte[]	Byte[]	byte[]:01020304
+binary(16)	Byte[]	Byte[]	byte[]:6F9619FF8B86D011B42D00C04FC964FF
+varbinary(50)	Byte[]	Byte[]	byte[]:010203
+blob	Byte[]	Byte[]	byte[]:010203
+longblob	Byte[]	Byte[]	byte[]:010203
+date	DateTime	DateTime	DateTime:2024-03-17T00:00:00.0000000
+date zero	DateTime	-	GetValue THROWS InvalidCastException
+time	TimeSpan	TimeSpan	TimeSpan:09:41:22
+time(6)	TimeSpan	TimeSpan	TimeSpan:-34.22:59:59
+datetime	DateTime	DateTime	DateTime:2024-03-17T09:41:22.0000000
+datetime(6)	DateTime	DateTime	DateTime:2024-03-17T09:41:22.1234560
+datetime zero	DateTime	-	GetValue THROWS InvalidCastException
+timestamp(6)	DateTime	DateTime	DateTime:2024-03-17T09:41:22.1234560
+geometry	Byte[]	Byte[]	byte[]:000000000101000000000000000000F03F0000000000000040

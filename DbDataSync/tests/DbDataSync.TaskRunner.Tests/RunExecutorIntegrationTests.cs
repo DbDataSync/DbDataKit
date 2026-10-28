@@ -233,6 +233,14 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
     /// worker, returning the final TaskRuns row for that pass.</summary>
     private Task<TaskRunRecord> EnqueueAndDrainAsync() => EnqueueAndDrainAsync("e2e-sync");
 
+    /// <summary>A failed run's own log is the failure message: "expected Succeeded, actual Failed" alone says nothing about why.</summary>
+    private void AssertSucceeded(Guid runId)
+    {
+        var run = _taskRunStore.GetRun(runId)!;
+        if (run.Status != RunStatus.Succeeded)
+            throw new Xunit.Sdk.XunitException($"Run {runId} ended {run.Status}, not Succeeded. Its log: " + string.Join(" | ", _logWriter.GetLogs(runId).Select(e => e.Message)));
+    }
+
     /// <summary>The same, for a replication other than the fixture's default "e2e-sync" — every test
     /// that stands up its own mapping (a different reader, provisioning off, and so on) needs its own
     /// replication name, since <see cref="SetUpConfigAsync"/> and <c>SetUp*Async</c> below each save a
@@ -622,7 +630,7 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
             new WorkItemKinds(MsSqlDriverKinds.BatchReload, MsSqlDriverKinds.StagingTable, MsSqlDriverKinds.MergeReconcile));
         await _executor.ExecuteWorkerAsync("e2e-sync", WorkerLanes.Uniform(1), CancellationToken.None);
 
-        Assert.Equal(RunStatus.Succeeded, _taskRunStore.GetRun(bulkLoadRunId)!.Status);
+        AssertSucceeded(bulkLoadRunId);
 
         var rows = await GetRowsAsync(_targetTable);
         Assert.Equal("One", rows[1]);                 // repaired
@@ -1061,7 +1069,7 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
         var runId = _workQueueStore.Enqueue("prov-create", RunKind.Primary, "main");
         await _executor.ExecuteWorkerAsync("prov-create", WorkerLanes.Uniform(1), CancellationToken.None);
 
-        Assert.Equal(RunStatus.Succeeded, _taskRunStore.GetRun(runId)!.Status);
+        AssertSucceeded(runId);
         Assert.Equal(new Dictionary<int, string> { [1] = "Alice" }, await GetRowsAsync(target));
     }
 
