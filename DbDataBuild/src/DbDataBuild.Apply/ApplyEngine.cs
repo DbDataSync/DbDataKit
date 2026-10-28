@@ -580,6 +580,7 @@ public static class ApplyEngine
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
         var sliceIndex = slice == null ? -1 : columns.ToList().FindIndex(c => string.Equals(c.Name, slice.Column, StringComparison.OrdinalIgnoreCase));
+        var conversion = TransferValues.Plan(columns);
         var expected = slice == null ? null : TransferValues.Convert(slice.Value, columns[sliceIndex]);
         await foreach (var row in rows.WithCancellation(ct))
         {
@@ -588,10 +589,9 @@ public static class ApplyEngine
             {
                 full = new object?[columns.Count];
                 for (var i = 0; i < readWidth; i++) full[i < sliceIndex ? i : i + 1] = row[i];          // the slice column is not among the read ones: it is the added one (last, or wherever the copy put it)
-                full[sliceIndex] = expected;
+                full[sliceIndex] = slice.Value;
             }
-            for (var i = 0; i < columns.Count; i++)
-                if (!(slice is { Added: true } && i == sliceIndex)) full[i] = TransferValues.Convert(full[i], columns[i]);
+            full = conversion.Convert(full);
             if (slice is { Added: false } && !Equals(full[sliceIndex], expected))
                 throw new TransferException($"column `{slice.Column}`: a row of the origin does not hold the slice value the plan names for it.");
             yield return full;
