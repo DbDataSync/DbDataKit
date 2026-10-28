@@ -20,6 +20,9 @@ public sealed class MyExpression : ISqlColumnExpression
         return $"UPPER({context.ColumnReference})";
     }
 }
+
+// The script ends with an expression, with no semicolon after it: the implementation the slot asks for.
+new MyExpression()
 `
 
 const SQL_STARTER = `-- {{target}}, {{targetSchema}}, {{targetTable}}, {{source}}, {{staging}} are quoted
@@ -31,7 +34,7 @@ UPDATE STATISTICS {{target}};
 
 const empty = (slot: string): ScriptDefinition => ({
   manifest: {
-    name: '', kind: slot, language: 'CSharp', entryType: 'MyExpression',
+    name: '', kind: slot, language: 'CSharp',
     description: '', parameters: [], enabled: true,
   },
   code: STARTER,
@@ -88,7 +91,6 @@ export function ScriptEditPage() {
       manifest: {
         ...draft.manifest, language,
         kind: language === 'Sql' ? 'hook' : (slots?.[0]?.slot ?? draft.manifest.kind),
-        entryType: language === 'Sql' ? null : 'MyExpression',
       },
       code: language === 'Sql' ? SQL_STARTER : STARTER,
     })
@@ -187,18 +189,6 @@ export function ScriptEditPage() {
                     <option value="Sql">SQL</option>
                   </select>
                 </Field>
-                {!isSql && (
-                  <Field label="Entry type">
-                    {/* Named rather than discovered, so a script holding helper types has an
-                        unambiguous entry point. */}
-                    <input
-                      className="input mono" required
-                      value={draft.manifest.entryType ?? ''}
-                      onChange={(e) => setManifest({ entryType: e.target.value })}
-                      data-testid="script-entry-type-input"
-                    />
-                  </Field>
-                )}
                 <Field label="Enabled">
                   <select
                     className="select"

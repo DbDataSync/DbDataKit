@@ -50,8 +50,8 @@ public sealed class ScriptedMetadataTests : IDisposable
         _configRepository.SaveScript(
             new ScriptDefinition
             {
-                Manifest = new ScriptConfig { Name = name, Kind = ScriptSlots.MetadataProvider, EntryType = entryType },
-                Code = code,
+                Manifest = new ScriptConfig { Name = name, Kind = ScriptSlots.MetadataProvider },
+                Code = code + $"\nnew {entryType}()\n",
             },
             new DbDataKit.Config.Git.GitAuthor("t", "t@t"));
 

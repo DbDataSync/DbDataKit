@@ -23,7 +23,7 @@ public sealed class ScriptBinding
 /// <summary>Which language a script's code file is written in — see phase 26 §"Reusable hooks live in
 /// the editor area". A SQL hook is the same artifact as a C# script, one field different: it has no
 /// entry point to compile, and its code file sits beside the manifest as <c>.sql</c> instead of
-/// <c>.cs</c>.</summary>
+/// <c>.csx</c>.</summary>
 public enum ScriptLanguage
 {
     CSharp,
@@ -31,7 +31,7 @@ public enum ScriptLanguage
 }
 
 /// <summary>
-/// Persisted as config/scripts/&lt;name&gt;.yaml, beside config/scripts/&lt;name&gt;.cs (or, for a
+/// Persisted as config/scripts/&lt;name&gt;.yaml, beside config/scripts/&lt;name&gt;.csx (or, for a
 /// <see cref="ScriptLanguage.Sql"/> hook, config/scripts/&lt;name&gt;.sql) which holds the code. Two
 /// files rather than one because code embedded in YAML diffs badly, cannot be opened by an editor, and
 /// re-indents on every round trip through a serializer.
@@ -50,11 +50,6 @@ public sealed class ScriptConfig
 
     public ScriptLanguage Language { get; set; } = ScriptLanguage.CSharp;
 
-    /// <summary>The type in the script that implements the slot's contract. Required for
-    /// <see cref="ScriptLanguage.CSharp"/>; meaningless — and left null — for
-    /// <see cref="ScriptLanguage.Sql"/>, which has no entry point to compile.</summary>
-    public string? EntryType { get; set; }
-
     public string? Description { get; set; }
 
     /// <summary>
@@ -70,8 +65,7 @@ public sealed class ScriptConfig
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// SHA-256 of <see cref="EntryType"/> and <see cref="Code"/>-that-was (via <see cref="ScriptDefinition.Code"/>
-    /// at save time), computed once by <c>ConfigRepository.SaveScript</c> and written down here rather
+    /// SHA-256 of the script's code (<see cref="ScriptDefinition.Code"/> at save time), computed once by <c>ConfigRepository.SaveScript</c> and written down here rather
     /// than recomputed on every read.
     /// <para>
     /// This is what lets a long-lived process (the API's <c>ScriptHost</c>) tell "has this script's
@@ -87,8 +81,8 @@ public sealed class ScriptConfig
     /// Used both there (by <c>ConfigRepository.SaveScript</c>) and by <c>ScriptCompiler</c>'s own
     /// on-disk compiled-assembly cache, so the two caching layers can never disagree about what a given
     /// hash means.</summary>
-    public static string ComputeHash(string code, string? entryType) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{entryType}\n{code}"))).ToLowerInvariant();
+    public static string ComputeHash(string code) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(code))).ToLowerInvariant();
 }
 
 /// <summary>A script and its code, as one thing, for the API and the compiler.</summary>

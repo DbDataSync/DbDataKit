@@ -36,8 +36,8 @@ public sealed class TransformPipelineTests : IDisposable
         _configRepository.SaveScript(
             new ScriptDefinition
             {
-                Manifest = new ScriptConfig { Name = name, Kind = kind, EntryType = entryType },
-                Code = code,
+                Manifest = new ScriptConfig { Name = name, Kind = kind },
+                Code = code + $"\nnew {entryType}()\n",
             },
             new DbDataKit.Config.Git.GitAuthor("t", "t@t"));
 

@@ -51,6 +51,6 @@ public static class DriverScriptHost
         var context = new ClosureLoadContext($"driver:{manifest.Id}", closure, name => AssemblyLoadContext.Default.Assemblies.Any(a => a.GetName().Name == name));
         var result = CsxCompiler.RunAsync(compiled.Image!, context).GetAwaiter().GetResult();
         return result as IDriver
-            ?? throw new InvalidOperationException($"Driver '{manifest.Id}': the script ends with {(result is null ? "no value" : $"a {result.GetType().Name}")}, not an IDriver. End it with an expression such as `new MyDriver()`.");
+            ?? throw new InvalidOperationException($"Driver '{manifest.Id}': the script ends with {(result is null ? "no value" : $"a {result.GetType().Name}")}, not an IDriver. End it with an expression such as `new MyDriver()`, with no semicolon after it (a final `;` makes it a statement with no value).");
     }
 }

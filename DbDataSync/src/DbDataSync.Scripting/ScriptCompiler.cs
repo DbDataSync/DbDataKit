@@ -1,39 +1,21 @@
-using System.Reflection;
-using System.Runtime.Loader;
+using DbDataKit.Scripting;
 using DbDataSync.Core.Config;
 using DbDataSync.Scripting.Abstractions;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 
 namespace DbDataSync.Scripting;
 
 /// <summary>
-/// Compiles a script's source into an assembly and finds its entry type.
+/// Compiles a script (<c>config/scripts/&lt;name&gt;.csx</c>) with the shared compiler of <c>DbDataKit.Scripting</c> (plan 13, S07). A script may <c>#r "nuget: Id, 1.2.3"</c> packages (exact versions), <c>#load</c> other scripts of the
+/// configuration repository's scripts folder, and ends with an expression that is the slot's implementation (<c>new MyTransform()</c>). It is compiled against the allow-listed framework assemblies, the contracts a script implements and its own
+/// packages, and it runs in a collectible load context of its own, so replacing a script does not leak an assembly for the life of the process.
 /// <para>
-/// <c>CSharpCompilation</c> rather than <c>Microsoft.CodeAnalysis.CSharp.Scripting</c>: the same Roslyn
-/// dependency with more control over the reference set, and full C# semantics — which matter, because
-/// the slots this feeds end at "rebuild the whole query from metadata", which is real code with types
-/// and helper methods rather than an expression.
+/// **The allow-list and the syntax guard are a guardrail, not a security boundary, and must not be described as one.** Reflection defeats them, and .NET has had no in-process code-trust mechanism since CAS was removed. The security decision (the
+/// risk is accepted and gated by permissions) is recorded in architecture/planning/done/csharp-scripting-host.md. Keeping an assembly out works for <c>System.Net.Http</c> and <c>System.Diagnostics.Process</c>, which have their own; it does nothing
+/// about <c>System.IO.File</c> or <c>System.Environment</c>, which live in <c>System.Private.CoreLib</c> next to <c>string</c>, and <see cref="ScriptSyntaxGuard"/> covers that gap as a lint.
 /// </para>
 /// </summary>
-public sealed class ScriptCompiler(ScriptCacheDirectory cache)
+public sealed class ScriptCompiler(ScriptCacheDirectory cache, string? scriptsDirectory = null, string? packageSource = null)
 {
-    /// <summary>
-    /// What a script is allowed to reference.
-    /// <para>
-    /// **This is a guardrail, not a security boundary, and must not be described as one.** Reflection
-    /// defeats it, and .NET has had no in-process code-trust mechanism since CAS was removed. The
-    /// security decision — the risk is accepted and gated by permissions — is recorded in
-    /// architecture/planning/done/csharp-scripting-host.md.
-    /// </para>
-    /// <para>
-    /// It is also **partial by construction**, which is worth knowing before relying on it. Keeping an
-    /// assembly out works for <c>System.Net.Http</c> and <c>System.Diagnostics.Process</c>, which have
-    /// their own; it does nothing about <c>System.IO.File</c> or <c>System.Environment</c>, which live
-    /// in <c>System.Private.CoreLib</c> next to <c>string</c>. <see cref="ScriptSyntaxGuard"/> covers
-    /// that gap as a lint.
-    /// </para>
-    /// </summary>
     private static readonly string[] AllowedAssemblies =
     [
         "System.Runtime",
@@ -45,139 +27,81 @@ public sealed class ScriptCompiler(ScriptCacheDirectory cache)
         "netstandard",
     ];
 
+    private static readonly string[] Imports =
+    [
+        "System", "System.Linq", "System.Collections.Generic", "System.Threading", "System.Threading.Tasks",
+        "DbDataSync.Core.Config", "DbDataSync.Scripting.Abstractions", "DbDataSync.Drivers.Abstractions",
+    ];
+
     public ScriptCompilation Compile(ScriptDefinition script)
     {
         if (string.IsNullOrWhiteSpace(script.Code))
-            return ScriptCompilation.Failed(
-                [new ScriptDiagnostic(0, 0, $"Script '{script.Manifest.Name}' has no code.")]);
+            return ScriptCompilation.Failed([new ScriptDiagnostic(0, 0, $"Script '{script.Manifest.Name}' has no code.")]);
 
-        // A SQL hook has no entry type to compile — ScriptHost never routes one here (see
-        // HookExecution), so reaching this with Language=Sql is a caller error, not a config problem.
-        if (script.Manifest.EntryType is not { } entryType)
+        // A SQL hook has no code to compile — ScriptHost never routes one here (see HookExecution), so reaching this with Language=Sql is a caller error, not a config problem.
+        if (script.Manifest.Language != ScriptLanguage.CSharp)
             throw new InvalidOperationException(
-                $"Script '{script.Manifest.Name}' has no EntryType and cannot be compiled — " +
-                "ScriptCompiler.Compile is only for ScriptLanguage.CSharp scripts.");
+                $"Script '{script.Manifest.Name}' is not a C# script and cannot be compiled — ScriptCompiler.Compile is only for ScriptLanguage.CSharp scripts.");
 
-        var hash = HashOf(script.Code, entryType);
-        var cached = cache.TryGetAssemblyPath(hash);
-        if (cached is not null)
-            return Load(File.ReadAllBytes(cached), script, hash);
+        IReadOnlyList<PackageRequest> requests;
+        string source;
+        try { (requests, source) = ScriptDirectives.Extract(script.Code, exactOnly: true); }
+        catch (ScriptDirectiveException ex) { return ScriptCompilation.Failed([new ScriptDiagnostic(ex.Line, 1, ex.Message)]); }
 
-        var syntaxTree = CSharpSyntaxTree.ParseText(script.Code, path: $"{script.Manifest.Name}.cs");
+        Closure closure;
+        try { closure = ResolvePackages(requests); }
+        catch (Exception ex) when (ex is PackageResolutionException or PackageIntegrityException)
+        {
+            return ScriptCompilation.Failed([new ScriptDiagnostic(0, 0, $"The packages of script '{script.Manifest.Name}' could not be resolved: {ex.Message}")]);
+        }
 
-        // Before Roslyn, because the reference set cannot express this on its own — see the guard.
-        var banned = ScriptSyntaxGuard.Check(syntaxTree);
-        if (banned.Count > 0)
-            return ScriptCompilation.Failed(banned);
+        var compiler = new CsxCompiler(new CsxCompilerOptions
+        {
+            CacheDirectory = Path.Combine(cache.Root, "csx"),
+            LoadRoot = scriptsDirectory,
+            HostReferences = [typeof(ISqlColumnExpression).Assembly.Location, typeof(DbDataSync.Drivers.Abstractions.ColumnMetadata).Assembly.Location, typeof(ColumnMapping).Assembly.Location],
+            Imports = Imports,
+            AllowedFrameworkAssembly = name => AllowedAssemblies.Contains(name, StringComparer.OrdinalIgnoreCase),
+        });
+        // Before Roslyn emits anything, because the reference set cannot express the namespace lint on its own — the guard runs inside the shared compiler.
+        var name = scriptsDirectory is null ? script.Manifest.Name + ".csx" : Path.Combine(scriptsDirectory, script.Manifest.Name + ".csx");
+        var compiled = compiler.Compile(source, name, closure);
+        if (!compiled.Success)
+            return ScriptCompilation.Failed(compiled.Diagnostics.Where(d => d.IsError).Select(d => new ScriptDiagnostic(d.Line, d.Column, d.Message)).ToList());
 
-        var compilation = CSharpCompilation.Create(
-            $"DbDataSync.Script.{script.Manifest.Name}.{hash[..8]}",
-            [syntaxTree],
-            ReferenceSet(),
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, optimizationLevel: OptimizationLevel.Release));
-
-        using var stream = new MemoryStream();
-        var result = compilation.Emit(stream);
-        if (!result.Success)
-            return ScriptCompilation.Failed(result.Diagnostics
-                .Where(d => d.Severity == DiagnosticSeverity.Error)
-                .Select(ToDiagnostic)
-                .ToList());
-
-        var bytes = stream.ToArray();
-        cache.Store(hash, bytes);
-        return Load(bytes, script, hash);
+        return Load(compiled.Image!, closure, script);
     }
 
-    private static ScriptCompilation Load(byte[] assemblyBytes, ScriptDefinition script, string hash)
+    private ScriptCompilation Load(byte[] image, Closure closure, ScriptDefinition script)
     {
-        // Collectible, so replacing a script does not leak an assembly for the life of the process.
-        // In the TaskRunner that hardly matters — the process is per run — but the API is long-lived
-        // and compiles on every save.
-        var context = new AssemblyLoadContext($"script:{script.Manifest.Name}:{hash[..8]}", isCollectible: true);
-        Assembly assembly;
+        var hash = ScriptConfig.ComputeHash(script.Code);
+        // Collectible, so replacing a script does not leak an assembly for the life of the process. In the TaskRunner that hardly matters — the process is per run — but the API is long-lived and compiles on every save.
+        var context = new ClosureLoadContext($"script:{script.Manifest.Name}:{hash[..8]}", closure,
+            shared: n => System.Runtime.Loader.AssemblyLoadContext.Default.Assemblies.Any(a => a.GetName().Name == n));
         try
         {
-            assembly = context.LoadFromStream(new MemoryStream(assemblyBytes));
+            return ScriptCompilation.Succeeded(context, CsxCompiler.Load(image, context), hash);
         }
         catch (Exception ex)
         {
             context.Unload();
             return ScriptCompilation.Failed([new ScriptDiagnostic(0, 0, $"Could not load the compiled script: {ex.Message}")]);
         }
-
-        var entryType = assembly.GetTypes().FirstOrDefault(
-            t => string.Equals(t.Name, script.Manifest.EntryType!, StringComparison.Ordinal));
-
-        if (entryType is null)
-        {
-            var available = string.Join(", ", assembly.GetTypes().Where(t => t.IsPublic).Select(t => t.Name));
-            context.Unload();
-            return ScriptCompilation.Failed([new ScriptDiagnostic(0, 0,
-                $"Entry type '{script.Manifest.EntryType}' was not found in script '{script.Manifest.Name}' " +
-                $"(public types: {(available.Length == 0 ? "none" : available)}).")]);
-        }
-
-        return ScriptCompilation.Succeeded(context, entryType, hash);
     }
 
-    /// <summary>
-    /// The reference set, resolved from the assemblies already loaded in this process rather than from
-    /// a reference pack on disk — the host and the script run on the same runtime by construction, so
-    /// there is no version to reconcile.
-    /// </summary>
-    private static IReadOnlyList<MetadataReference> ReferenceSet()
+    // exact versions that are in the package store need no network; a script's packages are fetched when it is first validated (saved or previewed), and a run finds them there
+    private Closure ResolvePackages(IReadOnlyList<PackageRequest> requests)
     {
-        var references = new List<MetadataReference>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        var closure = new Closure();
+        if (requests.Count == 0) return closure;
+        var options = new PackageResolverOptions
         {
-            if (assembly.IsDynamic || string.IsNullOrEmpty(assembly.Location))
-                continue;
-
-            var name = assembly.GetName().Name;
-            if (name is null || !AllowedAssemblies.Contains(name, StringComparer.OrdinalIgnoreCase))
-                continue;
-            if (seen.Add(assembly.Location))
-                references.Add(MetadataReference.CreateFromFile(assembly.Location));
-        }
-
-        // The contracts a script implements, always — without them nothing it writes can compile.
-        var abstractions = typeof(ISqlColumnExpression).Assembly;
-        if (seen.Add(abstractions.Location))
-            references.Add(MetadataReference.CreateFromFile(abstractions.Location));
-
-        var drivers = typeof(DbDataSync.Drivers.Abstractions.ColumnMetadata).Assembly;
-        if (seen.Add(drivers.Location))
-            references.Add(MetadataReference.CreateFromFile(drivers.Location));
-
-        // And the config types the contracts hand a script: ColumnMapping on every transform context,
-        // SourceTableRef and TableRef on a lifecycle hook's. Without this a script could implement the
-        // interfaces but not read half of what it was given — phase 27's own motivating example, "for
-        // each mapped column with no target column, emit ALTER TABLE", touches Target and so never
-        // compiled. Found by phase 41, which was the first thing to run one.
-        var config = typeof(DbDataSync.Core.Config.ColumnMapping).Assembly;
-        if (seen.Add(config.Location))
-            references.Add(MetadataReference.CreateFromFile(config.Location));
-
-        return references;
+            Store = new PackageStore(Path.Combine(cache.Root, "packages")),
+            Sources = [new PackageSource(packageSource ?? "https://api.nuget.org/v3/index.json")],
+            HostProvides = n => Platform.FrameworkAssemblies().ContainsKey(n),
+        };
+        return new PackageResolver(options).ResolveAsync(requests).GetAwaiter().GetResult();
     }
-
-    private static ScriptDiagnostic ToDiagnostic(Diagnostic diagnostic)
-    {
-        var span = diagnostic.Location.GetLineSpan();
-        return new ScriptDiagnostic(
-            span.StartLinePosition.Line + 1,
-            span.StartLinePosition.Character + 1,
-            diagnostic.GetMessage());
-    }
-
-    /// <summary>Keyed on the entry type as well as the code, because changing which type is the entry
-    /// point changes what compiles to — without changing a byte of source. Delegates to
-    /// <see cref="ScriptConfig.ComputeHash"/> so this on-disk compiled-assembly cache and
-    /// <c>ScriptHost</c>'s own in-memory one always agree on what a hash means.</summary>
-    internal static string HashOf(string code, string entryType) => ScriptConfig.ComputeHash(code, entryType);
 }
 
 public sealed record ScriptDiagnostic(int Line, int Column, string Message)
@@ -187,38 +111,40 @@ public sealed record ScriptDiagnostic(int Line, int Column, string Message)
 
 public sealed class ScriptCompilation
 {
-    private ScriptCompilation(AssemblyLoadContext? context, Type? entryType, string? hash, IReadOnlyList<ScriptDiagnostic> diagnostics)
+    private ScriptCompilation(ClosureLoadContext? context, LoadedCsx? script, string? hash, IReadOnlyList<ScriptDiagnostic> diagnostics)
     {
         LoadContext = context;
-        EntryType = entryType;
+        Script = script;
         Hash = hash;
         Diagnostics = diagnostics;
     }
 
-    public AssemblyLoadContext? LoadContext { get; }
-    public Type? EntryType { get; }
+    public ClosureLoadContext? LoadContext { get; }
+    public LoadedCsx? Script { get; }
     public string? Hash { get; }
     public IReadOnlyList<ScriptDiagnostic> Diagnostics { get; }
 
-    public bool Success => EntryType is not null;
+    public bool Success => Script is not null;
 
-    public static ScriptCompilation Succeeded(AssemblyLoadContext context, Type entryType, string hash) =>
-        new(context, entryType, hash, []);
+    public static ScriptCompilation Succeeded(ClosureLoadContext context, LoadedCsx script, string hash) => new(context, script, hash, []);
 
-    public static ScriptCompilation Failed(IReadOnlyList<ScriptDiagnostic> diagnostics) =>
-        new(null, null, null, diagnostics);
+    public static ScriptCompilation Failed(IReadOnlyList<ScriptDiagnostic> diagnostics) => new(null, null, null, diagnostics);
 
-    /// <summary>Creates the script's type, cast to the contract its slot requires.</summary>
+    /// <summary>Runs the script, which builds the implementation its slot requires: a new instance each time, cast to the contract.</summary>
     public T CreateInstance<T>(string scriptName) where T : class
     {
-        if (EntryType is null)
+        if (Script is null)
             throw new ScriptExecutionException($"Script '{scriptName}' did not compile: {string.Join("; ", Diagnostics)}");
 
-        if (!typeof(T).IsAssignableFrom(EntryType))
-            throw new ScriptExecutionException(
-                $"Script '{scriptName}' type '{EntryType.Name}' does not implement {typeof(T).Name}.");
+        object? result;
+        try { result = Script.RunAsync().GetAwaiter().GetResult(); }
+        catch (Exception ex) { throw new ScriptExecutionException($"Script '{scriptName}' failed while it was being built: {ex.GetBaseException().Message}"); }
 
-        return Activator.CreateInstance(EntryType) as T
-            ?? throw new ScriptExecutionException($"Script '{scriptName}' type '{EntryType.Name}' could not be constructed.");
+        return result switch
+        {
+            T instance => instance,
+            null => throw new ScriptExecutionException($"Script '{scriptName}' ends with no value: end it with an expression that is the {typeof(T).Name} and no semicolon after it, for example `new MyScript()` (a final `;` makes it a statement with no value)."),
+            _ => throw new ScriptExecutionException($"Script '{scriptName}' ends with a {result.GetType().Name}, which does not implement {typeof(T).Name}."),
+        };
     }
 }

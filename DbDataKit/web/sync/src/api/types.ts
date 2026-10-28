@@ -528,9 +528,6 @@ export interface ScriptConfig {
   /** Which extension point this implements — see GET /api/scripts/slots. */
   kind: string
   language: ScriptLanguage
-  /** The type in the code implementing the slot's contract. Null for a Sql hook, which has no entry
-   * point to compile. */
-  entryType: string | null
   description: string | null
   parameters: ParameterDescriptor[]
   enabled: boolean

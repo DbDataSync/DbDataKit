@@ -15,13 +15,14 @@ public sealed class ScriptCompilerTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_cacheRoot, recursive: true); } catch (IOException) { }
+        try { Directory.Delete(_cacheRoot, recursive: true); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }       // on Windows the package assembly a test loaded is locked until the process ends
     }
 
+    /// <summary>A script is its code and a last expression that is the slot's implementation; <paramref name="entryType"/> is the type that expression builds (empty: the script ends with nothing).</summary>
     private static ScriptDefinition Script(string code, string entryType = "Upper") => new()
     {
-        Manifest = new ScriptConfig { Name = "upper", Kind = ScriptSlots.SqlColumnExpression, EntryType = entryType },
-        Code = code,
+        Manifest = new ScriptConfig { Name = "upper", Kind = ScriptSlots.SqlColumnExpression },
+        Code = entryType.Length == 0 ? code : code + $"\nnew {entryType}()\n",
     };
 
     private const string ValidCode = """
@@ -35,12 +36,12 @@ public sealed class ScriptCompilerTests : IDisposable
         """;
 
     [Fact]
-    public void ValidCode_CompilesAndItsEntryTypeIsFound()
+    public void ValidCode_Compiles()
     {
         var compilation = _compiler.Compile(Script(ValidCode));
 
         Assert.True(compilation.Success, string.Join("; ", compilation.Diagnostics));
-        Assert.Equal("Upper", compilation.EntryType!.Name);
+        Assert.NotNull(compilation.Hash);
     }
 
     [Fact]
@@ -156,14 +157,24 @@ public sealed class ScriptCompilerTests : IDisposable
     }
 
     [Fact]
-    public void AMissingEntryType_SaysWhatWasActuallyThere()
+    public void AScriptThatEndsWithNoExpression_SaysHowToEndIt()
     {
-        var compilation = _compiler.Compile(Script(ValidCode, entryType: "NotThisOne"));
+        var compilation = _compiler.Compile(Script(ValidCode, entryType: ""));
 
-        Assert.False(compilation.Success);
-        var message = Assert.Single(compilation.Diagnostics).Message;
-        Assert.Contains("NotThisOne", message);
-        Assert.Contains("Upper", message);
+        Assert.True(compilation.Success);          // it compiles: what is missing is the value, found when the instance is asked for
+        var ex = Assert.Throws<ScriptExecutionException>(() => compilation.CreateInstance<ISqlColumnExpression>("upper"));
+        Assert.Contains("ends with no value", ex.Message);
+        Assert.Contains("new MyScript()", ex.Message);
+        Assert.Contains("no semicolon", ex.Message);
+    }
+
+    [Fact]
+    public void AScriptThatEndsWithTheWrongThing_NamesWhatItEndsWith()
+    {
+        var compilation = _compiler.Compile(Script("var n = 42;\nn", entryType: ""));
+
+        var ex = Assert.Throws<ScriptExecutionException>(() => compilation.CreateInstance<ISqlColumnExpression>("upper"));
+        Assert.Contains("Int32", ex.Message);
     }
 
     [Fact]
@@ -189,34 +200,72 @@ public sealed class ScriptCompilerTests : IDisposable
         // otherwise pay Roslyn's start-up cost on every fifteen-second pass.
         Assert.True(_compiler.Compile(Script(ValidCode)).Success);
 
-        var cached = Directory.GetFiles(_cacheRoot, "*.dll");
+        var cached = Directory.GetFiles(_cacheRoot, "*.dll", SearchOption.AllDirectories);
         Assert.Single(cached);
 
         var second = _compiler.Compile(Script(ValidCode));
         Assert.True(second.Success);
-        Assert.Single(Directory.GetFiles(_cacheRoot, "*.dll"));
+        Assert.Single(Directory.GetFiles(_cacheRoot, "*.dll", SearchOption.AllDirectories));
     }
 
     [Fact]
-    public void ChangingTheEntryType_IsADifferentCacheEntryEvenWithIdenticalCode()
+    public void TheContentHash_IsOfTheCodeAlone()
     {
-        const string twoTypes = """
+        Assert.Equal(ScriptConfig.ComputeHash("a"), ScriptConfig.ComputeHash("a"));
+        Assert.NotEqual(ScriptConfig.ComputeHash("a"), ScriptConfig.ComputeHash("b"));
+    }
+
+    [Fact]
+    public void LoadBringsInAnotherScriptOfTheScriptsFolder_AndNothingOutsideIt()
+    {
+        var scripts = Path.Combine(_cacheRoot, "config", "scripts");
+        Directory.CreateDirectory(scripts);
+        File.WriteAllText(Path.Combine(scripts, "shared.csx"), "string Wrap(string s) => \"UPPER(\" + s + \")\";");
+        File.WriteAllText(Path.Combine(_cacheRoot, "outside.csx"), "int Secret() => 1;");
+        var compiler = new ScriptCompiler(new ScriptCacheDirectory(Path.Combine(_cacheRoot, "cache2")), scripts);
+        const string Body = """
             using DbDataSync.Scripting.Abstractions;
 
-            public sealed class Upper : ISqlColumnExpression
+            public sealed class Wrapped : ISqlColumnExpression
             {
-                public string? RenderSql(SqlColumnExpressionContext c) => $"UPPER({c.ColumnReference})";
-            }
-
-            public sealed class Lower : ISqlColumnExpression
-            {
-                public string? RenderSql(SqlColumnExpressionContext c) => $"LOWER({c.ColumnReference})";
+                public string? RenderSql(SqlColumnExpressionContext context) => $"x";
             }
             """;
 
-        Assert.NotEqual(
-            ScriptCompiler.HashOf(twoTypes, "Upper"),
-            ScriptCompiler.HashOf(twoTypes, "Lower"));
+        var inside = compiler.Compile(new ScriptDefinition { Manifest = new ScriptConfig { Name = "uses-shared", Kind = ScriptSlots.SqlColumnExpression }, Code = "#load \"shared.csx\"\n" + Body + "\nWrap(\"c\") == \"UPPER(c)\" ? new Wrapped() : null\n" });
+        Assert.True(inside.Success, string.Join("; ", inside.Diagnostics));
+        Assert.NotNull(inside.CreateInstance<ISqlColumnExpression>("uses-shared"));
+
+        var outside = compiler.Compile(new ScriptDefinition { Manifest = new ScriptConfig { Name = "escapes", Kind = ScriptSlots.SqlColumnExpression }, Code = "#load \"../../outside.csx\"\n" + Body + "\nnew Wrapped()\n" });
+        Assert.False(outside.Success);
+    }
+
+    [Fact]
+    public void AScriptMayAskForAPackage_ResolvedFromAFeed_AndUseItsTypes()
+    {
+        var packages = Environment.GetEnvironmentVariable("NUGET_PACKAGES") is { Length: > 0 } set ? set : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages");
+        var folder = Path.Combine(packages, "npgsql");
+        Assert.True(Directory.Exists(folder), "Npgsql is not in the machine's NuGet package folder: restore a project that uses it first");
+        var version = Directory.EnumerateDirectories(folder).Select(Path.GetFileName).Where(v => v is not null && !v.Contains('-')).Order().Last();
+        var compiler = new ScriptCompiler(new ScriptCacheDirectory(Path.Combine(_cacheRoot, "cache3")), packageSource: packages);
+        const string Body = """
+            using DbDataSync.Scripting.Abstractions;
+
+            public sealed class UsesNpgsql : ISqlColumnExpression
+            {
+                public string? RenderSql(SqlColumnExpressionContext context) => typeof(Npgsql.NpgsqlConnection).Name;
+            }
+            """;
+
+        var compilation = compiler.Compile(new ScriptDefinition
+        {
+            Manifest = new ScriptConfig { Name = "uses-npgsql", Kind = ScriptSlots.SqlColumnExpression },
+            Code = $"#r \"nuget: Npgsql, {version}\"\n" + Body + "\nnew UsesNpgsql()\n",
+        });
+
+        Assert.True(compilation.Success, string.Join("; ", compilation.Diagnostics));
+        var expression = compilation.CreateInstance<ISqlColumnExpression>("uses-npgsql");
+        Assert.Equal("NpgsqlConnection", expression.RenderSql(new SqlColumnExpressionContext("c", "c", null, "[c]", new FakeDialect(), ScriptParameters.Empty)));
     }
 
     private sealed class FakeDialect : IScriptDialect
@@ -242,7 +291,7 @@ public sealed class ScriptCompilerTests : IDisposable
         {
             Manifest = new ScriptConfig
             {
-                Name = "reads-its-context", Kind = ScriptSlots.LifecycleHook, EntryType = "ReadsItsContext",
+                Name = "reads-its-context", Kind = ScriptSlots.LifecycleHook,
             },
             Code = """
                 using System.Collections.Generic;
@@ -263,6 +312,8 @@ public sealed class ScriptCompilerTests : IDisposable
                         return [new HookStatement($"-- {mapped.Count} column(s), {from} -> {to}", [])];
                     }
                 }
+
+                new ReadsItsContext()
                 """,
         });
 

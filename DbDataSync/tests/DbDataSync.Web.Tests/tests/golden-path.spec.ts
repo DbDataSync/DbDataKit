@@ -508,7 +508,6 @@ test.describe.serial('golden path: define, configure, and run a replication end-
     await page.goto('/scripts')
     await page.getByTestId('new-script-button').click()
     await page.getByTestId('script-name-input').fill(SCRIPT)
-    await page.getByTestId('script-entry-type-input').fill('ReverseName')
     await setCode(page, 'script-code-input', `using DbDataSync.Scripting.Abstractions;
 
 public sealed class ReverseName : ISqlColumnExpression
@@ -518,6 +517,8 @@ public sealed class ReverseName : ISqlColumnExpression
             ? $"REVERSE({c.ColumnReference})"
             : null;
 }
+
+new ReverseName()
 `)
 
     // Compile before saving — the operator finds out here rather than at the first run.
@@ -587,7 +588,6 @@ public sealed class ReverseName : ISqlColumnExpression
     await page.goto('/scripts/new')
     await page.getByTestId('script-name-input').fill('never-bound')
     await page.getByTestId('script-kind-select').selectOption('rowTransform')
-    await page.getByTestId('script-entry-type-input').fill('Unused')
     await setCode(page, 'script-code-input', `using System.Threading;
 using System.Threading.Tasks;
 using DbDataSync.Drivers.Abstractions;
@@ -600,6 +600,8 @@ public sealed class Unused : IRowTransform
     public ValueTask<ChangeRow?> TransformAsync(ChangeRow row, RowTransformContext c, CancellationToken ct)
         => ValueTask.FromResult<ChangeRow?>(row);
 }
+
+new Unused()
 `)
     await page.getByTestId('save-script-button').click()
     await expect(page.getByTestId('scripts-table')).toContainText('never-bound', { timeout: 15_000 })
@@ -615,7 +617,6 @@ public sealed class Unused : IRowTransform
     await page.goto('/scripts/new')
     await page.getByTestId('script-name-input').fill(SCRIPT)
     await page.getByTestId('script-kind-select').selectOption('rowTransform')
-    await page.getByTestId('script-entry-type-input').fill('DropGadgets')
     await setCode(page, 'script-code-input', `using System.Threading;
 using System.Threading.Tasks;
 using DbDataSync.Drivers.Abstractions;
@@ -639,6 +640,8 @@ public sealed class DropGadgets : IRowTransform
         return ValueTask.FromResult<ChangeRow?>(row);
     }
 }
+
+new DropGadgets()
 `)
     await page.getByTestId('save-script-button').click()
     await expect(page.getByTestId('scripts-table')).toContainText(SCRIPT, { timeout: 15_000 })
@@ -891,7 +894,6 @@ public sealed class DropGadgets : IRowTransform
     await page.goto('/scripts/new')
     await page.getByTestId('script-name-input').fill('shout')
     await page.getByTestId('script-kind-select').selectOption('valueColumnExpression')
-    await page.getByTestId('script-entry-type-input').fill('Shout')
     await setCode(page, 'script-code-input', `using System.Collections.Generic;
 using DbDataSync.Scripting.Abstractions;
 
@@ -902,6 +904,8 @@ public sealed class Shout : IValueColumnExpression
     public object? Evaluate(object? value, ValueColumnExpressionContext c) =>
         value is string s ? s.ToUpperInvariant() : value;
 }
+
+new Shout()
 `)
 
     await page.getByTestId('run-script-test-button').click()
@@ -926,6 +930,8 @@ public sealed class Shout : IValueColumnExpression
     public object? Evaluate(object? value, ValueColumnExpressionContext c) =>
         value is string s ? s + "!" : value;
 }
+
+new Shout()
 `)
     await page.getByTestId('run-script-test-button').click()
     await expect(cases).toContainText("'sample!'", { timeout: 20_000 })
@@ -940,6 +946,8 @@ public sealed class Shout : IValueColumnExpression
 
     public object? Evaluate(object? value, ValueColumnExpressionContext c) => ((string)value!).Substring(3);
 }
+
+new Shout()
 `)
     await page.getByTestId('run-script-test-button').click()
     await expect(page.getByTestId('script-test-error')).toBeVisible({ timeout: 20_000 })

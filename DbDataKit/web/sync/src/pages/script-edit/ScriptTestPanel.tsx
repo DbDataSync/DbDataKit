@@ -50,7 +50,7 @@ export function ScriptTestPanel({ draft }: { draft: ScriptDefinition }) {
             <button
               type="button"
               className="btn"
-              disabled={test.isPending || !draft.manifest.entryType}
+              disabled={test.isPending || draft.manifest.language === 'Sql'}
               onClick={() => test.mutate({
                 name: draft.manifest.name || 'draft',
                 request: { script: draft, connectionName: connectionName || undefined },
