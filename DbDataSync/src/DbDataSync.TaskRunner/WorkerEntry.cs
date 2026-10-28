@@ -42,7 +42,7 @@ public static class WorkerEntry
         // The cache is what makes scripting affordable here: this process is spawned per run, so without it
         // every pass would start a compiler before compiling anything of ours.
         var scriptHost = new ScriptHost(
-            configRepository, new ScriptCompiler(ScriptCacheDirectory.BesideStateDatabase(options.StateDbPath)));
+            configRepository, new ScriptCompiler(ScriptCacheDirectory.BesideStateDatabase(options.StateDbPath), configRepository.ScriptsDirectory));
 
         // Loaded before DriverRegistry for the same reason the API loads it first: a descriptor or compiled
         // driver registered from 109d/109e on resolves its library through this. The worker is a separate

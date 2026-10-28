@@ -124,8 +124,8 @@ public sealed class ScriptedQueryReaderTests(MsSqlTestDatabase db) : IClassFixtu
         _configRepository.SaveScript(
             new ScriptDefinition
             {
-                Manifest = new ScriptConfig { Name = "audit-query", Kind = ScriptSlots.SqlColumnExpression, EntryType = "AuditQuery" },
-                Code = AuditQuery,
+                Manifest = new ScriptConfig { Name = "audit-query", Kind = ScriptSlots.SqlColumnExpression },
+                Code = AuditQuery + "\nnew AuditQuery()\n",
             },
             new DbDataKit.Config.Git.GitAuthor("t", "t@t"));
 
@@ -229,7 +229,7 @@ public sealed class ScriptedQueryReaderTests(MsSqlTestDatabase db) : IClassFixtu
         _configRepository.SaveScript(
             new ScriptDefinition
             {
-                Manifest = new ScriptConfig { Name = "wrong-op", Kind = ScriptSlots.SqlColumnExpression, EntryType = "WrongOp" },
+                Manifest = new ScriptConfig { Name = "wrong-op", Kind = ScriptSlots.SqlColumnExpression },
                 Code = """
                     using DbDataSync.Scripting.Abstractions;
 
@@ -239,6 +239,8 @@ public sealed class ScriptedQueryReaderTests(MsSqlTestDatabase db) : IClassFixtu
                         public SourceQuery BuildReadQuery(SourceQueryContext c) => SourceQuery.Text("SELECT 1 AS Id;");
                         public SourceQueryShape DescribeResult(SourceQueryContext c) => new(OperationColumn: "NotThere");
                     }
+
+                    new WrongOp()
                     """,
             },
             new DbDataKit.Config.Git.GitAuthor("t", "t@t"));

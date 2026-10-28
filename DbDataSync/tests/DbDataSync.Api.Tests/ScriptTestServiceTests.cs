@@ -34,8 +34,8 @@ public sealed class ScriptTestServiceTests(TestApiFactory factory) : IClassFixtu
         {
             script = new ScriptDefinition
             {
-                Manifest = new ScriptConfig { Name = name, Kind = kind, EntryType = entryType },
-                Code = code,
+                Manifest = new ScriptConfig { Name = name, Kind = kind },
+                Code = code + $"\nnew {entryType}()\n",
             },
             connectionName,
         }, JsonOptions);
@@ -328,7 +328,7 @@ public sealed class ScriptTestServiceTests(TestApiFactory factory) : IClassFixtu
         {
             script = new ScriptDefinition
             {
-                Manifest = new ScriptConfig { Name = name, Kind = "metadataProvider", EntryType = "X" },
+                Manifest = new ScriptConfig { Name = name, Kind = "metadataProvider" },
                 Code = """
                     using System.Collections.Generic;
                     using System.Threading;
@@ -342,11 +342,13 @@ public sealed class ScriptTestServiceTests(TestApiFactory factory) : IClassFixtu
                         public Task<IReadOnlyList<TableMetadata>> ListTablesAsync(MetadataContext c, string d, CancellationToken ct) => c.DriverTables(d, ct);
                         public Task<IReadOnlyList<ColumnMetadata>> ListColumnsAsync(MetadataContext c, string d, string s, string t, CancellationToken ct) => c.DriverColumns(d, s, t, ct);
                     }
+
+                    new X()
                     """,
             },
         }, JsonOptions);
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.True(response.StatusCode == HttpStatusCode.BadRequest, await response.Content.ReadAsStringAsync());
         Assert.Contains("choosing a connection", await response.Content.ReadAsStringAsync());
     }
 }

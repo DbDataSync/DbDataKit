@@ -41,10 +41,9 @@ public sealed class ScriptsControllerTests(TestApiFactory factory) : IClassFixtu
         {
             Name = name,
             Kind = "sqlColumnExpression",
-            EntryType = entryType,
             Description = "Upper-cases a column at the source.",
         },
-        Code = code,
+        Code = code + $"\nnew {entryType}()\n",
     };
 
     [Fact]
@@ -57,10 +56,10 @@ public sealed class ScriptsControllerTests(TestApiFactory factory) : IClassFixtu
 
         var loaded = await _client.GetFromJsonAsync<ScriptDefinition>($"/api/scripts/{name}", JsonOptions);
 
-        Assert.Equal("Upper", loaded!.Manifest.EntryType);
-        // The code comes back byte for byte — it lives in its own .cs file precisely so a serializer
+        Assert.Equal("Upper-cases a column at the source.", loaded!.Manifest.Description);
+        // The code comes back byte for byte — it lives in its own .csx file precisely so a serializer
         // never gets to re-indent it.
-        Assert.Equal(ValidCode, loaded.Code);
+        Assert.Equal(Definition(name, ValidCode).Code, loaded.Code);
     }
 
     [Fact]
