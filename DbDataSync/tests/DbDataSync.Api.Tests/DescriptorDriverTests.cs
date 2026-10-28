@@ -99,8 +99,8 @@ public sealed class DescriptorDriverTests : IClassFixture<DescriptorDriverApiFac
 
         // Same reason RunLifecycleIntegrationTests sets this: the spawned TaskRunner is a real child
         // process with its own SecretStore, not this test host's in-memory one.
-        SetSecretEnvVar(_srcConnectionName, "DbDataSync_Test_Pw1");
-        SetSecretEnvVar(_tgtConnectionName, "DbDataSync_Test_Pw1");
+        SetSecretEnvVar(_srcConnectionName, TestSupport.TestEngines.MySql.Password);
+        SetSecretEnvVar(_tgtConnectionName, TestSupport.TestEngines.MsSql.Password);
 
         await CreateMySqlConnectionAsync();
         await CreateMsSqlConnectionAsync();
@@ -156,11 +156,11 @@ public sealed class DescriptorDriverTests : IClassFixture<DescriptorDriverApiFac
             Name = _srcConnectionName,
             DriverType = DescriptorDriverApiFactory.DriverId,
             Host = "localhost",
-            Port = 13306,
+            Port = TestSupport.TestEngines.MySql.Port,
             Database = _mySqlDatabase,
             AuthMode = AuthMode.SqlAuth,
             UserId = "root",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MySql.Password,
         }, JsonOptions)).EnsureSuccessStatusCode();
 
     private async Task CreateMsSqlConnectionAsync() =>
@@ -169,12 +169,12 @@ public sealed class DescriptorDriverTests : IClassFixture<DescriptorDriverApiFac
             Name = _tgtConnectionName,
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = _targetDatabase,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
         }, JsonOptions)).EnsureSuccessStatusCode();
 
     private async Task CreateReplicationAsync()

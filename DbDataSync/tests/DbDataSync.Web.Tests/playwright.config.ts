@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { SA_PASSWORD } from './test-db'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '../..')
@@ -59,7 +60,7 @@ if (!isWorker) {
   )
 }
 
-// The password used for the real SQL Server test database (started via docker-compose.yml's mssql-source service —
+// The password used for the real SQL Server test database (started via testenv's mssql profile —
 // see architecture/implementation/done/phase-003-mssql-driver.md). This sandbox has no OS keychain, so the
 // API's SecretStore falls back to environment variables — presetting these lets the *spawned
 // TaskRunner child process* resolve the connection credentials it needs to actually run a
@@ -75,8 +76,8 @@ const authEnv = {
 
 // The environment variables the API's SecretStore falls back to when its encrypted store has no password for the connection.
 const secretEnv = {
-  DBDATA_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_SRC: 'DbDataSync_Test_Pw1',
-  DBDATA_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_TGT: 'DbDataSync_Test_Pw1',
+  DBDATA_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_SRC: SA_PASSWORD,
+  DBDATA_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_TGT: SA_PASSWORD,
 }
 
 export default defineConfig({

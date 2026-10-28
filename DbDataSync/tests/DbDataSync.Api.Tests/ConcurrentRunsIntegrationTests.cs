@@ -72,8 +72,8 @@ public sealed class ConcurrentRunsIntegrationTests : IClassFixture<TestApiFactor
             await ExecuteAsync(dbConnection, $"INSERT INTO dbo.[Src_{i}] (Id, Name) VALUES {values};");
         }
 
-        SetSecretEnvVar(_srcConnectionName, "DbDataSync_Test_Pw1");
-        SetSecretEnvVar(_tgtConnectionName, "DbDataSync_Test_Pw1");
+        SetSecretEnvVar(_srcConnectionName, TestSupport.TestEngines.MsSql.Password);
+        SetSecretEnvVar(_tgtConnectionName, TestSupport.TestEngines.MsSql.Password);
 
         await CreateConnectionAsync(_srcConnectionName);
         await CreateConnectionAsync(_tgtConnectionName);
@@ -195,12 +195,12 @@ public sealed class ConcurrentRunsIntegrationTests : IClassFixture<TestApiFactor
             Name = name,
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = _databaseName,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
         }, JsonOptions)).EnsureSuccessStatusCode();
 
     private static async Task EnsureSuccessWithBodyAsync(HttpResponseMessage response)

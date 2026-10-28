@@ -8,7 +8,7 @@ namespace DbDataSync.Drivers.Postgres.Tests;
 
 /// <summary>
 /// Phase 34 against a real server with <c>wal_level = logical</c> and the <c>wal2json</c> output
-/// plugin — see <c>docker/postgres-logical/Dockerfile</c>, which exists because no well-known public
+/// plugin — see <c>testenv/postgres-logical/Dockerfile</c>, which exists because no well-known public
 /// image carries that plugin any more.
 /// <para>
 /// The test that matters most here is <see cref="AReadThatIsNotAcknowledged_SeesTheSameChangesAgain"/>.

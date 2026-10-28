@@ -4,7 +4,7 @@ using Xunit;
 namespace DbDataSync.Drivers.Oracle.Tests;
 
 /// <summary>
-/// Points at the local Docker container from docker-compose.yml by default; override via
+/// Points at the shared testenv Oracle (profile `oracle`) by default; override via
 /// DBDATASYNC_TEST_ORACLE_SERVER. Unlike <c>PostgresTestDatabase</c>/<c>MySqlFamilyTestDatabase</c>,
 /// this does **not** create and drop a fresh database per test class — Oracle has no equivalent an
 /// ordinary app user can create cheaply (a new pluggable database is a DBA-level, heavyweight

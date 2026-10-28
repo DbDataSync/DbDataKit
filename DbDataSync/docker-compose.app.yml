@@ -1,6 +1,6 @@
 # The product, for somebody who wants to run it rather than develop it.
 #
-# Deliberately a second file: docker-compose.yml stands up the test databases this repo develops
+# Deliberately its own file: testenv/docker-compose.yml stands up the test databases this repo develops
 # against, and folding the application into it would make "start my test databases" also start an
 # application.
 #

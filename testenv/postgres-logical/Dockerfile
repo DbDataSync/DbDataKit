@@ -1,4 +1,4 @@
-# PostgreSQL with the wal2json output plugin, for phase 34's logical-decoding reader.
+# PostgreSQL with the wal2json output plugin, for phase 34's logical-decoding reader (testenv profile `postgres-logical`).
 #
 # A build step rather than an image swap, because there is no longer a well-known public image that
 # carries wal2json. Debezium's postgres images are the usual answer and stopped being one: as of

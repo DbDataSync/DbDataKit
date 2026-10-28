@@ -4,17 +4,41 @@
 #
 # Host ports are fixed and documented here so a suite's connection settings never depend on discovery:
 #
-#   mssql      14330     SQL Server 2022, user sa
-#   postgres   15432     PostgreSQL 17, user postgres
-#   mysql      13306     MySQL 9, user root
-#   mariadb    13307     MariaDB 11, user root
-#   oracle     15210     Oracle Database Free 23ai (gvenzl/oracle-free:23-slim), service FREEPDB1, user dbkit (sys/system: the same password)
+#   mssql              14330   SQL Server 2022, user sa, SQL Server Agent on (Sync's CDC needs it)
+#   mssql-target       14331   a second SQL Server 2022, user sa: Sync's cross-instance replication and its targets
+#   postgres           15432   PostgreSQL 17 with TLS, user postgres
+#   postgres-logical   15433   PostgreSQL 17 with wal_level=logical and wal2json, user dbdatasync (see below)
+#   mysql              13306   MySQL 9, user root
+#   mariadb            13307   MariaDB 11, user root
+#   oracle             15210   Oracle Database Free 23ai (gvenzl/oracle-free:23-slim), service FREEPDB1, user dbkit (sys/system: the same password)
 #
-# (DbDataSync's own docker-compose.yml still runs its engines on 14330/14331/15432/...; it moves into this file engine by
-# engine, and the two can't run together on one machine until it has.)
+# This is the one test-engine environment of the repository: DbDataSync's own docker-compose.yml is gone, its engines are the profiles
+# above, and every suite starts what it needs with `testenv.sh up`. The two things Sync needed that the other suites do not:
+#
+# - `postgres-logical` is a separate engine on purpose, the one place where two engines of the same kind run side by side. Logical
+#   decoding needs `wal_level=logical`, a restart-requiring server setting, and the wal2json plugin, which no public image carries (it is
+#   built from testenv/postgres-logical/Dockerfile on a freshly pulled `postgres:17`; DBKIT_TEST_PULL=false skips the pull, for a machine that is offline or rate-limited). Turning that on for the plain `postgres`
+#   would change the server every other suite tests against (TLS, default settings, the Debian build Build's conformance suite pins
+#   differences to) to suit one product, so Sync's slot tests get their own server on its own port.
+# - `oracle` mounts testenv/oracle-init: Sync's flashback reader needs EXECUTE on DBMS_FLASHBACK and FLASHBACK ANY TABLE for the app
+#   user (`dbkit`), and a pre-existing table (Oracle's flashback version query refuses a table created seconds ago). The init scripts run
+#   on the container's first start; harmless for the other suites.
+#
+# None of the engines keeps data between runs (no volumes): `testenv.sh down` removes everything, and every suite creates its own
+# databases and tables. The users and the password are the same for every engine (DBKIT_TEST_PASSWORD, default DbKit_Test_Pw1), except
+# that Sync's PostgreSQL user stays `dbdatasync`.
 name: dbkit-test
 
 x-password: &password ${DBKIT_TEST_PASSWORD:-DbKit_Test_Pw1}
+
+# Images from 2025 onward ship /opt/mssql-tools18 only, whose sqlcmd needs -C for the container's self-signed certificate;
+# try that first and fall back, since `:2022-latest` moves under you.
+x-mssql-health: &mssql-health
+  test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || exit 1"]
+  interval: 5s
+  timeout: 5s
+  retries: 30
+  start_period: 15s
 
 services:
   mssql:
@@ -25,16 +49,26 @@ services:
       ACCEPT_EULA: "Y"
       MSSQL_PID: Developer
       MSSQL_SA_PASSWORD: *password
+      # CDC's capture is a SQL Server Agent job: without Agent `sp_cdc_enable_table` succeeds and then nothing is ever captured
+      # (Sync's CDC reader would wait for an LSN that never comes). The image ships Agent but leaves it stopped. Harmless for the other
+      # suites; only this instance has it, the target is written to and never captured from.
+      MSSQL_AGENT_ENABLED: "true"
     ports:
       - "14330:1433"
-    healthcheck:
-      # Images from 2025 onward ship /opt/mssql-tools18 only, whose sqlcmd needs -C for the container's self-signed certificate;
-      # try that first and fall back, since `:2022-latest` moves under you.
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-      start_period: 15s
+    healthcheck: *mssql-health
+
+  # The second SQL Server, for Sync's cross-instance replication (source on 14330, target here) and anything that must cross servers.
+  mssql-target:
+    profiles: [mssql-target]
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: dbkit-test-mssql-target
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: *password
+    ports:
+      - "14331:1433"
+    healthcheck: *mssql-health
 
   postgres:
     profiles: [postgres]
@@ -58,6 +92,46 @@ services:
       - "15432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  # PostgreSQL for Sync's logical-decoding reader; see the header for why it is its own engine. Built, not pulled.
+  postgres-logical:
+    profiles: [postgres-logical]
+    build:
+      context: ./postgres-logical
+      pull: ${DBKIT_TEST_PULL:-true}
+    image: dbkit-test-postgres-logical:17
+    container_name: dbkit-test-postgres-logical
+    # wal_level=logical is what lets a replication slot decode anything at all; it is a restart-requiring setting on a real server,
+    # which is the single biggest adoption obstacle of this mechanism and why the provisioner checks it before proposing a slot.
+    #
+    # max_replication_slots defaults to 10. Sync's slots are one per source table, not one per replication (PgLogicalSlotReader says
+    # why a shared slot cannot be advanced safely), so the default is a low ceiling for anything but a toy replication.
+    #
+    # Since PostgreSQL 18.6/17.11/16.15/15.19/14.24 (the fix for CVE-2026-6471) an output plugin library has to be listed in
+    # output_plugin_libraries before a slot may use it; without wal2json there, creating a slot fails with `library "wal2json" may not
+    # be used as an output plugin`.
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - output_plugin_libraries=pgoutput,test_decoding,wal2json
+      - -c
+      - max_replication_slots=20
+      - -c
+      - max_wal_senders=20
+    environment:
+      POSTGRES_USER: dbdatasync
+      POSTGRES_PASSWORD: *password
+      POSTGRES_DB: dbdatasync
+    ports:
+      - "15433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbdatasync"]
       interval: 3s
       timeout: 5s
       retries: 20
@@ -95,8 +169,9 @@ services:
       retries: 30
       start_period: 20s
 
-  # The slowest to start (a couple of minutes the first time). Ask for it only when a suite needs it. A generic engine: Sync's Oracle flashback-reader tests
-  # also need EXECUTE on DBMS_FLASHBACK and FLASHBACK ANY TABLE for their user, which DbDataSync/docker/oracle-init grants on Sync's own stack.
+  # The slowest to start (a couple of minutes the first time). Ask for it only when a suite needs it. Sync's Oracle flashback-reader
+  # tests also need EXECUTE on DBMS_FLASHBACK and FLASHBACK ANY TABLE for the app user and a table with some age: oracle-init/ does that
+  # on first start (the image runs every script in /container-entrypoint-initdb.d once the app user exists).
   oracle:
     profiles: [oracle]
     image: gvenzl/oracle-free:23-slim
@@ -107,6 +182,8 @@ services:
       APP_USER_PASSWORD: *password
     ports:
       - "15210:1521"
+    volumes:
+      - ./oracle-init:/container-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "healthcheck.sh"]
       interval: 10s

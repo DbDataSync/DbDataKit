@@ -70,19 +70,19 @@ public sealed class PreviewIntegrationTests : IClassFixture<TestApiFactory>, IAs
         await ExecuteAsync(connection, "CREATE TABLE dbo.PreviewHookLog (Note NVARCHAR(100) NOT NULL);");
 
         Environment.SetEnvironmentVariable(
-            _secrets.EnvName(SecretRefs.ForConnection(_connectionName)), "DbDataSync_Test_Pw1");
+            _secrets.EnvName(SecretRefs.ForConnection(_connectionName)), TestSupport.TestEngines.MsSql.Password);
 
         (await _client.PutAsJsonAsync($"/api/connections/{_connectionName}", new ConnectionInput
         {
             Name = _connectionName,
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = _databaseName,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
         }, JsonOptions)).EnsureSuccessStatusCode();
 
         (await _client.PutAsJsonAsync($"/api/replications/{_replicationName}", new ReplicationTaskConfig
@@ -736,12 +736,12 @@ public sealed class PreviewIntegrationTests : IClassFixture<TestApiFactory>, IAs
             Name = _connectionName,
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = _databaseName,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
             Scripts = new Dictionary<string, ScriptBinding?> { ["metadataProvider"] = new ScriptBinding { ScriptName = scriptName } },
         }, JsonOptions)).EnsureSuccessStatusCode();
 

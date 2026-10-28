@@ -2,14 +2,14 @@ import path from 'node:path'
 import { test, expect } from '@playwright/test'
 import { KNOWN_DRIVER_ID, KNOWN_DRIVER_LIBRARY } from '../playwright.config'
 import { screenshotDir } from '../screenshots'
+import { MYSQL_PORT, MYSQL_ROOT_PASSWORD } from '../test-db'
 
 const screenshotsDir = screenshotDir('connection-test-preview')
 
-// The real MySQL container docker-compose.yml stands up (dbdatasync-mysql, port 13306) — a
+// The real MySQL container testenv/ stands up (dbkit-test-mysql, port 13306) — a
 // GenericDriver-backed connection (mysql.generic) is the only way to exercise phase 176M's
 // PreviewConnection end to end through the real console: every hand-written built-in (MsSql/Postgres/
 // MySql/Oracle) doesn't implement it, only a descriptor-driven driver does.
-const MYSQL_ROOT_PASSWORD = process.env.DBDATASYNC_MYSQL_ROOT_PASSWORD ?? 'DbDataSync_Test_Pw1'
 const CONNECTION_NAME = `preview-e2e-${Date.now()}`
 
 /**
@@ -49,8 +49,8 @@ test.describe.serial('connection test preview (phase 177M)', () => {
     await page.getByTestId('connection-name-input').fill(CONNECTION_NAME)
     await page.getByTestId('connection-driver-select').selectOption(KNOWN_DRIVER_ID)
     await page.getByTestId('connection-parameters-host').fill('localhost')
-    await page.getByTestId('connection-parameters-port').fill('13306')
-    await page.getByTestId('connection-parameters-database').fill('dbdatasync')
+    await page.getByTestId('connection-parameters-port').fill(String(MYSQL_PORT))
+    await page.getByTestId('connection-parameters-database').fill('mysql')
     await page.getByTestId('connection-parameters-userId').fill('root')
     await page.getByTestId('connection-parameters-password').fill(MYSQL_ROOT_PASSWORD)
     await page.getByTestId('save-connection-button').click()
@@ -71,7 +71,7 @@ test.describe.serial('connection test preview (phase 177M)', () => {
 
     const resolved = page.getByTestId('connection-resolved-string')
     await expect(resolved).toContainText('localhost')
-    await expect(resolved).toContainText('dbdatasync')
+    await expect(resolved).toContainText('mysql')
     await expect(resolved).toContainText('••••••')
     await expect(resolved).not.toContainText(MYSQL_ROOT_PASSWORD)
 

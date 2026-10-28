@@ -41,13 +41,13 @@ public sealed class JdbcUrlTemplateTests(JdbcTestDatabase db) : IClassFixture<Jd
         var config = new ConnectionConfig
         {
             Name = "jdbc-preview-full", DriverType = "Jdbc",
-            Host = "localhost", Port = 15432, Database = db.DatabaseName,
+            Host = "localhost", Port = TestSupport.TestEngines.Postgres.Port, Database = db.DatabaseName,
             AuthMode = AuthMode.SqlAuth, UserId = "dbdatasync",
         };
 
         var preview = driver.PreviewConnection(config);
 
-        Assert.Equal($"jdbc:postgresql://localhost:15432/{db.DatabaseName}", preview.JdbcUri);
+        Assert.Equal($"jdbc:postgresql://localhost:{TestSupport.TestEngines.Postgres.Port}/{db.DatabaseName}", preview.JdbcUri);
         Assert.Contains("••••••", preview.ConnectionString);
         // host/port/database were all consumed by the template, same as the real connection.
         Assert.False(preview.Properties.ContainsKey("database"));
@@ -66,16 +66,16 @@ public sealed class JdbcUrlTemplateTests(JdbcTestDatabase db) : IClassFixture<Jd
         var config = new ConnectionConfig
         {
             Name = "jdbc-template-full", DriverType = "Jdbc",
-            Host = "localhost", Port = 15432, Database = db.DatabaseName,
+            Host = "localhost", Port = TestSupport.TestEngines.Postgres.Port, Database = db.DatabaseName,
             AuthMode = AuthMode.SqlAuth, UserId = "dbdatasync",
         };
 
-        await using var connection = driver.CreateConnection(config, "DbDataSync_Test_Pw1");
+        await using var connection = driver.CreateConnection(config, TestSupport.TestEngines.Postgres.Password);
         var built = new JdbcConnectionStringBuilder(connection.ConnectionString);
 
-        Assert.Equal($"jdbc:postgresql://localhost:15432/{db.DatabaseName}", built.JdbcUrl);
+        Assert.Equal($"jdbc:postgresql://localhost:{TestSupport.TestEngines.Postgres.Port}/{db.DatabaseName}", built.JdbcUrl);
         Assert.Equal("dbdatasync", built["user"]);
-        Assert.Equal("DbDataSync_Test_Pw1", built["password"]);
+        Assert.Equal(TestSupport.TestEngines.Postgres.Password, built["password"]);
         // host/port/database were all consumed by the template — none of them should also leak through
         // as a property under keys.Host/Port/Database's own name (the whole point of PlaceOrFallback).
         Assert.False(built.ContainsKey("host"));
@@ -99,14 +99,14 @@ public sealed class JdbcUrlTemplateTests(JdbcTestDatabase db) : IClassFixture<Jd
         var config = new ConnectionConfig
         {
             Name = "jdbc-template-partial", DriverType = "Jdbc",
-            Host = "localhost", Port = 15432, Database = db.DatabaseName,
+            Host = "localhost", Port = TestSupport.TestEngines.Postgres.Port, Database = db.DatabaseName,
             AuthMode = AuthMode.None,
         };
 
         using var connection = driver.CreateConnection(config, credential: null);
         var built = new JdbcConnectionStringBuilder(connection.ConnectionString);
 
-        Assert.Equal("jdbc:postgresql://localhost:15432/", built.JdbcUrl);
+        Assert.Equal($"jdbc:postgresql://localhost:{TestSupport.TestEngines.Postgres.Port}/", built.JdbcUrl);
         Assert.Equal(db.DatabaseName, built["database"]);
     }
 

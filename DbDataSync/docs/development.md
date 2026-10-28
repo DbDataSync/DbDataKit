@@ -38,26 +38,40 @@ until you trigger a backfill with a reconciling writer.
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Node.js 24+](https://nodejs.org/) and npm
-- [Docker](https://www.docker.com/) (for local SQL Server instances)
+- [Docker](https://www.docker.com/) (for the test engines)
 
-## 1. Start SQL Server
+## 1. Start the test engines
 
-```sh
-docker compose up -d
-```
-
-This starts two independent SQL Server containers — `mssql-source` (`localhost,14330`) and
-`mssql-target` (`localhost,14331`) — so a local replication genuinely crosses two database server
-instances, not just two databases on one shared instance. Both use SA password `DbDataSync_Test_Pw1`
-by default (override with the `DBDATASYNC_MSSQL_SA_PASSWORD` environment variable before first `up` —
-the password is baked in at first container init, so changing it later requires
-`docker compose down -v` to reset the data volumes).
-
-Wait for both to report healthy:
+DbDataSync has no compose file of its own: its databases are profiles of the repository's one test-engine environment,
+`testenv/docker-compose.yml`, started with `testenv/testenv.sh` from the repository root (a bash script; on Windows use Git Bash or WSL).
 
 ```sh
-docker compose ps
+testenv/testenv.sh up mssql mssql-target postgres-logical
 ```
+
+This starts two independent SQL Server containers — `dbkit-test-mssql` (`localhost,14330`, with SQL Server Agent on, which change data
+capture needs) and `dbkit-test-mssql-target` (`localhost,14331`) — so a local replication genuinely crosses two database server instances,
+not just two databases on one shared instance. The third is PostgreSQL with `wal_level=logical` and the wal2json plugin
+(`dbkit-test-postgres-logical`, `localhost:15433`, user `dbdatasync`), which the Postgres logical-decoding reader needs; the plain
+`postgres` profile on 15432 that the other products test against does not have it. MySQL (13306), MariaDB (13307) and Oracle
+(15210, service `FREEPDB1`) are the profiles `mysql`, `mariadb` and `oracle`; `up` with no names starts every engine.
+
+Every engine uses the password `DbKit_Test_Pw1` (set `DBKIT_TEST_PASSWORD` before `up` to change it; it is read when the containers
+are created) and the users `sa`, `root`, `dbdatasync` (PostgreSQL) and `dbkit` (Oracle). Nothing is kept between runs: `testenv/testenv.sh
+down` removes the containers and their data, and every test creates its own databases and tables. `up` waits for each engine's health
+check. `tools/dev-harness up` starts the three engines above itself.
+
+The tests read where the engines are from `DBDATASYNC_TEST_*` variables; print them for what is running and load them into your shell:
+
+```sh
+eval "$(testenv/testenv.sh env dbdatasync)"
+```
+
+(`testenv/testenv.sh env dbdatasync --dotenv >> "$GITHUB_ENV"` in a GitHub Actions job.) Without them the tests use literal defaults, the
+values of the old `DbDataSync/docker-compose.yml`: password `DbDataSync_Test_Pw1`, PostgreSQL on 15432. Those no longer match the shared
+engines (password `DbKit_Test_Pw1`, PostgreSQL on 15433, Oracle user `dbkit`), so run the suites after the `eval` above. The variables:
+`DBDATASYNC_TEST_MSSQL_SERVER` and `_MSSQL_SOURCE_SERVER` (14330), `_MSSQL_TARGET_SERVER` (14331), `_POSTGRES_SERVER` and
+`_POSTGRES_JDBC_URL` (15433), `_MYSQL_SERVER`, `_MARIADB_SERVER`, `_ORACLE_SERVER`.
 
 ## 2. Build the solution
 
@@ -105,7 +119,7 @@ DbDataSync was started.
 
 ```sh
 dotnet test --filter "Category!=Integration"   # fast, no external dependencies
-dotnet test --filter "Category=Integration"    # needs the two containers from step 1
+dotnet test --filter "Category=Integration"    # needs the engines from step 1 and the eval of `testenv.sh env dbdatasync`
 ```
 
 The Playwright SPA end-to-end suite (`tests/DbDataSync.Web.Tests/`) drives the same golden-path

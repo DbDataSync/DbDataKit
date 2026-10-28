@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { DB_NAME, querySql, runSql, SA_PASSWORD, SOURCE_TABLE, SRC_CONNECTION_NAME, TARGET_TABLE, TGT_CONNECTION_NAME } from '../test-db'
+import { DB_NAME, MSSQL_PORT, querySql, runSql, SA_PASSWORD, SOURCE_TABLE, SRC_CONNECTION_NAME, TARGET_TABLE, TGT_CONNECTION_NAME } from '../test-db'
 import { screenshotDir } from '../screenshots'
 import { waitForLoadToComplete } from '../mapping-load-waiter'
 
@@ -63,7 +63,7 @@ test.describe.serial('golden path: define, configure, and run a replication end-
       await expect(page).toHaveURL(/\/connections\/new$/)
       await page.getByTestId('connection-name-input').fill(name)
       await page.getByTestId('connection-parameters-host').fill('localhost')
-      await page.getByTestId('connection-parameters-port').fill('14330')
+      await page.getByTestId('connection-parameters-port').fill(String(MSSQL_PORT))
       await page.getByTestId('connection-parameters-database').fill(DB_NAME)
       await page.getByTestId('connection-parameters-userId').fill('sa')
       await page.getByTestId('connection-parameters-password').fill(SA_PASSWORD)
@@ -686,7 +686,7 @@ new DropGadgets()
     // invites the question of which one is being used.
     await expect(page.getByTestId('connection-parameters-host')).toHaveCount(0)
 
-    await page.getByTestId('connection-parameters-connectionString').fill('Server=localhost,14330;TrustServerCertificate=True')
+    await page.getByTestId('connection-parameters-connectionString').fill(`Server=localhost,${MSSQL_PORT};TrustServerCertificate=True`)
     await page.getByTestId('connection-parameters-database').fill(DB_NAME)
     await page.getByTestId('connection-parameters-userId').fill('sa')
     await page.getByTestId('connection-parameters-password').fill(SA_PASSWORD)
@@ -698,7 +698,7 @@ new DropGadgets()
     // It survives a reload in the mode it was saved in, and it actually connects.
     await page.goto(`/connections/${NAME}`)
     await expect(page.getByTestId('connection-parameters-addressMode')).toHaveValue('connectionString', { timeout: 15_000 })
-    await expect(page.getByTestId('connection-parameters-connectionString')).toHaveValue(/Server=localhost,14330/)
+    await expect(page.getByTestId('connection-parameters-connectionString')).toHaveValue(new RegExp(`Server=localhost,${MSSQL_PORT}`))
 
     await page.getByTestId('test-connection-button').click()
     await expect(page.getByTestId('connection-test-result')).toContainText('reachable', { timeout: 20_000 })

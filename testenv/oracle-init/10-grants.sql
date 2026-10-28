@@ -1,3 +1,5 @@
+-- The shared testenv's Oracle app user is `dbkit` (testenv/docker-compose.yml); Sync's flashback tests run as it.
+--
 -- Run once, automatically, on first container initialization — gvenzl/oracle-free's own entrypoint
 -- executes every *.sql file under /container-entrypoint-initdb.d as `sqlplus / as sysdba`, after the
 -- APP_USER has already been created (confirmed by reading container-entrypoint.sh directly, not
@@ -13,7 +15,7 @@
 -- testing, not assumed).
 ALTER SESSION SET CONTAINER = FREEPDB1;
 
-GRANT EXECUTE ON DBMS_FLASHBACK TO dbdatasync;
-GRANT FLASHBACK ANY TABLE TO dbdatasync;
+GRANT EXECUTE ON DBMS_FLASHBACK TO dbkit;
+GRANT FLASHBACK ANY TABLE TO dbkit;
 
 EXIT;

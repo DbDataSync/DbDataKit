@@ -16,8 +16,12 @@
 #   mssql     DBKIT_TEST_MSSQL            ADO.NET connection string (SqlClient)
 #             DBKIT_TEST_MSSQL_SERVER     host,port       DBKIT_TEST_MSSQL_USER   DBKIT_TEST_MSSQL_PASSWORD
 #             DBKIT_TEST_MSSQL_ODBC       ODBC connection string for "ODBC Driver 18 for SQL Server"
+#   mssql-target  DBKIT_TEST_MSSQL_TARGET   the same ADO.NET string for the second SQL Server (port 14331)
+#             DBKIT_TEST_MSSQL_TARGET_SERVER / _USER / _PASSWORD
 #   postgres  DBKIT_TEST_POSTGRES         Npgsql connection string
 #             DBKIT_TEST_POSTGRES_HOST / _PORT / _USER / _PASSWORD / _DB
+#   postgres-logical  DBKIT_TEST_POSTGRES_LOGICAL   Npgsql connection string for the wal_level=logical server (port 15433, user dbdatasync)
+#             DBKIT_TEST_POSTGRES_LOGICAL_HOST / _PORT / _USER / _PASSWORD / _DB / _JDBC_URL
 #   mysql     DBKIT_TEST_MYSQL            MySqlConnector connection string (root)
 #   mariadb   DBKIT_TEST_MARIADB          the same, for MariaDB
 #             DBKIT_TEST_MYSQL_HOST / _PORT / _USER / _PASSWORD / _DB (and DBKIT_TEST_MARIADB_...)
@@ -31,7 +35,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 compose=(docker compose -f "$here/docker-compose.yml")
 password="${DBKIT_TEST_PASSWORD:-DbKit_Test_Pw1}"
 host=127.0.0.1
-engines_all=(mssql postgres mysql mariadb oracle)
+engines_all=(mssql mssql-target postgres postgres-logical mysql mariadb oracle)
 
 running() {
   if [ -n "${TESTENV_ASSUME_RUNNING+x}" ]; then
@@ -66,6 +70,13 @@ canonical() {
     echo "DBKIT_TEST_MSSQL=Server=$server;User Id=sa;Password=$password;TrustServerCertificate=True;Encrypt=False"
     echo "DBKIT_TEST_MSSQL_ODBC=Driver={ODBC Driver 18 for SQL Server};Server=$server;UID=sa;PWD=$password;TrustServerCertificate=Yes"
   fi
+  if grep -qx mssql-target <<<"$up"; then
+    local tserver="$host,14331"
+    echo "DBKIT_TEST_MSSQL_TARGET_SERVER=$tserver"
+    echo "DBKIT_TEST_MSSQL_TARGET_USER=sa"
+    echo "DBKIT_TEST_MSSQL_TARGET_PASSWORD=$password"
+    echo "DBKIT_TEST_MSSQL_TARGET=Server=$tserver;User Id=sa;Password=$password;TrustServerCertificate=True;Encrypt=False"
+  fi
   if grep -qx postgres <<<"$up"; then
     echo "DBKIT_TEST_POSTGRES_HOST=$host"
     echo "DBKIT_TEST_POSTGRES_PORT=15432"
@@ -73,6 +84,15 @@ canonical() {
     echo "DBKIT_TEST_POSTGRES_PASSWORD=$password"
     echo "DBKIT_TEST_POSTGRES_DB=postgres"
     echo "DBKIT_TEST_POSTGRES=Host=$host;Port=15432;Username=postgres;Password=$password;Database=postgres"
+  fi
+  if grep -qx postgres-logical <<<"$up"; then
+    echo "DBKIT_TEST_POSTGRES_LOGICAL_HOST=$host"
+    echo "DBKIT_TEST_POSTGRES_LOGICAL_PORT=15433"
+    echo "DBKIT_TEST_POSTGRES_LOGICAL_USER=dbdatasync"
+    echo "DBKIT_TEST_POSTGRES_LOGICAL_PASSWORD=$password"
+    echo "DBKIT_TEST_POSTGRES_LOGICAL_DB=postgres"
+    echo "DBKIT_TEST_POSTGRES_LOGICAL=Host=$host;Port=15433;Username=dbdatasync;Password=$password;Database=postgres"
+    echo "DBKIT_TEST_POSTGRES_LOGICAL_JDBC_URL=jdbc:postgresql://$host:15433/"
   fi
   local engine port
   for engine in mysql mariadb; do
@@ -136,7 +156,8 @@ case "$cmd" in
   up)
     [ "$#" -gt 0 ] || set -- "${engines_all[@]}"
     profiles_for "$@"
-    "${compose[@]}" "${PROFILES[@]}" up -d --wait --wait-timeout 240
+    # --build: postgres-logical is built from testenv/postgres-logical (a no-op for the engines that are pulled).
+    "${compose[@]}" "${PROFILES[@]}" up -d --build --wait --wait-timeout 240
     ;;
   down)
     "${compose[@]}" --profile '*' down -v --remove-orphans

@@ -5,7 +5,7 @@ namespace DbDataSync.Drivers.Postgres.Tests;
 
 /// <summary>
 /// Creates a uniquely-named database on a real PostgreSQL instance for the lifetime of one test class
-/// and drops it afterwards. Points at the local Docker container from docker-compose.yml by default;
+/// and drops it afterwards. Points at the local Docker container from testenv/ by default;
 /// override via DBDATASYNC_TEST_POSTGRES_SERVER.
 /// </summary>
 public sealed class PostgresTestDatabase : IAsyncLifetime

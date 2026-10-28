@@ -72,7 +72,7 @@ public sealed class ReconcileDeletesScd2IntegrationTests : IClassFixture<TestApi
         // SCD2 shape (DS_VersionKey/DS_ValidFrom/DS_ValidTo/DS_IsCurrent) the first time a pass runs,
         // the same fixture posture Scd2NaturalKeyIntegrationTests uses for the identical reason.
 
-        SetSecretEnvVar(_connectionName, "DbDataSync_Test_Pw1");
+        SetSecretEnvVar(_connectionName, TestSupport.TestEngines.MsSql.Password);
         await CreateConnectionAsync();
         await CreateReplicationAsync();
         await CreateMappingAsync();
@@ -237,12 +237,12 @@ public sealed class ReconcileDeletesScd2IntegrationTests : IClassFixture<TestApi
             Name = _connectionName,
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = _databaseName,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
         }, JsonOptions)).EnsureSuccessStatusCode();
 
     /// <summary>The mapping's own Change Processing writer is Scd2, and Reconcile is enabled with no

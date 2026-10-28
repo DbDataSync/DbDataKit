@@ -54,7 +54,7 @@ public sealed class JdbcTestQueryTests : IClassFixture<JdbcTestQueryApiFactory>,
         await create.ExecuteNonQueryAsync();
 
         Environment.SetEnvironmentVariable(
-            _secrets.EnvName(SecretRefs.ForConnection(_connectionName)), "DbDataSync_Test_Pw1");
+            _secrets.EnvName(SecretRefs.ForConnection(_connectionName)), TestSupport.TestEngines.Postgres.Password);
 
         (await _client.PutAsJsonAsync($"/api/connections/{_connectionName}", new ConnectionInput
         {
@@ -63,7 +63,7 @@ public sealed class JdbcTestQueryTests : IClassFixture<JdbcTestQueryApiFactory>,
             ConnectionString = $"{JdbcUrl}{_databaseName}",
             AuthMode = AuthMode.SqlAuth,
             UserId = "dbdatasync",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.Postgres.Password,
         }, JsonOptions)).EnsureSuccessStatusCode();
     }
 
@@ -119,7 +119,7 @@ public sealed class JdbcTestQueryTests : IClassFixture<JdbcTestQueryApiFactory>,
             ConnectionString = $"{JdbcUrl}{_databaseName}",
             AuthMode = AuthMode.SqlAuth,
             UserId = "dbdatasync",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.Postgres.Password,
             TestQuery = "SELECT 42 AS answer",
         }, JsonOptions)).EnsureSuccessStatusCode();
 

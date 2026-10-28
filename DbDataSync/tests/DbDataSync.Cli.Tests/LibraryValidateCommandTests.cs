@@ -67,12 +67,12 @@ public sealed class LibraryValidateCommandTests : IDisposable
             Name = "mssql-conn",
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = "master",
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
         });
 
         var exitCode = await LibraryCommand.RunAsync(
@@ -112,22 +112,21 @@ public sealed class LibraryValidateCommandTests : IDisposable
             Name = "mssql-real",
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = "master",
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
         });
-        ExposeCredential("mssql-real", "DbDataSync_Test_Pw1");
+        ExposeCredential("mssql-real", TestSupport.TestEngines.MsSql.Password);
 
         var exitCode = await LibraryCommand.RunAsync(
             ["validate", "microsoft-data-sqlclient", "--connection", "mssql-real", "--repo", _root]);
 
         Assert.Equal(0, exitCode);
 
-        await using var connection = new SqlConnection(
-            "Data Source=localhost,14330;User ID=sa;Password=DbDataSync_Test_Pw1;TrustServerCertificate=True");
+        await using var connection = new SqlConnection(TestSupport.TestEngines.MsSql.ConnectionString);
         await connection.OpenAsync();
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = "SELECT COUNT(*) FROM sys.tables WHERE name LIKE 'DbDataSync_LibraryValidation_%';";
@@ -150,14 +149,14 @@ public sealed class LibraryValidateCommandTests : IDisposable
             Name = "pg-real",
             DriverType = DriverIds.Postgres,
             Host = "localhost",
-            Port = 15432,
+            Port = TestSupport.TestEngines.Postgres.Port,
             Properties = new Dictionary<string, string> { ["SSL Mode"] = "Disable" },
             Database = "dbdatasync",
             AuthMode = AuthMode.SqlAuth,
             UserId = "dbdatasync",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.Postgres.Password,
         });
-        ExposeCredential("pg-real", "DbDataSync_Test_Pw1");
+        ExposeCredential("pg-real", TestSupport.TestEngines.Postgres.Password);
 
         var exitCode = await LibraryCommand.RunAsync(
             ["validate", "npgsql", "--connection", "pg-real", "--repo", _root]);

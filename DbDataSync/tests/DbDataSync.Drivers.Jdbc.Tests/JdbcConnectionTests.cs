@@ -31,7 +31,7 @@ public sealed class JdbcConnectionTests(JdbcTestDatabase db) : IClassFixture<Jdb
             AuthMode = AuthMode.SqlAuth,
             UserId = "dbdatasync",
         };
-        _connection = _driver.CreateConnection(config, "DbDataSync_Test_Pw1");
+        _connection = _driver.CreateConnection(config, TestSupport.TestEngines.Postgres.Password);
         _connection.Open();
         return Task.CompletedTask;
     }
@@ -66,7 +66,7 @@ public sealed class JdbcConnectionTests(JdbcTestDatabase db) : IClassFixture<Jdb
     [Fact]
     public void ConnectionString_NoLongerCarriesThePassword_AfterOpen()
     {
-        Assert.DoesNotContain("DbDataSync_Test_Pw1", _connection.ConnectionString);
+        Assert.DoesNotContain(TestSupport.TestEngines.Postgres.Password, _connection.ConnectionString);
     }
 
     [Fact]

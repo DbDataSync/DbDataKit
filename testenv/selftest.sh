@@ -41,6 +41,39 @@ check "mariadb: its own port and names" '[[ "$out" == *"DBKIT_TEST_MARIADB=Serve
 out="$(t oracle --dotenv)"
 check "oracle: an ODP.NET string for the pluggable database" '[[ "$out" == *"DBKIT_TEST_ORACLE=Data Source=127.0.0.1:15210/FREEPDB1;User Id=dbkit;Password=DbKit_Test_Pw1"* && "$out" == *"DBKIT_TEST_ORACLE_SERVICE=FREEPDB1"* ]]'
 
+# The second SQL Server and the logical-decoding PostgreSQL
+out="$(t mssql-target --dotenv)"
+check "mssql-target: its own port, and nothing of the first SQL Server" '[[ "$out" == *"DBKIT_TEST_MSSQL_TARGET=Server=127.0.0.1,14331;User Id=sa;Password=DbKit_Test_Pw1;"* && "$out" == *"DBKIT_TEST_MSSQL_TARGET_SERVER=127.0.0.1,14331"* && "$out" != *"DBKIT_TEST_MSSQL="* ]]'
+out="$(t mssql --dotenv)"
+check "mssql: the target's variables stay out when only the first runs" '[[ "$out" != *MSSQL_TARGET* ]]'
+out="$(t postgres-logical --dotenv)"
+check "postgres-logical: port 15433, user dbdatasync, a JDBC URL, and nothing of the plain PostgreSQL" '[[ "$out" == *"DBKIT_TEST_POSTGRES_LOGICAL=Host=127.0.0.1;Port=15433;Username=dbdatasync;Password=DbKit_Test_Pw1;Database=postgres"* && "$out" == *"DBKIT_TEST_POSTGRES_LOGICAL_JDBC_URL=jdbc:postgresql://127.0.0.1:15433/"* && "$out" != *"DBKIT_TEST_POSTGRES="* && "$out" != *"DBKIT_TEST_POSTGRES_PORT"* ]]'
+out="$(t postgres --dotenv)"
+check "postgres: the logical server's variables stay out when only the plain one runs" '[[ "$out" != *LOGICAL* ]]'
+out="$(t "mssql postgres postgres-logical" dbdatakit --dotenv)"
+check "kit: the plain PostgreSQL is still the shared one when the logical one runs too" '[[ "$out" == *"DBDATA_TEST_POSTGRES=Host=127.0.0.1;Port=15432;"* ]]'
+
+# DbDataSync mapping
+out="$(t "mssql mssql-target postgres-logical mysql mariadb oracle" dbdatasync --dotenv)"
+check "sync: SQL Server source, target and the shared server variable" '[[ "$out" == *"DBDATASYNC_TEST_MSSQL_SERVER=Server=127.0.0.1,14330;"* && "$out" == *"DBDATASYNC_TEST_MSSQL_SOURCE_SERVER=Server=127.0.0.1,14330;"* && "$out" == *"DBDATASYNC_TEST_MSSQL_TARGET_SERVER=Server=127.0.0.1,14331;"* ]]'
+check "sync: PostgreSQL is the logical one, with its JDBC URL" '[[ "$out" == *"DBDATASYNC_TEST_POSTGRES_SERVER=Host=127.0.0.1;Port=15433;Username=dbdatasync;"* && "$out" == *"DBDATASYNC_TEST_POSTGRES_JDBC_URL=jdbc:postgresql://127.0.0.1:15433/"* ]]'
+check "sync: MySQL, MariaDB and Oracle" '[[ "$out" == *"DBDATASYNC_TEST_MYSQL_SERVER=Server=127.0.0.1;Port=13306;"* && "$out" == *"DBDATASYNC_TEST_MARIADB_SERVER=Server=127.0.0.1;Port=13307;"* && "$out" == *"DBDATASYNC_TEST_ORACLE_SERVER=Data Source=127.0.0.1:15210/FREEPDB1;User Id=dbkit;"* ]]'
+out="$(t postgres dbdatasync --dotenv)"
+check "sync: the plain PostgreSQL is not the one Sync uses (no logical decoding there)" '[[ "$out" != *DBDATASYNC_TEST_POSTGRES* ]]'
+out="$(t mssql dbdatasync --dotenv)"
+check "sync: only what runs is set" '[[ "$out" == *DBDATASYNC_TEST_MSSQL_SERVER=* && "$out" != *TARGET_SERVER* && "$out" != *ORACLE* && "$out" != *POSTGRES* ]]'
+
+# The compose file itself (needs the docker CLI, not a daemon; skipped without it)
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  cfg="$(docker compose -f "$here/docker-compose.yml" --profile '*' config 2>&1 || true)"
+  check "compose: every engine has its own profile and a container name" '[[ "$cfg" == *"container_name: dbkit-test-mssql-target"* && "$cfg" == *"container_name: dbkit-test-postgres-logical"* ]]'
+  check "compose: no two engines publish the same host port" '[ "$(grep -oE "published: \"[0-9]+\"" <<<"$cfg" | sort | uniq -d | wc -l)" -eq 0 ]'
+  check "compose: the logical server is wal_level=logical with wal2json" '[[ "$cfg" == *"wal_level=logical"* && "$cfg" == *"wal2json"* ]]'
+  check "compose: SQL Server Agent on for the first SQL Server only" '[ "$(grep -c "MSSQL_AGENT_ENABLED" <<<"$cfg")" -eq 1 ]'
+  check "compose: Oracle runs the init scripts" '[[ "$cfg" == *"/container-entrypoint-initdb.d"* ]]'
+  check "each profile named in testenv.sh exists in the compose file" '[ "$(docker compose -f "$here/docker-compose.yml" --profile "*" config --services | sort | tr "\n" " ")" = "$(grep "^engines_all=" "$here/testenv.sh" | sed "s/.*(\(.*\))/\1/" | tr " " "\n" | sort | tr "\n" " ")" ]'
+fi
+
 # Output formats
 check "shell format quotes values" '[[ "$(t postgres)" == *"export DBKIT_TEST_POSTGRES_USER='"'"'postgres'"'"'"* ]]'
 check "eval makes the variables real" '(eval "$(t mssql dbdataproxy)"; [ "$DBPROXY_TEST_SQLSERVER_USER" = sa ] && [ "$DBPROXY_REQUIRE_SQLSERVER" = true ])'

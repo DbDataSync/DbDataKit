@@ -163,8 +163,21 @@ public static class Scenario
         return $"CREATE TABLE {table.QualifiedSource} (\n{string.Join(",\n", columns)}\n);";
     }
 
-    public static string SaPassword =>
-        Environment.GetEnvironmentVariable("DBDATASYNC_MSSQL_SA_PASSWORD") ?? "DbDataSync_Test_Pw1";
+    /// <summary>The shared test engines' password (<c>DBKIT_TEST_PASSWORD</c>, the same variable <c>testenv/</c> starts the containers with).
+    /// <c>DBDATASYNC_MSSQL_SA_PASSWORD</c> and <c>DBDATASYNC_POSTGRES_PASSWORD</c> belonged to the old DbDataSync/docker-compose.yml, which is
+    /// gone; a clean break, so setting either is an error that says so rather than being ignored.</summary>
+    public static string SaPassword
+    {
+        get
+        {
+            foreach (var retired in new[] { "DBDATASYNC_MSSQL_SA_PASSWORD", "DBDATASYNC_POSTGRES_PASSWORD" })
+                if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable(retired)))
+                    throw new HarnessException(
+                        $"{retired} is no longer read: the test engines are the shared ones in testenv/ now, whose password is " +
+                        "DBKIT_TEST_PASSWORD (default DbKit_Test_Pw1). Unset it, or set DBKIT_TEST_PASSWORD instead.");
+            return Environment.GetEnvironmentVariable("DBKIT_TEST_PASSWORD") ?? "DbKit_Test_Pw1";
+        }
+    }
 
     public static string ServerConnectionString(string host, int port, string? database = null) =>
         new SqlConnectionStringBuilder

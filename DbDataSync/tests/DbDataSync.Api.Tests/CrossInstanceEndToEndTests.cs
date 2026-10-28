@@ -14,7 +14,7 @@ namespace DbDataSync.Api.Tests;
 /// <summary>
 /// Phase 7's end-to-end validation (architecture/implementation-plan.md § Phase 7,
 /// architecture/implementation/done/phase-007-e2e-validation.md): source and target connections point at
-/// two genuinely separate SQL Server *instances* (docker-compose.yml's mssql-source/mssql-target,
+/// two genuinely separate SQL Server *instances* (testenv's mssql and mssql-target,
 /// distinct containers on distinct ports) rather than two databases sharing one server, and the whole
 /// scenario — initial full load, then two full insert/update/delete cycles — is confirmed by querying
 /// the real target database directly rather than trusting the API's own reported row counts.
@@ -79,11 +79,11 @@ public sealed class CrossInstanceEndToEndTests : IClassFixture<TestApiFactory>, 
         await using (var tgtConnection = OpenDatabaseConnection(TargetServerConnectionString))
             await ExecuteAsync(tgtConnection, $"CREATE TABLE dbo.[{_targetTable}] (Id INT NOT NULL PRIMARY KEY, Name NVARCHAR(50) NOT NULL);");
 
-        SetSecretEnvVar(_srcConnectionName, "DbDataSync_Test_Pw1");
-        SetSecretEnvVar(_tgtConnectionName, "DbDataSync_Test_Pw1");
+        SetSecretEnvVar(_srcConnectionName, TestSupport.TestEngines.MsSql.Password);
+        SetSecretEnvVar(_tgtConnectionName, TestSupport.TestEngines.MsSqlTarget.Password);
 
-        await CreateConnectionAsync(_srcConnectionName, host: "localhost", port: 14330);
-        await CreateConnectionAsync(_tgtConnectionName, host: "localhost", port: 14331);
+        await CreateConnectionAsync(_srcConnectionName, host: "localhost", port: TestSupport.TestEngines.MsSql.Port);
+        await CreateConnectionAsync(_tgtConnectionName, host: "localhost", port: TestSupport.TestEngines.MsSqlTarget.Port);
         await CreateReplicationAsync();
     }
 
@@ -250,7 +250,7 @@ public sealed class CrossInstanceEndToEndTests : IClassFixture<TestApiFactory>, 
             Database = _databaseName,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = port == TestSupport.TestEngines.MsSqlTarget.Port ? TestSupport.TestEngines.MsSqlTarget.Password : TestSupport.TestEngines.MsSql.Password,
         }, JsonOptions)).EnsureSuccessStatusCode();
 
     private async Task CreateReplicationAsync()

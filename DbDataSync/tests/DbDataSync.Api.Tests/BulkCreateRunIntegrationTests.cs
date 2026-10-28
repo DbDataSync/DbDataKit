@@ -92,8 +92,8 @@ public sealed class BulkCreateRunIntegrationTests : IClassFixture<TestApiFactory
 
         // As RunLifecycleIntegrationTests: the spawned TaskRunner is a real child process with its own
         // SecretStore, and inherits this process's environment.
-        SetSecretEnvVar(_srcConnectionName, "DbDataSync_Test_Pw1");
-        SetSecretEnvVar(_tgtConnectionName, "DbDataSync_Test_Pw1");
+        SetSecretEnvVar(_srcConnectionName, TestSupport.TestEngines.MsSql.Password);
+        SetSecretEnvVar(_tgtConnectionName, TestSupport.TestEngines.MsSql.Password);
 
         await CreateConnectionAsync(_srcConnectionName, _sourceDb);
         await CreateConnectionAsync(_tgtConnectionName, _targetDb);
@@ -265,12 +265,12 @@ public sealed class BulkCreateRunIntegrationTests : IClassFixture<TestApiFactory
             Name = name,
             DriverType = DriverIds.MsSql,
             Host = "localhost",
-            Port = 14330,
+            Port = TestSupport.TestEngines.MsSql.Port,
             Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" },
             Database = database,
             AuthMode = AuthMode.SqlAuth,
             UserId = "sa",
-            Password = "DbDataSync_Test_Pw1",
+            Password = TestSupport.TestEngines.MsSql.Password,
         }, JsonOptions)).EnsureSuccessStatusCode();
 
     /// <summary>

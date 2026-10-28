@@ -26,4 +26,9 @@
     <ProjectReference Include="..\..\src\DbDataSync.Drivers.Generic\DbDataSync.Drivers.Generic.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Where the test engines are (DBDATASYNC_TEST_* variables); see its doc comment. -->
+    <Compile Include="..\Shared\TestEngines.cs" Link="Shared\TestEngines.cs" />
+  </ItemGroup>
+
 </Project>
