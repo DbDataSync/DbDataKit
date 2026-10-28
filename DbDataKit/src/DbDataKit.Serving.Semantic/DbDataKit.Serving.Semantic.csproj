@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Serving.Semantic</RootNamespace>
+    <PackageId>DbDataKit.Serving.Semantic</PackageId>
+    <Description>The semantic module of the serving layer (plan 19, J10): semantic requests and semantic SQL answered by the semantic engine, written against the core services of DbDataKit.Serving.Abstractions. Every query the engine plans runs through the host's own query service, as the caller, so the host's access rules, limits and failure model apply unchanged.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Serving.Abstractions\DbDataKit.Serving.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Semantic\DbDataKit.Semantic.csproj" />
+  </ItemGroup>
+</Project>

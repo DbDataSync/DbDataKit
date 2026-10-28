@@ -71,6 +71,30 @@ public sealed class ProxyOptions
 
     /// <summary>Local user accounts (hashed passwords) and the data sources they may use.</summary>
     public List<UserOptions> Users { get; set; } = [];
+
+    /// <summary>Semantic models served as sources named <c>semantic:&lt;model&gt;</c> (plan 19, J10). Read at start; a change needs a restart.</summary>
+    public SemanticOptions Semantic { get; set; } = new();
+}
+
+/// <summary>The semantic models this server answers semantic requests and semantic SQL for. Their data is read through the data sources, as the signed-in client, so a client needs access to those.</summary>
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class SemanticOptions
+{
+    public List<SemanticModelOptions> Models { get; set; } = [];
+
+    /// <summary>The engine's adoption level (0-5): what a level cannot execute comes back as remaining steps. The highest is the default.</summary>
+    [ConfigKey(Min = 0, Max = 5)]
+    public int Level { get; set; } = 5;
+}
+
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class SemanticModelOptions
+{
+    /// <summary>The catalog file (the semantic model, <c>docs/semantic/catalog.md</c>); a relative path is relative to <c>DataDirectory</c>. The model is named by the catalog's own <c>name</c>.</summary>
+    public string Catalog { get; set; } = "";
+
+    /// <summary>For each source of the catalog, the data source of this server that holds its tables. A source not listed is looked for under its own name.</summary>
+    public Dictionary<string, string> Sources { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>A client paired with this server, as <c>server.yaml</c> keeps it (see <c>PairedClientsFile</c>).</summary>

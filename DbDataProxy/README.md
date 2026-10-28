@@ -272,6 +272,22 @@ from the provider, default 38/9 when unknown), `date` → Date32, `datetime/date
 ODBC columns of types `System.Data.Odbc` cannot read (e.g. SQL Server `datetimeoffset`/`time` through ODBC) fail
 with a message telling you to `CAST` them in the query.
 
+### Semantic queries
+
+A semantic model (a catalog of dimensions, attributes and measures over tables, [`docs/semantic/catalog.md`](../docs/semantic/catalog.md)) is served as a source named `semantic:<model>`, where the model is the catalog's own `name`. In `server.yaml`:
+
+```yaml
+semantic:
+  level: 5                                  # the engine's adoption level; the highest is the default
+  models:
+    - catalog: semantic/sales.yaml          # relative to the data directory
+      sources: { sqlserver_sales: warehouse }   # each catalog source -> the data source that holds its tables
+```
+
+A client sends the statement as it sends SQL, with `x-datasource: semantic:sales_catalog`: the text is a JSON request (it starts with `{`, [`docs/semantic/query.md`](../docs/semantic/query.md)) or semantic SQL (`SELECT customers.region, MEASURE(orders.net_revenue) FROM sales_catalog GROUP BY ALL`, [`docs/semantic/semantic-sql.md`](../docs/semantic/semantic-sql.md)). The answer is an Arrow table of the combined result; the engine's status, request hash, warnings and the steps it left (`remaining`) are in the schema's metadata under `qis.*`.
+
+Every scan the engine plans is run as the signed-in client against the mapped data source, through the same rules as their own SQL: they need access to that data source, its read-only classifier and limits apply, and a failure is classified the same way. `GetTables` on the model source lists its dimensions, attributes, measures and hierarchies. Catalogs are read when the server starts (a catalog that does not load stops the start and names its file); a change needs a restart. SQL Server, PostgreSQL and DuckDB sources are supported; an Analysis Services source of a catalog is refused with a message until the SSAS executor is hosted (plan 19, J16). Only queries are served: ad hoc tables, bindings and value maps are not.
+
 ### Compression
 
 `Proxy:Compression` (global) and `DataSources:<name>:Compression` (override):

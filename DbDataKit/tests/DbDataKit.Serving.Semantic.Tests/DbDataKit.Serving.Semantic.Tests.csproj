@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="DuckDB.NET.Data" />
+    <PackageReference Include="Apache.Arrow" />
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\DbDataKit.Serving.Semantic\DbDataKit.Serving.Semantic.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- the sample model and its data, as the semantic engine's own conformance suite runs on them -->
+    <None Include="..\DbDataKit.Semantic.Tests\conformance\catalog\**;..\DbDataKit.Semantic.Tests\conformance\data\**" Link="conformance\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Import Project="..\..\build\DuckDb.Native.targets" />
+</Project>

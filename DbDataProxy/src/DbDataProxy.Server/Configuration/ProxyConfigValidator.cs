@@ -27,6 +27,7 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
         ValidateDataSources(o, cx);
         ValidateUsers(o, cx);
         ValidateJwt(o, cx);
+        ValidateSemantic(o, cx);
 
         if (!string.IsNullOrWhiteSpace(o.DataDirectory))
         {
@@ -41,6 +42,20 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
             cx.Warning("SchemaVersion", $"Schema version {o.SchemaVersion}: the statement `Classifier` of {string.Join(", ", sourcesWithoutClassifier)} defaults to warn. " +
                 $"Schema version {ProxyConfig.LatestSchemaVersion} defaults it to strict.",
                 $"Set `Classifier` on each data source, then set `SchemaVersion` to {ProxyConfig.LatestSchemaVersion}.");
+    }
+
+    private static void ValidateSemantic(ProxyOptions o, IConfigValidationContext cx)
+    {
+        for (int i = 0; i < o.Semantic.Models.Count; i++)
+        {
+            var model = o.Semantic.Models[i];
+            string at = $"Semantic.Models[{i}]";
+            if (string.IsNullOrWhiteSpace(model.Catalog))
+                cx.Error($"{at}.Catalog", "`Catalog` is empty.", "Name the catalog file of the model.");
+            foreach (var (source, dataSource) in model.Sources)
+                if (!o.DataSources.ContainsKey(dataSource))
+                    cx.Error($"{at}.Sources.{source}", $"The catalog source `{source}` is mapped to `{dataSource}`, which is not a data source.", $"Use one of: {string.Join(", ", o.DataSources.Keys)}.");
+        }
     }
 
     private static void ValidateManagement(ProxyOptions o, IConfigValidationContext cx)

@@ -68,6 +68,7 @@
     <Project Path="DbDataKit/src/DbDataKit.Serving.Abstractions/DbDataKit.Serving.Abstractions.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Serving.Conformance/DbDataKit.Serving.Conformance.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Serving.FlightSql/DbDataKit.Serving.FlightSql.csproj" />
+    <Project Path="DbDataKit/src/DbDataKit.Serving.Semantic/DbDataKit.Serving.Semantic.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Semantic.Abstractions/DbDataKit.Semantic.Abstractions.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Semantic.Connections/DbDataKit.Semantic.Connections.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Semantic.Extraction/DbDataKit.Semantic.Extraction.csproj" />
@@ -142,6 +143,7 @@
     <Project Path="DbDataKit/tests/DbDataKit.Metadata.Abstractions.Tests/DbDataKit.Metadata.Abstractions.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Serving.Abstractions.Tests/DbDataKit.Serving.Abstractions.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Serving.FlightSql.Tests/DbDataKit.Serving.FlightSql.Tests.csproj" />
+    <Project Path="DbDataKit/tests/DbDataKit.Serving.Semantic.Tests/DbDataKit.Serving.Semantic.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Semantic.Tests/DbDataKit.Semantic.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Metadata.Tests/DbDataKit.Metadata.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Lineage.Tests/DbDataKit.Lineage.Tests.csproj" />

@@ -27,20 +27,10 @@ public sealed class ConnectionsSourceExecutor(IReadOnlyDictionary<string, Semant
     {
         if (!sources.TryGetValue(query.Source, out var source)) return Fallback(query, maxRows, $"has no connection for source '{query.Source}'");
         var engine = source.Provider.Engine;
-        if (engine == EngineId.SqlServer)
-        {
-            if (query.Native.Dialect != "tsql") return Fallback(query, maxRows, $"cannot run {query.Native.Dialect} on source '{query.Source}' (SQL Server)");
-            return Run(source, query.ExecText ?? query.Native.Text, query.DuckDbParameters, named: true, maxRows, columnar);
-        }
-        if (engine == EngineId.Postgres)
-        {
-            // PostgreSQL's own text, whatever the catalog calls the source: its tables are expected on the connection
-            if (query.Postgres is null) return Fallback(query, maxRows, $"cannot run {query.Native.Dialect} on source '{query.Source}' (PostgreSQL)");
-            return Run(source, query.Postgres.Text, query.Postgres.Parameters, named: false, maxRows, columnar);
-        }
-        if (engine == EngineId.DuckDb)
-            return Run(source, query.DuckDbSql, query.DuckDbParameters.Select(DuckDbValue).ToList(), named: false, maxRows, columnar);
-        return Fallback(query, maxRows, $"cannot run source '{query.Source}': the {engine.Value} engine is not supported yet");
+        SourceEngine? routed = engine == EngineId.SqlServer ? SourceEngine.SqlServer : engine == EngineId.Postgres ? SourceEngine.Postgres : engine == EngineId.DuckDb ? SourceEngine.DuckDb : null;
+        if (routed is null) return Fallback(query, maxRows, $"cannot run source '{query.Source}': the {engine.Value} engine is not supported yet");
+        var text = NativeRoute.For(routed.Value, query, out var why);
+        return text is null ? Fallback(query, maxRows, why!) : Run(source, text.Text, text.Parameters, text.Named, maxRows, columnar);
     }
 
     /// <inheritdoc />
@@ -76,11 +66,4 @@ public sealed class ConnectionsSourceExecutor(IReadOnlyDictionary<string, Semant
         p.Value = value ?? DBNull.Value;
         return p;
     }
-
-    /// <summary>
-    /// DuckDB.NET sends a decimal parameter as text, which DuckDB then won't compare with a number. A whole number goes as a long and
-    /// the rest as a double, so the same parameters stay exact for SQL Server.
-    /// </summary>
-    private static object? DuckDbValue(object? v) =>
-        v is decimal d ? (d == Math.Truncate(d) && Math.Abs(d) < long.MaxValue ? (long)d : (double)d) : v;
 }
