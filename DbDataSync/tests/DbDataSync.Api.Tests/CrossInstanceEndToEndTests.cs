@@ -109,7 +109,7 @@ public sealed class CrossInstanceEndToEndTests : IClassFixture<TestApiFactory>, 
     public async Task InitialLoad_ThenTwoInsertUpdateDeleteCycles_ReplicateCorrectlyAcrossRealInstances()
     {
         // --- Run 1: initial full load ---
-        var run1 = await TriggerAndWaitAsync();
+        var run1 = await TriggerAndWaitAsync(expectLoad: true);
         Assert.Equal("Succeeded", run1.GetProperty("status").GetString());
         Assert.Equal(3, run1.GetProperty("rowsRead").GetInt64());
         Assert.Equal(3, run1.GetProperty("rowsWritten").GetInt64());
@@ -144,7 +144,7 @@ public sealed class CrossInstanceEndToEndTests : IClassFixture<TestApiFactory>, 
         await AssertTargetRowsAsync(new Dictionary<int, string> { [2] = "Bobby", [3] = "Caroline", [5] = "Eve" });
     }
 
-    private async Task<JsonElement> TriggerAndWaitAsync()
+    private async Task<JsonElement> TriggerAndWaitAsync(bool expectLoad = false)
     {
         var triggerResponse = await _client.PostAsync($"/api/replications/{_replicationName}/runs", new StringContent("", Encoding.UTF8, "application/json"));
         triggerResponse.EnsureSuccessStatusCode();
@@ -174,15 +174,25 @@ public sealed class CrossInstanceEndToEndTests : IClassFixture<TestApiFactory>, 
                     // requested. Wait for it, then return its row instead, when this trigger was the
                     // one that started it (a later, genuinely incremental trigger starts no load, and
                     // returns its own row unchanged).
-                    await _client.WaitForLoadToCompleteAsync(_replicationName, "main");
-                    var history = await _client.GetFromJsonAsync<JsonElement>(
-                        $"/api/replications/{_replicationName}/runs?kind=BulkLoad&mappingName=main&limit=1");
-                    var load = history.GetProperty("runs").EnumerateArray().FirstOrDefault();
-                    return load.ValueKind == JsonValueKind.Object
-                        && DateTimeOffset.Parse(load.GetProperty("enqueuedAtUtc").GetString()!)
-                            >= DateTimeOffset.Parse(run.GetProperty("enqueuedAtUtc").GetString()!)
-                        ? load
-                        : run;
+                    // The first trigger always starts the load, so its row is waited for: the read-state hold can
+                    // still read "not loading" in the moment before the Bulk Load run is enqueued, and then
+                    // there is no row yet to return.
+                    var loadDeadline = DateTimeOffset.UtcNow.AddSeconds(30);
+                    while (true)
+                    {
+                        await _client.WaitForLoadToCompleteAsync(_replicationName, "main");
+                        var history = await _client.GetFromJsonAsync<JsonElement>(
+                            $"/api/replications/{_replicationName}/runs?kind=BulkLoad&mappingName=main&limit=1");
+                        var load = history.GetProperty("runs").EnumerateArray().FirstOrDefault();
+                        if (load.ValueKind == JsonValueKind.Object
+                            && DateTimeOffset.Parse(load.GetProperty("enqueuedAtUtc").GetString()!)
+                                >= DateTimeOffset.Parse(run.GetProperty("enqueuedAtUtc").GetString()!)
+                            && load.GetProperty("status").GetString() is "Succeeded" or "Failed" or "Cancelled")
+                            return load;
+                        if (!expectLoad || DateTimeOffset.UtcNow >= loadDeadline)
+                            return run;
+                        await Task.Delay(250);
+                    }
                 }
             }
 

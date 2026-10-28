@@ -1,0 +1,34 @@
+BOOLEAN	Boolean	Boolean	bool:true
+TINYINT	SByte	SByte	SByte:-5
+SMALLINT	Int16	Int16	Int16:-300
+INTEGER	Int32	Int32	Int32:70000
+BIGINT	Int64	Int64	Int64:5000000000
+HUGEINT	BigInteger	BigInteger	BigInteger:170141183460469231731687303715884105727
+UTINYINT	Byte	Byte	Byte:200
+USMALLINT	UInt16	UInt16	UInt16:60000
+UINTEGER	UInt32	UInt32	UInt32:4000000000
+UBIGINT	UInt64	UInt64	UInt64:18446744073709551615
+UHUGEINT	BigInteger	BigInteger	BigInteger:340282366920938463463374607431768211455
+FLOAT	Single	Single	float:1.5
+DOUBLE	Double	Double	double:1.5
+DECIMAL(4,1)	Decimal	Decimal	decimal:123.4
+DECIMAL(18,2)	Decimal	Decimal	decimal:12345.67
+DECIMAL(38,10)	Decimal	Decimal	decimal:123456789012345678.123456789
+VARCHAR	String	String	string:text
+BLOB	Stream	UnmanagedMemoryStream	UnmanagedMemoryStream:System.IO.UnmanagedMemoryStream
+UUID	Guid	Guid	Guid:6f9619ff-8b86-d011-b42d-00c04fc964ff
+BIT	String	String	string:101
+DATE	DateOnly	DateOnly	DateOnly:2024-03-17
+TIME	TimeOnly	TimeOnly	TimeOnly:09:41:22.1234560
+TIMETZ	DateTimeOffset	DateTimeOffset	DateTimeOffset:0001-01-01T09:41:22.1234560+02:00
+TIMESTAMP	DateTime	DateTime	DateTime:2024-03-17T09:41:22.1234560
+TIMESTAMP_S	DateTime	DateTime	DateTime:2024-03-17T09:41:22.0000000
+TIMESTAMP_MS	DateTime	DateTime	DateTime:2024-03-17T09:41:22.1230000
+TIMESTAMP_NS	DateTime	DateTime	DateTime:2024-03-17T09:41:22.1234567
+TIMESTAMPTZ	DateTime	DateTime	DateTime:2024-03-17T07:41:22.1234560
+INTERVAL	TimeSpan	TimeSpan	TimeSpan:1.02:00:00
+INTERVAL months	TimeSpan	-	GetValue THROWS ArgumentOutOfRangeException
+ENUM('a','b')	String	String	string:a
+INTEGER[]	List`1	List`1	List`1:System.Collections.Generic.List`1[System.Int32]
+STRUCT(a INTEGER)	Dictionary`2	Dictionary`2	Dictionary`2:System.Collections.Generic.Dictionary`2[System.String,System.Object]
+MAP(VARCHAR, INTEGER)	Dictionary`2	Dictionary`2	Dictionary`2:System.Collections.Generic.Dictionary`2[System.String,System.Int32]

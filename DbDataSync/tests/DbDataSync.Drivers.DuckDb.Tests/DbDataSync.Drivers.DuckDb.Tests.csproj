@@ -27,5 +27,10 @@
     <ProjectReference Include="..\..\src\DbDataSync.Drivers.DuckDb\DbDataSync.Drivers.DuckDb.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\StagingMatrix.cs" Link="Shared\StagingMatrix.cs" />
+    <Compile Include="..\Shared\ReaderTypeProbe.cs" Link="Shared\ReaderTypeProbe.cs" />
+  </ItemGroup>
+
   <Import Project="$(DbDataKitRoot)build/DuckDb.Native.targets" />
 </Project>
