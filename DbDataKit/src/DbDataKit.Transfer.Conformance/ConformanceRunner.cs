@@ -12,7 +12,7 @@ namespace DbDataKit.Transfer.Conformance;
 public static class ConformanceRunner
 {
     public static IEnumerable<StrategyCase> CasesFor(ConformanceEngine engine, bool requireVerified = false) =>
-        StrategyCases.All.Where(c => StrategyMatrix.Builtin.Check(c.Strategy, engine.Dialect.Id, engine.Version, requireVerified).Allowed);
+        StrategyCases.All.Where(c => c.AppliesTo(engine.Dialect.Id) && StrategyMatrix.Builtin.Check(c.Strategy, engine.Dialect.Id, engine.Version, requireVerified).Allowed);
 
     public static async Task<ConformanceResult> RunAsync(ConformanceEngine engine, StrategyCase c, CancellationToken ct = default)
     {
@@ -28,16 +28,18 @@ public static class ConformanceRunner
         var gate = new WriteGate(new NonDisposingExecutor(executor), new WriteGateOptions("conformance", log) { Redactor = new Redactor() });
         try
         {
-            await CreateAsync(gate, d, target, c, unique: c.UniqueKeyOnTarget, ct);
-            await CreateAsync(gate, d, stage, c, unique: false, ct);
+            var stageSchema = c.StageExtraColumns is null ? c.Schema : new TransferSchema([.. c.Schema.Columns, .. c.StageExtraColumns]);
+            await CreateAsync(gate, d, target, c.Schema, unique: c.UniqueKeyOnTarget, ct);
+            await CreateAsync(gate, d, stage, stageSchema, unique: false, ct);
             await SeedAsync(gate, d, target, c.Schema, c.TargetRows, ct);
-            await SeedAsync(gate, d, stage, c.Schema, c.StageRows, ct);
+            await SeedAsync(gate, d, stage, stageSchema, c.StageRows, ct);
 
             var seeded = Normalise(c.TargetRows, c.Schema);
             for (var run = 1; run <= 2; run++)
             {
                 var request = new ApplyRequest(target, stage, c.Schema, engine.Version);
                 if (c.Configure is not null) request = c.Configure(request);
+                if (engine.Syntax is not null) request = request with { Scoped = (request.Scoped ?? new ScopedOptions()) with { Syntax = engine.Syntax } };
                 if (c.Resolve is not null) request = await c.Resolve(request, d, s => gate.ScalarAsync(s, ct));
                 var set = StrategyCatalog.Build(c.Strategy, request, d);
                 try
@@ -60,7 +62,7 @@ public static class ConformanceRunner
             foreach (var t in new[] { target, stage })
             {
                 try { await gate.ExecuteAsync(new SqlStatement("cleanup:drop", $"DROP TABLE IF EXISTS {d.QuoteQualified(t.Parts)}", [], new WriteIntent("cleanup:drop", WriteKind.Ddl, t.ToString())), CancellationToken.None); }
-                catch (Exception ex) when (ex is DbException or GateRefusedException) { }
+                catch (Exception ex) when (ex is DbException or GateRefusedException or InvalidOperationException) { }
             }
             await gate.DisposeAsync();
         }
@@ -69,10 +71,10 @@ public static class ConformanceRunner
 
     // ---------------------------------------------------------------- setup
 
-    private static async Task CreateAsync(WriteGate gate, ISqlDialect d, TableName table, StrategyCase c, bool unique, CancellationToken ct)
+    private static async Task CreateAsync(WriteGate gate, ISqlDialect d, TableName table, TransferSchema schema, bool unique, CancellationToken ct)
     {
-        var cols = string.Join(", ", c.Schema.Columns.Select(col => $"{d.Quote(col.Name)} {d.ColumnType(col.Type).Require()}{(unique && col.IsKey ? " NOT NULL" : "")}"));
-        var pk = unique ? $", PRIMARY KEY ({string.Join(", ", c.Schema.Keys.Select(k => d.Quote(k.Name)))})" : "";
+        var cols = string.Join(", ", schema.Columns.Select(col => $"{d.Quote(col.Name)} {d.ColumnType(col.Type).Require()}{(unique && col.IsKey ? " NOT NULL" : "")}"));
+        var pk = unique ? $", PRIMARY KEY ({string.Join(", ", schema.Keys.Select(k => d.Quote(k.Name)))})" : "";
         var text = $"CREATE TABLE {d.QuoteQualified(table.Parts)} ({cols}{pk})";
         await gate.ExecuteAsync(new SqlStatement("setup:create", text, [], new WriteIntent("setup:create", WriteKind.Ddl, table.ToString())), ct);
     }

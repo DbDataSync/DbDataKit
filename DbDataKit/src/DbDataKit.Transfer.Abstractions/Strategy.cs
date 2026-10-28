@@ -78,6 +78,9 @@ public sealed record ApplyRequest(
     string? ScopeColumn = null)
 {
     public ApplyOptions Opts => Options ?? new ApplyOptions();
+
+    /// <summary>The options of <c>delete_insert_by_scope</c> and <c>merge_staged_changes</c>; the other strategies ignore it.</summary>
+    public ScopedOptions? Scoped { get; init; }
 }
 
 public interface IApplyStrategy

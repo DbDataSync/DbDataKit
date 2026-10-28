@@ -76,13 +76,17 @@ public sealed class AdoWriteExecutor(DbConnection connection, ISqlDialect dialec
         return cmd;
     }
 
-    /// <summary>Adds parameters in statement order. Named styles set the name without its prefix character; numbered and positional styles are unnamed.</summary>
+    /// <summary>
+    /// Adds parameters in statement order. A named marker (<c>@name</c>, <c>:name</c>) sets the name without its prefix character; numbered (<c>$1</c>)
+    /// and positional (<c>?</c>) markers are unnamed. The marker decides, not the dialect, so statements built with a caller's own placeholder text
+    /// (<see cref="StatementSyntax"/>) bind as they read.
+    /// </summary>
     internal static void Bind(DbCommand cmd, ISqlDialect dialect, IReadOnlyList<SqlParameter> parameters)
     {
         foreach (var p in parameters)
         {
             var dp = cmd.CreateParameter();
-            if (dialect.ParameterStyle is ParameterStyle.NamedAt or ParameterStyle.NamedColon) dp.ParameterName = p.Marker[1..];
+            if (p.Marker is ['@' or ':', _, ..]) dp.ParameterName = p.Marker[1..];
             if (ParameterValues.DbTypeFor(dialect.Id, p.Type) is { } dbType) dp.DbType = dbType;
             dp.Value = ParameterValues.Adapt(dialect.Id, p.Value) ?? DBNull.Value;
             cmd.Parameters.Add(dp);

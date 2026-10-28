@@ -26,6 +26,18 @@ public static class StrategyCases
         new TransferColumn("note", CanonicalType.String(50)),
     ]);
 
+    /// <summary>The columns of a staged change set beyond the written ones: what the row is for and its per-pass ordinal.</summary>
+    private static readonly TransferColumn[] Bookkeeping =
+    [
+        new TransferColumn("__Operation", CanonicalType.String(1)),
+        new TransferColumn("__Ordinal", CanonicalType.Of(CanonicalKind.Int64)),
+    ];
+
+    /// <summary>A staged row: the written columns, the operation ('U' upsert, 'D' delete) and the ordinal.</summary>
+    private static object?[] S(int id, string name, decimal amount, string op, long ordinal) => [id, name, amount, op, ordinal];
+
+    private static readonly string[] SqlServerOnly = ["sqlserver"];
+
     private static object?[] I(int? id, string name, decimal amount) => [id, name, amount];
     private static object?[] D(int id, int day, string note) => [id, new DateOnly(2024, 1, day), note];
     private static object?[] E(int id, int hour, string note) => [id, new DateTime(2024, 1, 1, hour, 0, 0, DateTimeKind.Unspecified), note];
@@ -103,6 +115,75 @@ public static class StrategyCases
             [I(1, "a", 1m)],
             [I(1, "a", 1m)])
         { Configure = r => r with { Options = new ApplyOptions { Guard = DeleteGuard.None } } },
+
+        // ---- the scope-shaped strategies (plan 13, A16a): what Sync's writers do with a staged change set
+
+        new("delete_insert_by_scope over every row refills without delete-marked rows", StrategyNames.DeleteInsertByScope, Items,
+            [I(1, "a", 1m), I(2, "b", 2m), I(3, "c", 3m)],
+            [S(2, "b2", 20m, "U", 1), S(4, "d", 4m, "U", 2), S(3, "c", 3m, "D", 3)],
+            [I(2, "b2", 20m), I(4, "d", 4m)])
+        {
+            StageExtraColumns = Bookkeeping,
+            Configure = r => r with { Scoped = new ScopedOptions { Marker = new OperationMarker() } },
+        },
+
+        new("delete_insert_by_scope over a list leaves the rest of the table alone", StrategyNames.DeleteInsertByScope, Items,
+            [I(1, "a", 1m), I(2, "b", 2m), I(3, "c", 3m), I(4, "d", 4m)],
+            [S(2, "b2", 20m, "U", 1), S(1, "a", 1m, "D", 2)],
+            [I(2, "b2", 20m), I(3, "c", 3m), I(4, "d", 4m)])
+        {
+            StageExtraColumns = Bookkeeping,
+            Configure = r => r with { Scoped = new ScopedOptions { Marker = new OperationMarker(), Scope = ScopeFilter.List("id", [1, 2]) } },
+        },
+
+        new("delete_insert_by_scope over a half-open range keeps both neighbours", StrategyNames.DeleteInsertByScope, Items,
+            [I(1, "a", 1m), I(2, "b", 2m), I(3, "c", 3m), I(4, "d", 4m), I(5, "e", 5m)],
+            [S(3, "c2", 30m, "U", 1), S(2, "b", 2m, "D", 2)],
+            [I(1, "a", 1m), I(3, "c2", 30m), I(4, "d", 4m), I(5, "e", 5m)])
+        {
+            StageExtraColumns = Bookkeeping,
+            Configure = r => r with { Scoped = new ScopedOptions { Marker = new OperationMarker(), Scope = ScopeFilter.Range("id", 2, 4) } },
+        },
+
+        new("delete_insert_by_scope refills one ordinal slice of the stage", StrategyNames.DeleteInsertByScope, Items,
+            [I(9, "old", 9m)],
+            [S(1, "one", 1m, "U", 1), S(2, "two", 2m, "U", 2), S(3, "three", 3m, "D", 3), S(4, "four", 4m, "U", 4)],
+            [I(2, "two", 2m)])
+        {
+            StageExtraColumns = Bookkeeping,
+            Configure = r => r with { Scoped = new ScopedOptions { Marker = new OperationMarker(), Ordinal = new OrdinalRange(1, 3) } },
+        },
+
+        new("merge_staged_changes upserts and applies delete-marked rows", StrategyNames.MergeStagedChanges, Items,
+            [I(1, "a", 1m), I(2, "b", 2m), I(3, "c", 3m)],
+            [S(2, "b2", 20m, "U", 1), S(3, "c", 3m, "D", 2), S(4, "d", 4m, "U", 3), S(5, "e", 5m, "D", 4)],
+            [I(1, "a", 1m), I(2, "b2", 20m), I(4, "d", 4m)])
+        {
+            UniqueKeyOnTarget = true,
+            StageExtraColumns = Bookkeeping,
+            Configure = r => r with { Scoped = new ScopedOptions { Marker = new OperationMarker() } },
+        },
+
+        new("merge_staged_changes applies one ordinal slice of the stage", StrategyNames.MergeStagedChanges, Items,
+            [I(1, "a", 1m), I(2, "b", 2m), I(3, "c", 3m)],
+            [S(2, "b2", 20m, "U", 1), S(3, "c2", 30m, "U", 2), S(4, "d", 4m, "U", 3), S(5, "e", 5m, "U", 4)],
+            [I(1, "a", 1m), I(2, "b", 2m), I(3, "c2", 30m), I(4, "d", 4m)])
+        {
+            UniqueKeyOnTarget = true,
+            StageExtraColumns = Bookkeeping,
+            Configure = r => r with { Scoped = new ScopedOptions { Marker = new OperationMarker(), Ordinal = new OrdinalRange(1, 3) } },
+        },
+
+        new("merge_staged_changes deletes what the stage does not mention, inside the scope only", StrategyNames.MergeStagedChanges, Items,
+            [I(1, "a", 1m), I(2, "b", 2m), I(3, "c", 3m), I(4, "d", 4m), I(5, "e", 5m)],
+            [S(2, "b2", 20m, "U", 1), S(4, "d", 4m, "D", 2)],
+            [I(1, "a", 1m), I(2, "b2", 20m), I(5, "e", 5m)])
+        {
+            UniqueKeyOnTarget = true,
+            OnlyEngines = SqlServerOnly,
+            StageExtraColumns = Bookkeeping,
+            Configure = r => r with { Scoped = new ScopedOptions { Marker = new OperationMarker(), Scope = ScopeFilter.Range("id", 2, 5), DeleteUnmatchedInScope = true } },
+        },
     ];
 }
 

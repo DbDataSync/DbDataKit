@@ -23,6 +23,6 @@ public class DuckDbConformanceTests
     public void Every_shared_strategy_has_a_case_on_the_reference_engine()
     {
         var covered = ConformanceRunner.CasesFor(Engine).Select(c => c.Strategy).ToHashSet();
-        foreach (var s in DbDataKit.Transfer.StrategyMatrix.Builtin.Strategies) Assert.Contains(s, covered);
+        foreach (var s in DbDataKit.Transfer.StrategyMatrix.Builtin.Strategies.Where(s => DbDataKit.Transfer.StrategyMatrix.Builtin.Check(s, Engine.Dialect.Id).Allowed)) Assert.Contains(s, covered);
     }
 }
