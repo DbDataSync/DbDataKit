@@ -1,0 +1,9 @@
+# The sales of a small shop: a table that exists (the tool builds nothing here; `connection seed` fills it from seeds/shop/sales.sql).
+name: shop.sales
+kind: mapped
+grain: [sale_id]
+columns:
+  - {name: sale_id, type: BIGINT, nullable: false}
+  - {name: sold_on, type: DATE, nullable: false}
+  - {name: units, type: INTEGER, nullable: false}
+  - {name: amount, type: "DECIMAL(12, 2)", nullable: false}

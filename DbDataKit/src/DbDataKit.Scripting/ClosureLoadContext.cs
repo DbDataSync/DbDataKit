@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 
 namespace DbDataKit.Scripting;
@@ -28,22 +27,9 @@ public sealed class ClosureLoadContext : AssemblyLoadContext
 
     protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
     {
-        foreach (var candidate in NativeNames(unmanagedDllName))
+        foreach (var candidate in DefaultContextBinder.NativeNames(unmanagedDllName))
             if (_closure.Native.TryGetValue(candidate, out var path)) return LoadUnmanagedDllFromPath(path);
         return IntPtr.Zero;
-    }
-
-    // a DllImport names a library without its prefix or extension, or with them; try the forms each platform uses
-    private static IEnumerable<string> NativeNames(string name)
-    {
-        yield return name;
-        var (prefix, extension) = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ("", ".dll") : RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? ("lib", ".dylib") : ("lib", ".so");
-        if (!name.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) yield return name + extension;
-        if (prefix.Length > 0 && !name.StartsWith(prefix, StringComparison.Ordinal))
-        {
-            yield return prefix + name;
-            if (!name.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) yield return prefix + name + extension;
-        }
     }
 }
 

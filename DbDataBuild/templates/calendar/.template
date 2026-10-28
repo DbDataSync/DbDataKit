@@ -1,0 +1,1 @@
+A fiscal calendar built as a model (fiscal year, quarter and month labels, prior-year counterparts) and the semantic model that uses it: calendar levels, shifts, a hierarchy, and the data checks generated from them.

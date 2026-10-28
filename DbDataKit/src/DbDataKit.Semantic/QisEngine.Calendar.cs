@@ -150,16 +150,17 @@ public sealed partial class QisEngine
 
     /// <summary>True when a source can be asked for a whole dimension (its own table, not the fact rows): SQL Server, or an Analysis Services model whose columns have DAX.</summary>
     private static bool CanReadDimension(SourceDef source, params BindingDef[] bindings) =>
-        source.Kind == "sqlserver" || (source.Kind == "ssas" && bindings.All(b => b.Dax is not null));
+        source.Kind is "sqlserver" or "postgres" || (source.Kind == "ssas" && bindings.All(b => b.Dax is not null));
 
     /// <summary>
-    /// Reads a dimension with no parameters: T-SQL on SQL Server; on Analysis Services the DAX, with the SQL text as the twin the test stand-in runs. The rows are what the
+    /// Reads a dimension with no parameters: T-SQL on SQL Server, the same text as PostgreSQL's; on Analysis Services the DAX, with the SQL text as the twin the test stand-in runs. The rows are what the
     /// columns hold, so a member with no fact rows is there.
     /// </summary>
     private List<Dictionary<string, object?>> ReadDimension(string source, string sql, Func<string> dax)
     {
-        var native = cat.Doc.Sources[source].Kind == "ssas" ? new NativeQuery("dax", dax()) : new NativeQuery("tsql", sql);
-        return executor.Execute(new CompiledQuery(source, native, sql, []), rowCap + 1).Rows;
+        var kind = cat.Doc.Sources[source].Kind;
+        var native = kind switch { "ssas" => new NativeQuery("dax", dax()), "postgres" => new NativeQuery("postgres", sql), _ => new NativeQuery("tsql", sql) };
+        return executor.Execute(new CompiledQuery(source, native, sql, [], null, kind == "ssas" ? null : new ParameterizedSql(sql, [])), rowCap + 1).Rows;
     }
 
     private static bool FilteredBeyondEquals(Filter f, string attr) => f switch
@@ -253,11 +254,22 @@ public sealed partial class QisEngine
     /// <summary>Runs a attributes-only scan (no measures) and returns its rows. Used to read members and calendar pairs.</summary>
     private List<Dictionary<string, object?>> Scan(string source, List<string> attrs, List<Filter> filters)
     {
-        var native = cat.Doc.Sources[source].Kind == "ssas"
-            ? new NativeQuery("dax", DaxEmitter.BuildDax(cat, source, attrs, [], filters, [], null))
-            : new NativeQuery("tsql", SqlEmitter.BuildSelect(cat, source, attrs, [], filters, [], null, EmitDialects.TSql).Text);
+        var kind = cat.Doc.Sources[source].Kind;
+        var native = kind switch
+        {
+            "ssas" => new NativeQuery("dax", DaxEmitter.BuildDax(cat, source, attrs, [], filters, [], null)),
+            "postgres" => new NativeQuery("postgres", SqlEmitter.BuildSelect(cat, source, attrs, [], filters, [], null, EmitDialects.Postgres).Text),
+            _ => new NativeQuery("tsql", SqlEmitter.BuildSelect(cat, source, attrs, [], filters, [], null, EmitDialects.TSql).Text),
+        };
         var (duckSql, duckParams) = SqlEmitter.BuildSelect(cat, source, attrs, [], filters, [], null, EmitDialects.DuckDb);
         var execText = native.Dialect == "tsql" ? SqlEmitter.BuildSelect(cat, source, attrs, [], filters, [], null, EmitDialects.TSql).Text : null;
-        return executor.Execute(new CompiledQuery(source, native, duckSql, duckParams, execText), rowCap + 1).Rows;
+        ParameterizedSql? postgres = null;
+        if (kind != "ssas")
+        {
+            var (pgText, pgParams) = SqlEmitter.BuildSelect(cat, source, attrs, [], filters, [], null, EmitDialects.Postgres);
+            postgres = new ParameterizedSql(pgText, pgParams);
+            if (kind == "postgres") execText = pgText;
+        }
+        return executor.Execute(new CompiledQuery(source, native, duckSql, duckParams, execText, postgres), rowCap + 1).Rows;
     }
 }

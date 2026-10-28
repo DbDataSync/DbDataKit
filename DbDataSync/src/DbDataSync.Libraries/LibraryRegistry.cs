@@ -1,12 +1,10 @@
 using System.Data.Common;
-using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Runtime.Loader;
+using DbDataKit.Scripting;
 
 namespace DbDataSync.Libraries;
 
 /// <summary>
-/// Loads every <c>&lt;repo&gt;/libraries/*/library.json</c> manifest and registers its
+/// Loads every <c>&lt;repo&gt;/libraries/*/library.csx</c> and registers its
 /// <see cref="DbProviderFactory"/> by name, so any consumer — the state store, a driver, a script —
 /// gets one without the solution ever referencing the underlying NuGet package. See
 /// <c>architecture/planning/todo/nuget-loaded-drivers.md</c> §*The provider layer*.
@@ -17,22 +15,15 @@ namespace DbDataSync.Libraries;
 /// assembly only has to be *loadable* at that point, never referenced by anything in this solution.
 /// </para>
 /// <para>
-/// **Loadable** means: this registers one <see cref="AssemblyLoadContext.Default"/>
-/// <see cref="AssemblyLoadContext.Resolving"/> handler per process (see <see cref="EnsureResolverArmed"/>)
-/// backed by an <see cref="AssemblyDependencyResolver"/> per installed library directory, so a
-/// library's own managed dependencies and <c>runtimes/&lt;rid&gt;/native/</c> assets resolve. Libraries
-/// load into the *default* context deliberately, not a per-library isolated one — a <c>SqlConnection</c>
-/// from a library and one from a future built-in driver must be the same <c>Type</c>, which an isolated
-/// context would break.
+/// **Loadable** means: the library's packages are resolved from its own store (<c>libraries/&lt;id&gt;/lib/</c>, checked against
+/// <c>library.lock</c>, no network) and bound to the *default* load context by <see cref="DefaultContextBinder"/>, so a library's own managed dependencies and
+/// <c>runtimes/&lt;rid&gt;/native/</c> assets resolve. Libraries load into the *default* context deliberately, not a per-library isolated one — a <c>SqlConnection</c>
+/// from a library and one the built-in driver is compiled against must be the same <c>Type</c>, which an isolated
+/// context would break. The cost is that a library is never unloaded.
 /// </para>
 /// </summary>
 public sealed class LibraryRegistry
 {
-    private static readonly List<AssemblyDependencyResolver> Resolvers = [];
-    private static readonly List<string> LibDirs = [];
-    private static bool _resolverArmed;
-    private static readonly object ResolverLock = new();
-
     private readonly string _librariesRoot;
 
     public LibraryRegistry(string repoRoot) => _librariesRoot = LibraryPaths.LibrariesDir(repoRoot);
@@ -42,68 +33,110 @@ public sealed class LibraryRegistry
     public IReadOnlyDictionary<string, LibraryManifest> Installed { get; private set; } =
         new Dictionary<string, LibraryManifest>(StringComparer.Ordinal);
 
+    /// <summary>Libraries whose files are written but whose packages could not be loaded from the store (not restored yet, a hash that no longer matches), with the reason. They are in <see cref="Installed"/> too.</summary>
+    public IReadOnlyDictionary<string, string> NotRestored { get; private set; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>Things worth knowing that did not stop a library loading: another library already supplies one of its assemblies (the first one loaded is used, as the default context allows only one).</summary>
+    public IReadOnlyDictionary<string, string> Warnings { get; private set; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
     /// <summary>
-    /// Scans <c>libraries/*/library.json</c>, arms assembly resolution for each one found, and
-    /// registers every factory. An absent or empty <c>libraries/</c> directory is a silent no-op — most
-    /// deployments have none.
+    /// Scans <c>libraries/*/library.csx</c>, binds each one's packages and registers every factory. An absent or empty <c>libraries/</c> directory is a silent no-op — most
+    /// deployments have none. A folder that still holds the old <c>library.json</c> and no <c>library.csx</c> stops the load with a message naming the file.
     /// </summary>
     public LibraryRegistry LoadAll()
     {
         var installed = new Dictionary<string, LibraryManifest>(StringComparer.Ordinal);
+        var problems = new Dictionary<string, string>(StringComparer.Ordinal);
+        var warnings = new Dictionary<string, string>(StringComparer.Ordinal);
         if (Directory.Exists(_librariesRoot))
         {
             foreach (var dir in Directory.EnumerateDirectories(_librariesRoot))
             {
-                var manifestPath = LibraryPaths.ManifestPath(dir);
-                if (!File.Exists(manifestPath))
+                RefuseOldFormat(dir);
+                if (!File.Exists(LibraryPaths.ManifestPath(dir)))
                     continue;
 
-                var manifest = LibraryManifest.Read(manifestPath);
+                var manifest = Load(dir, problems, warnings);
                 installed[manifest.Id] = manifest;
-
-                var libDir = LibraryPaths.LibDir(dir);
-                if (Directory.Exists(libDir))
-                    ArmResolver(libDir);
-
-                DbProviderFactories.RegisterFactory(manifest.Id, manifest.FactoryType);
             }
         }
 
         Installed = installed;
+        NotRestored = problems;
+        Warnings = warnings;
         return this;
+    }
+
+    private static void RefuseOldFormat(string libraryDir)
+    {
+        var old = Path.Combine(libraryDir, LibraryPaths.RefusedManifestFileName);
+        if (File.Exists(old) && !File.Exists(LibraryPaths.ManifestPath(libraryDir)))
+            throw new InvalidDataException(
+                $"'{old}' is the old library format and is no longer read. A library is now a library.csx of #r \"nuget: Id, 1.2.3\" lines: " +
+                $"run `dbdatasync library install {Path.GetFileName(libraryDir)}` to write it, or write it by hand and run `dbdatasync library sync`.");
+    }
+
+    private static LibraryManifest Load(string libraryDir, Dictionary<string, string> problems, Dictionary<string, string> warnings)
+    {
+        var manifest = LibraryManifest.Read(LibraryPaths.ManifestPath(libraryDir));
+        var factoryType = manifest.FactoryType;
+        var libDir = LibraryPaths.LibDir(libraryDir);
+        if (Directory.Exists(libDir))
+        {
+            try
+            {
+                var closure = LibraryResolution.LoadAsync(libraryDir, manifest.Packages).GetAwaiter().GetResult();
+                var conflicts = DefaultContextBinder.Bind(closure, [libDir]);
+                if (conflicts.Count > 0)
+                    warnings[manifest.Id] = $"another library already supplies {string.Join(", ", conflicts)}; the first one loaded is used.";
+                if (factoryType.Length == 0)
+                {
+                    var discovery = FactoryTypeReflector.Discover(closure.Managed.Values.ToList());
+                    if (discovery.Status == FactoryTypeDiscoveryStatus.Found) factoryType = discovery.FactoryType!;
+                    else problems[manifest.Id] = "the packages carry no single DbProviderFactory; name it with a `// factory: Type, Assembly` line.";
+                }
+            }
+            catch (Exception ex) when (ex is PackageResolutionException or PackageIntegrityException or InvalidDataException)
+            {
+                problems[manifest.Id] = ex.Message;
+            }
+        }
+        else
+        {
+            problems[manifest.Id] = $"not restored: run `dbdatasync library sync {manifest.Id}`.";
+        }
+
+        if (factoryType.Length > 0) DbProviderFactories.RegisterFactory(manifest.Id, factoryType);
+        return manifest with { FactoryType = factoryType };
     }
 
     /// <summary>
     /// Loads and registers exactly one library already on disk (by id) into this same instance's
     /// <see cref="Installed"/>, without rescanning — for a caller (phase 120's <c>POST /api/libraries</c>)
     /// that just wrote it and wants this process's own view of "is it installed" to reflect that
-    /// immediately, without a restart. Deliberately not "call <see cref="LoadAll"/> again": that would
-    /// re-arm a resolver for every already-installed library a second time, unboundedly, if this were
-    /// ever called more than once per process — which, unlike <see cref="LoadAll"/>'s one call at
-    /// startup, this now can be. A silent no-op if <paramref name="id"/> isn't actually on disk.
+    /// immediately, without a restart. A silent no-op if <paramref name="id"/> isn't actually on disk.
     /// </summary>
     public void RegisterInstalled(string id)
     {
         var libraryDir = Path.Combine(_librariesRoot, id);
-        var manifestPath = LibraryPaths.ManifestPath(libraryDir);
-        if (!File.Exists(manifestPath))
+        RefuseOldFormat(libraryDir);
+        if (!File.Exists(LibraryPaths.ManifestPath(libraryDir)))
             return;
 
-        var manifest = LibraryManifest.Read(manifestPath);
-
-        var libDir = LibraryPaths.LibDir(libraryDir);
-        if (Directory.Exists(libDir))
-            ArmResolver(libDir);
-
-        DbProviderFactories.RegisterFactory(manifest.Id, manifest.FactoryType);
+        var problems = new Dictionary<string, string>(NotRestored, StringComparer.Ordinal);
+        problems.Remove(id);
+        var warnings = new Dictionary<string, string>(Warnings, StringComparer.Ordinal);
+        warnings.Remove(id);
+        var manifest = Load(libraryDir, problems, warnings);
+        NotRestored = problems;
+        Warnings = warnings;
         Installed = new Dictionary<string, LibraryManifest>(Installed, StringComparer.Ordinal) { [manifest.Id] = manifest };
     }
 
     /// <summary>Drops <paramref name="id"/> from <see cref="Installed"/> — for
     /// <c>DELETE /api/libraries/{id}</c> (phase 120), so this process's own view stops claiming a
-    /// removed library is installed. Does not (cannot) un-arm its resolver or un-register its factory
-    /// name; an orphaned resolver pointing at a deleted directory is harmless dead weight, not a
-    /// correctness problem — <see cref="GetFactory"/> refuses by <see cref="Installed"/> membership
+    /// removed library is installed. Does not (cannot) un-bind its assemblies or un-register its factory
+    /// name; <see cref="GetFactory"/> refuses by <see cref="Installed"/> membership
     /// first, before ever reaching <see cref="DbProviderFactories.GetFactory(string)"/>.</summary>
     public void Remove(string id)
     {
@@ -111,6 +144,7 @@ public sealed class LibraryRegistry
             return;
 
         Installed = Installed.Where(kv => kv.Key != id).ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+        NotRestored = NotRestored.Where(kv => kv.Key != id).ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -156,91 +190,14 @@ public sealed class LibraryRegistry
 
         return $"Library '{id}' is not installed. Install it with `dbdatasync library install {id}`.";
     }
-
-    /// <summary>The file names a native library called <paramref name="name"/> has on this platform.</summary>
-    private static IEnumerable<string> NativeFileNames(string name)
-    {
-        if (OperatingSystem.IsWindows()) return [name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? name : name + ".dll"];
-        var extension = OperatingSystem.IsMacOS() ? ".dylib" : ".so";
-        return [$"lib{name}{extension}", name.EndsWith(extension, StringComparison.Ordinal) ? name : name + extension];
-    }
-
-    private static void ArmResolver(string libDir)
-    {
-        var depsJson = Directory.EnumerateFiles(libDir, "*.deps.json").FirstOrDefault();
-        if (depsJson is null)
-            return;
-
-        // AssemblyDependencyResolver keys off the .deps.json's own main assembly path, not the
-        // directory — any file in the same publish output resolves the same closure.
-        var resolver = new AssemblyDependencyResolver(depsJson);
-        lock (ResolverLock)
-        {
-            Resolvers.Add(resolver);
-            if (!LibDirs.Contains(libDir)) LibDirs.Add(libDir);
-            EnsureResolverArmed();
-        }
-    }
-
-    /// <summary>
-    /// One <see cref="AssemblyLoadContext.Resolving"/> handler for the process's lifetime, trying every
-    /// armed library's resolver in turn. Registered once — a second <see cref="LibraryRegistry"/>
-    /// instance (a test standing up its own repo root, say) adds to <see cref="Resolvers"/> rather than
-    /// double-subscribing.
-    /// </summary>
-    private static void EnsureResolverArmed()
-    {
-        if (_resolverArmed)
-            return;
-        _resolverArmed = true;
-
-        AssemblyLoadContext.Default.ResolvingUnmanagedDll += (assembly, unmanagedName) =>
-        {
-            lock (ResolverLock)
-            {
-                foreach (var resolver in Resolvers)
-                {
-                    var path = resolver.ResolveUnmanagedDllToPath(unmanagedName);
-                    if (path is not null)
-                        return NativeLibrary.Load(path);
-                }
-
-                // A native library placed beside the library's assemblies without a deps.json entry (the DuckDB engine,
-                // from the pin): the platform's file name for it, in a library folder.
-                foreach (var dir in LibDirs)
-                {
-                    foreach (var candidate in NativeFileNames(unmanagedName))
-                    {
-                        var file = Path.Combine(dir, candidate);
-                        if (File.Exists(file))
-                            return NativeLibrary.Load(file);
-                    }
-                }
-            }
-            return IntPtr.Zero;
-        };
-
-        AssemblyLoadContext.Default.Resolving += (context, name) =>
-        {
-            lock (ResolverLock)
-            {
-                foreach (var resolver in Resolvers)
-                {
-                    var path = resolver.ResolveAssemblyToPath(name);
-                    if (path is not null)
-                        return context.LoadFromAssemblyPath(path);
-                }
-            }
-            return null;
-        };
-    }
 }
 
 /// <summary>The on-disk layout every library (and, from 109d/109e on, every driver) shares — one
 /// place both the installer and the registry agree on it.</summary>
 public static class LibraryPaths
 {
-    public const string ManifestFileName = "library.json";
+    public const string ManifestFileName = "library.csx";
+    public const string RefusedManifestFileName = "library.json";
     public const string LibDirName = "lib";
 
     public static string LibrariesDir(string repoRoot) => Path.Combine(repoRoot, "libraries");

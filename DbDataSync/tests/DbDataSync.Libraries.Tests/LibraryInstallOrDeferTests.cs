@@ -3,10 +3,8 @@ using Xunit;
 namespace DbDataSync.Libraries.Tests;
 
 /// <summary>
-/// Phase 121's runtime-only-image entry point, <see cref="LibraryInstaller.InstallOrDeferAsync"/> —
-/// every branch driven with <c>hasSdkOverride</c> rather than an actual runtime-only machine (this
-/// sandbox always has the SDK), matching the seam phase 123 already established for
-/// <c>Environment.ProcessPath</c>.
+/// The runtime-only image's entry point, <see cref="LibraryInstaller.InstallOrDeferAsync"/>: a catalog package at its pinned version is copied from the image's cache (no network); anything else is
+/// resolved from a feed. Nothing needs the .NET SDK any more, so there is no deferred state: an install completes or fails with the reason.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class LibraryInstallOrDeferTests : IAsyncLifetime
@@ -37,65 +35,85 @@ public sealed class LibraryInstallOrDeferTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task WithAnSdk_RestoresForReal_ExactlyLikeInstallAsync()
+    public async Task WithNoCacheEntry_ResolvesFromAFeed_ExactlyLikeInstallAsync()
     {
         var result = await LibraryInstaller.InstallOrDeferAsync(
             _repoRoot, "MySqlConnector", [new PackageRef("MySqlConnector", "2.4.0")],
-            "MySqlConnector.MySqlConnectorFactory, MySqlConnector", hasSdkOverride: true);
+            "MySqlConnector.MySqlConnectorFactory, MySqlConnector", cacheRoot: Path.Combine(_cacheRoot, "none"));
 
         Assert.Equal(LibraryInstaller.LibraryInstallOutcome.Installed, result.Outcome);
-        Assert.True(Directory.Exists(LibraryPaths.LibDir(LibraryPaths.LibraryDir(_repoRoot, "MySqlConnector"))));
+        var libraryDir = LibraryPaths.LibraryDir(_repoRoot, "MySqlConnector");
+        Assert.Contains("MySqlConnector.dll", Directory.EnumerateFiles(LibraryPaths.LibDir(libraryDir), "*.dll", SearchOption.AllDirectories).Select(Path.GetFileName));
+        Assert.True(File.Exists(LibraryResolution.LockPath(libraryDir)));
     }
 
     [Fact]
-    public async Task WithNoSdk_AndAPinnedCatalogVersion_CopiesFromTheCache()
+    public async Task APinnedCatalogVersion_IsCopiedFromTheCache()
     {
         var result = await LibraryInstaller.InstallOrDeferAsync(
             _repoRoot, MySqlConnector.Id, [new PackageRef(MySqlConnector.PackageId, MySqlConnector.PinnedVersion)],
-            factoryType: null, cacheRoot: _cacheRoot, hasSdkOverride: false);
+            factoryType: null, cacheRoot: _cacheRoot);
 
         Assert.Equal(LibraryInstaller.LibraryInstallOutcome.InstalledFromCache, result.Outcome);
         Assert.Equal(MySqlConnector.FactoryType, result.Manifest.FactoryType);
-        var libDir = LibraryPaths.LibDir(LibraryPaths.LibraryDir(_repoRoot, MySqlConnector.Id));
-        Assert.Contains("MySqlConnector.dll", Directory.EnumerateFiles(libDir).Select(Path.GetFileName));
+        var libraryDir = LibraryPaths.LibraryDir(_repoRoot, MySqlConnector.Id);
+        Assert.Contains("MySqlConnector.dll", Directory.EnumerateFiles(LibraryPaths.LibDir(libraryDir), "*.dll", SearchOption.AllDirectories).Select(Path.GetFileName));
+        Assert.True(File.Exists(LibraryResolution.LockPath(libraryDir)));
 
         // A real factory out of the copy, not just files that happen to be there.
         var registry = new LibraryRegistry(_repoRoot).LoadAll();
+        Assert.Empty(registry.NotRestored);
         Assert.NotNull(registry.GetFactory(MySqlConnector.Id));
     }
 
     [Fact]
-    public async Task WithNoSdk_AndAnUnpinnedVersionOfACatalogPackage_IsPendingRestore()
+    public async Task AnUnpinnedVersionOfACatalogPackage_IsResolvedFromAFeed()
     {
         var result = await LibraryInstaller.InstallOrDeferAsync(
             _repoRoot, MySqlConnector.Id, [new PackageRef(MySqlConnector.PackageId, "2.3.7")],
-            MySqlConnector.FactoryType, cacheRoot: _cacheRoot, hasSdkOverride: false);
+            MySqlConnector.FactoryType, cacheRoot: _cacheRoot);
 
-        Assert.Equal(LibraryInstaller.LibraryInstallOutcome.PendingRestore, result.Outcome);
+        Assert.Equal(LibraryInstaller.LibraryInstallOutcome.Installed, result.Outcome);
         Assert.Equal("2.3.7", Assert.Single(result.Manifest.Packages).Version);
-        var libraryDir = LibraryPaths.LibraryDir(_repoRoot, MySqlConnector.Id);
-        Assert.True(File.Exists(LibraryPaths.ManifestPath(libraryDir)));
-        Assert.False(Directory.Exists(LibraryPaths.LibDir(libraryDir)));
     }
 
     [Fact]
-    public async Task WithNoSdk_AndANonCatalogPackage_IsPendingRestore()
+    public async Task APackageNoFeedHas_FailsWithTheReason_AndLeavesNothingBehind()
     {
-        var result = await LibraryInstaller.InstallOrDeferAsync(
+        var ex = await Assert.ThrowsAnyAsync<InvalidOperationException>(() => LibraryInstaller.InstallOrDeferAsync(
             _repoRoot, "SomeVendor.Driver", [new PackageRef("SomeVendor.Driver", "1.0.0")],
-            "SomeVendor.Driver.SomeVendorFactory, SomeVendor.Driver", cacheRoot: _cacheRoot, hasSdkOverride: false);
+            "SomeVendor.Driver.SomeVendorFactory, SomeVendor.Driver", cacheRoot: _cacheRoot));
 
-        Assert.Equal(LibraryInstaller.LibraryInstallOutcome.PendingRestore, result.Outcome);
-        Assert.False(Directory.Exists(LibraryPaths.LibDir(LibraryPaths.LibraryDir(_repoRoot, "SomeVendor.Driver"))));
+        Assert.Contains("SomeVendor.Driver", ex.Message);
+        Assert.False(Directory.Exists(LibraryPaths.LibraryDir(_repoRoot, "SomeVendor.Driver")));
     }
 
     [Fact]
-    public async Task WithNoSdk_NoCacheHit_AndNoFactoryType_Throws()
+    public void AnOldLibraryJson_StopsTheLoad_WithAMessageNamingTheFile()
     {
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => LibraryInstaller.InstallOrDeferAsync(
-            _repoRoot, "SomeVendor.Driver", [new PackageRef("SomeVendor.Driver", "1.0.0")],
-            factoryType: null, cacheRoot: _cacheRoot, hasSdkOverride: false));
+        var libraryDir = LibraryPaths.LibraryDir(_repoRoot, "old-style");
+        Directory.CreateDirectory(libraryDir);
+        File.WriteAllText(Path.Combine(libraryDir, "library.json"), """{"id":"old-style","factoryType":"X.Y, X","packages":[{"id":"X","version":"1.0.0"}]}""");
 
-        Assert.Contains("no SDK", ex.Message);
+        var ex = Assert.Throws<InvalidDataException>(() => new LibraryRegistry(_repoRoot).LoadAll());
+
+        Assert.Contains("library.json", ex.Message);
+        Assert.Contains("library.csx", ex.Message);
+    }
+
+    [Fact]
+    public void ALibraryCsx_HoldsOnlyPackageLines_AndRoundTrips()
+    {
+        var libraryDir = LibraryPaths.LibraryDir(_repoRoot, "round-trip");
+        var manifest = new LibraryManifest("round-trip", "A.B.Factory, A.B", [new PackageRef("A.B", "1.2.3"), new PackageRef("A.B.Native", "4.5.6")]);
+        manifest.Write(LibraryPaths.ManifestPath(libraryDir));
+
+        var read = LibraryManifest.Read(LibraryPaths.ManifestPath(libraryDir));
+        Assert.Equal(("round-trip", "A.B.Factory, A.B"), (read.Id, read.FactoryType));
+        Assert.Equal(manifest.Packages, read.Packages);
+
+        File.AppendAllText(LibraryPaths.ManifestPath(libraryDir), "System.Console.WriteLine(1);" + Environment.NewLine);
+        var ex = Assert.Throws<InvalidDataException>(() => LibraryManifest.Read(LibraryPaths.ManifestPath(libraryDir)));
+        Assert.Contains("more than #r", ex.Message);
     }
 }

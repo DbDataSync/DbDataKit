@@ -12,6 +12,7 @@
       "DbDataBuild/src/DbDataBuild.Models/DbDataBuild.Models.csproj",
       "DbDataBuild/src/DbDataBuild.Planning/DbDataBuild.Planning.csproj",
       "DbDataBuild/src/DbDataBuild.Sample/DbDataBuild.Sample.csproj",
+      "DbDataBuild/src/DbDataBuild.Semantic/DbDataBuild.Semantic.csproj",
       "DbDataBuild/src/DbDataBuild.Sql/DbDataBuild.Sql.csproj",
       "DbDataBuild/src/DbDataBuild.State/DbDataBuild.State.csproj",
       "DbDataBuild/src/DbDataBuild.Targets.DuckDb/DbDataBuild.Targets.DuckDb.csproj",

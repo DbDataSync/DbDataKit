@@ -101,6 +101,18 @@ public class ResolverTests
     }
 
     [Fact]
+    public async Task The_polyfill_packages_a_netstandard_library_asks_for_are_skipped_too_so_an_offline_feed_need_not_have_them()
+    {
+        using var feed = new Feed();
+        feed.Add("Uses.Memory", "1.0.0", ["lib/netstandard2.0/Uses.Memory.dll"], [new Dep("System.Memory", "4.5.3", "netstandard2.0"), new Dep("System.Runtime.CompilerServices.Unsafe", "4.5.0", "netstandard2.0")]);
+
+        var closure = await new PackageResolver(feed.Options()).ResolveAsync([Exact("Uses.Memory", "1.0.0")]);
+
+        Assert.Equal(["Uses.Memory 1.0.0"], Names(closure));
+        Assert.Equal(["System.Memory", "System.Runtime.CompilerServices.Unsafe"], closure.Skipped.Order());
+    }
+
+    [Fact]
     public async Task A_package_the_script_names_beats_a_dependencys_wish_and_a_warning_says_so()
     {
         using var feed = new Feed();

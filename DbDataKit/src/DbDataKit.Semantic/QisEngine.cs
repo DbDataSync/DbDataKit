@@ -447,15 +447,26 @@ public sealed partial class QisEngine(Catalog cat, ISourceExecutor executor, Val
         List<FilterNotApplied> notApplied, List<(string, string)> order, int? limit, string hash, string path,
         List<string>? rollup = null, JsonArray? levels = null, List<Filter>? having = null, bool cube = false)
     {
-        var native = cat.Doc.Sources[source].Kind == "ssas"
-            ? new NativeQuery("dax", DaxEmitter.BuildDax(cat, source, attrs, measures, applied, order, limit, rollup, having, cube))
-            : new NativeQuery("tsql", SqlEmitter.BuildSelect(cat, source, attrs, measures, applied, order, limit, EmitDialects.TSql, rollup, having, cube).Text);
+        var kind = cat.Doc.Sources[source].Kind;
+        var native = kind switch
+        {
+            "ssas" => new NativeQuery("dax", DaxEmitter.BuildDax(cat, source, attrs, measures, applied, order, limit, rollup, having, cube)),
+            "postgres" => new NativeQuery("postgres", SqlEmitter.BuildSelect(cat, source, attrs, measures, applied, order, limit, EmitDialects.Postgres, rollup, having, cube).Text),
+            _ => new NativeQuery("tsql", SqlEmitter.BuildSelect(cat, source, attrs, measures, applied, order, limit, EmitDialects.TSql, rollup, having, cube).Text),
+        };
 
         var execLimit = limit is not null ? limit.Value + 1 : rowCap + 1;
         var (duckSql, duckParams) = SqlEmitter.BuildSelect(cat, source, attrs, measures, applied, order, execLimit, EmitDialects.DuckDb, rollup, having, cube);
         var execText = native.Dialect == "tsql"
             ? SqlEmitter.BuildSelect(cat, source, attrs, measures, applied, order, execLimit, EmitDialects.TSql, rollup, having, cube).Text : null;
-        var compiled = new CompiledQuery(source, native, duckSql, duckParams, execText);
+        ParameterizedSql? postgres = null;
+        if (kind != "ssas")
+        {
+            var (pgText, pgParams) = SqlEmitter.BuildSelect(cat, source, attrs, measures, applied, order, execLimit, EmitDialects.Postgres, rollup, having, cube);
+            postgres = new ParameterizedSql(pgText, pgParams);
+            if (kind == "postgres") execText = pgText;
+        }
+        var compiled = new CompiledQuery(source, native, duckSql, duckParams, execText, postgres);
         // An executor that reads Arrow hands the rows over as columns; a column it cannot (a datetime among them) makes it answer in rows.
         var outcome = executor is IColumnarSourceExecutor columnarExecutor ? columnarExecutor.ExecuteColumnar(compiled, execLimit) : new ColumnarOutcome(null, executor.Execute(compiled, execLimit));
         var columnar = outcome.Columnar;

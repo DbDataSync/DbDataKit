@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Serving.Conformance</RootNamespace>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <Description>Abstract xunit conformance suite for the core services of the serving layer (identity, sessions, catalog, queries, updates): what any host promises a protocol module.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3.extensibility.core" />
+    <PackageReference Include="xunit.v3.assert" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Serving.Abstractions\DbDataKit.Serving.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

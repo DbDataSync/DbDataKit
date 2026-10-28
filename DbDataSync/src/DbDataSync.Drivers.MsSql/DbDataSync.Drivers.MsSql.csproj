@@ -7,6 +7,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <DbDataKitReference Include="Transfer.SqlServer" />   <!-- SqlBulkCopy staging; plan 13, A14 -->
     <DbDataKitReference Include="Connections.SqlServer" />   <!-- the SqlClient composer; plan 13, A08 -->
   </ItemGroup>
 
