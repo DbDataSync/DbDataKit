@@ -18,8 +18,8 @@ public sealed class WebServerTests : IDisposable
     {
         Assert.Equal(0, CliApp.Run(["project", "create", "starter", dir, "--format", "json"], new StringWriter(), new StringWriter()));
         Directory.CreateDirectory(Path.Combine(dir, "plans"));
-        File.WriteAllText(Path.Combine(dir, "plans", "p.plan.yml"), "secret: statements\n");
-        File.WriteAllText(Path.Combine(dir, ".env"), "DBDATA_BUILD_SQLSERVER_WRITE=secret\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "plans", "p.plan.yml"), "secret: statements\n");
+        TestFiles.WriteAllText(Path.Combine(dir, ".env"), "DBDATA_BUILD_SQLSERVER_WRITE=secret\n");
         server = new WebServer(dir, new TuiCommand.CliHost(_ => null));
         server.StartAsync();
     }
@@ -128,7 +128,7 @@ public sealed class WebServerTests : IDisposable
     {
         var outside = Path.Combine(Path.GetTempPath(), "ddb-web-out-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(outside);
-        File.WriteAllText(Path.Combine(outside, "secret.sql"), "select 'secret'");
+        TestFiles.WriteAllText(Path.Combine(outside, "secret.sql"), "select 'secret'");
         try
         {
             try { Directory.CreateSymbolicLink(Path.Combine(dir, "models", "leak"), outside); }

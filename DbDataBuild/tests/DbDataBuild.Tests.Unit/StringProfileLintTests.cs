@@ -25,7 +25,7 @@ public class StringProfileLintTests
     {
         var full = Path.Combine(dir, path);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-        File.WriteAllText(full, text);
+        TestFiles.WriteAllText(full, text);
     }
 
     private static string Project(string sql, string config = Config, bool trimmed = false, string extra = "")

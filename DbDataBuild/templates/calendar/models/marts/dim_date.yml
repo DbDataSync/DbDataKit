@@ -1,0 +1,12 @@
+name: marts.dim_date
+kind: full
+grain: [calendar_date]
+columns:
+  - {name: calendar_date, type: DATE, nullable: false}
+  - {name: fiscal_year, type: "VARCHAR(8)", nullable: false}
+  - {name: fiscal_quarter, type: "VARCHAR(12)", nullable: false}
+  - {name: fiscal_month, type: "VARCHAR(12)", nullable: false}
+  - {name: prior_year_calendar_date, type: DATE, nullable: false}
+  - {name: prior_year_fiscal_year, type: "VARCHAR(8)", nullable: false}
+  - {name: prior_year_fiscal_quarter, type: "VARCHAR(12)", nullable: false}
+  - {name: prior_year_fiscal_month, type: "VARCHAR(12)", nullable: false}

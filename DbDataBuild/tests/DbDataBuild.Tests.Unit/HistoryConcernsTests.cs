@@ -11,15 +11,15 @@ public class HistoryConcernsTests
     private static string Project(string config = "")
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n" + config);
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\n" + config);
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
         Directory.CreateDirectory(Path.Combine(dir, "models/stg"));
         Directory.CreateDirectory(Path.Combine(dir, "models/marts"));
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n  - {name: amount, type: \"DECIMAL(14, 2)\"}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n  - {name: amount, type: \"DECIMAL(14, 2)\"}\n");
         void Model(string path, string name, string kind, string sql, string columns)
         {
-            File.WriteAllText(Path.Combine(dir, "models", path + ".yml"), $"name: {name}\nkind: {kind}\ncolumns:\n{columns}");
-            File.WriteAllText(Path.Combine(dir, "models", path + ".sql"), sql + "\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "models", path + ".yml"), $"name: {name}\nkind: {kind}\ncolumns:\n{columns}");
+            TestFiles.WriteAllText(Path.Combine(dir, "models", path + ".sql"), sql + "\n");
         }
         Model("stg/orders", "stg.orders", "view", "SELECT order_id, amount FROM staging.orders", "  - {name: order_id, type: BIGINT}\n  - {name: amount, type: \"DECIMAL(14, 2)\"}\n");
         Model("marts/fct", "marts.fct", "view", "SELECT order_id, amount * 2 AS double_amount FROM stg.orders", "  - {name: order_id, type: BIGINT}\n  - {name: double_amount, type: \"DECIMAL(18, 3)\"}\n");

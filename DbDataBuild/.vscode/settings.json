@@ -3,7 +3,9 @@
     "schemas/model.schema.json": ["models/**/*.yml", "!models/**/_dbdatabuild.yml"],
     "schemas/folder.schema.json": "models/**/_dbdatabuild.yml",
     "schemas/model-test.schema.json": "tests/models/**/*.yml",
+    "schemas/semantic.schema.json": "semantic/**/*.yml",
     "schemas/config.schema.json": "dbdatabuild.yml",
+    "schemas/connection.schema.json": "connections/*.yaml",
     "schemas/answers.schema.json": ["answers.yml", "*-answers.yml", "plans/**/answers*.yml"]
   }
 }

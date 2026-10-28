@@ -30,7 +30,7 @@ public class OriginCatalogConformanceTests
         {
             var dir = Path.Combine(Path.GetTempPath(), "ddb-catalog-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(dir);
-            File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
+            TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
             return new Project(dir, env);
         }
 

@@ -36,7 +36,8 @@ public static class ConnectionDefinitionLoader
 
     public static ConnectionLoadResult LoadFile(string path) => Load(File.ReadAllText(path), path);
 
-    public static ConnectionLoadResult Load(string yaml, string file = "connection.yml")
+    /// <param name="addressRequired">False for a product whose connection files carry no address because the login comes from its environment (DbDataBuild: plan 13, E03); every other rule still applies.</param>
+    public static ConnectionLoadResult Load(string yaml, string file = "connection.yml", bool addressRequired = true)
     {
         var diags = new List<ConfigDiagnostic>();
         var root = StrictYamlReader.Read(yaml, file, diags);
@@ -57,7 +58,7 @@ public static class ConnectionDefinitionLoader
         var bound = new ConfigBinder().Bind<ConnectionDefinition>(root, file);
         diags.AddRange(bound.Diagnostics);
         if (bound.Value is null || diags.HasErrors()) return new(null, diags);
-        Validate(bound.Value, file, bound.Sources, diags);
+        Validate(bound.Value, file, bound.Sources, diags, addressRequired);
         return new(bound.Value, diags);
     }
 
@@ -69,7 +70,7 @@ public static class ConnectionDefinitionLoader
         return diags;
     }
 
-    private static void Validate(ConnectionDefinition d, string file, IReadOnlyDictionary<string, SourceInfo> src, List<ConfigDiagnostic> diags)
+    private static void Validate(ConnectionDefinition d, string file, IReadOnlyDictionary<string, SourceInfo> src, List<ConfigDiagnostic> diags, bool addressRequired = true)
     {
         void Err(string code, string path, string message, string? fix = null) => diags.Add(Diag(code, file, src, path, message, fix, ConfigSeverity.Error));
         void Warn(string code, string path, string message, string? fix = null) => diags.Add(Diag(code, file, src, path, message, fix, ConfigSeverity.Warning));
@@ -80,7 +81,7 @@ public static class ConnectionDefinitionLoader
         bool loginHoldsString = logins.Any(l => l.Spec?.ConnectionStringSecret is not null);
         if (forms > 1)
             Err(BadAddress, d.Address is not null ? "address" : "connection_string", "Give either `address` or a connection string, not both.", "Remove one of `address`, `connection_string`, `connection_string_secret`.");
-        else if (forms == 0 && !loginHoldsString)
+        else if (forms == 0 && !loginHoldsString && addressRequired)
             Err(BadAddress, "", "The connection has no address.", "Add `address:` (host, port, database), `connection_string:` or `connection_string_secret:`.");
         if (d.Address is { Host: null, Database: null })
             Err(BadAddress, "address", "`address` needs at least a `host` or a `database`.");

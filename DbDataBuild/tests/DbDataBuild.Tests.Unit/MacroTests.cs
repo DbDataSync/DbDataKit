@@ -22,7 +22,7 @@ public class MacroTests
     {
         var full = Path.Combine(dir, path);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-        File.WriteAllText(full, text);
+        TestFiles.WriteAllText(full, text);
     }
 
     private static string Project(string macros = Snapshots, string? config = null)
@@ -146,7 +146,7 @@ public class MacroTests
         var before = ProjectContext.Load(dir);
         var snap = before.DefinitionHashOf("SELECT * FROM status_totals('src.orders_snap', 'snap_date')");
         var plain = before.DefinitionHashOf("SELECT 1 AS n");
-        File.WriteAllText(Path.Combine(dir, "macros", "snapshots.sql"), Snapshots.Replace("sum(amount)", "max(amount)"));
+        TestFiles.WriteAllText(Path.Combine(dir, "macros", "snapshots.sql"), Snapshots.Replace("sum(amount)", "max(amount)"));
         var after = ProjectContext.Load(dir);
         Assert.NotEqual(snap, after.DefinitionHashOf("SELECT * FROM status_totals('src.orders_snap', 'snap_date')"));
         Assert.Equal(plain, after.DefinitionHashOf("SELECT 1 AS n"));
@@ -381,7 +381,7 @@ public class MacroTests
 
         const string call = "SELECT * FROM totals('src.orders')";
         var before = ctx.DefinitionHashOf(call);
-        File.WriteAllText(Path.Combine(dir, "macros", "snapshots.sql"), WithDefaults.Replace("lag_days := 0", "lag_days := 1"));
+        TestFiles.WriteAllText(Path.Combine(dir, "macros", "snapshots.sql"), WithDefaults.Replace("lag_days := 0", "lag_days := 1"));
         Assert.NotEqual(before, ProjectContext.Load(dir).DefinitionHashOf(call));                                      // the default is part of the macro's text
     }
 

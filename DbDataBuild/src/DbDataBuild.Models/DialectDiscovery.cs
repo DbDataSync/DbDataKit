@@ -1,19 +1,26 @@
 using System.Security.Cryptography;
 using System.Text;
+using ServerFacts = DbDataKit.Metadata.ServerFacts;
 
 namespace DbDataBuild.Models;
 
 /// <summary>
 /// What a Flight SQL server said about itself in its answer to `GetSqlInfo` (docs/research/read-origins.md section 10), by the standard ids: `FLIGHT_SQL_SERVER_NAME` (0), `FLIGHT_SQL_SERVER_VERSION` (1),
-/// `FLIGHT_SQL_SERVER_READ_ONLY` (3), `SQL_IDENTIFIER_CASE` (503), `SQL_IDENTIFIER_QUOTE_CHAR` (504) and `SQL_QUOTED_IDENTIFIER_CASE` (505). Every member is null when the server did not say it. The two case members are the
-/// words of the protocol's enum: `case_insensitive`, `uppercase`, `unknown`, or `value_N` for one this tool does not know.
+/// `FLIGHT_SQL_SERVER_READ_ONLY` (3), `SQL_IDENTIFIER_CASE` (503), `SQL_IDENTIFIER_QUOTE_CHAR` (504) and `SQL_QUOTED_IDENTIFIER_CASE` (505), as the shared <see cref="ServerFacts"/> record (plan 13, B05): the name and
+/// version are `ProductName` and `ProductVersion`, the quote character `QuoteOpen`, and the two case members are the words of the protocol's enum in `StoredCaseWord` and `QuotedCaseWord` (`case_insensitive`, `uppercase`,
+/// `unknown`, or `value_N` for one this tool does not know). Every member is null when the server did not say it.
 /// </summary>
-public sealed record ServerFacts(string? ServerName = null, string? ServerVersion = null, string? IdentifierQuote = null, string? IdentifierCase = null, string? QuotedIdentifierCase = null, bool? ReadOnly = null)
+public static class FlightServerFacts
 {
     public static readonly ServerFacts Nothing = new();
 
+    /// <summary>The facts of a Flight SQL answer, in the order the lock file lists them.</summary>
+    public static ServerFacts Of(string? name = null, string? version = null, string? quote = null, string? identifierCase = null, string? quotedIdentifierCase = null, bool? readOnly = null) =>
+        new(ProductName: name, ProductVersion: version, QuoteOpen: quote, ReadOnly: readOnly, StoredCaseWord: identifierCase, QuotedCaseWord: quotedIdentifierCase,
+            StoredCase: identifierCase == "uppercase" ? DbDataKit.Dialect.IdentifierCase.Upper : null);
+
     /// <summary>True when the server said none of what the tool reads.</summary>
-    public bool IsEmpty => this == Nothing;
+    public static bool IsEmpty(this ServerFacts facts) => facts == Nothing;
 
     /// <summary>The words of the protocol's `SqlSupportedCaseSensitivity` enum.</summary>
     public static string CaseName(long value) => value switch { 0 => "unknown", 1 => "case_insensitive", 2 => "uppercase", _ => "value_" + value.ToString(System.Globalization.CultureInfo.InvariantCulture) };
@@ -44,7 +51,7 @@ public static class DialectDiscovery
     {
         var reasons = new List<string>();
         DialectProfile? baseProfile = null;
-        if (facts.ServerName is { Length: > 0 } product)
+        if (facts.ProductName is { Length: > 0 } product)
         {
             var slug = Slug(product);
             if (userDialects.TryGetValue(slug, out var own)) { baseProfile = DialectProfiles.ForDriver("flightsql", own); reasons.Add($"the server is `{product}`, which is the project's dialect `{slug}`"); }
@@ -62,13 +69,13 @@ public static class DialectDiscovery
         if (baseProfile == null) reasons.Add("the dialect is `ansi`; add a profile under `dialects:` named after the product, or put the dialect in `engine`, to choose another");
 
         var name = profile.Name;
-        if (facts.IdentifierQuote is { Length: > 0 } quote)
+        if (facts.QuoteOpen is { Length: > 0 } quote)
         {
             var (open, close) = quote switch { "\"" => ("\"", "\""), "`" => ("`", "`"), "[" => ("[", "]"), _ => (null, null) };
             if (open == null) reasons.Add($"the identifier quote the server reported (`{quote}`) is not one the tool writes; `{profile.QuoteOpen}` is kept");
             else if (open != profile.QuoteOpen) { profile = profile with { QuoteOpen = open, QuoteClose = close! }; reasons.Add($"the server reported the identifier quote `{quote}`, so names are quoted with it"); }
         }
-        if (facts.IdentifierCase == "uppercase" && profile.Case != IdentifierCase.Upper) { profile = profile with { Case = IdentifierCase.Upper }; reasons.Add("the server reported that it folds identifiers to upper case"); }
+        if (facts.StoredCaseWord == "uppercase" && profile.Case != IdentifierCase.Upper) { profile = profile with { Case = IdentifierCase.Upper }; reasons.Add("the server reported that it folds identifiers to upper case"); }
         if (baseProfile != null && profile != baseProfile) profile = profile with { Extends = baseProfile.Name };
         return new DiscoveredDialect(name, profile, reasons);
     }

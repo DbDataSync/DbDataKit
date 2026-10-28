@@ -70,7 +70,7 @@ public class QueryHeadTests
     {
         var full = Path.Combine(dir, path);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-        File.WriteAllText(full, text);
+        TestFiles.WriteAllText(full, text);
     }
 
     private const string Orders = "name: staging.orders\nkind: mapped\ngrain: [order_id]\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n  - {name: amount, type: \"DECIMAL(18,2)\", nullable: false}\n";

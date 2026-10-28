@@ -1,18 +1,13 @@
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Descriptor;
-using DbDataSync.Libraries;
 using Xunit;
 
 namespace DbDataSync.Drivers.Loader.Tests;
 
 /// <summary>
-/// Loads a real compiled <see cref="IDriver"/> plugin — <c>tests/fixtures/DbDataSync.Drivers.LoaderTestFixture</c>,
-/// published and installed exactly the way <c>dbdatasync driver install --kind compiled</c> would leave
-/// it on disk — through <see cref="DriverLoader.LoadCompiledDrivers"/>, and proves the isolation
-/// property that makes the whole mechanism safe: the plugin's <c>IDriver</c> is the *same* <c>Type</c>
-/// as the host's, not a second incompatible one from a redundant copy of
-/// <c>DbDataSync.Drivers.Abstractions</c> the plugin's own publish output happens to carry.
+/// Loads a real compiled <see cref="IDriver"/> — a <c>drivers/&lt;id&gt;/driver.csx</c>, installed exactly the way <c>dbdatasync driver install</c> leaves it on disk — through <see cref="DriverLoader.LoadCompiledDrivers"/>, and proves
+/// the isolation property that makes the mechanism safe: the script's <c>IDriver</c> is the *same* <c>Type</c> as the host's, not a second incompatible one.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class CompiledDriverLoaderTests : IDisposable
@@ -26,37 +21,23 @@ public sealed class CompiledDriverLoaderTests : IDisposable
         try { Directory.Delete(_repoRoot, recursive: true); } catch (IOException) { /* best effort */ }
     }
 
-    private void InstallFixture(string id, string driverType)
+    private static string Version()
     {
-        var driverDir = Path.Combine(_repoRoot, "drivers", id);
-        var libDir = Path.Combine(driverDir, "lib");
-        Directory.CreateDirectory(libDir);
-        // Recursive, preserving subdirectories: AssemblyDependencyResolver expects a native asset
-        // (Sqlite's e_sqlite3) at the same runtimes/<rid>/native/ path relative to the main assembly
-        // that dotnet publish put it at, not flattened into lib/ itself.
-        var sourceRoot = FixturePublisher.OutputDirectory;
-        foreach (var file in Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories))
-        {
-            var relative = Path.GetRelativePath(sourceRoot, file);
-            var destPath = Path.Combine(libDir, relative);
-            Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
-            File.Copy(file, destPath, overwrite: true);
-        }
-
-        new CompiledDriverManifest(
-            id, CompiledDriverManifest.CompiledKind, "DbDataSync.Drivers.LoaderTestFixture.dll", driverType,
-            [new PackageRef("DbDataSync.Drivers.LoaderTestFixture", "1.0.0")])
-            .Write(Path.Combine(driverDir, CompiledDriverManifest.FileName));
+        var version = DriverFixtures.SqliteVersion();
+        Assert.True(version is not null, "Microsoft.Data.Sqlite is not in the machine's NuGet package folder: restore a project that uses it first");
+        return version!;
     }
 
     [Fact]
-    public async Task LoadCompiledDrivers_RegistersThePlugin_AndARoundTripSucceeds()
+    public async Task LoadCompiledDrivers_RegistersTheDriver_AndARoundTripSucceeds()
     {
-        InstallFixture("fixture-driver", "DbDataSync.Drivers.LoaderTestFixture.FixtureDriver");
+        await DriverFixtures.InstallAsync(_repoRoot, "fixture-driver", DriverFixtures.WorkingDriver(Version()));
         var registry = new DriverRegistry();
+        var errors = new List<(string Message, Exception Exception)>();
 
-        DriverLoader.LoadCompiledDrivers(_repoRoot, registry);
+        DriverLoader.LoadCompiledDrivers(_repoRoot, registry, (message, ex) => errors.Add((message, ex)));
 
+        Assert.Empty(errors);
         Assert.True(registry.TryGet("fixture.loadertest", out var driver));
         Assert.NotNull(driver);
 
@@ -74,27 +55,22 @@ public sealed class CompiledDriverLoaderTests : IDisposable
     }
 
     [Fact]
-    public void LoadCompiledDrivers_IsolationHolds_ThePluginsIDriverIsTheHostsType()
+    public async Task LoadCompiledDrivers_IsolationHolds_TheDriversIDriverIsTheHostsType()
     {
-        InstallFixture("fixture-driver-identity", "DbDataSync.Drivers.LoaderTestFixture.FixtureDriver");
+        await DriverFixtures.InstallAsync(_repoRoot, "fixture-driver-identity", DriverFixtures.WorkingDriver(Version()));
         var registry = new DriverRegistry();
 
         DriverLoader.LoadCompiledDrivers(_repoRoot, registry);
 
         Assert.True(registry.TryGet("fixture.loadertest", out var driver));
-        // The assertion that matters: this project has its own DbDataSync.Drivers.Abstractions
-        // reference (transitively, through DbDataSync.Drivers.Descriptor), and the fixture's own
-        // publish output carries a *second* copy of that same assembly. If the loader's isolated
-        // AssemblyLoadContext preferred its own private copy over the host's already-loaded one, this
-        // `is` check would fail — two different Type objects named IDriver, neither assignable to the
-        // other, which is the standard failure mode a naive plugin loader falls into.
+        // The script is compiled against the host's DbDataSync.Drivers.Abstractions and its load context hands that name back to the default context; a private copy would make this a second IDriver.
         Assert.IsAssignableFrom<IDriver>(driver);
     }
 
     [Fact]
-    public void LoadCompiledDrivers_AContractVersionTheHostCannotSupport_IsRefused_AndSkipped()
+    public async Task LoadCompiledDrivers_AContractVersionTheHostCannotSupport_IsRefused_AndSkipped()
     {
-        InstallFixture("fixture-bad-contract", "DbDataSync.Drivers.LoaderTestFixture.FixtureDriverBadContract");
+        await DriverFixtures.InstallAsync(_repoRoot, "fixture-bad-contract", DriverFixtures.BadContractDriver());
         var registry = new DriverRegistry();
         var errors = new List<(string Message, Exception Exception)>();
 
@@ -107,37 +83,60 @@ public sealed class CompiledDriverLoaderTests : IDisposable
     }
 
     [Fact]
-    public void LoadCompiledDrivers_AMissingAssembly_IsSkippedRatherThanThrowing()
+    public void LoadCompiledDrivers_ANotRestoredDriver_IsSkippedRatherThanThrowing_AndSaysHowToRestoreIt()
     {
         var driverDir = Path.Combine(_repoRoot, "drivers", "fixture-missing-lib");
         Directory.CreateDirectory(driverDir);
-        new CompiledDriverManifest(
-            "fixture-missing-lib", CompiledDriverManifest.CompiledKind, "DoesNotExist.dll", "Some.Type",
-            [new PackageRef("DoesNotExist", "1.0.0")])
-            .Write(Path.Combine(driverDir, CompiledDriverManifest.FileName));
+        File.WriteAllText(Path.Combine(driverDir, CompiledDriverManifest.FileName), "#r \"nuget: DoesNotExist, 1.0.0\"\nnew object()\n");
         var registry = new DriverRegistry();
         var errors = new List<(string Message, Exception Exception)>();
 
         DriverLoader.LoadCompiledDrivers(_repoRoot, registry, (message, ex) => errors.Add((message, ex)));
 
-        Assert.Single(errors);
+        var error = Assert.Single(errors);
+        Assert.Contains("driver sync fixture-missing-lib", error.Exception.Message);
         Assert.Empty(registry.All);
     }
 
     [Fact]
-    public void LoadCompiledDrivers_ADriverTypeThatIsNotAnIDriver_IsSkippedRatherThanThrowing()
+    public async Task LoadCompiledDrivers_AScriptThatDoesNotEndWithADriver_IsSkippedRatherThanThrowing()
     {
-        // A real type in the fixture assembly (so it loads fine) that just isn't an IDriver.
-        InstallFixture("fixture-wrong-type", "DbDataSync.Drivers.LoaderTestFixture.FixtureDriver");
-        var manifestPath = Path.Combine(_repoRoot, "drivers", "fixture-wrong-type", CompiledDriverManifest.FileName);
-        var manifest = CompiledDriverManifest.Read(manifestPath);
-        (manifest with { DriverType = "DbDataSync.Drivers.LoaderTestFixture.NotADriver" }).Write(manifestPath);
+        await DriverFixtures.InstallAsync(_repoRoot, "fixture-wrong-type", "var notADriver = 42;\nnotADriver\n");
         var registry = new DriverRegistry();
         var errors = new List<(string Message, Exception Exception)>();
 
         DriverLoader.LoadCompiledDrivers(_repoRoot, registry, (message, ex) => errors.Add((message, ex)));
 
-        Assert.Single(errors);
-        Assert.Contains("does not implement IDriver", errors[0].Exception.Message);
+        var error = Assert.Single(errors);
+        Assert.Contains("not an IDriver", error.Exception.Message);
+    }
+
+    [Fact]
+    public async Task LoadCompiledDrivers_AScriptThatDoesNotCompile_IsSkipped_WithTheLineOfTheError()
+    {
+        await DriverFixtures.InstallAsync(_repoRoot, "fixture-broken", "// a comment\n\nvar x = missing + 1;\nnew object()\n");
+        var registry = new DriverRegistry();
+        var errors = new List<(string Message, Exception Exception)>();
+
+        DriverLoader.LoadCompiledDrivers(_repoRoot, registry, (message, ex) => errors.Add((message, ex)));
+
+        var error = Assert.Single(errors);
+        Assert.Contains("(3,", error.Exception.Message);
+    }
+
+    [Fact]
+    public void LoadCompiledDrivers_AnOldDriverJson_IsSkipped_WithAMessageNamingTheFile()
+    {
+        var driverDir = Path.Combine(_repoRoot, "drivers", "old-style");
+        Directory.CreateDirectory(driverDir);
+        File.WriteAllText(Path.Combine(driverDir, "driver.json"), "{}");
+        var registry = new DriverRegistry();
+        var errors = new List<(string Message, Exception Exception)>();
+
+        DriverLoader.LoadCompiledDrivers(_repoRoot, registry, (message, ex) => errors.Add((message, ex)));
+
+        var error = Assert.Single(errors);
+        Assert.Contains("driver.json", error.Message);
+        Assert.Contains("driver.csx", error.Exception.Message);
     }
 }

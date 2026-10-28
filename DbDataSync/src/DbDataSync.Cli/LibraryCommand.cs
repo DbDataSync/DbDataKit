@@ -105,13 +105,8 @@ public static class LibraryCommand
             switch (result.Outcome)
             {
                 case LibraryInstaller.LibraryInstallOutcome.InstalledFromCache:
-                    Console.WriteLine($"Installed library '{manifest.Id}' ({packageList}) from the in-image catalog cache — no SDK, no network.");
+                    Console.WriteLine($"Installed library '{manifest.Id}' ({packageList}) from the in-image catalog cache — no network.");
                     Console.WriteLine($"Factory: {manifest.FactoryType}");
-                    break;
-                case LibraryInstaller.LibraryInstallOutcome.PendingRestore:
-                    Console.WriteLine($"Wrote library '{manifest.Id}' ({packageList}), but there is no SDK here to restore it.");
-                    Console.WriteLine($"Factory: {manifest.FactoryType}");
-                    Console.WriteLine($"Run `dbdatasync library sync {manifest.Id}` on a host with the SDK to finish it.");
                     break;
                 default:
                     Console.WriteLine($"Installed library '{manifest.Id}' ({packageList}).");

@@ -21,8 +21,8 @@ public class ReviewCommandTests : IDisposable
     private string Write(string id, RiskClass risk, bool report = true)
     {
         var path = Path.Combine(dir, "plans", "postgres", id + ".plan.yml");
-        File.WriteAllText(path, PlanDocument.Serialize(Sample(id, risk)));
-        if (report) File.WriteAllText(Path.Combine(dir, "plans", "postgres", id + ".plan.md"), "# Plan report\n");
+        TestFiles.WriteAllText(path, PlanDocument.Serialize(Sample(id, risk)));
+        if (report) TestFiles.WriteAllText(Path.Combine(dir, "plans", "postgres", id + ".plan.md"), "# Plan report\n");
         return path;
     }
 
@@ -38,7 +38,7 @@ public class ReviewCommandTests : IDisposable
     {
         Write("2026-10-01-aaaa0001", RiskClass.Safe);
         var bad = Write("2026-10-02-bbbb0002", RiskClass.Destructive);
-        File.WriteAllText(bad, File.ReadAllText(bad).Replace("DROP COLUMN x", "DROP COLUMN y"));
+        TestFiles.WriteAllText(bad, File.ReadAllText(bad).Replace("DROP COLUMN x", "DROP COLUMN y"));
         var (exit, doc) = Review("--project", dir);
         Assert.Equal(0, exit);
         var plans = doc["data"]!["plans"]!.AsArray();
@@ -68,7 +68,7 @@ public class ReviewCommandTests : IDisposable
     public void An_edited_plan_is_refused_and_a_path_that_is_not_a_plan_is_a_usage_error()
     {
         var path = Write("2026-10-04-dddd0004", RiskClass.Safe);
-        File.WriteAllText(path, File.ReadAllText(path).Replace("DROP COLUMN x", "DROP COLUMN z"));
+        TestFiles.WriteAllText(path, File.ReadAllText(path).Replace("DROP COLUMN x", "DROP COLUMN z"));
         var (exit, doc) = Review("plans/postgres/2026-10-04-dddd0004.plan.yml", "--project", dir);
         Assert.Equal(CliApp.ExitFindings, exit);
         Assert.False((bool)doc["data"]!["intact"]!);

@@ -45,7 +45,7 @@ public sealed class InternalCommandTests : IAsyncLifetime
             var package = Assert.Single(manifest.Packages);
             Assert.Equal(entry.PackageId, package.Id);
             Assert.Equal(entry.PinnedVersion, package.Version);
-            Assert.True(Directory.EnumerateFiles(LibraryPaths.LibDir(libraryDir), "*.dll").Any(), $"'{entry.Id}' restored no DLLs.");
+            Assert.True(Directory.EnumerateFiles(LibraryPaths.LibDir(libraryDir), "*.dll", SearchOption.AllDirectories).Any(), $"'{entry.Id}' restored no DLLs.");
         }
     }
 

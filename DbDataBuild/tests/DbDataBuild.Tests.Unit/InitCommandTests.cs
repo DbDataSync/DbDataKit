@@ -8,7 +8,7 @@ public class InitCommandTests
     private static string Project(string config)
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
         return dir;
     }
 

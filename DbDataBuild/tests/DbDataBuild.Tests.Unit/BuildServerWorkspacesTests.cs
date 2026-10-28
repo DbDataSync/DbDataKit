@@ -226,9 +226,9 @@ public sealed class BuildServerWorkspacesTests : IAsyncLifetime
         var id = await Draft();
         var folder = Path.Combine(ServerDir, "workspaces", "sales", id);
         var relative = Path.GetRelativePath(folder, ModelIn(folder));
-        File.WriteAllText(ModelIn(folder), "select 1 as draft\n");
+        TestFiles.WriteAllText(ModelIn(folder), "select 1 as draft\n");
         await AsAda(HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/commit", """{"message":"Draft"}""");
-        File.WriteAllText(Path.Combine(project, relative), "select 2 as main\n");
+        TestFiles.WriteAllText(Path.Combine(project, relative), "select 2 as main\n");
         using (var repo = new Repository(project))
         {
             Commands.Stage(repo, "*");

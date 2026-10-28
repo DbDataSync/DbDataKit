@@ -127,7 +127,7 @@ public class DuckDbOriginTests : IDisposable
         Assert.Equal([3L, 4L, 5L], rows.Select(r => r[0]));
         // and CSV, which is the same kind of query
         var csv = Path.Combine(dir, "orders.csv").Replace('\\', '/');
-        File.WriteAllText(csv, "id,label\n1,a\n2,b\n");
+        TestFiles.WriteAllText(csv, "id,label\n1,a\n2,b\n");
         Assert.Equal(2, (await read.QueryAsync($"SELECT * FROM read_csv('{csv}')")).Count);
     }
 

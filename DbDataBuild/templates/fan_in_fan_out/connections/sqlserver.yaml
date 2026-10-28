@@ -1,0 +1,10 @@
+schema: connection/1
+name: sqlserver
+engine: sqlserver
+extensions:
+  build:
+    version: 16
+    title: Warehouse
+    description: "Holds the models and, centrally, the tool's records."
+    tags: [warehouse]
+    properties: {role: build}

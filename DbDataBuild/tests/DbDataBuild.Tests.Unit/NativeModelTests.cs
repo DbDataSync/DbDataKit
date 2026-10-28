@@ -14,7 +14,7 @@ public class NativeModelTests
     {
         var full = Path.Combine(dir, path);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-        File.WriteAllText(full, text);
+        TestFiles.WriteAllText(full, text);
     }
 
     private static string Project(string config = "defaults: {connections: [sqlserver]}\nparameters:\n  top: { type: INTEGER, value: 5 }\n")

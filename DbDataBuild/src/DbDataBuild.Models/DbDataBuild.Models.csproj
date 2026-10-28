@@ -7,6 +7,7 @@
   <ItemGroup>
     <PackageReference Include="YamlDotNet" />
     <DbDataKitReference Include="Scheduling" />   <!-- the cron and time zone check for a plan's schedule; plan 13, M07 -->
+    <DbDataKitReference Include="Connections.Abstractions" />   <!-- the connection/1 loader for the project's connection files; plan 13, E03 -->
     <DbDataKitReference Include="Dialect" />   <!-- identifier quoting for the targets and built-in profiles; plan 13, B01 -->
   </ItemGroup>
 

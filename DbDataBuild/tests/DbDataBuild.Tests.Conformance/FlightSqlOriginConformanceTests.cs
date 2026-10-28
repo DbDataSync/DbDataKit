@@ -28,7 +28,7 @@ internal sealed class FlightRun(Engine destination, string name, string dir, str
     {
         var path = Path.Combine(dir, rel);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, text);
+        TestFiles.WriteAllText(path, text);
     }
 
     public void Dispose() { try { Directory.Delete(dir, true); } catch (IOException) { } }
@@ -366,7 +366,9 @@ public class FlightSqlOriginConformanceTests
             Ok(run.Cli("connection", "refresh", "sqlserver", "fan", "--parallel", "3"), "uncapped");
             Assert.Equal(3, seen!.MostInUse("proxy"));
             Assert.True(server.MostConcurrent >= 2, $"the server saw {server.MostConcurrent} statements at once");
-            run.Write("dbdatabuild.yml", File.ReadAllText(Path.Combine(run.Dir, "dbdatabuild.yml")).Replace("proxy: { engine: readonly flightsql duck }", "proxy: { engine: readonly flightsql duck, max_parallel: 1 }"));
+            var proxyFile = Path.Combine(run.Dir, "connections", "proxy.yaml");
+            Assert.DoesNotContain("extensions:", File.ReadAllText(proxyFile));       // the connection has no settings of its own yet: the cap is the first
+            File.AppendAllText(proxyFile, "extensions:\n  build:\n    max_parallel: 1\n");
             var clock = System.Diagnostics.Stopwatch.StartNew();
             Ok(run.Cli("connection", "refresh", "sqlserver", "fan", "--parallel", "3"), "capped");
             Assert.Equal(1, seen!.MostInUse("proxy"));

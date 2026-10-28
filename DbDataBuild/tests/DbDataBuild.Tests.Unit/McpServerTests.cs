@@ -222,7 +222,7 @@ public class McpServerTests : IDisposable
         var plan = Path.Combine(dir, "plans", "postgres");
         Directory.CreateDirectory(plan);
         var id = "2026-10-05-eeee0005";
-        File.WriteAllText(Path.Combine(plan, id + ".plan.yml"), DbDataBuild.Planning.PlanDocument.Serialize(new DbDataBuild.Planning.Plan(id, "postgres", null, false, "0.1.0",
+        TestFiles.WriteAllText(Path.Combine(plan, id + ".plan.yml"), DbDataBuild.Planning.PlanDocument.Serialize(new DbDataBuild.Planning.Plan(id, "postgres", null, false, "0.1.0",
             [new DbDataKit.Schema.Planning.ObjectBase("marts.fct", DbDataKit.Schema.ObjectState.InSync, new string('a', 64), new string('a', 64))], [],
             [new DbDataBuild.Planning.PlanStep("1", DbDataBuild.Planning.StepType.Ddl, "marts.fct", "drop column x", "ALTER TABLE marts.fct DROP COLUMN x;", DbDataKit.Schema.Planning.RiskClass.Destructive, ["col.dropped"], new string('b', 64), [])], [])));
         var host = new ApplyHost(); var feed = new Feed(); var output = new SyncWriter();
@@ -400,7 +400,7 @@ public class McpServerTests : IDisposable
         Assert.Equal("project compile", (string)JsonNode.Parse(Text(validate))!["document"]!["command"]!);
         Assert.True((bool)Call(s, "ui_run", new JsonObject { ["command"] = "connection_refresh" })["isError"]!);                       // not a command the page runs
         Assert.True((bool)Call(s, "ui_run", new JsonObject { ["command"] = "project_compile", ["arguments"] = new JsonObject { ["write"] = true } })["isError"]!);
-        File.WriteAllText(Path.Combine(dir, ".env"), "SECRET=1");
+        TestFiles.WriteAllText(Path.Combine(dir, ".env"), "SECRET=1");
         Assert.True((bool)Call(s, "ui_file", new JsonObject { ["path"] = ".env" })["isError"]!);
         Assert.True((bool)Call(s, "ui_file", new JsonObject { ["path"] = "../x.sql" })["isError"]!);
         var yml = Call(s, "ui_file", new JsonObject { ["path"] = "dbdatabuild.yml" });
@@ -425,7 +425,7 @@ public class McpServerTests : IDisposable
         var plan = Path.Combine(dir, "plans", "postgres");
         Directory.CreateDirectory(plan);
         var id = "2026-10-05-eeee0005";
-        File.WriteAllText(Path.Combine(plan, id + ".plan.yml"), DbDataBuild.Planning.PlanDocument.Serialize(new DbDataBuild.Planning.Plan(id, "postgres", null, false, "0.1.0",
+        TestFiles.WriteAllText(Path.Combine(plan, id + ".plan.yml"), DbDataBuild.Planning.PlanDocument.Serialize(new DbDataBuild.Planning.Plan(id, "postgres", null, false, "0.1.0",
             [new DbDataKit.Schema.Planning.ObjectBase("marts.fct", DbDataKit.Schema.ObjectState.InSync, new string('a', 64), new string('a', 64))], [],
             [new DbDataBuild.Planning.PlanStep("1", DbDataBuild.Planning.StepType.Ddl, "marts.fct", "add column", "ALTER TABLE marts.fct ADD x int;", DbDataKit.Schema.Planning.RiskClass.Safe, ["col.added"], new string('b', 64), [])], [])));
         var relative = $"plans/postgres/{id}.plan.yml";

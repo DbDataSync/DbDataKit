@@ -1,6 +1,12 @@
 using System.Data.Common;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Dialect;
+using BulkOptions = DbDataKit.Transfer.BulkOptions;
+using TableName = DbDataKit.Transfer.TableName;
+using WriteTarget = DbDataKit.Transfer.WriteTarget;
+using DbDataKit.Transfer.SqlServer;
+using DbDataSync.Drivers.Generic;
 using Microsoft.Data.SqlClient;
 using DbDataSync.Core.Sql;
 
@@ -69,7 +75,7 @@ public sealed class MsSqlStagingTableProvider : IStagingProvider, IStatementPrev
         }
 
         var rowCount = await BulkCopyAsync(
-            targetConnection, stagingTable, mappedTargetColumns, columnMappings, effectiveRows, hasChangeOrdering, cancellationToken);
+            targetConnection, stagingTable, mappedTargetColumns, typeByName, columnMappings, effectiveRows, hasChangeOrdering, cancellationToken);
 
         return new StagedChangeSet(stagingTable, rowCount, hasChangeOrdering);
     }
@@ -150,6 +156,7 @@ public sealed class MsSqlStagingTableProvider : IStagingProvider, IStatementPrev
         DbConnection targetConnection,
         string stagingTable,
         IReadOnlyList<string> mappedTargetColumns,
+        IReadOnlyDictionary<string, string> typeByName,
         IReadOnlyList<ColumnMapping> columnMappings,
         IAsyncEnumerable<ChangeRow> rows,
         bool includeChangeOrdering,
@@ -157,37 +164,22 @@ public sealed class MsSqlStagingTableProvider : IStagingProvider, IStatementPrev
     {
         var sourceColumnByTarget = columnMappings.ToDictionary(m => m.TargetColumn, m => m.SourceColumn);
 
-        // Phase 132: the two ordering columns are self-mapped — same name in the reader's schema as in
-        // the staging table — so ChangeRowDataReader needs no change at all; it already resolves each
-        // "target" column's ordinal by looking up sourceColumnByTarget[targetColumn] against the row's
-        // schema, and an identity entry does exactly that.
-        var readerColumns = mappedTargetColumns;
-        if (includeChangeOrdering)
-        {
-            readerColumns = [.. mappedTargetColumns, ChangeOrdering.OrderingColumn, ChangeOrdering.ChangedAtColumn];
-            sourceColumnByTarget = new Dictionary<string, string>(sourceColumnByTarget)
-            {
-                [ChangeOrdering.OrderingColumn] = ChangeOrdering.OrderingColumn,
-                [ChangeOrdering.ChangedAtColumn] = ChangeOrdering.ChangedAtColumn,
-            };
-        }
+        // The load itself is the shared SqlServerBulkWriter (SqlBulkCopy fed from batch readers, columns mapped by name). What stays here is what is
+        // Sync's: the staging table, the operation marker and the two ordering columns (phase 132), which are self-mapped (the same name in the
+        // reader's schema as in the staging table).
+        var schema = StagingBatches.Schema(EngineId.SqlServer, mappedTargetColumns, typeByName, includeChangeOrdering, OperationColumn);
+        var counter = new StagingBatches.Counter();
+        var batches = StagingBatches.Batch(rows, schema, mappedTargetColumns, sourceColumnByTarget, includeChangeOrdering, counter, cancellationToken);
 
-        using var bulkCopy = new SqlBulkCopy((SqlConnection)targetConnection)
+        var options = new BulkOptions
         {
-            DestinationTableName = stagingTable,
-            // SqlBulkCopy is not a DbCommand, so it never went through CreateTimedCommand and quietly
-            // ran on its own 30-second default regardless of the operator's configured command
-            // timeout — the same class of long-running target operation as a chunked MERGE, timed out
-            // by a completely different number. Reusing the connection's own stamp keeps one dial for
-            // "how long may work against this target run" rather than adding a second one.
-            BulkCopyTimeout = ConnectionTimeouts.CommandTimeoutOf(targetConnection),
+            BatchSize = 0,   // one batch, as before: the staging table is temporary, so there is nothing to commit piecemeal
+            // SqlBulkCopy is not a DbCommand, so it never went through CreateTimedCommand and quietly ran on its own 30-second default regardless of
+            // the operator's configured command timeout. Reusing the connection's own stamp keeps one dial for "how long may work against this
+            // target run"; zero is no limit in both.
+            Timeout = TimeSpan.FromSeconds(ConnectionTimeouts.CommandTimeoutOf(targetConnection)),
         };
-        foreach (var column in readerColumns)
-            bulkCopy.ColumnMappings.Add(column, column);
-        bulkCopy.ColumnMappings.Add(OperationColumn, OperationColumn);
-
-        await using var dataReader = new ChangeRowDataReader(rows, readerColumns, sourceColumnByTarget, cancellationToken);
-        await bulkCopy.WriteToServerAsync(dataReader, cancellationToken);
-        return dataReader.RowsProduced;
+        var writer = new SqlServerBulkWriter((SqlConnection)targetConnection);
+        return await writer.WriteAsync(new WriteTarget(new TableName(null, stagingTable), schema), batches, options, cancellationToken);
     }
 }

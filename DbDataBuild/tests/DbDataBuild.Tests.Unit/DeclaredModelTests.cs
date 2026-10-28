@@ -86,8 +86,8 @@ public class DeclaredModelTests
     {
         var dir = TestSupport.NewProjectDir();
         Directory.CreateDirectory(Path.Combine(dir, "models", "staging"));
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\n" + Cols);
-        File.WriteAllText(Path.Combine(dir, "models/staging/bad.yml"), "name: staging.nope\nkind: mapped\n" + Cols);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\n" + Cols);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/bad.yml"), "name: staging.nope\nkind: mapped\n" + Cols);
         var result = ProjectValidator.Validate(dir);
         Assert.Equal("staging.orders", Assert.Single(result.MappedModels).Name);
         Assert.Contains(result.Diagnostics, d => d.Code == "DDB-107" && d.Location.File == "models/staging/bad.yml");
@@ -98,12 +98,12 @@ public class DeclaredModelTests
     {
         var dir = TestSupport.NewProjectDir();
         Directory.CreateDirectory(Path.Combine(dir, "models", "staging"));
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\n" + Cols);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\n" + Cols);
         var result = ProjectValidator.Validate(dir);
         Assert.Equal("staging.orders", Assert.Single(result.MappedModels).Name);
         Assert.DoesNotContain(result.Diagnostics, d => d.Code == "DDB-108");              // nothing is missing: there is no query to have
 
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.sql"), "SELECT 1");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.sql"), "SELECT 1");
         Assert.Contains(ProjectValidator.Validate(dir).Diagnostics, d => d.Code == "DDB-108" && d.Found.Contains("has no query of its own"));
     }
 
@@ -111,10 +111,10 @@ public class DeclaredModelTests
     public void A_folder_can_make_everything_beneath_it_mapped_and_say_where_it_exists()
     {
         var dir = TestSupport.NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "connections:\n  crm: { engine: postgres }\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "connections:\n  crm: { engine: postgres }\n");
         Directory.CreateDirectory(Path.Combine(dir, "models", "crm"));
-        File.WriteAllText(Path.Combine(dir, "models/crm/_dbdatabuild.yml"), "defaults:\n  kind: mapped\n  connections: [crm]\n");
-        File.WriteAllText(Path.Combine(dir, "models/crm/customers.yml"), "name: crm.customers\n" + Cols);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/crm/_dbdatabuild.yml"), "defaults:\n  kind: mapped\n  connections: [crm]\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/crm/customers.yml"), "name: crm.customers\n" + Cols);
         var result = ProjectValidator.Validate(dir);
         Assert.Empty(result.Diagnostics);
         var d = Assert.Single(result.MappedModels);

@@ -13,14 +13,14 @@ public class ModelSelectionTests
     private static string Project()
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults:\n  connections: [sqlserver]\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults:\n  connections: [sqlserver]\n");
         foreach (var d in new[] { "staging", "src", "stg", "marts" }) Directory.CreateDirectory(Path.Combine(dir, "models", d));
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\ntags: [raw]\nproperties: {tier: 1}\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
-        File.WriteAllText(Path.Combine(dir, "models/src/ext.yml"), "name: src.ext\nkind:\n  native:\n    query: SELECT order_id FROM staging.orders\nreads: [staging.orders]\nconnections: [sqlserver]\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
-        File.WriteAllText(Path.Combine(dir, "models/stg/orders.yml"), "name: stg.orders\nkind: view\ntags: [clean]\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
-        File.WriteAllText(Path.Combine(dir, "models/stg/orders.sql"), "SELECT order_id FROM staging.orders\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/big.yml"), "name: marts.big\nkind: full\ntags: [clean, big]\nproperties: {tier: 2}\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/big.sql"), "SELECT o.order_id FROM stg.orders o JOIN src.ext e ON e.order_id = o.order_id\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), "name: staging.orders\nkind: mapped\ntags: [raw]\nproperties: {tier: 1}\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/src/ext.yml"), "name: src.ext\nkind:\n  native:\n    query: SELECT order_id FROM staging.orders\nreads: [staging.orders]\nconnections: [sqlserver]\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/stg/orders.yml"), "name: stg.orders\nkind: view\ntags: [clean]\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/stg/orders.sql"), "SELECT order_id FROM staging.orders\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/big.yml"), "name: marts.big\nkind: full\ntags: [clean, big]\nproperties: {tier: 2}\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/big.sql"), "SELECT o.order_id FROM stg.orders o JOIN src.ext e ON e.order_id = o.order_id\n");
         return dir;
     }
 

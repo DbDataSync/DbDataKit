@@ -25,19 +25,15 @@ public sealed class LibraryInstallTests : IDisposable
     private sealed record FromCatalogResultDto(string Id, string Library);
 
     /// <summary>Phase 121's "pending restore" surfacing on <c>GET /api/libraries</c> — a manifest
-    /// written directly to disk with no <c>lib/</c>, exactly the shape
-    /// <see cref="DbDataSync.Libraries.LibraryInstaller.InstallOrDeferAsync"/> leaves behind on a
-    /// no-SDK/no-cache-hit install. Written straight to disk (rather than driven through the no-SDK
-    /// branch of a real API call, which would need a way to fake "no SDK" through the controller) —
-    /// the branch itself is already covered thoroughly at the <c>LibraryInstaller</c> layer; this is
-    /// only proving <c>GET /api/libraries</c> reports it correctly.</summary>
+    /// written directly to disk with no <c>lib/</c>, the shape a fresh checkout of a configuration repository
+    /// has before <c>library sync</c> restores it (<c>lib/</c> is not tracked in git). This proves <c>GET /api/libraries</c> reports it correctly.</summary>
     [Fact]
     public async Task PendingRestore_IsReportedOnGetLibraries()
     {
         var libraryDir = Path.Combine(_factory.RepoRoot, "libraries", "some-vendor-driver");
         Directory.CreateDirectory(libraryDir);
-        await File.WriteAllTextAsync(Path.Combine(libraryDir, "library.json"),
-            """{"id":"some-vendor-driver","factoryType":"SomeVendor.Driver.SomeVendorFactory, SomeVendor.Driver","packages":[{"id":"SomeVendor.Driver","version":"1.0.0"}]}""");
+        await File.WriteAllTextAsync(Path.Combine(libraryDir, "library.csx"),
+            "// factory: SomeVendor.Driver.SomeVendorFactory, SomeVendor.Driver\n#r \"nuget: SomeVendor.Driver, 1.0.0\"\n");
 
         var client = await _factory.SignedInAsAsync(UserRole.Admin);
         var libraries = await client.GetFromJsonAsync<List<LibraryDto>>("/api/libraries");

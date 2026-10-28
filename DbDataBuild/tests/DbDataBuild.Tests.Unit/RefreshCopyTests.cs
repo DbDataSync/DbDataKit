@@ -15,7 +15,7 @@ public class RefreshCopyTests
     {
         var p = Path.Combine(dir, rel);
         Directory.CreateDirectory(Path.GetDirectoryName(p)!);
-        File.WriteAllText(p, text);
+        TestFiles.WriteAllText(p, text);
     }
 
     private static string Project(string copyYaml)

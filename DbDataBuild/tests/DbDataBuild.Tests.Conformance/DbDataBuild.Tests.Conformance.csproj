@@ -35,6 +35,7 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <Compile Include="..\DbDataBuild.Tests.Unit\TestFiles.cs" Link="TestFiles.cs" />   <!-- writes a project's connections as connection/1 files from the older one-text fixtures; plan 13, E03 -->
     <ProjectReference Include="..\..\src\DbDataBuild.Core\DbDataBuild.Core.csproj" />
     <ProjectReference Include="..\..\src\DbDataBuild.Models\DbDataBuild.Models.csproj" />
     <ProjectReference Include="..\..\src\DbDataBuild.Sql\DbDataBuild.Sql.csproj" />

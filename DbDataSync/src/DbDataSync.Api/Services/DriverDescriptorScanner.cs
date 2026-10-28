@@ -12,7 +12,7 @@ public static class DriverDescriptorScanner
     /// verified here) to match the <see cref="Drivers.Abstractions.IDriver.DriverType"/> the loader
     /// actually registered from the same directory.</param>
     /// <param name="Source">"descriptor" for a <c>driver.yaml</c>-backed driver, "compiled" for a
-    /// <c>driver.json</c>-backed one.</param>
+    /// <c>driver.csx</c>-backed one.</param>
     /// <param name="LibraryId">The descriptor's <c>library:</c> reference — null for a compiled
     /// driver, which restores its package privately rather than through a shared library.</param>
     /// <param name="JdbcJarNames">Phase 173V — the descriptor's <c>jdbc.driverJarPaths</c> (names inside
@@ -46,7 +46,7 @@ public static class DriverDescriptorScanner
                 }
             }
             catch (Exception ex) when (ex is IOException or InvalidOperationException
-                or YamlDotNet.Core.YamlException or System.Text.Json.JsonException)
+                or YamlDotNet.Core.YamlException or System.Text.Json.JsonException or InvalidDataException)
             {
                 // Omitted, not surfaced — see the class doc comment.
             }

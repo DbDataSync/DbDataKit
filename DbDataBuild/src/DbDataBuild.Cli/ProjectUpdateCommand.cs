@@ -1,3 +1,4 @@
+using ServerFacts = DbDataKit.Metadata.ServerFacts;
 using System.Text;
 using DbDataBuild.Core;
 using DbDataBuild.Define;
@@ -131,8 +132,8 @@ internal static class ProjectUpdateCommand
             }
             catch (GateRefusedException ex) { rows.Add(Skipped(connection, ex.Diagnostic.Found)); continue; }
             catch (Exception ex) when (ex is not OperationCanceledException) { rows.Add(Skipped(connection, $"it could not be reached ({Failures.Describe(ex)}), so its server was not asked; the committed dialect, if any, is kept")); continue; }
-            var note = facts == null ? "the server does not implement GetSqlInfo, so it says nothing about itself" : facts.IsEmpty ? "the server answered GetSqlInfo with nothing the tool reads" : null;
-            facts ??= ServerFacts.Nothing;
+            var note = facts == null ? "the server does not implement GetSqlInfo, so it says nothing about itself" : facts.IsEmpty() ? "the server answered GetSqlInfo with nothing the tool reads" : null;
+            facts ??= FlightServerFacts.Nothing;
             var chosen = DialectDiscovery.Choose(facts, config.Dialects);
             var entry = DialectLockEntry.From(connection.Name, facts, chosen);
             entries.TryGetValue(connection.Name, out var committed);
@@ -156,7 +157,7 @@ internal static class ProjectUpdateCommand
             {
                 "new" => $"found: {Describe(r)}",
                 "changed" => $"CHANGED: {Describe(r)} ({string.Join("; ", r.Changes)})",
-                "version_changed" => $"unchanged, the server's version is now {r.Reported?.ServerVersion ?? "unreported"}",
+                "version_changed" => $"unchanged, the server's version is now {r.Reported?.ProductVersion ?? "unreported"}",
                 "unchanged" => $"unchanged: {Describe(r)}",
                 _ => r.Note ?? r.Status,
             };
@@ -179,7 +180,7 @@ internal static class ProjectUpdateCommand
         output.Payload("dialects", rows.Select(r => new
         {
             connection = r.Connection, driver = r.Driver, status = r.Status, dialect = r.Dialect, profile_hash = r.ProfileHash,
-            server = r.Reported?.ServerName, server_version = r.Reported?.ServerVersion, identifier_quote = r.Reported?.IdentifierQuote, identifier_case = r.Reported?.IdentifierCase, read_only = r.Reported?.ReadOnly,
+            server = r.Reported?.ProductName, server_version = r.Reported?.ProductVersion, identifier_quote = r.Reported?.QuoteOpen, identifier_case = r.Reported?.StoredCaseWord, read_only = r.Reported?.ReadOnly,
             changes = r.Changes, note = r.Note,
         }).ToList());
         output.Payload("dialects_file", new { path = ProductInfo.DialectLockFile, status = fileStatus });
@@ -223,5 +224,5 @@ internal static class ProjectUpdateCommand
         new(connection.Name, connection.Kind.Driver, "skipped", connection.DialectLock?.Dialect, null, connection.DialectLock?.Hash, [], reason, null);
 
     private static string Describe(DialectRow r) =>
-        $"dialect `{r.Dialect}`{(r.Reported?.ServerName is { } s ? $" (server {s}{(r.Reported.ServerVersion is { } v ? " " + v : "")})" : "")}";
+        $"dialect `{r.Dialect}`{(r.Reported?.ProductName is { } s ? $" (server {s}{(r.Reported.ProductVersion is { } v ? " " + v : "")})" : "")}";
 }

@@ -32,7 +32,7 @@ public class TrackingUpgradeConformanceTests
         try
         {
             Directory.CreateDirectory(Path.Combine(dir, "models"));
-            File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), $"defaults: {{connections: [{name}]}}\ntracking: {{ connection: {name}, schema: {schema} }}\n" + (name == "postgres" ? "string_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: C }\n" : ""));
+            TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), $"defaults: {{connections: [{name}]}}\ntracking: {{ connection: {name}, schema: {schema} }}\n" + (name == "postgres" ? "string_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: C }\n" : ""));
 
             // the layout as it was: this layout, less the column, with the keys as they were, the version recorded as 3
             Ok(Cli("connection", "init", name, "--apply"), "init");
@@ -97,7 +97,7 @@ public class TrackingUpgradeConformanceTests
         try
         {
             Directory.CreateDirectory(Path.Combine(dir, "models"));
-            File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), $"defaults: {{connections: [{name}]}}\ntracking: {{ connection: {name}, schema: {schema} }}\n" + (name == "postgres" ? "string_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: C }\n" : ""));
+            TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), $"defaults: {{connections: [{name}]}}\ntracking: {{ connection: {name}, schema: {schema} }}\n" + (name == "postgres" ? "string_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: C }\n" : ""));
             Assert.Equal(0, Cli("connection", "init", name, "--apply").Exit);
 
             // the layout as it was: this layout without the two columns of layout five, recorded as four (the table of layout six is left: a store at four is not claimed whatever else it holds)
@@ -153,7 +153,7 @@ public class TrackingUpgradeConformanceTests
         try
         {
             Directory.CreateDirectory(Path.Combine(dir, "models"));
-            File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), $"defaults: {{connections: [{name}]}}\ntracking: {{ connection: {name}, schema: {schema} }}\n" + (name == "postgres" ? "string_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: C }\n" : ""));
+            TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), $"defaults: {{connections: [{name}]}}\ntracking: {{ connection: {name}, schema: {schema} }}\n" + (name == "postgres" ? "string_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: C }\n" : ""));
             Assert.Equal(0, Cli("connection", "init", name, "--apply").Exit);
             Assert.Equal(TrackingSchema.Version.ToString(), await Version());
 
@@ -204,7 +204,7 @@ public class TrackingUpgradeConformanceTests
         try
         {
             Directory.CreateDirectory(Path.Combine(dir, "models"));
-            File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), $"defaults: {{connections: [{name}]}}\ntracking: {{ connection: {name}, schema: {schema} }}\n" + (name == "postgres" ? "string_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: C }\n" : ""));
+            TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), $"defaults: {{connections: [{name}]}}\ntracking: {{ connection: {name}, schema: {schema} }}\n" + (name == "postgres" ? "string_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: C }\n" : ""));
             Assert.Equal(0, Cli("connection", "init", name, "--apply").Exit);
             Assert.Equal(TrackingSchema.Version.ToString(), await Version());
             await engine.ExecAsync($"INSERT INTO {Q(schema)}.{Q("migration_log")} ({Q("connection")}, {Q("plan_id")}, {Q("plan_hash")}, {Q("plan_text")}, {Q("applied_by")}, {Q("applied_utc")}, {Q("status")}) VALUES ('{name}', 'ref-old', '{new string('a', 64)}', 'text', 'me', {(name == "postgres" ? "now()" : "SYSUTCDATETIME()")}, 'completed')");
@@ -261,12 +261,12 @@ public class TrackingUpgradeConformanceTests
             Directory.CreateDirectory(Path.Combine(dir, "models/src"));
             Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
             Directory.CreateDirectory(Path.Combine(dir, "models/marts"));
-            File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), $"defaults: {{connections: [{name}]}}\ntracking: {{ connection: {name}, schema: {schema} }}\n" + (name == "postgres" ? "string_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: C }\n" : ""));
-            File.WriteAllText(Path.Combine(dir, "models/src/t.yml"), "name: src.t\nkind: mapped\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
-            File.WriteAllText(Path.Combine(dir, "models/staging/v1.yml"), "name: staging.v1\nkind: view\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
-            File.WriteAllText(Path.Combine(dir, "models/staging/v1.sql"), "SELECT id FROM src.t\n");
-            File.WriteAllText(Path.Combine(dir, "models/marts/v2.yml"), "name: marts.v2\nkind: view\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
-            File.WriteAllText(Path.Combine(dir, "models/marts/v2.sql"), "SELECT id FROM staging.v1\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), $"defaults: {{connections: [{name}]}}\ntracking: {{ connection: {name}, schema: {schema} }}\n" + (name == "postgres" ? "string_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: C }\n" : ""));
+            TestFiles.WriteAllText(Path.Combine(dir, "models/src/t.yml"), "name: src.t\nkind: mapped\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "models/staging/v1.yml"), "name: staging.v1\nkind: view\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "models/staging/v1.sql"), "SELECT id FROM src.t\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "models/marts/v2.yml"), "name: marts.v2\nkind: view\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "models/marts/v2.sql"), "SELECT id FROM staging.v1\n");
             Assert.Equal(0, Cli("project", "compile").Exit);
             Assert.Equal(0, Cli("connection", "init", name, "--apply").Exit);
             Assert.Equal(TrackingSchema.Version.ToString(), await Version());
@@ -343,10 +343,10 @@ public class TrackingUpgradeConformanceTests
         {
             Directory.CreateDirectory(Path.Combine(dir, "models/src"));
             Directory.CreateDirectory(Path.Combine(dir, "models/marts"));
-            File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), $"defaults: {{connections: [{name}]}}\ntracking: {{ connection: {name}, schema: {schema} }}\n" + (name == "postgres" ? "string_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: C }\n" : ""));
-            File.WriteAllText(Path.Combine(dir, "models/src/t.yml"), "name: src.t\ntitle: A table\nkind: mapped\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
-            File.WriteAllText(Path.Combine(dir, "models/marts/v1.yml"), "name: marts.v1\nkind: view\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
-            File.WriteAllText(Path.Combine(dir, "models/marts/v1.sql"), "SELECT id FROM src.t\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), $"defaults: {{connections: [{name}]}}\ntracking: {{ connection: {name}, schema: {schema} }}\n" + (name == "postgres" ? "string_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: C }\n" : ""));
+            TestFiles.WriteAllText(Path.Combine(dir, "models/src/t.yml"), "name: src.t\ntitle: A table\nkind: mapped\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "models/marts/v1.yml"), "name: marts.v1\nkind: view\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n");
+            TestFiles.WriteAllText(Path.Combine(dir, "models/marts/v1.sql"), "SELECT id FROM src.t\n");
             Assert.Equal(0, Cli("project", "compile").Exit);
             Assert.Equal(0, Cli("connection", "init", name, "--apply").Exit);
             Assert.Equal(0, Cli("connection", "publish", name).Exit);

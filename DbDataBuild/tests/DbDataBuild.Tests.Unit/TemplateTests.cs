@@ -20,7 +20,7 @@ public class TemplateTests
     }
 
     [Fact]
-    public void The_distribution_carries_six_projects()
+    public void The_distribution_carries_seven_projects()
     {
         Assert.Contains(TemplateStore.All, t => t.Name == "starter");
         Assert.Contains(TemplateStore.All, t => t.Name == "retail");
@@ -28,6 +28,7 @@ public class TemplateTests
         Assert.Contains(TemplateStore.All, t => t.Name == "adventureworks");
         Assert.Contains(TemplateStore.All, t => t.Name == "fan_in_fan_out");
         Assert.Contains(TemplateStore.All, t => t.Name == "macro_examples");
+        Assert.Contains(TemplateStore.All, t => t.Name == "calendar");
         Assert.All(TemplateStore.All, t => Assert.NotEqual("", t.Description));
     }
 

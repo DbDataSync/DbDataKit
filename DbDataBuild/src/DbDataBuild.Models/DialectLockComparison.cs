@@ -1,3 +1,4 @@
+using ServerFacts = DbDataKit.Metadata.ServerFacts;
 namespace DbDataBuild.Models;
 
 public static class DialectLockComparison
@@ -19,7 +20,7 @@ public static class DialectLockComparison
         if (committed.Ping != current.Ping) found.Add("the ping statement changed");
         if (committed.Catalog != current.Catalog) found.Add($"the catalog was {committed.Catalog} and is now {current.Catalog}");
         if (found.Count == 0) found.Add("the profile changed");
-        if (committed.Reported.ServerName != nowFacts.ServerName) found.Add($"the server was {Name(committed.Reported.ServerName)} and now says {Name(nowFacts.ServerName)}");
+        if (committed.Reported.ProductName != nowFacts.ProductName) found.Add($"the server was {Name(committed.Reported.ProductName)} and now says {Name(nowFacts.ProductName)}");
         return found;
     }
 

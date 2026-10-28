@@ -1,36 +1,51 @@
-using System.Text.Json;
+using System.Text;
+using DbDataKit.Scripting;
 using DbDataSync.Libraries;
 
 namespace DbDataSync.Drivers.Descriptor;
 
 /// <summary>
-/// <c>&lt;repo&gt;/drivers/&lt;id&gt;/driver.json</c> — the compiled-plugin counterpart to
-/// <c>driver.yaml</c>. Same directory, different manifest: <see cref="DriverLoader"/> tells the two
-/// apart by which file is present, exactly the way <c>library.json</c> and this file both live under
-/// one <c>lib/</c>-bearing directory layout without conflicting.
+/// <c>&lt;repo&gt;/drivers/&lt;id&gt;/driver.csx</c> — the compiled-plugin counterpart to <c>driver.yaml</c>: a C# script that asks for its packages with <c>#r "nuget: Id, 1.2.3"</c>
+/// (exact versions), may <c>#load</c> helper scripts from the repository, declares what it needs and ends with an expression that is the <see cref="Abstractions.IDriver"/>
+/// (<c>new MyDriver()</c>). <see cref="DriverLoader"/> tells the two apart by which file is present. The hashes of the packages are in <c>driver.lock</c> beside it, and
+/// <c>lib/</c> (not tracked in git) holds the package store and the compiled script.
 /// </summary>
-/// <param name="Kind">Always <c>"compiled"</c> today — stated rather than assumed, so a future second
-/// compiled shape (a <c>StateDialect</c> plugin, 109f/109h) can share this file name with its own
-/// value instead of silently being misread as an <see cref="IDriver"/>.</param>
-/// <param name="Assembly">The plugin's own main assembly file name (not a path — resolved under this
-/// driver's <c>lib/</c>), e.g. <c>MyCompany.DbDataSync.Drivers.MySqlBinlog.dll</c>.</param>
-/// <param name="DriverType">An assembly-qualified type name implementing <see cref="Abstractions.IDriver"/>,
-/// resolved via <see cref="Type.GetType(string)"/> against the plugin's own
-/// <see cref="System.Runtime.Loader.AssemblyLoadContext"/> once its assembly is loaded.</param>
-public sealed record CompiledDriverManifest(string Id, string Kind, string Assembly, string DriverType, IReadOnlyList<PackageRef> Packages)
+/// <param name="Id">The folder name.</param>
+/// <param name="Packages">The packages the script names, in order.</param>
+/// <param name="Source">The script text.</param>
+public sealed record CompiledDriverManifest(string Id, IReadOnlyList<PackageRef> Packages, string Source)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    public const string FileName = "driver.csx";
+    public const string LockFileName = "driver.lock";
+
+    /// <summary>The format this replaced: a manifest naming an assembly and a type in a package. Refused, not read.</summary>
+    public const string RefusedFileName = "driver.json";
+
+    public static CompiledDriverManifest Read(string path)
     {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
+        var text = File.ReadAllText(path);
+        var id = Path.GetFileName(Path.GetDirectoryName(Path.GetFullPath(path)))!;
+        try
+        {
+            var (requests, _) = ScriptDirectives.Extract(text, exactOnly: true);
+            return new CompiledDriverManifest(id, [.. requests.Select(r => new PackageRef(r.Id, r.Range.MinVersion!.ToNormalizedString()))], text);
+        }
+        catch (ScriptDirectiveException ex)
+        {
+            throw new InvalidDataException($"'{path}': {ex.Message}", ex);
+        }
+    }
 
-    public static CompiledDriverManifest Read(string path) =>
-        JsonSerializer.Deserialize<CompiledDriverManifest>(File.ReadAllText(path), JsonOptions)
-        ?? throw new InvalidOperationException($"'{path}' does not contain a compiled driver manifest.");
+    /// <summary>A driver that is one package: the script asks for it and ends with <c>new DriverType()</c>.</summary>
+    public static CompiledDriverManifest ForPackage(string id, PackageRef package, string driverType) => new(id, [package],
+        new StringBuilder()
+            .Append("// A DbDataSync driver: the packages it needs (exact versions) and an expression that is the IDriver.\n")
+            .Append("#r \"nuget: ").Append(package.Id).Append(", ").Append(package.Version).Append("\"\n")
+            .Append("new ").Append(driverType).Append("()\n").ToString());
 
-    public void Write(string path) => File.WriteAllText(path, JsonSerializer.Serialize(this, JsonOptions));
-
-    public const string FileName = "driver.json";
-    public const string CompiledKind = "compiled";
+    public void Write(string path)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        File.WriteAllText(path, Source);
+    }
 }

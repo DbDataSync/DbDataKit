@@ -192,7 +192,7 @@ public class OdbcOriginTests
         var dir = Path.Combine(Path.GetTempPath(), "ddb-odbc-" + Guid.NewGuid().ToString("N")[..8]);
         Assert.Equal(0, Cli(["project", "create", "starter", dir]).Exit);
         var config = Path.Combine(dir, "dbdatabuild.yml");
-        File.WriteAllText(config, "dialects:\n  blind: { extends: ansi, catalog: none }\n" + File.ReadAllText(config).Replace("connections:\n  sqlserver:", "connections:\n  legacy: { engine: readonly odbc blind }\n  sqlserver:"));
+        TestFiles.WriteAllText(config, "dialects:\n  blind: { extends: ansi, catalog: none }\n" + File.ReadAllText(config) + "connections:\n  legacy: { engine: readonly odbc blind }\n");
         var r = Cli(["project", "import", "legacy", "src.*", "--project", dir], v => v == "DBDATA_BUILD_LEGACY_READ" ? "Driver={No Such ODBC Driver};PWD=secretpw" : null);
         Assert.Equal(1, r.Exit);
         Assert.Contains("`catalog: none`", r.Err);
@@ -291,7 +291,7 @@ public class OdbcOriginTests
         var dir = Path.Combine(Path.GetTempPath(), "ddb-odbc-" + Guid.NewGuid().ToString("N")[..8]);
         Assert.Equal(0, Cli(["project", "create", "starter", dir]).Exit);
         var config = Path.Combine(dir, "dbdatabuild.yml");
-        File.WriteAllText(config, File.ReadAllText(config).Replace("connections:\n  sqlserver:", "connections:\n  legacy: { engine: readonly odbc }\n  sqlserver:"));
+        TestFiles.WriteAllText(config, File.ReadAllText(config) + "connections:\n  legacy: { engine: readonly odbc }\n");
         string? Env(string v) => v == "DBDATA_BUILD_LEGACY_READ" ? "Driver={Vendor Driver 9000};Server=db.internal;UID=reader;PWD=hunter2" : null;
         var inspect = Cli(["connection", "inspect", "legacy", "--project", dir], Env);
         Assert.NotEqual(0, inspect.Exit);

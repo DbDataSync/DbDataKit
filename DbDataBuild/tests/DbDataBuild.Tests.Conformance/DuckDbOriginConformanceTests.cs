@@ -55,7 +55,7 @@ public class DuckDbOriginConformanceTests
         {
             var path = Path.Combine(dir, rel);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, text);
+            TestFiles.WriteAllText(path, text);
         }
 
         public void Origin(params string[] sql)

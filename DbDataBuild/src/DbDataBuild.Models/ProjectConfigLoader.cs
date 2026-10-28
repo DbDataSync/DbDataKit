@@ -21,31 +21,47 @@ public static class ProjectConfigLoader
                 $"`{ProductInfo.ConfigFile}` was not found under {projectRoot}. Built-in defaults apply."));
             return ProjectConfig.Default;
         }
-        var loaded = Load(File.ReadAllText(path), ProductInfo.ConfigFile, diags) ?? ProjectConfig.Default;
+        var before = diags.Count;
+        var connections = ProjectConnectionFiles.Read(projectRoot, diags);        // `connections/<name>.yaml`, connection/1 (plan 13, E03)
+        var loaded = Load(File.ReadAllText(path), ProductInfo.ConfigFile, diags, connections) ?? ProjectConfig.Default;
+        if (diags.Skip(before).Any(d => d.Severity == Severity.Error)) return ProjectConfig.Default;     // a connection file with a problem is a project that is not loaded, as a problem in the project file is
         return DialectLockFile.ApplyFromProject(projectRoot, loaded, diags);      // the dialects `project update` committed for Flight SQL connections that name none
     }
 
-    public static ProjectConfig? Load(string text, string file, List<Diagnostic> diags)
+    /// <summary>
+    /// Loads the project file's text. <paramref name="connectionFiles"/> is what the project's `connections/` folder held (<see cref="ProjectConnectionFiles"/>): when it is given the text is a project on disk and a
+    /// `connections:` in it is refused (DDB-621); when it is null (a text in memory, as the tests and the editors have it) a `connections:` mapping in the text is the connections.
+    /// </summary>
+    public static ProjectConfig? Load(string text, string file, List<Diagnostic> diags, ProjectConnectionFiles.Loaded? connectionFiles = null)
     {
         var before = diags.Count;
         var root = StrictYamlReader.Read(text, file, diags);
-        if (root == null) return diags.Count > before ? null : ProjectConfig.Default; // an empty file means all defaults
-        var cfg = new Reader(file, diags).Read(root);
+        if (root == null)
+        {
+            if (diags.Count > before) return null;
+            if (connectionFiles?.Connections == null) return ProjectConfig.Default;     // an empty file means all defaults
+            root = new YamlMapping([], 1, 1);                                           // ... and the connection files still declare connections
+        }
+        var cfg = new Reader(file, diags) { NodeFiles = connectionFiles?.NodeFiles }.Read(root, connectionFiles);
         return diags.Count > before ? null : cfg;
     }
 
     private sealed class Reader(string file, List<Diagnostic> diags) : YamlFieldReader(file, diags)
     {
+        /// <summary>The mapping connections are read from: the files' (project on disk) or the `connections:` of the text (in memory).</summary>
+        private YamlMapping? connectionNodes;
+        private bool connectionsInText;
+
         private readonly Dictionary<string, int> lines = [];
 
         /// <summary>The connections whose `engine` says `readonly`, found before the connections are read in full (a tracking setting may name a connection declared further down).</summary>
         private IReadOnlySet<string> readOnlyConnections = new HashSet<string>();
 
-        private static HashSet<string> ReadOnlyNames(YamlMapping top)
+        private static HashSet<string> ReadOnlyNames(YamlMapping? connections)
         {
             var names = new HashSet<string>(StringComparer.Ordinal);
-            if (top.Get("connections") is not YamlMapping all) return names;
-            foreach (var e in all.Entries)
+            if (connections is null) return names;
+            foreach (var e in connections.Entries)
             {
                 if (e.Value is not YamlMapping m || m.Get("engine") is not { } en) continue;
                 var words = en is YamlScalar s ? ConnectionKeywords.Words(s.Value) : en is YamlSequence q ? q.Items.OfType<YamlScalar>().SelectMany(i => ConnectionKeywords.Words(i.Value)).ToList() : [];
@@ -54,7 +70,7 @@ public static class ProjectConfigLoader
             return names;
         }
 
-        public ProjectConfig? Read(YamlNode root)
+        public ProjectConfig? Read(YamlNode root, ProjectConnectionFiles.Loaded? files = null)
         {
             if (root is not YamlMapping top)
             {
@@ -63,7 +79,14 @@ public static class ProjectConfigLoader
             }
             CheckKeys(top, TopKeys, "the configuration");
             var d = ProjectConfig.Default;
-            readOnlyConnections = ReadOnlyNames(top);
+            if (files != null)
+            {
+                if (top.Entries.FirstOrDefault(e => e.Key.Value == "connections") is { } old)
+                    Add(DiagnosticCatalog.ConnectionsInProjectFile, old.Key, $"`{ProductInfo.ConfigFile}` declares connections under `connections:`: {string.Join(", ", (old.Value as YamlMapping)?.Entries.Select(e => "`" + e.Key.Value + "`") ?? [])}.");
+                connectionNodes = files.Connections;
+            }
+            else { connectionNodes = top.Get("connections") as YamlMapping; connectionsInText = top.Get("connections") is not null; }
+            readOnlyConnections = ReadOnlyNames(connectionNodes);
 
             var dialects = ReadDialects(top);
             var connections = ReadConnections(top, dialects);
@@ -433,8 +456,8 @@ public static class ProjectConfigLoader
         private Dictionary<string, ConnectionConfig> ReadConnections(YamlMapping top, IReadOnlyDictionary<string, DialectProfile> dialects)
         {
             var result = new Dictionary<string, ConnectionConfig>(ConnectionConfig.Implicit, StringComparer.Ordinal);
-            if (top.Get("connections") is not { } node) return result;
-            if (node is not YamlMapping connections) { Add(DiagnosticCatalog.InvalidValue, node, "`connections` must map connection names to settings."); return result; }
+            if (connectionsInText && top.Get("connections") is { } node && node is not YamlMapping) { Add(DiagnosticCatalog.InvalidValue, node, "`connections` must map connection names to settings."); return result; }
+            if (connectionNodes is not { } connections) return result;
             var upper = new Dictionary<string, string>(StringComparer.Ordinal);
             var declared = new HashSet<string>(TargetNames.All.Concat(connections.Entries.Select(x => x.Key.Value)), StringComparer.Ordinal);     // a tracking connection may be declared later in the file
             foreach (var e in connections.Entries)

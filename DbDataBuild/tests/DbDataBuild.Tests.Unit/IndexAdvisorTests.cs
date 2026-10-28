@@ -115,11 +115,11 @@ public class IndexAdvisorTests
     private static string Project(string modelYaml, string config = "defaults: {connections: [sqlserver]}\n")
     {
         var dir = NewProjectDir();
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
-        File.WriteAllText(Path.Combine(dir, "models/staging/t.yml"), "name: staging.t\nkind: mapped\ngrain: [order_id]\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n  - {name: customer_id, type: BIGINT}\n  - {name: event_ts, type: TIMESTAMP}\n");
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), modelYaml);
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT order_id, customer_id, event_ts FROM staging.t");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/t.yml"), "name: staging.t\nkind: mapped\ngrain: [order_id]\ncolumns:\n  - {name: order_id, type: BIGINT, nullable: false}\n  - {name: customer_id, type: BIGINT}\n  - {name: event_ts, type: TIMESTAMP}\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.yml"), modelYaml);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), "SELECT order_id, customer_id, event_ts FROM staging.t");
         return dir;
     }
 

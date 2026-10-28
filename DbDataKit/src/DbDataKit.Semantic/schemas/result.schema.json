@@ -173,6 +173,7 @@
             "dialect": {
               "enum": [
                 "tsql",
+                "postgres",
                 "dax",
                 "duckdb"
               ]

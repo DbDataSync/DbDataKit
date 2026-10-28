@@ -13,10 +13,10 @@ public class LoweringIntegrationTests
     {
         var dir = NewProjectDir();
         Directory.CreateDirectory(Path.Combine(dir, "models/staging"));
-        File.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), Orders);
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct.yml"), Fct);
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct.sql"), sql);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/staging/orders.yml"), Orders);
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), config);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct.yml"), Fct);
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct.sql"), sql);
         return dir;
     }
 
@@ -63,7 +63,7 @@ public class LoweringIntegrationTests
         Assert.Equal(0, RenderFiles("--project", dir, "--check").Exit);
 
         // changing the author's query changes the lowered file
-        File.WriteAllText(Path.Combine(dir, "models/marts/fct.sql"), "SELECT customer_id, COUNT(*) AS n FROM staging.orders WHERE amount > 0 GROUP BY ALL\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct.sql"), "SELECT customer_id, COUNT(*) AS n FROM staging.orders WHERE amount > 0 GROUP BY ALL\n");
         Assert.Equal(1, RenderFiles("--project", dir, "--check").Exit);
     }
 
@@ -91,7 +91,7 @@ public class LoweringIntegrationTests
 
         // turning lowering off restores the old behavior: the author's text goes to the matrix as written, and a project with errors is not compiled
         Directory.Delete(Path.Combine(dir, "rendered"), true);
-        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\nlowering:\n  enabled: false\n");
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}\nlowering:\n  enabled: false\n");
         var off = Run("project", "compile", "--project", dir);
         Assert.Equal(1, off.Exit);
         Assert.Contains("DDB-301", off.Err);
