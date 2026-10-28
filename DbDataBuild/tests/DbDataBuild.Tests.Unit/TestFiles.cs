@@ -75,6 +75,8 @@ public static class TestFiles
 
     private static string Flow(YamlNode node) => node switch
     {
+        // a value written plain stays plain, so `true` and `1` keep their types (the properties of a connection are typed); anything else is quoted
+        YamlScalar { Quoted: false } s when s.Value.Length > 0 && System.Text.RegularExpressions.Regex.IsMatch(s.Value, @"^[A-Za-z0-9_.\-]+$") => s.Value,
         YamlScalar s => Scalar(s.Value),
         YamlSequence q => "[" + string.Join(", ", q.Items.Select(Flow)) + "]",
         YamlMapping m => "{" + string.Join(", ", m.Entries.Select(x => Scalar(x.Key.Value) + ": " + Flow(x.Value))) + "}",

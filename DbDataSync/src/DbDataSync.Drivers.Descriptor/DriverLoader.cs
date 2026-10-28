@@ -1,4 +1,3 @@
-using System.Reflection;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
 using DbDataSync.Libraries;
@@ -10,7 +9,7 @@ namespace DbDataSync.Drivers.Descriptor;
 /// both composition roots (<c>DbDataSyncHost.cs</c> and <c>TaskRunner/Program.cs</c>) call, so a
 /// driver is available identically to the API and the worker without either duplicating the load logic
 /// ("two composition roots", plan doc §*Blockers to clear*). A directory holding <c>driver.yaml</c> is
-/// a descriptor (109d, <see cref="LoadDescriptorDrivers"/>); one holding <c>driver.json</c> is a
+/// a descriptor (109d, <see cref="LoadDescriptorDrivers"/>); one holding <c>driver.csx</c> is a
 /// compiled plugin (109e, <see cref="LoadCompiledDrivers"/>) — the two never coexist in one directory,
 /// but nothing stops one repo having some of each.
 /// </summary>
@@ -53,11 +52,8 @@ public static class DriverLoader
     }
 
     /// <summary>
-    /// A failed plugin — a missing dependency, a contract-version mismatch, a type that doesn't
-    /// implement <see cref="IDriver"/> — is logged and skipped rather than failing host startup, for
-    /// the same reason a failed descriptor is: one plugin's problem should not take every other driver
-    /// down with it. Each plugin gets its own <see cref="DriverPluginLoadContext"/>, logged with its
-    /// dependency closure and any assembly it had to down-bind to the host's version.
+    /// A failed driver script — a missing package, a compile error, a contract-version mismatch, a script that does not end with an <see cref="IDriver"/> — is logged and skipped rather than failing host startup, for
+    /// the same reason a failed descriptor is: one driver's problem should not take every other driver down with it. A <c>driver.json</c> (the format before <c>driver.csx</c>) is logged by name and skipped too.
     /// </summary>
     public static void LoadCompiledDrivers(string repoRoot, DriverRegistry driverRegistry, Action<string, Exception>? onError = null)
     {
@@ -69,58 +65,33 @@ public static class DriverLoader
 
         foreach (var dir in Directory.EnumerateDirectories(driversRoot))
         {
-            var manifestPath = Path.Combine(dir, CompiledDriverManifest.FileName);
-            if (!File.Exists(manifestPath))
+            var scriptPath = Path.Combine(dir, CompiledDriverManifest.FileName);
+            var oldPath = Path.Combine(dir, CompiledDriverManifest.RefusedFileName);
+            if (!File.Exists(scriptPath))
+            {
+                if (File.Exists(oldPath))
+                    onError($"Skipped driver '{oldPath}'", new NotSupportedException(
+                        $"'{CompiledDriverManifest.RefusedFileName}' is the old compiled-driver format and is no longer read. A compiled driver is now a {CompiledDriverManifest.FileName} script of #r \"nuget:\" lines ending with `new MyDriver()`: " +
+                        $"run `dbdatasync driver install {Path.GetFileName(dir)} --kind compiled --package <id> --version <v> --driver-type <Type>` to write it."));
                 continue;
+            }
 
             try
             {
-                LoadOne(dir, manifestPath, driverRegistry, onError);
+                var driver = DriverScriptHost.Load(dir);
+                if (!DriverContract.IsSupported(driver.ContractVersion))
+                {
+                    throw new NotSupportedException(
+                        $"Driver '{Path.GetFileName(dir)}' targets contract version {driver.ContractVersion}, which this build of " +
+                        $"DbDataSync (supporting {DriverContract.MinSupportedVersion}-{DriverContract.CurrentVersion}) cannot load. " +
+                        "Use a version of the driver that targets this DbDataSync version.");
+                }
+                driverRegistry.Register(driver);
             }
-            catch (Exception ex) when (ex is IOException or InvalidOperationException or NotSupportedException
-                or System.Text.Json.JsonException or ReflectionTypeLoadException or FileLoadException or BadImageFormatException)
+            catch (Exception ex) when (ex is IOException or InvalidOperationException or NotSupportedException or InvalidDataException or FileLoadException or BadImageFormatException)
             {
-                onError($"Failed to load compiled driver '{manifestPath}'", ex);
+                onError($"Failed to load compiled driver '{scriptPath}'", ex);
             }
         }
-    }
-
-    private static void LoadOne(string driverDir, string manifestPath, DriverRegistry driverRegistry, Action<string, Exception> onError)
-    {
-        var manifest = CompiledDriverManifest.Read(manifestPath);
-        if (manifest.Kind != CompiledDriverManifest.CompiledKind)
-        {
-            throw new NotSupportedException(
-                $"Driver '{manifest.Id}': manifest kind '{manifest.Kind}' is not '{CompiledDriverManifest.CompiledKind}'.");
-        }
-
-        var assemblyPath = Path.Combine(driverDir, "lib", manifest.Assembly);
-        if (!File.Exists(assemblyPath))
-            throw new FileNotFoundException($"Driver '{manifest.Id}': assembly '{assemblyPath}' does not exist.", assemblyPath);
-
-        var context = new DriverPluginLoadContext(
-            manifest.Id, assemblyPath,
-            onDownBind: message => onError($"Driver '{manifest.Id}'", new InvalidOperationException(message)));
-        var assembly = context.LoadFromAssemblyPath(assemblyPath);
-
-        var driverType = assembly.GetType(manifest.DriverType)
-            ?? throw new InvalidOperationException(
-                $"Driver '{manifest.Id}': type '{manifest.DriverType}' was not found in '{manifest.Assembly}'.");
-
-        if (Activator.CreateInstance(driverType) is not IDriver driver)
-        {
-            throw new InvalidOperationException(
-                $"Driver '{manifest.Id}': type '{manifest.DriverType}' does not implement IDriver.");
-        }
-
-        if (!DriverContract.IsSupported(driver.ContractVersion))
-        {
-            throw new NotSupportedException(
-                $"Driver '{manifest.Id}' targets contract version {driver.ContractVersion}, which this build of " +
-                $"DbDataSync (supporting {DriverContract.MinSupportedVersion}-{DriverContract.CurrentVersion}) cannot load. " +
-                "Use a build of the plugin that targets this DbDataSync version.");
-        }
-
-        driverRegistry.Register(driver);
     }
 }

@@ -102,8 +102,8 @@ public sealed class HookSaveValidationTests : IDisposable
     {
         _repository.SaveScript(new ScriptDefinition
         {
-            Manifest = new ScriptConfig { Name = "not-sql", Kind = "sqlColumnExpression", Language = ScriptLanguage.CSharp, EntryType = "X" },
-            Code = "public sealed class X : DbDataSync.Scripting.Abstractions.ISqlColumnExpression { public string? RenderSql(DbDataSync.Scripting.Abstractions.SqlColumnExpressionContext c) => null; }",
+            Manifest = new ScriptConfig { Name = "not-sql", Kind = "sqlColumnExpression", Language = ScriptLanguage.CSharp },
+            Code = "public sealed class X : DbDataSync.Scripting.Abstractions.ISqlColumnExpression { public string? RenderSql(DbDataSync.Scripting.Abstractions.SqlColumnExpressionContext c) => null; }" + "\nnew X()\n",
         }, Author);
 
         var ex = Assert.Throws<ConfigValidationException>(() => _repository.SaveConnection(Connection(new()

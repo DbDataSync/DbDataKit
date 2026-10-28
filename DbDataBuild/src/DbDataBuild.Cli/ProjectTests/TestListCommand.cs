@@ -1,5 +1,6 @@
 using DbDataBuild.Core;
 using DbDataBuild.Models;
+using DbDataBuild.Semantic;
 
 namespace DbDataBuild.Cli;
 
@@ -9,12 +10,12 @@ internal static class TestListCommand
     public static int Run(CommandSpec spec, string root, string? kind, string[] tags, TextWriter output, TextWriter error)
     {
         output.WriteLine($"{ProductInfo.Cli} {spec.Name}  |  effect: {spec.Effect.Describe()}  |  {spec.Marks}  |  connection: none");
-        if (kind is not (null or "metadata" or "model")) { error.WriteLine("--kind is `metadata` or `model`."); return CliApp.ExitUsage; }
+        if (kind is not (null or "metadata" or "model" or "semantic")) { error.WriteLine("--kind is `metadata`, `model` or `semantic`."); return CliApp.ExitUsage; }
         bool Wanted(IReadOnlyList<string> t) => tags.Length == 0 || t.Any(x => tags.Contains(x, StringComparer.Ordinal));
 
         var rows = new List<(string Name, string Kind, string Severity, IReadOnlyList<string> Tags, string File, string? Model, int Cases, string? Description)>();
         var damaged = 0;
-        if (kind != "model")
+        if (kind is null or "metadata")
             foreach (var file in TestRuleLoader.Discover(root))
             {
                 var problems = new List<Diagnostic>();
@@ -22,7 +23,7 @@ internal static class TestListCommand
                 if (rule == null) { foreach (var d in problems) error.Diag(d); damaged++; continue; }
                 if (Wanted(rule.Tags)) rows.Add((rule.Name, "metadata", rule.Severity, rule.Tags, file, null, 1, rule.Description));
             }
-        if (kind != "metadata")
+        if (kind is null or "model")
             foreach (var file in ModelTestLoader.Discover(root))
             {
                 var problems = new List<Diagnostic>();
@@ -30,6 +31,14 @@ internal static class TestListCommand
                 if (test == null) { foreach (var d in problems) error.Diag(d); damaged++; continue; }
                 if (Wanted(test.Tags)) rows.Add((test.Name, "model", test.Severity, test.Tags, file, test.Model, test.Cases.Count, test.Description));
             }
+        // the data checks generated from the semantic models: listed here, run against a connection by `connection check` (they read data, which `tests run` never does)
+        if ((kind is null or "semantic") && SemanticProject.Discover(root).Count > 0)
+        {
+            var ctx = ProjectContext.Load(root);
+            foreach (var m in ctx.Semantic.Models)
+                foreach (var check in SemanticChecks.Generate(m, ctx.Config).Checks)
+                    if (Wanted(["semantic"])) rows.Add((check.Name, "semantic", "error", ["semantic"], check.File, check.Models[0], 1, check.Description));
+        }
         rows = rows.OrderBy(r => r.Name, StringComparer.Ordinal).ToList();
         output.Payload("tests", rows.Select(r => new { name = r.Name, kind = r.Kind, file = r.File, model = r.Model, cases = r.Cases, description = r.Description, severity = r.Severity, tags = r.Tags }).ToList());
         output.Payload("damaged", damaged);
@@ -41,6 +50,7 @@ internal static class TestListCommand
             foreach (var r in rows)
                 output.WriteLine($"{r.Name.PadRight(width)}  {r.Kind,-8}  {r.Severity,-8}  {(r.Tags.Count == 0 ? "-" : string.Join(", ", r.Tags))}{(r.Model != null ? $"   (model {r.Model}, {r.Cases} case(s))" : "")}");
         }
+        if (rows.Any(r => r.Kind == "semantic")) output.WriteLine("The semantic checks read data: `connection check [connection]` runs them.");
         output.Next("project tests run" + (tags.Length > 0 ? " " + string.Join(" ", tags.Select(t => $"--tag {t}")) : ""));
         return damaged > 0 ? CliApp.ExitFindings : CliApp.ExitOk;
     }

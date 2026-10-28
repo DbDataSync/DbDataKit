@@ -70,15 +70,22 @@ public sealed class LocalChannelServer : IAsyncDisposable
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    private NamedPipeServerStream CreatePipe()
+    private NamedPipeServerStream CreatePipe() =>
+        NamedPipeServerStreamAcl.Create(_options.Endpoint, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances,
+            PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0, _security ??= BuildSecurity());
+
+    // Built once: resolving an account name to its SID is a lookup that can take long on a busy machine, and a client that connects while the next instance is being created finds no pipe to connect to until it exists.
+    private PipeSecurity? _security;
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private PipeSecurity BuildSecurity()
     {
         var security = new PipeSecurity();
         foreach (var identity in _options.WindowsIdentities)
             security.AddAccessRule(new PipeAccessRule(Resolve(identity), PipeAccessRights.ReadWrite, AccessControlType.Allow));
         // The creator is added too, so the server can open further instances of the pipe.
         security.AddAccessRule(new PipeAccessRule(WindowsIdentity.GetCurrent().User!, PipeAccessRights.FullControl, AccessControlType.Allow));
-        return NamedPipeServerStreamAcl.Create(_options.Endpoint, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances,
-            PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0, security);
+        return security;
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]

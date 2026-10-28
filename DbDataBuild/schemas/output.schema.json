@@ -680,6 +680,44 @@
       "if": {
         "properties": {
           "command": {
+            "const": "project show semantic"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_show_semantic"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "connection check"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_connection_check"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "project tests list"
           }
         },
@@ -5104,6 +5142,373 @@
         }
       }
     },
+    "data_project_show_semantic": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "source": {
+                      "type": "string"
+                    },
+                    "connection": {
+                      "type": "string"
+                    },
+                    "engine": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "connection",
+                    "engine"
+                  ]
+                }
+              },
+              "bindings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "member": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "attribute",
+                        "measure"
+                      ]
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "connection": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "column": {
+                      "type": "string"
+                    },
+                    "aggregate": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "member",
+                    "kind",
+                    "source",
+                    "connection",
+                    "model",
+                    "column"
+                  ]
+                }
+              },
+              "tables": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "connection": {
+                      "type": "string"
+                    },
+                    "physical": {
+                      "type": "string"
+                    },
+                    "primary_key": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "type"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "model",
+                    "source",
+                    "connection",
+                    "physical",
+                    "primary_key",
+                    "columns"
+                  ]
+                }
+              },
+              "relationships": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    },
+                    "from_columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "to_columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "from",
+                    "to",
+                    "from_columns",
+                    "to_columns",
+                    "source"
+                  ]
+                }
+              },
+              "hierarchies": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "levels": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "levels"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "name",
+              "file",
+              "sources",
+              "bindings",
+              "tables",
+              "relationships",
+              "hierarchies"
+            ]
+          }
+        }
+      }
+    },
+    "data_connection_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "type": "string"
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "total": {
+              "type": "integer"
+            },
+            "passed": {
+              "type": "integer"
+            },
+            "failed": {
+              "type": "integer"
+            },
+            "errored": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "total",
+            "passed",
+            "failed",
+            "errored"
+          ]
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "hierarchy",
+                  "relationship_orphans",
+                  "relationship_grain"
+                ]
+              },
+              "catalog": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "models": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "file": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer"
+              },
+              "status": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "error"
+                ]
+              },
+              "violations": {
+                "type": "integer"
+              },
+              "columns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "examples": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "kind",
+              "catalog",
+              "description",
+              "models",
+              "file",
+              "line",
+              "status",
+              "violations"
+            ]
+          }
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "catalog": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "catalog",
+              "description",
+              "reason",
+              "file",
+              "line"
+            ]
+          }
+        }
+      },
+      "required": [
+        "connection",
+        "counts",
+        "checks",
+        "skipped"
+      ]
+    },
     "data_project_tests_list": {
       "type": "object",
       "additionalProperties": false,
@@ -5120,7 +5525,8 @@
               "kind": {
                 "enum": [
                   "metadata",
-                  "model"
+                  "model",
+                  "semantic"
                 ]
               },
               "file": {

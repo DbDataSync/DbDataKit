@@ -73,7 +73,7 @@ public static class BuiltInDriverLibraries
                 return;
 
             var catalogEntry = KnownLibraries.TryGetById(libraryId)!;
-            var result = await LibraryInstaller.InstallOrDeferAsync(
+            await LibraryInstaller.InstallOrDeferAsync(
                 repoRoot, libraryId, [new PackageRef(catalogEntry.PackageId, catalogEntry.PinnedVersion)],
                 catalogEntry.FactoryType, cancellationToken: cancellationToken);
 
@@ -81,14 +81,6 @@ public static class BuiltInDriverLibraries
             // POST /api/libraries already uses — so the connection-open call right after this returns
             // can actually resolve the assembly it needs.
             libraryRegistry.RegisterInstalled(libraryId);
-
-            if (result.Outcome == LibraryInstaller.LibraryInstallOutcome.PendingRestore)
-            {
-                throw new InvalidOperationException(
-                    $"'{libraryId}' has no SDK here to restore it, and no in-image catalog cache hit for it either — " +
-                    "its manifest was written but it is still pending restore. Run `dbdatasync library sync` " +
-                    "on a host with the SDK, then retry.");
-            }
         }
         finally
         {

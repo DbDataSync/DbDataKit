@@ -58,7 +58,7 @@ public sealed class EngineFixture : IAsyncLifetime
         {
             using (var con = new NpgsqlConnection(postgres)) { con.Open(); Execute(con, $"CREATE DATABASE {_name}"); }
             var db = new NpgsqlConnectionStringBuilder(postgres) { Database = _name }.ConnectionString;
-            PostgresTwinExecutor.LoadSeed(db, ConformanceTests.Seed);
+            PostgresSeed.Load(db, ConformanceTests.Seed);
             _databases[Postgres] = db;
         }
         return ValueTask.CompletedTask;

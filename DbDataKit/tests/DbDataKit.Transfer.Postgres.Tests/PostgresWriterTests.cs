@@ -108,6 +108,45 @@ public class PostgresLiveTests
         Assert.True(result.Passed, string.Join("\n", result.Differences));
     }
 
+    [Fact]
+    public async Task A_value_binary_copy_cannot_write_fails_naming_the_column_and_never_the_value()
+    {
+        Assert.SkipUnless(ConnectionString is not null, "set DBDATA_TEST_POSTGRES to run");
+        var ct = TestContext.Current.CancellationToken;
+        var d = DialectCatalog.For(EngineId.Postgres);
+        var schema = new TransferSchema([new("id", CanonicalType.Of(CanonicalKind.Int32)), new("at", CanonicalType.Timestamp(6, tz: true))]);
+        var table = new TableName("public", "ddk_copyfail_" + Guid.NewGuid().ToString("N")[..8]);
+        await using var conn = new NpgsqlConnection(ConnectionString);
+        await conn.OpenAsync(ct);
+        await using (var create = conn.CreateCommand())
+        {
+            create.CommandText = $"CREATE TABLE {d.QuoteQualified(table.Parts)} (id integer, at timestamptz)";
+            await create.ExecuteNonQueryAsync(ct);
+        }
+        try
+        {
+            async IAsyncEnumerable<DataBatch> Rows()
+            {
+                // Npgsql refuses a DateTime that is not UTC for timestamptz
+                yield return new RowDataBatch(schema, [[1, DateTime.SpecifyKind(new DateTime(2026, 1, 1, 9, 0, 0), DateTimeKind.Unspecified)]]);
+                await Task.CompletedTask;
+            }
+            var ex = await Assert.ThrowsAsync<PostgresCopyValueException>(() => new PostgresBulkWriter(conn).WriteAsync(new WriteTarget(table, schema), Rows(), new BulkOptions(), ct));
+            Assert.Equal("at", ex.Column);
+            Assert.Equal(typeof(DateTime), ex.ClrType);
+            Assert.Equal(NpgsqlDbType.TimestampTz, ex.CopyType);
+            Assert.DoesNotContain("2026", ex.Message);
+        }
+        finally
+        {
+            await using var drop = new NpgsqlConnection(ConnectionString);
+            await drop.OpenAsync(ct);
+            await using var cmd = drop.CreateCommand();
+            cmd.CommandText = $"DROP TABLE IF EXISTS {d.QuoteQualified(table.Parts)}";
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+    }
+
     [Theory]
     [InlineData(TransactionMode.None)]
     [InlineData(TransactionMode.PerBatch)]

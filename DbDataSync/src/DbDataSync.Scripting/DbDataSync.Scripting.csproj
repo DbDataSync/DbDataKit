@@ -13,6 +13,7 @@
          DuckDBConnection(...)` directly for a DuckDb-kind strategy. -->
     <PackageReference Include="DuckDB.NET.Data" ExcludeAssets="runtime;native" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <DbDataKitReference Include="Scripting" />
   </ItemGroup>
 
   <ItemGroup>

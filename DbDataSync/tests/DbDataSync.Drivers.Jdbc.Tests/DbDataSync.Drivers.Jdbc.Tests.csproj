@@ -45,9 +45,13 @@
 
   <Target Name="DownloadJdbcTestJar" BeforeTargets="BeforeBuild" Condition="!Exists('$(JdbcTestJarPath)')">
     <MakeDir Directories="$(BaseIntermediateOutputPath)jdbc-jars" />
+    <!-- Maven Central answered 404 for a jar that exists, once, on CI: a failed first download is not an error until the second source has been tried too. -->
     <DownloadFile
       SourceUrl="https://repo1.maven.org/maven2/org/postgresql/postgresql/$(JdbcTestJarVersion)/postgresql-$(JdbcTestJarVersion).jar"
-      DestinationFolder="$(BaseIntermediateOutputPath)jdbc-jars" />
+      DestinationFolder="$(BaseIntermediateOutputPath)jdbc-jars" Retries="3" RetryDelayMilliseconds="2000" ContinueOnError="true" />
+    <DownloadFile Condition="!Exists('$(JdbcTestJarPath)')"
+      SourceUrl="https://maven-central.storage-download.googleapis.com/maven2/org/postgresql/postgresql/$(JdbcTestJarVersion)/postgresql-$(JdbcTestJarVersion).jar"
+      DestinationFolder="$(BaseIntermediateOutputPath)jdbc-jars" Retries="3" RetryDelayMilliseconds="2000" />
   </Target>
 
   <ItemGroup>

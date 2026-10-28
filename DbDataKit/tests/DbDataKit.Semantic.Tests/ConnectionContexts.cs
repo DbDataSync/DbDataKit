@@ -1,8 +1,10 @@
 using DbDataKit.Connections;
 using DbDataKit.Connections.DuckDb;
+using DbDataKit.Connections.Postgres;
 using DbDataKit.Connections.SqlServer;
 using DbDataKit.Secrets;
 using DbDataKit.Semantic.Connections;
+using Npgsql;
 
 namespace DbDataKit.Semantic.Tests;
 
@@ -38,5 +40,25 @@ public static class ConnectionContexts
             Name = "semantic_test_duckdb", Engine = "duckdb", Access = AccessMode.Readonly, Address = new AddressSpec { Database = file },
         };
         return new SemanticSource(new DuckDbProvider(), new ConnectionContext { Definition = definition, Role = LoginRole.Read });
+    }
+
+    /// <summary>A read-only PostgreSQL connection to the scratch database named by <paramref name="connectionString"/> (the Npgsql string of <c>DBDATA_TEST_POSTGRES</c> with that database).</summary>
+    public static SemanticSource Postgres(string connectionString)
+    {
+        var b = new NpgsqlConnectionStringBuilder(connectionString);
+        var definition = new ConnectionDefinition
+        {
+            Name = "semantic_test_postgres", Engine = "postgres", Access = AccessMode.Readonly,
+            Address = new AddressSpec { Host = b.Host, Port = b.Port, Database = b.Database },
+            ReadLogin = new LoginSpec { Mode = AuthMode.Sql, User = b.Username },
+            // the shared test engine has no certificate
+            Tls = new TlsSpec { Encrypt = false },
+        };
+        var login = new ResolvedLogin(LoginRole.Read, AuthMode.Sql, "env:DBDATA_TEST_POSTGRES")
+        {
+            UserName = b.Username,
+            Password = b.Password is { Length: > 0 } password ? SecretValue.From(password) : null,
+        };
+        return new SemanticSource(new PostgresProvider(), new ConnectionContext { Definition = definition, Login = login, Role = LoginRole.Read });
     }
 }

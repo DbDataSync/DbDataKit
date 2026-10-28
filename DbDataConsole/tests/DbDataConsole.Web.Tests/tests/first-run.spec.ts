@@ -137,9 +137,9 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expectYaml('# description: staging.orders groups the raw statuses', '- name: every raw status has a group')
   await page.getByTestId('build-edit-save').click()
   await expect(page.getByTestId('build-edit-clean')).toBeVisible()
-  await page.getByTestId('build-edit-file-dbdatabuild.yml').click()                                // the project file: a connection's title
-  await page.getByTestId('form-field-connections.sqlserver.title').fill('Main warehouse')
-  await expectYaml('Main warehouse', '# Where the models are built, and how text behaves there')
+  await page.getByTestId('build-edit-file-connections/sqlserver.yaml').click()                    // a connection file: its title (the tool's own settings are under extensions.build)
+  await page.getByTestId('form-field-extensions.build.title').fill('Main warehouse')
+  await expectYaml('Main warehouse', '# Connections are files (connection/1), one per connection')
   await page.getByTestId('build-edit-save').click()
   await expect(page.getByTestId('build-edit-clean')).toBeVisible()
   await page.getByTestId('build-edit-file-models/staging/orders.sql').click()

@@ -1,0 +1,133 @@
+# The semantic model of the marts (docs/semantic/catalog.md, written without its physical layer).
+#
+# What people ask for, by the names they use: measures (net amount, units, margin) by dimensions (customer region, product category, month). The tables are not written here:
+# `table:` names a model of this project and `column:` one of its declared columns, so `project compile` fails, at the line below, when a model or a column is renamed or removed.
+# The tool generates the physical layer (tables, columns, types, keys) from the models. A source is a connection; `default` is the project's default connection, so this file
+# works on SQL Server and on PostgreSQL alike. `project show semantic` lists what is bound to what.
+version: "0.3"
+name: retail_sales
+description: Sales and returns of Northstar Outfitters.
+
+# Many-to-one relationships between models: `to_columns` are the grain of the `to` model.
+relationships:
+  - {name: sales_to_customer, from: marts.fct_sales_lines, to: marts.dim_customer, from_columns: [customer_id], to_columns: [customer_id]}
+  - {name: sales_to_product,  from: marts.fct_sales_lines, to: marts.dim_product,  from_columns: [product_id],  to_columns: [product_id]}
+  - {name: sales_to_store,    from: marts.fct_sales_lines, to: marts.dim_store,    from_columns: [store_id],    to_columns: [store_id]}
+  - {name: sales_to_date,     from: marts.fct_sales_lines, to: marts.dim_date,     from_columns: [date_key],     to_columns: [date_key]}
+  - {name: returns_to_product, from: marts.fct_returns,    to: marts.dim_product,  from_columns: [product_id],  to_columns: [product_id]}
+  - {name: returns_to_date,    from: marts.fct_returns,    to: marts.dim_date,     from_columns: [date_key],     to_columns: [date_key]}
+
+dimensions:
+  customers:
+    attributes:
+      region:
+        type: string
+        synonyms: [customer region]
+        bindings:
+          default: {table: marts.dim_customer, column: region}
+      country:
+        type: string
+        synonyms: [customer country]
+        bindings:
+          default: {table: marts.dim_customer, column: country_code}
+  products:
+    attributes:
+      department:
+        type: string
+        bindings:
+          default: {table: marts.dim_product, column: department}
+      category:
+        type: string
+        synonyms: [product category]
+        bindings:
+          default: {table: marts.dim_product, column: category_name}
+      product:
+        type: string
+        synonyms: [item, product name]
+        bindings:
+          default: {table: marts.dim_product, column: product_name}
+  stores:
+    attributes:
+      region:
+        type: string
+        synonyms: [store region]
+        bindings:
+          default: {table: marts.dim_store, column: region}
+      channel_group:
+        type: string
+        synonyms: [channel]
+        bindings:
+          default: {table: marts.dim_store, column: channel_group}
+      store:
+        type: string
+        bindings:
+          default: {table: marts.dim_store, column: store_name}
+  date:
+    attributes:
+      calendar_date:
+        type: date
+        synonyms: [date, day]
+        bindings:
+          default: {table: marts.dim_date, column: date}
+      year:
+        type: integer
+        bindings:
+          default: {table: marts.dim_date, column: year}
+      year_month:
+        type: integer
+        synonyms: [month]
+        bindings:
+          default: {table: marts.dim_date, column: year_month}
+
+measures:
+  sales.net_amount:
+    type: number
+    source: default
+    agg: sum
+    of: {table: marts.fct_sales_lines, column: net_amount}
+    synonyms: [net sales, revenue]
+    semantics: {rollup: {default: sum}, spread: blank, status: governed}
+  sales.gross_amount:
+    type: number
+    source: default
+    agg: sum
+    of: {table: marts.fct_sales_lines, column: gross_amount}
+    semantics: {rollup: {default: sum}, spread: blank, status: governed}
+  sales.margin_amount:
+    type: number
+    source: default
+    agg: sum
+    of: {table: marts.fct_sales_lines, column: margin_amount}
+    synonyms: [margin]
+    semantics: {rollup: {default: sum}, spread: blank, status: governed}
+  sales.units:
+    type: integer
+    source: default
+    agg: sum
+    of: {table: marts.fct_sales_lines, column: quantity}
+    semantics: {rollup: {default: sum}, spread: blank, status: governed}
+  sales.order_count:
+    type: integer
+    source: default
+    agg: count_distinct
+    of: {table: marts.fct_sales_lines, column: order_id}
+    synonyms: [orders]
+    semantics: {rollup: {default: none}, spread: blank, status: governed}
+  returns.refund_amount:
+    type: number
+    source: default
+    agg: sum
+    of: {table: marts.fct_returns, column: refund_amount}
+    synonyms: [refunds]
+    semantics: {rollup: {default: sum}, spread: blank, status: governed}
+  sales.margin_rate:
+    type: number
+    compute: {op: divide, args: [sales.margin_amount, sales.net_amount]}
+    synonyms: [margin rate]
+
+# Each level is many-to-one onto the one above. `connection check` tests it against the data.
+hierarchies:
+  products.by_category:
+    levels: [products.department, products.category, products.product]
+  date.by_month:
+    levels: [date.year, date.year_month]

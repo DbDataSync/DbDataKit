@@ -12,6 +12,7 @@
     <ProjectReference Include="..\DbDataBuild.Apply\DbDataBuild.Apply.csproj" />
     <ProjectReference Include="..\DbDataBuild.Lowering\DbDataBuild.Lowering.csproj" />
     <ProjectReference Include="..\DbDataBuild.Sample\DbDataBuild.Sample.csproj" />
+    <ProjectReference Include="..\DbDataBuild.Semantic\DbDataBuild.Semantic.csproj" />
     <ProjectReference Include="..\DbDataBuild.Tui\DbDataBuild.Tui.csproj" />
     <ProjectReference Include="..\DbDataBuild.Targets.DuckDb\DbDataBuild.Targets.DuckDb.csproj" />
   </ItemGroup>

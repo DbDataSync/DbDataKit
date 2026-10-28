@@ -505,6 +505,41 @@ public static class DiagnosticCatalog
         "Make the file one query that returns the violating rows.",
         "A rule only reads: it is one SELECT statement. Several statements, DDL, DML and files with only comments are refused before anything runs.");
 
+    // 61x: semantic models (`semantic/`, DESIGN.md "Semantic models in a project")
+    public static readonly DiagnosticDescriptor SemanticFileInvalid = E("610", "A semantic file is not valid",
+        "a file in `semantic/` that is strict YAML of the shape `schemas/semantic.schema.json` describes: dimensions, measures, hierarchies, calendars and segments, with no `tables` and no source `kind`",
+        $"Correct the file at the reported line. `{ProductInfo.Cli} project agent-kit` writes the schema for an editor. Name a model of the project in each binding and measure, and a connection as the source; the tables are generated.",
+        "A semantic file is a catalog (the format of the semantic layer, docs/semantic/catalog.md) without its physical layer: the tables, their columns, types and keys are generated from the models, so a file that writes them is refused instead of read beside what the models say. " +
+        "Syntax errors, duplicate keys, anchors and aliases, unknown keys, values of the wrong shape and two files with one `name:` are all this code.");
+    public static readonly DiagnosticDescriptor SemanticUnknownModel = E("611", "A semantic file names a model the project does not have",
+        "the name of a model of the project (built or mapped) in each `table:` of a binding or measure, and in `from:` and `to:` of a relationship",
+        $"Fix the spelling, or add the model (`{ProductInfo.Cli} project model create`, or `project import` for a table that exists).",
+        "A binding's `table:` is a model (`marts.dim_customer`), never a database table: the physical table is whatever the model builds on the connection. The check runs on every `project compile`, so a model that is renamed or removed breaks the semantic files that use it, at the line that names it.");
+    public static readonly DiagnosticDescriptor SemanticModelNotOnConnection = E("612", "A semantic binding names a model that is not on that connection",
+        "a binding or measure whose model is built or mapped on the connection it is bound to",
+        "Bind it to a connection the model is on, or add the connection to the model's `connections:`.",
+        "A binding's key (and a measure's `source:`) is a connection, and the model it names must exist there: the generated physical table is that model's table on that connection. `default` names the project's one default connection.");
+    public static readonly DiagnosticDescriptor SemanticUnknownColumn = E("613", "A semantic file names a column the model does not declare",
+        "a `column:` that is one of the declared columns of the model its `table:` names",
+        $"Fix the spelling, or use the column's new name: a column that was renamed in the model breaks every binding that used it. `{ProductInfo.Cli} project show semantic` lists what is bound to what.",
+        "Columns come from the model's definition, so the semantic file cannot drift from what is built: renaming or dropping a column in a model is a compile error here until the binding follows.");
+    public static readonly DiagnosticDescriptor SemanticBindingTypeMismatch = E("614", "A semantic attribute's type disagrees with the column it is bound to",
+        "an attribute of type string, integer, number, boolean, date or datetime bound to a column of that logical type",
+        "Change the attribute's `type:`, or bind it to a column of the type it says.",
+        "The column's logical type is the model's declared type (VARCHAR is string, INTEGER and BIGINT integer, DECIMAL and DOUBLE number, DATE date, TIMESTAMP datetime). A mismatch would make the semantic layer read the column as something it is not.");
+    public static readonly DiagnosticDescriptor SemanticRelationshipInvalid = E("615", "A semantic relationship is not many-to-one by the model's grain",
+        "a relationship whose `to_columns` are the `grain` of the model it points to (so each row of the `from` model matches at most one row)",
+        "Point `to:` at the model that is keyed by those columns, or declare the grain of the `to` model.",
+        "Relationships are many-to-one: the columns of the `to` model are its declared grain (or a unique key). A generated test also checks the data (`connection check`): rows of the `from` model with no match, and a grain that is not unique.");
+    public static readonly DiagnosticDescriptor SemanticUnknownConnection = E("616", "A semantic file names a connection that is not a source",
+        "the name of a connection of the project that builds tables (lowercase letters, digits and underscores), or `default` for the project's one default connection",
+        "Name a connection declared in dbdatabuild.yml, or say `default`.",
+        "A source of the semantic layer is a Build connection. A read-only origin (DuckDB, ODBC, Flight SQL) cannot be one yet, and neither can a connection whose name the catalog format cannot carry.");
+    public static readonly DiagnosticDescriptor SemanticModelInvalid = E("617", "A semantic model is not valid",
+        "a semantic model that passes the catalog validation: known members, reachable attributes, calendars and hierarchies over real dimensions, derived measures over real measures",
+        "Read the message: it starts with the validation code (in brackets) and is at the line of the file it is about. `docs/semantic/catalog.md` describes each block.",
+        "Everything the semantic layer's own validation finds that has no code of its own here: a hierarchy level that is not a dimension, a calendar that is not a time dimension, a measure computed from itself, an attribute no relationship reaches, and the like.");
+
     // 5xx: state and safety (logins, the mutation gate, tracking tables)
     public static readonly DiagnosticDescriptor LoginNotConfigured = E("501", "Login not configured",
         "A connection string in the environment variable named in the message, for the login this command needs.",
@@ -569,6 +604,7 @@ public static class DiagnosticCatalog
         AnswerForUnknownQuestion, AnswerChoiceInvalid, AnswerValueMismatch, NoProposalToAccept, QuestionUnanswered,
         DefinitionOutOfSync, RenderedFileOutOfDate, ObjectChangedOutsideTool, LoadDefinitionChanged, AdoptionDeclined, UpstreamBlocked, ModelUnplannable, PlanFileInvalid, StepNeedsAllowance, PlanIsStale, PlanAlreadyStarted, ApplyLockHeld, StepFailed, RefreshPlanMissing, RefreshCheckFailed, RefreshFileChanged, RefreshPlanUndeclared, RefreshMembershipDuplicate, RefreshMembershipInvalid, KindWrittenOldWay, KindShapeInvalid, RefreshInputMissing, RefreshPlanUnknown, ReadOnlyConnectionNotWritable, DialectProfileInvalid, DialectLockInvalid, DialectLockMissing, DialectLockStale, OriginDialectChanged, ProjectUpdateDiffers, InputResolverInvalid, InputsDependOnEachOther, InputNotResolved, InputsMoved, StepResultDiffers, DirtyWorkingTree, HistoryInconsistent, DefinitionFileChanged, DefinitionNotEditable,
         TestFailed, TestCouldNotRun, TestNotASelect,
+        SemanticFileInvalid, SemanticUnknownModel, SemanticModelNotOnConnection, SemanticUnknownColumn, SemanticBindingTypeMismatch, SemanticRelationshipInvalid, SemanticUnknownConnection, SemanticModelInvalid,
         LoginNotConfigured, GateRefused, StatementLogUnavailable, ReadStatementRefused, TrackingNotInitialized,
         InternalError, ProjectFilePathRefused, ProjectFileHashStale, ProjectFileUnusable,
         ConnectionFileInvalid, ConnectionsInProjectFile,

@@ -116,6 +116,9 @@ public sealed class ConfigRepository
 
     // ---- Scripts ----
 
+    /// <summary>The folder the scripts and their manifests are in; the compiler lets <c>#load</c> reach files here and nowhere else.</summary>
+    public string ScriptsDirectory => ConfigPaths.ScriptsDir(_configRoot);
+
     /// <summary>
     /// Manifest and code are written and committed **together**, so history never shows a manifest
     /// describing code that was not yet there, or code with no manifest to say what it implements.
@@ -126,7 +129,7 @@ public sealed class ConfigRepository
 
         // Computed here, once, rather than on every later read — see ScriptConfig.ContentHash's own
         // doc comment for why a long-lived process needs this written down instead of rehashed per use.
-        script.Manifest.ContentHash = ScriptConfig.ComputeHash(script.Code, script.Manifest.EntryType);
+        script.Manifest.ContentHash = ScriptConfig.ComputeHash(script.Code);
 
         var manifestPath = ConfigPaths.ScriptManifestFile(_configRoot, script.Manifest.Name);
         var codePath = ConfigPaths.ScriptCodeFile(_configRoot, script.Manifest.Name, script.Manifest.Language);
@@ -151,6 +154,15 @@ public sealed class ConfigRepository
     {
         var manifest = LoadScriptManifest(name);
         var codePath = ConfigPaths.ScriptCodeFile(_configRoot, name, manifest.Language);
+        if (manifest.Language == ScriptLanguage.CSharp && !File.Exists(codePath))
+        {
+            // the format before .csx: a class with an entry type in a .cs file; refused by name, never read as if it were current
+            var oldPath = Path.ChangeExtension(codePath, ".cs");
+            if (File.Exists(oldPath))
+                throw new InvalidDataException(
+                    $"'{oldPath}' is the old script format and is no longer read. A script is now a .csx file that may #r \"nuget:\" packages and ends with an expression, without a final semicolon, that is the slot's implementation (for example `new MyTransform()`); " +
+                    $"move the code to '{codePath}' and add that last line.");
+        }
         return new ScriptDefinition
         {
             Manifest = manifest,

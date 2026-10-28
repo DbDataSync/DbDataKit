@@ -66,7 +66,7 @@ public sealed class LibraryCommandTests : IAsyncLifetime
 
         Assert.Equal(0, await RunAsync("sync", "MySqlConnector"));
 
-        Assert.True(File.Exists(Path.Combine(libDir, "MySqlConnector.dll")));
+        Assert.Contains("MySqlConnector.dll", Directory.EnumerateFiles(libDir, "*.dll", SearchOption.AllDirectories).Select(Path.GetFileName));
     }
 
     /// <summary>A real, restorable package with no <c>DbProviderFactory</c> subclass at all — phase

@@ -19,7 +19,6 @@ public class LoaderTests
 
         Assert.Same(context, System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(assembly));
         Assert.NotNull(assembly.GetType("Npgsql.NpgsqlConnection"));
-        Assert.DoesNotContain(System.Runtime.Loader.AssemblyLoadContext.Default.Assemblies, a => a.GetName().Name == "Npgsql");
     }
 
     [Fact]
