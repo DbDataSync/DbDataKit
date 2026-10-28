@@ -186,7 +186,7 @@ public sealed class DriversController(
     /// disk — parse, then the identical <see cref="DriverDescriptorReader.BuildDriver"/> round-trip
     /// <see cref="InstallFromCatalog"/> uses, but *before* writing rather than after, so a failure never
     /// leaves a half-written driver directory behind. <c>409</c> if the id already exists (a
-    /// <c>driver.yaml</c> or a compiled <c>driver.json</c> either one — both live at the same
+    /// <c>driver.yaml</c> or a compiled <c>driver.csx</c> either one — both live at the same
     /// <c>drivers/&lt;id&gt;/</c> path).
     /// </summary>
     [Authorize(Policies.Admin)]
@@ -351,7 +351,7 @@ public sealed class DriversController(
 }
 
 /// <param name="Source">"builtin" for the three compiled-in drivers; "descriptor" for one loaded from
-/// a <c>driver.yaml</c>; "compiled" for one loaded from a <c>driver.json</c> plugin manifest (109e).
+/// a <c>driver.yaml</c>; "compiled" for one loaded from a <c>driver.csx</c> script (109e).
 /// Decided from <see cref="DriverIds"/> membership plus which manifest file backs the driver on disk
 /// (phase 118) — not the two-way builtin/descriptor guess this DTO shipped with.</param>
 /// <param name="Library">The bound <c>DbDataSync.Libraries</c> id for a descriptor driver; null for a

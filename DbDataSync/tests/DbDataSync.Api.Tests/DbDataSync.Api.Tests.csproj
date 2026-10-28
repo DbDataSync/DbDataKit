@@ -53,7 +53,7 @@
     <Using Include="DbDataKit.Web.Auth" />
     <Using Include="DbDataKit.Monitoring" />   <!-- plan 13, U04 -->
     <Using Include="DbDataSync.State.StateDatabase" Alias="StateDatabase" />
-    <!-- Reuses FixturePublisher (publishes tests/fixtures/DbDataSync.Drivers.LoaderTestFixture once)
+    <!-- Reuses DriverFixtures (the compiled-driver scripts of the loader tests)
          for CompiledDriverApiFactory, rather than duplicating that dotnet-publish shell-out here. -->
     <ProjectReference Include="..\DbDataSync.Drivers.Loader.Tests\DbDataSync.Drivers.Loader.Tests.csproj" />
   </ItemGroup>

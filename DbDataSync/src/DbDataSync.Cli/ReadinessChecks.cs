@@ -281,7 +281,7 @@ internal sealed class LibrariesAndDriversCheck : IReadinessCheck
                         driverIds.Add(CompiledDriverManifest.Read(jsonPath).Id);
                 }
                 catch (Exception ex) when (ex is IOException or InvalidOperationException or YamlDotNet.Core.YamlException
-                    or JsonException)
+                    or JsonException or InvalidDataException)
                 {
                     problems.Add($"driver '{Path.GetFileName(dir)}' does not parse: {ex.Message}");
                 }
