@@ -131,8 +131,91 @@ public class MutationGateTests
         var begin = log.Entries[0];
         Assert.Equal(DbDataKit.Schema.Hashing.ScriptHash("UPDATE t SET x = @x"), begin.StatementHash);
         Assert.Equal("UPDATE t SET x = @x", begin.Text);
-        Assert.Equal([("x", "5")], begin.Parameters);
+        Assert.Equal([("x", "5")], begin.Parameters!.Select(p => (p.Name, p.Value)));
         Assert.Null(log.Entries[1].Text);
+    }
+
+    /// <summary>
+    /// The owner's rule for B06: Build logs the values of a statement's parameters, as it always has, and not hashes of them. The shared gate's own default is hashes; this tool asks for the full-value level in one
+    /// place (<c>MutationGate.Options</c>), and this test fails if that ever changes. (Whether hashes would be better is a separate decision for the owner.)
+    /// </summary>
+    [Fact]
+    public async Task Parameter_values_are_logged_as_they_always_were_never_as_hashes()
+    {
+        var log = new MemoryStatementLog();
+        var gate = MutationGate.ForTesting(new Probe(), "apply", StatementKind.Data, log);
+        await gate.ExecuteAsync(GateStatement.FromPlanStep("s1", StatementKind.Data, "UPDATE t SET a = @n, b = @name, c = @gone",
+            [new("n", DbType.Int32, 5), new("name", DbType.String, "secret-customer-42"), new("gone", DbType.String, null)]));
+        var begin = log.Entries.Single(e => e.Phase == "begin");
+        Assert.Equal([("n", "5"), ("name", "secret-customer-42"), ("gone", "")], begin.Parameters!.Select(p => (p.Name, p.Value)));      // a null is the empty text, as Convert.ToString gives it and as the log always showed it
+        Assert.Equal("UPDATE t SET a = @n, b = @name, c = @gone", begin.Text);
+        Assert.All(log.Entries.Where(e => e.Phase != "begin"), e => Assert.Null(e.Parameters));
+    }
+
+    [Fact]
+    public async Task The_values_are_in_the_file_in_the_clear_as_the_file_has_always_shown_them()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ddb-log-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var run = Guid.NewGuid();
+            using var log = new FileStatementLog(dir, "apply", run);
+            var gate = MutationGate.ForTesting(new Probe(), "apply", StatementKind.Data, log);
+            await gate.ExecuteAsync(GateStatement.FromPlanStep("s1", StatementKind.Data, "UPDATE t SET b = @name", [new("name", DbType.String, "secret-customer-42")]));
+            var begin = ReadWhileOpen(log.Path).First();
+            Assert.Contains("\"name\":\"name\"", begin);
+            Assert.Contains("\"value\":\"secret-customer-42\"", begin);      // the value, in the clear, as the file has always shown it
+            Assert.Contains("\"hash\":\"", begin);                          // and, new with the shared log, a salted hash and the type beside it
+            Assert.Contains("\"type\":\"string\"", begin);
+            Assert.Contains("\"text\":\"UPDATE t SET b = @name\"", begin);
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void The_log_file_can_be_read_by_its_owner_only_on_a_system_that_has_owners()
+    {
+        if (OperatingSystem.IsWindows()) return;      // there the file inherits the folder's access list, which is the project's own
+        var dir = Path.Combine(Path.GetTempPath(), "ddb-log-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var log = new FileStatementLog(dir, "apply", Guid.NewGuid());
+            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(log.Path));
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public async Task The_parameters_of_a_bulk_insert_are_counted_not_listed()
+    {
+        var log = new MemoryStatementLog();
+        var gate = MutationGate.ForTesting(new Probe(), "seed", StatementKind.Data, log);
+        await gate.ExecuteAsync(GateStatement.BulkInsert("rows", "INSERT INTO t VALUES (@a), (@b)", [new("a", DbType.String, "row-one"), new("b", DbType.String, "row-two")]));
+        var logged = Assert.Single(log.Entries[0].Parameters!);
+        Assert.Equal(("(bulk values)", "2 values, not logged"), (logged.Name, logged.Value));
+    }
+
+    [Fact]
+    public async Task The_application_lock_names_its_resource_in_the_log()
+    {
+        var log = new MemoryStatementLog();
+        var gate = MutationGate.ForTesting(new Probe(), "apply", StatementKind.Data, log);
+        await gate.AcquireApplicationLockAsync("dbdatabuild:warehouse", shared: true, TimeSpan.Zero);
+        await gate.ReleaseApplicationLockAsync("dbdatabuild:warehouse", shared: true);
+        Assert.Equal(["acquire application lock dbdatabuild:warehouse (shared)", "release application lock dbdatabuild:warehouse (shared)"], log.Entries.Where(e => e.Phase == "begin").Select(e => e.Text));
+    }
+
+    [Fact]
+    public async Task Sibling_gates_write_one_ordered_log_and_obey_the_permissions_they_are_given()
+    {
+        var log = new MemoryStatementLog();
+        var gate = MutationGate.ForTesting(new Probe(), "refresh", StatementKind.Data | StatementKind.Tracking, log);
+        var sibling = gate.SiblingForTesting(new Probe());
+        await gate.ExecuteAsync(GateStatement.FromPlanStep("a", StatementKind.Data, "INSERT 1"));
+        await sibling.ExecuteAsync(GateStatement.FromPlanStep("b", StatementKind.Data, "INSERT 2"));
+        Assert.Equal([1, 1, 2, 2], log.Entries.Select(e => e.Ordinal));
+        Assert.Equal(gate.RunId, sibling.RunId);
+        await Assert.ThrowsAsync<GateRefusedException>(() => sibling.ExecuteAsync(GateStatement.FromPlanStep("c", StatementKind.Ddl, "DROP TABLE x")));
     }
 
     [Fact]
@@ -143,7 +226,7 @@ public class MutationGateTests
         {
             var run = Guid.NewGuid();
             using var log = new FileStatementLog(dir, "apply", run);
-            log.Append(new StatementLogEntry(run, 1, DateTime.UtcNow, "apply", "begin", "s1", "Data", "h", "SELECT 'é'", [("p", "v")], null));
+            log.Append(new StatementLogEntry(run, 1, DateTime.UtcNow, "apply", "begin", "s1", "Data", "h", "SELECT 'é'", [new DbDataKit.Transfer.LoggedParameter("p", "String", "", "v")], null));
             var line = ReadWhileOpen(log.Path).Single(); // readable while the log is still open: it was flushed
             Assert.Contains("\"step\":\"s1\"", line);
             Assert.Contains("é", line);

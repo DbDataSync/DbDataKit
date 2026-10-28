@@ -20,6 +20,8 @@ public sealed record WriteGateOptions(string Command, IStatementLog Log)
     public IRedactor? Redactor { get; init; }
     /// <summary>Runs every check and writes every log entry but executes nothing.</summary>
     public bool DryRun { get; init; }
+    /// <summary>The application lock's resource name is part of the logged text. Off by default (a resource can name a target); on for a product whose resources are its own bookkeeping names.</summary>
+    public bool LogLockResource { get; init; }
 }
 
 /// <summary>Counts per statement of one <see cref="WriteGate.RunAsync"/>; <see cref="RowsWritten"/> sums statements that insert or update.</summary>
@@ -38,14 +40,31 @@ public sealed class WriteGate : IAsyncDisposable
 {
     private readonly IWriteExecutor? _executor;
     private readonly WriteGateOptions _o;
-    private readonly byte[] _salt = RandomNumberGenerator.GetBytes(16);
-    private readonly object _seq = new();
-    private int _ordinal;
+    private readonly byte[] _salt;
+    private readonly Sequence _seq;
 
-    public WriteGate(IWriteExecutor? executor, WriteGateOptions options)
+    /// <summary>What the gates of one run share when they run side by side (each on a session of its own): the salt of the value hashes, and the ordinal of the log with the lock that keeps an ordinal and its line together, so the log of a run is one ordered sequence whichever session wrote a line.</summary>
+    private sealed class Sequence { public readonly object Lock = new(); public int Value; }
+
+    public WriteGate(IWriteExecutor? executor, WriteGateOptions options) : this(executor, options, new Sequence(), RandomNumberGenerator.GetBytes(16))
     {
         if (executor is null && !options.DryRun) throw new ArgumentException("an executor is required unless the gate is a dry run", nameof(executor));
-        _executor = executor; _o = options;
+    }
+
+    private WriteGate(IWriteExecutor? executor, WriteGateOptions options, Sequence sequence, byte[] salt)
+    {
+        _executor = executor; _o = options; _seq = sequence; _salt = salt;
+    }
+
+    /// <summary>
+    /// Another gate of the same run: its own executor (a connection runs one statement at a time, so loads that run side by side each take one), the same command, log, redactor, value salt and ordinal.
+    /// <paramref name="permitted"/> narrows or widens what the sibling may do. Each gate is still the only handle on its executor.
+    /// </summary>
+    public WriteGate Sibling(IWriteExecutor executor, WriteKind? permitted = null)
+    {
+        ArgumentNullException.ThrowIfNull(executor);
+        if (DryRun) throw new InvalidOperationException("A dry-run gate has no session to open a sibling of.");
+        return new WriteGate(executor, permitted is { } p ? _o with { Permitted = p } : _o, _seq, _salt);
     }
 
     public Guid RunId => _o.RunId;
@@ -177,7 +196,7 @@ public sealed class WriteGate : IAsyncDisposable
     public async Task<bool> AcquireLockAsync(string resource, bool shared = false, TimeSpan maxWait = default, CancellationToken ct = default)
     {
         var id = "lock";
-        var n = Begin(DryRun ? "dry-run" : "begin", id, "Lock", $"acquire application lock{(shared ? " (shared)" : "")}", null);
+        var n = Begin(DryRun ? "dry-run" : "begin", id, "Lock", $"acquire application lock{ResourceText(resource)}{(shared ? " (shared)" : "")}", null);
         if (DryRun) return true;
         var clock = System.Diagnostics.Stopwatch.StartNew();
         bool granted;
@@ -190,19 +209,21 @@ public sealed class WriteGate : IAsyncDisposable
     public async Task ReleaseLockAsync(string resource, bool shared = false, CancellationToken ct = default)
     {
         if (DryRun) return;
-        var n = Begin("begin", "unlock", "Lock", "release application lock", null);
+        var n = Begin("begin", "unlock", "Lock", $"release application lock{ResourceText(resource)}{(shared ? " (shared)" : "")}", null);
         await _executor!.UnlockAsync(resource, shared, ct);
         Record(n, "end", "unlock", "Lock", null, null, "released", null);
     }
 
     // ------------------------------------------------------------------ checks and logging
 
+    private string ResourceText(string resource) => _o.LogLockResource ? " " + resource : "";
+
     private void Check(WriteIntent intent, string step)
     {
         if (_o.Access == AccessMode.ReadOnly)
-            throw new GateRefusedException($"`{_o.Command}` has read-only access; step `{step}` ({intent.Kind}) was refused. Nothing was executed.");
+            throw new GateRefusedException($"`{_o.Command}` has read-only access; step `{step}` ({intent.Kind}) was refused. Nothing was executed.", GateRefusal.ReadOnly);
         if ((_o.Permitted & intent.Kind) != intent.Kind)
-            throw new GateRefusedException($"`{_o.Command}` permits {_o.Permitted} statements; step `{step}` is {intent.Kind}. Nothing was executed.");
+            throw new GateRefusedException($"`{_o.Command}` permits {_o.Permitted} statements; step `{step}` is {intent.Kind}. Nothing was executed.", GateRefusal.NotPermitted);
     }
 
     private async Task RecoverAsync(string step)
@@ -214,17 +235,18 @@ public sealed class WriteGate : IAsyncDisposable
 
     private int Begin(string phase, string step, string kind, string? text, SqlStatement? statement)
     {
-        lock (_seq)
+        lock (_seq.Lock)
         {
-            var n = ++_ordinal;
+            var n = ++_seq.Value;
             var parms = statement is null ? null : Parameters(statement);
             Record(n, phase, step, kind, text, parms, null, text);
             return n;
         }
     }
 
-    private IReadOnlyList<LoggedParameter> Parameters(SqlStatement s) =>
-        [.. s.Parameters.Select(p => new LoggedParameter(p.Name, p.Type.ToString(), ValueHash(p.Value),
+    private IReadOnlyList<LoggedParameter> Parameters(SqlStatement s) => s.ParametersAreRows
+        ? [new LoggedParameter("(bulk values)", "n/a", "", _o.Detail == StatementLogDetail.WithValues ? $"{s.Parameters.Count.ToString(CultureInfo.InvariantCulture)} values, not logged" : null)]
+        : [.. s.Parameters.Select(p => new LoggedParameter(p.Name, p.Type.ToString(), ValueHash(p.Value),
             _o.Detail == StatementLogDetail.WithValues ? Redact(Convert.ToString(p.Value, CultureInfo.InvariantCulture) ?? "NULL") : null))];
 
     /// <summary>Salted per run, so equal values correlate within a run but cannot be looked up in a table of guesses.</summary>
@@ -248,7 +270,7 @@ public sealed class WriteGate : IAsyncDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            throw new GateRefusedException($"The statement log could not be written ({ex.GetType().Name}), so step `{step}` was not executed.");
+            throw new GateRefusedException($"The statement log could not be written ({ex.GetType().Name}), so step `{step}` was not executed.", GateRefusal.LogUnavailable);
         }
     }
 
@@ -258,7 +280,8 @@ public sealed class WriteGate : IAsyncDisposable
         try { Record(n, "end", step, kind, null, null, outcome, hashSource); } catch (GateRefusedException) { }
     }
 
-    private static string Hash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+    /// <summary>Line endings are read as LF, so the same statement hashes the same on every platform (the tracking tables' script hashes do the same).</summary>
+    private static string Hash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.Replace("\r\n", "\n", StringComparison.Ordinal)))).ToLowerInvariant();
 
     /// <summary>Exception type and driver error code only: driver messages can quote data.</summary>
     private static string Describe(Exception ex) => ex is DbException { ErrorCode: var code } && code != 0 ? $"{ex.GetType().Name} code={code}" : ex.GetType().Name;
