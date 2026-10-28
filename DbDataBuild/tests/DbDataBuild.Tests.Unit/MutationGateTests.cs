@@ -153,7 +153,7 @@ public class MutationGateTests
     }
 
     [Fact]
-    public async Task The_values_are_in_the_file_as_the_file_has_always_shown_them()
+    public async Task The_values_are_in_the_file_in_the_clear_as_the_file_has_always_shown_them()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ddb-log-" + Guid.NewGuid().ToString("N"));
         try
@@ -163,8 +163,24 @@ public class MutationGateTests
             var gate = MutationGate.ForTesting(new Probe(), "apply", StatementKind.Data, log);
             await gate.ExecuteAsync(GateStatement.FromPlanStep("s1", StatementKind.Data, "UPDATE t SET b = @name", [new("name", DbType.String, "secret-customer-42")]));
             var begin = ReadWhileOpen(log.Path).First();
-            Assert.Contains("\"Name\":\"name\",\"Value\":\"secret-customer-42\"", begin);
+            Assert.Contains("\"name\":\"name\"", begin);
+            Assert.Contains("\"value\":\"secret-customer-42\"", begin);      // the value, in the clear, as the file has always shown it
+            Assert.Contains("\"hash\":\"", begin);                          // and, new with the shared log, a salted hash and the type beside it
+            Assert.Contains("\"type\":\"string\"", begin);
             Assert.Contains("\"text\":\"UPDATE t SET b = @name\"", begin);
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void The_log_file_can_be_read_by_its_owner_only_on_a_system_that_has_owners()
+    {
+        if (OperatingSystem.IsWindows()) return;      // there the file inherits the folder's access list, which is the project's own
+        var dir = Path.Combine(Path.GetTempPath(), "ddb-log-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var log = new FileStatementLog(dir, "apply", Guid.NewGuid());
+            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(log.Path));
         }
         finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
     }
