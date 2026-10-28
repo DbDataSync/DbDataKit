@@ -98,24 +98,31 @@ Decision on 2026-10-28 (13a): build a conversion layer between Sync's loose sour
 versus lenient (13b section 1) is **not answered**, so the layer keeps today's behaviour: the providers still convert as in section 2, and the layer adds
 what section 2 shows is missing without changing an outcome.
 
-For a column whose target type maps to a canonical kind, the layer decides once per column and runtime type, from the table of that target engine:
+`StagingValueGate` (Drivers.Generic) sits in the staging batch reader, one check per cell. For a column whose target type maps to a canonical kind it decides
+once per column and runtime type, from `StagingValueRules` (generated from the two matrices):
 
-* **Pass**: the value goes to the writer untouched. Every cell section 2 shows as stored is Pass, including the lenient and the surprising ones (`1.5`
-  into `tinyint` stored as 2; PostgreSQL `int` into `date`), because changing them is the strict-versus-lenient decision.
-* **Refuse**: a runtime type that section 2 shows is refused for every target of that canonical kind. It fails *before* the batch is written, with one
-  message that names the target table, the column, the target column type and the value's runtime type, never the value
-  (`Staging into dbo.Orders: column 'Total' (decimal(18,2)) cannot take a System.Guid from the source`). Today the same failures arrive from the
-  provider with whatever text it has: SqlClient names the column and the types; a PostgreSQL server error and a few client errors name neither.
-* **Unmappable target types** (`hierarchyid`, `money` on some engines, ...) are Pass for everything, as today.
+* **Refuse**: a runtime type that no column of that canonical kind took in the matrix (every sample refused). The cell fails *before* the writer sees it,
+  with one message that names the target table, the column, the column's declared type and the value's runtime type, never the value
+  (`Staging into dbo.Orders: column 'Total' (decimal(18,2)) cannot take a value of type System.Guid from the source ...`). Before, the same failure arrived from the
+  provider with whatever text it had: SqlClient usually names the column and the types; a PostgreSQL server error and a few client errors name neither.
+* **Pass**: everything else, untouched: every cell section 2 shows as stored, including the lenient and the surprising ones (`1.5` into `tinyint` stored as
+  2; PostgreSQL `int` into `date`), because changing them is the strict-versus-lenient decision; and every runtime type the matrix never measured (an `IPAddress`, a
+  java object, a range), because the table says nothing about it and the provider decides, as before.
+* PostgreSQL `interval` and `json`/`jsonb` targets are left to the provider on purpose: it refuses them with its own message, which carries the advice to stage through the
+  other Kind. Unmappable target types and engines other than SQL Server and PostgreSQL pass everything.
 
-No value is converted. The reason is in the table: SQL Server accepts what PostgreSQL refuses (an `int` into `boolean` or `timestamptz`) and the
-reverse, so one canonical conversion cannot reproduce both engines' behaviour, and a conversion per engine is exactly what the providers already do.
-Where the layer could do more is listed as findings, each a behaviour change to be decided:
+**No value is converted.** The table is why: SQL Server accepts what PostgreSQL refuses (an `int` into `boolean`, a `DateTime` of the wrong kind into `timestamptz`) and the
+reverse, so one canonical conversion cannot reproduce both engines, and a conversion per engine is exactly what the providers already do. Every change the layer makes
+is in the refusal column: the matrices were regenerated with the gate in place and compared cell by cell with the ones measured before it: of 1,900 cells, **0 stored cells changed
+and 0 refused cells became stored**; 1,074 refused cells (477 on SQL Server, 597 on PostgreSQL) now fail with `StagingValueException` instead of a provider exception, at the same
+point of the load (the batch is not written either way).
+
+What the layer could do beyond this is the findings below, each a behaviour change the owner has not asked for.
 
 ## 4. Findings (not changed here)
 
 1. **PostgreSQL `COPY` mis-reads integers as dates, times and timestamps** (`int` into `date`, `uint`/`long` into `time`, `timestamp`, `timestamptz`): stored without error as a count of days or microseconds since 2000-01-01. A source integer column mapped onto a date column is a mapping mistake the engine does not catch.
-2. **A PostgreSQL `timestamptz` target takes only `DateTime` of kind `Utc`.** SQL Server `datetime2`/`datetimeoffset`, MySQL `datetime` and DuckDB `TIMESTAMP` sources are refused. The logical-slot reader returns a `DateTimeOffset` with the offset of the decoded text, so it is refused whenever that offset is not zero.
+2. **A PostgreSQL `timestamptz` target takes only `DateTime` of kind `Utc`** (deliberate, and the refusal explains it; but it is a cross-engine gap). SQL Server `datetime2`/`datetimeoffset`, MySQL `datetime` and DuckDB `TIMESTAMP` sources are refused. The logical-slot reader returns a `DateTimeOffset` with the offset of the decoded text, so it is refused whenever that offset is not zero.
 3. **`DateTime` into a SQL Server `varchar`/`nvarchar` is formatted by the client** (`03/17/2024 09:41:22`, fraction dropped), and a string such as `"1.5"` is read as a date by `date`/`datetime`/`datetime2`/`datetimeoffset` targets. Both are the client's parsing and formatting, so they very likely follow the worker's culture; the matrix ran in one culture only and that is **not verified** under another.
 4. **PostgreSQL `COPY` cannot stage `interval`, `jsonb`, `timetz`, `money`, arrays or any type missing from `PostgresNpgsqlTypes`.** The error says so and names the other staging Kind.
 5. **Readers that cannot hand a value over at all**: SQL Server `geography`, `geometry`, `hierarchyid` (missing assembly); PostgreSQL unbounded `numeric` above 28 digits, `NaN`, intervals with months; MySQL zero dates and non-GUID `char(36)`; DuckDB intervals with months. These fail in the source driver before staging sees them.

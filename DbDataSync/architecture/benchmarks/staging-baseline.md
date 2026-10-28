@@ -36,3 +36,19 @@ back to back on one machine: 4 cores shared with other jobs (load average 7 to 2
 Allocation is unchanged (SQL Server 248.4 -> 250.4 MB, PostgreSQL 147.0 -> 142.7 MB), peak managed heap +0.5 to +0.2 MB (17.6 -> 18.2, 17.4 -> 17.6), peak working set +1 MB, GC counts identical (15 / 0 / 0 and 8 / 0 / 0).
 The run-to-run spread on this machine (about 15%) is larger than any difference between the two builds, so the honest reading is "no measurable change", not "faster". An earlier "after" with 2,048-row staging batches
 (rather than 128) was *not* within noise: the held batches were promoted to generation 1 and 2 and cost 20 to 90 ms of GC pause, which is why `StagingBatches.BatchRows` is 128.
+
+## After A14a (the value gate in front of both bulk paths)
+
+A14a puts `StagingValueGate` between Sync's rows and the shared writers: one type comparison per cell against the column's last accepted type, and a refusal for a runtime type the engine never takes (`architecture/staging-value-types.md`).
+Measured the same way as above, one machine, back to back: the tool built from `main` (A14 and A15 merged, no gate) against the tool built from the branch, SQL Server 2022 (`mssql/server:2022-latest` in a container) and PostgreSQL 17 (container) on the same host,
+4 cores shared with other jobs (load average 2.5 to 5.5, lower than in the A14/A15 runs), .NET 10.0, 200,000 x 20, four interleaved rounds of "before, after", each cell the median of 5 runs (the tool's own).
+
+| provider | before (`main`), ms per round | after, ms per round | median before | median after | change |
+| --- | --- | --- | ---: | ---: | ---: |
+| SQL Server, `SqlBulkCopy` | 2,536 / 2,434 / 2,272 / 2,265 | 2,353 / 2,264 / 2,155 / 2,509 | 2,353 | 2,309 | -1.9% |
+| PostgreSQL, binary `COPY` | 2,356 / 2,061 / 2,154 / 2,275 | 2,133 / 2,293 / 2,200 / 2,367 | 2,215 | 2,247 | +1.4% |
+
+Spread of the four rounds (max over min): SQL Server 12% before, 16% after; PostgreSQL 14% before, 11% after. Allocation is unchanged (250.4 and 142.8 MB in both builds), peak heap 18.4 and 17.9 MB in both, GC counts identical (15 / 0 / 0 and 8 / 0 / 0).
+
+What it supports: no measurable change from the gate (the differences are inside the spread, and in opposite directions). What it does not support: a statement about the 5% bar against the baseline table above, which was measured on a 24-core machine; this machine cannot reproduce those conditions, so the comparison is same machine, before and after only.
+The benchmark's columns (int, strings, decimal, datetime2 in a 5-column cycle) are all types the gate passes, so this measures the cost of the check, not of a refusal.
