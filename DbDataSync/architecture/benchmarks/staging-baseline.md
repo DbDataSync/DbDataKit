@@ -52,3 +52,22 @@ Spread of the four rounds (max over min): SQL Server 12% before, 16% after; Post
 
 What it supports: no measurable change from the gate (the differences are inside the spread, and in opposite directions). What it does not support: a statement about the 5% bar against the baseline table above, which was measured on a 24-core machine; this machine cannot reproduce those conditions, so the comparison is same machine, before and after only.
 The benchmark's columns (int, strings, decimal, datetime2 in a 5-column cycle) are all types the gate passes, so this measures the cost of the check, not of a refusal.
+
+## After A16b (the writers' statements from the shared builders)
+
+A16b moves the four apply writers onto `DbDataKit.Transfer`'s scope-shaped builders. The hot loop of a chunked apply is the same calls as before (one command and its parameters per chunk, over the staging table's ordinal);
+what changed is that the statement text is built once, on the first chunk, instead of once per chunk, and the ordinal parameters are created from the built statement's slots. This measures `DeleteInsertWriter.ApplyAsync` alone
+(delete the scope, refill it in chunks inside the one transaction) on PostgreSQL, the only engine that was available: SQL Server, MySQL and Oracle were not, so the three SQL Server writers have no timing.
+
+Same method as above where it fits: one machine, the test project built from the commit before the change and from the branch, run back to back as separate processes. 4 cores shared with other jobs (load average 1.4 to 4.5),
+PostgreSQL 16.15 started directly (not a container), .NET 10.0, a 200,000-row, 4-column staged set (`BatchInsertStagingProvider`, outside the timed part), `applyBatchSize` 5,000 (40 chunks) and 500 (400 chunks),
+each cell the median of 7 applies in one process after one warm-up apply, five processes per build (rounds 1 to 3 ran before then after, rounds 4 and 5 after then before, to see whether the order matters).
+
+| `applyBatchSize` | before, median ms per process | after, median ms per process | median before | median after | change |
+| --- | --- | --- | ---: | ---: | ---: |
+| 5,000 | 1,384 (first, cold) / 857 / 858 / 910 / 934 | 865 / 899 / 899 / 880 / 957 | 910 | 899 | -1.2% |
+| 500 | 1,456 (first, cold) / 1,014 / 1,001 / 1,159 / 1,092 | 1,046 / 1,167 / 1,078 / 1,110 / 1,114 | 1,092 | 1,110 | +1.6% |
+
+Spread: the seven applies inside one process range 20 to 40% (775 to 1,204 ms at 5,000), more than any difference between the builds. The first three rounds (before, then after) showed the "after" build 4 to 10% slower and the two rounds in the other order
+showed it no slower, so the order, not the code, explains that. Allocation per apply fell (0.13 to 0.08 MB at 5,000; 1.22 to 0.76 MB at 500) because the text is no longer rebuilt per chunk. What this supports: no measurable change on PostgreSQL.
+What it does not support: a statement about 5% against any 24-core baseline (this 4-core shared machine cannot show it), or anything about SQL Server, MySQL or Oracle.
