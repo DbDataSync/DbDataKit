@@ -22,10 +22,10 @@ public sealed partial class PendingInstances(string path, TimeProvider? clock = 
     private readonly object _gate = new();
 
     /// <summary>
-    /// Records an announcement. A server that gave no address is reached at the one its announcement came from (<paramref name="from"/>) and the port it named: the pairing pins the certificate it presents, so the address
-    /// is only where to look, and a container whose address changes announces again. Returns why it was not taken, or null.
+    /// Records an announcement. A server that gave no address is reached by the host name it announced, when that name <paramref name="hostResolves"/> for this console (so a server that gets a new IP address stays reachable and paired),
+    /// and otherwise at the address its announcement came from (<paramref name="from"/>), with the port it named. The pairing pins the certificate it presents, so the address is only where to look. Returns why it was not taken, or null.
     /// </summary>
-    public string? Announce(Announcement announcement, System.Net.IPAddress? from)
+    public string? Announce(Announcement announcement, System.Net.IPAddress? from, bool hostResolves = false)
     {
         if (!Products.Contains(announcement.Product)) return "the product is not one this console manages";
         if (announcement.InstanceId is not { } id || !IdPattern().IsMatch(id)) return "the instance id is missing or not valid";
@@ -36,7 +36,8 @@ public sealed partial class PendingInstances(string path, TimeProvider? clock = 
             if (announcement.Port is < 1 or > 65535) return "the port is missing or not valid";
             if (from is null) return "the announcement came from no address and gave none";
             var address = from.IsIPv4MappedToIPv6 ? from.MapToIPv4() : from;
-            url = new UriBuilder(Uri.UriSchemeHttps, address.ToString(), announcement.Port).Uri;
+            var name = hostResolves && announcement.Host is { } host && HostPattern().IsMatch(host) ? host : address.ToString();
+            url = new UriBuilder(Uri.UriSchemeHttps, name, announcement.Port).Uri;
         }
         else if (!Uri.TryCreate(announcement.Url, UriKind.Absolute, out url) || url.Scheme != Uri.UriSchemeHttps || url.Host.Length == 0 || url.AbsoluteUri.Length > 300) return "the address is not an https address";
         if (announcement.Code is not { Length: > 0 and <= 40 }) return "the code is missing";
@@ -100,4 +101,8 @@ public sealed partial class PendingInstances(string path, TimeProvider? clock = 
 
     [GeneratedRegex("^[A-Za-z0-9._:-]{1,64}$")]
     private static partial Regex IdPattern();
+
+    /// <summary>A DNS host name: letters, digits, dots and hyphens.</summary>
+    [GeneratedRegex("^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$")]
+    public static partial Regex HostPattern();
 }

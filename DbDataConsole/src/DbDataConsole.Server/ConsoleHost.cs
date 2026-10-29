@@ -98,7 +98,8 @@ public static class ConsoleHost
             Announcement? announcement;
             try { announcement = await context.Request.ReadFromJsonAsync<Announcement>(new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web), context.RequestAborted); }
             catch (Exception ex) when (ex is System.Text.Json.JsonException or Microsoft.AspNetCore.Http.BadHttpRequestException) { announcement = null; }
-            var refusal = announcement is null ? "the body is not an announcement" : context.RequestServices.GetRequiredService<PendingInstances>().Announce(announcement, context.Connection.RemoteIpAddress);
+            var resolves = announcement?.Host is { } host && PendingInstances.HostPattern().IsMatch(host) && await ResolvesAsync(host);
+            var refusal = announcement is null ? "the body is not an announcement" : context.RequestServices.GetRequiredService<PendingInstances>().Announce(announcement, context.Connection.RemoteIpAddress, resolves);
             if (refusal is null) { context.Response.StatusCode = StatusCodes.Status204NoContent; return; }
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             await context.Response.WriteAsJsonAsync(new { error = refusal }, context.RequestAborted);
@@ -137,6 +138,17 @@ public static class ConsoleHost
             await context.Response.WriteAsync("The dbdatakit console is running, but its web app is not installed here (no wwwroot).");
         }).AllowAnonymous();
         return app;
+    }
+
+    /// <summary>Whether the console can look the name up, which a name on the network the servers share with it can.</summary>
+    private static async Task<bool> ResolvesAsync(string host)
+    {
+        try
+        {
+            using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            return (await Dns.GetHostAddressesAsync(host, limit.Token)).Length > 0;
+        }
+        catch (Exception ex) when (ex is System.Net.Sockets.SocketException or OperationCanceledException) { return false; }
     }
 
     private static IPAddress AddressOf(Uri listen) =>

@@ -8,17 +8,18 @@ using Microsoft.Extensions.Hosting;
 namespace DbDataKit.Web.Trust;
 
 /// <summary>
-/// What a server tells a console that is waiting to hear of it: who it is, the port its management API is on, a single-use code that lets the console pair once an administrator there confirms, and, only when the console could not work it out,
-/// the address to use (<see cref="ConsoleAnnouncer.AdvertiseVariable"/>). Without an address the console uses the one the announcement came from.
+/// What a server tells a console that is waiting to hear of it: who it is, the port its management API is on, its host name, a single-use code that lets the console pair once an administrator there confirms, and, only when the
+/// host name is not enough, the whole address to use (<see cref="ConsoleAnnouncer.AdvertiseVariable"/>). The console reaches the server by name when the name resolves for it, so a server that gets a new IP address stays paired;
+/// when it does not resolve, the console uses the address the announcement came from.
 /// </summary>
-public sealed record Announcement(string Product, string InstanceId, string Name, int Port, string? Url, string Code, DateTimeOffset Expires);
+public sealed record Announcement(string Product, string InstanceId, string Name, int Port, string? Host, string? Url, string Code, DateTimeOffset Expires);
 
 /// <summary>
 /// A server that offers itself to a console (plan 13a, L03): when <see cref="UrlVariable"/> names a console's announce address (a private port of the console, reachable only on the network the two share, such as a compose network; the console
 /// listens on the port of the same variable, so one setting shared by a whole compose file is all there is) and this server has
 /// no console paired, it repeats an <see cref="Announcement"/> every <see cref="Interval"/> until one is. The console lists the server as pending; nothing is paired until an administrator confirms it there, and the code it carries expires in minutes and works once.
 /// </summary>
-public sealed class ConsoleAnnouncer(string product, string instanceId, string name, Func<int?> port, Uri? advertise, Uri console, PairedClientsFile clients, PairingCodes codes, TimeProvider? clock = null)
+public sealed class ConsoleAnnouncer(string product, string instanceId, string name, Func<int?> port, Uri? advertise, Uri console, PairedClientsFile clients, PairingCodes codes, TimeProvider? clock = null, string? hostName = null)
 {
     public const string UrlVariable = "DBDATAKIT_CONSOLE_ANNOUNCE_URL";
     public const string AdvertiseVariable = "DBDATAKIT_ADVERTISE_URL";
@@ -31,7 +32,6 @@ public sealed class ConsoleAnnouncer(string product, string instanceId, string n
 
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private PairingCode? _code;
-
     /// <summary>The announcer this environment asks for, or null when it asks for none (or does not say where the server can be reached, which a console needs).</summary>
     public static ConsoleAnnouncer? FromEnvironment(string product, string instanceId, Func<int?> port, PairedClientsFile clients, PairingCodes codes, Func<string, string?>? environment = null)
     {
@@ -51,7 +51,7 @@ public sealed class ConsoleAnnouncer(string product, string instanceId, string n
         // a new code when the one held is about to lapse, or the server's waiting codes were cancelled (five wrong codes cancel them all)
         if (_code is null || _code.ExpiresAt - now < Renew || codes.Pending() == 0)
             _code = codes.Create(ServerRole.Admin, null, Lifetime);
-        var announcement = new Announcement(product, instanceId, name, listening, advertise?.AbsoluteUri.TrimEnd('/'), _code.Code, _code.ExpiresAt);
+        var announcement = new Announcement(product, instanceId, name, listening, hostName ?? System.Net.Dns.GetHostName(), advertise?.AbsoluteUri.TrimEnd('/'), _code.Code, _code.ExpiresAt);
         try
         {
             using var response = await http.PostAsJsonAsync(new Uri(console, Path), announcement, Json, cancellationToken).ConfigureAwait(false);
