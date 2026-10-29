@@ -726,7 +726,7 @@ date	string:1.5	STORED DateTime:2026-01-05T00:00:00.0000000
 date	string:true	REFUSED InvalidOperationException (names the column and value type)
 date	string:date	STORED DateTime:2024-03-17T00:00:00.0000000
 date	string:datetime	STORED DateTime:2024-03-17T00:00:00.0000000
-date	string:time	STORED DateTime:2026-10-28T00:00:00.0000000
+date	string:time	STORED DateTime:<today>T00:00:00.0000000
 date	string:guid	REFUSED InvalidOperationException (names the column and value type)
 date	string:json	REFUSED InvalidOperationException (names the column and value type)
 date	string:xml	REFUSED InvalidOperationException (names the column and value type)
@@ -826,7 +826,7 @@ datetime	string:1.5	STORED DateTime:2026-01-05T00:00:00.0000000
 datetime	string:true	REFUSED InvalidOperationException (names the column and value type)
 datetime	string:date	STORED DateTime:2024-03-17T00:00:00.0000000
 datetime	string:datetime	STORED DateTime:2024-03-17T09:41:22.0000000
-datetime	string:time	STORED DateTime:2026-10-28T09:41:22.0000000
+datetime	string:time	STORED DateTime:<today>T09:41:22.0000000
 datetime	string:guid	REFUSED InvalidOperationException (names the column and value type)
 datetime	string:json	REFUSED InvalidOperationException (names the column and value type)
 datetime	string:xml	REFUSED InvalidOperationException (names the column and value type)
@@ -876,7 +876,7 @@ datetime2(7)	string:1.5	STORED DateTime:2026-01-05T00:00:00.0000000
 datetime2(7)	string:true	REFUSED InvalidOperationException (names the column and value type)
 datetime2(7)	string:date	STORED DateTime:2024-03-17T00:00:00.0000000
 datetime2(7)	string:datetime	STORED DateTime:2024-03-17T09:41:22.0000000
-datetime2(7)	string:time	STORED DateTime:2026-10-28T09:41:22.0000000
+datetime2(7)	string:time	STORED DateTime:<today>T09:41:22.0000000
 datetime2(7)	string:guid	REFUSED InvalidOperationException (names the column and value type)
 datetime2(7)	string:json	REFUSED InvalidOperationException (names the column and value type)
 datetime2(7)	string:xml	REFUSED InvalidOperationException (names the column and value type)
@@ -926,7 +926,7 @@ datetimeoffset(7)	string:1.5	STORED DateTimeOffset:2026-01-05T00:00:00.0000000+0
 datetimeoffset(7)	string:true	REFUSED InvalidOperationException (names the column and value type)
 datetimeoffset(7)	string:date	STORED DateTimeOffset:2024-03-17T00:00:00.0000000+00:00
 datetimeoffset(7)	string:datetime	STORED DateTimeOffset:2024-03-17T09:41:22.0000000+00:00
-datetimeoffset(7)	string:time	STORED DateTimeOffset:2026-10-28T09:41:22.0000000+00:00
+datetimeoffset(7)	string:time	STORED DateTimeOffset:<today>T09:41:22.0000000+00:00
 datetimeoffset(7)	string:guid	REFUSED InvalidOperationException (names the column and value type)
 datetimeoffset(7)	string:json	REFUSED InvalidOperationException (names the column and value type)
 datetimeoffset(7)	string:xml	REFUSED InvalidOperationException (names the column and value type)
