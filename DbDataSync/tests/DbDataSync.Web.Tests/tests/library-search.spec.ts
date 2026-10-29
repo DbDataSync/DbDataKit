@@ -5,19 +5,28 @@ import { screenshotDir } from '../screenshots'
 const screenshotsDir = screenshotDir('library-search')
 
 /**
- * Phase 119's NuGet search box on the Libraries screen — against the real public index, since this
- * suite's single API instance doesn't have a way to flip `DbDataSync:Nuget:Search:Mode` per test (the
- * disabled/unavailable-degrades-to-manual-entry behavior is covered at the API layer by
- * `LibrarySearchTests`, and the client-side branch it drives is the same `status !== 'ok'` check this
- * test's "enabled" path already exercises the other side of).
+ * Phase 119's NuGet search box on the Libraries screen. The server's call to the public index is
+ * answered in the browser with a fixed result: the test used to reach nuget.org through the API and
+ * failed whenever that round trip was slow or refused, which says nothing about this screen (the real
+ * call is covered at the API layer by `LibrarySearchTests`, as are the disabled and unavailable
+ * answers).
  */
 test.describe('admin: Libraries — NuGet search', () => {
-  test('searching finds a real package, and a version is required before the install command appears', async ({ page }) => {
+  test('searching finds a package, and a version is required before the install command appears', async ({ page }) => {
+    await page.route('**/api/libraries/search**', (route) => route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'ok',
+        results: new URL(route.request().url()).searchParams.get('q')
+          ? [{ id: 'MySqlConnector', description: 'A MySQL driver', latestVersion: '2.6.2', versions: ['2.6.2', '2.4.0'], totalDownloads: 1234567, verified: true }]
+          : [],
+      }),
+    }))
     await page.goto('/drivers/libraries')
 
     const searchInput = page.getByTestId('admin-libraries-search-input')
     // The probe-on-mount call has to settle (proving search is reachable) before the box replaces the
-    // "checking..." placeholder — a generous timeout since it's a real network round trip.
+    // "checking..." placeholder.
     await expect(searchInput).toBeVisible({ timeout: 15_000 })
 
     await searchInput.fill('MySqlConnector')
