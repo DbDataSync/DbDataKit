@@ -21,13 +21,24 @@ public sealed partial class PendingInstances(string path, TimeProvider? clock = 
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly object _gate = new();
 
-    /// <summary>Records an announcement. Returns why it was not taken, or null.</summary>
-    public string? Announce(Announcement announcement)
+    /// <summary>
+    /// Records an announcement. A server that gave no address is reached at the one its announcement came from (<paramref name="from"/>) and the port it named: the pairing pins the certificate it presents, so the address
+    /// is only where to look, and a container whose address changes announces again. Returns why it was not taken, or null.
+    /// </summary>
+    public string? Announce(Announcement announcement, System.Net.IPAddress? from)
     {
         if (!Products.Contains(announcement.Product)) return "the product is not one this console manages";
         if (announcement.InstanceId is not { } id || !IdPattern().IsMatch(id)) return "the instance id is missing or not valid";
         if (string.IsNullOrWhiteSpace(announcement.Name) || announcement.Name.Length > 100 || announcement.Name.Any(char.IsControl)) return "the name is missing, too long or has control characters";
-        if (!Uri.TryCreate(announcement.Url, UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps || url.Host.Length == 0 || url.AbsoluteUri.Length > 300) return "the address is not an https address";
+        Uri? url;
+        if (announcement.Url is null)
+        {
+            if (announcement.Port is < 1 or > 65535) return "the port is missing or not valid";
+            if (from is null) return "the announcement came from no address and gave none";
+            var address = from.IsIPv4MappedToIPv6 ? from.MapToIPv4() : from;
+            url = new UriBuilder(Uri.UriSchemeHttps, address.ToString(), announcement.Port).Uri;
+        }
+        else if (!Uri.TryCreate(announcement.Url, UriKind.Absolute, out url) || url.Scheme != Uri.UriSchemeHttps || url.Host.Length == 0 || url.AbsoluteUri.Length > 300) return "the address is not an https address";
         if (announcement.Code is not { Length: > 0 and <= 40 }) return "the code is missing";
         var now = _clock.GetUtcNow();
         if (announcement.Expires <= now) return "the code has already expired";

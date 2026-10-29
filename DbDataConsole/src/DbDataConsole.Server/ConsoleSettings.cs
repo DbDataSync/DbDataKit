@@ -24,8 +24,6 @@ public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUr
 
     public string PendingPath => System.IO.Path.Combine(Directory, "pending.json");
 
-    public const string AnnounceListenVariable = "DBDATAKIT_CONSOLE_ANNOUNCE_LISTEN";
-
     public string StatePath => System.IO.Path.Combine(Directory, "state.db");
 
     /// <summary>What <c>--repo</c> defaults to: <see cref="DirectoryVariable"/>, else a folder under the user's local application data.</summary>

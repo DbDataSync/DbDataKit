@@ -61,9 +61,12 @@ public static class ConsoleCli
             return CliExit.Usage;
         }
 
+        // The private port: --announce-listen, or the port of the one variable a compose file shares with its servers (where they announce is where the console listens, on every address)
         Uri? announce = null;
-        if ((parsed.Get("announce-listen") ?? (environment ?? Environment.GetEnvironmentVariable)(ConsoleSettings.AnnounceListenVariable)) is { Length: > 0 } announceText
-            && (!Uri.TryCreate(announceText, UriKind.Absolute, out announce) || announce.Scheme != Uri.UriSchemeHttp || announce.Port == listen.Port))
+        var announceText = parsed.Get("announce-listen");
+        if (announceText is null && Uri.TryCreate((environment ?? Environment.GetEnvironmentVariable)(DbDataKit.Web.Trust.ConsoleAnnouncer.UrlVariable), UriKind.Absolute, out var shared) && shared.Scheme == Uri.UriSchemeHttp)
+            announceText = new UriBuilder(Uri.UriSchemeHttp, "0.0.0.0", shared.Port).Uri.AbsoluteUri;
+        if (announceText is { Length: > 0 } && (!Uri.TryCreate(announceText, UriKind.Absolute, out announce) || announce.Scheme != Uri.UriSchemeHttp || announce.Port == listen.Port))
         {
             await context.Error.WriteLineAsync("--announce-listen is a plain http address on a port of its own, such as http://0.0.0.0:8481, and is reachable only on the network the servers share with the console.");
             return CliExit.Usage;

@@ -73,7 +73,7 @@ internal static class BuildServer
         app.UseDbDataPipeline();
         app.MapDbDataEndpoints();
         app.MapPairing(new PairingService(instanceId, fingerprint, clients, files.Codes()));
-        app.AnnounceToConsole("dbdatabuild", instanceId, clients, files.Codes());
+        app.AnnounceToConsole("dbdatabuild", instanceId, settings.Listen.Port, clients, files.Codes());
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new MemoryReplayCache()));
         app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache()), refused => log($"A call was refused ({refused.Failure}): {refused.Detail}"));
         BuildManagementApi.Map(app, projects, commands, runner, surfaceFor, scheduler, new Workspaces(settings.Directory, TimeProvider.System), workspaceRunner, new ProxiesFile(settings.Directory), proxyPublisher, files.Codes(), $"Build server {instanceId}");

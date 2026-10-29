@@ -98,7 +98,7 @@ public static class ConsoleHost
             Announcement? announcement;
             try { announcement = await context.Request.ReadFromJsonAsync<Announcement>(new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web), context.RequestAborted); }
             catch (Exception ex) when (ex is System.Text.Json.JsonException or Microsoft.AspNetCore.Http.BadHttpRequestException) { announcement = null; }
-            var refusal = announcement is null ? "the body is not an announcement" : context.RequestServices.GetRequiredService<PendingInstances>().Announce(announcement);
+            var refusal = announcement is null ? "the body is not an announcement" : context.RequestServices.GetRequiredService<PendingInstances>().Announce(announcement, context.Connection.RemoteIpAddress);
             if (refusal is null) { context.Response.StatusCode = StatusCodes.Status204NoContent; return; }
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             await context.Response.WriteAsJsonAsync(new { error = refusal }, context.RequestAborted);

@@ -7,14 +7,18 @@ using Microsoft.Extensions.Hosting;
 
 namespace DbDataKit.Web.Trust;
 
-/// <summary>What a server tells a console that is waiting to hear of it: who it is, where the console can reach it, and a single-use code that lets the console pair once an administrator there confirms.</summary>
-public sealed record Announcement(string Product, string InstanceId, string Name, string Url, string Code, DateTimeOffset Expires);
+/// <summary>
+/// What a server tells a console that is waiting to hear of it: who it is, the port its management API is on, a single-use code that lets the console pair once an administrator there confirms, and, only when the console could not work it out,
+/// the address to use (<see cref="ConsoleAnnouncer.AdvertiseVariable"/>). Without an address the console uses the one the announcement came from.
+/// </summary>
+public sealed record Announcement(string Product, string InstanceId, string Name, int Port, string? Url, string Code, DateTimeOffset Expires);
 
 /// <summary>
-/// A server that offers itself to a console (plan 13a, L03): when <see cref="UrlVariable"/> names a console's announce address (a private port of the console, reachable only on the network the two share, such as a compose network) and this server has
+/// A server that offers itself to a console (plan 13a, L03): when <see cref="UrlVariable"/> names a console's announce address (a private port of the console, reachable only on the network the two share, such as a compose network; the console
+/// listens on the port of the same variable, so one setting shared by a whole compose file is all there is) and this server has
 /// no console paired, it repeats an <see cref="Announcement"/> every <see cref="Interval"/> until one is. The console lists the server as pending; nothing is paired until an administrator confirms it there, and the code it carries expires in minutes and works once.
 /// </summary>
-public sealed class ConsoleAnnouncer(string product, string instanceId, string name, Uri advertise, Uri console, PairedClientsFile clients, PairingCodes codes, TimeProvider? clock = null)
+public sealed class ConsoleAnnouncer(string product, string instanceId, string name, Func<int?> port, Uri? advertise, Uri console, PairedClientsFile clients, PairingCodes codes, TimeProvider? clock = null)
 {
     public const string UrlVariable = "DBDATAKIT_CONSOLE_ANNOUNCE_URL";
     public const string AdvertiseVariable = "DBDATAKIT_ADVERTISE_URL";
@@ -29,23 +33,25 @@ public sealed class ConsoleAnnouncer(string product, string instanceId, string n
     private PairingCode? _code;
 
     /// <summary>The announcer this environment asks for, or null when it asks for none (or does not say where the server can be reached, which a console needs).</summary>
-    public static ConsoleAnnouncer? FromEnvironment(string product, string instanceId, PairedClientsFile clients, PairingCodes codes, Func<string, string?>? environment = null)
+    public static ConsoleAnnouncer? FromEnvironment(string product, string instanceId, Func<int?> port, PairedClientsFile clients, PairingCodes codes, Func<string, string?>? environment = null)
     {
         environment ??= Environment.GetEnvironmentVariable;
         if (!Uri.TryCreate(environment(UrlVariable), UriKind.Absolute, out var console) || console.Scheme is not ("http" or "https")) return null;
-        if (!Uri.TryCreate(environment(AdvertiseVariable), UriKind.Absolute, out var advertise) || advertise.Scheme != Uri.UriSchemeHttps) return null;
-        return new ConsoleAnnouncer(product, instanceId, environment(NameVariable) is { Length: > 0 } named ? named : product, advertise, console, clients, codes);
+        // optional: the address the console should use when the one it sees the announcement come from is not it (a proxy or published port in between)
+        Uri? advertise = Uri.TryCreate(environment(AdvertiseVariable), UriKind.Absolute, out var given) && given.Scheme == Uri.UriSchemeHttps ? given : null;
+        return new ConsoleAnnouncer(product, instanceId, environment(NameVariable) is { Length: > 0 } named ? named : product, port, advertise, console, clients, codes);
     }
 
     /// <summary>Tells the console once, unless a console is paired already. Returns whether the console took the announcement.</summary>
     public async Task<bool> AnnounceOnceAsync(HttpClient http, CancellationToken cancellationToken = default)
     {
         if (clients.All().Any(c => c.Kind == ClientKind.Console)) return false;
+        if (port() is not { } listening) return false; // the server has not bound its port yet
         var now = _clock.GetUtcNow();
         // a new code when the one held is about to lapse, or the server's waiting codes were cancelled (five wrong codes cancel them all)
         if (_code is null || _code.ExpiresAt - now < Renew || codes.Pending() == 0)
             _code = codes.Create(ServerRole.Admin, null, Lifetime);
-        var announcement = new Announcement(product, instanceId, name, advertise.AbsoluteUri.TrimEnd('/'), _code.Code, _code.ExpiresAt);
+        var announcement = new Announcement(product, instanceId, name, listening, advertise?.AbsoluteUri.TrimEnd('/'), _code.Code, _code.ExpiresAt);
         try
         {
             using var response = await http.PostAsJsonAsync(new Uri(console, Path), announcement, Json, cancellationToken).ConfigureAwait(false);
@@ -72,9 +78,13 @@ public sealed class ConsoleAnnouncer(string product, string instanceId, string n
 public static class ConsoleAnnouncing
 {
     /// <summary>Starts the announcer the environment asks for (if any) when the host has started, and stops it with the host.</summary>
-    public static IEndpointRouteBuilder AnnounceToConsole(this IEndpointRouteBuilder app, string product, string instanceId, PairedClientsFile clients, PairingCodes codes)
+    public static IEndpointRouteBuilder AnnounceToConsole(this IEndpointRouteBuilder app, string product, string instanceId, int port, PairedClientsFile clients, PairingCodes codes) =>
+        app.AnnounceToConsole(product, instanceId, () => port, clients, codes);
+
+    /// <summary>As above, for a server that learns its port only once it is listening.</summary>
+    public static IEndpointRouteBuilder AnnounceToConsole(this IEndpointRouteBuilder app, string product, string instanceId, Func<int?> port, PairedClientsFile clients, PairingCodes codes)
     {
-        if (ConsoleAnnouncer.FromEnvironment(product, instanceId, clients, codes) is not { } announcer) return app;
+        if (ConsoleAnnouncer.FromEnvironment(product, instanceId, port, clients, codes) is not { } announcer) return app;
         var lifetime = app.ServiceProvider.GetRequiredService<IHostApplicationLifetime>();
         lifetime.ApplicationStarted.Register(() => _ = announcer.RunAsync(lifetime.ApplicationStopping));
         return app;
