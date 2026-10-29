@@ -15,6 +15,7 @@
     <DbDataKitReference Include="Cli" />   <!-- the shared noun-verb grammar; plan 13, C04 -->
     <DbDataKitReference Include="Serving.FlightSql" />   <!-- the Flight SQL wire module, moved out of this project (plan 19, N02) -->
     <DbDataKitReference Include="Serving.Semantic" />   <!-- semantic requests and semantic SQL over the data sources; plan 19, J10 -->
+    <DbDataKitReference Include="Semantic.Ssas" />   <!-- Analysis Services sources of a semantic model (Windows only at run time); plan 19, J16 -->
     <DbDataKitReference Include="Connections.Abstractions" />   <!-- connection/1, the data source format; plan 13, E02 -->
     <DbDataKitReference Include="Connections.SqlServer" />
     <DbDataKitReference Include="Connections.DuckDb" />

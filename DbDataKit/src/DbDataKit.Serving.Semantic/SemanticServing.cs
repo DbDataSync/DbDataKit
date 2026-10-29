@@ -50,7 +50,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         // The engine blocks on the host while it runs the scans, so it runs on a thread of its own
         return Task.Run<IServingAnswer>(() =>
         {
-            var engine = new QisEngine(model.Catalog, new ServingSourceExecutor(inner, catalog, context, model, cancellationToken), new Validator(model.Catalog), models.Level, rowCap: (int)Math.Min(limit ?? 1_000_000, 1_000_000));
+            var engine = new QisEngine(model.Catalog, new ServingSourceExecutor(inner, catalog, context, model, models, cancellationToken), new Validator(model.Catalog), models.Level, rowCap: (int)Math.Min(limit ?? 1_000_000, 1_000_000));
             var result = engine.Run(document);
             if (result.Status == "failed") throw new ServingInvalidException(Describe(result));
             return new SemanticAnswer(result, provenance);

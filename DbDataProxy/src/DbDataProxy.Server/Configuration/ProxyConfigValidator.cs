@@ -55,6 +55,13 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
             foreach (var (source, dataSource) in model.Sources)
                 if (!o.DataSources.ContainsKey(dataSource))
                     cx.Error($"{at}.Sources.{source}", $"The catalog source `{source}` is mapped to `{dataSource}`, which is not a data source.", $"Use one of: {string.Join(", ", o.DataSources.Keys)}.");
+            foreach (var (source, connection) in model.Ssas)
+            {
+                if (string.IsNullOrWhiteSpace(connection))
+                    cx.Error($"{at}.Ssas.{source}", $"The connection string of `{source}` is empty.", "Give the connection string of the Analysis Services server, or a secret reference to it.");
+                else if (!OperatingSystem.IsWindows())
+                    cx.Error($"{at}.Ssas.{source}", "Analysis Services sources run only on Windows (the ADOMD.NET client does).", "Run this server on Windows, or leave this source out.");
+            }
         }
     }
 
