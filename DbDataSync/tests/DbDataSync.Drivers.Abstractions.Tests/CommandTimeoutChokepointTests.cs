@@ -75,7 +75,7 @@ public sealed class CommandTimeoutChokepointTests
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "DbDataSync.slnx")))
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "DbDataSync.slnf")))
             directory = directory.Parent;
 
         Assert.NotNull(directory);

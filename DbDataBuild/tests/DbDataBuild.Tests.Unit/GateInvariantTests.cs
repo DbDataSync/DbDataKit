@@ -12,7 +12,7 @@ public class GateInvariantTests
     private static string Root()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "DbDataBuild.sln"))) dir = dir.Parent;
+        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "DbDataBuild.slnf"))) dir = dir.Parent;
         return dir?.FullName ?? throw new InvalidOperationException("Repository root not found.");
     }
 

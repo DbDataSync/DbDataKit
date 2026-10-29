@@ -188,11 +188,11 @@ async Task UpAsync(HarnessArgs options, string root, CancellationToken cancellat
 static string FindRepoRoot()
 {
     var directory = new DirectoryInfo(AppContext.BaseDirectory);
-    while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "DbDataSync.slnx")))
+    while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "DbDataSync.slnf")))
         directory = directory.Parent;
 
     return directory?.FullName
-        ?? throw new HarnessException("Could not locate the repository root (no DbDataSync.slnx in any parent directory).");
+        ?? throw new HarnessException("Could not locate the repository root (no DbDataSync.slnf in any parent directory).");
 }
 
 static void PrintUsage()

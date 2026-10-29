@@ -430,7 +430,7 @@ public class OriginCatalogTests
     public void The_gate_names_the_native_odbc_catalog_file_and_it_executes_no_statement()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "DbDataBuild.sln"))) dir = dir.Parent;
+        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "DbDataBuild.slnf"))) dir = dir.Parent;
         var text = File.ReadAllText(Path.Combine(dir!.FullName, "src/DbDataBuild.Execution/OdbcCatalogClient.cs"));
         // the catalog functions only: nothing that prepares or executes a statement is imported from the driver manager
         Assert.DoesNotContain("SQLExecDirect", text);

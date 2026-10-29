@@ -131,7 +131,7 @@ public sealed class RunnerWithoutItsOwnerTests : IDisposable
             var configuration = Path.GetFileName(Path.GetDirectoryName(baseDir))!;
 
             var repoRoot = new DirectoryInfo(baseDir);
-            while (repoRoot is not null && !File.Exists(Path.Combine(repoRoot.FullName, "DbDataSync.slnx")))
+            while (repoRoot is not null && !File.Exists(Path.Combine(repoRoot.FullName, "DbDataSync.slnf")))
                 repoRoot = repoRoot.Parent;
 
             return Path.Combine(

@@ -10,9 +10,9 @@ public sealed class SyncCliTests
     private static string SchemaPath()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-            if (File.Exists(Path.Combine(dir.FullName, "DbDataSync.slnx")))
+            if (File.Exists(Path.Combine(dir.FullName, "DbDataSync.slnf")))
                 return Path.Combine(dir.FullName, "schemas", "output.schema.json");
-        throw new DirectoryNotFoundException("DbDataSync.slnx was not found above " + AppContext.BaseDirectory);
+        throw new DirectoryNotFoundException("DbDataSync.slnf was not found above " + AppContext.BaseDirectory);
     }
 
     [Fact]
