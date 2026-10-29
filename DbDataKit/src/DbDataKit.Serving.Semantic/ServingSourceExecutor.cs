@@ -9,7 +9,7 @@ namespace DbDataKit.Serving.Semantic;
 /// Runs the queries the semantic engine plans through the host's own query service, as the caller: each scan is a SQL request against the serving source the model maps its catalog source to, so the host's access rules, classifier and limits
 /// apply to it exactly as they do to a client's SQL. Which text runs depends on the product the source reports (<see cref="NativeRoute"/>). The engine is synchronous, so this blocks the thread it runs on; the module runs the engine off the request's thread.
 /// </summary>
-internal sealed class ServingSourceExecutor(IServingQueries queries, IServingCatalog catalog, ServingContext context, SemanticModel model, SemanticModels models, CancellationToken cancellationToken) : ISourceExecutor
+internal sealed class ServingSourceExecutor(IServingQueries queries, IServingCatalog catalog, ServingContext context, SemanticModel model, SemanticModels models, CancellationToken cancellationToken, List<ExplainedScan>? explain = null) : ISourceExecutor
 {
     private readonly Dictionary<string, SourceEngine> _engines = [];
 
@@ -18,6 +18,7 @@ internal sealed class ServingSourceExecutor(IServingQueries queries, IServingCat
     public QueryRows Execute(CompiledQuery query, int maxRows)
     {
         var kind = model.Catalog.Doc.Sources.TryGetValue(query.Source, out var def) ? def.Kind : "";
+        if (explain is not null) return Explained(query, kind, explain);
         if (kind == "ssas")
         {
             var ssas = models.SsasExecutor?.Invoke(model, SemanticModel.BaseSource(query.Source), this)
@@ -30,6 +31,20 @@ internal sealed class ServingSourceExecutor(IServingQueries queries, IServingCat
         var text = NativeRoute.For(engine, query, out var why) ?? throw new ServingInvalidException($"Model '{model.Name}' {why}.");
         var parameters = text.Parameters.Select((value, i) => Parameter(text.Named ? $"p{i + 1}" : null, value)).ToList();
         return ReadAsync(servingSource, text.Text, parameters, maxRows).GetAwaiter().GetResult();
+    }
+
+    /// <summary>Notes the text the scan would run and answers no rows, so the engine plans the whole request without touching a source.</summary>
+    private QueryRows Explained(CompiledQuery query, string kind, List<ExplainedScan> explain)
+    {
+        if (kind == "ssas") explain.Add(new(query.Source, "ssas", query.Native.Text));
+        else
+        {
+            var servingSource = model.ServingSource(query.Source);
+            var engine = EngineOf(servingSource);
+            var text = NativeRoute.For(engine, query, out var why) ?? throw new ServingInvalidException($"Model '{model.Name}' {why}.");
+            explain.Add(new(query.Source, engine.ToString(), text.Text));
+        }
+        return new QueryRows([], []);
     }
 
     public QueryRows ExecuteNativeText(string source, NativeQuery native, int maxRows) =>
@@ -110,3 +125,6 @@ internal sealed class ServingSourceExecutor(IServingQueries queries, IServingCat
         };
     }
 }
+
+/// <summary>One scan of an explained request: the catalog source, the engine that would run it and the text it would run.</summary>
+internal sealed record ExplainedScan(string Source, string Engine, string Text);

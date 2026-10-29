@@ -42,10 +42,28 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         };
         if (model is null) return inner.RunAsync(context, request, cancellationToken);
 
+        var explaining = false;
+        if (isSql && text.TrimStart().StartsWith("EXPLAIN ", StringComparison.OrdinalIgnoreCase)) { explaining = true; text = text.TrimStart()[8..]; }
         var document = isSql ? Translate(text, model) : Parse(text);
+        if (!isSql && document["kind"]?.GetValue<string>() == "explain" && document["query"] is JsonObject explained)
+        {
+            // {"kind":"explain","query":{...}} is the same request as a query, planned and not run
+            explaining = true;
+            document = new JsonObject { ["kind"] = "query", ["query"] = explained.DeepClone() };
+            foreach (var (key, value) in (JsonObject)Parse(text)) if (key is not ("kind" or "query")) document[key] = value?.DeepClone();
+        }
         if (document["kind"]?.GetValue<string>() != "query") throw new ServingInvalidException("This server answers semantic queries ('kind': 'query'); registrations and the other request kinds are not served yet.");
         var limit = request.Asked?.MaxRows;
         var provenance = new ServingProvenance(isSql ? text : Canonical(document, model.Name, text), null, context.Channel, SemanticModels.SourcePrefix + model.Name);
+
+        if (explaining) return Task.Run<IServingAnswer>(() =>
+        {
+            var scans = new List<ExplainedScan>();
+            var engine = new QisEngine(model.Catalog, new ServingSourceExecutor(inner, catalog, context, model, models, cancellationToken, scans), new Validator(model.Catalog), models.Level, rowCap: 1);
+            var result = engine.Run(document);
+            if (result.Status == "failed") throw new ServingInvalidException(Describe(result));
+            return new ExplainAnswer(scans, provenance);
+        }, cancellationToken);
 
         // The engine blocks on the host while it runs the scans, so it runs on a thread of its own
         return Task.Run<IServingAnswer>(() =>

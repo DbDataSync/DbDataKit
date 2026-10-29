@@ -13,3 +13,7 @@ IServingServices services = hostServices.WithSemantic(models);
 - **The catalog describes the model**: under `semantic:<model>` the dimensions, their attributes and the measures are listed as `Model`, `Dimension` and `Measure` objects.
 
 Not here: SSAS sources (J16), ad hoc tables and other request kinds than a query, and a child process for the combine (J11).
+
+## Explain
+
+`EXPLAIN <semantic SQL>`, or a JSON request with `"kind": "explain"` in place of `query`, answers what the request would run: one row per scan with `source`, `engine` and `text`, and nothing is sent to a source.
