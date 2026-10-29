@@ -47,6 +47,18 @@ public static class SharedCatalog
         return tables;
     }
 
+    /// <summary>
+    /// The databases the connection's server offers, as the database picker lists them (plan 13, A11): the ones the login can open, without templates and, when given, without the engine's own
+    /// (<paramref name="skip"/>, by name: SQL Server's <c>master</c>, <c>tempdb</c>, <c>model</c> and <c>msdb</c>, which the shared reader lists). Ordered by the reader.
+    /// </summary>
+    public static async Task<IReadOnlyList<string>> DatabasesAsync(ICatalogReader reader, IReadOnlySet<string>? skip, CancellationToken cancellationToken)
+    {
+        var databases = new List<string>();
+        await foreach (var name in reader.ListCatalogsAsync(cancellationToken).ConfigureAwait(false))
+            if (skip is null || !skip.Contains(name)) databases.Add(name);
+        return databases;
+    }
+
     private static int IndexOf(IReadOnlyList<string> key, string name)
     {
         for (int i = 0; i < key.Count; i++)

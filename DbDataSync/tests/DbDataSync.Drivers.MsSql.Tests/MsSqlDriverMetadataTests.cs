@@ -62,6 +62,7 @@ public sealed class MsSqlDriverMetadataTests(MsSqlTestDatabase db) : IClassFixtu
     {
         var databases = await _driver.ListDatabasesAsync(_connection, CancellationToken.None);
         Assert.Contains(db.DatabaseName, databases);
+        Assert.DoesNotContain(databases, d => d is "master" or "tempdb" or "model" or "msdb");   // the engine's own are not offered
     }
 
     [Fact]
