@@ -134,7 +134,7 @@ public sealed class SemanticModuleTests : IDisposable
         var catalog = Catalog.Load(Path.Combine(AppContext.BaseDirectory, "conformance", "catalog.yaml"));
         var models = new SemanticModels
         {
-            SsasExecutor = (model, source, fallback) => { made.Add((model, source)); return new Recording(ran); },
+            SsasExecutor = (model, source, fallback) => { made.Add((model.Name, source)); return new Recording(ran); },
         }.Add(catalog, new Dictionary<string, string> { ["sqlserver_sales"] = "warehouse" });
         var services = new TestServices(_host).WithSemantic(models);
 
@@ -157,6 +157,18 @@ public sealed class SemanticModuleTests : IDisposable
         }
 
         public DbDataKit.Semantic.Abstractions.QueryRows ExecuteNativeText(string source, NativeQuery native, int maxRows) => throw new NotSupportedException();
+    }
+
+    [Fact]
+    public void ASourceWithSeveralFactTablesRunsWhereTheSourceDoes()
+    {
+        var catalog = Catalog.Load(Path.Combine(AppContext.BaseDirectory, "conformance", "catalog.yaml"));
+        var model = new SemanticModel(catalog, new Dictionary<string, string> { ["sqlserver_sales"] = "warehouse" });
+
+        Assert.Contains("sqlserver_sales.fact_returns", catalog.Doc.Sources.Keys);
+        Assert.Equal("warehouse", model.ServingSource("sqlserver_sales.fact_returns"));
+        Assert.Equal("warehouse", model.ServingSource("sqlserver_sales"));
+        Assert.Equal("ssas_finance", model.ServingSource("ssas_finance"));
     }
 
     [Fact]

@@ -20,7 +20,7 @@ internal sealed class ServingSourceExecutor(IServingQueries queries, IServingCat
         var kind = model.Catalog.Doc.Sources.TryGetValue(query.Source, out var def) ? def.Kind : "";
         if (kind == "ssas")
         {
-            var ssas = models.SsasExecutor?.Invoke(model.Name, query.Source, this)
+            var ssas = models.SsasExecutor?.Invoke(model, SemanticModel.BaseSource(query.Source), this)
                 ?? throw new ServingInvalidException($"Source '{query.Source}' of model '{model.Name}' is Analysis Services, which this server is not set up to run.");
             return ssas.Execute(query, maxRows);
         }

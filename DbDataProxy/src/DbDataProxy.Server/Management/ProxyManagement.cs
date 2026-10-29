@@ -25,7 +25,7 @@ public sealed record ManagementResult(int Status, JsonNode Body)
 /// </list>
 /// A secret is never part of an answer: the settings are shown the way <c>config show</c> shows them, and the sentinel test puts a value in every place a secret can be and looks for it in every answer.
 /// </summary>
-public sealed partial class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null, ProxyActivity? activity = null, ProxyCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, ProxySecrets? secrets = null, PairingCodes? pairingCodes = null)
+public sealed partial class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null, ProxyActivity? activity = null, ProxyCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, ProxySecrets? secrets = null, PairingCodes? pairingCodes = null, ProxySemanticModels? semanticModels = null)
 {
     public const string Prefix = "/api/v1";
 
@@ -64,6 +64,14 @@ public sealed partial class ProxyManagement(IConfigurationRoot configuration, st
             if (!caller.Holds(ServerRole.Admin) && !caller.Holds(ServerRole.Publisher)) return Denied(ServerRole.Admin);
             var rest = route.Length > (Prefix + "/data-sources").Length ? route[(Prefix + "/data-sources/").Length..].Split('/') : [];
             return await dataSources.HandleAsync(method, rest, body, query["expected_version"], caller, cancellationToken);
+        }
+        if (route == Prefix + "/semantic-models" || route.StartsWith(Prefix + "/semantic-models/", StringComparison.Ordinal))
+        {
+            if (semanticModels is null) return ManagementResult.Problem(404, "There is no such call.");
+            // an administrator may do everything; a publishing server client only what the owner rules let it do to its own models, which ProxySemanticModels checks
+            if (!caller.Holds(ServerRole.Admin) && !caller.Holds(ServerRole.Publisher)) return Denied(ServerRole.Admin);
+            var rest = route.Length > (Prefix + "/semantic-models").Length ? route[(Prefix + "/semantic-models/").Length..].Split('/') : [];
+            return await semanticModels.HandleAsync(method, rest, body, caller, cancellationToken);
         }
         if (route == Prefix + "/secrets" || route.StartsWith(Prefix + "/secrets/", StringComparison.Ordinal))
         {
