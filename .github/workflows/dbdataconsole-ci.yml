@@ -29,7 +29,7 @@ jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataConsole/|DbDataKit/|DbDataBuild/|DbDataSync/|DbDataProxy/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataconsole-|_)|actions/setup-product))'
+      paths: '^(DbDataConsole/|DbDataKit/|DbDataBuild/|DbDataSync/|DbDataProxy/|dist/compose/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataconsole-|_)|actions/setup-product))'
 
   # The host, its sign-in and its command line run on both systems; the Windows service registration is only exercised here against fakes.
   test:
@@ -143,3 +143,17 @@ jobs:
           test "$(curl -sk -o /dev/null -w '%{http_code}' https://localhost:8480/api/users)" = 401
           docker exec ddk dotnet /app/dbdatakit.dll user invite --url https://localhost:8480 | grep -q '/invite#'
           test "$(docker exec ddk id -u)" != 0
+
+  # Each compose file of dist/compose starts a product with the console: the product announces itself on the console's private port, waits as pending, and is paired when confirmed (plan 13a, L03).
+  compose:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build server and console
+        run: dist/compose/check.sh dist/compose/build.yml build

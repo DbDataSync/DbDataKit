@@ -5,8 +5,9 @@ namespace DbDataConsole.Server;
 /// <summary>Where a console keeps what is its own, and where it listens.</summary>
 /// <param name="Directory">The console's directory: <c>state.db</c> (users, sessions, invitations, notifications), `instances.yaml` (the servers it manages), `secrets/` (the key it signs for them with), its certificate, and <c>FIRST-RUN.txt</c> until the first administrator exists.</param>
 /// <param name="Listen">The address it listens on; HTTPS. A passkey is bound to the host name, so a name such as <c>localhost</c> works and a bare IP address does not.</param>
+/// <param name="AnnounceListen">A private address (plain HTTP) where servers on the network the console shares with them announce themselves, to wait for an administrator to confirm them; null: none. It serves nothing else, and must not be published outside that network.</param>
 /// <param name="PublicUrl">The address people open it at, when that is not the address it listens on (a container listens on every address; a proxy answers on a name of its own). A passkey is bound to this name and port, and an invitation link is made from it, so it has to be the one in the browser's address bar. Null: the address it listens on, or <c>localhost</c> on the same port where that is every address.</param>
-public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUrl = null)
+public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUrl = null, Uri? AnnounceListen = null)
 {
     /// <summary>The address a browser opens, and the origin a passkey is bound to.</summary>
     public Uri Public => PublicUrl ?? (IsEveryAddress(Listen.Host) ? new UriBuilder(Listen) { Host = "localhost" }.Uri : Listen);
@@ -20,6 +21,10 @@ public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUr
     public const string DirectoryVariable = "DBDATAKIT_CONSOLE_DIR";
 
     public string InstancesPath => System.IO.Path.Combine(Directory, "instances.yaml");
+
+    public string PendingPath => System.IO.Path.Combine(Directory, "pending.json");
+
+    public const string AnnounceListenVariable = "DBDATAKIT_CONSOLE_ANNOUNCE_LISTEN";
 
     public string StatePath => System.IO.Path.Combine(Directory, "state.db");
 
