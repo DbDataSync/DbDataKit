@@ -11,6 +11,7 @@ public static class SemanticModelsLoader
 {
     public static SemanticModels Load(ProxyOptions options, string dataDirectory, SecretsRuntime? secrets = null, Action<string>? warn = null)
     {
+        DbDataKit.Semantic.Sandbox.Limits = options.Semantic.Combine.ToLimits();
         var models = new SemanticModels
         {
             Level = options.Semantic.Level,
@@ -42,6 +43,7 @@ public static class SemanticModelsLoader
     /// </summary>
     public static IReadOnlySet<string> Reload(SemanticModels models, ProxyOptions options, string dataDirectory, IReadOnlySet<string> previous, Action<string> warn)
     {
+        DbDataKit.Semantic.Sandbox.Limits = options.Semantic.Combine.ToLimits();
         var configured = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var allLoaded = true;
         foreach (var entry in options.Semantic.Models)
