@@ -166,7 +166,14 @@ public static class ProxyHost
         services.AddSingleton(sp =>
         {
             var current = sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue;
-            return SemanticModelsLoader.Load(current, ResolveDataDirectory(current), sp.GetRequiredService<SecretsRuntime>(), problem => sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Semantic").LogWarning("{Problem}", problem));
+            var log = sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Semantic");
+            var loaded = SemanticModelsLoader.Load(current, ResolveDataDirectory(current), sp.GetRequiredService<SecretsRuntime>(), problem => log.LogWarning("{Problem}", problem));
+            // a changed server.yaml is applied to the models without a restart; the first pass only learns which names the file gives
+            var directory = ResolveDataDirectory(current);
+            var configured = SemanticModelsLoader.Reload(loaded, current, directory, new HashSet<string>(), _ => { });
+            sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>().OnChange((changed, _) =>
+                configured = SemanticModelsLoader.Reload(loaded, changed, ResolveDataDirectory(changed), configured, problem => log.LogWarning("{Problem}", problem)));
+            return loaded;
         });
         services.AddSingleton<IServingServices>(sp => sp.GetRequiredService<ProxyServing>().WithSemantic(sp.GetRequiredService<SemanticModels>()));
         services.AddSingleton(sp =>
