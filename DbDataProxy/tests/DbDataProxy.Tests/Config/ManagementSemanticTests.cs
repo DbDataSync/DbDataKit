@@ -16,6 +16,22 @@ public sealed partial class ManagementTests
     private static string Publish(string catalog, string source, int? expected = null, object? ssas = null) =>
         JsonSerializer(new { catalog, sources = new Dictionary<string, string> { ["sqlserver_sales"] = source }, ssas, expected_version = expected });
 
+    /// <summary>A DuckDB file holding an empty table for every table the sample catalog's SQL source names, as the publish check needs.</summary>
+    private string SalesData(string name)
+    {
+        var file = Path.Combine(dataDirectory, name + ".duckdb");
+        var sales = CatalogLoader.LoadText(CatalogText).Doc.Sources.Where(s => DbDataKit.Serving.Semantic.SemanticModel.BaseSource(s.Key) == "sqlserver_sales").Select(s => s.Value);
+        using var connection = new DuckDB.NET.Data.DuckDBConnection("Data Source=" + file);
+        connection.Open();
+        foreach (var table in sales.SelectMany(s => s.Joins.Values.Select(j => j.Table).Append(s.Fact.Table)).Distinct())
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = $"CREATE TABLE IF NOT EXISTS {table} (x INTEGER)";
+            command.ExecuteNonQuery();
+        }
+        return Conn.Yaml(name, "duckdb", "Data Source=" + file);
+    }
+
     private async Task<JsonNode> BodyAsync(HttpResponseMessage response) => JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
 
     [Fact]
@@ -23,7 +39,7 @@ public sealed partial class ManagementTests
     {
         await StartAsync();
         var publisher = await PairPublisherAsync(build1);
-        await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/data-sources/sales-ro", ServerRole.Publisher, Put(Plain("sales-ro"), null));
+        await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/data-sources/sales-ro", ServerRole.Publisher, Put(SalesData("sales-ro"), null));
         var models = app.Services.GetRequiredService<SemanticModels>();
         Assert.Null(models.Find("sales_catalog"));
 
@@ -57,7 +73,7 @@ public sealed partial class ManagementTests
         var admin = await PairAsync();
         var publisher = await PairPublisherAsync(build1);
         await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/by-hand", ServerRole.Admin, Put(Plain("by-hand"), null));
-        await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/data-sources/sales-ro", ServerRole.Publisher, Put(Plain("sales-ro"), null));
+        await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/data-sources/sales-ro", ServerRole.Publisher, Put(SalesData("sales-ro"), null));
         var models = app.Services.GetRequiredService<SemanticModels>();
         await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/semantic-models/sales_catalog", ServerRole.Publisher, Publish(CatalogText, "sales-ro"));
 
@@ -69,6 +85,7 @@ public sealed partial class ManagementTests
         Assert.Equal(HttpStatusCode.BadRequest, await Try(Publish(CatalogText, "no-such-source", 1)));
         Assert.Equal(HttpStatusCode.BadRequest, await Try(Publish(CatalogText, "by-hand", 1)));                                  // not made by this client
         Assert.Equal(HttpStatusCode.Conflict, await Try(Publish(CatalogText, "sales-ro", 7)));                                    // stale
+        Assert.Equal(HttpStatusCode.BadRequest, await Try(Publish(CatalogText.Replace("fact_sales", "no_such_table"), "sales-ro", 1)));  // a table the data source lacks
         if (!OperatingSystem.IsWindows())
             Assert.Equal(HttpStatusCode.BadRequest, await Try(Publish(CatalogText, "sales-ro", 1, new { ssas_finance = "secret:x" })));
         Assert.Equal(HttpStatusCode.BadRequest, await Try(Publish(CatalogText, "sales-ro", 1, new { ssas_finance = "Data Source=x;Password=literal" })));
@@ -84,8 +101,8 @@ public sealed partial class ManagementTests
         var admin = await PairAsync();
         var first = await PairPublisherAsync(build1);
         var second = await PairPublisherAsync(build2);
-        await CallAsAsync(build1, first, HttpMethod.Put, "/api/v1/data-sources/sales-ro", ServerRole.Publisher, Put(Plain("sales-ro"), null));
-        await CallAsAsync(build2, second, HttpMethod.Put, "/api/v1/data-sources/sales-ro2", ServerRole.Publisher, Put(Plain("sales-ro2"), null));
+        await CallAsAsync(build1, first, HttpMethod.Put, "/api/v1/data-sources/sales-ro", ServerRole.Publisher, Put(SalesData("sales-ro"), null));
+        await CallAsAsync(build2, second, HttpMethod.Put, "/api/v1/data-sources/sales-ro2", ServerRole.Publisher, Put(SalesData("sales-ro2"), null));
         await CallAsAsync(build1, first, HttpMethod.Put, "/api/v1/semantic-models/sales_catalog", ServerRole.Publisher, Publish(CatalogText, "sales-ro"));
 
         Assert.Equal(HttpStatusCode.Forbidden, (await CallAsAsync(build2, second, HttpMethod.Get, "/api/v1/semantic-models/sales_catalog", ServerRole.Publisher)).StatusCode);
