@@ -72,6 +72,28 @@ public sealed class MsSqlDriverMetadataTests(MsSqlTestDatabase db) : IClassFixtu
     }
 
     [Fact]
+    public async Task ListTablesAsync_OffersBaseTablesOfAnySchema_NotViewsOrTheEnginesOwn()
+    {
+        var schema = "s" + Guid.NewGuid().ToString("N")[..8];
+        var view = $"v_{_tableName}";
+        await using (var create = _connection.CreateCommand())
+        {
+            create.CommandText = $"""
+                EXEC('CREATE SCHEMA [{schema}]');
+                EXEC('CREATE TABLE [{schema}].[other] (Id int NOT NULL)');
+                EXEC('CREATE VIEW dbo.[{view}] AS SELECT Id FROM dbo.[{_tableName}]');
+                """;
+            await create.ExecuteNonQueryAsync();
+        }
+
+        var tables = await _driver.ListTablesAsync(_connection, db.DatabaseName, CancellationToken.None);
+
+        Assert.Contains(tables, t => t.Schema == schema && t.Table == "other");
+        Assert.DoesNotContain(tables, t => t.Table == view);
+        Assert.DoesNotContain(tables, t => t.Schema is "sys" or "INFORMATION_SCHEMA");
+    }
+
+    [Fact]
     public async Task EstimateRowCountAsync_ReflectsRowsPresent_AndIsNullForAMissingTable()
     {
         await using (var insert = _connection.CreateCommand())

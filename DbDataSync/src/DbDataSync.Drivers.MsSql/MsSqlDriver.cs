@@ -128,20 +128,7 @@ public sealed class MsSqlDriver : IDriver, IConnectionTester, IDialectProvider, 
         DbConnection connection, string database, CancellationToken cancellationToken)
     {
         connection.ChangeDatabase(database);
-
-        using var cmd = connection.CreateTimedCommand();
-        cmd.CommandText = """
-            SELECT s.name, t.name
-            FROM sys.tables t
-            JOIN sys.schemas s ON t.schema_id = s.schema_id
-            ORDER BY s.name, t.name;
-            """;
-
-        var results = new List<TableMetadata>();
-        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-            results.Add(new TableMetadata(reader.GetString(0), reader.GetString(1)));
-        return results;
+        return await SharedCatalog.TablesAsync(new DbDataKit.Metadata.SqlServerCatalogReader(connection, options: SharedCatalog.OptionsFor(connection)), cancellationToken);
     }
 
     public async Task<IReadOnlyList<ColumnMetadata>> ListColumnsAsync(

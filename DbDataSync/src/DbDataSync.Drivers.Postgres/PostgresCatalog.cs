@@ -26,7 +26,7 @@ internal sealed class PostgresCatalog : ITableCatalog
     private PostgresCatalog() { }
 
     public Task<IReadOnlyList<TableMetadata>> ListTablesAsync(DbConnection connection, CancellationToken cancellationToken) =>
-        Shared.ListTablesAsync(connection, cancellationToken);
+        SharedCatalog.TablesAsync(new PostgresCatalogReader(connection, options: SharedCatalog.OptionsFor(connection)), cancellationToken);
 
     public async Task<IReadOnlyList<ColumnMetadata>> GetColumnsAsync(
         DbConnection connection, string schema, string table, CancellationToken cancellationToken)
