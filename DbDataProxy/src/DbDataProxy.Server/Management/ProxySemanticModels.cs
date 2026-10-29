@@ -171,6 +171,24 @@ public sealed class ProxySemanticModels(
             {
                 return $"Data source '{dataSource}' (for source '{source}') did not answer a test query.";
             }
+            // every table the source's facts and joins name, so a mapping to the wrong database is refused here and not at the first query
+            var tables = parsed.Doc.Sources.Where(s => SemanticModel.BaseSource(s.Key) == source)
+                .SelectMany(s => s.Value.Joins.Values.Select(j => j.Table).Append(s.Value.Fact.Table))
+                .Where(t => !string.IsNullOrWhiteSpace(t)).Distinct(StringComparer.OrdinalIgnoreCase);
+            foreach (var table in tables)
+            {
+                if (table.Contains(';')) return $"The table '{table}' of source '{source}' is not a table name.";
+                try
+                {
+                    var resolved = catalog().Resolve(new ProxyPrincipal("management", "management", ["*"]), dataSource);
+                    await using var result = await resolved.Executor.ExecuteQueryAsync(new DbDataProxy.Data.QueryRequest("SELECT 1 FROM " + table + " WHERE 1 = 0", 1, 15), cancellationToken);
+                    await foreach (var _ in result.ReadBatchesAsync(cancellationToken)) break;
+                }
+                catch (Exception ex) when (ex is Grpc.Core.RpcException or DbDataKit.Connections.ConnectionFailureException)
+                {
+                    return $"The table '{table}' of source '{source}' could not be read on data source '{dataSource}'.";
+                }
+            }
         }
         foreach (var extra in sources.Keys.Concat(ssas.Keys).Where(k => !parsed.Doc.Sources.ContainsKey(k) && !parsed.Doc.Sources.Keys.Any(id => SemanticModel.BaseSource(id) == k)).Distinct())
             return $"The catalog has no source '{extra}'.";
