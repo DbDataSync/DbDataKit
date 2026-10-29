@@ -156,4 +156,4 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Build server and console
-        run: dist/compose/check.sh dist/compose/build.yml build
+        run: dist/compose/check.sh dist/compose/build.yml dbdatabuild

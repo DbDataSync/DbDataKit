@@ -1,7 +1,7 @@
 # The console and a Build server, paired by announcement. One setting is shared by the whole file: where the console takes announcements.
 # The console listens there (on a port that is not published, so only containers of this network reach it) and every server announces there;
 # the console sees which address each announcement came from. A server waits as pending until an administrator confirms it:
-#   docker compose -f dist/compose/build.yml exec console dotnet /app/dbdatakit.dll instance confirm build
+#   docker compose -f dist/compose/build.yml exec console dotnet /app/dbdatakit.dll instance confirm dbdatabuild
 # (or in the web app). Run from the repository root. Another server is another service with `environment: *announce`.
 name: dbdatakit-build
 x-announce: &announce
