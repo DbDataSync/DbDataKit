@@ -35,6 +35,18 @@ public static class SharedCatalog
         })];
     }
 
+    /// <summary>
+    /// The base tables of the connection's current database, system objects left out, as the table picker lists them (plan 13, A11): views are not offered, and neither are the engine's own schemas or the
+    /// product's tracking tables (<c>cdc</c>, <c>sys</c>, <c>pg_catalog</c>). Ordered by schema, then name, ordinally.
+    /// </summary>
+    public static async Task<IReadOnlyList<TableMetadata>> TablesAsync(ICatalogReader reader, CancellationToken cancellationToken)
+    {
+        var tables = new List<TableMetadata>();
+        await foreach (var table in reader.ListTablesAsync(new TableFilter(Kinds: new HashSet<TableKind> { TableKind.Table }), cancellationToken).ConfigureAwait(false))
+            if (table.Schema is { } schema) tables.Add(new TableMetadata(schema, table.Name));
+        return tables;
+    }
+
     private static int IndexOf(IReadOnlyList<string> key, string name)
     {
         for (int i = 0; i < key.Count; i++)
