@@ -267,7 +267,10 @@ class BuildTests(unittest.TestCase):
         self.assertIn("cost$.txt", names)
 
     def test_no_table_the_windows_installer_would_have_to_guess_about(self):
-        self.assertNotIn("Environment", subprocess.run([MSIINFO, "tables", str(self.out)], capture_output=True, text=True).stdout.split())
+        # newer wixl writes every standard table, empty ones included, so the table may exist; it must have no rows (an export is three header lines, then the rows)
+        tables = subprocess.run([MSIINFO, "tables", str(self.out)], capture_output=True, text=True).stdout.split()
+        if "Environment" in tables:
+            self.assertEqual([], [line for line in self.table("Environment").splitlines()[3:] if line.strip()])
 
 
 if __name__ == "__main__":
