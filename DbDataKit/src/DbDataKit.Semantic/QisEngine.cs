@@ -43,13 +43,21 @@ public sealed partial class QisEngine(Catalog cat, ISourceExecutor executor, Val
 
     public Result Run(JsonObject doc) => doc["kind"]?.GetValue<string>() switch
     {
-        "query" => RunInZone(doc, () => Recorded(doc, WithResolved(RunQuery(doc)))),
+        "query" => RunParameterized(doc),
         "native_batch" => RunNativeBatch(doc),
         "table" or "bindings" or "value_map" => RunRegistration(doc),
         "clarify" => RunClarify(doc),
         "unsupported" => RunUnsupported(doc),
         var k => Result.Failed(level, null, [Err("schema_invalid", "$.kind", $"Unknown kind '{k}'.", "core")]),
     };
+
+    /// <summary>Resolves the request's parameters (J25), then runs the literal request; the record keeps the request as it came, which replays with its parameters.</summary>
+    private Result RunParameterized(JsonObject doc)
+    {
+        var (literal, errors) = ResolveParameters(doc);
+        if (errors is not null) return Result.Failed(level, QisJson.RequestHash(doc), errors);
+        return RunInZone(literal, () => Recorded(doc, WithResolved(RunQuery(literal))));
+    }
 
     /// <summary>Runs a query in the time zone it names, or the catalog's.</summary>
     private Result RunInZone(JsonObject doc, Func<Result> run)

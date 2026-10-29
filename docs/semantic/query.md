@@ -452,6 +452,19 @@ one returns `status: partial` with `reason_code: clarification_needed`; the user
 `unsupported` document returns `status: failed` with one `unsupported` error carrying the reason code and detail, so the
 user is told.
 
+## Parameters
+
+A request may leave a value to be bound: a value node `{"param": "name"}` stands for a value, and `parameters` beside `query` binds it (`{"regions": ["East", "West"], "quarter": "FY27-Q1", "n": 5}`). A parameter stands for a **value, never for a name**: a filter value, or an argument that is a number, a member of a fixed set or a boolean (the request's `limit`, a transform's `keep` or offset). It never stands for an attribute, a measure, an operator, a transform's name or a calendar level.
+
+`parameter_definitions` gives a name more: `for` (the attribute it is a value of), `type` (`string`, `integer`, `number`, `boolean`), `many` (it is a list), `default` and `required`.
+
+* In a filter, `"values": [{"param": "quarter"}]` takes one value or splices a list; `"values": {"param": "regions"}` is the whole list (a single value is a list of one). A list is valid where the argument takes several values; elsewhere it is `param_type_mismatch`.
+* The empty list is refused (`param_empty_list`): "no values" silently meaning "no filter" is how a dashboard shows everything by mistake.
+* A parameter in a filter's values is for that filter's attribute; a definition naming another attribute is `param_for_mismatch`. Every bound value is checked before any source is read: against the definition's type or the attribute's type (`param_type_mismatch`), and against the member list of a catalog-member attribute (`param_unknown_member`). `param_missing` is a name with no binding and no default; `param_unknown` is a binding no value uses.
+* Parameters are resolved once, before the request is validated, hashed or planned: the request hash, the cache key and a replay are those of the literal form, and a parameterized request returns the rows of its literal form.
+
+Not yet: `?`, `$n` and `:name` markers in semantic SQL, prepared statements on a model, the `members` call, `empty: matches_none`, and the range check of an argument's parameter (plan 19, J25).
+
 ## Validation and canonicalization
 
 Validation runs after JSON Schema checks and before any emitter. An invalid request returns errors to the agent for
