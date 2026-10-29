@@ -1,7 +1,7 @@
 name: Repository checks
 
 # Rules about the repository as a whole rather than one product: one version of each NuGet package (scripts/check_package_versions.py),
-# one solution that lists every project and builds (DbDataKit.slnx, scripts/check_solution.py).
+# one solution that lists every project and builds (DbDataKit.slnx, scripts/check_solution.py), no document or script that uses a retired command name (scripts/check_docs_commands.py).
 
 on:
   pull_request:
@@ -42,6 +42,7 @@ jobs:
       - uses: actions/checkout@v7
       - run: python3 -I -m unittest discover -s scripts/tests -v
       - run: python3 -I scripts/check_package_versions.py
+      - run: python3 -I scripts/check_docs_commands.py
 
   solution:
     runs-on: ubuntu-latest
