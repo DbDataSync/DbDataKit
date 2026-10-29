@@ -85,6 +85,26 @@ public sealed class SemanticOptions
     /// <summary>The engine's adoption level (0-5): what a level cannot execute comes back as remaining steps. The highest is the default.</summary>
     [ConfigKey(Min = 0, Max = 5)]
     public int Level { get; set; } = 5;
+
+    /// <summary>What one combine (the step that joins the results of several scans) may use before it is stopped and the request fails with a limit.</summary>
+    public SemanticCombineOptions Combine { get; set; } = new();
+}
+
+public sealed class SemanticCombineOptions
+{
+    /// <summary>Memory one combine may use, in megabytes.</summary>
+    [ConfigKey(Min = 16, Max = 1_048_576)]
+    public int MemoryMb { get; set; } = 1024;
+
+    /// <summary>Seconds one combine may run.</summary>
+    [ConfigKey(Min = 1, Max = 86_400)]
+    public int TimeoutSeconds { get; set; } = 60;
+
+    /// <summary>Rows, over all the scans a combine loads, above which it is refused.</summary>
+    [ConfigKey(Min = 1, Max = 2_000_000_000)]
+    public int MaxInputRows { get; set; } = 5_000_000;
+
+    internal DbDataKit.Semantic.SandboxLimits ToLimits() => new(MemoryMb * 1024L * 1024L, TimeSpan.FromSeconds(TimeoutSeconds), MaxInputRows);
 }
 
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
