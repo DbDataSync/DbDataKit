@@ -58,6 +58,19 @@ public sealed class SemanticModuleTests : IDisposable
     }
 
     [Fact]
+    public async Task AnExplainedRequestAnswersTheTextItWouldRunAndRunsNothing()
+    {
+        var sql = "EXPLAIN SELECT customers.region, MEASURE(orders.net_revenue) FROM sales_catalog GROUP BY ALL LIMIT 10";
+        var fromSql = await RowsAsync(await _services.Queries.RunAsync(Alice, new ServingRequest.Sql("semantic:sales_catalog", sql)));
+        var fromJson = await RowsAsync(await _services.Queries.RunAsync(Alice, new ServingRequest.Sql("semantic:sales_catalog", Request.Replace("\"kind\": \"query\"", "\"kind\": \"explain\""))));
+
+        Assert.NotEmpty(fromSql);
+        Assert.All(fromSql, row => Assert.StartsWith("sqlserver_sales|DuckDb|", row));
+        Assert.Contains("SELECT", fromSql[0], StringComparison.OrdinalIgnoreCase);
+        Assert.NotEmpty(fromJson);
+    }
+
+    [Fact]
     public async Task SemanticSqlOnAModelSourceIsTheSameRequest()
     {
         var sql = """
