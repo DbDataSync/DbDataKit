@@ -117,21 +117,8 @@ public sealed class PostgresDriver : IDriver, IConnectionTester, IDialectProvide
         IntegratedNeedsUser = true,
     };
 
-    /// <summary>
-    /// <c>datistemplate = false</c> drops template0/template1; <c>datallowconn</c> drops anything the
-    /// server will not accept a connection to, which would only ever produce a failure downstream.
-    /// </summary>
-    public async Task<IReadOnlyList<string>> ListDatabasesAsync(DbConnection connection, CancellationToken cancellationToken)
-    {
-        using var cmd = connection.CreateTimedCommand();
-        cmd.CommandText = "SELECT datname FROM pg_database WHERE datistemplate = false AND datallowconn = true ORDER BY datname;";
-
-        var results = new List<string>();
-        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-            results.Add(reader.GetString(0));
-        return results;
-    }
+    /// <summary>The shared reader drops templates (<c>datistemplate</c>) and what the server will not accept a connection to (<c>datallowconn</c>), which would only ever produce a failure downstream.</summary>
+    public Task<IReadOnlyList<string>> ListDatabasesAsync(DbConnection connection, CancellationToken cancellationToken) => PostgresCatalog.Instance.ListDatabasesAsync(connection, cancellationToken);
 
     public async Task<IReadOnlyList<TableMetadata>> ListTablesAsync(
         DbConnection connection, string database, CancellationToken cancellationToken)

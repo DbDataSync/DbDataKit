@@ -7,6 +7,15 @@ namespace DbDataSync.Drivers.Postgres.Tests;
 public sealed class PostgresTableListingTests(PostgresTestDatabase db) : IClassFixture<PostgresTestDatabase>
 {
     [Fact]
+    public async Task ListDatabasesAsync_OffersTheTestDatabase_NotTemplates()
+    {
+        await using var connection = db.OpenConnection();
+        var databases = await new PostgresDriver().ListDatabasesAsync(connection, CancellationToken.None);
+        Assert.Contains(db.DatabaseName, databases);
+        Assert.DoesNotContain(databases, d => d is "template0" or "template1");
+    }
+
+    [Fact]
     public async Task ListTablesAsync_OffersBaseTablesOfAnySchema_NotViewsOrTheEnginesOwn()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];

@@ -111,18 +111,10 @@ public sealed class MsSqlDriver : IDriver, IConnectionTester, IDialectProvider, 
     private static bool IsTrue(string value) => value.Equals("true", StringComparison.OrdinalIgnoreCase) || value.Equals("yes", StringComparison.OrdinalIgnoreCase) || value == "1";
     private static bool IsFalse(string value) => value.Equals("false", StringComparison.OrdinalIgnoreCase) || value.Equals("no", StringComparison.OrdinalIgnoreCase) || value == "0";
 
-    public async Task<IReadOnlyList<string>> ListDatabasesAsync(DbConnection connection, CancellationToken cancellationToken)
-    {
-        using var cmd = connection.CreateTimedCommand();
-        // database_id > 4 skips the fixed system databases (master, tempdb, model, msdb).
-        cmd.CommandText = "SELECT name FROM sys.databases WHERE database_id > 4 ORDER BY name;";
+    private static readonly HashSet<string> SystemDatabases = new(["master", "tempdb", "model", "msdb"], StringComparer.OrdinalIgnoreCase);
 
-        var results = new List<string>();
-        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-            results.Add(reader.GetString(0));
-        return results;
-    }
+    public async Task<IReadOnlyList<string>> ListDatabasesAsync(DbConnection connection, CancellationToken cancellationToken) =>
+        await SharedCatalog.DatabasesAsync(new DbDataKit.Metadata.SqlServerCatalogReader(connection, options: SharedCatalog.OptionsFor(connection)), SystemDatabases, cancellationToken);
 
     public async Task<IReadOnlyList<TableMetadata>> ListTablesAsync(
         DbConnection connection, string database, CancellationToken cancellationToken)
