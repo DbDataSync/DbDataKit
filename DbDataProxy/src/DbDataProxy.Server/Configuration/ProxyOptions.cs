@@ -95,6 +95,12 @@ public sealed class SemanticModelOptions
 
     /// <summary>For each source of the catalog, the data source of this server that holds its tables. A source not listed is looked for under its own name.</summary>
     public Dictionary<string, string> Sources { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// For each catalog source of kind <c>ssas</c>, the connection string of its Analysis Services server (a secret reference works for the whole string or for <c>Password=</c>). Windows only. The connection is this server's, not the caller's:
+    /// whoever may query the model reads what that account can read.
+    /// </summary>
+    public Dictionary<string, string> Ssas { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>A client paired with this server, as <c>server.yaml</c> keeps it (see <c>PairedClientsFile</c>).</summary>

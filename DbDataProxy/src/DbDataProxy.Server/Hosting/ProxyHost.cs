@@ -163,7 +163,7 @@ public static class ProxyHost
         services.AddSingleton<ChainedCredentialValidator>();
         services.AddSingleton<IJwtValidator, JwtBearerValidator>();
         services.AddSingleton<ProxyServing>();
-        services.AddSingleton<IServingServices>(sp => sp.GetRequiredService<ProxyServing>().WithSemantic(SemanticModelsLoader.Load(sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue, ResolveDataDirectory(sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue))));
+        services.AddSingleton<IServingServices>(sp => sp.GetRequiredService<ProxyServing>().WithSemantic(SemanticModelsLoader.Load(sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue, ResolveDataDirectory(sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue), sp.GetRequiredService<SecretsRuntime>())));
         services.AddSingleton(sp =>
         {
             var current = sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>();

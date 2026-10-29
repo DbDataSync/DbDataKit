@@ -1,4 +1,5 @@
 using DbDataKit.Semantic;
+using DbDataKit.Semantic.Abstractions;
 
 namespace DbDataKit.Serving.Semantic;
 
@@ -21,6 +22,12 @@ public sealed class SemanticModels
 
     /// <summary>The engine level the host runs at (plan 14's adoption levels); what a level cannot execute comes back as remaining steps.</summary>
     public int Level { get; init; } = 5;
+
+    /// <summary>
+    /// Makes the executor for a source of kind <c>ssas</c> (model name, catalog source, and the executor for everything that is not DAX); null when the host does not run Analysis Services.
+    /// The host owns this because the client library runs on Windows only, and because the connection (the service account's, not the caller's) is the host's to configure.
+    /// </summary>
+    public Func<string, string, ISourceExecutor, ISourceExecutor>? SsasExecutor { get; init; }
 
     public IReadOnlyCollection<SemanticModel> All => _models.Values;
 

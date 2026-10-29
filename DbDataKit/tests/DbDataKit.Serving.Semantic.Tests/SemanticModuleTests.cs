@@ -1,5 +1,6 @@
 using Apache.Arrow;
 using DbDataKit.Semantic;
+using DbDataKit.Semantic.Abstractions;
 
 namespace DbDataKit.Serving.Semantic.Tests;
 
@@ -110,6 +111,52 @@ public sealed class SemanticModuleTests : IDisposable
         await Assert.ThrowsAsync<ServingInvalidException>(() => _services.Queries.RunAsync(Alice, new ServingRequest.Sql("semantic:sales_catalog", "{ not json")));
         var error = await Assert.ThrowsAsync<ServingInvalidException>(() => _services.Queries.RunAsync(Alice, new ServingRequest.Sql("semantic:sales_catalog", "DELETE FROM x")));
         Assert.Contains("sql_", error.Message);
+    }
+
+    private const string BudgetRequest = """
+        {"spec_version": "0.3", "kind": "query", "query": {"measures": ["budget.budget_amount"], "attributes": ["customers.region"], "limit": 10}}
+        """;
+
+    [Fact]
+    public async Task ASourceOnAnalysisServicesIsRefusedWhenTheHostRunsNone()
+    {
+        var error = await Assert.ThrowsAsync<ServingInvalidException>(() => _services.Queries.RunAsync(Alice, new ServingRequest.Semantic("sales_catalog", BudgetRequest)));
+
+        Assert.Contains("Analysis Services", error.Message);
+        Assert.Contains("ssas_finance", error.Message);
+    }
+
+    [Fact]
+    public async Task ASourceOnAnalysisServicesRunsThroughTheExecutorTheHostMakes()
+    {
+        var made = new List<(string Model, string Source)>();
+        var ran = new List<CompiledQuery>();
+        var catalog = Catalog.Load(Path.Combine(AppContext.BaseDirectory, "conformance", "catalog.yaml"));
+        var models = new SemanticModels
+        {
+            SsasExecutor = (model, source, fallback) => { made.Add((model, source)); return new Recording(ran); },
+        }.Add(catalog, new Dictionary<string, string> { ["sqlserver_sales"] = "warehouse" });
+        var services = new TestServices(_host).WithSemantic(models);
+
+        var answer = await services.Queries.RunAsync(Alice, new ServingRequest.Semantic("sales_catalog", BudgetRequest));
+        Assert.Equal(["West|120", "East|80"], await RowsAsync(answer));
+
+        Assert.Equal(("sales_catalog", "ssas_finance"), Assert.Single(made));
+        Assert.Equal("dax", Assert.Single(ran).Native.Dialect);
+        Assert.Empty(_host.Received);
+    }
+
+    private sealed class Recording(List<CompiledQuery> ran) : DbDataKit.Semantic.Abstractions.ISourceExecutor
+    {
+        public bool RunsNativeText => false;
+
+        public DbDataKit.Semantic.Abstractions.QueryRows Execute(CompiledQuery query, int maxRows)
+        {
+            ran.Add(query);
+            return new(["customers_region", "budget_budget_amount"], [new() { ["customers_region"] = "West", ["budget_budget_amount"] = 120.0 }, new() { ["customers_region"] = "East", ["budget_budget_amount"] = 80.0 }]);
+        }
+
+        public DbDataKit.Semantic.Abstractions.QueryRows ExecuteNativeText(string source, NativeQuery native, int maxRows) => throw new NotSupportedException();
     }
 
     [Fact]

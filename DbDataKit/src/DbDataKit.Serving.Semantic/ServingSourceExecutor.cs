@@ -9,7 +9,7 @@ namespace DbDataKit.Serving.Semantic;
 /// Runs the queries the semantic engine plans through the host's own query service, as the caller: each scan is a SQL request against the serving source the model maps its catalog source to, so the host's access rules, classifier and limits
 /// apply to it exactly as they do to a client's SQL. Which text runs depends on the product the source reports (<see cref="NativeRoute"/>). The engine is synchronous, so this blocks the thread it runs on; the module runs the engine off the request's thread.
 /// </summary>
-internal sealed class ServingSourceExecutor(IServingQueries queries, IServingCatalog catalog, ServingContext context, SemanticModel model, CancellationToken cancellationToken) : ISourceExecutor
+internal sealed class ServingSourceExecutor(IServingQueries queries, IServingCatalog catalog, ServingContext context, SemanticModel model, SemanticModels models, CancellationToken cancellationToken) : ISourceExecutor
 {
     private readonly Dictionary<string, SourceEngine> _engines = [];
 
@@ -18,7 +18,12 @@ internal sealed class ServingSourceExecutor(IServingQueries queries, IServingCat
     public QueryRows Execute(CompiledQuery query, int maxRows)
     {
         var kind = model.Catalog.Doc.Sources.TryGetValue(query.Source, out var def) ? def.Kind : "";
-        if (kind == "ssas") throw new ServingInvalidException($"Source '{query.Source}' of model '{model.Name}' is Analysis Services, which this server does not run yet.");
+        if (kind == "ssas")
+        {
+            var ssas = models.SsasExecutor?.Invoke(model.Name, query.Source, this)
+                ?? throw new ServingInvalidException($"Source '{query.Source}' of model '{model.Name}' is Analysis Services, which this server is not set up to run.");
+            return ssas.Execute(query, maxRows);
+        }
 
         var servingSource = model.ServingSource(query.Source);
         var engine = EngineOf(servingSource);
