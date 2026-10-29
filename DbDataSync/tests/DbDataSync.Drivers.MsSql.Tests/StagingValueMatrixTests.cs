@@ -21,6 +21,9 @@ public sealed class StagingValueMatrixTests(MsSqlTestDatabase db) : IClassFixtur
         "varbinary(50)", "uniqueidentifier", "date", "time(7)", "datetime", "datetime2(7)", "datetimeoffset(7)", "xml",
     ];
 
+    // A time-only string stored in a date-and-time column takes the server's current date, so the file names it instead of the day it was written.
+    private static readonly string Today = DateTime.UtcNow.ToString("yyyy-MM-dd");
+
     private static string ExpectedPath([CallerFilePath] string here = "") => Path.Combine(Path.GetDirectoryName(here)!, "StagingMatrix.mssql.expected.tsv");
 
     [Fact]
@@ -53,7 +56,7 @@ public sealed class StagingValueMatrixTests(MsSqlTestDatabase db) : IClassFixtur
                     finally { await staging.CleanupAsync(connection, staged, CancellationToken.None); }
                 }
                 catch (Exception ex) { outcome = StagingMatrix.Refused(ex, value.Instance.GetType().Name); }
-                actual.Add($"{type}\t{value.Name}\t{outcome}");
+                actual.Add($"{type}\t{value.Name}\t{outcome.Replace(Today, "<today>")}");
             }
         }
 
