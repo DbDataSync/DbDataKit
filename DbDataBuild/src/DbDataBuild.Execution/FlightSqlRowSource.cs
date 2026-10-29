@@ -1,18 +1,13 @@
 using ServerFacts = DbDataKit.Metadata.ServerFacts;
-using System.Net.Security;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using Apache.Arrow;
 using Apache.Arrow.Flight;
-using Apache.Arrow.Flight.Client;
 using Apache.Arrow.Flight.Sql;
 using Apache.Arrow.Flight.Sql.Client;
 using DbDataBuild.Models;
 using DbDataBuild.State;
 using Google.Protobuf;
 using Grpc.Core;
-using Grpc.Core.Interceptors;
-using Grpc.Net.Client;
+using DbDataKit.Connections.FlightSql;
 
 namespace DbDataBuild.Execution;
 
@@ -54,43 +49,15 @@ internal interface IServerFacts
 internal sealed class FlightSqlRowSource : IRowSource, IMetadataCatalog, IServerFacts
 {
     private readonly FlightSqlLogin login;
-    private readonly GrpcChannel channel;
-    private readonly FlightSqlClient client;
-    private readonly Metadata headers;
+    private readonly FlightSqlConnection connection;
 
-    internal FlightSqlClient Client => client;
+    internal FlightSqlClient Client => connection.Client;
 
-    private readonly DeadlineInterceptor deadlines;
+    internal FlightSqlConnection Connection => connection;
 
-    private FlightSqlRowSource(FlightSqlLogin login, GrpcChannel channel, FlightSqlClient client, Metadata headers, DeadlineInterceptor deadlines)
+    private FlightSqlRowSource(FlightSqlLogin login, FlightSqlConnection connection)
     {
-        this.login = login; this.channel = channel; this.client = client; this.headers = headers; this.deadlines = deadlines;
-    }
-
-    /// <summary>
-    /// The time limit of a call is a gRPC **deadline**: every call made while a limit is set carries one (the server gets it too, as `grpc-timeout`, and can stop). The library's own `FlightCallOptions.Timeout` is not
-    /// used by its client, so the limit is put on the calls here.
-    /// </summary>
-    private sealed class DeadlineInterceptor : Interceptor
-    {
-        private long ticks;
-        public TimeSpan? Timeout { set => Interlocked.Exchange(ref ticks, value?.Ticks ?? 0); }
-
-        private ClientInterceptorContext<TRequest, TResponse> With<TRequest, TResponse>(ClientInterceptorContext<TRequest, TResponse> context)
-            where TRequest : class where TResponse : class =>
-            Interlocked.Read(ref ticks) is var t and > 0 && context.Options.Deadline is null
-                ? new(context.Method, context.Host, context.Options.WithDeadline(DateTime.UtcNow + TimeSpan.FromTicks(t))) : context;
-
-        public override TResponse BlockingUnaryCall<TRequest, TResponse>(TRequest request, ClientInterceptorContext<TRequest, TResponse> context, BlockingUnaryCallContinuation<TRequest, TResponse> continuation) =>
-            continuation(request, With(context));
-        public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(TRequest request, ClientInterceptorContext<TRequest, TResponse> context, AsyncUnaryCallContinuation<TRequest, TResponse> continuation) =>
-            continuation(request, With(context));
-        public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(TRequest request, ClientInterceptorContext<TRequest, TResponse> context, AsyncServerStreamingCallContinuation<TRequest, TResponse> continuation) =>
-            continuation(request, With(context));
-        public override AsyncClientStreamingCall<TRequest, TResponse> AsyncClientStreamingCall<TRequest, TResponse>(ClientInterceptorContext<TRequest, TResponse> context, AsyncClientStreamingCallContinuation<TRequest, TResponse> continuation) =>
-            continuation(With(context));
-        public override AsyncDuplexStreamingCall<TRequest, TResponse> AsyncDuplexStreamingCall<TRequest, TResponse>(ClientInterceptorContext<TRequest, TResponse> context, AsyncDuplexStreamingCallContinuation<TRequest, TResponse> continuation) =>
-            continuation(With(context));
+        this.login = login; this.connection = connection;
     }
 
     /// <summary>`Flight SQL server proxy.example.com:31337 (TLS)`: where the source goes, never how it signs in.</summary>
@@ -100,83 +67,33 @@ internal sealed class FlightSqlRowSource : IRowSource, IMetadataCatalog, IServer
     internal const int DefaultTimeoutSeconds = 30;
 
     /// <summary>
-    /// Builds the channel and signs in: a bearer token is sent with each call; a user and password are traded for one by the server's handshake. Nothing is sent for a token (the first call is the first contact), so
-    /// "the server cannot be reached" and "the token is refused" show at the first statement, which for a command is its check of the origin.
+    /// Opens the shared Flight SQL connection and signs in: a bearer token is sent with each call; a user and password are traded for one by the server's handshake. Nothing is sent for a token (the first call is the first
+    /// contact), so "the server cannot be reached" and "the token is refused" show at the first statement, which for a command is its check of the origin. TLS is the machine's trust, the certificate authority of `ca_file`
+    /// instead of it, or no check at all (`tls_skip_verify`).
     /// </summary>
     public static async Task<FlightSqlRowSource> ConnectAsync(string loginValue, CancellationToken ct)
     {
         var login = FlightSqlLogin.Parse(loginValue);
-        var handler = new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(DefaultTimeoutSeconds), EnableMultipleHttp2Connections = true };
-        if (login.Tls) handler.SslOptions = TlsOptions(login);
-        var channel = GrpcChannel.ForAddress(login.Address, new GrpcChannelOptions { HttpHandler = handler, DisposeHttpClient = true, MaxReceiveMessageSize = null, MaxSendMessageSize = null });
+        var token = await login.ResolveTokenAsync(ct);
+        var timeout = TimeSpan.FromSeconds(DefaultTimeoutSeconds);
+        var settings = new FlightSqlSettings(
+            login.Address, token != null ? FlightSqlAuthMethod.Bearer : login.User != null ? FlightSqlAuthMethod.Basic : FlightSqlAuthMethod.None,
+            login.User, token ?? login.Password, login.TlsSkipVerify, Catalog: null, ConnectTimeout: timeout, CommandTimeout: timeout, FlightSqlParameterMode.Prepared,
+            CaFile: login.Tls && !login.TlsSkipVerify ? login.CaFile : null, Headers: login.Headers.Select(h => new KeyValuePair<string, string>(h.Name, h.Value)).ToList());
+        var connection = new FlightSqlConnection(settings, value => throw new NotSupportedException("A copy's origin binds its values; it never writes them into the text."));
         try
         {
-            var headers = new Metadata();
-            foreach (var (name, value) in login.Headers) headers.Add(name, value);
-            var deadlines = new DeadlineInterceptor();
-            var flight = new FlightClient(channel.Intercept(deadlines));
-            if (await login.ResolveTokenAsync(ct) is { } token) headers.Add("authorization", "Bearer " + token);
-            else if (login.User != null) headers.Add("authorization", await HandshakeAsync(flight, login, headers, ct));
-            return new FlightSqlRowSource(login, channel, new FlightSqlClient(flight), headers, deadlines);
+            try { await connection.OpenAsync(ct); }
+            catch (InvalidOperationException ex) when (ex.Message.StartsWith("The CA file", StringComparison.Ordinal)) { throw new FlightSqlLoginException("The ca_file of the Flight SQL login could not be read as a PEM file of certificates."); }
+            return new FlightSqlRowSource(login, connection);
         }
-        catch { channel.Dispose(); throw; }
-    }
-
-    /// <summary>
-    /// The server's basic-authentication handshake: the user and password go in an `authorization: Basic` header of the Handshake call, and the server answers with the header to use from then on (`Bearer ...`), in the
-    /// response headers or the trailers. A server that answers with none is sent the basic header with every call.
-    /// </summary>
-    private static async Task<string> HandshakeAsync(FlightClient flight, FlightSqlLogin login, Metadata custom, CancellationToken ct)
-    {
-        var basic = "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{login.User}:{login.Password}"));
-        var metadata = new Metadata();
-        foreach (var h in custom) metadata.Add(h);
-        metadata.Add("authorization", basic);
-        using var call = flight.Handshake(metadata, DateTime.UtcNow.AddSeconds(DefaultTimeoutSeconds), ct);
-        var headersTask = call.ResponseHeadersAsync;
-        try
-        {
-            await call.RequestStream.WriteAsync(new FlightHandshakeRequest(ByteString.Empty, 0), ct);
-            await call.RequestStream.CompleteAsync();
-        }
-        // a server that decides on the header alone answers and ends the call before the empty request is written; what it answered is what counts (a refusal is the status the next read throws)
-        catch (Exception ex) when (ex is RpcException or InvalidOperationException or OperationCanceledException && !ct.IsCancellationRequested) { }
-        var responseHeaders = await headersTask;
-        while (await call.ResponseStream.MoveNext(ct)) { /* the payload is not used */ }
-        var issued = responseHeaders.GetValue("authorization") ?? call.GetTrailers().GetValue("authorization");
-        return string.IsNullOrWhiteSpace(issued) ? basic : issued;
-    }
-
-    /// <summary>The TLS the login asks for: the machine's trust by default, the certificate authority of `ca_file` instead of it, or no check at all (`tls_skip_verify`).</summary>
-    internal static SslClientAuthenticationOptions TlsOptions(FlightSqlLogin login)
-    {
-        var options = new SslClientAuthenticationOptions();
-        if (login.TlsSkipVerify) options.RemoteCertificateValidationCallback = (_, _, _, _) => true;
-        else if (login.CaFile != null)
-        {
-            X509Certificate2Collection roots;
-            try { roots = []; roots.ImportFromPemFile(login.CaFile); }
-            catch (Exception ex) when (ex is IOException or System.Security.Cryptography.CryptographicException or UnauthorizedAccessException)
-            { throw new FlightSqlLoginException("The ca_file of the Flight SQL login could not be read as a PEM file of certificates."); }
-            options.RemoteCertificateValidationCallback = (_, certificate, _, errors) =>
-            {
-                if (certificate == null) return false;
-                if ((errors & SslPolicyErrors.RemoteCertificateNameMismatch) != 0 || (errors & SslPolicyErrors.RemoteCertificateNotAvailable) != 0) return false;
-                using var chain = new X509Chain();
-                chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-                chain.ChainPolicy.CustomTrustStore.AddRange(roots);
-                chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-                return chain.Build(new X509Certificate2(certificate));
-            };
-        }
-        return options;
+        catch { connection.Dispose(); throw; }
     }
 
     private FlightCallOptions Options(int? timeoutSeconds)
     {
         var seconds = timeoutSeconds ?? DefaultTimeoutSeconds;
-        deadlines.Timeout = seconds > 0 ? TimeSpan.FromSeconds(seconds) : null;
-        return new FlightCallOptions { Headers = headers };
+        return connection.CallOptions(seconds > 0 ? TimeSpan.FromSeconds(seconds) : TimeSpan.Zero);
     }
 
     public async Task<IRowReader> ExecuteAsync(string sql, IReadOnlyList<GateParameter> parameters, int? timeoutSeconds, bool streaming, CancellationToken ct)
@@ -186,56 +103,20 @@ internal sealed class FlightSqlRowSource : IRowSource, IMetadataCatalog, IServer
         try
         {
             FlightInfo info;
-            if (parameters.Count == 0) info = await client.ExecuteAsync(sql, Transaction.NoTransaction, options, ct);
+            if (parameters.Count == 0) info = await Client.ExecuteAsync(sql, Transaction.NoTransaction, options, ct);
             else
             {
-                prepared = await PrepareAsync(sql, options, ct);
-                info = await BindAndExecuteAsync(prepared, ArrowConversions.ParameterBatch(parameters), options, ct);
+                prepared = await PreparedHandle.CreateAsync(Client, sql, options, ct);
+                info = await prepared.BindAndExecuteAsync(ArrowConversions.ParameterBatch(parameters), options, ct);
             }
             return await FlightSqlRowReader.StartAsync(this, info, options, prepared, ct);
         }
         catch
         {
-            await CloseQuietlyAsync(prepared, options);
+            if (prepared != null) await prepared.CloseQuietlyAsync(options);
             throw;
         }
     }
-
-    // The prepared-statement exchange is made here from the protocol's own messages (CreatePreparedStatement and ClosePreparedStatement actions, a DoPut of the parameters, a FlightInfo for the handle) instead of with the
-    // library's PreparedStatement, which refuses a server that leaves the dataset or the parameter schema empty (the protocol allows it, and a proxy may well do it) and holds the handle as UTF-8 text.
-
-    /// <summary>A server-side prepared statement: its opaque handle, and the schema of its rows when the server said it.</summary>
-    internal sealed record PreparedHandle(ByteString Handle, Schema? DatasetSchema);
-
-    private async Task<PreparedHandle> PrepareAsync(string sql, FlightCallOptions options, CancellationToken ct)
-    {
-        var action = new FlightAction("CreatePreparedStatement", Google.Protobuf.WellKnownTypes.Any.Pack(new Arrow.Flight.Protocol.Sql.ActionCreatePreparedStatementRequest { Query = sql }).ToByteString());
-        Arrow.Flight.Protocol.Sql.ActionCreatePreparedStatementResult? created = null;
-        await foreach (var result in client.DoActionAsync(action, options, ct)) created ??= Google.Protobuf.WellKnownTypes.Any.Parser.ParseFrom(result.Body).Unpack<Arrow.Flight.Protocol.Sql.ActionCreatePreparedStatementResult>();
-        if (created == null || created.PreparedStatementHandle.IsEmpty) throw new InvalidOperationException("The Flight SQL server returned no prepared statement.");
-        var schema = created.DatasetSchema.IsEmpty ? null : SchemaExtensions.DeserializeSchema(new ReadOnlyMemory<byte>(created.DatasetSchema.ToByteArray()));
-        return new PreparedHandle(created.PreparedStatementHandle, schema);
-    }
-
-    private async Task<FlightInfo> BindAndExecuteAsync(PreparedHandle prepared, RecordBatch parameters, FlightCallOptions options, CancellationToken ct)
-    {
-        var descriptor = FlightDescriptor.CreateCommandDescriptor(Google.Protobuf.WellKnownTypes.Any.Pack(new Arrow.Flight.Protocol.Sql.CommandPreparedStatementQuery { PreparedStatementHandle = prepared.Handle }).ToByteArray());
-        await client.DoPutAsync(descriptor, parameters, options, ct);
-        return await client.GetFlightInfoAsync(descriptor, options, ct);
-    }
-
-    internal static async Task CloseQuietlyAsync(PreparedHandle? prepared, FlightCallOptions options, FlightSqlRowSource source)
-    {
-        if (prepared == null) return;
-        try
-        {
-            var action = new FlightAction("ClosePreparedStatement", Google.Protobuf.WellKnownTypes.Any.Pack(new Arrow.Flight.Protocol.Sql.ActionClosePreparedStatementRequest { PreparedStatementHandle = prepared.Handle }).ToByteString());
-            await foreach (var _ in source.client.DoActionAsync(action, options, CancellationToken.None)) { /* no result */ }
-        }
-        catch (Exception) { /* the statement is gone with the connection */ }
-    }
-
-    private Task CloseQuietlyAsync(PreparedHandle? prepared, FlightCallOptions options) => CloseQuietlyAsync(prepared, options, this);
 
     public Task<IRowReader> ExecuteCommandAsync(string text, IReadOnlyList<GateParameter> parameters, CancellationToken ct) =>
         throw new NotSupportedException("A Flight SQL connection runs queries only: a native command is for SQL Server and PostgreSQL connections.");
@@ -264,19 +145,19 @@ internal sealed class FlightSqlRowSource : IRowSource, IMetadataCatalog, IServer
             Schema? schema = null;
             try
             {
-                prepared = await PrepareAsync(sql, options, ct);
+                prepared = await PreparedHandle.CreateAsync(Client, sql, options, ct);
                 schema = prepared.DatasetSchema;
             }
             catch (Exception ex) when (FlightSqlFailure.Rpc(ex) != null) { /* a server without prepared statements may still say the schema of a query */ }
             if (schema == null || schema.FieldsList.Count == 0)
             {
                 // the library's GetExecuteSchemaAsync prepares a statement it then leaves open when the server gives no schema: the GetSchema call is made here with the statement as a command
-                try { schema = await client.GetSchemaAsync(FlightDescriptor.CreateCommandDescriptor(Google.Protobuf.WellKnownTypes.Any.Pack(new Arrow.Flight.Protocol.Sql.CommandStatementQuery { Query = sql }).ToByteArray()), options, ct); }
+                try { schema = await Client.GetSchemaAsync(FlightDescriptor.CreateCommandDescriptor(Google.Protobuf.WellKnownTypes.Any.Pack(new Arrow.Flight.Protocol.Sql.CommandStatementQuery { Query = sql }).ToByteArray()), options, ct); }
                 catch (Exception ex) when (FlightSqlFailure.Rpc(ex) != null) { return null; }
             }
             return schema == null || schema.FieldsList.Count == 0 ? null : ArrowConversions.Columns(schema);
         }
-        finally { await CloseQuietlyAsync(prepared, options); }
+        finally { if (prepared != null) await prepared.CloseQuietlyAsync(options); }
     }
 
     // ---- the metadata calls ----
@@ -286,13 +167,13 @@ internal sealed class FlightSqlRowSource : IRowSource, IMetadataCatalog, IServer
 
     // The library's own metadata calls send an empty string for a filter left out (`catalog = ""`), which servers read as "the catalog with no name" and answer with nothing. These send only what is asked.
     private async Task<FlightInfo> MetadataInfoAsync(Google.Protobuf.IMessage command, FlightCallOptions options, CancellationToken ct) =>
-        await client.GetFlightInfoAsync(FlightDescriptor.CreateCommandDescriptor(Google.Protobuf.WellKnownTypes.Any.Pack(command).ToByteArray()), options, ct);
+        await Client.GetFlightInfoAsync(FlightDescriptor.CreateCommandDescriptor(Google.Protobuf.WellKnownTypes.Any.Pack(command).ToByteArray()), options, ct);
 
     private async Task<List<RecordBatch>> ReadAsync(FlightInfo info, FlightCallOptions options, CancellationToken ct)
     {
         var batches = new List<RecordBatch>();
         foreach (var endpoint in info.Endpoints)
-            await foreach (var batch in client.DoGetAsync(endpoint.Ticket, options, ct)) batches.Add(batch);
+            await foreach (var batch in connection.DoGetAsync(endpoint.Ticket, options, ct)) batches.Add(batch);
         return batches;
     }
 
@@ -434,7 +315,7 @@ internal sealed class FlightSqlRowSource : IRowSource, IMetadataCatalog, IServer
 
     public ValueTask DisposeAsync()
     {
-        channel.Dispose();
+        connection.Dispose();
         return ValueTask.CompletedTask;
     }
 }
@@ -444,7 +325,7 @@ internal sealed class FlightSqlRowReader : IRowReader
 {
     private readonly FlightSqlRowSource source;
     private readonly FlightCallOptions options;
-    private readonly FlightSqlRowSource.PreparedHandle? prepared;
+    private readonly PreparedHandle? prepared;
     private readonly CancellationTokenSource cancellation;
     private readonly IReadOnlyList<FlightEndpoint> endpoints;
     private int nextEndpoint;
@@ -453,12 +334,12 @@ internal sealed class FlightSqlRowReader : IRowReader
     private int row = -1;
     private Schema schema;
 
-    private FlightSqlRowReader(FlightSqlRowSource source, FlightCallOptions options, FlightSqlRowSource.PreparedHandle? prepared, CancellationTokenSource cancellation, IReadOnlyList<FlightEndpoint> endpoints, Schema schema)
+    private FlightSqlRowReader(FlightSqlRowSource source, FlightCallOptions options, PreparedHandle? prepared, CancellationTokenSource cancellation, IReadOnlyList<FlightEndpoint> endpoints, Schema schema)
     {
         this.source = source; this.options = options; this.prepared = prepared; this.cancellation = cancellation; this.endpoints = endpoints; this.schema = schema;
     }
 
-    public static async Task<FlightSqlRowReader> StartAsync(FlightSqlRowSource source, FlightInfo info, FlightCallOptions options, FlightSqlRowSource.PreparedHandle? prepared, CancellationToken ct)
+    public static async Task<FlightSqlRowReader> StartAsync(FlightSqlRowSource source, FlightInfo info, FlightCallOptions options, PreparedHandle? prepared, CancellationToken ct)
     {
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var reader = new FlightSqlRowReader(source, options, prepared, cancellation, info.Endpoints, info.Schema ?? new Schema(new List<Field>(), null));
@@ -480,7 +361,7 @@ internal sealed class FlightSqlRowReader : IRowReader
             if (batches == null)
             {
                 if (nextEndpoint >= endpoints.Count) return false;
-                batches = source.Client.DoGetAsync(endpoints[nextEndpoint++].Ticket, options, cancellation.Token).GetAsyncEnumerator(cancellation.Token);
+                batches = source.Connection.DoGetAsync(endpoints[nextEndpoint++].Ticket, options, cancellation.Token).GetAsyncEnumerator(cancellation.Token);
             }
             if (!await batches.MoveNextAsync())
             {
@@ -523,7 +404,7 @@ internal sealed class FlightSqlRowReader : IRowReader
         {
             current?.Dispose();
             cancellation.Dispose();
-            await FlightSqlRowSource.CloseQuietlyAsync(prepared, options, source);
+            if (prepared != null) await prepared.CloseQuietlyAsync(options);
         }
     }
 }

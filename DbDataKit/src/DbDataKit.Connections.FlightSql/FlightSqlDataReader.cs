@@ -28,7 +28,7 @@ public sealed class FlightSqlDataReader : DbDataReader
     private readonly FlightInfo _info;
     private readonly FlightCallOptions _options;
     private readonly CancellationToken _token;
-    private PreparedStatement? _prepared;
+    private PreparedHandle? _prepared;
 
     private IAsyncEnumerator<RecordBatch>? _batches;
     private int _endpoint;
@@ -40,7 +40,7 @@ public sealed class FlightSqlDataReader : DbDataReader
 
     internal FlightSqlDataReader(
         FlightSqlConnection connection, FlightInfo info, FlightCallOptions options,
-        PreparedStatement? prepared, System.Data.CommandBehavior behavior, CancellationToken token)
+        PreparedHandle? prepared, System.Data.CommandBehavior behavior, CancellationToken token)
     {
         _connection = connection;
         _info = info;
@@ -246,8 +246,7 @@ public sealed class FlightSqlDataReader : DbDataReader
 
         if (_prepared is not null)
         {
-            try { await _prepared.CloseAsync(_options, CancellationToken.None); }
-            catch (Exception) { /* released with the connection otherwise */ }
+            await _prepared.CloseQuietlyAsync(_options);
             _prepared = null;
         }
     }

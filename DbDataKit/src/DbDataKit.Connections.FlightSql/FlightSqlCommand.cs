@@ -99,7 +99,7 @@ public sealed class FlightSqlCommand : DbCommand
         var timeout = CommandTimeout <= 0 ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(CommandTimeout);
         var options = _connection.CallOptions(timeout);
 
-        PreparedStatement? prepared = null;
+        PreparedHandle? prepared = null;
         try
         {
             var (sql, ordered) = Statement(inline: false);
@@ -113,9 +113,8 @@ public sealed class FlightSqlCommand : DbCommand
             {
                 try
                 {
-                    prepared = await _connection.Client.PrepareAsync(sql, Apache.Arrow.Flight.Sql.Transaction.NoTransaction, options, token);
-                    prepared.SetParameters(ArrowParameters.Build(ordered));
-                    info = await prepared.ExecuteAsync(options, token);
+                    prepared = await PreparedHandle.CreateAsync(_connection.Client, sql, options, token);
+                    info = await prepared.BindAndExecuteAsync(ArrowParameters.Build(ordered), options, token);
                 }
                 catch (Exception ex) when (IsUnimplemented(ex))
                 {
@@ -123,7 +122,7 @@ public sealed class FlightSqlCommand : DbCommand
                     // remember it and send the values as literals instead.
                     _connection.ServerRefusesParameters = true;
                     if (prepared is not null)
-                        await CloseQuietlyAsync(prepared, options);
+                        await prepared.CloseQuietlyAsync(options);
                     prepared = null;
                     info = await _connection.Client.ExecuteAsync(
                         Statement(inline: true).Sql, Apache.Arrow.Flight.Sql.Transaction.NoTransaction, options, token);
@@ -142,7 +141,7 @@ public sealed class FlightSqlCommand : DbCommand
         finally
         {
             if (prepared is not null)
-                await CloseQuietlyAsync(prepared, options);
+                await prepared.CloseQuietlyAsync(options);
         }
     }
 
@@ -177,18 +176,6 @@ public sealed class FlightSqlCommand : DbCommand
         ex is RpcException { StatusCode: StatusCode.Unimplemented }
         || (ex is AggregateException agg && agg.InnerExceptions.Any(IsUnimplemented))
         || (ex.InnerException is { } inner && IsUnimplemented(inner));
-
-    private static async Task CloseQuietlyAsync(PreparedStatement prepared, FlightCallOptions options)
-    {
-        try
-        {
-            await prepared.CloseAsync(options, CancellationToken.None);
-        }
-        catch (Exception)
-        {
-            // Best effort: a prepared statement that cannot be closed is released with the connection.
-        }
-    }
 
     protected override void Dispose(bool disposing)
     {

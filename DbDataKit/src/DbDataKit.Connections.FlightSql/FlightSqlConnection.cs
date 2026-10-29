@@ -1,3 +1,4 @@
+using Grpc.Core.Interceptors;
 using System.Data;
 using System.Data.Common;
 using System.Net.Security;
@@ -34,6 +35,7 @@ public sealed class FlightSqlConnection : DbConnection
     private GrpcChannel? _channel;
     private string? _authorization;
     private ConnectionState _state = ConnectionState.Closed;
+    private readonly DeadlineInterceptor _deadlines = new();
 
     public FlightSqlConnection(FlightSqlSettings settings, Func<object?, string> renderLiteral)
     {
@@ -51,13 +53,14 @@ public sealed class FlightSqlConnection : DbConnection
     /// the prepared round trips and send values inline.</summary>
     internal volatile bool ServerRefusesParameters;
 
-    internal FlightSqlClient Client { get; private set; } = null!;
+    /// <summary>The Flight SQL client, for the calls a command does not make (the metadata calls, a statement's schema). It is the library's own: its unary calls take the headers and the deadline of <see cref="CallOptions"/>.</summary>
+    public FlightSqlClient Client { get; private set; } = null!;
 
     /// <summary>
     /// Streams the record batches behind a ticket, decompressing LZ4/Zstd ones. Used instead of
     /// <c>Client.DoGetAsync</c>, which cannot read a compressed batch — see <see cref="FlightDataReader"/>.
     /// </summary>
-    internal IAsyncEnumerable<Apache.Arrow.RecordBatch> DoGetAsync(
+    public IAsyncEnumerable<Apache.Arrow.RecordBatch> DoGetAsync(
         FlightTicket ticket, FlightCallOptions options, CancellationToken cancellationToken)
     {
         var channel = _channel ?? throw new InvalidOperationException("The connection is not open.");
@@ -67,7 +70,7 @@ public sealed class FlightSqlConnection : DbConnection
 
     /// <summary>A fresh options object per call: <see cref="Metadata"/> is mutable and shared state
     /// between concurrent calls would be a bug waiting to happen.</summary>
-    internal FlightCallOptions CallOptions(TimeSpan? timeout = null)
+    public FlightCallOptions CallOptions(TimeSpan? timeout = null)
     {
         var options = new FlightCallOptions();
         if (_authorization is not null)
@@ -78,9 +81,15 @@ public sealed class FlightSqlConnection : DbConnection
         if (_settings.Compression is { } compression)
             options.Headers.Add(FlightSqlSettings.CompressionHeader, compression);
 
+        foreach (var (name, value) in _settings.Headers ?? [])
+            options.Headers.Add(name, value);
+
         var effective = timeout ?? _settings.CommandTimeout;
         if (effective > TimeSpan.Zero && effective != Timeout.InfiniteTimeSpan)
             options.Timeout = effective;
+
+        // The library's client ignores FlightCallOptions.Timeout, so the limit is put on the calls as a gRPC deadline (the server receives it too and can stop). One limit at a time per connection, as a connection runs one command at a time.
+        _deadlines.Timeout = options.Timeout > TimeSpan.Zero ? options.Timeout : null;
 
         return options;
     }
@@ -128,6 +137,10 @@ public sealed class FlightSqlConnection : DbConnection
                 RemoteCertificateValidationCallback = static (_, _, _, _) => true,
             };
         }
+        else if (_settings.CaFile is { } caFile)
+        {
+            handler.SslOptions = CustomRootTrust(caFile);
+        }
 
         _channel = GrpcChannel.ForAddress(_settings.Address, new GrpcChannelOptions
         {
@@ -138,7 +151,7 @@ public sealed class FlightSqlConnection : DbConnection
             DisposeHttpClient = true,
         });
 
-        var flight = new FlightClient(_channel);
+        var flight = new FlightClient(_channel.Intercept(_deadlines));
         Client = new FlightSqlClient(flight);
 
         try
@@ -219,6 +232,30 @@ public sealed class FlightSqlConnection : DbConnection
         {
             throw wrapped;
         }
+    }
+
+    /// <summary>
+    /// Trust for the certificate authorities of a PEM file instead of the machine's: the chain must build to one of them, and the host name must still match.
+    /// </summary>
+    private static SslClientAuthenticationOptions CustomRootTrust(string caFile)
+    {
+        System.Security.Cryptography.X509Certificates.X509Certificate2Collection roots;
+        try { roots = []; roots.ImportFromPemFile(caFile); }
+        catch (Exception ex) when (ex is IOException or System.Security.Cryptography.CryptographicException or UnauthorizedAccessException)
+        { throw new InvalidOperationException("The CA file of the Flight SQL connection could not be read as a PEM file of certificates."); }
+        return new SslClientAuthenticationOptions
+        {
+            RemoteCertificateValidationCallback = (_, certificate, _, errors) =>
+            {
+                if (certificate is null) return false;
+                if ((errors & System.Net.Security.SslPolicyErrors.RemoteCertificateNameMismatch) != 0 || (errors & System.Net.Security.SslPolicyErrors.RemoteCertificateNotAvailable) != 0) return false;
+                using var chain = new System.Security.Cryptography.X509Certificates.X509Chain();
+                chain.ChainPolicy.TrustMode = System.Security.Cryptography.X509Certificates.X509ChainTrustMode.CustomRootTrust;
+                chain.ChainPolicy.CustomTrustStore.AddRange(roots);
+                chain.ChainPolicy.RevocationMode = System.Security.Cryptography.X509Certificates.X509RevocationMode.NoCheck;
+                return chain.Build(new System.Security.Cryptography.X509Certificates.X509Certificate2(certificate));
+            },
+        };
     }
 
     private static string? Authorization(Metadata? metadata) =>
