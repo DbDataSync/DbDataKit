@@ -9,6 +9,8 @@ public sealed record PairRequest(string Url, string Code, string? Name);
 /// <param name="Name">What the publisher calls the other server; the other server's name, made into an id, when empty.</param>
 public sealed record LinkRequest(string From, string To, string? Name);
 
+public sealed record PendingSummary(string Id, string Name, string Product, string Url, DateTimeOffset LastSeen);
+
 public sealed record InstanceSummary(string Id, string Name, string Url, string? Product, string? Version, int? ApiVersion, bool Reachable, bool? Ready, string? Problem, DateTimeOffset? PairedAt);
 
 /// <summary>
@@ -17,8 +19,30 @@ public sealed record InstanceSummary(string Id, string Name, string Url, string?
 /// </summary>
 [ApiController]
 [Route("api/instances")]
-public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay relay) : ControllerBase
+public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay relay, PendingInstances pending) : ControllerBase
 {
+    /// <summary>The servers that announced themselves and wait to be confirmed (never their codes).</summary>
+    [HttpGet("pending")]
+    public ActionResult<IReadOnlyList<PendingSummary>> Pending() =>
+        Ok(pending.All().Select(p => new PendingSummary(p.InstanceId, p.Name, p.Product, p.Url.AbsoluteUri, p.LastSeen)).ToList());
+
+    /// <summary>Pairs with a waiting server, as an administrator's confirmation.</summary>
+    [HttpPost("pending/{id}/confirm")]
+    public async Task<ActionResult<InstanceSummary>> Confirm(string id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var paired = await instances.ConfirmAsync(pending, id, cancellationToken);
+            return Ok(Summarise(await instances.StatusAsync(paired, cancellationToken)));
+        }
+        catch (DbDataKit.Web.Trust.PairingFailedException ex) { return BadRequest(new { error = ex.Message }); }
+        catch (DbDataKit.Web.Trust.IncompatibleServerException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    /// <summary>Forgets a waiting server without pairing; it will be listed again while it keeps announcing.</summary>
+    [HttpDelete("pending/{id}")]
+    public IActionResult Reject(string id) => pending.Remove(id) ? NoContent() : NotFound(new { error = "No such server is waiting." });
+
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<InstanceSummary>>> List(CancellationToken cancellationToken) =>
         Ok((await instances.StatusOfAllAsync(cancellationToken)).Select(Summarise).ToList());

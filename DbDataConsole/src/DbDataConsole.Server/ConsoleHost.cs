@@ -46,7 +46,13 @@ public static class ConsoleHost
             host.ServiceName = ConsoleService.RegistrationName;
             host.Version = Version;
         });
-        builder.WebHost.ConfigureKestrel(o => o.Listen(AddressOf(settings.Listen), settings.Listen.Port, listen => listen.UseHttps(certificate)));
+        if (settings.AnnounceListen is { } announce && (announce.Scheme != Uri.UriSchemeHttp || announce.Port == settings.Listen.Port))
+            throw new ArgumentException("The announce address is a plain http address on a port of its own.", nameof(settings));
+        builder.WebHost.ConfigureKestrel(o =>
+        {
+            o.Listen(AddressOf(settings.Listen), settings.Listen.Port, listen => listen.UseHttps(certificate));
+            if (settings.AnnounceListen is { } announce) o.Listen(AddressOf(announce), announce.Port);
+        });
 
         // A passkey belongs to a host name; unless the configuration says otherwise it is the one people open the console at.
         var relyingParty = $"{Auth.Section}:Passkeys:RelyingPartyId";
@@ -72,12 +78,32 @@ public static class ConsoleHost
         builder.Services.AddSingleton(sp => new ConsoleKeyStore(sp.GetRequiredService<EncryptedFileSecretStore>(), sp.GetRequiredService<EncryptedFileSecretStore>()));
         builder.Services.AddSingleton(_ => new InstanceRegistry(settings.InstancesPath));
         builder.Services.AddSingleton<ConsoleInstances>();
+        builder.Services.AddSingleton(_ => new PendingInstances(settings.PendingPath));
         builder.Services.AddSingleton<ConsoleRelay>();
         configure?.Invoke(builder.Services);
 
         var app = builder.Build();
         if (app.Services.GetRequiredService<PasskeyOptions>().Problem() is { } problem)
             log($"Passkeys are misconfigured and will not work: {problem}");
+
+        // The private port answers announcements and nothing else; the announcement path answers on no other port
+        var announcePort = settings.AnnounceListen?.Port;
+        app.Use(async (context, next) =>
+        {
+            var onAnnouncePort = announcePort is { } port && context.Connection.LocalPort == port;
+            var isAnnouncement = context.Request.Path.Equals(ConsoleAnnouncer.Path, StringComparison.Ordinal);
+            if (!onAnnouncePort && !isAnnouncement) { await next(); return; }
+            if (!onAnnouncePort || !isAnnouncement || !HttpMethods.IsPost(context.Request.Method)) { context.Response.StatusCode = StatusCodes.Status404NotFound; return; }
+            if (context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } limit) limit.MaxRequestBodySize = 4096;
+            Announcement? announcement;
+            try { announcement = await context.Request.ReadFromJsonAsync<Announcement>(new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web), context.RequestAborted); }
+            catch (Exception ex) when (ex is System.Text.Json.JsonException or Microsoft.AspNetCore.Http.BadHttpRequestException) { announcement = null; }
+            var resolves = announcement?.Host is { } host && PendingInstances.HostPattern().IsMatch(host) && await ResolvesAsync(host);
+            var refusal = announcement is null ? "the body is not an announcement" : context.RequestServices.GetRequiredService<PendingInstances>().Announce(announcement, context.Connection.RemoteIpAddress, resolves);
+            if (refusal is null) { context.Response.StatusCode = StatusCodes.Status204NoContent; return; }
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await context.Response.WriteAsJsonAsync(new { error = refusal }, context.RequestAborted);
+        });
 
         app.UseDbDataPipeline();
         app.MapDbDataEndpoints();
@@ -112,6 +138,17 @@ public static class ConsoleHost
             await context.Response.WriteAsync("The dbdatakit console is running, but its web app is not installed here (no wwwroot).");
         }).AllowAnonymous();
         return app;
+    }
+
+    /// <summary>Whether the console can look the name up, which a name on the network the servers share with it can.</summary>
+    private static async Task<bool> ResolvesAsync(string host)
+    {
+        try
+        {
+            using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            return (await Dns.GetHostAddressesAsync(host, limit.Token)).Length > 0;
+        }
+        catch (Exception ex) when (ex is System.Net.Sockets.SocketException or OperationCanceledException) { return false; }
     }
 
     private static IPAddress AddressOf(Uri listen) =>

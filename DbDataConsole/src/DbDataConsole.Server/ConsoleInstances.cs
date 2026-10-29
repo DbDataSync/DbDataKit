@@ -37,6 +37,18 @@ public sealed class ConsoleInstances(InstanceRegistry registry, ConsoleKeyStore 
         return registry.Add(server, name, identity.Key.Fingerprint);
     }
 
+    /// <summary>
+    /// Confirms a server that announced itself: pairs with it at the address and with the code it gave, then takes it off the waiting list. The address and the code are the server's own claim, which is why an administrator
+    /// confirms; the pairing still pins the certificate the server presents then, as any pairing does. A server whose code has lapsed announces again and can be confirmed on the next listing.
+    /// </summary>
+    public async Task<RegisteredInstance> ConfirmAsync(PendingInstances pending, string idOrName, CancellationToken ct = default)
+    {
+        var waiting = pending.Find(idOrName) ?? throw new PairingFailedException($"No server waiting is called '{idOrName}' (or the name is not unique; use its id).");
+        var paired = await PairAsync(waiting.Url, waiting.Code, waiting.Name, ct);
+        pending.Remove(waiting.InstanceId);
+        return paired;
+    }
+
     public IReadOnlyList<RegisteredInstance> All() => registry.All();
 
     /// <summary>Forgets a server. It still lists this console among its paired clients until its administrator runs <c>server unpair</c> there.</summary>

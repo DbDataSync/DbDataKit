@@ -1,0 +1,32 @@
+# The console and a Build server, paired by announcement. One setting is shared by the whole file: where the console takes announcements.
+# The console listens there (on a port that is not published, so only containers of this network reach it) and every server announces there;
+# the server announces its host name, which the console resolves on this network (so a server that gets a new IP address stays paired; its address is used when the name does not resolve). A server waits as pending until an administrator confirms it:
+#   docker compose -f dist/compose/build.yml exec console dotnet /app/dbdatakit.dll instance confirm dbdatabuild
+# (or in the web app). Run from the repository root. Another server is another service with `environment: *announce`.
+name: dbdatakit-build
+x-announce: &announce
+  DBDATAKIT_CONSOLE_ANNOUNCE_URL: http://console:8481
+services:
+  console:
+    build:
+      context: ../..
+      dockerfile: DbDataConsole/Dockerfile
+    environment: *announce
+    ports:
+      - "8480:8480"
+    volumes:
+      - console-data:/data
+  build:
+    build:
+      context: ../..
+      dockerfile: DbDataBuild/Dockerfile
+    # the name the server announces; the service name is already a name of it on this network
+    hostname: build
+    environment: *announce
+    volumes:
+      - build-data:/data
+    depends_on:
+      - console
+volumes:
+  console-data:
+  build-data:
