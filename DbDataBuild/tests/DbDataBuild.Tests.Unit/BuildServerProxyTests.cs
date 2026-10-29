@@ -29,11 +29,13 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
     private readonly List<(string Method, string Path, string Body, ValidatedToken Token)> seen = [];
     private int dataSourceStatus = 404;       // what the proxy says to a read of the data source; 200 means one exists
     private HttpStatusCode writeAnswer = HttpStatusCode.OK;
+    private HttpStatusCode modelAnswer = HttpStatusCode.OK;     // what the proxy says to publishing a model
     private WebApplication proxy = null!;
     private WebApplication build = null!;
     private HttpClient http = null!;
     private PairedServer paired = null!;
     private string project = null!;
+    private string retail = null!;
 
     private string BuildDir => Path.Combine(root, "build-server");
     private string ProxyDir => Path.Combine(root, "proxy");
@@ -46,6 +48,9 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
         Assert.Equal(0, CliApp.Run(["project", "create", "starter", project, "--format", "json"], new StringWriter(), new StringWriter()));
         var projects = new ProjectsFile(BuildDir);
         projects.Add(new HostedProject("sales", project, null, null));
+        retail = Path.Combine(root, "retail");
+        Assert.Equal(0, CliApp.Run(["project", "create", "retail", retail, "--format", "json"], new StringWriter(), new StringWriter()));
+        projects.Add(new HostedProject("retail", retail, null, null));
 
         var secrets = ServerSecrets.Open(BuildDir);
         using (var read = SecretValue.From(ReadLogin)) await secrets.SetAsync(ServerSecrets.NameOf("sqlserver", DbDataKit.Connections.LoginRole.Read), read);
@@ -97,6 +102,9 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
             seen.Add((context.Request.Method, context.Request.Path.Value!, body, context.ManagementToken()));
             var path = context.Request.Path.Value!;
             if (path.StartsWith("/api/v1/secrets/", StringComparison.Ordinal)) return Results.Json(new { reference = "secret:dbdata:proxy:managed-x:" + path[(path.LastIndexOf('/') + 1)..] });
+            if (path.StartsWith("/api/v1/semantic-models/", StringComparison.Ordinal))
+                return context.Request.Method == "GET" ? Results.Json(new { error = "none" }, statusCode: 404)
+                    : modelAnswer == HttpStatusCode.OK ? Results.Json(new { version = 1, created = true }) : Results.Json(new { error = "The catalog does not load, so nothing was published." }, statusCode: (int)modelAnswer);
             if (context.Request.Method == "GET") return dataSourceStatus == 200 ? Results.Json(new { version = "v1" }) : Results.Json(new { error = "none" }, statusCode: 404);
             return writeAnswer == HttpStatusCode.OK
                 ? Results.Json(new { version = "v2", created = dataSourceStatus != 200 })
@@ -237,5 +245,54 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Conflict, none.StatusCode);
         Assert.Contains("No read login", await none.Content.ReadAsStringAsync());
         Assert.Empty(seen);                                                                 // nothing reached the proxy in any of these
+    }
+
+    private async Task<HttpResponseMessage> PublishModel(string who, ServerRole role, string proxyName, object body, string projectId = "retail")
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/projects/{projectId}/proxies/{proxyName}/publish-model") { Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(body), Encoding.UTF8, "application/json") };
+        request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, console.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, who, who, role)));
+        return await http.SendAsync(request);
+    }
+
+    [Fact]
+    public async Task Publishing_a_semantic_model_sends_the_connections_it_reads_first_then_the_catalog_with_its_physical_layer_and_never_the_write_login()
+    {
+        await Pair();
+
+        var reply = await PublishModel("ada", ServerRole.Approver, "edge", new { model = "retail_sales" });
+
+        Assert.True(reply.StatusCode == HttpStatusCode.OK, await reply.Content.ReadAsStringAsync());
+        var answer = JsonNode.Parse(await reply.Content.ReadAsStringAsync())!;
+        Assert.Equal(("retail_sales", 1), ((string)answer["model"]!, (int)answer["version"]!));
+        Assert.Equal(["sqlserver"], answer["data_sources"]!.AsArray().Select(d => (string)d!));
+
+        // the data source before the model that reads it
+        var order = seen.Select(r => r.Path).ToList();
+        Assert.True(order.IndexOf("/api/v1/data-sources/sqlserver") < order.IndexOf("/api/v1/semantic-models/retail_sales") && order.IndexOf("/api/v1/data-sources/sqlserver") >= 0);
+
+        var sent = JsonNode.Parse(seen.Single(r => r.Method == "PUT" && r.Path == "/api/v1/semantic-models/retail_sales").Body)!;
+        var catalog = DbDataKit.Semantic.CatalogLoader.LoadText((string)sent["catalog"]!);            // what the proxy loads
+        Assert.Equal("retail_sales", catalog.Name);
+        Assert.Contains(catalog.Doc.Sources.Keys, k => k.Length > 0);
+        Assert.All(sent["sources"]!.AsObject(), s => Assert.Equal("sqlserver", (string)s.Value!));     // each source reads the data source of its connection
+        Assert.DoesNotContain(seen, r => r.Body.Contains("WRITE-pw", StringComparison.Ordinal));
+        Assert.All(seen, r => Assert.Equal("ada", r.Token.SubjectId));
+    }
+
+    [Fact]
+    public async Task Publishing_a_semantic_model_needs_the_approver_role_a_model_of_the_project_and_passes_on_the_proxys_refusal()
+    {
+        await Pair();
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await PublishModel("bob", ServerRole.Author, "edge", new { model = "retail_sales" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await PublishModel("ada", ServerRole.Approver, "edge", new { model = "nope" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await PublishModel("ada", ServerRole.Approver, "edge", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await PublishModel("ada", ServerRole.Approver, "nowhere", new { model = "retail_sales" })).StatusCode);
+        Assert.Empty(seen);
+
+        modelAnswer = HttpStatusCode.BadRequest;
+        var refused = await PublishModel("ada", ServerRole.Approver, "edge", new { model = "retail_sales" });
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Contains("nothing was published", await refused.Content.ReadAsStringAsync());
     }
 }

@@ -51,14 +51,17 @@ public sealed record GeneratedRelationship(string Name, string FromModel, string
 /// <summary>A semantic model compiled against a physical layer: the validated catalog and the physical layer that was generated for it.</summary>
 public sealed class AuthoredCompilation
 {
-    internal AuthoredCompilation(Catalog catalog, IReadOnlyList<GeneratedTable> tables, IReadOnlyList<GeneratedRelationship> relationships, IReadOnlyDictionary<string, string> sources, IReadOnlyList<MemberBinding> bindings)
-        => (Catalog, Tables, Relationships, Sources, Bindings) = (catalog, tables, relationships, sources, bindings);
+    internal AuthoredCompilation(Catalog catalog, IReadOnlyList<GeneratedTable> tables, IReadOnlyList<GeneratedRelationship> relationships, IReadOnlyDictionary<string, string> sources, IReadOnlyList<MemberBinding> bindings, JsonObject json)
+        => (Catalog, Tables, Relationships, Sources, Bindings, Json) = (catalog, tables, relationships, sources, bindings, json);
 
     /// <summary>What every attribute and measure is bound to, in the order the file lists them.</summary>
     public IReadOnlyList<MemberBinding> Bindings { get; }
 
     /// <summary>The catalog as the engine loads it, physical layer included.</summary>
     public Catalog Catalog { get; }
+
+    /// <summary>The same catalog as the document the engine loaded it from: what a server that serves the model is given (<see cref="CatalogLoader.LoadJson"/> and <see cref="CatalogLoader.LoadText"/> read it).</summary>
+    public JsonObject Json { get; }
 
     /// <summary>The generated tables, one per model and source the file uses.</summary>
     public IReadOnlyList<GeneratedTable> Tables { get; }
@@ -300,7 +303,7 @@ public sealed class AuthoredCatalog
         try
         {
             var catalog = CatalogLoader.LoadJson(json);
-            return new AuthoredCompilation(catalog, tables, relationships, kinds, BindingsOf());
+            return new AuthoredCompilation(catalog, tables, relationships, kinds, BindingsOf(), json);
         }
         catch (CatalogException e)
         {

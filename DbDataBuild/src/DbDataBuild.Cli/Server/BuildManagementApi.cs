@@ -279,6 +279,27 @@ internal static class BuildManagementApi
             var result = await publisher.PublishAsync(proxy, config, connection, string.IsNullOrWhiteSpace(dataSource) ? connection : dataSource, token, context.RequestAborted);
             return Results.Json(result.Body, statusCode: result.Status);
         });
+
+        // J12: a semantic model of the project, with the connections it reads, to the same proxy
+        app.MapPost("/api/v1/projects/{project}/proxies/{proxy}/publish-model", async (string project, string proxy, HttpContext context) =>
+        {
+            if (projects.Find(project) is not { } hosted) return Results.NotFound();
+            var token = context.ManagementToken();
+            if (!ManagementAuthorization.Authorize(token, ServerRole.Approver, hosted.Id).Allowed) return Results.Json(new { error = "This needs the approver role." }, statusCode: StatusCodes.Status403Forbidden);
+            string? model;
+            try
+            {
+                var body = await JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body, cancellationToken: context.RequestAborted);
+                model = body?["model"]?.GetValue<string>();
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException) { model = null; }
+            if (string.IsNullOrWhiteSpace(model)) return Results.Json(new { error = "The body is a JSON object with the \"model\" (the name of a semantic model of the project) to publish." }, statusCode: StatusCodes.Status400BadRequest);
+
+            var loaded = ProjectContext.Load(projects.RootOf(hosted));
+            if (loaded.Semantic.Models.FirstOrDefault(m => m.Name == model) is not { } file) return Results.Json(new { error = $"The project has no semantic model '{model}'." }, statusCode: StatusCodes.Status404NotFound);
+            var result = await publisher.PublishSemanticAsync(proxy, file, loaded.Config, token, context.RequestAborted);
+            return Results.Json(result.Body, statusCode: result.Status);
+        });
     }
 
     /// <summary>

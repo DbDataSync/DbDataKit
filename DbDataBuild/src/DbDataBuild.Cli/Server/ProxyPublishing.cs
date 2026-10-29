@@ -115,6 +115,54 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
         }
     }
 
+    /// <summary>
+    /// Publishes a semantic model of a project to a paired Proxy (plan 19, J12): the connections it reads go first, each as a read-only data source of the same name (only the read login leaves, as for <see cref="PublishAsync"/>), then the
+    /// model itself, the catalog with its generated physical layer and the data source each of its sources reads. The Proxy checks the catalog, that its data sources answer and that this client made them, writes a new version and switches to it
+    /// only when all of that holds; a refusal leaves the version that was serving. The model is published over the version this server last published (read first), so two servers cannot silently replace each other's.
+    /// </summary>
+    public async Task<PublishResult> PublishSemanticAsync(string proxyName, DbDataBuild.Semantic.SemanticModelFile model, ProjectConfig project, ValidatedToken person, CancellationToken ct)
+    {
+        if (proxies.Find(proxyName) is not { } proxy) return Fail(404, $"This server is not paired with a proxy called '{proxyName}'.");
+        if (model.Compilation is not { } compiled) return Fail(409, $"The semantic model '{model.Name}' ({model.File}) does not compile; fix it first (project compile shows why).");
+
+        var published = new JsonArray();
+        foreach (var connection in model.Connections.Values.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        {
+            var result = await PublishAsync(proxyName, project, connection, connection, person, ct);
+            if (result.Status != 200) return new PublishResult(result.Status, new JsonObject { ["error"] = $"Publishing the connection '{connection}' failed, so the model was not published: {(string?)result.Body["error"]}" });
+            published.Add((string?)result.Body["data_source"]);
+        }
+
+        var self = await identity.GetOrCreateAsync(ct);
+        using var http = new HttpClient(PairingClient.Pinned(proxy.Fingerprint)) { BaseAddress = new Uri(proxy.Url), Timeout = TimeSpan.FromSeconds(60) };
+        async Task<HttpResponseMessage> Send(HttpMethod method, string path, object? body = null)
+        {
+            using var request = new HttpRequestMessage(method, path);
+            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, self.Issuer().Issue(new ConsoleTokenRequest(proxy.InstanceId, person.SubjectId, person.SubjectName, ServerRole.Publisher)));
+            if (body is not null) request.Content = JsonContent.Create(body, options: Json);
+            return await http.SendAsync(request, ct);
+        }
+        try
+        {
+            var path = $"/api/v1/semantic-models/{Uri.EscapeDataString(model.Name)}";
+            int? current = null;
+            using (var existing = await Send(HttpMethod.Get, path))
+            {
+                if (existing.IsSuccessStatusCode) current = (int?)JsonNode.Parse(await existing.Content.ReadAsStringAsync(ct))?["current_version"];
+                else if (existing.StatusCode != System.Net.HttpStatusCode.NotFound) return await Refused(existing, "reading the model");
+            }
+            var sources = model.Connections.ToDictionary(c => c.Key, c => c.Value, StringComparer.Ordinal);
+            using var written = await Send(HttpMethod.Put, path, new { catalog = compiled.Json.ToJsonString(), sources, expected_version = current });
+            if (!written.IsSuccessStatusCode) return await Refused(written, "publishing the model");
+            var answer = JsonNode.Parse(await written.Content.ReadAsStringAsync(ct))!;
+            return new PublishResult(200, new JsonObject { ["proxy"] = proxyName, ["model"] = model.Name, ["version"] = (int?)answer["version"], ["created"] = (bool?)answer["created"] ?? current is null, ["data_sources"] = published });
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IncompatibleServerException)
+        {
+            return Fail(502, $"The proxy '{proxyName}' did not answer ({ex.GetType().Name}).");
+        }
+    }
+
     private static PublishResult Fail(int status, string message) => new(status, new JsonObject { ["error"] = message });
 
     /// <summary>The proxy's refusal, in its own words (they name the rule), under the status it gave.</summary>

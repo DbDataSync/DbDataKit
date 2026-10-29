@@ -1485,3 +1485,9 @@ Operator decision: correlated subqueries are a hard requirement.
 - **Moved into the shared client** (and so also Sync's): the tolerant prepared-statement exchange, `CaFile` and `Headers`, the deadline interceptor.
 - **Verified**: the Flight conformance classes against both sqlflite servers (plain; TLS with the CA file), 20 of 20.
 - **Not done**: Build's `ArrowConversions` and the catalog calls still duplicate the Arrow reading and the Flight SQL metadata calls that Sync has too.
+
+### J12: publish a semantic model to a paired Proxy (plan 19)
+
+- **Built**: `POST /api/v1/projects/{project}/proxies/{proxy}/publish-model` (`{"model": "<name>"}`; the approver role, like publishing a connection). `ProxyPublisher.PublishSemanticAsync` publishes the connections the model reads first (each as a read-only data source of the same name, only the read login leaving), then `PUT`s the model to the Proxy's `/api/v1/semantic-models/{name}`: the compiled catalog with its generated physical layer (`AuthoredCompilation.Json`), and the data source each source reads. It reads the Proxy's current version first and publishes over it, so a second server's model of that name is a refusal, not a replacement. The Proxy's refusals come back in its own words.
+- **Verified**: 2 unit tests against a stand-in Proxy (order, the catalog loads with the shared loader, no write login, the person on every call, roles, refusals). Not run: against the real Proxy end to end, or a real database behind the published data source.
+- **Not done**: a command line form (`server` has only the API for publishing connections too), the other engines (the Proxy side of a Build connection is SQL Server only), a rollback call from Build (the Proxy has `POST .../rollback`), `semantic` in `project show` of what is published where.
