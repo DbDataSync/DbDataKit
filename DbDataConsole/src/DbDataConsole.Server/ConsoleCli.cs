@@ -42,10 +42,10 @@ public static class ConsoleCli
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context, Func<string, string?>? environment)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "listen", "public-url", "web-root", "announce-listen" });
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "listen", "public-url", "web-root", "announce-listen", "state-engine", "state-connection" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
         {
-            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <console directory>] [--listen https://<name>:<port>] [--public-url https://<name>:<port>] [--announce-listen http://<address>:<port>]");
+            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <console directory>] [--listen https://<name>:<port>] [--public-url https://<name>:<port>] [--announce-listen http://<address>:<port>] [--state-engine sqlite|mssql|postgres --state-connection <connection string>]");
             return CliExit.Usage;
         }
         if (!Uri.TryCreate(parsed.Get("listen") ?? ConsoleSettings.DefaultListen, UriKind.Absolute, out var listen) || listen.Scheme != Uri.UriSchemeHttps)
@@ -72,7 +72,7 @@ public static class ConsoleCli
             return CliExit.Usage;
         }
 
-        var settings = new ConsoleSettings(DirectoryOf(parsed, environment), listen, publicUrl, announce);
+        var settings = new ConsoleSettings(DirectoryOf(parsed, environment), listen, publicUrl, announce, ConsoleState.SettingsFrom(environment, parsed.Get("state-engine"), parsed.Get("state-connection")));
         Directory.CreateDirectory(settings.Directory);
         var app = ConsoleHost.Build(settings, ConsoleHost.Certificate(settings.Directory), line => context.Error.WriteLine(line), parsed.Get("web-root"));
         await context.Out.WriteLineAsync($"The console is on {listen} (people open it at {settings.Public}). The first administrator redeems the invitation in {Path.Combine(settings.Directory, "FIRST-RUN.txt")}.");
@@ -264,7 +264,7 @@ public static class ConsoleCli
     ]);
 
     /// <summary>Opens the state database the way the server does. It is made if there is none, so an invitation can be printed before the first start.</summary>
-    private static StateDatabase OpenState(CliArgs parsed, Func<string, string?>? environment) => ConsoleState.Open(DirectoryOf(parsed, environment));
+    private static StateDatabase OpenState(CliArgs parsed, Func<string, string?>? environment) => ConsoleState.Open(DirectoryOf(parsed, environment), ConsoleState.SettingsFrom(environment), environment);
 
     private static async Task<int> UserListAsync(string[] args, CliContext context, Func<string, string?>? environment)
     {

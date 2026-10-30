@@ -368,6 +368,25 @@ segments:
 An unknown segment is `unknown_segment` (with the catalog's segments as suggestions); a segment filtering on something that isn't an attribute is
 rejected when the catalog loads (`segment_unknown_member`).
 
+## Saved queries
+
+A model can offer named queries (plan 19, J26): a semantic SQL text or a request, and what its parameters are. A server that hosts the model (the Proxy) offers each as a **view** (no required parameter) or a **function** (parameters) on the model's source, and it runs as the caller like any query, so the caller's own access applies.
+
+```yaml
+queries:
+  revenue_by_region:
+    description: Net revenue and orders by region for a fiscal quarter
+    sql: >-
+      SELECT customers.region, MEASURE(orders.net_revenue), MEASURE(orders.order_count) FROM sales_catalog
+      WHERE date.fiscal_quarter = :quarter GROUP BY ALL ORDER BY MEASURE(orders.net_revenue) DESC LIMIT 100
+    parameters:
+      quarter: {for: date.fiscal_quarter, type: string, default: FY27-Q1}
+  all_regions:
+    request: {spec_version: "0.3", kind: query, query: {measures: [orders.net_revenue], attributes: [customers.region], limit: 100}}
+```
+
+Exactly one of `sql` and `request`. `parameters` are the `parameter_definitions` of the request (`for`, `type`, `many`, `default`, `required`, `empty`; see query.md, "Parameters"); a positional `?` marker is named `1`, `2`, .... A saved query is called by selecting from it, and nothing else is allowed in the statement: `SELECT * FROM revenue_by_region`, `SELECT * FROM revenue_by_region('FY27-Q1')` (positional: the parameters in the order written), `SELECT * FROM revenue_by_region(quarter := 'FY27-Q1')`, or with a marker the statement binds (`revenue_by_region(:q)`). A prepared call reports its markers as the parameter schema, typed from the saved query's definitions. The model's description lists each saved query as a view with its `call` form. A saved query that does not translate is rejected when the catalog loads (`query_invalid`, naming it). Because they are part of the catalog, saved queries are published, versioned and rolled back with the model (J12, J13).
+
 ## Validation codes
 
 Catalog validation runs when the catalog is loaded, before any query. **Implemented** codes (negative tests in `CatalogTests`):

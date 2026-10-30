@@ -44,7 +44,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
 
         var explaining = false;
         if (isSql && text.TrimStart().StartsWith("EXPLAIN ", StringComparison.OrdinalIgnoreCase)) { explaining = true; text = text.TrimStart()[8..]; }
-        var document = isSql ? Translate(text, model) : Parse(text);
+        var document = isSql ? TranslateOrCall(text, model, BoundParameters(request, text)) : Parse(text);
         if (!isSql && document["kind"]?.GetValue<string>() == "explain" && document["query"] is JsonObject explained)
         {
             // {"kind":"explain","query":{...}} is the same request as a query, planned and not run
@@ -52,6 +52,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
             document = new JsonObject { ["kind"] = "query", ["query"] = explained.DeepClone() };
             foreach (var (key, value) in (JsonObject)Parse(text)) if (key is not ("kind" or "query")) document[key] = value?.DeepClone();
         }
+        if (document["kind"]?.GetValue<string>() == "members") return MembersAsync(context, model, document, text, cancellationToken);
         if (document["kind"]?.GetValue<string>() != "query") throw new ServingInvalidException("This server answers semantic queries ('kind': 'query'); registrations and the other request kinds are not served yet.");
         var limit = request.Asked?.MaxRows;
         var provenance = new ServingProvenance(isSql ? text : Canonical(document, model.Name, text), null, context.Channel, SemanticModels.SourcePrefix + model.Name);
@@ -77,10 +78,56 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         }, cancellationToken);
     }
 
-    public Task<ServingStatementInfo> PrepareAsync(ServingContext context, ServingRequest.Sql statement, CancellationToken cancellationToken = default) =>
-        SemanticModels.IsModelSource(statement.Source)
-            ? throw new ServingInvalidException("A semantic model takes no prepared statements; send the request.")
-            : inner.PrepareAsync(context, statement, cancellationToken);
+    /// <summary>
+    /// A statement on a model is prepared by reading it: the text must translate or parse, and what it leaves to be bound is reported as the parameter schema (a name, the attribute it is for, a type, whether it takes a list).
+    /// Nothing is sent to a source. A client binds the values by those names (or positionally for a <c>?</c> marker) and executes.
+    /// </summary>
+    /// <summary>
+    /// <c>{"kind": "members", "attribute": "customers.region", "search": "ea", "limit": 50}</c>: the distinct values of an attribute to choose a parameter's value from, one column <c>member</c>. They are read through the host as the caller, so the caller sees
+    /// only what their access reaches; a catalog that lists its members (<c>members</c>) answers without a read.
+    /// </summary>
+    private Task<IServingAnswer> MembersAsync(ServingContext context, SemanticModel model, JsonObject request, string text, CancellationToken cancellationToken)
+    {
+        var attribute = request["attribute"]?.GetValue<string>() ?? throw new ServingInvalidException("A members request names an attribute: {\"kind\": \"members\", \"attribute\": \"customers.region\"}.");
+        var search = request["search"]?.GetValue<string>();
+        int? limit = request["limit"] is JsonValue v && v.TryGetValue<int>(out var n) ? n : null;
+        var provenance = new ServingProvenance(text, null, context.Channel, SemanticModels.SourcePrefix + model.Name);
+        return Task.Run<IServingAnswer>(() =>
+        {
+            var engine = new QisEngine(model.Catalog, new ServingSourceExecutor(inner, catalog, context, model, models, cancellationToken), new Validator(model.Catalog), models.Level);
+            (List<string> members, bool truncated, List<DbDataKit.Semantic.Abstractions.QisError>? errors) result;
+            try { result = engine.Members(attribute, search, limit); }
+            catch (SandboxLimitException stopped) { throw new ServingLimitException(stopped.Message, stopped.Limit); }
+            if (result.errors is { Count: > 0 } failed) throw new ServingInvalidException(string.Join("; ", failed.Select(e => $"{e.Code}: {e.Message}")));
+            return new MembersAnswer(result.members, result.truncated, provenance);
+        }, cancellationToken);
+    }
+
+    public Task<ServingStatementInfo> PrepareAsync(ServingContext context, ServingRequest.Sql statement, CancellationToken cancellationToken = default)
+    {
+        if (!SemanticModels.IsModelSource(statement.Source)) return inner.PrepareAsync(context, statement, cancellationToken);
+        var model = Model(statement.Source);
+        var text = statement.Text.TrimStart();
+        var isSql = !text.StartsWith('{');
+        if (isSql && text.StartsWith("EXPLAIN ", StringComparison.OrdinalIgnoreCase)) text = text[8..];
+        if (isSql && SemanticSqlTranslator.TranslateCall(text, model.Catalog, null, describing: true) is (true, _, var called))
+        {
+            // a saved query called with markers: what it will be asked for is each marker, with what the saved query says of the parameter it fills
+            if (!called.Ok) throw new ServingInvalidException(string.Join("; ", called.Errors.Select(e => $"{e.Code}: {e.Message}")));
+            var fills = called.Request!["parameters"] as JsonObject ?? new JsonObject();
+            var definitions = called.Request["parameter_definitions"] as JsonObject ?? new JsonObject();
+            var asked = fills.Where(p => p.Value is JsonObject { Count: 1 } m && m["param"] is not null).Select(p =>
+            {
+                var d = definitions[p.Key] as JsonObject;
+                return new ServingParameterInfo(((JsonObject)p.Value!)["param"]!.GetValue<string>(), d?["for"]?.GetValue<string>(), d?["type"]?.GetValue<string>(), d?["many"]?.GetValue<bool>() ?? false);
+            }).ToList();
+            return Task.FromResult(new ServingStatementInfo(asked.Count, asked));
+        }
+        var document = isSql ? Translate(text, model, null) : Parse(text);
+        if (document["kind"]?.GetValue<string>() == "explain" && document["query"] is JsonObject query) document = new JsonObject { ["kind"] = "query", ["query"] = query.DeepClone(), ["parameter_definitions"] = document["parameter_definitions"]?.DeepClone() };
+        var shapes = QueryParameters.Describe(document, model.Catalog);
+        return Task.FromResult(new ServingStatementInfo(shapes.Count, [.. shapes.Select(s => new ServingParameterInfo(s.Name, s.For, s.Type, s.Many))]));
+    }
 
     /// <summary>The query as semantic SQL when it can be written so, otherwise the request as it came.</summary>
     private static string Canonical(JsonObject document, string model, string original)
@@ -97,9 +144,67 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         catch (System.Text.Json.JsonException e) { throw new ServingInvalidException($"The semantic request is not valid JSON: {e.Message}"); }
     }
 
-    private static JsonObject Translate(string sql, SemanticModel model)
+    /// <summary>The values bound with a statement (a prepared statement's parameters), as the request's <c>parameters</c>: by name, or "1", "2", ... for the unnamed ones in order.</summary>
+    private static JsonObject? BoundParameters(ServingRequest request, string text)
     {
-        var translation = SemanticSqlTranslator.Translate(sql, model.Name);
+        var bound = request switch { ServingRequest.Sql s => s.Parameters, ServingRequest.SemanticSql q => q.Parameters, _ => null };
+        if (bound is not { Count: > 0 }) return null;
+        var markers = Markers(text);
+        var result = new JsonObject();
+        for (int i = 0; i < bound.Count; i++)
+        {
+            var parameter = bound[i];
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            result[NameOf(parameter, i, markers)] = parameter.Type switch
+            {
+                "list" => JsonNode.Parse(parameter.Text ?? "[]"),
+                "null" => null,
+                "bool" => JsonValue.Create(string.Equals(parameter.Text, "true", StringComparison.OrdinalIgnoreCase)),
+                "int64" => JsonValue.Create(long.Parse(parameter.Text ?? "0", inv)),
+                "double" => JsonValue.Create(double.Parse(parameter.Text ?? "0", inv)),
+                "decimal" => JsonValue.Create(decimal.Parse(parameter.Text ?? "0", inv)),
+                _ => JsonValue.Create(parameter.Text),
+            };
+        }
+        return result;
+    }
+
+    /// <summary>The marker a bound value is for: its own name when the statement has a marker of that name, else the position a client's default name stands for (<c>p0</c>, <c>parameter_0</c>: the first marker), else its place in the list.</summary>
+    private static string NameOf(ServingParameter parameter, int index, HashSet<string> markers)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        if (parameter.Name is { } name)
+        {
+            if (markers.Contains(name)) return name;
+            var digits = name.StartsWith("parameter_", StringComparison.Ordinal) ? name[10..] : name.StartsWith('p') ? name[1..] : "";
+            if (int.TryParse(digits, System.Globalization.NumberStyles.None, inv, out var position) && markers.Contains((position + 1).ToString(inv))) return (position + 1).ToString(inv);
+            return name;
+        }
+        return (index + 1).ToString(inv);
+    }
+
+    private static HashSet<string> Markers(string text)
+    {
+        try
+        {
+            var translation = SemanticSqlTranslator.Translate(text);
+            if (translation.Request is null) return [];
+            return [.. QueryParameters.Describe(translation.Request, null).Select(s => s.Name)];
+        }
+        catch (Exception e) when (e is not OperationCanceledException) { return []; }
+    }
+
+    /// <summary>The text as a call of a saved query of the model when it is one (J26), else as semantic SQL.</summary>
+    private static JsonObject TranslateOrCall(string sql, SemanticModel model, JsonObject? parameters)
+    {
+        var (isCall, _, call) = SemanticSqlTranslator.TranslateCall(sql, model.Catalog, parameters);
+        if (!isCall) return Translate(sql, model, parameters);
+        return call.Ok ? call.Request! : throw new ServingInvalidException(string.Join("; ", call.Errors.Select(e => $"{e.Code}: {e.Message}")));
+    }
+
+    private static JsonObject Translate(string sql, SemanticModel model, JsonObject? parameters)
+    {
+        var translation = SemanticSqlTranslator.Translate(sql, model.Name, parameters);
         return translation.Ok ? translation.Request! : throw new ServingInvalidException(string.Join("; ", translation.Errors.Select(e => $"{e.Code}: {e.Message}")));
     }
 
@@ -128,6 +233,13 @@ internal sealed class SemanticCatalog(IServingCatalog inner, SemanticModels mode
         var doc = model.Catalog.Doc;
         var name = model.Name;
         yield return new ServingObject(ServingObjectKind.Model, [name]);
+        // the saved queries (J26): each is selected as SELECT * FROM <name>(arguments); the properties say how it is called
+        foreach (var (queryName, saved) in doc.Queries)
+        {
+            var properties = new Dictionary<string, string> { ["saved_query"] = "true", ["call"] = $"SELECT * FROM {queryName}({string.Join(", ", saved.Parameters.Select(p => p.Key))})" };
+            if (saved.Parameters.Count > 0) properties["parameters"] = saved.Parameters.ToJsonString();
+            yield return new ServingObject(ServingObjectKind.View, [name, queryName], saved.Description, Properties: properties);
+        }
         foreach (var (dimension, def) in doc.Dimensions)
         {
             yield return new ServingObject(ServingObjectKind.Dimension, [name, dimension], def.Label);

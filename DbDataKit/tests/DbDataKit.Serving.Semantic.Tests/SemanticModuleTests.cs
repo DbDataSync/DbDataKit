@@ -71,6 +71,49 @@ public sealed class SemanticModuleTests : IDisposable
     }
 
     [Fact]
+    public async Task AStatementWithBoundValuesIsTheSameRequestAsItsLiteralForm()
+    {
+        var literal = "SELECT customers.region, MEASURE(orders.net_revenue), MEASURE(orders.order_count) FROM sales_catalog WHERE date.fiscal_quarter = 'FY27-Q1' GROUP BY ALL ORDER BY MEASURE(orders.net_revenue) DESC LIMIT 100";
+        var marked = literal.Replace("'FY27-Q1'", "?");
+
+        var expected = await RowsAsync(await _services.Queries.RunAsync(Alice, new ServingRequest.Sql("semantic:sales_catalog", literal)));
+        var positional = await RowsAsync(await _services.Queries.RunAsync(Alice, new ServingRequest.Sql("semantic:sales_catalog", marked, [new ServingParameter(null, "string", "FY27-Q1")])));
+        var named = await RowsAsync(await _services.Queries.RunAsync(Alice, new ServingRequest.SemanticSql("sales_catalog", literal.Replace("'FY27-Q1'", ":quarter"), Parameters: [new ServingParameter("quarter", "string", "FY27-Q1")])));
+
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected, positional);
+        Assert.Equal(expected, named);
+    }
+
+    private Task<IServingAnswer> Members(string json) => _services.Queries.RunAsync(Alice, new ServingRequest.Sql("semantic:sales_catalog", json));
+
+    [Fact]
+    public async Task MembersListsTheValuesOfAnAttributeAndSearchAndLimitNarrowThem()
+    {
+        var all = await RowsAsync(await Members("""{"kind": "members", "attribute": "customers.region"}"""));
+        var searched = await RowsAsync(await Members("""{"kind": "members", "attribute": "customers.region", "search": "EAS"}"""));
+        var limited = await Members("""{"kind": "members", "attribute": "customers.region", "limit": 1}""");
+        var truncated = limited.Schema.Metadata["qis.truncated"];
+        var one = await RowsAsync(limited);
+
+        Assert.Contains("East", all);
+        Assert.Contains("North", all);                 // read from the dimension table, so a region with no sales is there
+        Assert.Equal(["East"], searched);
+        Assert.Single(one);
+        Assert.Equal("true", truncated);
+    }
+
+    [Fact]
+    public async Task MembersAreReadAsTheCallerAndAnUnknownAttributeIsRefused()
+    {
+        await Assert.ThrowsAsync<ServingInvalidException>(() => Members("""{"kind": "members", "attribute": "customers.no_such"}"""));
+        await Assert.ThrowsAsync<ServingInvalidException>(() => Members("""{"kind": "members"}"""));
+
+        _host.Denied.Add("warehouse");
+        await Assert.ThrowsAsync<ServingDeniedException>(() => Members("""{"kind": "members", "attribute": "customers.region"}"""));
+    }
+
+    [Fact]
     public async Task SemanticSqlOnAModelSourceIsTheSameRequest()
     {
         var sql = """

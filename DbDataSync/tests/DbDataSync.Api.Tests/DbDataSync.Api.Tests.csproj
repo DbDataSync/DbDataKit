@@ -49,6 +49,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DbDataSync.Api\DbDataSync.Api.csproj" />
+    <!-- Not referenced, only built: the integration tests spawn the TaskRunner (and LibraryValidationLauncher the CLI)
+         from their own build output (TestApiFactory), so building this project alone must build them too. Without
+         it a run triggered against a missing TaskRunner.dll stays Queued and the test times out waiting for it. -->
+    <ProjectReference Include="..\..\src\DbDataSync.TaskRunner\DbDataSync.TaskRunner.csproj" ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\src\DbDataSync.Cli\DbDataSync.Cli.csproj" ReferenceOutputAssembly="false" Private="false" />
     <Using Include="DbDataKit.State" />
     <Using Include="DbDataKit.Web.Auth" />
     <Using Include="DbDataKit.Monitoring" />   <!-- plan 13, U04 -->

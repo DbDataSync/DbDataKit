@@ -33,6 +33,43 @@ public sealed class StateTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
     }
 
     [Fact]
+    public void A_postgresql_database_the_operator_names_keeps_the_feed_with_the_secret_resolved_when_it_is_opened()
+    {
+        var server = Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES");
+        if (server is null) Assert.Skip("set DBDATA_TEST_POSTGRES to run on PostgreSQL");
+
+        var name = $"proxy_state_{Guid.NewGuid():N}";
+        using (var admin = new Npgsql.NpgsqlConnection(server))
+        {
+            admin.Open();
+            using var create = admin.CreateCommand();
+            create.CommandText = $"CREATE DATABASE {name}";
+            create.ExecuteNonQuery();
+        }
+        try
+        {
+            var builder = new Npgsql.NpgsqlConnectionStringBuilder(server) { Database = name };
+            var password = builder.Password;
+            builder.Password = null;
+            var settings = new StateSettings("postgres", builder.ConnectionString + ";Password=secret:state-db");
+            var opened = ProxyState.Open(_dir, settings, text => text.Replace("secret:state-db", password));
+
+            new NotificationStore(opened).Raise(NotificationKinds.CertificateExpiring, "kept on the server");
+            Assert.Equal(["kept on the server"], new NotificationStore(ProxyState.Open(_dir, settings, text => text.Replace("secret:state-db", password))).List().Select(n => n.Message));
+            Assert.False(File.Exists(ProxyState.PathIn(_dir)), "a server engine keeps no SQLite file");
+        }
+        finally
+        {
+            Npgsql.NpgsqlConnection.ClearAllPools();
+            using var admin = new Npgsql.NpgsqlConnection(server);
+            admin.Open();
+            using var drop = admin.CreateCommand();
+            drop.CommandText = $"DROP DATABASE IF EXISTS {name} WITH (FORCE)";
+            drop.ExecuteNonQuery();
+        }
+    }
+
+    [Fact]
     public void Each_console_reads_the_feed_on_its_own()
     {
         var store = new NotificationStore(ProxyState.Open(_dir));

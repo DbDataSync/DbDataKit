@@ -1,0 +1,26 @@
+{
+  "product": "dbdatakit",
+  "displayName": "DbDataKit",
+  "description": "The dbdatakit console: sign-in, users and invitations, and the one web interface for the DbData servers paired with it. Needs the .NET 10 runtime (ASP.NET Core).",
+  "homepage": "https://github.com/DbDataSync/DbDataKit/tree/main/DbDataConsole",
+  "license": "MIT",
+  "platforms": {
+    "win-x64": {
+      "exe": "dbdatakit.exe"
+    },
+    "linux-x64": {
+      "exe": "dbdatakit"
+    }
+  },
+  "windowsScope": "machine",
+  "service": {
+    "name": "DbDataKitConsole",
+    "register": "service install",
+    "unregister": "service uninstall"
+  },
+  "requiresDotnet": "10.0",
+  "notes": "Settings and data (the users, sessions, certificate) live in the console's data directory, away from the program files. Start it with: dbdatakit server run. Pair a server with it: run 'server pair' on the server, then dbdatakit instance add <url> --code <code>.",
+  "msi": {
+    "upgradeCode": "6D1F8B34-9E2A-4C57-B0A6-4E3C7D95A218"
+  }
+}

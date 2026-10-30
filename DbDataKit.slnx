@@ -81,7 +81,9 @@
     <Project Path="DbDataKit/src/DbDataKit.Schema/DbDataKit.Schema.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Scheduling/DbDataKit.Scheduling.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Scripting/DbDataKit.Scripting.csproj" />
+    <Project Path="DbDataKit/src/DbDataKit.Identity/DbDataKit.Identity.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.State/DbDataKit.State.csproj" />
+    <Project Path="DbDataKit/src/DbDataKit.State.Engines/DbDataKit.State.Engines.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Secrets.Abstractions/DbDataKit.Secrets.Abstractions.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Secrets.Cli/DbDataKit.Secrets.Cli.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Secrets.Store/DbDataKit.Secrets.Store.csproj" />
@@ -148,7 +150,9 @@
     <Project Path="DbDataKit/tests/DbDataKit.Lineage.Cli.Tests/DbDataKit.Lineage.Cli.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Monitoring.Tests/DbDataKit.Monitoring.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Odbc.Metadata.Tests/DbDataKit.Odbc.Metadata.Tests.csproj" />
+    <Project Path="DbDataKit/tests/DbDataKit.Identity.Tests/DbDataKit.Identity.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.State.Tests/DbDataKit.State.Tests.csproj" />
+    <Project Path="DbDataKit/tests/DbDataKit.State.Engines.Tests/DbDataKit.State.Engines.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Schema.Tests/DbDataKit.Schema.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Scheduling.Tests/DbDataKit.Scheduling.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Scripting.Tests/DbDataKit.Scripting.Tests.csproj" />

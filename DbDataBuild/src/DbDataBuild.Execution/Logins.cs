@@ -1,3 +1,4 @@
+using DbDataKit.Odbc.Metadata;
 using System.Data.Common;
 using DbDataBuild.Core;
 using DbDataKit.Connections;
@@ -210,7 +211,7 @@ public sealed class LoginSettings
     private async Task<DbConnection> OpenOdbcAsync(CancellationToken ct)
     {
         if (Login == Login.Write) throw new InvalidOperationException("An ODBC connection is only read.");
-        var c = new System.Data.Odbc.OdbcConnection(OdbcLogin.Normalize(ConnectionString)) { ConnectionTimeout = 30 };
+        var c = new System.Data.Odbc.OdbcConnection(OdbcConnectionString.Normalize(ConnectionString)) { ConnectionTimeout = 30 };
         try { await c.OpenAsync(ct); }
         catch { await c.DisposeAsync(); throw; }
         return c;

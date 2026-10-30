@@ -24,6 +24,33 @@ on:
         description: The commit to release. Empty means the newest commit on main. It must be on main and have a green DbDataProxy CI run.
         type: string
         default: ''
+      version:
+        description: The release version, exactly as it would be tagged (2026.10.30.1415 or 2026.10.30.1415-beta). Empty means the UTC clock now. suite-release.yml passes one so every product of a suite release has the same.
+        type: string
+        default: ''
+      dry_run:
+        description: Build everything and attach the files to the run (artifact "release-<product>"), but tag nothing and publish nothing.
+        type: boolean
+        default: false
+  # suite-release.yml calls this (plan 13a, L06), with dry_run for the suite's dry run.
+  workflow_call:
+    inputs:
+      beta:
+        description: Publish as a prerelease (-beta suffix on the version, prerelease flag on the GitHub Release).
+        type: boolean
+        default: false
+      sha:
+        description: The commit to release. Empty means the newest commit on main. It must be on main and have a green DbDataProxy CI run.
+        type: string
+        default: ''
+      version:
+        description: The release version, exactly as it would be tagged (2026.10.30.1415 or 2026.10.30.1415-beta). Empty means the UTC clock now. suite-release.yml passes one so every product of a suite release has the same.
+        type: string
+        default: ''
+      dry_run:
+        description: Build everything and attach the files to the run (artifact "release-<product>"), but tag nothing and publish nothing.
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -72,6 +99,7 @@ jobs:
 
       # A lookup, not a re-run: the run on main is the validation (a rebase merge makes new commits, so a pull request's own run is not theirs).
       - name: Require a green CI run for this exact commit
+        if: ${{ !inputs.dry_run }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -94,6 +122,7 @@ jobs:
         shell: bash
         env:
           BETA: ${{ inputs.beta }}
+          WANTED_VERSION: ${{ inputs.version }}
         run: |
           IFS=. read -r y m d hm <<< "$(date -u +%Y.%m.%d.%H%M)"
           version="$((10#$y)).$((10#$m)).$((10#$d)).$((10#$hm))"
@@ -101,6 +130,15 @@ jobs:
           if [ "$BETA" = "true" ]; then
             version="${version}-beta"
             prerelease=true
+          fi
+          # A version handed in (by suite-release.yml) wins over the clock; it must be CalVer, and -beta decides the prerelease flag.
+          if [ -n "$WANTED_VERSION" ]; then
+            case "$WANTED_VERSION" in
+              [0-9][0-9][0-9][0-9].*.*.*) ;;
+              *) echo "::error::'$WANTED_VERSION' is not a CalVer version (YYYY.M.D.HHmm[-beta])"; exit 1 ;;
+            esac
+            version="$WANTED_VERSION"
+            case "$version" in *-beta) prerelease=true ;; *) prerelease=false ;; esac
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
@@ -113,7 +151,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: package
+          name: dbdataproxy-package
           path: DbDataProxy/artifacts/release/dbdataproxy-v*.zip
           if-no-files-found: error
 
@@ -135,7 +173,7 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          name: package
+          name: dbdataproxy-package
           path: assets
 
       - uses: ./.github/actions/build-msi
@@ -150,13 +188,23 @@ jobs:
         working-directory: assets
         run: sha256sum * > SHA256SUMS && cat SHA256SUMS
 
+      # A dry run (suite-release.yml) keeps the files on the run instead of publishing them.
+      - uses: actions/upload-artifact@v7
+        if: ${{ inputs.dry_run }}
+        with:
+          name: release-dbdataproxy
+          path: assets/*
+          if-no-files-found: error
+
       - name: Tag this commit with the released version
+        if: ${{ !inputs.dry_run }}
         working-directory: .
         run: |
           git tag "dbdataproxy/v$VERSION"
           git push origin "refs/tags/dbdataproxy/v$VERSION"
 
       - name: Publish the GitHub Release
+        if: ${{ !inputs.dry_run }}
         working-directory: .
         run: |
           prerelease_flag=()
@@ -171,6 +219,7 @@ jobs:
             assets/*
 
       - uses: ./.github/actions/publish-dist
+        if: ${{ !inputs.dry_run }}
         with:
           product: dbdataproxy
           meta: DbDataProxy/dist.json

@@ -24,14 +24,82 @@ public static class SemanticSqlTranslator
     private static Refused Unsupported(string what) => new("sql_unsupported", what);
 
     /// <summary>Translates the text. With <paramref name="model"/>, the name after FROM must be it (<c>sql_wrong_model</c>).</summary>
-    public static SqlTranslation Translate(string sql, string? model = null)
+    public static SqlTranslation Translate(string sql, string? model = null, JsonObject? parameters = null)
     {
         try
         {
-            return new SqlTranslation(Build(SqlParser.ParseSelect(sql), model), []);
+            var request = Build(SqlParser.ParseSelect(SqlMarkers.Rewrite(sql)), model);
+            // markers become {"param": name} nodes (a positional one is named "1", "2", ...); the values travel beside the query, as in the JSON form
+            if (parameters is { Count: > 0 }) request["parameters"] = parameters.DeepClone();
+            return new SqlTranslation(request, []);
         }
         catch (SqlSyntaxException e) { return Failed("sql_syntax", e.Message); }
         catch (Refused e) { return Failed(e.Code, e.Message); }
+    }
+
+    /// <summary>
+    /// A saved query used as a view or function (plan 19, J26): <c>SELECT * FROM monthly_revenue</c> or <c>SELECT * FROM monthly_revenue('FY27-Q1')</c> or <c>... (quarter := :q)</c>, where the name is one of the catalog's <c>queries</c>. The saved
+    /// query's request gets the arguments as its <c>parameters</c> (a positional argument is the parameter at that place in the saved query's definitions); an argument that is itself a marker takes the value bound to that marker in
+    /// <paramref name="bound"/>. <c>IsCall</c> is false when the text does not select from a saved query at all, and it is then translated as any semantic SQL. A call is the saved query as it is: no WHERE, GROUP BY or other clause.
+    /// </summary>
+    public static (bool IsCall, string? Name, SqlTranslation Translation) TranslateCall(string sql, Catalog catalog, JsonObject? bound = null, bool describing = false)
+    {
+        if (catalog.Doc.Queries.Count == 0) return (false, null, new SqlTranslation(null, []));
+        try
+        {
+            var node = SqlParser.ParseSelect(SqlMarkers.Rewrite(sql));
+            if (node["type"]?.GetValue<string>() != "SELECT_NODE" || CalledName(node["from_table"], catalog) is not { } name) return (false, null, new SqlTranslation(null, []));
+            var saved = catalog.Doc.Queries[name];
+
+            if (node["select_list"]!.AsArray() is not [{ } star] || star["type"]?.GetValue<string>() != "STAR"
+                || node["where_clause"] is not null || node["having"] is not null || node["qualify"] is not null || node["modifiers"] is JsonArray { Count: > 0 }
+                || node["group_expressions"] is JsonArray { Count: > 0 } || node["cte_map"]?["map"] is JsonArray { Count: > 0 })
+                throw Unsupported($"a saved query is selected as it is: SELECT * FROM {name}(arguments), with no other clause");
+
+            var request = saved.Sql is not null
+                ? Build(SqlParser.ParseSelect(SqlMarkers.Rewrite(saved.Sql)), catalog.Name)
+                : (JsonObject)saved.Request!.DeepClone();
+            request["spec_version"] ??= QisEngine.SpecVersion;
+            var order = saved.Parameters.Select(p => p.Key).ToList();
+            foreach (var shape in QueryParameters.Describe(request, null).Where(s => !order.Contains(s.Name))) order.Add(shape.Name);
+
+            var values = new JsonObject();
+            var from = node["from_table"]!;
+            var position = 0;
+            if (from["type"]?.GetValue<string>() == "TABLE_FUNCTION")
+                foreach (var (key, expression) in Arguments(from["function"]!))
+                {
+                    var value = Value(expression);
+                    var target = key.Length > 0 ? key : position < order.Count ? order[position] : throw Unsupported($"{name} takes {order.Count} argument(s)");
+                    if (key.Length == 0) position++;
+                    if (value is JsonObject { Count: 1 } marker && marker["param"]?.GetValue<string>() is { } markerName)
+                    {
+                        // describing a prepared statement: the marker stays, so the caller can see what it will be asked for
+                        if (!describing)
+                        {
+                            if (bound is null || !bound.TryGetPropertyValue(markerName, out var given)) throw new Refused("param_missing", $"The argument {target} is the marker {markerName}, which has no value.");
+                            value = given?.DeepClone();
+                        }
+                    }
+                    values[target] = value;
+                }
+            request["parameter_definitions"] = saved.Parameters.DeepClone();
+            if (values.Count > 0) request["parameters"] = values;
+            return (true, name, new SqlTranslation(request, []));
+        }
+        catch (SqlSyntaxException e) { return (false, null, Failed("sql_syntax", e.Message)); }
+        catch (Refused e) { return (true, null, Failed(e.Code, e.Message)); }
+    }
+
+    private static string? CalledName(JsonNode? from, Catalog catalog)
+    {
+        var name = from?["type"]?.GetValue<string>() switch
+        {
+            "BASE_TABLE" => from["table_name"]?.GetValue<string>(),
+            "TABLE_FUNCTION" => from["function"]?["function_name"]?.GetValue<string>(),
+            _ => null,
+        };
+        return name is not null && catalog.Doc.Queries.ContainsKey(name) ? name : null;
     }
 
     private static SqlTranslation Failed(string code, string message) => new(null, [new QisError("semantic_sql", code, "$", message)]);
@@ -202,7 +270,9 @@ public static class SemanticSqlTranslator
                 var children = e["children"]!.AsArray();
                 var leaf = Subject(children[0]!.AsObject());
                 leaf["operator"] = type == "COMPARE_IN" ? "equals" : "not_equals";
-                leaf["values"] = new JsonArray(children.Skip(1).Select(c => Value(c!)!).ToArray());
+                var members = children.Skip(1).Select(c => Value(c!)!).ToArray();
+                // IN :regions is the whole of the values, which a list parameter fills (a single marker in the list)
+                leaf["values"] = members.Length == 1 && members[0] is JsonObject { Count: 1 } only && only["param"] is not null ? only.DeepClone() : new JsonArray(members);
                 return leaf;
             }
             case "COMPARE_BETWEEN":
@@ -383,6 +453,7 @@ public static class SemanticSqlTranslator
         switch (e["type"]?.GetValue<string>())
         {
             case "VALUE_CONSTANT": return Constant(e["literal"]!.AsObject());
+            case "VALUE_PARAMETER": return new JsonObject { ["param"] = e["identifier"]?.GetValue<string>() ?? throw Unsupported("a parameter marker has no name") };
             case "FUNCTION":
             {
                 var name = e["function_name"]!.GetValue<string>();
