@@ -31,7 +31,7 @@ public static class SyncCli
     [
         new Noun("server", "The long-running process and its first-run setup",
         [
-            Forward("run", "Start the API, the scheduler and the web console in one foreground process (what the service runs)", EffectClass.OfflineOnly, "[--repo <path>] [--state-db <path>] [--url <url>]", ServeCommand.RunAsync),
+            Forward("run", "Start the API and the scheduler in one foreground process (what the service runs; the screens are the dbdatakit console's)", EffectClass.OfflineOnly, "[--repo <path>] [--state-db <path>] [--url <url>]", ServeCommand.RunAsync),
             Forward("setup", "The interactive first-run walk-through, or a review screen for an existing install", EffectClass.RepoFilesOnly, "[--repo <path>]", SetupCommand.RunAsync),
         ]).With([.. PairingVerbs.Create(args => new PairingFiles(SyncManagement.ServerYamlIn(DbDataSyncRoot.Resolve(args))))]),
         new Noun("service", "Registration of 'server run' with Windows or systemd",

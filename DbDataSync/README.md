@@ -4,9 +4,9 @@
 
 **DbDataSync** · [Install](docs/install.md) · [Configuration](docs/configuration.md) · [Getting started](docs/getting-started.md) · [Replication concepts](docs/replication-concepts.md) · [Drivers and libraries](docs/drivers-and-libraries.md) · [State database](docs/state-database.md) · [Building from source](docs/development.md)
 
-DbDataSync is a cross-database replication tool. You define a replication in a web UI — the source
-table, the target table, column mappings, a schedule, and how changes are processed — and DbDataSync
-keeps the target in sync. It does a full initial load, then applies incremental changes on a schedule
+DbDataSync is a cross-database replication tool. You define a replication in the web app of the
+[dbdatakit console](https://github.com/DbDataSync/DbDataKit/blob/main/DbDataConsole/README.md) — the source table, the target table, column mappings,
+a schedule, and how changes are processed — and DbDataSync keeps the target in sync. It does a full initial load, then applies incremental changes on a schedule
 or on demand.
 
 A replication's source and target can be different engines — a SQL Server source can feed a
@@ -45,6 +45,21 @@ This installs DbDataSync into your own profile and walks you through setup. See
 [Install](docs/install.md) for a Windows or
 systemd service, a machine-wide install, or running in a container. The package is also on
 [nuget.org](https://www.nuget.org/packages/DbDataSync).
+
+## Where the screens are
+
+`dbdatasync server run` is the server: the API, the scheduler and the runs. It serves **no web app of its own**: its address answers the API and the
+console's calls, and a browser pointed at it is told where the screens are. They are in the **dbdatakit console**, one web app for every DbData
+server, which you pair with the server once:
+
+```sh
+dbdatasync server pair                      # on the server: prints a single-use code
+dbdatakit instance add https://<this server>:5080 --code <code>     # or the console's Servers page
+```
+
+Then open the server on the console's **Servers** page (`/servers/<id>`). People sign in, and are made, in the console. The docs are in the console too, at
+**Docs** (`/docs/sync`) and at each Sync screen's **Docs** link; the pages in this folder are the same files. The server must be reachable over
+HTTPS for the console to pair with it (see [Install](docs/install.md#connecting-a-console)).
 
 ## Next steps
 

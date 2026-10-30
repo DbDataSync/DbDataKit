@@ -28,7 +28,7 @@
       clock field often small enough to have one.
     -->
     <Version>$([System.DateTime]::UtcNow.ToString("yyyy.MM.dd.HHmm'-alpha.'s"))</Version>
-    <Description>Cross-database replication — a git-tracked config repo, a scheduler, and a web console.</Description>
+    <Description>Cross-database replication — a git-tracked config repo and a scheduler, managed from the dbdatakit console.</Description>
     <Authors>Dan Shryock</Authors>
     <PackageTags>database;replication;sync;etl;sql-server;mssql;postgresql;cli;dotnet-tool</PackageTags>
 

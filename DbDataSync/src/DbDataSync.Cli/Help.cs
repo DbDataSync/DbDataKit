@@ -12,7 +12,7 @@ public static class Help
                   one. Refuses to run when stdin/stdout aren't a real console.
 
               dbdatasync server run [--repo <path>] [--state-db <path>] [--url <url>]
-                  Starts the API, the scheduler and the web console in one process (what the service runs).
+                  Starts the API and the scheduler in one process (what the service runs); its screens are the dbdatakit console's.
                   Defaults: --repo {CliOptions.DefaultRoot}, --url http://localhost:5080
 
               dbdatasync service install|uninstall|status|start|stop|restart|doctor [--repo <path>] [--url <url>] [--account <account>] [--password-stdin]

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """No product document, script or workflow uses a command name that plan 13 retired, or one that does not exist (slice X03).
 
-Two checks over the same files:
+Three checks over the same files:
   1. the retired forms, listed in RETIRED with what replaced them;
   2. every `dbdatasync|dbdataproxy|dbdatakit|dbdatastore|dbdatabuild <words>` that is typed must be a command that exists. The commands are read from the
      sources, not listed by hand: the nouns and verbs of each product's command line (the shared ones in DbDataKit/src, the product's own under its src) and,
-     for Build, its generated command reference (DbDataBuild/docs/commands.md, which a test keeps current).
+     for Build, its generated command reference (DbDataBuild/docs/commands.md, which a test keeps current);
+  3. no DbDataSync document says its server serves a web app at its own address (SYNC_WEB_APP): since U11 the screens are the dbdatakit console's.
 
 History (plans, progress logs, research, phase documents, release notes) and test fixtures are not checked, because they say what was true then. A line can
 name an old or made-up form on purpose with the marker `retired-name-ok` on itself or the line above.
@@ -31,6 +32,15 @@ RETIRED = [
     (r"\bdbdataproxy(?:\.exe)?\s+query(?!\s+run)\b", "dbdataproxy query run"),
     (r"\bdbdataproxy(?:\.exe)?\s+--healthcheck\b", "dbdataproxy health check"),
     (r"\bDbDataProxy(?:\.Worker)?\.exe\b", "dbdataproxy.exe / dbdataproxy-worker.exe (lower case)"),
+]
+
+# What a Sync document may no longer say (slice U11, X03): the server serves no web app, its screens are the dbdatakit console's. Each pattern is a way the old claim was written,
+# with what is true now. Only DbDataSync's own documents are read, and a line can name the old claim on purpose with the marker.
+SYNC_WEB_APP = [
+    (r"(?i)\bopen\b[^.\n]{0,24}https?://(?:localhost|127\.0\.0\.1)(?::\d+)?:(?:5080|8080)\b", "the server's address serves no web app: open the server in the console (`/servers/<id>`)"),
+    (r"(?i)\b(?:dbdatasync|the server|the api)\b[^.\n]{0,40}\bserves?\s+(?!\W*no\b)[^.\n]{0,30}\b(?:web\s+(?:ui|app|console)|spa|its console|the console)\b", "the server serves no web app; its screens are the dbdatakit console's"),
+    (r"/app/wwwroot|\bwwwroot/docs\b", "the image and the packages carry no wwwroot; the docs are the console's (`/docs/sync`)"),
+    (r"\bsrc/DbDataSync\.Web\b", "the screens are `DbDataKit/web/sync`"),
 ]
 
 # The program each product's command line is called by, and the folder whose sources define it (the console is `dbdatakit`).
@@ -159,6 +169,27 @@ def check_retired(root):
     return problems
 
 
+def check_web_app(root):
+    """No document of DbDataSync says its server serves a web app at its own address (the screens moved to the console in U11)."""
+    problems = []
+    compiled = [(re.compile(pattern), instead) for pattern, instead in SYNC_WEB_APP]
+    sync = os.path.join(root, "DbDataSync")
+    if not os.path.isdir(sync):
+        return problems
+    for path in files(sync):
+        if not path.endswith(".md"):
+            continue
+        rel = os.path.relpath(path, root).replace(os.sep, "/")
+        lines = read(path).splitlines()
+        for number, line in enumerate(lines, 1):
+            if marked(lines, number):
+                continue
+            for pattern, instead in compiled:
+                if pattern.search(line):
+                    problems.append(f"{rel}:{number}: says Sync serves a web app; {instead}")
+    return problems
+
+
 def check_exist(root):
     problems = []
     tables = {}
@@ -210,7 +241,7 @@ def check_readmes(root):
 
 
 def check(root):
-    return check_retired(root) + check_exist(root) + check_readmes(root)
+    return check_retired(root) + check_web_app(root) + check_exist(root) + check_readmes(root)
 
 
 def main(argv):
