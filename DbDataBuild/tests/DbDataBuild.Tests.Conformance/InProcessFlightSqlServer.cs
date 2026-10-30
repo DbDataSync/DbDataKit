@@ -1,3 +1,4 @@
+using DbDataKit.Connections.FlightSql;
 using System.Collections.Concurrent;
 using System.Data.Common;
 using System.Net;
@@ -233,7 +234,7 @@ internal sealed class DuckFlightSqlServer(InProcessFlightSqlServer.ServerState s
 
     private async Task<RecordBatch> RunAsync(string sql, RecordBatch? parameters, CancellationToken ct, bool record = true)
     {
-        var values = parameters == null ? [] : Enumerable.Range(0, parameters.ColumnCount).Select(i => ArrowConversions.Value(parameters.Column(i), 0)).ToArray();
+        var values = parameters == null ? [] : Enumerable.Range(0, parameters.ColumnCount).Select(i => ArrowValueReader.Value(parameters.Column(i), 0)).ToArray();
         if (record)
             lock (state.Gate)
             {
