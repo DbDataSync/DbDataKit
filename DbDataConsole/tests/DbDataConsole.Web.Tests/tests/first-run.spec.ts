@@ -171,6 +171,13 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(page.getByTestId('build-git-change').filter({ hasText: 'models/staging/orders.sql' })).toHaveCount(1)
   await expect(page.getByTestId('build-git-change')).toHaveCount(5)                // the four files edited through forms, and the model's query
   await expect(page.getByTestId('build-git-merge')).toBeDisabled()
+  // the changed query is shown side by side: the text it had on the left, the saved one (with the limit) on the right
+  await page.getByTestId('build-git-change').filter({ hasText: 'models/staging/orders.sql' }).click()
+  const diff = page.getByTestId('build-git-diff-editor')
+  await expect(diff.locator('.monaco-diff-editor.side-by-side')).toBeVisible()
+  await expect(diff.locator('.editor.original')).toBeVisible()
+  await expect(diff.locator('.editor.modified')).toContainText('LIMIT 2')
+  await expect(diff.locator('.editor.original')).not.toContainText('LIMIT 2')
   await page.getByTestId('build-git-message').fill('Limit staging orders')
   await page.getByTestId('build-git-commit').click()
   await expect(page.getByTestId('build-git-commit-row')).toContainText('Limit staging orders')
