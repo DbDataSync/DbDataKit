@@ -105,6 +105,7 @@ public static class ProxyManagementHost
         app.MapPairing(new PairingService(instanceId,
             () => holder.Current is { } certificate ? PairingProof.CertificateFingerprint(certificate) : throw new InvalidOperationException("This server has no certificate to pair against."),
             clients, files.Codes()));
+        app.AnnounceToConsole("dbdataproxy", instanceId, options.Management.Port, clients, files.Codes());
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new MemoryReplayCache()));
 
         app.MapMethods($"{ProxyManagement.Prefix}/{{**rest}}", ["GET", "POST", "PUT", "DELETE"], async (HttpContext context) =>

@@ -14,6 +14,25 @@ namespace DbDataKit.Semantic;
 /// </summary>
 public static class Sandbox
 {
+    /// <summary>
+    /// What one combine may use, for a host that runs requests from people it does not control; null (the default) leaves a combine unlimited, as for an agent on its own machine.
+    /// The memory limit is DuckDB's own, the time limit interrupts the running statement, and the row limit is checked on what is loaded before any of it is.
+    /// </summary>
+    public static SandboxLimits? Limits { get => _scoped.Value ?? _default; set => _default = value; }
+
+    private static SandboxLimits? _default;
+    private static readonly AsyncLocal<SandboxLimits?> _scoped = new();
+
+    /// <summary>Limits for the calls made inside the returned scope only (and the tasks they start), whatever <see cref="Limits"/> is.</summary>
+    public static IDisposable Scope(SandboxLimits limits)
+    {
+        var before = _scoped.Value;
+        _scoped.Value = limits;
+        return new Restore(() => _scoped.Value = before);
+    }
+
+    private sealed class Restore(Action undo) : IDisposable { public void Dispose() => undo(); }
+
     private static readonly Dictionary<string, string> TypeSql = new()
     {
         ["string"] = "VARCHAR", ["number"] = "DOUBLE", ["integer"] = "BIGINT", ["boolean"] = "BOOLEAN",
@@ -78,9 +97,11 @@ public static class Sandbox
     /// <summary>Loads result sets as tables in a fresh DuckDB, locks it down, runs the SQL.</summary>
     public static QueryRows Run(string sql, IEnumerable<ResultSet> resultSets, int maxRows)
     {
-        using var con = new DuckDBConnection("DataSource=:memory:");
-        con.Open();
-        foreach (var ds in resultSets)
+        var limits = Limits;
+        var sets = resultSets as IReadOnlyCollection<ResultSet> ?? resultSets.ToList();
+        limits?.CheckInput(sets.Sum(s => (long)(s.Columnar?.Batch.Length ?? s.Rows.Count)));
+        using var con = Open(limits);
+        foreach (var ds in sets)
         {
             var fields = CreateTable(con, ds.Id, ds.Descriptor);
             if (ds.Columnar is { } columnar) { Append(con, ds.Id, fields, columnar); continue; }
@@ -93,7 +114,15 @@ public static class Sandbox
                 line.EndRow();
             }
         }
-        return Query(con, sql, maxRows);
+        return Query(con, sql, maxRows, limits);
+    }
+
+    private static DuckDBConnection Open(SandboxLimits? limits)
+    {
+        var con = new DuckDBConnection("DataSource=:memory:");
+        con.Open();
+        if (limits is not null) Exec(con, $"SET memory_limit = '{limits.MemoryBytes / (1024 * 1024)}MB'");
+        return con;
     }
 
     /// <summary>A result set that arrived as Arrow columns (<see cref="IColumnarSourceExecutor"/>): its table id, descriptor and rows.</summary>
@@ -105,14 +134,16 @@ public static class Sandbox
     /// </summary>
     public static QueryRows RunColumnar(string sql, IEnumerable<ColumnarTable> tables, int maxRows)
     {
-        using var con = new DuckDBConnection("DataSource=:memory:");
-        con.Open();
-        foreach (var t in tables)
+        var limits = Limits;
+        var all = tables as IReadOnlyCollection<ColumnarTable> ?? tables.ToList();
+        limits?.CheckInput(all.Sum(t => (long)t.Rows.Batch.Length));
+        using var con = Open(limits);
+        foreach (var t in all)
         {
             var fields = CreateTable(con, t.Id, t.Descriptor);
             Append(con, t.Id, fields, t.Rows);
         }
-        return Query(con, sql, maxRows);
+        return Query(con, sql, maxRows, limits);
     }
 
     private static void Append(DuckDBConnection con, string id, List<(string Name, string Type)> fields, ColumnarRows rows)
@@ -136,13 +167,22 @@ public static class Sandbox
         return fields;
     }
 
-    private static QueryRows Query(DuckDBConnection con, string sql, int maxRows)
+    private static QueryRows Query(DuckDBConnection con, string sql, int maxRows, SandboxLimits? limits)
     {
         Exec(con, "SET enable_external_access = false");
         Exec(con, "SET lock_configuration = true");
         using var cmd = con.CreateCommand();
         cmd.CommandText = sql;
-        return QueryRowReader.Read(cmd, maxRows);
+        if (limits is null) return QueryRowReader.Read(cmd, maxRows);
+
+        var timedOut = false;
+        using var timer = new Timer(_ => { timedOut = true; try { cmd.Cancel(); } catch (Exception) { /* the statement finished first */ } }, null, limits.Timeout, Timeout.InfiniteTimeSpan);
+        try { return QueryRowReader.Read(cmd, maxRows); }
+        catch (Exception ex) when (timedOut) { throw new SandboxLimitException("time", $"The combine ran longer than {limits.Timeout.TotalSeconds:0} seconds and was stopped.", ex); }
+        catch (DuckDBException ex) when (ex.Message.Contains("Out of Memory", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new SandboxLimitException("memory", $"The combine needed more than {limits.MemoryBytes / (1024 * 1024)} MB and was stopped.", ex);
+        }
     }
 
     /// <summary>The writer of one Arrow column into the appender as the descriptor's type; an Arrow type that already matches is read without boxing.</summary>
@@ -178,4 +218,19 @@ public static class Sandbox
         cmd.CommandText = sql;
         cmd.ExecuteNonQuery();
     }
+}
+
+/// <summary>What a combine may use: memory, time, and the rows of everything it loads.</summary>
+public sealed record SandboxLimits(long MemoryBytes, TimeSpan Timeout, long MaxInputRows)
+{
+    internal void CheckInput(long rows)
+    {
+        if (rows > MaxInputRows) throw new SandboxLimitException("rows", $"The combine would load {rows} rows, more than the {MaxInputRows} it may.", null);
+    }
+}
+
+/// <summary>A combine reached one of <see cref="SandboxLimits"/> and was stopped: <see cref="Limit"/> is <c>rows</c>, <c>time</c> or <c>memory</c>.</summary>
+public sealed class SandboxLimitException(string limit, string message, Exception? inner) : Exception(message, inner)
+{
+    public string Limit { get; } = limit;
 }

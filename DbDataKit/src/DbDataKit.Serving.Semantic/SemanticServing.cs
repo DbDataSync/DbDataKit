@@ -69,7 +69,9 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         return Task.Run<IServingAnswer>(() =>
         {
             var engine = new QisEngine(model.Catalog, new ServingSourceExecutor(inner, catalog, context, model, models, cancellationToken), new Validator(model.Catalog), models.Level, rowCap: (int)Math.Min(limit ?? 1_000_000, 1_000_000));
-            var result = engine.Run(document);
+            Result result;
+            try { result = engine.Run(document); }
+            catch (SandboxLimitException stopped) { throw new ServingLimitException(stopped.Message, stopped.Limit); }
             if (result.Status == "failed") throw new ServingInvalidException(Describe(result));
             return new SemanticAnswer(result, provenance);
         }, cancellationToken);
