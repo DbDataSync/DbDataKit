@@ -116,6 +116,46 @@ if (!isWorker) {
   }
 }
 
+// Servers for the monitoring story (plan 13a, M12): a Build server that runs schedules and hosts a project whose one refresh plan runs every minute and fails (no login is set for its connection, so a run ends
+// with an exit code), a Sync server for a replication made in the story, and a Proxy the story sends failed logins to. They are separate from the servers above, whose pairing codes the first-run story spends.
+export const monitorBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-monitor-build'), port: 8489, project: 'scheduled', plan: 'minutely', connection: 'sqlserver' }
+export const monitorSync = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-monitor-sync'), port: 8490 }
+export const monitorProxy = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-monitor-proxy'), flightPort: 8491, managementPort: 8492 }
+if (!isWorker) {
+  // the Build project: two models, one with a refresh plan that is scheduled every minute; compiled, so the server finds the plan in rendered/
+  fs.rmSync(monitorBuild.directory, { recursive: true, force: true })
+  fs.mkdirSync(monitorBuild.directory, { recursive: true })
+  const project = path.join(os.tmpdir(), 'dbdatakit-console-e2e-monitor-project')
+  fs.rmSync(project, { recursive: true, force: true })
+  const write = (relative: string, text: string) => { const file = path.join(project, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text) }
+  const columns = 'grain: [event_id]\ncolumns:\n  - {name: event_id, type: BIGINT, nullable: false}\n  - {name: event_ts, type: TIMESTAMP, nullable: false}\n  - {name: amount, type: "DECIMAL(14, 2)"}\n'
+  write('dbdatabuild.yml', 'defaults: {connections: [sqlserver]}\nstring_semantics:\n  case: sensitive\n  trailing_space: ignored\n  collations:\n    default: { duckdb: NFC, sqlserver: Latin1_General_100_CS_AS }\n' +
+    `refresh:\n  plans:\n    ${monitorBuild.plan}: { schedule: "* * * * *", time_zone: UTC }\n`)
+  write('models/staging/events.yml', 'name: staging.events\nkind: mapped\n' + columns)
+  write('models/marts/fct_events.yml', 'name: marts.fct_events\nkind: {incremental_by_time_range: {time_column: event_ts}}\n' + columns +
+    'loads:\n  incremental:\n    default: true\n    strategy: watermark_append\n    watermark: {column: event_ts, resolver: target_max, on_null: initial, initial: "2000-01-01 00:00:00"}\n' +
+    `refresh: { ${monitorBuild.plan}: incremental }\n`)
+  write('models/marts/fct_events.sql', 'SELECT e.event_id, e.event_ts, e.amount FROM staging.events e\n')
+  execFileSync('dotnet', ['exec', buildDll, 'project', 'compile', '--project', project], { stdio: 'ignore' })
+  execFileSync('dotnet', ['exec', buildDll, 'server', 'project', 'add', monitorBuild.project, '--path', project, '--repo', monitorBuild.directory], { stdio: 'ignore' })
+  const madeBuild = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', monitorBuild.directory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'monitor-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeBuild)![1])
+
+  fs.rmSync(monitorSync.directory, { recursive: true, force: true })
+  fs.mkdirSync(monitorSync.directory, { recursive: true })
+  const madeSync = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--repo', monitorSync.directory, '--max-role', 'admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'monitor-sync-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeSync)![1])
+
+  fs.rmSync(monitorProxy.directory, { recursive: true, force: true })
+  fs.mkdirSync(path.join(monitorProxy.directory, 'config', 'proxy'), { recursive: true })
+  fs.mkdirSync(path.join(monitorProxy.directory, 'config', 'connections'), { recursive: true })
+  fs.writeFileSync(path.join(monitorProxy.directory, 'config', 'server.yaml'), 'schemaVersion: 2\ntls: { mode: selfSigned }\n')
+  fs.writeFileSync(path.join(monitorProxy.directory, 'config', 'proxy', 'auth.yaml'), 'jwt:\n  signingKey: console-e2e-signing-key-0123456789abcdef\n  audience: api://console-e2e\n')
+  fs.copyFileSync(path.join(proxyDirectory, 'config', 'connections', 'erp.yaml'), path.join(monitorProxy.directory, 'config', 'connections', 'erp.yaml'))
+  const madeProxy = execFileSync('dotnet', ['exec', proxyDll, 'server', 'pair', '--repo', monitorProxy.directory, '--max-role', 'admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'monitor-proxy-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeProxy)![1])
+}
+
 // A passkey is bound to the host name and the port it was made on, and the server builds its list of allowed origins from the address it is told to listen on,
 // so the address is fixed here and the test opens exactly that.
 const port = 8481
@@ -180,6 +220,36 @@ export default defineConfig({
       timeout: 60_000,
       stdout: 'pipe',
       stderr: 'pipe',
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(monitorBuild.directory), '--listen', `https://localhost:${monitorBuild.port}`, '--scheduler'].join(' '),
+      url: `https://localhost:${monitorBuild.port}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(proxyDll), 'server', 'run',
+        `--Proxy:DataDirectory=${JSON.stringify(monitorProxy.directory)}`, '--Proxy:Listen:Address=127.0.0.1', `--Proxy:Listen:Port=${monitorProxy.flightPort}`,
+        '--Proxy:Management:Enabled=true', '--Proxy:Management:Address=127.0.0.1', `--Proxy:Management:Port=${monitorProxy.managementPort}`].join(' '),
+      url: `https://localhost:${monitorProxy.managementPort}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(syncDll), 'server', 'run', '--repo', JSON.stringify(monitorSync.directory), '--url', `https://localhost:${monitorSync.port}`].join(' '),
+      url: `https://localhost:${monitorSync.port}/api/health`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 90_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+      env: { Kestrel__Certificates__Default__Path: syncCertificate, Kestrel__Certificates__Default__Password: syncCertificatePassword },
     },
     {
       command: ['dotnet', 'exec', JSON.stringify(syncDll), 'server', 'run', '--repo', JSON.stringify(syncDirectory), '--url', syncUrl].join(' '),
