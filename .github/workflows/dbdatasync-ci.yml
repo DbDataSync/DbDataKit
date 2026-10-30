@@ -270,7 +270,7 @@ jobs:
         # The same specs again, through the console (plan 13a, U08): a console and a paired `dbdatasync server run`, the specs' addresses
         # translated to /servers/<id>/... and the relay (tests/DbDataSync.Web.Tests/fixtures.ts). `dotnet exec` on the built console DLL, as above.
         run: |
-          dotnet build ../DbDataConsole/src/DbDataConsole.Server
+          dotnet build ../../DbDataConsole/src/DbDataConsole.Server
           npm run build -w @dbdatakit/console
         working-directory: DbDataKit/web
       - name: Test (Playwright, through the console)
