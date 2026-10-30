@@ -114,7 +114,11 @@ test.describe.serial('golden path: define, configure, and run a replication end-
     await page.getByTestId('schedule-bulk-load-parallelism-input').fill('2')
     await shot(page, '04-replication-endpoints.png')
 
+    // Reloading before the PUT is answered abandons it, so wait for the save itself.
+    const saveAnswered = page.waitForResponse((r) => r.request().method() === 'PUT'
+      && new URL(r.url()).pathname.endsWith(`/api/replications/${REPLICATION_NAME}`))
     await page.getByTestId('save-settings-button').click()
+    expect((await saveAnswered).ok()).toBe(true)
 
     await page.reload()
     await page.getByTestId('tab-overview').click()
@@ -1080,6 +1084,9 @@ new Shout()
     await table.getByRole('button', { name: '+ Add' }).click()
     await table.getByLabel('Application Name value').fill('DbDataSync')
     await page.getByTestId('save-connection-button').click()
+    // The save navigates to the list once the PUT has been answered; leaving earlier abandons the request
+    // (through the console's relay that is the difference between a saved setting and none).
+    await expect(page.getByTestId('connections-table')).toContainText(SRC_CONNECTION_NAME, { timeout: 15_000 })
 
     await page.goto(`/connections/${SRC_CONNECTION_NAME}`)
     await expect(page.getByTestId('connection-parameters-properties').getByLabel('Application Name value'))

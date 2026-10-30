@@ -69,7 +69,7 @@ tinyint	decimal:fraction	STORED Byte:1
 tinyint	double:NaN	REFUSED InvalidOperationException (names the column and value type)
 tinyint	double:Infinity	REFUSED InvalidOperationException (names the column and value type)
 tinyint	decimal:18digits	REFUSED InvalidOperationException (names the column and value type)
-tinyint	char	STORED Byte:97
+tinyint	char	REFUSED StagingValueException (names the column and value type)
 tinyint	string	REFUSED InvalidOperationException (names the column and value type)
 tinyint	string:1	STORED Byte:1
 tinyint	string:1.5	REFUSED InvalidOperationException (names the column and value type)
@@ -119,7 +119,7 @@ smallint	decimal:fraction	STORED Int16:1
 smallint	double:NaN	REFUSED InvalidOperationException (names the column and value type)
 smallint	double:Infinity	REFUSED InvalidOperationException (names the column and value type)
 smallint	decimal:18digits	REFUSED InvalidOperationException (names the column and value type)
-smallint	char	STORED Int16:97
+smallint	char	REFUSED StagingValueException (names the column and value type)
 smallint	string	REFUSED InvalidOperationException (names the column and value type)
 smallint	string:1	STORED Int16:1
 smallint	string:1.5	REFUSED InvalidOperationException (names the column and value type)
@@ -169,7 +169,7 @@ int	decimal:fraction	STORED Int32:1
 int	double:NaN	REFUSED InvalidOperationException (names the column and value type)
 int	double:Infinity	REFUSED InvalidOperationException (names the column and value type)
 int	decimal:18digits	REFUSED InvalidOperationException (names the column and value type)
-int	char	STORED Int32:97
+int	char	REFUSED StagingValueException (names the column and value type)
 int	string	REFUSED InvalidOperationException (names the column and value type)
 int	string:1	STORED Int32:1
 int	string:1.5	REFUSED InvalidOperationException (names the column and value type)
@@ -219,7 +219,7 @@ bigint	decimal:fraction	STORED Int64:1
 bigint	double:NaN	REFUSED InvalidOperationException (names the column and value type)
 bigint	double:Infinity	REFUSED InvalidOperationException (names the column and value type)
 bigint	decimal:18digits	STORED Int64:12345678901234568
-bigint	char	STORED Int64:97
+bigint	char	REFUSED StagingValueException (names the column and value type)
 bigint	string	REFUSED InvalidOperationException (names the column and value type)
 bigint	string:1	STORED Int64:1
 bigint	string:1.5	REFUSED InvalidOperationException (names the column and value type)
@@ -486,12 +486,12 @@ nvarchar(50)	string:non-BMP	STORED string:a\ud83d\ude00b
 nvarchar(50)	byte[]	REFUSED StagingValueException (names the column and value type)
 nvarchar(50)	byte[]:16	REFUSED StagingValueException (names the column and value type)
 nvarchar(50)	Guid	REFUSED StagingValueException (names the column and value type)
-nvarchar(50)	DateTime	STORED string:03/17/2024 09:41:22
-nvarchar(50)	DateTime:Utc	STORED string:03/17/2024 09:41:22
-nvarchar(50)	DateTime:midnight	STORED string:03/17/2024 00:00:00
-nvarchar(50)	DateTime:1500	STORED string:01/01/1500 00:00:00
+nvarchar(50)	DateTime	REFUSED StagingValueException (names the column and value type)
+nvarchar(50)	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
+nvarchar(50)	DateTime:midnight	REFUSED StagingValueException (names the column and value type)
+nvarchar(50)	DateTime:1500	REFUSED StagingValueException (names the column and value type)
 nvarchar(50)	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
-nvarchar(50)	DateOnly	STORED string:03/17/2024 00:00:00
+nvarchar(50)	DateOnly	REFUSED StagingValueException (names the column and value type)
 nvarchar(50)	TimeOnly	REFUSED StagingValueException (names the column and value type)
 nvarchar(50)	TimeSpan	REFUSED StagingValueException (names the column and value type)
 nvarchar(50)	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
@@ -536,12 +536,12 @@ nvarchar(5)	string:non-BMP	STORED string:a\ud83d\ude00b
 nvarchar(5)	byte[]	REFUSED StagingValueException (names the column and value type)
 nvarchar(5)	byte[]:16	REFUSED StagingValueException (names the column and value type)
 nvarchar(5)	Guid	REFUSED StagingValueException (names the column and value type)
-nvarchar(5)	DateTime	REFUSED InvalidOperationException (names the column)
-nvarchar(5)	DateTime:Utc	REFUSED InvalidOperationException (names the column)
-nvarchar(5)	DateTime:midnight	REFUSED InvalidOperationException (names the column)
-nvarchar(5)	DateTime:1500	REFUSED InvalidOperationException (names the column)
+nvarchar(5)	DateTime	REFUSED StagingValueException (names the column and value type)
+nvarchar(5)	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
+nvarchar(5)	DateTime:midnight	REFUSED StagingValueException (names the column and value type)
+nvarchar(5)	DateTime:1500	REFUSED StagingValueException (names the column and value type)
 nvarchar(5)	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
-nvarchar(5)	DateOnly	REFUSED InvalidOperationException (names the column)
+nvarchar(5)	DateOnly	REFUSED StagingValueException (names the column and value type)
 nvarchar(5)	TimeOnly	REFUSED StagingValueException (names the column and value type)
 nvarchar(5)	TimeSpan	REFUSED StagingValueException (names the column and value type)
 nvarchar(5)	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
@@ -586,12 +586,12 @@ varchar(50)	string:non-BMP	STORED string:a??b
 varchar(50)	byte[]	REFUSED StagingValueException (names the column and value type)
 varchar(50)	byte[]:16	REFUSED StagingValueException (names the column and value type)
 varchar(50)	Guid	REFUSED StagingValueException (names the column and value type)
-varchar(50)	DateTime	STORED string:03/17/2024 09:41:22
-varchar(50)	DateTime:Utc	STORED string:03/17/2024 09:41:22
-varchar(50)	DateTime:midnight	STORED string:03/17/2024 00:00:00
-varchar(50)	DateTime:1500	STORED string:01/01/1500 00:00:00
+varchar(50)	DateTime	REFUSED StagingValueException (names the column and value type)
+varchar(50)	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
+varchar(50)	DateTime:midnight	REFUSED StagingValueException (names the column and value type)
+varchar(50)	DateTime:1500	REFUSED StagingValueException (names the column and value type)
 varchar(50)	DateTimeOffset	REFUSED StagingValueException (names the column and value type)
-varchar(50)	DateOnly	STORED string:03/17/2024 00:00:00
+varchar(50)	DateOnly	REFUSED StagingValueException (names the column and value type)
 varchar(50)	TimeOnly	REFUSED StagingValueException (names the column and value type)
 varchar(50)	TimeSpan	REFUSED StagingValueException (names the column and value type)
 varchar(50)	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)

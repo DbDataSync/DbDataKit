@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner, Field, useIsAdmin } from '@dbdatakit/shell'
-import { consoleApi, type InstanceSummary } from '../api'
+import { consoleApi, instancesKey, type InstanceSummary } from '../api'
+import { PendingServers } from './PendingServers'
 import { Link } from 'react-router-dom'
 import { ConsoleShell } from '../ConsoleShell'
 
 const COLUMNS = '1.4fr 1.4fr 1.8fr 2fr 1fr'
-export const instancesKey = ['instances'] as const
 
 /** What the person should read about a server: how it answered, and if it did not, why. */
 function statusOf(instance: InstanceSummary): { text: string; tone: 'ok' | 'warn' | 'bad' } {
@@ -65,6 +65,8 @@ export function InstancesPage() {
         </div>
 
         <ErrorBanner error={instances.error ?? forget.error} />
+
+        <PendingServers />
 
         <div className="card flush" data-testid="instances-table">
           <div className="grid-head" style={{ gridTemplateColumns: COLUMNS, gap: 14 }}>

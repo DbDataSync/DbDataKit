@@ -182,7 +182,11 @@ public sealed class DescriptorDriverTests : IClassFixture<DescriptorDriverApiFac
         (await _client.PutAsJsonAsync($"/api/replications/{_replicationName}", new ReplicationTaskConfig
         {
             Name = _replicationName,
-            Enabled = true,
+            // Disabled so the scheduler never starts a pass of its own: "Run now" ignores Enabled, so the
+            // test's triggered run is the mapping's first pass. Enabled, the scheduler's pass raced it —
+            // the triggered run then failed with MappingLoadingException (the initial load still running),
+            // or finished before JoinRun so runCompleted never reached the test.
+            Enabled = false,
             Scheduling = new SchedulingConfig { Mode = ScheduleMode.Continuous, FrequencySeconds = 3600 },
             ChangeProcessing = new ChangeProcessingConfig
             {
@@ -191,8 +195,12 @@ public sealed class DescriptorDriverTests : IClassFixture<DescriptorDriverApiFac
                 // resolves from MsSqlDriver's.
                 Reader = new ReaderConfig { Kind = "Watermark", Options = { ["watermarkColumn"] = "modified_at" } },
                 Cache = new CacheConfig { Kind = "MsSqlStagingTable" },
-                Writer = new WriterConfig { Kind = "MsSqlDeleteInsert" },
+                // An upsert for the incremental passes: a Watermark pass stages only what changed, which
+                // a delete-insert would take for the whole table (ConfigValidation.ValidateIncrementalReconcilePairing).
+                Writer = new WriterConfig { Kind = "MsSqlMerge" },
             },
+            // The initial load reads the whole table, so the delete-insert this test used to run belongs here.
+            BulkLoad = new BulkLoadConfig { Writer = new WriterConfig { Kind = "MsSqlDeleteInsert" } },
         }, JsonOptions)).EnsureSuccessStatusCode();
 
         (await _client.PutAsJsonAsync($"/api/replications/{_replicationName}/table-mappings/main", new TableMappingConfig

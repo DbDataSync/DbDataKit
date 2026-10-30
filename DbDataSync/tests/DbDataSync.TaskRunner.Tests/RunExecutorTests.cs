@@ -355,6 +355,59 @@ public sealed class RunExecutorTests : IDisposable
     }
 
     /// <summary>
+    /// A reconciling writer behind an incremental reader replaced the whole target with the rows a pass
+    /// staged — only what changed — so a pass that found nothing emptied the table and still succeeded.
+    /// Save-time validation now refuses the pairing (<see cref="ConfigValidation.ValidateIncrementalReconcilePairing"/>),
+    /// but a mapping can reach it without being saved again: here the replication's writer changes after the
+    /// mapping was saved, as it would for a mapping saved before that rule. The run is refused, from config
+    /// alone, before a connection is opened — so before anything could be deleted.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteWorkerAsync_AnIncrementalReaderWithAReconcilingWriter_IsRefused_BeforeAnyConnectionIsOpened()
+    {
+        SaveTask("crm-sync", readerKind: "Watermark");
+        _configRepository.SaveTableMapping("crm-sync", new TableMappingConfig
+        {
+            Name = "orders",
+            Sources = [new SourceTableSpec { ConnectionName = "src", Database = "App", Table = "Orders" }],
+            Targets = [new TableSpec { ConnectionName = "tgt", Database = "DW", Table = "Orders" }],
+        }, Author);
+
+        var task = _configRepository.LoadReplicationTask("crm-sync");
+        task.ChangeProcessing.Writer = new WriterConfig { Kind = MsSqlDriverKinds.DeleteInsert };
+        _configRepository.SaveReplicationTask(task, Author);
+
+        // Both unreachable — if the refusal did not happen first, a connection attempt is what would fail.
+        foreach (var (name, database) in new[] { ("src", "App"), ("tgt", "DW") })
+        {
+            _configRepository.SaveConnection(new ConnectionInput
+            {
+                Name = name,
+                DriverType = DriverIds.MsSql,
+                Host = "127.0.0.1",
+                Port = 1,
+                Database = database,
+                AuthMode = AuthMode.IntegratedAuth,
+                Properties = new Dictionary<string, string> { ["Connect Timeout"] = "1" },
+            }, Author);
+        }
+
+        var watermarkKey = WatermarkKey.Build(
+            new SourceTableRef { ConnectionName = "src", Database = "App", Schema = "dbo", Table = "Orders" },
+            MsSqlDialect.Instance);
+        new ChangeWatermarkStore(_stateDatabase).SetReadIntent("crm-sync", "orders", watermarkKey, ReadIntent.Changes);
+
+        var runId = await EnqueueAndDrainAsync("crm-sync", "orders");
+
+        var run = _taskRunStore.GetRun(runId)!;
+        Assert.Equal(RunStatus.Failed, run.Status);
+        Assert.Contains("'Watermark'", run.ErrorSummary);
+        Assert.Contains($"'{MsSqlDriverKinds.DeleteInsert}'", run.ErrorSummary);
+        Assert.Contains("upsert writer", run.ErrorSummary);
+        Assert.DoesNotContain("Failed to open connection", run.ErrorSummary);
+    }
+
+    /// <summary>
     /// Follow-up to phase 143: a manual "Run Now" landing on a mapping still <see cref="ReadHold.Loading"/>
     /// (the state a mapping's own first-ever pass leaves it in mid-load — see
     /// <c>LocalRunnerState.RequestInitialLoad</c>'s own <c>SetPendingLoad</c> call) used to fall through

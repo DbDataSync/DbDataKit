@@ -37,6 +37,73 @@ public static class SemanticSqlTranslator
         catch (Refused e) { return Failed(e.Code, e.Message); }
     }
 
+    /// <summary>
+    /// A saved query used as a view or function (plan 19, J26): <c>SELECT * FROM monthly_revenue</c> or <c>SELECT * FROM monthly_revenue('FY27-Q1')</c> or <c>... (quarter := :q)</c>, where the name is one of the catalog's <c>queries</c>. The saved
+    /// query's request gets the arguments as its <c>parameters</c> (a positional argument is the parameter at that place in the saved query's definitions); an argument that is itself a marker takes the value bound to that marker in
+    /// <paramref name="bound"/>. <c>IsCall</c> is false when the text does not select from a saved query at all, and it is then translated as any semantic SQL. A call is the saved query as it is: no WHERE, GROUP BY or other clause.
+    /// </summary>
+    public static (bool IsCall, string? Name, SqlTranslation Translation) TranslateCall(string sql, Catalog catalog, JsonObject? bound = null, bool describing = false, Func<string, SavedQueryDef?>? userQueries = null)
+    {
+        // the model's own saved queries first; then, for a host that keeps them, the caller's (J27)
+        SavedQueryDef? Find(string name) => catalog.Doc.Queries.TryGetValue(name, out var own) ? own : userQueries?.Invoke(name);
+        if (catalog.Doc.Queries.Count == 0 && userQueries is null) return (false, null, new SqlTranslation(null, []));
+        try
+        {
+            var node = SqlParser.ParseSelect(SqlMarkers.Rewrite(sql));
+            if (node["type"]?.GetValue<string>() != "SELECT_NODE" || CalledName(node["from_table"], Find) is not { } name) return (false, null, new SqlTranslation(null, []));
+            var saved = Find(name)!;
+
+            if (node["select_list"]!.AsArray() is not [{ } star] || star["type"]?.GetValue<string>() != "STAR"
+                || node["where_clause"] is not null || node["having"] is not null || node["qualify"] is not null || node["modifiers"] is JsonArray { Count: > 0 }
+                || node["group_expressions"] is JsonArray { Count: > 0 } || node["cte_map"]?["map"] is JsonArray { Count: > 0 })
+                throw Unsupported($"a saved query is selected as it is: SELECT * FROM {name}(arguments), with no other clause");
+
+            var request = saved.Sql is not null
+                ? Build(SqlParser.ParseSelect(SqlMarkers.Rewrite(saved.Sql)), catalog.Name)
+                : (JsonObject)saved.Request!.DeepClone();
+            request["spec_version"] ??= QisEngine.SpecVersion;
+            var order = saved.Parameters.Select(p => p.Key).ToList();
+            foreach (var shape in QueryParameters.Describe(request, null).Where(s => !order.Contains(s.Name))) order.Add(shape.Name);
+
+            var values = new JsonObject();
+            var from = node["from_table"]!;
+            var position = 0;
+            if (from["type"]?.GetValue<string>() == "TABLE_FUNCTION")
+                foreach (var (key, expression) in Arguments(from["function"]!))
+                {
+                    var value = Value(expression);
+                    var target = key.Length > 0 ? key : position < order.Count ? order[position] : throw Unsupported($"{name} takes {order.Count} argument(s)");
+                    if (key.Length == 0) position++;
+                    if (value is JsonObject { Count: 1 } marker && marker["param"]?.GetValue<string>() is { } markerName)
+                    {
+                        // describing a prepared statement: the marker stays, so the caller can see what it will be asked for
+                        if (!describing)
+                        {
+                            if (bound is null || !bound.TryGetPropertyValue(markerName, out var given)) throw new Refused("param_missing", $"The argument {target} is the marker {markerName}, which has no value.");
+                            value = given?.DeepClone();
+                        }
+                    }
+                    values[target] = value;
+                }
+            request["parameter_definitions"] = saved.Parameters.DeepClone();
+            if (values.Count > 0) request["parameters"] = values;
+            return (true, name, new SqlTranslation(request, []));
+        }
+        catch (SqlSyntaxException e) { return (false, null, Failed("sql_syntax", e.Message)); }
+        catch (Refused e) { return (true, null, Failed(e.Code, e.Message)); }
+    }
+
+    private static string? CalledName(JsonNode? from, Func<string, SavedQueryDef?> find)
+    {
+        var name = from?["type"]?.GetValue<string>() switch
+        {
+            "BASE_TABLE" => from["table_name"]?.GetValue<string>(),
+            "TABLE_FUNCTION" => from["function"]?["function_name"]?.GetValue<string>(),
+            _ => null,
+        };
+        return name is not null && find(name) is not null ? name : null;
+    }
+
     private static SqlTranslation Failed(string code, string message) => new(null, [new QisError("semantic_sql", code, "$", message)]);
 
     // ---------- the statement ----------

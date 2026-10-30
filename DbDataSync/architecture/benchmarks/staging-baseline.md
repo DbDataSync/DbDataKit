@@ -71,3 +71,20 @@ each cell the median of 7 applies in one process after one warm-up apply, five p
 Spread: the seven applies inside one process range 20 to 40% (775 to 1,204 ms at 5,000), more than any difference between the builds. The first three rounds (before, then after) showed the "after" build 4 to 10% slower and the two rounds in the other order
 showed it no slower, so the order, not the code, explains that. Allocation per apply fell (0.13 to 0.08 MB at 5,000; 1.22 to 0.76 MB at 500) because the text is no longer rebuilt per chunk. What this supports: no measurable change on PostgreSQL.
 What it does not support: a statement about 5% against any 24-core baseline (this 4-core shared machine cannot show it), or anything about SQL Server, MySQL or Oracle.
+
+## After A14b (the gate's refusal table grows by the reinterpreted pairs)
+
+A14b adds pairs to the table `StagingValueRules` looks up (`StagingValueRules.Reinterpreted.cs`); the check per cell is the same one type comparison against the column's last accepted type, and the lookup itself (`Verdict`, two short list scans) runs once per column and runtime type.
+Measured as for A14a: the tool built in Release from `main` (in its own worktree) and from the branch, SQL Server 2022 and PostgreSQL 17 (containers from `testenv/`) on the same host, 4 cores shared with other jobs (load average 2.0 to 3.3), .NET 10.0.13, 200,000 x 20,
+each cell the median of 5 runs (the tool's own). Eight interleaved rounds, of which rounds 1 to 4 ran "before, after" and rounds 5 to 8 ran "after, before", to see whether the order matters.
+
+| provider | before (`main`), ms per round | after, ms per round | median before | median after | change |
+| --- | --- | --- | ---: | ---: | ---: |
+| SQL Server, `SqlBulkCopy` | 1,793 / 1,651 / 1,649 / 1,642 / 1,838 / 1,766 / 1,674 / 1,607 | 1,750 / 1,847 / 1,753 / 1,804 / 1,669 / 1,768 / 1,698 / 1,617 | 1,663 | 1,752 | +5.4% |
+| PostgreSQL, binary `COPY` | 2,108 / 1,592 / 1,958 / 1,692 / 1,645 / 1,884 / 1,681 / 1,684 | 1,908 / 1,624 / 1,736 / 1,657 / 1,808 / 1,622 / 1,606 / 1,633 | 1,688 | 1,645 | -2.5% |
+
+Spread of the eight rounds (max over min): SQL Server 14% before, 14% after; PostgreSQL 32% before, 19% after. Allocation (250.2 and 142.8 MB), peak heap (about 130 MB with this run's runtime settings, the same in both builds) and GC counts (1 / 0 / 0) are identical in both builds.
+
+How to read the SQL Server line: the +5.4% looks like the order, not a cost of the change. In the four rounds where "before" ran first, "after" was 7.8% slower (medians 1,650 and 1,779); in the four where "after" ran first, it was 2.1% faster (1,720 and 1,684): the build that ran second in a round tended to be the slower one, the effect A16b also saw.
+That is a reading of eight rounds, not a proof. PostgreSQL moved the other way (-2.5%). The differences are inside the spread and change sign with the order, so the honest reading is "no measurable change". What this does not support: a statement about the 5% bar against the 24-core baseline at the top of this file. This 4-core shared machine cannot prove 5% against it, or even
+against itself (the spread is 14% to 32%); only the same-machine pairs above mean anything. The benchmark's columns (int, strings, decimal, datetime2) are all pairs the gate passes, so this measures the cost of the check, not of a refusal.

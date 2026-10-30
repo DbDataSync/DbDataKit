@@ -125,6 +125,15 @@ anywhere including ODBC/JDBC).
 `SupportsReconciliation` is what the reader/writer pickers use to show which writers reconcile —
 covered in [Getting started](getting-started.md).
 
+A reconciling writer takes the staged rows to be *everything* in its scope, so it only belongs behind a
+reader that reads the whole scope (`BatchReload`, or a Bulk Load). Behind an incremental reader
+(`Watermark`, `TriggerAudit`, Change Tracking, CDC, a logical slot, Flashback) a pass stages only what
+changed, and the writer would delete every other target row. Saving a mapping with that pairing for change
+processing is refused, and a mapping that reaches it anyway (saved before the rule, or its replication's
+writer changed since) fails its incremental pass before anything is read. Use an upsert writer such as
+`MsSqlMerge` for change processing, and set the reconciling writer on the Bulk Load pipeline if full
+reloads should use it.
+
 ## Bulk loading (backfill)
 
 **"Backfill" in the UI is `RunKind.BulkLoad` internally** — the same operation, one name change partway

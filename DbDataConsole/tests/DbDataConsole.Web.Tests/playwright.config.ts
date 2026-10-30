@@ -102,6 +102,20 @@ if (!isWorker) {
   fs.writeFileSync(path.join(scratchDirectory, 'proxy-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
+// Two more Build servers that announce themselves to the console instead of being paired with a code (plan 13a, L03): each is told where the console takes announcements and which address to give,
+// and waits as pending until the test confirms or rejects it. A Build server with no project is enough: what is tested is the console's list and the pairing a confirmation makes.
+export const announceListen = 'http://127.0.0.1:8486'
+export const announcers = [
+  { name: 'Announcing confirm', port: 8487, directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-announce-confirm') },
+  { name: 'Announcing reject', port: 8488, directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-announce-reject') },
+]
+if (!isWorker) {
+  for (const announcer of announcers) {
+    fs.rmSync(announcer.directory, { recursive: true, force: true })
+    fs.mkdirSync(announcer.directory, { recursive: true })
+  }
+}
+
 // A passkey is bound to the host name and the port it was made on, and the server builds its list of allowed origins from the address it is told to listen on,
 // so the address is fixed here and the test opens exactly that.
 const port = 8481
@@ -127,6 +141,7 @@ export default defineConfig({
       'dotnet', 'exec', path.join(repoRoot, 'DbDataConsole/src/DbDataConsole.Server/bin/Debug/net10.0/dbdatakit.dll'),
       'server', 'run', '--repo', JSON.stringify(scratchDirectory), '--listen', origin,
       '--web-root', JSON.stringify(path.join(repoRoot, 'DbDataKit/web/console/dist')),
+      '--announce-listen', announceListen,
     ].join(' '),
     url: `${origin}/health/live`,
     ignoreHTTPSErrors: true,
@@ -145,6 +160,16 @@ export default defineConfig({
       stderr: 'pipe',
       env: warehouseConnection ? { DBDATA_BUILD_POSTGRES_READ: warehouseConnection, DBDATA_BUILD_POSTGRES_WRITE: warehouseConnection } : {},
     },
+    ...announcers.map((announcer) => ({
+      command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(announcer.directory), '--listen', `https://localhost:${announcer.port}`].join(' '),
+      url: `https://localhost:${announcer.port}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+      env: { DBDATAKIT_CONSOLE_ANNOUNCE_URL: announceListen, DBDATAKIT_ADVERTISE_URL: `https://localhost:${announcer.port}`, DBDATAKIT_INSTANCE_NAME: announcer.name },
+    })),
     {
       command: ['dotnet', 'exec', JSON.stringify(proxyDll), 'server', 'run',
         `--Proxy:DataDirectory=${JSON.stringify(proxyDirectory)}`, '--Proxy:Listen:Address=127.0.0.1', `--Proxy:Listen:Port=${proxyPort}`,

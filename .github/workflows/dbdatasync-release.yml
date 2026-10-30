@@ -21,6 +21,33 @@ on:
         description: The commit to release. Empty means the newest commit on main. It must be on main and have a green DbDataSync CI run.
         type: string
         default: ''
+      version:
+        description: The release version, exactly as it would be tagged (2026.10.30.1415 or 2026.10.30.1415-beta). Empty means the UTC clock now. suite-release.yml passes one so every product of a suite release has the same.
+        type: string
+        default: ''
+      dry_run:
+        description: Build everything and attach the files to the run (artifact "release-<product>"), but tag nothing and publish nothing.
+        type: boolean
+        default: false
+  # suite-release.yml calls this (plan 13a, L06), with dry_run for the suite's dry run.
+  workflow_call:
+    inputs:
+      beta:
+        description: Publish as a prerelease (-beta suffix on the version, prerelease flag on the GitHub Release).
+        type: boolean
+        default: false
+      sha:
+        description: The commit to release. Empty means the newest commit on main. It must be on main and have a green DbDataSync CI run.
+        type: string
+        default: ''
+      version:
+        description: The release version, exactly as it would be tagged (2026.10.30.1415 or 2026.10.30.1415-beta). Empty means the UTC clock now. suite-release.yml passes one so every product of a suite release has the same.
+        type: string
+        default: ''
+      dry_run:
+        description: Build everything and attach the files to the run (artifact "release-<product>"), but tag nothing and publish nothing.
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -67,6 +94,7 @@ jobs:
       # for a commit that reached main some other way (a bot push, a skipped run), which is the case this gate is for. Any successful run
       # counts, not merely the newest: a flake that was re-run to green is what a human would have accepted by hand.
       - name: Require a green CI run for this exact commit
+        if: ${{ !inputs.dry_run }}
         working-directory: .
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -110,6 +138,7 @@ jobs:
         id: version
         env:
           BETA: ${{ inputs.beta }}
+          WANTED_VERSION: ${{ inputs.version }}
         run: |
           IFS=. read -r y m d hm <<< "$(date -u +%Y.%m.%d.%H%M)"
           version="$((10#$y)).$((10#$m)).$((10#$d)).$((10#$hm))"
@@ -117,6 +146,15 @@ jobs:
           if [ "$BETA" = "true" ]; then
             version="${version}-beta"
             prerelease=true
+          fi
+          # A version handed in (by suite-release.yml) wins over the clock; it must be CalVer, and -beta decides the prerelease flag.
+          if [ -n "$WANTED_VERSION" ]; then
+            case "$WANTED_VERSION" in
+              [0-9][0-9][0-9][0-9].*.*.*) ;;
+              *) echo "::error::'$WANTED_VERSION' is not a CalVer version (YYYY.M.D.HHmm[-beta])"; exit 1 ;;
+            esac
+            version="$WANTED_VERSION"
+            case "$version" in *-beta) prerelease=true ;; *) prerelease=false ;; esac
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
@@ -271,6 +309,14 @@ jobs:
           echo "dbdatasync version said: $reported"
           case "$reported" in *"$SHIPPED"*) ;; *) echo "expected $SHIPPED in that output"; exit 1 ;; esac
 
+      # A dry run (suite-release.yml) keeps the files on the run instead of publishing them.
+      - uses: actions/upload-artifact@v7
+        if: ${{ inputs.dry_run }}
+        with:
+          name: release-dbdatasync
+          path: DbDataSync/artifacts/dist/*
+          if-no-files-found: error
+
       # After the package is built and checked, not before: a tag is a claim that this version shipped, and it
       # should never exist for one that didn't. This is also *why* a failed run needs no tag cleanup
       # any more, unlike the tag-push-triggered shape this replaced — a run that fails anywhere above
@@ -283,6 +329,7 @@ jobs:
       # information. actions/checkout@v4's default persist-credentials is what makes a plain `git
       # push` here work with no further auth setup.
       - name: Tag this commit with the released version
+        if: ${{ !inputs.dry_run }}
         env:
           VERSION: ${{ steps.pack.outputs.shipped }}
         run: |
@@ -298,6 +345,7 @@ jobs:
       # the release has to carry exactly the two assets it looks for: DbDataSync.<version>.nupkg and its .sha512 checksum.
       # --latest=false because "latest" is one marker for the whole repository, not one per product.
       - name: Publish the GitHub Release
+        if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.pack.outputs.shipped }}
@@ -331,6 +379,7 @@ jobs:
             "$NUPKG" "$NUPKG.sha512" artifacts/dist/*
 
       - uses: ./.github/actions/publish-dist
+        if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

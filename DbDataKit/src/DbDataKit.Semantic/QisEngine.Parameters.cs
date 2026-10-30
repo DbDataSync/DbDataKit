@@ -22,15 +22,26 @@ public sealed partial class QisEngine
         if (doc["parameter_definitions"] is not null and not JsonObject) errors.Add(Err("param_invalid", "$.parameter_definitions", "parameter_definitions is an object of names and definitions."));
 
         var used = new HashSet<string>(StringComparer.Ordinal);
+        _noneLeaves = [];
         var copy = (JsonObject)doc.DeepClone();
         copy.Remove("parameters");
         copy.Remove("parameter_definitions");
         Replace(copy, "$", null, bound, definitions, used, errors);
 
+        // a filter whose list parameter is empty and defined `empty: matches_none` matches nothing: an attribute that is set and not set at once
+        foreach (var leaf in _noneLeaves.Distinct())
+        {
+            var attribute = leaf["attribute"]?.GetValue<string>();
+            leaf.Clear();
+            if (attribute is null) { errors.Add(Err("param_empty_list", "$", "An empty list that matches none needs a filter on an attribute.")); continue; }
+            leaf["and"] = new JsonArray(new JsonObject { ["attribute"] = attribute, ["operator"] = "set" }, new JsonObject { ["attribute"] = attribute, ["operator"] = "not_set" });
+        }
         foreach (var (name, _) in bound)
             if (!used.Contains(name) && !definitions.ContainsKey(name)) errors.Add(Err("param_unknown", $"$.parameters.{name}", $"'{name}' is bound but no value in the request is that parameter."));
         return (copy, errors.Count > 0 ? errors : null);
     }
+
+    private List<JsonObject> _noneLeaves = [];
 
     private static bool ContainsParameter(JsonNode? node) => node switch
     {
@@ -57,6 +68,7 @@ public sealed partial class QisEngine
                         // the whole of a filter's values is the parameter: a list or one value
                         var resolved = Bind(whole, here, key == "values" ? filterAttribute : null, many: key == "values", bound, definitions, used, errors);
                         if (resolved is not null) o[key] = key == "values" ? (resolved is JsonArray ? resolved : new JsonArray(resolved)) : resolved;
+                        if (resolved is JsonArray { Count: 0 }) _noneLeaves.Add(o);
                     }
                     else if (key == "values" && child is JsonArray values)
                     {
@@ -72,6 +84,7 @@ public sealed partial class QisEngine
                             else items.Add(values[i]?.DeepClone());
                         }
                         o[key] = new JsonArray([.. items]);
+                        if (items.Count == 0 && values.Count > 0) _noneLeaves.Add(o);
                     }
                     else if (child is not null) Replace(child, here, filterAttribute, bound, definitions, used, errors);
                 }
@@ -115,6 +128,7 @@ public sealed partial class QisEngine
         {
             if (!many) { errors.Add(Err("param_type_mismatch", path, $"Parameter '{name}' is a list, and this place takes one value.")); return null; }
             if (!declaredMany && definition is not null) { errors.Add(Err("param_type_mismatch", path, $"Parameter '{name}' is bound to a list but is not defined with many: true.")); return null; }
+            if (list.Count == 0 && definition?["empty"]?.GetValue<string>() == "matches_none") return list;
             if (list.Count == 0) { errors.Add(Err("param_empty_list", path, $"Parameter '{name}' is an empty list; an empty list is refused so that no values never silently means no filter.")); return null; }
             foreach (var item in list)
                 if (ValueProblem(name, item, declaredType, target) is { } bad) { errors.Add(Err(bad.Code, path, bad.Message)); return null; }

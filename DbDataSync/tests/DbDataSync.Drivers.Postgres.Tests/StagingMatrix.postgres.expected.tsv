@@ -383,8 +383,8 @@ text	string:xml	STORED string:<a>1</a>
 text	string:NUL	REFUSED PostgresException
 text	string:60chars	STORED string:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 text	string:non-BMP	STORED string:a\ud83d\ude00b
-text	byte[]	STORED string:\u0001\u0002\u0003
-text	byte[]:16	REFUSED PostgresException
+text	byte[]	REFUSED StagingValueException (names the column and value type)
+text	byte[]:16	REFUSED StagingValueException (names the column and value type)
 text	Guid	REFUSED StagingValueException (names the column and value type)
 text	DateTime	REFUSED StagingValueException (names the column and value type)
 text	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
@@ -395,7 +395,7 @@ text	DateOnly	REFUSED StagingValueException (names the column and value type)
 text	TimeOnly	REFUSED StagingValueException (names the column and value type)
 text	TimeSpan	REFUSED StagingValueException (names the column and value type)
 text	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
-text	Stream	STORED string:\u0001\u0002\u0003
+text	Stream	REFUSED StagingValueException (names the column and value type)
 text	int[]	REFUSED StagingValueException (names the column and value type)
 text	List<int>	REFUSED StagingValueException (names the column and value type)
 character varying(5)	bool	REFUSED StagingValueException (names the column and value type)
@@ -433,8 +433,8 @@ character varying(5)	string:xml	REFUSED PostgresException
 character varying(5)	string:NUL	REFUSED PostgresException
 character varying(5)	string:60chars	REFUSED PostgresException
 character varying(5)	string:non-BMP	STORED string:a\ud83d\ude00b
-character varying(5)	byte[]	STORED string:\u0001\u0002\u0003
-character varying(5)	byte[]:16	REFUSED PostgresException
+character varying(5)	byte[]	REFUSED StagingValueException (names the column and value type)
+character varying(5)	byte[]:16	REFUSED StagingValueException (names the column and value type)
 character varying(5)	Guid	REFUSED StagingValueException (names the column and value type)
 character varying(5)	DateTime	REFUSED StagingValueException (names the column and value type)
 character varying(5)	DateTime:Utc	REFUSED StagingValueException (names the column and value type)
@@ -445,7 +445,7 @@ character varying(5)	DateOnly	REFUSED StagingValueException (names the column an
 character varying(5)	TimeOnly	REFUSED StagingValueException (names the column and value type)
 character varying(5)	TimeSpan	REFUSED StagingValueException (names the column and value type)
 character varying(5)	TimeSpan:3days	REFUSED StagingValueException (names the column and value type)
-character varying(5)	Stream	STORED string:\u0001\u0002\u0003
+character varying(5)	Stream	REFUSED StagingValueException (names the column and value type)
 character varying(5)	int[]	REFUSED StagingValueException (names the column and value type)
 character varying(5)	List<int>	REFUSED StagingValueException (names the column and value type)
 bytea	bool	REFUSED StagingValueException (names the column and value type)
@@ -552,15 +552,15 @@ date	bool	REFUSED StagingValueException (names the column and value type)
 date	sbyte	REFUSED StagingValueException (names the column and value type)
 date	byte	REFUSED StagingValueException (names the column and value type)
 date	short	REFUSED StagingValueException (names the column and value type)
-date	ushort	STORED DateOnly:2000-01-02
-date	int	STORED DateOnly:2000-01-02
+date	ushort	REFUSED StagingValueException (names the column and value type)
+date	int	REFUSED StagingValueException (names the column and value type)
 date	uint	REFUSED StagingValueException (names the column and value type)
 date	long	REFUSED StagingValueException (names the column and value type)
 date	ulong	REFUSED StagingValueException (names the column and value type)
 date	BigInteger	REFUSED StagingValueException (names the column and value type)
-date	int:300	STORED DateOnly:2000-10-27
+date	int:300	REFUSED StagingValueException (names the column and value type)
 date	long:2^40	REFUSED StagingValueException (names the column and value type)
-date	int:-1	STORED DateOnly:1999-12-31
+date	int:-1	REFUSED StagingValueException (names the column and value type)
 date	ulong:max	REFUSED StagingValueException (names the column and value type)
 date	float	REFUSED StagingValueException (names the column and value type)
 date	double	REFUSED StagingValueException (names the column and value type)
@@ -604,12 +604,12 @@ time	byte	REFUSED StagingValueException (names the column and value type)
 time	short	REFUSED StagingValueException (names the column and value type)
 time	ushort	REFUSED StagingValueException (names the column and value type)
 time	int	REFUSED StagingValueException (names the column and value type)
-time	uint	STORED TimeOnly:00:00:00.0000010
-time	long	STORED TimeOnly:00:00:00.0000010
+time	uint	REFUSED StagingValueException (names the column and value type)
+time	long	REFUSED StagingValueException (names the column and value type)
 time	ulong	REFUSED StagingValueException (names the column and value type)
 time	BigInteger	REFUSED StagingValueException (names the column and value type)
 time	int:300	REFUSED StagingValueException (names the column and value type)
-time	long:2^40	REFUSED PostgresException
+time	long:2^40	REFUSED StagingValueException (names the column and value type)
 time	int:-1	REFUSED StagingValueException (names the column and value type)
 time	ulong:max	REFUSED StagingValueException (names the column and value type)
 time	float	REFUSED StagingValueException (names the column and value type)
@@ -654,12 +654,12 @@ timestamp	byte	REFUSED StagingValueException (names the column and value type)
 timestamp	short	REFUSED StagingValueException (names the column and value type)
 timestamp	ushort	REFUSED StagingValueException (names the column and value type)
 timestamp	int	REFUSED StagingValueException (names the column and value type)
-timestamp	uint	STORED DateTime:2000-01-01T00:00:00.0000010
-timestamp	long	STORED DateTime:2000-01-01T00:00:00.0000010
+timestamp	uint	REFUSED StagingValueException (names the column and value type)
+timestamp	long	REFUSED StagingValueException (names the column and value type)
 timestamp	ulong	REFUSED StagingValueException (names the column and value type)
 timestamp	BigInteger	REFUSED StagingValueException (names the column and value type)
 timestamp	int:300	REFUSED StagingValueException (names the column and value type)
-timestamp	long:2^40	STORED DateTime:2000-01-13T17:25:11.6277760
+timestamp	long:2^40	REFUSED StagingValueException (names the column and value type)
 timestamp	int:-1	REFUSED StagingValueException (names the column and value type)
 timestamp	ulong:max	REFUSED StagingValueException (names the column and value type)
 timestamp	float	REFUSED StagingValueException (names the column and value type)
@@ -704,12 +704,12 @@ timestamptz	byte	REFUSED StagingValueException (names the column and value type)
 timestamptz	short	REFUSED StagingValueException (names the column and value type)
 timestamptz	ushort	REFUSED StagingValueException (names the column and value type)
 timestamptz	int	REFUSED StagingValueException (names the column and value type)
-timestamptz	uint	STORED DateTime:2000-01-01T00:00:00.0000010Z
-timestamptz	long	STORED DateTime:2000-01-01T00:00:00.0000010Z
+timestamptz	uint	REFUSED StagingValueException (names the column and value type)
+timestamptz	long	REFUSED StagingValueException (names the column and value type)
 timestamptz	ulong	REFUSED StagingValueException (names the column and value type)
 timestamptz	BigInteger	REFUSED StagingValueException (names the column and value type)
 timestamptz	int:300	REFUSED StagingValueException (names the column and value type)
-timestamptz	long:2^40	STORED DateTime:2000-01-13T17:25:11.6277760Z
+timestamptz	long:2^40	REFUSED StagingValueException (names the column and value type)
 timestamptz	int:-1	REFUSED StagingValueException (names the column and value type)
 timestamptz	ulong:max	REFUSED StagingValueException (names the column and value type)
 timestamptz	float	REFUSED StagingValueException (names the column and value type)

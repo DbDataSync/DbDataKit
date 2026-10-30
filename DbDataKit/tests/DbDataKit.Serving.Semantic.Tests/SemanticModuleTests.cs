@@ -85,6 +85,34 @@ public sealed class SemanticModuleTests : IDisposable
         Assert.Equal(expected, named);
     }
 
+    private Task<IServingAnswer> Members(string json) => _services.Queries.RunAsync(Alice, new ServingRequest.Sql("semantic:sales_catalog", json));
+
+    [Fact]
+    public async Task MembersListsTheValuesOfAnAttributeAndSearchAndLimitNarrowThem()
+    {
+        var all = await RowsAsync(await Members("""{"kind": "members", "attribute": "customers.region"}"""));
+        var searched = await RowsAsync(await Members("""{"kind": "members", "attribute": "customers.region", "search": "EAS"}"""));
+        var limited = await Members("""{"kind": "members", "attribute": "customers.region", "limit": 1}""");
+        var truncated = limited.Schema.Metadata["qis.truncated"];
+        var one = await RowsAsync(limited);
+
+        Assert.Contains("East", all);
+        Assert.Contains("North", all);                 // read from the dimension table, so a region with no sales is there
+        Assert.Equal(["East"], searched);
+        Assert.Single(one);
+        Assert.Equal("true", truncated);
+    }
+
+    [Fact]
+    public async Task MembersAreReadAsTheCallerAndAnUnknownAttributeIsRefused()
+    {
+        await Assert.ThrowsAsync<ServingInvalidException>(() => Members("""{"kind": "members", "attribute": "customers.no_such"}"""));
+        await Assert.ThrowsAsync<ServingInvalidException>(() => Members("""{"kind": "members"}"""));
+
+        _host.Denied.Add("warehouse");
+        await Assert.ThrowsAsync<ServingDeniedException>(() => Members("""{"kind": "members", "attribute": "customers.region"}"""));
+    }
+
     [Fact]
     public async Task SemanticSqlOnAModelSourceIsTheSameRequest()
     {
