@@ -801,6 +801,20 @@ public sealed class RunExecutor(
                 "intent on the mapping, or change its reader.");
         }
 
+        // A reconciling writer replaces its scope with what was staged; behind a reader that stages only
+        // changes (every IReadIntentDeclaring reader, on any intent but InitialLoad) that deletes every
+        // unchanged target row. Save-time validation names the built-in Kinds
+        // (ConfigValidation.ValidateIncrementalReconcilePairing); this asks the reader and the writer
+        // themselves, so a loaded driver's own Kinds, and a mapping saved before that rule, are refused
+        // too — like the intent check above, before any connection is opened. The writer is judged by its
+        // Kind across every registered driver rather than through the target connection, which is not
+        // loaded yet: a Kind names one writer implementation (the generic ones are shared by Kind), and a
+        // missing target connection keeps failing the way it always has, below.
+        if (item.RunKind == RunKind.Primary && intent != ReadIntent.InitialLoad && reader is IReadIntentDeclaring
+            && driverRegistry.All.Any(d => d.Writers.Any(w => w.Kind == writerKind && w.SupportsReconciliation)))
+            throw new InvalidOperationException(
+                ConfigValidation.IncrementalReconcileMessage(mapping.Name, readerKind, writerKind));
+
         DbConnection? sourceConnection = null;
         DbConnection? targetConnection = null;
         try

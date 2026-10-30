@@ -211,6 +211,52 @@ public static class ConfigValidation
     }
 
     /// <summary>
+    /// The readers whose ordinary pass stages only what changed since their stored position, never the
+    /// whole table — each declares <c>Changes</c> through <c>IReadIntentDeclaring</c>. Plain strings for
+    /// the reason <see cref="ValidateKeyReconcilePairing"/> gives; a driver loaded at run time (a
+    /// descriptor or compiled driver) with an incremental reader of its own name is caught by
+    /// <c>RunExecutor</c>'s own check instead, which asks the reader rather than a list.
+    /// </summary>
+    private static readonly HashSet<string> IncrementalReaderKinds = new(StringComparer.Ordinal)
+    {
+        "Watermark", "TriggerAudit", "MsSqlChangeTracking", "MsSqlCdc", "PgLogicalSlot", "OracleFlashback",
+    };
+
+    /// <summary>The writers that treat the staged rows as the complete contents of their scope and remove
+    /// every target row in it the change set does not carry (<c>IChangeWriter.SupportsReconciliation</c>).</summary>
+    private static readonly HashSet<string> ReconcilingWriterKinds = new(StringComparer.Ordinal)
+    {
+        "DeleteInsert", "KeyReconcileDelete", "KeyReconcileScd2Close", "MsSqlMergeReconcile", "MsSqlDeleteInsert",
+    };
+
+    /// <summary>
+    /// A reconciling writer replaces its scope with the staged rows, so it is only correct behind a
+    /// reader that stages the whole scope. Behind an incremental reader the staged rows are only what
+    /// changed: an unsegmented pass that found nothing new ran <c>DELETE … WHERE 1 = 1</c> and inserted
+    /// nothing, emptying the target, and reported success. Refused for change processing; a Bulk Load
+    /// reads the whole table, so the same writer stays available there (<c>BulkLoad.Writer</c>).
+    /// <para>
+    /// Mappings saved before this rule still load, and are refused when they run (<c>RunExecutor</c>
+    /// fails the pass with the same advice, before anything is read or deleted).
+    /// </para>
+    /// </summary>
+    public static void ValidateIncrementalReconcilePairing(TableMappingConfig mapping, string readerKind, string writerKind)
+    {
+        if (!IncrementalReaderKinds.Contains(readerKind) || !ReconcilingWriterKinds.Contains(writerKind))
+            return;
+
+        throw new ConfigValidationException(IncrementalReconcileMessage(mapping.Name, readerKind, writerKind));
+    }
+
+    /// <summary>The one wording for <see cref="ValidateIncrementalReconcilePairing"/> and the run-time refusal.</summary>
+    public static string IncrementalReconcileMessage(string mappingName, string readerKind, string writerKind) =>
+        $"Table mapping '{mappingName}' reads changes with '{readerKind}' and writes with '{writerKind}', which " +
+        "replaces everything in its scope with the rows a pass staged. An incremental pass stages only what " +
+        "changed, so every other target row would be deleted. Use an upsert writer for change processing " +
+        "(MsSqlMerge on SQL Server, for example), and set this writer on the Bulk Load pipeline if full " +
+        "reloads should use it; or read with a reload reader such as BatchReload.";
+
+    /// <summary>
     /// Phase 124's <c>KeyReconcile</c>/<c>KeyReconcileDelete</c> pair, save-time, widened by phase 129
     /// to also accept <c>KeyReconcileScd2Close</c> as the paired writer — and, only for that ending,
     /// two more checks that need the mapping's own primary writer. Plain string literals rather than
@@ -437,8 +483,7 @@ public static class ConfigValidation
     public static void ValidateReconcileScopeColumn(
         TableMappingConfig mapping, string readerKind, string writerKind, IReadOnlyDictionary<string, string> readerOptions)
     {
-        if (writerKind is not
-            ("DeleteInsert" or "KeyReconcileDelete" or "KeyReconcileScd2Close" or "MsSqlMergeReconcile" or "MsSqlDeleteInsert"))
+        if (!ReconcilingWriterKinds.Contains(writerKind))
             return;
 
         // Phase 195S: a segment or watermark can now name a relationship's own column instead of the

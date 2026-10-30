@@ -348,6 +348,7 @@ public sealed class ConfigRepository
         // which need to know Kind *and* Options (a stated naturalKey) to validate a KeyReconcileScd2Close
         // pairing.
         var primaryWriter = PipelineResolution.Writer(task, mapping);
+        ConfigValidation.ValidateIncrementalReconcilePairing(mapping, primaryReader.Kind, primaryWriter.Kind);
         ConfigValidation.ValidateReconcileScopeColumn(mapping, primaryReader.Kind, primaryWriter.Kind, primaryReader.Options);
 
         // Same reasoning, one step further: a historizing writer pointed at its own source grows the
