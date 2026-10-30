@@ -1,3 +1,4 @@
+using DbDataKit.Odbc.Metadata;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
@@ -53,7 +54,7 @@ public sealed record FlightSqlLogin(string Scheme, string Host, int Port, string
         var skip = false;
         var headers = new List<(string, string)>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (key, v) in split < 0 ? [] : OdbcLogin.Parse(text[(split + 1)..]))
+        foreach (var (key, v) in split < 0 ? [] : OdbcConnectionString.Parse(text[(split + 1)..]))
         {
             if (!seen.Add(key) && !key.StartsWith("header.", StringComparison.Ordinal)) throw Bad("repeats an option");
             switch (key)

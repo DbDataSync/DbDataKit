@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>The identity home (plan 13a, U13): groups and role assignments per server, Build project and app, and an OpenID Connect provider (authorization code with PKCE, ES256 id tokens, discovery, JWKS, userinfo) over the users and sessions of DbDataKit.State. A component: the serving layer hosts it (plan 20, O06), and it can run on its own (U15).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+    <ProjectReference Include="..\DbDataKit.Web\DbDataKit.Web.csproj" />
+  </ItemGroup>
+</Project>
