@@ -1,3 +1,4 @@
+using DbDataKit.Identity;
 using System.Net;
 using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
@@ -80,6 +81,14 @@ public static class ConsoleHost
         builder.Services.AddSingleton<ConsoleInstances>();
         builder.Services.AddSingleton(_ => new PendingInstances(settings.PendingPath));
         builder.Services.AddSingleton<ConsoleRelay>();
+        if (settings.Home is { } home)
+        {
+            // No users of its own: the first-run invitation would make one, so it is not made, and sign-in is the home's.
+            foreach (var d in builder.Services.Where(d => d.ImplementationType == typeof(BootstrapInvite)).ToList()) builder.Services.Remove(d);
+            builder.Services.AddSingleton(new OpenIdClient(
+                new OpenIdClientOptions(home.Authority.AbsoluteUri, home.ClientId, home.ClientSecret, new Uri(settings.Public, ConsoleFederation.CallbackPath).AbsoluteUri), new HttpClient()));
+            builder.Services.AddSingleton(sp => new FederatedUsers(sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<UserStore>(), home.AppId));
+        }
         configure?.Invoke(builder.Services);
 
         var app = builder.Build();
@@ -121,6 +130,7 @@ public static class ConsoleHost
         app.UseAuthorization();
         app.MapControllers();
         app.MapRelay();
+        if (settings.Home is not null) app.MapFederation();
 
         // Deep links are the web app's routes, not this server's: /users has to return the app. An unmatched /api route is a 404, never the app.
         app.MapFallback(async context =>

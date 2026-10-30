@@ -173,6 +173,42 @@ public sealed class UserStore(StateDatabase database)
             return (IReadOnlyList<UserCredentialRecord>)credentials;
         });
 
+    /// <summary>
+    /// A user the identity home owns, mirrored here under the home's own id (plan 13a U14): created on the first sign-in, and its name, email and role brought up to date at each one. Whether it may sign in
+    /// here (<see cref="SetEnabled"/>) stays this host's, and a sign-in does not undo it.
+    /// </summary>
+    public UserRecord UpsertFederated(string id, string displayName, string? email, UserRole role)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        if (Get(id) is null)
+            database.Retry(() =>
+            {
+                using var connection = database.OpenConnection();
+                using var cmd = database.Command(connection, """
+                    INSERT INTO Users (Id, DisplayName, Email, Role, Enabled, CreatedAtUtc)
+                    VALUES ($id, $name, $email, $role, 1, $createdAt);
+                    """);
+                cmd.Bind(database, "id", id);
+                cmd.Bind(database, "name", displayName);
+                cmd.Bind(database, "email", (object?)email ?? DBNull.Value);
+                cmd.Bind(database, "role", role.ToString());
+                cmd.Bind(database, "createdAt", DateTimeOffset.UtcNow.ToString("O"));
+                cmd.ExecuteNonQuery();
+            });
+        else
+            database.Retry(() =>
+            {
+                using var connection = database.OpenConnection();
+                using var cmd = database.Command(connection, "UPDATE Users SET DisplayName = $name, Email = $email, Role = $role WHERE Id = $id;");
+                cmd.Bind(database, "id", id);
+                cmd.Bind(database, "name", displayName);
+                cmd.Bind(database, "email", (object?)email ?? DBNull.Value);
+                cmd.Bind(database, "role", role.ToString());
+                cmd.ExecuteNonQuery();
+            });
+        return Get(id)!;
+    }
+
     public void SetRole(string userId, UserRole role) => Update(userId, "Role", role.ToString());
 
     public void SetEnabled(string userId, bool enabled) => Update(userId, "Enabled", enabled ? 1 : 0);
