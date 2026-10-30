@@ -116,6 +116,10 @@ A table that exists and that the tool does not build or write: a source system's
 
 A table the engine computes from its own query: a table-valued function, `STRING_SPLIT`, an engine-native `SELECT`. The text is in the engine's own dialect and is never lowered or transpiled, so it lives on exactly one connection. A query on that connection reads it as a derived table. With `access: command` (a stored procedure or a function call that returns rows, allowed only where the connection sets `allow_native_commands: true`) it can only be the origin of a copy, and the copy is a risky step.
 
+## Surrogate keys (`keys:`)
+
+A model that owns a surrogate key defines it once, `keys: {customer_key: {from: [source_system, customer_id]}}`; the key's name is the name of a function that queries will call. `from` lists the function's arguments in order (they need not be columns of the model), `method` is `hash` (a 64-bit hash of the normalized business key, the same on every engine) and `unknown_member` and `history`/`version_key` are read and checked. The definition is read and validated now; the function itself, its lowering for each engine and the checks arrive in the next slices (plan 25, K03 onward), so a `keys:` block has no effect on a build yet.
+
 ## Which one do I use?
 
 | You want | Use |
