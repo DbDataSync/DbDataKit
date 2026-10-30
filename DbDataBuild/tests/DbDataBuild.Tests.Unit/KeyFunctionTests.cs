@@ -51,6 +51,55 @@ public class KeyFunctionTests
         Assert.Equal(SurrogateKey.Compute("SAP", 42L), RunOnDuckDb(sql!));
     }
 
+    private static (int Exit, string Err) Compile(string dir)
+    {
+        var o = new StringWriter(); var e = new StringWriter();
+        return (CliApp.Run(["project", "compile", "--project", dir], o, e, environment: _ => null), e.ToString());
+    }
+
+    [Theory]
+    [InlineData("sqlserver", "HASHBYTES('SHA2_256'")]
+    [InlineData("postgres", "sha256(convert_to(")]
+    public void A_key_call_is_written_as_the_engines_hash_over_its_arguments(string engine, string hash)
+    {
+        var dir = Project(CustomerKey);
+        TestFiles.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), $"defaults: {{connections: [{engine}]}}\ntracking: none\nstring_semantics:\n  case: sensitive\n  trailing_space: {(engine == "postgres" ? "significant" : "ignored")}\n  collations:\n    default: {{ duckdb: NFC, {engine}: {(engine == "postgres" ? "en_US.utf8" : "Latin1_General_100_CS_AS_SC_UTF8")} }}\n");
+        File.WriteAllText(Path.Combine(dir, "models/marts/fct_sales.yml"), File.ReadAllText(Path.Combine(dir, "models/marts/fct_sales.yml")).Replace("kind: view", "kind: full"));
+        var (exit, err) = Compile(dir);
+        Assert.True(exit == 0, err);
+        var script = File.ReadAllText(Path.Combine(dir, "rendered", engine, "marts.fct_sales", "load.default.sql"));
+        Assert.Contains(hash, script);
+        Assert.DoesNotContain("ddb_key_", script);
+        Assert.Contains("IS NULL", script);
+        // the lowered query keeps the call, so the text of each engine is written from it
+        Assert.Contains("ddb_key_ti", File.ReadAllText(Path.Combine(dir, "rendered", "lowered", "marts.fct_sales", "lowered.sql")).Replace("ddb_key_tt", "ddb_key_ti"));
+    }
+
+    [Fact]
+    public void The_marker_is_replaced_whatever_its_arguments_hold()
+    {
+        // a comma and a parenthesis inside a string, a call inside an argument, and a second marker in the same text
+        var text = "SELECT ddb_key_tid(f(a, ')'), 'x,y(', CAST(d AS DATE)) AS k, ddb_key_t(b) AS j FROM t";
+        foreach (var target in new[] { "sqlserver", "fabric", "postgres" })
+        {
+            var finished = DbDataBuild.Targets.Rules.TargetRules.Finish(text, target);
+            Assert.DoesNotContain("ddb_key_", finished);
+            Assert.Contains("f(a, ')') IS NULL", finished);
+            Assert.Contains("'x,y(' IS NULL", finished);
+        }
+        Assert.Equal(text, DbDataBuild.Targets.Rules.TargetRules.Finish(text, "oracle"));          // a target with no definition is left alone, and says so on the engine
+    }
+
+    [Fact]
+    public void A_marker_names_its_part_types_and_refuses_a_wrong_argument_count()
+    {
+        Assert.Equal("ddb_key_tid", SurrogateKey.MarkerName([KeyPartType.Text, KeyPartType.Integer, KeyPartType.Date]));
+        Assert.Equal([KeyPartType.Text, KeyPartType.Date], SurrogateKey.TypesOfMarker("DDB_KEY_TD"));
+        Assert.Null(SurrogateKey.TypesOfMarker("ddb_key_tx"));
+        Assert.Null(SurrogateKey.TypesOfMarker("ddb_key_"));
+        Assert.Null(SurrogateKey.FromMarker("postgres", "ddb_key_ti", ["a"]));
+    }
+
     [Fact]
     public void A_call_with_the_wrong_number_of_arguments_is_refused_naming_the_arguments()
     {

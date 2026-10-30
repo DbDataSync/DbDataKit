@@ -146,6 +146,7 @@ public static partial class QueryDescriber
             var columns = string.Join(", ", table.Columns.Select(c => $"{Quote(c.Name)} {c.Type.Trim()}{(c.Nullable ? "" : " NOT NULL")}"));
             Run(connection, $"CREATE TABLE {Quote(table.SchemaName)}.{Quote(table.Name)} ({columns})");
         }
+        KeyMarkers.Register(connection, prelude?.Macros ?? []);          // the macros of surrogate keys that call a marker (see KeyMarkers) bind it by name
         foreach (var statement in prelude?.Macros ?? []) RunMacroStatement(connection, statement);
     }
 

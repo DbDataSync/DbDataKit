@@ -57,6 +57,38 @@ public static class SurrogateKey
     /// <summary>The key of a business key, or null when any part is NULL.</summary>
     public static long? Compute(params object?[] parts) => Normalize(parts) is { } n ? Hash(n) : null;
 
+    /// <summary>
+    /// The name of the marker function a lowered query carries for a key call: `ddb_key_` and one letter per part (`t` text, `i` whole number, `d` date), `ddb_key_ti`. The lowerer keeps the call, with its arguments, so the
+    /// text of each engine is written when the query is rendered for it (<see cref="FromMarker"/>) rather than found again in what DuckDB expanded.
+    /// </summary>
+    public static string MarkerName(IReadOnlyList<KeyPartType> types) => "ddb_key_" + string.Concat(types.Select(t => t switch { KeyPartType.Text => 't', KeyPartType.Integer => 'i', _ => 'd' }));
+
+    /// <summary>The part types a marker name stands for, or null when the name is not a marker.</summary>
+    public static IReadOnlyList<KeyPartType>? TypesOfMarker(string name)
+    {
+        if (!name.StartsWith("ddb_key_", StringComparison.OrdinalIgnoreCase) || name.Length == "ddb_key_".Length) return null;
+        var types = new List<KeyPartType>();
+        foreach (var c in name["ddb_key_".Length..].ToLowerInvariant())
+        {
+            switch (c)
+            {
+                case 't': types.Add(KeyPartType.Text); break;
+                case 'i': types.Add(KeyPartType.Integer); break;
+                case 'd': types.Add(KeyPartType.Date); break;
+                default: return null;
+            }
+        }
+        return types;
+    }
+
+    /// <summary>The key of a marker call: the SQL for the engine over the marker's arguments (already written in the engine's dialect), or null when the marker's name or argument count is not one this writes.</summary>
+    public static string? FromMarker(string engine, string markerName, IReadOnlyList<string> arguments)
+    {
+        var types = TypesOfMarker(markerName);
+        if (types == null || types.Count != arguments.Count) return null;
+        return Sql(engine, arguments.Select((a, i) => new KeyPart(a, types[i])).ToList());
+    }
+
     /// <summary>The engines <see cref="Sql"/> writes for.</summary>
     public static readonly IReadOnlyList<string> Engines = ["duckdb", "sqlserver", "fabric", "postgres"];
 
@@ -94,7 +126,8 @@ public static class SurrogateKey
     private static string Wrap(string e, string joined) => e switch
     {
         "sqlserver" or "fabric" =>
-            $"CAST(SUBSTRING(HASHBYTES('SHA2_256', CAST({joined} AS VARCHAR(MAX)) COLLATE Latin1_General_100_CI_AS_SC_UTF8), 1, 8) AS BIGINT)",
+            // the collation is put on the text before it is cast to VARCHAR, which is what makes the cast write UTF-8 (put after the cast it would only relabel characters the cast had already lost)
+            $"CAST(SUBSTRING(HASHBYTES('SHA2_256', CAST(({joined}) COLLATE Latin1_General_100_CI_AS_SC_UTF8 AS VARCHAR(MAX))), 1, 8) AS BIGINT)",
         "postgres" =>
             $"CAST(CAST('x' || encode(substring(sha256(convert_to({joined}, 'UTF8')) from 1 for 8), 'hex') AS bit(64)) AS bigint)",
         _ => DuckDbHash(joined),

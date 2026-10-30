@@ -9,8 +9,11 @@ namespace DbDataBuild.Models;
 /// <param name="Name">As written, with its schema name when it has one (`finance.net`).</param>
 /// <param name="Calls">The other macros its text calls, by name.</param>
 /// <param name="Uses">The types of the project its text mentions.</param>
-public sealed record MacroDefinition(string Name, bool IsType, string Sql, string File, int Line, IReadOnlyList<string> Calls, IReadOnlyList<string> Uses)
+public sealed record MacroDefinition(string Name, bool IsType, string Sql, string File, int Line, IReadOnlyList<string> Calls, IReadOnlyList<string> Uses, string? PlanningSql = null)
 {
+    /// <summary>The statement for a binding that lowers the query: a surrogate key calls its marker function there (see KeyMarkers) instead of expanding to DuckDB's hash. The text itself everywhere else.</summary>
+    public string SqlFor(bool planning) => planning ? PlanningSql ?? Sql : Sql;
+
     public string ShortName => Name[(Name.LastIndexOf('.') + 1)..];
     public string? SchemaName => Name.Contains('.') ? Name[..Name.LastIndexOf('.')] : null;
 }
@@ -96,8 +99,10 @@ public sealed class MacroLibrary
                     }
                     owned[name] = (model.Name, key.Line);
                     var parts = args.Select(a => new KeyPart("\"" + a.Replace("\"", "\"\"") + "\"", PartTypeOf(columns.GetValueOrDefault(a)))).ToList();
-                    var sql = $"CREATE OR REPLACE MACRO {name}({string.Join(", ", args.Select(a => "\"" + a.Replace("\"", "\"\"") + "\""))}) AS {SurrogateKey.Sql("duckdb", parts)}";
-                    generated.Add(new MacroDefinition(name, false, sql, file, key.Line, [], []));
+                    var head = $"CREATE OR REPLACE MACRO {name}({string.Join(", ", args.Select(a => "\"" + a.Replace("\"", "\"\"") + "\""))}) AS ";
+                    // the lowering binds the marker, whose arguments are cast to the part types as the full text casts them
+                    var markerCall = SurrogateKey.MarkerName(parts.Select(p => p.Type).ToList()) + "(" + string.Join(", ", parts.Select(p => $"CAST({p.Expression} AS {p.Type switch { KeyPartType.Text => "VARCHAR", KeyPartType.Integer => "BIGINT", _ => "DATE" }})")) + ")";
+                    generated.Add(new MacroDefinition(name, false, head + SurrogateKey.Sql("duckdb", parts), file, key.Line, [], [], head + markerCall));
                 }
             }
         if (generated.Count == 0) return this;
@@ -273,8 +278,8 @@ public sealed class MacroLibrary
         return Definitions.Where(d => reached.ContainsValue(d)).ToList();
     }
 
-    /// <summary>The statements for a binding of these queries: only what they reach, callees before callers.</summary>
-    public DuckPrelude PreludeFor(IEnumerable<string> sqlTexts)
+    /// <summary>The statements for a binding of these queries: only what they reach, callees before callers. <paramref name="planning"/>: the binding is one that lowers the query, where a surrogate key stays a call of its marker.</summary>
+    public DuckPrelude PreludeFor(IEnumerable<string> sqlTexts, bool planning = false)
     {
         var closure = Closure(sqlTexts);
         if (closure.Count == 0) return DuckPrelude.Empty;
@@ -289,7 +294,7 @@ public sealed class MacroLibrary
             ordered.Add(d);
         }
         foreach (var d in closure) Place(d);
-        return new DuckPrelude(schemas, ordered.Where(d => d.IsType).Select(d => d.Sql).ToList(), ordered.Where(d => !d.IsType).Select(d => d.Sql).ToList());
+        return new DuckPrelude(schemas, ordered.Where(d => d.IsType).Select(d => d.Sql).ToList(), ordered.Where(d => !d.IsType).Select(d => d.SqlFor(planning)).ToList());
     }
 
     /// <summary>A hash of the macros (and types) a set of queries reaches: a change to one changes what every query that reaches it expands to, so it is part of those queries' definition hash.</summary>
