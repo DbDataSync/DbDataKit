@@ -17,8 +17,8 @@ internal static class OutputSchemas
     private static string FindRoot()
     {
         var dir = AppContext.BaseDirectory;
-        while (dir != null && !File.Exists(Path.Combine(dir, "DbDataBuild.sln"))) dir = Path.GetDirectoryName(dir);
-        return dir ?? throw new InvalidOperationException("The repository root (DbDataBuild.sln) was not found above the test binaries.");
+        while (dir != null && !File.Exists(Path.Combine(dir, "DbDataBuild.slnf"))) dir = Path.GetDirectoryName(dir);
+        return dir ?? throw new InvalidOperationException("The repository root (DbDataBuild.slnf) was not found above the test binaries.");
     }
 
     public static void Check(string command, string document)

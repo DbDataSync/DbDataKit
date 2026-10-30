@@ -80,7 +80,7 @@ public class PolyglotBindingTests
     internal static string RepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "DbDataBuild.sln"))) dir = dir.Parent;
+        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "DbDataBuild.slnf"))) dir = dir.Parent;
         return dir?.FullName ?? throw new InvalidOperationException("repo root not found");
     }
 }

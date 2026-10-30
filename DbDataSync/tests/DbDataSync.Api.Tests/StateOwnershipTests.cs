@@ -112,10 +112,10 @@ public sealed class StateOwnershipTests
         get
         {
             var directory = new DirectoryInfo(AppContext.BaseDirectory);
-            while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "DbDataSync.slnx")))
+            while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "DbDataSync.slnf")))
                 directory = directory.Parent;
             return directory?.FullName
-                ?? throw new InvalidOperationException("Could not locate the repo root (DbDataSync.slnx).");
+                ?? throw new InvalidOperationException("Could not locate the repo root (DbDataSync.slnf).");
         }
     }
 }

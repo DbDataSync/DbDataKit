@@ -102,11 +102,11 @@ public class TestApiFactory : WebApplicationFactory<Program>
         var configuration = Path.GetFileName(Path.GetDirectoryName(baseDir))!;
 
         var repoRoot = new DirectoryInfo(baseDir);
-        while (repoRoot is not null && !File.Exists(Path.Combine(repoRoot.FullName, "DbDataSync.slnx")))
+        while (repoRoot is not null && !File.Exists(Path.Combine(repoRoot.FullName, "DbDataSync.slnf")))
             repoRoot = repoRoot.Parent;
 
         if (repoRoot is null)
-            throw new InvalidOperationException($"Could not locate the repo root (DbDataSync.slnx) from '{baseDir}'.");
+            throw new InvalidOperationException($"Could not locate the repo root (DbDataSync.slnf) from '{baseDir}'.");
 
         return Path.Combine(repoRoot.FullName, "src", projectName, "bin", configuration, tfm, $"{projectName}.dll");
     }

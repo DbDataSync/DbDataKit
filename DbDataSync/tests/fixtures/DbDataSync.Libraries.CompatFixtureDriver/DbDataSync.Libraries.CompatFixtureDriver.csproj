@@ -4,7 +4,7 @@
     The fake "driver" half of the fixture pair: compiled against the complete library version (a real
     ProjectReference, so its own DLL ends up with real MemberRef/TypeRef metadata table entries into
     "DbDataSync.Libraries.CompatFixtureLibrary" — exactly what LibrarySurfaceExtractor reads). Not part
-    of DbDataSync.slnx's build, same as its two library siblings.
+    of DbDataSync.slnf's build, same as its two library siblings.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>

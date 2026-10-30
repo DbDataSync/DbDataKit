@@ -115,7 +115,7 @@ public sealed class LauncherTests : IDisposable
         var configuration = here.Parent!.Name;
         for (var dir = here; dir is not null; dir = dir.Parent)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "DbDataSync.slnx")))
+            if (File.Exists(Path.Combine(dir.FullName, "DbDataSync.slnf")))
                 return Path.Combine(dir.FullName, "src", "DbDataSync.Cli", "bin", configuration, framework);
         }
 

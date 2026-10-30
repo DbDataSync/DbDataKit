@@ -22,7 +22,7 @@ Clients speak standard Flight SQL (ADBC, pyarrow, Java/Go/C++); the proxy runs t
 streams Arrow record batches back, optionally Arrow-IPC-compressed (zstd/lz4) or gRPC-gzipped. Stated main goal:
 shrinking result sets on the wire (`README.md` top).
 
-**Projects** (`DbDataProxy.slnx`):
+**Projects** (`DbDataProxy.slnf`):
 
 | Project | Type | Role |
 |---|---|---|

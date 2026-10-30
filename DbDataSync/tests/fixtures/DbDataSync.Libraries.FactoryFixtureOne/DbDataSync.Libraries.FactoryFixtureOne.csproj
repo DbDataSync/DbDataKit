@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Deliberately NOT referenced by any project in this repo and NOT part of DbDataSync.slnx's build —
+    Deliberately NOT referenced by any project in this repo and NOT part of DbDataSync.slnf's build —
     DbDataSync.Libraries.Tests publishes it on the fly and points FactoryTypeReflector.Discover at the
     result, exactly as it would a real library's restored lib/ directory.
   -->
