@@ -17,6 +17,7 @@
     <DbDataKitReference Include="Hosting.Certificates" />
     <DbDataKitReference Include="Security.Acl" />
     <DbDataKitReference Include="State" />   <!-- the users, sessions and invitations -->
+    <DbDataKitReference Include="State.Engines" />   <!-- SQLite, SQL Server or PostgreSQL for them, as the operator names; plan 13a, P11 -->
     <DbDataKitReference Include="Web" />
     <DbDataKitReference Include="Secrets.Abstractions" />   <!-- the key the console signs for its servers with -->
     <DbDataKitReference Include="Secrets" />
