@@ -40,19 +40,18 @@ public static class SetupCommand
         var app = session.App;
 
         var candidate = DbDataSyncRoot.Resolve(args);
+        // Clean break (plan 13, E04): the old files are refused, and setup is how the settings are written again, so it says what it found and stops.
+        if (DbDataSyncRoot.LegacyRefusal(candidate) is { } refusal)
+        {
+            Console.Error.WriteLine(refusal);
+            return 1;
+        }
+
         var root = candidate;
 
         if (!ExistingSetup.DetectedAt(root))
         {
-            // Phase 112: the platform default is machine-wide now, and the operator's only real
-            // configuration may still be sitting at the old per-user one. Default the folder prompt to
-            // it instead of guessing silently — accepting the default reviews it in place, typing
-            // something else starts fresh at the new location deliberately.
-            var legacyRoot = LegacyRootMigration.DetectAt(candidate);
-            if (legacyRoot is not null)
-                Dialogs.Message(app, "Existing configuration found", LegacyRootMigration.Message(legacyRoot, candidate));
-
-            root = Path.GetFullPath(Dialogs.PromptText(app, "dbdatasync server setup", "Config folder", legacyRoot ?? candidate));
+            root = Path.GetFullPath(Dialogs.PromptText(app, "dbdatasync server setup", "Config folder", candidate));
 
             if (ExistingSetup.DetectedAt(root))
                 Dialogs.Message(app, "Already configured", "That folder already has a DbDataSync configuration.");

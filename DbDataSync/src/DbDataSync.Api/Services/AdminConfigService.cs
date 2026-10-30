@@ -5,7 +5,6 @@ using DbDataKit.Config.Git;
 using DbDataSync.Core.Secrets;
 using Microsoft.Extensions.Configuration.CommandLine;
 using Microsoft.Extensions.Configuration.EnvironmentVariables;
-using Microsoft.Extensions.Configuration.Json;
 
 namespace DbDataSync.Api.Services;
 
@@ -53,7 +52,7 @@ public sealed class AdminConfigService(
     private static readonly IReadOnlyList<KeyDefinition> Keys =
     [
         new("DbDataSync:App:RepoRoot",
-            "Git-tracked config store root. This is how dbdatasync.config.yaml itself is found, so a " +
+            "Git-tracked config store root. This is how server.yaml itself is found, so a " +
             "value inside that same file could never relocate it — not editable here.",
             SupportsWrite: false),
         new("DbDataSync:App:Url",
@@ -211,7 +210,7 @@ public sealed class AdminConfigService(
     }
 
     /// <summary>
-    /// Writes one key into dbdatasync.config.yaml and commits it — the same call whether this is editing an
+    /// Writes one key into server.yaml and commits it — the same call whether this is editing an
     /// already-file-sourced value or "adopting" one that was not. Returns null for a key this screen does not
     /// know, or that is not file-writable (see the class doc comment).
     /// <para>
@@ -234,7 +233,7 @@ public sealed class AdminConfigService(
         var localKey = definition.Key["DbDataSync:".Length..];
         DbDataSyncConfigFile.SetValue(apiOptions.RepoRoot, "DbDataSync", localKey, value);
         git.CommitChanges(
-            [DbDataSyncConfigFile.PathIn(apiOptions.RepoRoot)], $"Set '{definition.Key}' in dbdatasync.config.yaml", author);
+            [DbDataSyncConfigFile.PathIn(apiOptions.RepoRoot)], $"Set '{definition.Key}' in server.yaml", author);
         restartRequired.Touch();
 
         return ToEntry(definition);
@@ -330,7 +329,7 @@ public sealed class AdminConfigService(
     }
 
     /// <summary>
-    /// The provider that beats <c>dbdatasync.config.yaml</c> for this key, and what it says — or
+    /// The provider that beats <c>server.yaml</c> for this key, and what it says — or
     /// <c>(null, null)</c>, the normal case.
     /// <para>
     /// The boundary is the environment-variables provider, because that is exactly where
@@ -389,7 +388,6 @@ public sealed class AdminConfigService(
         DbDataSyncConfigFileProvider => "file",
         CommandLineConfigurationProvider => "command line",
         EnvironmentVariablesConfigurationProvider => "environment variable",
-        JsonConfigurationProvider => "appsettings.json",
         _ => provider.GetType().Name,
     };
 
@@ -513,7 +511,7 @@ public sealed class AdminConfigService(
 /// box. Null for a setting with no fixed set (a path, a group name, a count) or an open one
 /// (<c>State:Engine</c> — a custom dialect can be registered beyond the three built-ins).</param>
 /// <param name="OverriddenBy">
-/// The provider that outranks <c>dbdatasync.config.yaml</c> for this key and is therefore what the
+/// The provider that outranks <c>server.yaml</c> for this key and is therefore what the
 /// process will actually use — <c>"environment variable"</c> or <c>"command line"</c> — or null, the
 /// normal case, when nothing does. <see cref="Source"/> still says <c>"file"</c> whenever the file
 /// carries the key, because that is what this screen edits; this says whether editing it will change

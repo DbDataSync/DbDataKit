@@ -15,7 +15,7 @@ namespace DbDataSync.Certificates;
 /// touches no Windows API at all — the OS-specific part is finding the certificate to bind in the first
 /// place (<see cref="CertificateStore"/>), which every caller does before calling in here. Keeping this
 /// class portable is also what makes <c>bind writes the four Kestrel keys into a temp
-/// dbdatasync.config.yaml</c> (the phase 82 doc's own Windows-only test bullet) not actually need to be
+/// server.yaml</c> (the phase 82 doc's own Windows-only test bullet) not actually need to be
 /// Windows-only itself — it is listed there because the doc grouped it with the store-touching tests
 /// it's usually run alongside, not because this class needs Windows to run.
 /// </para>

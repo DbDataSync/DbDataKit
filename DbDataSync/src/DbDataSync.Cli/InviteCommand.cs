@@ -29,7 +29,7 @@ public static class InviteCommand
         // Before phase 79 this constructed a SQLite-backed store unconditionally — no branch for a
         // non-SQLite DbDataSync:State:Engine at all, which meant an admin locked out of an MsSql- or
         // Postgres-backed deployment had no way to recover with this command. Resolved the same way
-        // DbDataSyncHost.cs resolves ApiOptions (dbdatasync.config.yaml, then DbDataSync__* environment
+        // DbDataSyncHost.cs resolves ApiOptions (server.yaml, then DbDataSync__* environment
         // variables — there is no dedicated --state-engine/--state-connection-string flag; this
         // command's own surface is deliberately small, and both are ordinary DbDataSync:* settings
         // already), then handed to the same factory, so the two never drift on how a non-SQLite state

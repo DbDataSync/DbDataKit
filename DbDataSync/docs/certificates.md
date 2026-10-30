@@ -10,7 +10,7 @@ depends on your platform and on whether you have a certificate authority (CA).
 | A certificate file I was given (certbot, an internal PKI, a platform team) | [PEM and PFX files](certificates-pem-and-pfx.md) | any | whoever issued it |
 | Something working now, with no CA | [Self-signed](certificates-self-signed.md) | any | the service renews a file certificate itself; you renew a store certificate |
 
-Every one of them ends the same way: `dbdatasync.config.yaml` gets the `Kestrel:Certificates:Default:*` keys, and
+Every one of them ends the same way: `server.yaml` gets the `Kestrel:Certificates:Default:*` keys, and
 **nothing takes effect until the service restarts**.
 
 - [Renewal and expiry](certificates-renewal-and-expiry.md): what renews what, and the warnings you will see.

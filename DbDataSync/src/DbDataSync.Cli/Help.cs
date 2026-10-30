@@ -65,7 +65,7 @@ public static class Help
                   auth, binding, first admin. Exits 1 if anything fails; what `server setup`'s
                   review screen runs.
               dbdatasync config get <key> | set <key> <value> [--repo <path>]
-                  Reads or changes one setting of dbdatasync.config.yaml.
+                  Reads or changes one setting of server.yaml.
 
               dbdatasync cert use-pem --cert <path> --key <path> | use-pfx --pfx <path>
                   Points Kestrel at a certificate file — unencrypted PEM key or

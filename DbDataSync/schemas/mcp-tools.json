@@ -222,7 +222,7 @@
     },
     {
       "name": "config_get",
-      "description": "One setting of dbdatasync.config.yaml. [Offline only] Usage: config get <key> [--repo <path>]",
+      "description": "One setting of server.yaml. [Offline only] Usage: config get <key> [--repo <path>]",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
