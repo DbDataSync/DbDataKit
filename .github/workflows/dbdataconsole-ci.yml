@@ -157,3 +157,5 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build server and console
         run: dist/compose/check.sh dist/compose/build.yml dbdatabuild
+      - name: Proxy and console
+        run: dist/compose/check.sh dist/compose/proxy.yml dbdataproxy
