@@ -30,6 +30,8 @@ internal static class ConfigPaths
 
     public static string ScriptsDir(string configRoot) => Path.Combine(configRoot, "scripts");
 
+    public static string ScriptLockFile(string configRoot, string name) => Path.Combine(ScriptsDir(configRoot), name + ScriptConfig.LockExtension);
+
     public static string ScriptManifestFile(string configRoot, string name) =>
         Path.Combine(ScriptsDir(configRoot), $"{name}.yaml");
 

@@ -27,6 +27,12 @@ to it in the pull request that makes the change; a release moves the entries int
   connection string or in properties are still honoured. A connect timeout in properties still wins. Any other property the shared policy reserves (credentials, host and database keys, `Application Intent`,
   `Multi Subnet Failover`, `Options`, `Search Path`, command timeouts) is now refused with a message naming it; put it in the connection string instead. (A08)
 - **Sync commands accept `--format json`.** `server`, `service`, `cert`, `secret`, `library`, `driver`, `config` and `health` print one JSON document (`schema`, `command`, `exit_code`, `ok`, `data`, `messages`, `errors`); an unknown command now exits 2 with "'x' is not a command" (it was 1 with "Unknown command 'x'"). (C07)
+- **The Docker image serves https on 8443, not plain http on 8080.** Like the Build, Proxy, Store and console images, it makes a self-signed certificate in the volume (`tls/dbdatasync.pfx`) on its first start and serves
+  `https://0.0.0.0:8443`; its health check is `dbdatasync health check --url https://127.0.0.1:8443`. A client, script, port mapping (`-p 8080:8080`) or health check that used `http://localhost:8080` gets a refused
+  connection: use `-p 8443:8443` and `https://` (`-k`, or trust the certificate; a console pins it when it pairs, and a Sync server on https now announces itself to a console, so `dist/compose/sync.yml` pairs the two).
+  The image no longer sets `DbDataSync__App__AllowInsecureHttp=true`. To run behind a proxy that ends TLS, override the entrypoint to `dotnet /app/DbDataSync.Cli.dll server run --url http://0.0.0.0:8080` and set
+  `DbDataSync__App__TrustedProxies` (the command is in `docs/install.md`). A server started with an `https://` address and no configured certificate now makes the managed one (`dbdatasync cert new-self-signed --file`'s file) instead of
+  failing at the first request; if it cannot, it exits 1 with a message naming `tls/dbdatasync.pfx`. (L08)
 - **Database errors show a fixed message and the engine's code, not the driver's text.** A failed connection test, run, preview, provisioning step or reconcile now reports for example
   `The login was rejected. [sqlserver 18456]` or `The server could not be reached. [postgres 08006]`; a run's stored error detail is empty for a driver failure. The driver's own text, with
   secrets scrubbed, is written to the server log. Set `Diagnostics:DriverDetails` to `true` (environment `Diagnostics__DriverDetails=true`) to append it to the response and keep it in the run
@@ -72,6 +78,11 @@ to it in the pull request that makes the change; a release moves the entries int
   column, or its `Transform`, to a type the column takes (a date or timestamp for a date column; `CAST(... AS ...)` or a conversion in the Transform; text for a text column). What is still stored as before:
   anything that is only a question of the value, such as `1.5` into an integer column (rounded on SQL Server, truncated on PostgreSQL), a number out of range, a string that parses as a date or a number, and a
   string too long for its column. Cost: one type comparison per cell, as before; no change in speed. (A14b)
+- **Package hashes of scripts are pinned in the configuration repository.** A `.csx` script's `#r "nuget: Id, 1.2.3"` packages are recorded, with their SHA-512, in `scripts/<name>.lock` beside the script (a library's are in `libraries/<id>/library.lock`
+  already, and a compiled driver's in `drivers/<id>/driver.lock`; same file format). A configuration repository without lock files keeps working: the first time a script with packages is compiled (validated, saved, tested or run) its lock file is created, and saving the script
+  commits it; a lock file created by a run is not committed by Sync, so **commit the new `scripts/*.lock` files** of an existing repository. From then on a package whose bytes differ (another machine, or the feed changed under the same id and version) is refused with a message naming the package, the version
+  and the lock file; if the change is expected, delete that package's line from the lock file and validate again. A stored package that matches its pin needs no network. The lock reader is strict: a key other than `schema` and `packages` stops the load,
+  naming the file and the key. Deleting a script deletes its lock file. (S12)
 
 ## DbDataBuild
 
@@ -125,3 +136,5 @@ to it in the pull request that makes the change; a release moves the entries int
 - Servers can announce themselves to a console (`DBDATAKIT_CONSOLE_ANNOUNCE_URL`, `DBDATAKIT_ADVERTISE_URL`) and wait to be confirmed (`dbdatakit instance pending|confirm|reject`); the console takes announcements on a private plain-http port (`--announce-listen`, `DBDATAKIT_CONSOLE_ANNOUNCE_LISTEN`) that must not be published. `dist/compose/build.yml` runs a console with a Build server this way. The Servers page of the web app lists the waiting servers (name, address, when each last announced) with a Confirm and a Reject button each, for administrators; Confirm pairs with the certificate the server presents, so confirm only a server you recognise.
 
 - The console's and the Proxy's state database can live on SQL Server or PostgreSQL: `--state-engine` and `--state-connection` (or `DBDATAKIT_CONSOLE_STATE_ENGINE` and `_CONNECTION`) for the console, `state:` in `server.yaml` for the Proxy. SQLite stays the default. Give each its own database; the password is a secret reference.
+
+- Publishing a Build connection to a Proxy works for every engine the Proxy serves (SQL Server, ODBC, DuckDB), not only SQL Server; a connection of another engine is refused with a message. A Proxy administrator can hand a data source made by hand to a paired Build server with `POST /api/v1/data-sources/{name}/adopt`; the Build console gains a Publish tab. A publish the Proxy refuses no longer leaves its login stored there, and a re-publish does not replace the stored login unless the Proxy accepted the data source. (T12)

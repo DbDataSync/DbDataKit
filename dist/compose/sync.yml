@@ -1,0 +1,31 @@
+# The console and a Sync server, paired by announcement; see build.yml for how, and for how the server is confirmed:
+#   docker compose -f dist/compose/sync.yml exec console dotnet /app/dbdatakit.dll instance confirm dbdatasync
+# The Sync image serves https on 8443 (a certificate it makes on its first start, which the console pins when it pairs); the server announces that port and its host name, which the console resolves on this network.
+# Run from the repository root.
+name: dbdatakit-sync
+x-announce: &announce
+  DBDATAKIT_CONSOLE_ANNOUNCE_URL: http://console:8481
+services:
+  console:
+    build:
+      context: ../..
+      dockerfile: DbDataConsole/Dockerfile
+    environment: *announce
+    ports:
+      - "8480:8480"
+    volumes:
+      - console-data:/data
+  sync:
+    build:
+      context: ../..
+      dockerfile: DbDataSync/Dockerfile
+    # the name the server announces; the service name is already a name of it on this network
+    hostname: sync
+    environment: *announce
+    volumes:
+      - sync-data:/var/lib/dbdatasync
+    depends_on:
+      - console
+volumes:
+  console-data:
+  sync-data:

@@ -41,6 +41,31 @@ public class LockFileTests
         Assert.Contains(said, error.Message);
     }
 
+    [Theory]
+    [InlineData("{\"schema\":\"scripting-lock/1\",\"extra\":1}", "unknown key `extra` at $.extra")]
+    [InlineData("{\"schema\":\"scripting-lock/1\",\"packages\":[]}", "`packages` at $.packages is not an object")]
+    [InlineData("{\"schema\":\"scripting-lock/1\",\"packages\":{\"a/1.0.0\":5}}", "$.packages.a/1.0.0")]
+    public void An_unknown_key_or_a_wrong_shape_is_an_error_with_its_path(string text, string said)
+    {
+        using var feed = new Feed();
+        var path = Path.Combine(feed.Root, "x.lock");
+        File.WriteAllText(path, text);
+
+        var error = Assert.Throws<InvalidDataException>(() => LockFile.Read(path, "scripts/x.lock"));
+
+        Assert.Contains("scripts/x.lock", error.Message);
+        Assert.Contains(said, error.Message);
+    }
+
+    [Fact]
+    public void Replace_keeps_only_the_packages_it_is_given()
+    {
+        var pins = new LockFile();
+        pins.Pin("Old", "1.0.0", "A");
+        pins.Replace([new ResolvedPackage("New", NuGet.Versioning.NuGetVersion.Parse("2.0.0"), "dir", "B")]);
+        Assert.Equal(["new/2.0.0"], pins.Pins.Keys);
+    }
+
     [Fact]
     public void A_missing_lock_file_is_an_empty_one()
     {

@@ -141,6 +141,109 @@ public sealed partial class ManagementTests
         Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
     }
 
+    private string ConnectionFile(string name) => Path.Combine(ConfigDirectory, "connections", name + ".yaml");
+
+    private static string AdoptBody(string client) => JsonSerializer(new { client });
+
+    [Fact]
+    public async Task An_administrator_adopts_a_hand_made_data_source_for_a_client_which_then_manages_it_and_the_audit_names_the_person()
+    {
+        await StartAsync();
+        var admin = await PairAsync();
+        var publisher = await PairPublisherAsync(build1);
+        await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/by-hand", ServerRole.Admin, Put(Plain("by-hand"), null));
+        Assert.DoesNotContain("managed_by", File.ReadAllText(ConnectionFile("by-hand")));
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsAsync(build1, publisher, HttpMethod.Get, "/api/v1/data-sources/by-hand", ServerRole.Publisher)).StatusCode);   // before: not the client's
+
+        var adopted = await CallAsync(admin, HttpMethod.Post, "/api/v1/data-sources/by-hand/adopt", ServerRole.Admin, AdoptBody("build-1"));
+        Assert.Equal(HttpStatusCode.OK, adopted.StatusCode);
+        var answer = JsonNode.Parse(await adopted.Content.ReadAsStringAsync())!;
+        Assert.True((bool)answer["adopted"]!);
+        Assert.Equal("build-1", (string)answer["managed_by"]!);
+        Assert.Contains("managed_by: build-1", File.ReadAllText(ConnectionFile("by-hand")));
+
+        // after: the client reads, changes and removes it, like one it made
+        var read = JsonNode.Parse(await (await CallAsAsync(build1, publisher, HttpMethod.Get, "/api/v1/data-sources/by-hand", ServerRole.Publisher)).Content.ReadAsStringAsync())!;
+        var changed = await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/data-sources/by-hand", ServerRole.Publisher, Put((string)read["text"]! + "# changed by the client\n", (string)read["version"]!));
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+        var again = await CallAsync(admin, HttpMethod.Post, "/api/v1/data-sources/by-hand/adopt", ServerRole.Admin, AdoptBody("build-1"));
+        Assert.False((bool)JsonNode.Parse(await again.Content.ReadAsStringAsync())!["adopted"]!);   // adopting what is already the client's changes nothing
+
+        var audit = File.ReadAllLines(Path.Combine(dataDirectory, "management-audit.log")).Select(l => JsonNode.Parse(l)!).ToList();
+        Assert.Contains(audit, a => (string)a["command"]! == "data-source adopt" && (string)a["target"]! == "by-hand" && (string)a["outcome"]! == "adopted by build-1" && (string)a["userId"]! == "ada");
+    }
+
+    [Fact]
+    public async Task A_server_client_cannot_adopt_whatever_its_ceiling_and_nothing_is_written()
+    {
+        await StartAsync();
+        var admin = await PairAsync();
+        var publisher = await PairPublisherAsync(build1);
+        await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/by-hand", ServerRole.Admin, Put(Plain("by-hand"), null));
+        var before = File.ReadAllText(ConnectionFile("by-hand"));
+
+        var refused = await CallAsAsync(build1, publisher, HttpMethod.Post, "/api/v1/data-sources/by-hand/adopt", ServerRole.Publisher, AdoptBody("build-1"));
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Contains("person's act", await refused.Content.ReadAsStringAsync());
+        Assert.Equal(before, File.ReadAllText(ConnectionFile("by-hand")));
+
+        // a server client with the admin role in its own ceiling is a server client still
+        var strong = await PairingClient.PairAsync(ManagementUrl, Files.Codes().Create(ServerRoles.Close(ServerRole.Admin)).Code, build2, ClientKind.Server, build2.Id);
+        var alsoRefused = await CallAsAsync(build2, strong, HttpMethod.Post, "/api/v1/data-sources/by-hand/adopt", ServerRole.Admin, AdoptBody("build-2"));
+        Assert.Equal(HttpStatusCode.Forbidden, alsoRefused.StatusCode);
+        Assert.Equal(before, File.ReadAllText(ConnectionFile("by-hand")));
+
+        // a person with less than the admin role is refused too
+        var lesser = await CallAsync(admin, HttpMethod.Post, "/api/v1/data-sources/by-hand/adopt", ServerRole.Viewer, AdoptBody("build-1"));
+        Assert.True(lesser.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized, lesser.StatusCode.ToString());
+        Assert.Equal(before, File.ReadAllText(ConnectionFile("by-hand")));
+
+        var audit = File.ReadAllLines(Path.Combine(dataDirectory, "management-audit.log")).Select(l => JsonNode.Parse(l)!).ToList();
+        Assert.Contains(audit, a => (string)a["command"]! == "data-source adopt" && (string)a["outcome"]! == "refused" && (string)a["consoleId"]! == "build-1" && (string)a["userId"]! == "ada");
+    }
+
+    [Fact]
+    public async Task An_administrator_can_hand_a_data_source_of_one_client_to_another_and_cannot_adopt_for_a_client_that_is_not_paired_as_a_server()
+    {
+        await StartAsync();
+        var admin = await PairAsync();
+        var first = await PairPublisherAsync(build1);
+        var second = await PairPublisherAsync(build2);
+        await CallAsAsync(build2, second, HttpMethod.Put, "/api/v1/data-sources/theirs", ServerRole.Publisher, Put(Plain("theirs"), null));
+        Assert.Contains("managed_by: build-2", File.ReadAllText(ConnectionFile("theirs")));
+
+        var handed = await CallAsync(admin, HttpMethod.Post, "/api/v1/data-sources/theirs/adopt", ServerRole.Admin, AdoptBody("build-1"));
+        Assert.Equal(HttpStatusCode.OK, handed.StatusCode);
+        Assert.Equal("build-2", (string)JsonNode.Parse(await handed.Content.ReadAsStringAsync())!["previous_owner"]!);
+        var text = File.ReadAllText(ConnectionFile("theirs"));
+        Assert.Contains("managed_by: build-1", text);
+        Assert.DoesNotContain("build-2", text);                                         // the owner line is replaced, not doubled
+        Assert.Equal(HttpStatusCode.OK, (await CallAsAsync(build1, first, HttpMethod.Get, "/api/v1/data-sources/theirs", ServerRole.Publisher)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsAsync(build2, second, HttpMethod.Get, "/api/v1/data-sources/theirs", ServerRole.Publisher)).StatusCode);
+
+        // the console is a person's client, not one that publishes; nobody by that id; no such source; no body
+        Assert.Equal(HttpStatusCode.NotFound, (await CallAsync(admin, HttpMethod.Post, "/api/v1/data-sources/theirs/adopt", ServerRole.Admin, AdoptBody(console.Id))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await CallAsync(admin, HttpMethod.Post, "/api/v1/data-sources/theirs/adopt", ServerRole.Admin, AdoptBody("nobody"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await CallAsync(admin, HttpMethod.Post, "/api/v1/data-sources/none/adopt", ServerRole.Admin, AdoptBody("build-1"))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(admin, HttpMethod.Post, "/api/v1/data-sources/theirs/adopt", ServerRole.Admin, "{}")).StatusCode);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, (await CallAsync(admin, HttpMethod.Get, "/api/v1/data-sources/theirs/adopt", ServerRole.Admin)).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_data_source_with_a_serving_policy_is_not_adopted_because_the_clients_write_would_drop_the_policy()
+    {
+        await StartAsync();
+        var admin = await PairAsync();
+        await PairPublisherAsync(build1);
+        await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/limited", ServerRole.Admin, Put(Conn.Yaml("limited", "duckdb", "Data Source=:memory:", proxy: ["allow_writes: true"]), null));
+        var before = File.ReadAllText(ConnectionFile("limited"));
+
+        var refused = await CallAsync(admin, HttpMethod.Post, "/api/v1/data-sources/limited/adopt", ServerRole.Admin, AdoptBody("build-1"));
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Contains("extensions.proxy", await refused.Content.ReadAsStringAsync());
+        Assert.Equal(before, File.ReadAllText(ConnectionFile("limited")));
+    }
+
     private static string SecretBody(string value) => JsonSerializer(new { value });
 
     [Fact]

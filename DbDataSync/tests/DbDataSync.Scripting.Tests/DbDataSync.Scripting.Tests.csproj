@@ -36,5 +36,9 @@
     <ProjectReference Include="..\..\src\DbDataSync.Drivers.Postgres\DbDataSync.Drivers.Postgres.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\LocalPackageFeed.cs" Link="Shared\LocalPackageFeed.cs" />
+  </ItemGroup>
+
   <Import Project="$(DbDataKitRoot)build/DuckDb.Native.targets" />
 </Project>
