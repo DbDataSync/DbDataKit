@@ -44,7 +44,7 @@ internal interface IServerFacts
 /// <summary>
 /// An Arrow Flight SQL server as a row source (Apache.Arrow.Flight.Sql over Grpc.Net.Client). The login is a URI with options (<see cref="FlightSqlLogin"/>). A statement without parameters is sent as a plain query; one with
 /// parameters is **prepared** and its parameters are bound as a one-row Arrow batch in the order the plan gives (`?`, positional). The server answers with endpoints; the rows are read from each in turn on this same
-/// connection as record batches and handed over value by value, by <see cref="ArrowConversions.Value"/>. A call's time limit is the gRPC deadline. Like ADO.NET's drivers it is only ever reached through <see cref="ReadSession"/>.
+/// connection as record batches and handed over value by value, by <see cref="ArrowValueReader.Value"/>. A call's time limit is the gRPC deadline. Like ADO.NET's drivers it is only ever reached through <see cref="ReadSession"/>.
 /// </summary>
 internal sealed class FlightSqlRowSource : IRowSource, IMetadataCatalog, IServerFacts
 {
@@ -107,7 +107,7 @@ internal sealed class FlightSqlRowSource : IRowSource, IMetadataCatalog, IServer
             else
             {
                 prepared = await PreparedHandle.CreateAsync(Client, sql, options, ct);
-                info = await prepared.BindAndExecuteAsync(ArrowConversions.ParameterBatch(parameters), options, ct);
+                info = await prepared.BindAndExecuteAsync(ArrowBinding.ParameterBatch(parameters), options, ct);
             }
             return await FlightSqlRowReader.StartAsync(this, info, options, prepared, ct);
         }
@@ -131,7 +131,7 @@ internal sealed class FlightSqlRowSource : IRowSource, IMetadataCatalog, IServer
         try
         {
             await using var reader = (FlightSqlRowReader)await ExecuteAsync(Dialect.Bounded(sql, 0), parameters, null, false, ct);
-            return reader.ResultSchema.FieldsList.Count == 0 ? null : ArrowConversions.Columns(reader.ResultSchema);
+            return reader.ResultSchema.FieldsList.Count == 0 ? null : ArrowBinding.Columns(reader.ResultSchema);
         }
         catch (Exception ex) when (FlightSqlFailure.Rpc(ex) != null) { return null; }
     }
@@ -155,119 +155,69 @@ internal sealed class FlightSqlRowSource : IRowSource, IMetadataCatalog, IServer
                 try { schema = await Client.GetSchemaAsync(FlightDescriptor.CreateCommandDescriptor(Google.Protobuf.WellKnownTypes.Any.Pack(new Arrow.Flight.Protocol.Sql.CommandStatementQuery { Query = sql }).ToByteArray()), options, ct); }
                 catch (Exception ex) when (FlightSqlFailure.Rpc(ex) != null) { return null; }
             }
-            return schema == null || schema.FieldsList.Count == 0 ? null : ArrowConversions.Columns(schema);
+            return schema == null || schema.FieldsList.Count == 0 ? null : ArrowBinding.Columns(schema);
         }
         finally { if (prepared != null) await prepared.CloseQuietlyAsync(options); }
     }
 
     // ---- the metadata calls ----
 
-    // the client library wraps a call's RpcException in an InvalidOperationException ("Failed to prepare statement"): the status is looked for down the chain
-    private static bool NotOffered(Exception ex) => FlightSqlFailure.Rpc(ex)?.StatusCode is StatusCode.Unimplemented or StatusCode.InvalidArgument;
+    // The catalog calls are the shared reader's; a server that rejects a metadata command it does not know answers InvalidArgument, which here, as Unimplemented, means "not offered".
+    private FlightSqlMetadataReader Catalog => catalogReader ??= new(connection, invalidArgumentIsNotOffered: true);
+    private FlightSqlMetadataReader? catalogReader;
 
-    // The library's own metadata calls send an empty string for a filter left out (`catalog = ""`), which servers read as "the catalog with no name" and answer with nothing. These send only what is asked.
-    private async Task<FlightInfo> MetadataInfoAsync(Google.Protobuf.IMessage command, FlightCallOptions options, CancellationToken ct) =>
-        await Client.GetFlightInfoAsync(FlightDescriptor.CreateCommandDescriptor(Google.Protobuf.WellKnownTypes.Any.Pack(command).ToByteArray()), options, ct);
+    private static TimeSpan MetadataTimeout => TimeSpan.FromSeconds(DefaultTimeoutSeconds);
 
-    private async Task<List<RecordBatch>> ReadAsync(FlightInfo info, FlightCallOptions options, CancellationToken ct)
-    {
-        var batches = new List<RecordBatch>();
-        foreach (var endpoint in info.Endpoints)
-            await foreach (var batch in connection.DoGetAsync(endpoint.Ticket, options, ct)) batches.Add(batch);
-        return batches;
-    }
-
-    private static int IndexOf(RecordBatch batch, string column) => batch.Schema.FieldsList.ToList().FindIndex(f => f.Name == column);
-
-    private static string? Text(RecordBatch batch, string column, int row) =>
-        IndexOf(batch, column) is var i and >= 0 ? ArrowConversions.Value(batch.Column(i), row)?.ToString() : null;
-
-    public async Task<IReadOnlyList<string>?> SchemasAsync(CancellationToken ct)
-    {
-        var options = Options(null);
-        try
-        {
-            var names = new SortedSet<string>(StringComparer.Ordinal);
-            foreach (var batch in await ReadAsync(await MetadataInfoAsync(new Arrow.Flight.Protocol.Sql.CommandGetDbSchemas(), options, ct), options, ct))
-                for (var r = 0; r < batch.Length; r++) if (Text(batch, "db_schema_name", r) is { Length: > 0 } name) names.Add(name);
-            return names.ToList();
-        }
-        catch (Exception ex) when (NotOffered(ex)) { return null; }
-    }
+    public async Task<IReadOnlyList<string>?> SchemasAsync(CancellationToken ct) =>
+        await Catalog.SchemasAsync(null, MetadataTimeout, ct) is { } names ? new SortedSet<string>(names.Where(n => n.Length > 0), StringComparer.Ordinal).ToList() : null;
 
     public async Task<IReadOnlyList<MetadataTable>?> TablesAsync(string schema, string? table, CancellationToken ct)
     {
-        var options = Options(null);
-        try
+        if (await Catalog.TablesAsync(null, schema, table, includeSchema: true, MetadataTimeout, ct) is not { } rows) return null;
+        var found = new List<MetadataTable>();
+        foreach (var row in rows)
         {
-            var found = new List<MetadataTable>();
-            var command = new Arrow.Flight.Protocol.Sql.CommandGetTables { DbSchemaFilterPattern = schema, IncludeSchema = true };
-            if (table != null) command.TableNameFilterPattern = table;
-            {
-                foreach (var batch in await ReadAsync(await MetadataInfoAsync(command, options, ct), options, ct))
-                    for (var r = 0; r < batch.Length; r++)
-                    {
-                        // the pattern is a LIKE pattern (`_` matches any character): the name is compared exactly here
-                        if (Text(batch, "db_schema_name", r) != schema || Text(batch, "table_name", r) is not { } name || (table != null && name != table)) continue;
-                        var type = Text(batch, "table_type", r) ?? "";
-                        if (type.Contains("SYSTEM", StringComparison.OrdinalIgnoreCase) || type.Contains("TEMPORARY", StringComparison.OrdinalIgnoreCase)) continue;
-                        var schemaIndex = IndexOf(batch, "table_schema");
-                        if (schemaIndex < 0 || ArrowConversions.Value(batch.Column(schemaIndex), r) is not byte[] bytes || bytes.Length == 0) continue;     // no columns told: it cannot be described
-                        found.Add(new(schema, name, type.Contains("VIEW", StringComparison.OrdinalIgnoreCase), ArrowConversions.Columns(SchemaExtensions.DeserializeSchema(new ReadOnlyMemory<byte>(bytes)))));
-                    }
-            }
-            return found;
+            // the pattern is a LIKE pattern (`_` matches any character): the name is compared exactly here
+            if (row.Schema != schema || row.Name is not { } name || (table != null && name != table)) continue;
+            if (row.Type.Contains("SYSTEM", StringComparison.OrdinalIgnoreCase) || row.Type.Contains("TEMPORARY", StringComparison.OrdinalIgnoreCase)) continue;
+            if (row.SchemaBytes is not { Length: > 0 }) continue;     // no columns told: it cannot be described
+            found.Add(new(schema, name, row.Type.Contains("VIEW", StringComparison.OrdinalIgnoreCase), ArrowBinding.Columns(row.ReadSchema()!)));
         }
-        catch (Exception ex) when (NotOffered(ex)) { return null; }
+        return found;
     }
 
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>?> PrimaryKeysAsync(string schema, CancellationToken ct)
     {
-        var options = Options(null);
-        try
+        var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        if (await TablesAsync(schema, null, ct) is not { } tables) return null;                                  // no metadata calls at all
+        foreach (var table in tables)
         {
-            var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
-            if (await TablesAsync(schema, null, ct) is not { } tables) return null;                                  // no metadata calls at all
-            foreach (var table in tables)
-            {
-                if (table.IsView) continue;
-                var columns = new List<(int Sequence, string Column)>();
-                foreach (var batch in await ReadAsync(await MetadataInfoAsync(new Arrow.Flight.Protocol.Sql.CommandGetPrimaryKeys { DbSchema = schema, Table = table.Name }, options, ct), options, ct))
-                    for (var r = 0; r < batch.Length; r++)
-                        if (Text(batch, "column_name", r) is { } column) columns.Add((int.TryParse(Text(batch, "key_sequence", r), out var s) ? s : columns.Count + 1, column));
-                if (columns.Count > 0) result[table.Name] = columns.OrderBy(c => c.Sequence).Select(c => c.Column).ToList();
-            }
-            return result;
+            if (table.IsView) continue;
+            if (await Catalog.PrimaryKeysAsync(null, schema, table.Name, MetadataTimeout, ct) is not { } keys) return null;
+            var columns = keys.Select((k, i) => (Sequence: k.Sequence ?? i + 1, k.Column)).ToList();
+            if (columns.Count > 0) result[table.Name] = columns.OrderBy(c => c.Sequence).Select(c => c.Column).ToList();
         }
-        catch (Exception ex) when (NotOffered(ex)) { return null; }
+        return result;
     }
 
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<MetadataForeignKey>>?> ForeignKeysAsync(string schema, CancellationToken ct)
     {
-        var options = Options(null);
-        try
+        var result = new Dictionary<string, IReadOnlyList<MetadataForeignKey>>(StringComparer.Ordinal);
+        if (await TablesAsync(schema, null, ct) is not { } tables) return null;                                  // no metadata calls at all
+        foreach (var table in tables)
         {
-            var result = new Dictionary<string, IReadOnlyList<MetadataForeignKey>>(StringComparer.Ordinal);
-            if (await TablesAsync(schema, null, ct) is not { } tables) return null;                                  // no metadata calls at all
-            foreach (var table in tables)
+            if (table.IsView) continue;
+            if (await Catalog.ImportedKeysAsync(null, schema, table.Name, MetadataTimeout, ct) is not { } imported) return null;
+            var rows = imported.Select((k, i) => (Key: k.KeyName ?? $"fk_{table.Name}_{k.ReferencedTable}", Sequence: k.Sequence ?? i + 1, k.Column,
+                RefSchema: k.ReferencedSchema ?? schema, RefTable: k.ReferencedTable, RefColumn: k.ReferencedColumn)).ToList();
+            if (rows.Count == 0) continue;
+            result[table.Name] = rows.GroupBy(x => x.Key, StringComparer.Ordinal).Select(g =>
             {
-                if (table.IsView) continue;
-                var rows = new List<(string Key, int Sequence, string Column, string RefSchema, string RefTable, string RefColumn)>();
-                foreach (var batch in await ReadAsync(await MetadataInfoAsync(new Arrow.Flight.Protocol.Sql.CommandGetImportedKeys { DbSchema = schema, Table = table.Name }, options, ct), options, ct))
-                    for (var r = 0; r < batch.Length; r++)
-                        if (Text(batch, "fk_column_name", r) is { } column && Text(batch, "pk_table_name", r) is { } refTable && Text(batch, "pk_column_name", r) is { } refColumn)
-                            rows.Add((Text(batch, "fk_key_name", r) ?? $"fk_{table.Name}_{refTable}", int.TryParse(Text(batch, "key_sequence", r), out var s) ? s : rows.Count + 1, column,
-                                Text(batch, "pk_db_schema_name", r) ?? schema, refTable, refColumn));
-                if (rows.Count == 0) continue;
-                result[table.Name] = rows.GroupBy(x => x.Key, StringComparer.Ordinal).Select(g =>
-                {
-                    var ordered = g.OrderBy(x => x.Sequence).ToList();
-                    return new MetadataForeignKey(table.Name, g.Key, ordered.Select(x => x.Column).ToList(), ordered[0].RefSchema, ordered[0].RefTable, ordered.Select(x => x.RefColumn).ToList());
-                }).ToList();
-            }
-            return result;
+                var ordered = g.OrderBy(x => x.Sequence).ToList();
+                return new MetadataForeignKey(table.Name, g.Key, ordered.Select(x => x.Column).ToList(), ordered[0].RefSchema, ordered[0].RefTable, ordered.Select(x => x.RefColumn).ToList());
+            }).ToList();
         }
-        catch (Exception ex) when (NotOffered(ex)) { return null; }
+        return result;
     }
 
     // The ids of the standard SqlInfo the tool reads (the Flight SQL protocol): the server's name, version and read-only flag, and how identifiers are cased and quoted.
@@ -279,38 +229,12 @@ internal sealed class FlightSqlRowSource : IRowSource, IMetadataCatalog, IServer
     /// </summary>
     public async Task<ServerFacts?> ServerFactsAsync(CancellationToken ct)
     {
-        var options = Options(null);
-        try
-        {
-            var command = new Arrow.Flight.Protocol.Sql.CommandGetSqlInfo();
-            foreach (var id in new[] { NameId, VersionId, ReadOnlyId, IdentifierCaseId, IdentifierQuoteId, QuotedIdentifierCaseId }) command.Info.Add(id);
-            string? name = null, version = null, quote = null, idCase = null, quotedCase = null; bool? readOnly = null;
-            foreach (var batch in await ReadAsync(await MetadataInfoAsync(command, options, ct), options, ct))
-            {
-                if (batch.ColumnCount < 2 || batch.Column(0) is not UInt32Array ids || batch.Column(1) is not DenseUnionArray values) continue;
-                var typeIds = ((Apache.Arrow.Types.UnionType)values.Data.DataType).TypeIds.ToArray();
-                for (var row = 0; row < batch.Length; row++)
-                {
-                    if (ids.GetValue(row) is not { } id) continue;
-                    var child = System.Array.IndexOf(typeIds, (int)values.TypeIds[row]);
-                    if (child < 0) continue;
-                    var offset = values.ValueOffsets[row];
-                    var text = values.Fields[child] is StringArray strings ? strings.GetString(offset) : null;
-                    var number = values.Fields[child] switch { Int64Array longs => longs.GetValue(offset), Int32Array ints => ints.GetValue(offset), _ => null };
-                    switch (id)
-                    {
-                        case NameId: name = text; break;
-                        case VersionId: version = text; break;
-                        case ReadOnlyId: readOnly = values.Fields[child] is BooleanArray flags ? flags.GetValue(offset) : null; break;
-                        case IdentifierQuoteId: quote = text; break;
-                        case IdentifierCaseId: idCase = number is { } c1 ? FlightServerFacts.CaseName(c1) : null; break;
-                        case QuotedIdentifierCaseId: quotedCase = number is { } c2 ? FlightServerFacts.CaseName(c2) : null; break;
-                    }
-                }
-            }
-            return FlightServerFacts.Of(name, version, quote, idCase, quotedCase, readOnly);
-        }
-        catch (Exception ex) when (NotOffered(ex)) { return null; }
+        if (await Catalog.SqlInfoAsync([NameId, VersionId, ReadOnlyId, IdentifierCaseId, IdentifierQuoteId, QuotedIdentifierCaseId], MetadataTimeout, ct) is not { } info) return null;
+        string? Text(uint id) => info.TryGetValue(id, out var v) ? v as string : null;
+        long? Number(uint id) => info.TryGetValue(id, out var v) ? v switch { long l => l, int i => i, _ => null } : null;
+        bool? flag = info.TryGetValue(ReadOnlyId, out var ro) ? ro as bool? : null;
+        return FlightServerFacts.Of(Text(NameId), Text(VersionId), Text(IdentifierQuoteId),
+            Number(IdentifierCaseId) is { } c1 ? FlightServerFacts.CaseName(c1) : null, Number(QuotedIdentifierCaseId) is { } c2 ? FlightServerFacts.CaseName(c2) : null, flag);
     }
 
     public ValueTask DisposeAsync()
@@ -388,7 +312,7 @@ internal sealed class FlightSqlRowReader : IRowReader
 
     public ValueTask<object?> ValueAsync(int column, CancellationToken ct)
     {
-        try { return ValueTask.FromResult(ArrowConversions.Value(current!.Column(column), row)); }
+        try { return ValueTask.FromResult(ArrowValueReader.Value(current!.Column(column), row)); }
         catch (ArrowTypeNotCarriedException ex) { throw new TransferException($"column `{schema.FieldsList[column].Name}`: {ex.Message}."); }
     }
 

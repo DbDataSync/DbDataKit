@@ -171,6 +171,11 @@ export interface GitChange {
   path: string
   status: string
   patch: string
+  /** The whole text at the start (null for a new file) and now (null for a deleted one); only when `sides` is true. */
+  before?: string | null
+  after?: string | null
+  /** False for a binary or very large file, which has its patch only. */
+  sides?: boolean
 }
 
 export interface GitCommit {

@@ -5,8 +5,11 @@ namespace DbDataKit.Config.Git;
 /// <summary>A workspace operation git refused; the message says what and why.</summary>
 public sealed class GitOperationException(string message, Exception? inner = null) : Exception(message, inner);
 
-/// <summary>One file a draft changed, with its patch (cut at the limit the caller gave).</summary>
-public sealed record GitFileChange(string Path, string Status, string Patch);
+/// <summary>
+/// One file a draft changed, with its patch (cut at the limit the caller gave) and, for a text file small enough, both whole texts so a screen can show them side by side (W11). <paramref name="Before"/> is null for a file that
+/// did not exist at the start and <paramref name="After"/> for one that does not exist now; <paramref name="Sides"/> is false for a binary file or one over the size limit, which have a patch only.
+/// </summary>
+public sealed record GitFileChange(string Path, string Status, string Patch, string? Before = null, string? After = null, bool Sides = false);
 
 /// <summary>What merging a branch did: the new tip when it merged, or the paths that conflicted when it did not (and nothing changed).</summary>
 public sealed record GitMergeResult(bool Merged, string? Sha, bool FastForward, IReadOnlyList<string> Conflicts);
@@ -18,7 +21,7 @@ public sealed record GitMergeResult(bool Merged, string? Sha, bool FastForward, 
 public static class GitWorkspaceOperations
 {
     /// <summary>Every file that differs from <paramref name="baseSha"/>, committed or not, with its patch.</summary>
-    public static IReadOnlyList<GitFileChange> Changes(string worktree, string baseSha, int maxPatchChars = 64 * 1024)
+    public static IReadOnlyList<GitFileChange> Changes(string worktree, string baseSha, int maxPatchChars = 64 * 1024, int maxSideChars = 256 * 1024)
     {
         try
         {
@@ -26,7 +29,17 @@ public static class GitWorkspaceOperations
             var start = repo.Lookup<Commit>(baseSha) ?? throw new GitOperationException("The commit this draft started at is not in the repository.");
             Commands.Stage(repo, "*");    // so a new file is a change too; the next commit would stage it anyway
             var patch = repo.Diff.Compare<Patch>(start.Tree, DiffTargets.Index);
-            return [.. patch.Select(c => new GitFileChange(c.Path.Replace('\\', '/'), c.Status.ToString().ToLowerInvariant(), c.Patch.Length > maxPatchChars ? c.Patch[..maxPatchChars] : c.Patch))];
+            return [.. patch.Select(c =>
+            {
+                var path = c.Path.Replace('\\', '/');
+                var text = c.Patch.Length > maxPatchChars ? c.Patch[..maxPatchChars] : c.Patch;
+                var before = c.Status == ChangeKind.Added ? null : start.Tree[c.OldPath]?.Target as Blob;
+                var after = c.Status == ChangeKind.Deleted ? null : repo.Lookup<Blob>(repo.Index[c.Path]?.Id);
+                var sides = before?.IsBinary != true && after?.IsBinary != true && Math.Max(before?.Size ?? 0, after?.Size ?? 0) <= maxSideChars;
+                return sides
+                    ? new GitFileChange(path, c.Status.ToString().ToLowerInvariant(), text, before?.GetContentText(), after?.GetContentText(), true)
+                    : new GitFileChange(path, c.Status.ToString().ToLowerInvariant(), text);
+            })];
         }
         catch (LibGit2SharpException ex) { throw new GitOperationException($"The changes could not be read: {ex.Message}", ex); }
     }

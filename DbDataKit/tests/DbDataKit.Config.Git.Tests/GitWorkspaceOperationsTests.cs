@@ -53,6 +53,29 @@ public sealed class GitWorkspaceOperationsTests : IDisposable
     }
 
     [Fact]
+    public void Changes_carry_both_texts_of_a_file_for_a_side_by_side_view_and_a_patch_only_for_binary_or_large_files()
+    {
+        File.WriteAllText(Path.Combine(Draft, "a.txt"), "two\n");
+        File.WriteAllText(Path.Combine(Draft, "c.txt"), "new\n");
+        File.Delete(Path.Combine(Draft, "b.txt"));
+        File.WriteAllBytes(Path.Combine(Draft, "d.bin"), [0, 1, 2, 0, 3]);
+        File.WriteAllText(Path.Combine(Draft, "big.txt"), new string('x', 50));
+
+        var changes = GitWorkspaceOperations.Changes(Draft, _base, maxSideChars: 40).ToDictionary(c => c.Path);
+
+        Assert.True(changes["a.txt"].Sides);
+        Assert.Equal("one", changes["a.txt"].Before!.Trim());
+        Assert.Equal("two", changes["a.txt"].After!.Trim());
+        Assert.Null(changes["c.txt"].Before);
+        Assert.Equal("new", changes["c.txt"].After!.Trim());
+        Assert.Equal("keep", changes["b.txt"].Before!.Trim());
+        Assert.Null(changes["b.txt"].After);
+        Assert.False(changes["d.bin"].Sides);
+        Assert.False(changes["big.txt"].Sides);
+        Assert.Null(changes["big.txt"].After);
+    }
+
+    [Fact]
     public void Uncommitted_changes_are_reported_until_a_commit_takes_them()
     {
         Assert.False(GitWorkspaceOperations.HasUncommitted(Draft));

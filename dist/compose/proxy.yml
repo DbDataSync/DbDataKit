@@ -1,0 +1,41 @@
+# The console and a Proxy, paired by announcement (see build.yml for the mechanism; the commands are the same with `-f dist/compose/proxy.yml`):
+#   docker compose -f dist/compose/proxy.yml exec console dotnet /app/dbdatakit.dll instance confirm dbdataproxy
+# The Proxy's management API is off by default and, when on, listens on the loopback address; here it is on, on every address of the container (port 8816, not
+# published: only the console, on this network, reaches it) and the address the console is told to use is fixed in this file. The Flight port (8815) is published for clients.
+# Run from the repository root.
+name: dbdatakit-proxy
+x-announce: &announce
+  DBDATAKIT_CONSOLE_ANNOUNCE_URL: http://console:8481
+services:
+  console:
+    build:
+      context: ../..
+      dockerfile: DbDataConsole/Dockerfile
+    environment: *announce
+    ports:
+      - "8480:8480"
+    volumes:
+      - console-data:/data
+  proxy:
+    build:
+      context: ../..
+      dockerfile: DbDataProxy/Dockerfile
+    # the name the server announces; the service name is already a name of it on this network
+    hostname: proxy
+    environment:
+      <<: *announce
+      DBPROXY_Proxy__Management__Enabled: "true"
+      DBPROXY_Proxy__Management__Address: 0.0.0.0
+      DBPROXY_Proxy__Management__Port: "8816"
+      # the console reaches the management API here, by name, whatever address the container gets
+      DBDATAKIT_ADVERTISE_URL: https://proxy:8816
+      DBDATAKIT_INSTANCE_NAME: dbdataproxy
+    ports:
+      - "8815:8815"
+    volumes:
+      - proxy-data:/data
+    depends_on:
+      - console
+volumes:
+  console-data:
+  proxy-data:

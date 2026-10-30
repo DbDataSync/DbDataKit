@@ -1095,6 +1095,61 @@
             ]
           }
         },
+        "keys": {
+          "description": "Surrogate keys the model owns (plan 25). The key's name is also the name of a function queries call, `customer_key(c.source_system, c.customer_id)`; `from` names its arguments in order. A key is a 64-bit hash of its normalized business key.",
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z_][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from"
+            ],
+            "properties": {
+              "from": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "method": {
+                "description": "`hash` (the default). `key_map` is planned (K10) and refused for now.",
+                "enum": [
+                  "hash"
+                ]
+              },
+              "unknown_member": {
+                "description": "A call with a NULL argument returns the reserved unknown key instead of NULL.",
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "enum": [
+                      "true",
+                      "false"
+                    ]
+                  }
+                ]
+              },
+              "history": {
+                "description": "The extra argument (the valid-from) of the version key; with `version_key`.",
+                "type": "string",
+                "minLength": 1
+              },
+              "version_key": {
+                "description": "The function that keys one history version; the key itself is then the durable key.",
+                "type": "string",
+                "pattern": "^[a-z_][a-z0-9_]*$"
+              }
+            }
+          }
+        },
         "refresh": {
           "description": "The refresh plans the model's loads are in: plan name to a membership or a list of them. It layers like `tags` (a list appends, `refresh=` replaces what a folder gave). A model with a default load and no `refresh:` anywhere is in the plan `default`. A plan the project does not declare is an error when the project declares any (`refresh.plans` in dbdatabuild.yml).",
           "type": "object",

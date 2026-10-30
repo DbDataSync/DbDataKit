@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { DB_NAME, MSSQL_PORT, querySql, runSql, SA_PASSWORD, SOURCE_TABLE, SRC_CONNECTION_NAME, TARGET_TABLE, TGT_CONNECTION_NAME } from '../test-db'
 import { screenshotDir } from '../screenshots'
 import { waitForLoadToComplete } from '../mapping-load-waiter'
+import { saveMapping, saveSettings } from '../save-waiter'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const screenshotsDir = screenshotDir('golden-path')
@@ -115,10 +116,7 @@ test.describe.serial('golden path: define, configure, and run a replication end-
     await shot(page, '04-replication-endpoints.png')
 
     // Reloading before the PUT is answered abandons it, so wait for the save itself.
-    const saveAnswered = page.waitForResponse((r) => r.request().method() === 'PUT'
-      && new URL(r.url()).pathname.endsWith(`/api/replications/${REPLICATION_NAME}`))
-    await page.getByTestId('save-settings-button').click()
-    expect((await saveAnswered).ok()).toBe(true)
+    await saveSettings(page, REPLICATION_NAME)
 
     await page.reload()
     await page.getByTestId('tab-overview').click()
@@ -167,7 +165,7 @@ test.describe.serial('golden path: define, configure, and run a replication end-
     await expect(page.getByTestId('writer-kind-select')).toHaveValue('DeleteInsert')
     await page.getByTestId('writer-kind-select').selectOption('MsSqlMerge')
 
-    await page.getByTestId('save-settings-button').click()
+    await saveSettings(page, REPLICATION_NAME)
 
     await page.reload()
     await page.getByTestId('tab-overview').click()
@@ -394,7 +392,7 @@ test.describe.serial('golden path: define, configure, and run a replication end-
     await selectWhenReady(page, 'source-table-select', `dbo.${SOURCE_TABLE}`)
     await shot(page, '15-mapping-endpoint-override.png')
 
-    await page.getByTestId('save-mapping-button').click()
+    await saveMapping(page, REPLICATION_NAME)
     await expect(page.getByTestId(`mapping-item-${MAPPING_NAME}`)).toBeVisible({ timeout: 15_000 })
 
     // Turning it back off returns the mapping to inheriting, which is what the saved config has to
@@ -405,7 +403,7 @@ test.describe.serial('golden path: define, configure, and run a replication end-
     await expect(page.getByTestId('source-connection-select')).toBeVisible({ timeout: 15_000 })
     await page.getByTestId('source-override-toggle').click()
     await expect(page.getByTestId('source-side')).toContainText('INHERITED')
-    await page.getByTestId('save-mapping-button').click()
+    await saveMapping(page, REPLICATION_NAME)
 
     await page.reload()
     await page.getByTestId('tab-mappings').click()
@@ -556,7 +554,7 @@ new ReverseName()
     await parameters.getByLabel('column value').fill(SOURCE_NAME_COLUMN)
     await shot(page, '20-script-binding.png')
 
-    await page.getByTestId('save-mapping-button').click()
+    await saveMapping(page, REPLICATION_NAME)
 
     // The mapping already carries a literal UPPER({{column}}) on Name from test 05, and a literal
     // transform beats a script — so the script's REVERSE has to lose. Clearing the literal is what
@@ -565,7 +563,7 @@ new ReverseName()
     await page.getByTestId(`column-mapping-transform-${SOURCE_NAME_COLUMN}-edit`).click()
     await page.getByTestId(`column-mapping-transform-${SOURCE_NAME_COLUMN}`).fill('')
     await page.getByTestId(`column-mapping-transform-${SOURCE_NAME_COLUMN}`).press('Enter')
-    await page.getByTestId('save-mapping-button').click()
+    await saveMapping(page, REPLICATION_NAME)
 
     // Touch the source so Change Tracking has something to report. Without this the next pass reads
     // zero rows and the target keeps whatever the previous pass left — which is correct behaviour and
@@ -654,7 +652,7 @@ new DropGadgets()
     await page.goto(`/replications/${REPLICATION_NAME}/overview/transforms`)
     await expect(page.getByTestId('script-bindings-card')).toBeVisible({ timeout: 15_000 })
     await page.getByTestId('script-binding-rowTransform').selectOption(SCRIPT)
-    await page.getByTestId('save-settings-button').click()
+    await saveSettings(page, REPLICATION_NAME)
 
     // Clear the target and touch the source, so this pass genuinely re-reads both rows.
     runSql(`DELETE FROM dbo.[${TARGET_TABLE}];`, DB_NAME)
@@ -745,7 +743,7 @@ new DropGadgets()
     await selectWhenReady(page, 'task-source-database-select', DB_NAME)
     await selectWhenReady(page, 'task-target-connection-select', TGT_CONNECTION_NAME)
     await selectWhenReady(page, 'task-target-database-select', DB_NAME)
-    await page.getByTestId('save-settings-button').click()
+    await saveSettings(page, PROVISIONED_REPLICATION)
 
     await page.getByTestId('tab-mappings').click()
     await page.getByTestId('new-mapping-button').click()

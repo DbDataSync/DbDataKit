@@ -1,28 +1,32 @@
 import { request } from '@dbdatakit/shell'
 import type { InstanceSummary } from './api'
 
-/** A replication or a scheduled plan, as one line of the view across servers. */
+/** A replication, a scheduled plan or a notice of a Proxy, as one line of the view across servers. */
 export interface MonitorRow {
   server: string
   serverName: string
-  product: 'dbdatasync' | 'dbdatabuild'
-  kind: 'replication' | 'plan'
+  /** Unique among the rows: the server and what the row is about (for a notice, its number). */
+  key: string
+  product: 'dbdatasync' | 'dbdatabuild' | 'dbdataproxy'
+  kind: 'replication' | 'plan' | 'event'
   subject: string
-  /** What to look at first: a failed last run, a lag past the limit, a hold, a run going, or nothing. */
-  state: 'failed' | 'lagging' | 'paused' | 'running' | 'ok'
+  /** What to look at first: a failed last run, a lag past the limit, a notice from a Proxy, a hold, a run going, or nothing. */
+  state: 'failed' | 'lagging' | 'event' | 'paused' | 'running' | 'ok'
   detail: string
+  /** Whether the person (or the server) holds it: a failed row can be held too, and then it is the hold that is released. */
+  held: boolean
   /** What the row's buttons act on. */
-  target: { replication: string } | { project: string; connection: string; plan: string }
+  target: { replication: string } | { project: string; connection: string; plan: string } | null
 }
 
 /** A replication whose slowest mapping is this far behind is shown as lagging. */
 export const LAG_LIMIT_MS = 15 * 60 * 1000
 
-const ORDER: Record<MonitorRow['state'], number> = { failed: 0, lagging: 1, paused: 2, running: 3, ok: 4 }
+const ORDER: Record<MonitorRow['state'], number> = { failed: 0, lagging: 1, event: 2, paused: 3, running: 4, ok: 5 }
 
-/** Failures first, then lag, then holds; within a state, by server and name. */
+/** Failures first, then lag, then a Proxy's notices, then holds; within a state, by server and name (a Proxy's notices keep the order they came in, newest first). */
 export const sortRows = (rows: MonitorRow[]) =>
-  [...rows].sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.serverName.localeCompare(b.serverName) || a.subject.localeCompare(b.subject))
+  [...rows].sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.serverName.localeCompare(b.serverName) || (a.state === 'event' ? 0 : a.subject.localeCompare(b.subject)))
 
 export function duration(ms: number): string {
   const minutes = Math.round(ms / 60000)
@@ -47,7 +51,7 @@ export function syncRow(server: InstanceSummary, name: string, status: SyncStatu
   else if (status.paused) { state = 'paused'; detail = status.pauseNote ? `Paused: ${status.pauseNote}` : 'Paused' }
   else if (!status.enabled) { state = 'paused'; detail = 'Switched off' }
   else if (status.running) { state = 'running'; detail = 'Running now' }
-  return { server: server.id, serverName: server.name, product: 'dbdatasync', kind: 'replication', subject: name, state, detail, target: { replication: name } }
+  return { key: `${server.id}/${name}`, server: server.id, serverName: server.name, product: 'dbdatasync', kind: 'replication', subject: name, state, detail, held: status.paused, target: { replication: name } }
 }
 
 export interface BuildJob { connection: string; plan: string; schedule: string; next_due: string | null; last_started: string | null; last_exit: number | null; paused?: boolean; paused_by?: string | null }
@@ -58,14 +62,28 @@ export function buildRow(server: InstanceSummary, project: string, job: BuildJob
   let detail = job.next_due ? `Next ${new Date(job.next_due).toLocaleString()}` : 'No next time'
   if (job.last_exit !== null && job.last_exit !== 0) { state = 'failed'; detail = `The last run ended with exit code ${job.last_exit}` }
   else if (job.paused) { state = 'paused'; detail = job.paused_by ? `Paused by ${job.paused_by}` : 'Paused' }
-  return { server: server.id, serverName: server.name, product: 'dbdatabuild', kind: 'plan', subject: `${project}: ${job.connection}/${job.plan}`, state, detail, target: { project, connection: job.connection, plan: job.plan } }
+  return { key: `${server.id}/${project}/${job.connection}/${job.plan}`, server: server.id, serverName: server.name, product: 'dbdatabuild', kind: 'plan', subject: `${project}: ${job.connection}/${job.plan}`, state, detail, held: job.paused === true, target: { project, connection: job.connection, plan: job.plan } }
+}
+
+/** What a Proxy's notification feed says: `GET /api/v1/notifications` (a failed-login lockout, a refused statement, a limit reached). */
+export interface ProxyNotification { id: number; kind: string; created: string; message: string }
+
+/** Notices older than this are history, not something to look at now. */
+export const NOTICE_WINDOW_MS = 24 * 60 * 60 * 1000
+
+/** The Proxy's own words for its notification kinds. A kind this view does not know is shown as it came. */
+const noticeTitle: Record<string, string> = { LoginLockedOut: 'Login locked out', StatementRefused: 'Statement refused', LimitReached: 'Limit reached' }
+
+/** One notice of a Proxy as a row. It has no buttons: a notice is something that happened, not something that runs. */
+export function proxyRow(server: InstanceSummary, notice: ProxyNotification): MonitorRow {
+  return { key: `${server.id}/notice/${notice.id}`, server: server.id, serverName: server.name, product: 'dbdataproxy', kind: 'event', subject: noticeTitle[notice.kind] ?? notice.kind, state: 'event', detail: notice.message, held: false, target: null }
 }
 
 const relay = (server: InstanceSummary, path: string) => `/relay/${server.id}${path}`
 const enc = encodeURIComponent
 
 /** Everything the view shows, from every reachable server of a kind it knows. A server that does not answer is reported beside the rows, never as a row, and never stops the others. */
-export async function loadRows(servers: InstanceSummary[]): Promise<{ rows: MonitorRow[]; problems: { server: string; message: string }[] }> {
+export async function loadRows(servers: InstanceSummary[], now: number = Date.now()): Promise<{ rows: MonitorRow[]; problems: { server: string; message: string }[] }> {
   const rows: MonitorRow[] = []
   const problems: { server: string; message: string }[] = []
   await Promise.all(servers.filter((s) => s.reachable).map(async (server) => {
@@ -87,6 +105,10 @@ export async function loadRows(servers: InstanceSummary[]): Promise<{ rows: Moni
           const { jobs } = await request<{ jobs: BuildJob[] }>(relay(server, `/api/v1/projects/${enc(project.id)}/schedule`))
           rows.push(...jobs.map((job) => buildRow(server, project.id, job)))
         }
+      } else if (server.product === 'dbdataproxy') {
+        const { notifications } = await request<{ notifications: ProxyNotification[] }>(relay(server, '/api/v1/notifications'))
+        // the feed lists the oldest first; the newest are what matters here
+        rows.push(...notifications.filter((n) => now - Date.parse(n.created) <= NOTICE_WINDOW_MS).reverse().slice(0, 20).map((n) => proxyRow(server, n)))
       }
     } catch (error) {
       problems.push({ server: server.name, message: error instanceof Error ? error.message : 'No answer' })
@@ -103,6 +125,7 @@ export const actions = {
 }
 
 function act(row: MonitorRow, what: 'pause' | 'resume' | 'run') {
+  if (row.target === null) return Promise.resolve(null)   // a notice has nothing to hold or run
   const base = `/relay/${row.server}`
   if ('replication' in row.target) {
     const name = enc(row.target.replication)

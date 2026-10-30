@@ -179,6 +179,15 @@ public static partial class TargetRules
         return ExpandMarker(text, "ddb_epoch", a => $"(DATEDIFF_BIG(SECOND, CAST('1970-01-01' AS DATETIME2), {a[0]}) + DATEPART(MICROSECOND, {a[0]}) / 1000000.0)");
     }
 
+    /// <summary>A call of a surrogate key (plan 25) reaches the transpiled text as `ddb_key_ti(a, b)`, one letter per argument; the engine's text of the key is written over the arguments as they now stand.</summary>
+    private static string ExpandKeyMarkers(string text, string target)
+    {
+        if (!text.Contains("ddb_key_", StringComparison.OrdinalIgnoreCase)) return text;
+        foreach (var name in System.Text.RegularExpressions.Regex.Matches(text, @"\bddb_key_[tid]+(?=\s*\()", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Select(m => m.Value.ToLowerInvariant()).Distinct().ToList())
+            text = ExpandMarker(text, name, a => DbDataKit.Dialect.SurrogateKey.FromMarker(target, name, a) ?? throw new InvalidOperationException($"The key marker {name} was given {a.Length} arguments. This is a tool bug."));
+        return text;
+    }
+
     private static string ExpandOperatorMarker(string text, string marker, string op) => ExpandMarker(text, marker, a => $"(({a[0]}) {op} ({a[1]}))");
 
     /// <summary>Replaces `marker(a, b, ...)` by what <paramref name="write"/> makes of the arguments: they are found by counting parentheses, so nested calls and string literals are safe. Innermost calls first.</summary>
