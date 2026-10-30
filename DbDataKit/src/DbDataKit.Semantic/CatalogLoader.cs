@@ -23,6 +23,9 @@ public static partial class CatalogLoader
     /// <summary>The breakdowns of a datetime dimension, finest first.</summary>
     public static readonly string[] DatetimeGranularities = ["hour", "day", "week", "month", "quarter", "year"];
 
+    /// <summary>The node as parsed from its own text, so a number read from YAML is the int or long a request carries and not a decimal.</summary>
+    private static JsonNode? AsWritten(JsonNode? node) => node is null ? null : JsonNode.Parse(node.ToJsonString());
+
     private static QisError Err(string code, string path, string message, List<string>? suggestions = null) =>
         new("catalog", code, path, message, suggestions is { Count: > 0 } ? suggestions : null);
 
@@ -532,6 +535,19 @@ public static partial class CatalogLoader
                 if (Validator.RelativeOps.Contains(leaf.Operator))
                     errors.Add(Err("segment_relative_period", leafPath + ".operator", $"{leaf.Operator} is relative to today, which a segment can't be: a request says it."));
             doc.Segments[name] = filters;
+        }
+
+        foreach (var (name, q) in root["queries"]?.AsObject() ?? [])
+        {
+            var def = new SavedQueryDef { Description = q!["description"]?.GetValue<string>(), Sql = q["sql"]?.GetValue<string>(), Request = AsWritten(q["request"]) as JsonObject, Parameters = AsWritten(q["parameters"]) as JsonObject ?? new JsonObject() };
+            if (def.Sql is not null)
+            {
+                var translation = Sql.SemanticSqlTranslator.Translate(def.Sql, root["name"]?.GetValue<string>());
+                if (!translation.Ok) errors.Add(Err("query_invalid", $"$.queries.{name}.sql", string.Join("; ", translation.Errors.Select(e => e.Message))));
+            }
+            else if (def.Request is not null && def.Request["kind"]?.GetValue<string>() != "query")
+                errors.Add(Err("query_invalid", $"$.queries.{name}.request", "A saved query's request is of kind query."));
+            doc.Queries[name] = def;
         }
 
         // A calendar names, for each time dimension, the dimension holding its member one unit earlier.
