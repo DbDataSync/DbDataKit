@@ -1,13 +1,28 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, ErrorBanner } from '@dbdatakit/shell'
+import { ApiError, DiffViewer, ErrorBanner } from '@dbdatakit/shell'
 import { buildApi } from '../api'
+import type { GitChange } from '../types'
 
 /** The files a refused merge names, when the server sent them. */
 export function conflictsOf(error: unknown): string[] {
   if (!(error instanceof ApiError)) return []
   const conflicts = (error.body as { conflicts?: unknown } | null | undefined)?.conflicts
   return Array.isArray(conflicts) ? conflicts.filter((c): c is string => typeof c === 'string') : []
+}
+
+const languageOf = (path: string) => (path.endsWith('.sql') ? 'sql' : path.endsWith('.yml') || path.endsWith('.yaml') ? 'yaml' : 'plaintext')
+
+/** One changed file: both texts side by side when the server sent them (W11), the unified patch for a binary or very large file. */
+export function ChangeDiff({ change }: { change: GitChange }) {
+  if (change.sides) {
+    return (
+      <div data-testid="build-git-diff">
+        <DiffViewer before={change.before ?? null} after={change.after ?? null} language={languageOf(change.path)} height={260} testId="build-git-diff-editor" />
+      </div>
+    )
+  }
+  return <pre className="mono" style={{ margin: 0, overflow: 'auto', maxHeight: 220 }} data-testid="build-git-patch">{change.patch}</pre>
 }
 
 /**
@@ -50,7 +65,7 @@ export function GitPanel({ project, workspace, remote, onMerged }: { project: st
           <button type="button" className="grid-row mono" style={{ width: '100%', textAlign: 'left' }} onClick={() => setExpanded(expanded === c.path ? null : c.path)} data-testid="build-git-change">
             {c.status} {c.path}
           </button>
-          {expanded === c.path && <pre className="mono" style={{ margin: 0, overflow: 'auto', maxHeight: 220 }} data-testid="build-git-patch">{c.patch}</pre>}
+          {expanded === c.path && <ChangeDiff change={c} />}
         </div>
       ))}
       <div className="row" style={{ gap: 12, margin: '10px 0', flexWrap: 'wrap' }}>
