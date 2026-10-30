@@ -15,6 +15,9 @@ COPY DbDataKit/web/sync/package.json sync/package.json
 COPY DbDataKit/web/console/package.json console/package.json
 RUN npm ci
 COPY DbDataKit/web .
+# The docs of every module the console serves (a module registers its folder in its package.json: Sync's is DbDataSync/docs, with its pictures in DbDataSync/screenshots); the build fails without them.
+COPY DbDataSync/docs /src/DbDataSync/docs
+COPY DbDataSync/screenshots /src/DbDataSync/screenshots
 RUN npm run build -w @dbdatakit/console
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build

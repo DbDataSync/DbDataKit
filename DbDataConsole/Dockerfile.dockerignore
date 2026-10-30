@@ -3,6 +3,9 @@
 .git/
 .vs/
 DbDataSync/
+# except what the console's web build reads: the docs of Sync's module and the pictures they show
+!DbDataSync/docs/
+!DbDataSync/screenshots/
 DbDataProxy/
 DbDataBuild/
 **/node_modules/
