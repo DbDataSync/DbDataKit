@@ -42,14 +42,16 @@ public static class SemanticSqlTranslator
     /// query's request gets the arguments as its <c>parameters</c> (a positional argument is the parameter at that place in the saved query's definitions); an argument that is itself a marker takes the value bound to that marker in
     /// <paramref name="bound"/>. <c>IsCall</c> is false when the text does not select from a saved query at all, and it is then translated as any semantic SQL. A call is the saved query as it is: no WHERE, GROUP BY or other clause.
     /// </summary>
-    public static (bool IsCall, string? Name, SqlTranslation Translation) TranslateCall(string sql, Catalog catalog, JsonObject? bound = null, bool describing = false)
+    public static (bool IsCall, string? Name, SqlTranslation Translation) TranslateCall(string sql, Catalog catalog, JsonObject? bound = null, bool describing = false, Func<string, SavedQueryDef?>? userQueries = null)
     {
-        if (catalog.Doc.Queries.Count == 0) return (false, null, new SqlTranslation(null, []));
+        // the model's own saved queries first; then, for a host that keeps them, the caller's (J27)
+        SavedQueryDef? Find(string name) => catalog.Doc.Queries.TryGetValue(name, out var own) ? own : userQueries?.Invoke(name);
+        if (catalog.Doc.Queries.Count == 0 && userQueries is null) return (false, null, new SqlTranslation(null, []));
         try
         {
             var node = SqlParser.ParseSelect(SqlMarkers.Rewrite(sql));
-            if (node["type"]?.GetValue<string>() != "SELECT_NODE" || CalledName(node["from_table"], catalog) is not { } name) return (false, null, new SqlTranslation(null, []));
-            var saved = catalog.Doc.Queries[name];
+            if (node["type"]?.GetValue<string>() != "SELECT_NODE" || CalledName(node["from_table"], Find) is not { } name) return (false, null, new SqlTranslation(null, []));
+            var saved = Find(name)!;
 
             if (node["select_list"]!.AsArray() is not [{ } star] || star["type"]?.GetValue<string>() != "STAR"
                 || node["where_clause"] is not null || node["having"] is not null || node["qualify"] is not null || node["modifiers"] is JsonArray { Count: > 0 }
@@ -91,7 +93,7 @@ public static class SemanticSqlTranslator
         catch (Refused e) { return (true, null, Failed(e.Code, e.Message)); }
     }
 
-    private static string? CalledName(JsonNode? from, Catalog catalog)
+    private static string? CalledName(JsonNode? from, Func<string, SavedQueryDef?> find)
     {
         var name = from?["type"]?.GetValue<string>() switch
         {
@@ -99,7 +101,7 @@ public static class SemanticSqlTranslator
             "TABLE_FUNCTION" => from["function"]?["function_name"]?.GetValue<string>(),
             _ => null,
         };
-        return name is not null && catalog.Doc.Queries.ContainsKey(name) ? name : null;
+        return name is not null && find(name) is not null ? name : null;
     }
 
     private static SqlTranslation Failed(string code, string message) => new(null, [new QisError("semantic_sql", code, "$", message)]);

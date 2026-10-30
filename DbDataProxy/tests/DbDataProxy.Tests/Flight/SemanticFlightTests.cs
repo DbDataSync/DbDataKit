@@ -159,6 +159,29 @@ public sealed class SemanticFlightTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task APersonsOwnSavedQueryIsCalledLikeAViewAndSharingItSharesNoData()
+    {
+        var store = _app!.Services.GetRequiredService<DbDataProxy.Server.State.SavedQueryStore>();
+        store.Save("alice", "sales_catalog", "my_revenue", new DbDataKit.Semantic.SavedQueryDef
+        {
+            Sql = "SELECT customers.region, MEASURE(orders.net_revenue) FROM sales_catalog WHERE date.fiscal_quarter = :quarter GROUP BY ALL LIMIT 100",
+            Parameters = System.Text.Json.Nodes.JsonNode.Parse("""{"quarter": {"for": "date.fiscal_quarter", "type": "string", "default": "FY27-Q1"}}""")!.AsObject(),
+        }, "alice");
+
+        var (_, expected) = await QueryAsync("alice", "SELECT customers.region, MEASURE(orders.net_revenue) FROM sales_catalog WHERE date.fiscal_quarter = 'FY27-Q1' GROUP BY ALL LIMIT 100");
+        var (_, called) = await QueryAsync("alice", "SELECT * FROM my_revenue");
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected, called);
+
+        // not shared: bob has no such saved query; shared: he can call it, but the data is still the data he may read, which is none here
+        var unknown = await Rpc.ExpectAsync(() => QueryAsync("bob", "SELECT * FROM my_revenue"));
+        Assert.Equal(StatusCode.InvalidArgument, unknown.StatusCode);   // to him there is no such view
+        store.Share("alice", "sales_catalog", "my_revenue", "user:bob");
+        var shared = await Rpc.ExpectAsync(() => QueryAsync("bob", "SELECT * FROM my_revenue"));
+        Assert.Equal(StatusCode.PermissionDenied, shared.StatusCode);
+    }
+
+    [Fact]
     public async Task SemanticSqlAnswersWithTheSameRows()
     {
         var (_, rows) = await QueryAsync("alice", """

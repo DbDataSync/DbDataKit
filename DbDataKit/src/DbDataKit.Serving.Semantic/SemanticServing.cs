@@ -44,7 +44,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
 
         var explaining = false;
         if (isSql && text.TrimStart().StartsWith("EXPLAIN ", StringComparison.OrdinalIgnoreCase)) { explaining = true; text = text.TrimStart()[8..]; }
-        var document = isSql ? TranslateOrCall(text, model, BoundParameters(request, text)) : Parse(text);
+        var document = isSql ? TranslateOrCall(text, model, BoundParameters(request, text), UserFinder(context, model)) : Parse(text);
         if (!isSql && document["kind"]?.GetValue<string>() == "explain" && document["query"] is JsonObject explained)
         {
             // {"kind":"explain","query":{...}} is the same request as a query, planned and not run
@@ -110,7 +110,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         var text = statement.Text.TrimStart();
         var isSql = !text.StartsWith('{');
         if (isSql && text.StartsWith("EXPLAIN ", StringComparison.OrdinalIgnoreCase)) text = text[8..];
-        if (isSql && SemanticSqlTranslator.TranslateCall(text, model.Catalog, null, describing: true) is (true, _, var called))
+        if (isSql && SemanticSqlTranslator.TranslateCall(text, model.Catalog, null, describing: true, userQueries: UserFinder(context, model)) is (true, _, var called))
         {
             // a saved query called with markers: what it will be asked for is each marker, with what the saved query says of the parameter it fills
             if (!called.Ok) throw new ServingInvalidException(string.Join("; ", called.Errors.Select(e => $"{e.Code}: {e.Message}")));
@@ -195,9 +195,12 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
     }
 
     /// <summary>The text as a call of a saved query of the model when it is one (J26), else as semantic SQL.</summary>
-    private static JsonObject TranslateOrCall(string sql, SemanticModel model, JsonObject? parameters)
+    private Func<string, SavedQueryDef?>? UserFinder(ServingContext context, SemanticModel model) =>
+        models.UserQueries is { } kept ? name => kept.Find(context.Caller, model.Name, name) : null;
+
+    private static JsonObject TranslateOrCall(string sql, SemanticModel model, JsonObject? parameters, Func<string, SavedQueryDef?>? userQueries)
     {
-        var (isCall, _, call) = SemanticSqlTranslator.TranslateCall(sql, model.Catalog, parameters);
+        var (isCall, _, call) = SemanticSqlTranslator.TranslateCall(sql, model.Catalog, parameters, userQueries: userQueries);
         if (!isCall) return Translate(sql, model, parameters);
         return call.Ok ? call.Request! : throw new ServingInvalidException(string.Join("; ", call.Errors.Select(e => $"{e.Code}: {e.Message}")));
     }
@@ -239,6 +242,14 @@ internal sealed class SemanticCatalog(IServingCatalog inner, SemanticModels mode
             var properties = new Dictionary<string, string> { ["saved_query"] = "true", ["call"] = $"SELECT * FROM {queryName}({string.Join(", ", saved.Parameters.Select(p => p.Key))})" };
             if (saved.Parameters.Count > 0) properties["parameters"] = saved.Parameters.ToJsonString();
             yield return new ServingObject(ServingObjectKind.View, [name, queryName], saved.Description, Properties: properties);
+        }
+        // and the ones this caller keeps or has been given (J27), with who owns each; the model's own names win
+        foreach (var kept in models.UserQueries?.List(context.Caller, name) ?? [])
+        {
+            if (doc.Queries.ContainsKey(kept.Name)) continue;
+            var properties = new Dictionary<string, string> { ["saved_query"] = "true", ["owner"] = kept.Owner, ["call"] = $"SELECT * FROM {kept.Name}({string.Join(", ", kept.Query.Parameters.Select(p => p.Key))})" };
+            if (kept.Query.Parameters.Count > 0) properties["parameters"] = kept.Query.Parameters.ToJsonString();
+            yield return new ServingObject(ServingObjectKind.View, [name, kept.Name], kept.Query.Description, Properties: properties);
         }
         foreach (var (dimension, def) in doc.Dimensions)
         {
