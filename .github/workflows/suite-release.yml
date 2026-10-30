@@ -10,8 +10,8 @@ name: Suite release
 #   gh workflow run suite-release.yml --ref main -f sha=<an older commit on main>
 #
 # A dry run keeps every package on the run (artifacts `release-<product>`) and the last job checks that each holds its zips, its MSI and a SHA256SUMS
-# that lists them. The products stay releasable on their own: each *-release.yml still has its own dispatch. Each release has its own CalVer
-# version, from the UTC clock when its workflow starts, so one suite release is the same commit and not the same version string.
+# that lists them. The products stay releasable on their own: each *-release.yml still has its own dispatch. One CalVer version, computed by the
+# `guard` job from the UTC clock, is handed to every product (their `version` input), so a suite release is one commit and one version string.
 
 on:
   workflow_dispatch:
@@ -175,6 +175,7 @@ jobs:
     with:
       sha: ${{ needs.guard.outputs.sha }}
       beta: ${{ inputs.beta }}
+      version: ${{ needs.guard.outputs.version }}
       dry_run: ${{ inputs.dry_run }}
     permissions:
       contents: write
@@ -185,6 +186,7 @@ jobs:
     with:
       sha: ${{ needs.guard.outputs.sha }}
       beta: ${{ inputs.beta }}
+      version: ${{ needs.guard.outputs.version }}
       dry_run: ${{ inputs.dry_run }}
     permissions:
       contents: write
@@ -195,6 +197,7 @@ jobs:
     with:
       sha: ${{ needs.guard.outputs.sha }}
       beta: ${{ inputs.beta }}
+      version: ${{ needs.guard.outputs.version }}
       dry_run: ${{ inputs.dry_run }}
     permissions:
       contents: write
