@@ -71,6 +71,21 @@ public sealed class SemanticModuleTests : IDisposable
     }
 
     [Fact]
+    public async Task AStatementWithBoundValuesIsTheSameRequestAsItsLiteralForm()
+    {
+        var literal = "SELECT customers.region, MEASURE(orders.net_revenue), MEASURE(orders.order_count) FROM sales_catalog WHERE date.fiscal_quarter = 'FY27-Q1' GROUP BY ALL ORDER BY MEASURE(orders.net_revenue) DESC LIMIT 100";
+        var marked = literal.Replace("'FY27-Q1'", "?");
+
+        var expected = await RowsAsync(await _services.Queries.RunAsync(Alice, new ServingRequest.Sql("semantic:sales_catalog", literal)));
+        var positional = await RowsAsync(await _services.Queries.RunAsync(Alice, new ServingRequest.Sql("semantic:sales_catalog", marked, [new ServingParameter(null, "string", "FY27-Q1")])));
+        var named = await RowsAsync(await _services.Queries.RunAsync(Alice, new ServingRequest.SemanticSql("sales_catalog", literal.Replace("'FY27-Q1'", ":quarter"), Parameters: [new ServingParameter("quarter", "string", "FY27-Q1")])));
+
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected, positional);
+        Assert.Equal(expected, named);
+    }
+
+    [Fact]
     public async Task SemanticSqlOnAModelSourceIsTheSameRequest()
     {
         var sql = """

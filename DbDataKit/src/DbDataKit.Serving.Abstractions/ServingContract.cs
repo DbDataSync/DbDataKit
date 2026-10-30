@@ -33,7 +33,7 @@ public abstract record ServingRequest(string Source, ServingLimits? Asked = null
     public sealed record Semantic(string Source, string Json, ServingLimits? Asked = null) : ServingRequest(Source, Asked);
 
     /// <summary>Semantic SQL (plan 14 R6) against the named model.</summary>
-    public sealed record SemanticSql(string Source, string Text, ServingLimits? Asked = null) : ServingRequest(Source, Asked);
+    public sealed record SemanticSql(string Source, string Text, ServingLimits? Asked = null, IReadOnlyList<ServingParameter>? Parameters = null) : ServingRequest(Source, Asked);
 
     /// <summary>MDX in the subset the semantic layer translates (plan 14 R7).</summary>
     public sealed record Mdx(string Source, string Text, ServingLimits? Asked = null) : ServingRequest(Source, Asked);

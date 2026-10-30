@@ -44,7 +44,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
 
         var explaining = false;
         if (isSql && text.TrimStart().StartsWith("EXPLAIN ", StringComparison.OrdinalIgnoreCase)) { explaining = true; text = text.TrimStart()[8..]; }
-        var document = isSql ? Translate(text, model) : Parse(text);
+        var document = isSql ? Translate(text, model, BoundParameters(request)) : Parse(text);
         if (!isSql && document["kind"]?.GetValue<string>() == "explain" && document["query"] is JsonObject explained)
         {
             // {"kind":"explain","query":{...}} is the same request as a query, planned and not run
@@ -97,9 +97,32 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         catch (System.Text.Json.JsonException e) { throw new ServingInvalidException($"The semantic request is not valid JSON: {e.Message}"); }
     }
 
-    private static JsonObject Translate(string sql, SemanticModel model)
+    /// <summary>The values bound with a statement (a prepared statement's parameters), as the request's <c>parameters</c>: by name, or "1", "2", ... for the unnamed ones in order.</summary>
+    private static JsonObject? BoundParameters(ServingRequest request)
     {
-        var translation = SemanticSqlTranslator.Translate(sql, model.Name);
+        var bound = request switch { ServingRequest.Sql s => s.Parameters, ServingRequest.SemanticSql q => q.Parameters, _ => null };
+        if (bound is not { Count: > 0 }) return null;
+        var result = new JsonObject();
+        for (int i = 0; i < bound.Count; i++)
+        {
+            var parameter = bound[i];
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            result[parameter.Name ?? (i + 1).ToString(inv)] = parameter.Type switch
+            {
+                "null" => null,
+                "bool" => JsonValue.Create(string.Equals(parameter.Text, "true", StringComparison.OrdinalIgnoreCase)),
+                "int64" => JsonValue.Create(long.Parse(parameter.Text ?? "0", inv)),
+                "double" => JsonValue.Create(double.Parse(parameter.Text ?? "0", inv)),
+                "decimal" => JsonValue.Create(decimal.Parse(parameter.Text ?? "0", inv)),
+                _ => JsonValue.Create(parameter.Text),
+            };
+        }
+        return result;
+    }
+
+    private static JsonObject Translate(string sql, SemanticModel model, JsonObject? parameters)
+    {
+        var translation = SemanticSqlTranslator.Translate(sql, model.Name, parameters);
         return translation.Ok ? translation.Request! : throw new ServingInvalidException(string.Join("; ", translation.Errors.Select(e => $"{e.Code}: {e.Message}")));
     }
 

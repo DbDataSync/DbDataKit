@@ -463,7 +463,9 @@ A request may leave a value to be bound: a value node `{"param": "name"}` stands
 * A parameter in a filter's values is for that filter's attribute; a definition naming another attribute is `param_for_mismatch`. Every bound value is checked before any source is read: against the definition's type or the attribute's type (`param_type_mismatch`), and against the member list of a catalog-member attribute (`param_unknown_member`). `param_missing` is a name with no binding and no default; `param_unknown` is a binding no value uses.
 * Parameters are resolved once, before the request is validated, hashed or planned: the request hash, the cache key and a replay are those of the literal form, and a parameterized request returns the rows of its literal form.
 
-Not yet: `?`, `$n` and `:name` markers in semantic SQL, prepared statements on a model, the `members` call, `empty: matches_none`, and the range check of an argument's parameter (plan 19, J25).
+In semantic SQL a marker is `?` (named "1", "2", ... in order), `$n` or `$name`, or `:name` (rewritten to `$name`; not inside a string or a comment, and `::` is a cast). `IN :regions` stands for a list. The values come beside the text, as the request's `parameters` (`SemanticSqlTranslator.Translate(sql, model, parameters)`), or as a statement's bound values on a model source (`ServingRequest.Sql` / `SemanticSql` with `Parameters`: named, or in order for the unnamed ones). `LIMIT $top` and a transform's keyword argument can be markers too.
+
+Not yet: prepared statements on a model over Flight SQL (the parameter schema), the `members` call, `empty: matches_none`, and the range check of an argument's parameter (plan 19, J25).
 
 ## Validation and canonicalization
 
