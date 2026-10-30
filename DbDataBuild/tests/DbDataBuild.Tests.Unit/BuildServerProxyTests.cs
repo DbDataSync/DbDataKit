@@ -231,6 +231,47 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Every_engine_the_proxy_serves_can_be_published_and_a_connection_of_another_engine_is_refused_in_a_sentence_before_anything_is_sent()
+    {
+        await Pair();
+        var secrets = ServerSecrets.Open(BuildDir);
+        // a connection file per driver (readonly where the driver can only be read), each with a read login of its own
+        var files = new Dictionary<string, string>
+        {
+            ["lake"] = "engine: odbc\naccess: readonly", ["local"] = "engine: duckdb\naccess: readonly", ["pg"] = "engine: postgres", ["flight"] = "engine: flightsql\naccess: readonly",
+        };
+        foreach (var (name, engine) in files)
+        {
+            File.WriteAllText(Path.Combine(project, "connections", name + ".yaml"), $"schema: connection/1\nname: {name}\n{engine}\n");
+            using var login = SecretValue.From($"login-of-{name}");
+            await secrets.SetAsync(ServerSecrets.NameOf(name, DbDataKit.Connections.LoginRole.Read), login);
+        }
+
+        foreach (var (name, driver) in new[] { ("lake", "odbc"), ("local", "duckdb") })
+        {
+            seen.Clear();
+            var reply = await Publish("ada", ServerRole.Approver, "edge", new { connection = name });
+            Assert.True(reply.StatusCode == HttpStatusCode.OK, await reply.Content.ReadAsStringAsync());
+            Assert.Equal($"login-of-{name}", (string)JsonNode.Parse(seen.Single(r => r.Path == $"/api/v1/secrets/{name}-read").Body)!["value"]!);
+            var definition = (string)JsonNode.Parse(seen.Single(r => r.Method == "PUT" && r.Path == $"/api/v1/data-sources/{name}").Body)!["text"]!;
+            Assert.Contains($"engine: {driver}", definition);
+            Assert.Contains("access: readonly", definition);
+            Assert.Contains($"connection_string_secret: 'secret:dbdata:proxy:managed-x:{name}-read'", definition);
+        }
+
+        foreach (var (name, driver) in new[] { ("pg", "postgres"), ("flight", "flightsql") })
+        {
+            seen.Clear();
+            var reply = await Publish("ada", ServerRole.Approver, "edge", new { connection = name });
+            Assert.Equal(HttpStatusCode.Conflict, reply.StatusCode);
+            var message = (string)JsonNode.Parse(await reply.Content.ReadAsStringAsync())!["error"]!;
+            Assert.Contains("sqlserver, odbc and duckdb", message);
+            Assert.Contains($"not {driver}", message);
+            Assert.Empty(seen);                                                             // not even the login was sent
+        }
+    }
+
+    [Fact]
     public async Task Publishing_needs_the_approver_role_a_paired_proxy_a_connection_of_the_project_and_a_read_login()
     {
         await Pair();

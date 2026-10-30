@@ -35,6 +35,7 @@ export function ProjectPage() {
           <NavLink to={`${base}/plans`} className={tabClass} data-testid="build-tab-plans">Plans</NavLink>
           <NavLink to={`${base}/compare`} className={tabClass} data-testid="build-tab-compare">Compare</NavLink>
           <NavLink to={`${base}/edit`} className={tabClass} data-testid="build-tab-edit">Edit</NavLink>
+          <NavLink to={`${base}/publish`} className={tabClass} data-testid="build-tab-publish">Publish</NavLink>
           <NavLink to={`${base}/sample`} className={tabClass} data-testid="build-tab-sample">Sample</NavLink>
         </>
       }

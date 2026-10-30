@@ -50,6 +50,30 @@ jobs:
       - run: dotnet build DbDataConsole.slnf -c Release
       - run: dotnet test --project tests/DbDataConsole.Tests -c Release --no-build --minimum-expected-tests 10
 
+  # The real programs in one run (plan 13a, T12): a Build server and a Proxy started from their built output, a console in the test between them. A Build server publishes and updates its own data source on the Proxy, is refused on
+  # one made by hand and on extensions.proxy, cannot adopt for itself, and the Proxy's audit names the person and the Build server. No browser and no database: nothing connects to the connections it publishes.
+  servers:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-product
+        with:
+          product: DbDataConsole
+          global-json: DbDataConsole/global.json
+      - name: Build a Build server
+        working-directory: DbDataBuild
+        run: |
+          scripts/fetch-native.sh
+          dotnet build src/DbDataBuild.Cli -c Debug
+      - name: Build a Proxy
+        working-directory: DbDataProxy
+        run: dotnet build src/DbDataProxy.Server -c Debug
+      - run: dotnet build tests/DbDataConsole.Servers.Tests -c Debug
+      - run: dotnet test --project tests/DbDataConsole.Servers.Tests -c Debug --no-build --minimum-expected-tests 1
+
   # The web app in a real browser against a real console: the first-run invitation, a passkey made in a virtual authenticator, signing out and back in with it, the users list,
   # and pairing a real Build server.
   playwright:

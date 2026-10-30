@@ -17,7 +17,7 @@ namespace DbDataProxy.Server.Management;
 /// configuration folder's git history as the person who made it, noted in the audit, and applied at once: the options monitor is told, and the next query sees the change without a restart.
 /// </summary>
 public sealed partial class ProxyDataSources(
-    string configDirectory, ProxyManagement validation, Action reload, Func<DataSourceCatalog> catalog, IAuditLog audit, GitCommitService? git, TimeProvider? clock = null)
+    string configDirectory, ProxyManagement validation, Action reload, Func<DataSourceCatalog> catalog, IAuditLog audit, GitCommitService? git, TimeProvider? clock = null, Func<string, PairedClient?>? findClient = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly WriteGuard _guard = new();
@@ -35,6 +35,10 @@ public sealed partial class ProxyDataSources(
         if (rest.Length == 0) return method == "GET" ? ManagementResult.Ok(List(OwnedBy(caller))) : ManagementResult.Problem(405, "Data sources are listed with GET.");
         var name = Uri.UnescapeDataString(rest[0]);
         if (!NamePattern().IsMatch(name)) return ManagementResult.Problem(400, "A data source name is a letter followed by letters, digits, '.', '_' or '-' (up to 64).");
+
+        // taking over a hand-made data source is a person's act with the admin role (OwnerScope.AuthorizeAdopt), whatever a server client's ceiling says: decided before the owner rules, which a client would fail with another sentence
+        if (rest.Length == 2 && rest[1] == "adopt")
+            return method == "POST" ? await AdoptAsync(name, body, caller, cancellationToken) : ManagementResult.Problem(405, "A data source is adopted with POST.");
 
         // a publishing client reaches only the data sources it made (the owner rules, plan 13 W12); an administrator reaches all
         var action = method switch { "GET" or "POST" => ObjectAction.Change, "DELETE" => ObjectAction.Delete, _ => File.Exists(FileOf(name)) ? ObjectAction.Change : ObjectAction.Create };
@@ -137,6 +141,65 @@ public sealed partial class ProxyDataSources(
         });
     }
 
+    private sealed record AdoptRequest(string? Client);
+
+    /// <summary>
+    /// <c>POST /api/v1/data-sources/{name}/adopt</c> (<c>{"client": "&lt;id of a paired server client&gt;"}</c>), plan 13 W12 and T12: a person with the admin role (a console's signed-in administrator, or the operating-system user on the local channel) makes a data source
+    /// that was made by hand, or by another client, one that client manages: its file gets <c>managed_by: &lt;client&gt;</c>, and from then on the owner rules let that client change and remove it. A server client is refused whatever its ceiling, and what the file says
+    /// is otherwise not touched. A data source that carries a serving policy (<c>extensions.proxy</c>) is not adopted: a client writes the whole file, which would silently drop the policy, so the policy goes first (an administrator moves it out) and the source is adopted after.
+    /// </summary>
+    private async Task<ManagementResult> AdoptAsync(string name, string? body, ManagementCaller caller, CancellationToken cancellationToken)
+    {
+        var decision = caller.Token is null ? null : OwnerScope.AuthorizeAdopt(caller.Token);
+        if (decision is { Allowed: false })
+        {
+            Record(caller, "data-source adopt", name, "refused");
+            return ManagementResult.Problem(403, decision.Reason ?? "Adopting a data source is a person's act with the admin role.");
+        }
+        AdoptRequest? request;
+        try { request = string.IsNullOrWhiteSpace(body) ? null : JsonSerializer.Deserialize<AdoptRequest>(body, Json); }
+        catch (JsonException) { request = null; }
+        if (string.IsNullOrWhiteSpace(request?.Client))
+            return ManagementResult.Problem(400, "The body is a JSON object naming the server client that takes the data source over: {\"client\": \"<client id>\"} (server clients lists them).");
+        var client = findClient?.Invoke(request.Client);
+        if (client is null || client.Kind != ClientKind.Server)
+            return ManagementResult.Problem(404, $"There is no paired server client '{request.Client}'; only a Build server (or another server client) can take a data source over.");
+
+        var file = FileOf(name);
+        if (!File.Exists(file)) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
+        var text = File.ReadAllText(file);
+        var current = DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, file).Definition;
+        if (current?.Extensions.Items.ContainsKey("proxy") == true)
+        {
+            Record(caller, "data-source adopt", name, "refused");
+            return ManagementResult.Problem(409, "The data source carries a serving policy (extensions.proxy), which a publishing client's write would drop. Move the policy out first, then adopt it.");
+        }
+        if (string.Equals(current?.ManagedBy, client.Id, StringComparison.Ordinal))
+            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["managed_by"] = client.Id, ["adopted"] = false, ["version"] = VersionOf(text) });
+
+        var adopted = ManagedByLine().IsMatch(text) ? ManagedByLine().Replace(text, $"managed_by: {client.Id}", 1) : (text.EndsWith('\n') ? text : text + "\n") + $"managed_by: {client.Id}\n";
+        var candidate = validation.ValidateFiles(new Dictionary<string, string> { [$"connections/{name}.yaml"] = adopted });
+        if (candidate.Body["valid"]?.GetValue<bool>() != true)
+            return new ManagementResult(400, new JsonObject { ["error"] = "The data source with that owner is not valid, so nothing was written.", ["valid"] = false, ["diagnostics"] = candidate.Body["diagnostics"]!.DeepClone() });
+
+        var result = await _guard.RunAsync(name, VersionOf(text), () => Task.FromResult(File.Exists(file) ? VersionOf(File.ReadAllText(file)) : null), () =>
+        {
+            var temp = file + ".tmp-" + Guid.NewGuid().ToString("N")[..8];
+            File.WriteAllText(temp, adopted, new UTF8Encoding(false));
+            File.Move(temp, file, overwrite: true);
+            return Task.FromResult(VersionOf(adopted));
+        }, cancellationToken);
+        if (!result.Applied)
+        {
+            Record(caller, "data-source adopt", name, "stale");
+            return new ManagementResult(409, new JsonObject { ["error"] = "The data source changed while it was being adopted; try again.", ["current_version"] = result.CurrentVersion });
+        }
+        Committed(caller, $"Data source {name} adopted by {client.Name} ({client.Id})", [file]);
+        Record(caller, "data-source adopt", name, $"adopted by {client.Id}");
+        reload();
+        return ManagementResult.Ok(new JsonObject { ["name"] = name, ["managed_by"] = client.Id, ["adopted"] = true, ["previous_owner"] = current?.ManagedBy, ["version"] = result.Value });
+    }
+
     private async Task<ManagementResult> DeleteAsync(string name, string? expectedVersion, ManagementCaller caller, CancellationToken cancellationToken)
     {
         var file = FileOf(name);
@@ -215,4 +278,7 @@ public sealed partial class ProxyDataSources(
 
     [GeneratedRegex("^[A-Za-z][A-Za-z0-9_.-]{0,63}$")]
     private static partial Regex NamePattern();
+
+    [GeneratedRegex(@"^managed_by:.*$", RegexOptions.Multiline)]
+    private static partial Regex ManagedByLine();
 }
