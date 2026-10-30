@@ -11,7 +11,7 @@ on:
       product:
         description: The product whose install files to republish.
         type: choice
-        options: [dbdatabuild, dbdatasync, dbdataproxy]
+        options: [dbdatakit, dbdatabuild, dbdatasync, dbdataproxy]
         required: true
 
 permissions:
@@ -33,6 +33,7 @@ jobs:
         id: release
         run: |
           case "$PRODUCT" in
+            dbdatakit)   meta=DbDataConsole/dist.json ;;
             dbdatabuild) meta=DbDataBuild/dist.json ;;
             dbdatasync)  meta=DbDataSync/dist.json ;;
             dbdataproxy) meta=DbDataProxy/dist.json ;;

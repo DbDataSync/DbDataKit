@@ -23,13 +23,32 @@ on:
   workflow_dispatch:
     inputs:
       beta:
-        description: Publish as a prerelease (-beta suffix on the version, prerelease flag on the GitHub Release). A prerelease does not touch the Scoop manifest.
+        description: Publish as a prerelease (-beta suffix on the version, prerelease flag on the GitHub Release).
         type: boolean
         default: false
       sha:
         description: The commit to release. Empty means the newest commit on main. It must be on main.
         type: string
         default: ''
+      dry_run:
+        description: Build everything and attach the files to the run (artifact "release-<product>"), but tag nothing and publish nothing.
+        type: boolean
+        default: false
+  # suite-release.yml calls this (plan 13a, L06), with dry_run for the suite's dry run.
+  workflow_call:
+    inputs:
+      beta:
+        description: Publish as a prerelease (-beta suffix on the version, prerelease flag on the GitHub Release).
+        type: boolean
+        default: false
+      sha:
+        description: The commit to release. Empty means the newest commit on main. It must be on main.
+        type: string
+        default: ''
+      dry_run:
+        description: Build everything and attach the files to the run (artifact "release-<product>"), but tag nothing and publish nothing.
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -149,7 +168,7 @@ jobs:
           ls -l "$zip"
       - uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.rid }}
+          name: dbdatabuild-${{ matrix.rid }}
           path: DbDataBuild/dbdatabuild-v*.zip
           if-no-files-found: error
 
@@ -169,6 +188,7 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
+          pattern: dbdatabuild-*
           path: assets
           merge-multiple: true
 
@@ -185,14 +205,24 @@ jobs:
         working-directory: assets
         run: sha256sum * > SHA256SUMS && cat SHA256SUMS
 
+      # A dry run (suite-release.yml) keeps the files on the run instead of publishing them.
+      - uses: actions/upload-artifact@v7
+        if: ${{ inputs.dry_run }}
+        with:
+          name: release-dbdatabuild
+          path: assets/*
+          if-no-files-found: error
+
       # After everything is built, not before: a tag is a claim that this version shipped, so a failed run leaves nothing to clean up.
       - name: Tag the released commit
+        if: ${{ !inputs.dry_run }}
         working-directory: .
         run: |
           git tag "dbdatabuild/v$VERSION" "$SHA"
           git push origin "refs/tags/dbdatabuild/v$VERSION"
 
       - name: Publish the GitHub Release
+        if: ${{ !inputs.dry_run }}
         working-directory: .
         run: |
           prerelease_flag=()
@@ -207,6 +237,7 @@ jobs:
             assets/*
 
       - uses: ./.github/actions/publish-dist
+        if: ${{ !inputs.dry_run }}
         with:
           product: dbdatabuild
           meta: DbDataBuild/dist.json

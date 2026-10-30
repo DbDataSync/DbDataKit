@@ -1,0 +1,278 @@
+name: Suite release
+
+# One release of the whole suite from one commit (plan 13a, L06): the console's zips, MSI and image, and each product's own release (its zips, MSI and
+# install files), which this workflow calls: dbdatabuild-release.yml, dbdataproxy-release.yml and dbdatasync-release.yml. Container images are
+# built for every product here and pushed to ghcr.io/<owner>/<product> (dbdatakit, dbdatabuild, dbdataproxy); DbDataSync's own image
+# keeps its multi-architecture workflow, dbdatasync-publish-image.yml, and is only built here, to prove the commit makes one.
+#
+#   gh workflow run suite-release.yml --ref main -f dry_run=true                 build everything, tag and publish nothing
+#   gh workflow run suite-release.yml --ref main -f beta=true                    a beta release of every product
+#   gh workflow run suite-release.yml --ref main -f sha=<an older commit on main>
+#
+# A dry run keeps every package on the run (artifacts `release-<product>`) and the last job checks that each holds its zips, its MSI and a SHA256SUMS
+# that lists them. The products stay releasable on their own: each *-release.yml still has its own dispatch. Each release has its own CalVer
+# version, from the UTC clock when its workflow starts, so one suite release is the same commit and not the same version string.
+
+on:
+  workflow_dispatch:
+    inputs:
+      beta:
+        description: Publish every product as a prerelease (-beta suffix, prerelease flag on the GitHub Releases).
+        type: boolean
+        default: false
+      sha:
+        description: The commit to release. Empty means the newest commit on main. It must be on main.
+        type: string
+        default: ''
+      dry_run:
+        description: Build everything and keep it on the run, but tag nothing and publish nothing (no images are pushed).
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  # Reads the CI runs for the commit being released, and pushes the images.
+  actions: read
+  packages: write
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.pick.outputs.sha }}
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Pick the commit, which must be on main
+        id: pick
+        env:
+          WANTED: ${{ inputs.sha }}
+        run: |
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "::error::suite-release.yml must be dispatched against 'main' (got '$GITHUB_REF_NAME'); pass -f sha=<commit> to release an older commit."
+            exit 1
+          fi
+          git fetch origin main
+          sha=$(git rev-parse "${WANTED:-origin/main}^{commit}")
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::$sha is not on main. Only commits on main are released."
+            exit 1
+          fi
+          echo "releasing $sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      # The console's own version, and the tag every image of this release carries.
+      - name: Compute the version
+        id: version
+        env:
+          BETA: ${{ inputs.beta }}
+        run: |
+          IFS=. read -r y m d hm <<< "$(date -u +%Y.%m.%d.%H%M)"
+          version="$((10#$y)).$((10#$m)).$((10#$d)).$((10#$hm))"
+          prerelease=false
+          if [ "$BETA" = "true" ]; then
+            version="${version}-beta"
+            prerelease=true
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+  # The console: its zips (framework-dependent, so both platforms build on Linux), its MSI, checksums, the tag and the GitHub Release.
+  console:
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SHA: ${{ needs.guard.outputs.sha }}
+      VERSION: ${{ needs.guard.outputs.version }}
+      PRERELEASE: ${{ needs.guard.outputs.prerelease }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.sha }}
+      # A lookup, not a re-run, as in the product releases. A dry run builds whatever is on main.
+      - name: Require a green CI run for this exact commit
+        if: ${{ !inputs.dry_run }}
+        run: |
+          green=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$SHA&status=success" \
+            --jq '[.workflow_runs[] | select(.name == "DbDataConsole CI")] | length')
+          echo "successful DbDataConsole CI runs for $SHA: $green"
+          [ "$green" -ge 1 ] || { echo "::error::No successful DbDataConsole CI run for $SHA."; exit 1; }
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: DbDataConsole/global.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Build the web app
+        working-directory: DbDataKit/web
+        run: |
+          npm ci
+          npm run build -w @dbdatakit/console
+      - name: Package win-x64 and linux-x64
+        run: |
+          for rid in win-x64 linux-x64; do
+            SKIP_WEB=1 DbDataConsole/scripts/package.sh "$rid" "$VERSION" "$PWD/assets"
+          done
+      - name: Smoke test the linux-x64 zip
+        run: |
+          mkdir "$RUNNER_TEMP/zip-smoke"
+          unzip -q "assets/dbdatakit-v$VERSION-linux-x64.zip" -d "$RUNNER_TEMP/zip-smoke"
+          test -f "$RUNNER_TEMP/zip-smoke/wwwroot/index.html"
+          "$RUNNER_TEMP/zip-smoke/dbdatakit" help | grep -q 'Usage: dbdatakit'
+      - uses: ./.github/actions/build-msi
+        with:
+          product: dbdatakit
+          meta: DbDataConsole/dist.json
+          version: ${{ env.VERSION }}
+          zip: assets/dbdatakit-v${{ env.VERSION }}-win-x64.zip
+          out: assets
+      - name: Checksums
+        working-directory: assets
+        run: sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        if: ${{ inputs.dry_run }}
+        with:
+          name: release-dbdatakit
+          path: assets/*
+          if-no-files-found: error
+      - name: Tag this commit with the released version
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git tag "dbdatakit/v$VERSION" "$SHA"
+          git push origin "refs/tags/dbdatakit/v$VERSION"
+      - name: Publish the GitHub Release
+        if: ${{ !inputs.dry_run }}
+        run: |
+          prerelease_flag=()
+          [ "$PRERELEASE" = "true" ] && prerelease_flag=(--prerelease)
+          gh release create "dbdatakit/v$VERSION" \
+            --verify-tag \
+            --latest=false \
+            --title "dbdatakit console $VERSION" \
+            --notes "The dbdatakit console $VERSION, built from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$SHA. The zips need the .NET 10 runtime. The version is the UTC date and time this release was built." \
+            "${prerelease_flag[@]}" \
+            assets/*
+      - uses: ./.github/actions/publish-dist
+        if: ${{ !inputs.dry_run }}
+        with:
+          product: dbdatakit
+          meta: DbDataConsole/dist.json
+          version: ${{ env.VERSION }}
+          prerelease: ${{ env.PRERELEASE }}
+          sums: assets/SHA256SUMS
+          sha: ${{ env.SHA }}
+          msi: assets/dbdatakit-v${{ env.VERSION }}-win-x64.msi
+
+  # Each product's own release, on the same commit.
+  build:
+    needs: guard
+    uses: ./.github/workflows/dbdatabuild-release.yml
+    with:
+      sha: ${{ needs.guard.outputs.sha }}
+      beta: ${{ inputs.beta }}
+      dry_run: ${{ inputs.dry_run }}
+    permissions:
+      contents: write
+      actions: read
+  proxy:
+    needs: guard
+    uses: ./.github/workflows/dbdataproxy-release.yml
+    with:
+      sha: ${{ needs.guard.outputs.sha }}
+      beta: ${{ inputs.beta }}
+      dry_run: ${{ inputs.dry_run }}
+    permissions:
+      contents: write
+      actions: read
+  sync:
+    needs: guard
+    uses: ./.github/workflows/dbdatasync-release.yml
+    with:
+      sha: ${{ needs.guard.outputs.sha }}
+      beta: ${{ inputs.beta }}
+      dry_run: ${{ inputs.dry_run }}
+    permissions:
+      contents: write
+      actions: read
+
+  # An image per product, built from the released commit. Pushed (a stable release also moves `latest`) unless this is a dry run; DbDataSync's is built
+  # and not pushed, because dbdatasync-publish-image.yml makes its multi-architecture image from the tag.
+  images:
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: dbdatakit,   dockerfile: DbDataConsole/Dockerfile, health: true,  push: true }
+          - { image: dbdatabuild, dockerfile: DbDataBuild/Dockerfile,   health: true,  push: true }
+          - { image: dbdataproxy, dockerfile: DbDataProxy/Dockerfile,   health: false, push: true }
+          - { image: dbdatasync,  dockerfile: DbDataSync/Dockerfile,    health: false, push: false }
+    name: image (${{ matrix.image }})
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
+      PRERELEASE: ${{ needs.guard.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.sha }}
+      - name: Build
+        run: docker build -f "${{ matrix.dockerfile }}" -t "${{ matrix.image }}:release" .
+      # The container must come up healthy before it is pushed (the products whose container needs configuration to start are only built).
+      - name: Health check
+        if: ${{ matrix.health }}
+        run: |
+          docker run -d --name img "${{ matrix.image }}:release"
+          for i in $(seq 1 40); do
+            status="$(docker inspect -f '{{.State.Health.Status}}' img)"
+            [ "$status" = healthy ] && break
+            sleep 3
+          done
+          docker logs img
+          [ "$status" = healthy ] || { echo "::error::the container is $status, not healthy"; exit 1; }
+      - name: Push
+        if: ${{ matrix.push && !inputs.dry_run }}
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          ref="ghcr.io/$owner/${{ matrix.image }}"
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker tag "${{ matrix.image }}:release" "$ref:$VERSION"
+          docker push "$ref:$VERSION"
+          if [ "$PRERELEASE" != "true" ]; then
+            docker tag "${{ matrix.image }}:release" "$ref:latest"
+            docker push "$ref:latest"
+          fi
+
+  # The dry run's answer: every product kept its package, and its checksums list what is in it.
+  verify:
+    if: ${{ inputs.dry_run }}
+    needs: [console, build, proxy, sync, images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: release
+      - name: Every artifact has its checksum
+        run: |
+          set -euo pipefail
+          for product in dbdatakit dbdatabuild dbdataproxy dbdatasync; do
+            dir="release/release-$product"
+            sums="$dir/SHA256SUMS"
+            [ -f "$sums" ] || { echo "::error::$product has no SHA256SUMS"; exit 1; }
+            (cd "$dir" && sha256sum --check SHA256SUMS)
+            for want in '-win-x64.zip' '-win-x64.msi'; do
+              ls "$dir"/*"$want" > /dev/null || { echo "::error::$product has no *$want"; exit 1; }
+              grep -q -- "$want" "$sums" || { echo "::error::$product's SHA256SUMS does not list *$want"; exit 1; }
+            done
+            echo "== $product"; ls -l "$dir"
+          done

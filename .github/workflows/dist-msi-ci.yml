@@ -8,6 +8,7 @@ on:
     paths:
       - 'dist/msi.py'
       - 'dist/tests/**'
+      - 'DbDataConsole/scripts/**'
       - '**/dist.json'
       - '.github/workflows/dist-msi-ci.yml'
   workflow_dispatch:
@@ -28,18 +29,31 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: sudo apt-get update -y && sudo apt-get install -y wixl msitools
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: DbDataConsole/global.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
       - name: Build two MSIs per product from the newest published package
         run: |
           set -euo pipefail
-          declare -A META=( [dbdataproxy]=DbDataProxy [dbdatasync]=DbDataSync [dbdatabuild]=DbDataBuild )
-          for product in dbdataproxy dbdatasync dbdatabuild; do
-            tag=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-              --jq "[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith(\"$product/v\")))][0].tag_name")
-            version=${tag#"$product"/v}
-            echo "$product: $version"
+          declare -A META=( [dbdataproxy]=DbDataProxy [dbdatasync]=DbDataSync [dbdatabuild]=DbDataBuild [dbdatakit]=DbDataConsole )
+          # The console has no published release before its first one, so its package is built here from this commit.
+          mkdir -p work/dbdatakit out/dbdatakit
+          DbDataConsole/scripts/package.sh win-x64 2026.1.1.0 "$PWD/work/dbdatakit"
+          for product in dbdataproxy dbdatasync dbdatabuild dbdatakit; do
             work="work/$product"; mkdir -p "$work" "out/$product"
-            gh release download "$tag" --pattern "$product-v$version-win-x64.zip" --dir "$work"
-            unzip -q "$work/$product-v$version-win-x64.zip" -d "$work/payload"
+            if [ "$product" = dbdatakit ]; then
+              unzip -q "$work/dbdatakit-v2026.1.1.0-win-x64.zip" -d "$work/payload"
+            else
+              tag=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+                --jq "[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith(\"$product/v\")))][0].tag_name")
+              version=${tag#"$product"/v}
+              echo "$product: $version"
+              gh release download "$tag" --pattern "$product-v$version-win-x64.zip" --dir "$work"
+              unzip -q "$work/$product-v$version-win-x64.zip" -d "$work/payload"
+            fi
             # Transitional (plan 13, C03): Proxy's executable is lower case from now on, and the newest published package still has the old
             # file name. Rename it in the unpacked copy so the MSI is built from dist.json as it is now; delete this once a release has the new name.
             # retired-name-ok: the old file name is what the newest published package still has
@@ -69,11 +83,12 @@ jobs:
           - { product: dbdataproxy, display: DbDataProxy, exe: dbdataproxy.exe, service: dbdataproxy, runs: true,  path: false }
           - { product: dbdatasync,  display: DbDataSync,  exe: dbdatasync.exe,  service: DbDataSync,  runs: false, path: true }
           - { product: dbdatabuild, display: DbDataBuild, exe: dbdatabuild.exe, service: '',          runs: false, path: true }
+          - { product: dbdatakit,   display: DbDataKit,   exe: dbdatakit.exe,   service: DbDataKitConsole, runs: false, path: false }
     name: windows (${{ matrix.product }})
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
-        if: matrix.product == 'dbdatasync'
+        if: matrix.product == 'dbdatasync' || matrix.product == 'dbdatakit'
         with:
           dotnet-version: '10.0.x'
       - uses: actions/download-artifact@v8
@@ -99,3 +114,28 @@ jobs:
         with:
           name: msi-logs-${{ matrix.product }}
           path: ${{ runner.temp }}/*.log
+
+  # Plan 13a, L04: the console and a product are installed from their own MSIs, then paired with the code the product prints.
+  pairing:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/download-artifact@v8
+        with:
+          name: msi
+          path: msi
+      - name: Install the console and DbDataBuild, pair them
+        shell: pwsh
+        run: |
+          ./dist/tests/msi-pairing-e2e.ps1 -ConsoleMsi "$PWD\msi\dbdatakit\v1.msi" -ProductMsi "$PWD\msi\dbdatabuild\v1.msi" `
+            -ProductDisplayName DbDataBuild -ProductExe dbdatabuild.exe
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: msi-logs-pairing
+          path: ${{ runner.temp }}/pairing*

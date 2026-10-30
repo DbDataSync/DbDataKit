@@ -12,6 +12,8 @@ own (DbDataSync is also a .NET tool package), but these always exist.
 | **PowerShell** | `install.ps1`: Windows PowerShell 5.1 and PowerShell 7 |
 | **bash** | `install.sh`: Linux and macOS |
 
+The products are `dbdatabuild`, `dbdatasync`, `dbdataproxy` and the console, `dbdatakit` (`DbDataConsole/dist.json`: the zip needs the .NET 10 runtime, the MSI registers the `DbDataKitConsole` service stopped, and its program folder is `DbDataKit`). Each has its own MSI: a product's MSI does not embed the console. To pair them after installing both, make a code on the product (`<program> server pair`) and run `dbdatakit instance add <https address> --code <code>`; `dist-msi-ci.yml` does exactly that on a Windows runner (`dist/tests/msi-pairing-e2e.ps1`).
+
 Releases are tagged `<product>/v<version>` in this repository (`<version>` is CalVer `YYYY.M.D.HHmm`, `-beta` for a prerelease).
 
 ## Stable URLs
@@ -82,6 +84,8 @@ Edit `<Product>/dist.json`:
 The release workflow builds the zips and `SHA256SUMS`, then calls `.github/actions/publish-dist`, which runs `dist/dist.py bind` to bake
 `dist.json` into copies of the templates here (the installers refuse to run unbound) and uploads them. Tests are in `dist/tests`: they run
 both installers against a local fake of the GitHub releases API (`dist-ci.yml`).
+
+`suite-release.yml` is the one release of everything from one commit: it builds the console's zips, MSI and image, calls the three product release workflows, and builds and pushes the images (`ghcr.io/<owner>/dbdatakit|dbdatabuild|dbdataproxy`; DbDataSync's image keeps `dbdatasync-publish-image.yml`). `-f dry_run=true` builds all of it, keeps each product's files as the run's `release-<product>` artifacts, checks every one has its zips, MSI and a verifying `SHA256SUMS`, and tags and pushes nothing. Each product workflow still releases on its own.
 
 If a `<product>/dist` release is deleted or loses its files, run the `dist-republish.yml` workflow for that product
 (`gh workflow run dist-republish.yml --ref main -f product=dbdataproxy`): it re-binds the files for the newest stable release and uploads them.
