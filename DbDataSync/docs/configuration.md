@@ -29,7 +29,7 @@ the console's web app reach the API" confusion:
 | --- | --- |
 | `dotnet run --project src/DbDataSync.Api` (dev loop) | `5183` (`http`), plus `7186` (`https`) |
 | `dbdatasync server run` | `5080` |
-| the Docker image | `8080` |
+| the Docker image | `8443` (https) |
 
 The dev-server proxy of the Sync screens (`DBDATASYNC_API_URL`, below) defaults to `5183` — i.e. it assumes the raw
 `dotnet run` dev loop, not a CLI-launched backend. Point it at `5080` if you're running against
@@ -224,7 +224,7 @@ connects to whatever `State:Engine`/`State:ConnectionString` (plus the secret st
 | flag | default |
 | --- | --- |
 | `--repo <path>` | see "Repo root resolution," above — used only to find a config file's `DbDataSync:App:Url`, nothing else |
-| `--url <url>` | `--url` flag, else the resolved config's `DbDataSync:App:Url`, else `http://127.0.0.1:8080` (the *container's* port, not `serve`'s 5080) |
+| `--url <url>` | `--url` flag, else the resolved config's `DbDataSync:App:Url`, else `http://127.0.0.1:8080` (not `serve`'s 5080; the container's health check passes `--url https://127.0.0.1:8443` itself) |
 
 Hits `{url}/api/health`; exits `0` on success, `1` otherwise. This is what the container's
 `HEALTHCHECK` runs — inside the image there's no config file to find, so it always falls through to
@@ -280,7 +280,7 @@ the old flat names is migrated automatically the first time `server run`/`server
 | `App:Server` | `DbDataSync__App__Server` | `kestrel` | `kestrel` or `httpsys`. `httpsys` is Windows-only and exists so the port can be shared with other processes — see "Sharing a port with HTTP.sys," below. Anything else refuses to start. Takes effect on restart |
 | `App:AlternateUrls` | `DbDataSync__App__AlternateUrls` | none | every other origin this deployment is also reached at, beyond `App:Url` — comma- or semicolon-separated. Purely additive: `App:Url`'s own origin is always trusted for passkeys without needing to be listed here too |
 | `App:TrustedProxies` | `DbDataSync__App__TrustedProxies` | none | proxies (IP addresses or CIDR ranges such as `10.0.0.0/8`, comma- or semicolon-separated) whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are believed. Set it when a TLS-terminating reverse proxy sits in front of a plain-HTTP bind; see [Plain HTTP](#plain-http-and-reverse-proxies) |
-| `App:AllowInsecureHttp` | `DbDataSync__App__AllowInsecureHttp` | `false` (`true` in the container image) | serve plain HTTP to every client. Credentials and data then cross the network in clear text |
+| `App:AllowInsecureHttp` | `DbDataSync__App__AllowInsecureHttp` | `false` | serve plain HTTP to every client. Credentials and data then cross the network in clear text |
 | `App:TaskRunnerDllPath` | `DbDataSync__App__TaskRunnerDllPath` | none | start replication workers as `dotnet exec` of this `DbDataSync.TaskRunner.dll`, see below |
 | `App:CliDllPath` | `DbDataSync__App__CliDllPath` | none | start the deep, connection-scoped library-validation check as `dotnet exec` of this `DbDataSync.Cli.dll`, see below |
 
@@ -297,11 +297,11 @@ A plain `http://` request is served only when it comes from the same machine (lo
 TLS-terminating proxy that this deployment trusts. Anything else gets `400` with a message saying how to fix it. `/api/health`
 is always answered, so a load balancer's probe works.
 
-To run behind a proxy that terminates TLS, bind plain HTTP (the container image does: `http://0.0.0.0:8080`), set
+To run behind a proxy that terminates TLS, bind plain HTTP (the container image does not, it serves https on 8443; override its entrypoint, see [Installing → Running in a container](install.md#running-in-a-container)), set
 `DbDataSync:App:TrustedProxies` to the proxy's address, and have the proxy send `X-Forwarded-Proto: https` (and `X-Forwarded-For`).
 Those headers are believed only from the addresses listed; from anywhere else they are ignored. A proxy on the same host that
 talks to a loopback bind needs nothing. With nothing trustworthy in front, bind HTTPS (see [certificates](certificates.md)).
-`App:AllowInsecureHttp: true` turns the check off; the container image sets it, so set it back to `false` there when a proxy fronts the container.
+`App:AllowInsecureHttp: true` turns the check off. The container image no longer sets it (it serves https), so a container behind a proxy that ends TLS sets `TrustedProxies` instead.
 
 #### `DbDataSync:State:*`
 
@@ -609,14 +609,14 @@ does the same from memory, so edits to a page appear on the next load of the con
 ## Container image
 
 ```sh
-docker run -p 8080:8080 -v dbdatasync-data:/var/lib/dbdatasync ghcr.io/dbdatasync/dbdatasync:latest
+docker run -p 8443:8443 -v dbdatasync-data:/var/lib/dbdatasync ghcr.io/dbdatasync/dbdatasync:latest
 ```
 
 `ghcr.io/dbdatasync/dbdatasync` is published for `linux/amd64` and `linux/arm64`, in a default and a smaller `runtime` variant —
 see [Installing → Running in a container](install.md#running-in-a-container) for the tags.
 
-- `EXPOSE 8080`; entrypoint is `dbdatasync server run --url http://0.0.0.0:8080` — no trailing `--repo` argument; override at `docker run` time (`docker run ... <image> --repo /some/other/path`) to pass different `dbdatasync server run` flags.
-- `HEALTHCHECK` runs `dbdatasync health check --url http://127.0.0.1:8080`.
+- `EXPOSE 8443`; entrypoint is `dbdatasync server run --url https://0.0.0.0:8443` (the server makes a self-signed certificate in the volume on its first start, unless one is configured; earlier images served plain http on 8080) — no trailing `--repo` argument; override at `docker run` time (`docker run ... <image> --repo /some/other/path`) to pass different `dbdatasync server run` flags.
+- `HEALTHCHECK` runs `dbdatasync health check --url https://127.0.0.1:8443` (it accepts the image's self-signed certificate).
 - The image carries no web app and no docs: the screens, and these docs, are the dbdatakit console's (its own image, `DbDataConsole/Dockerfile`) — see
   [Getting started](getting-started.md#reading-these-docs-in-the-console) and [Installing → Connecting a console](install.md#connecting-a-console).
 - `VOLUME ["/var/lib/dbdatasync"]` — one mount is a complete deployment: the config repository and the state database live together, so a backup of this directory is a backup of everything that isn't the image itself.
