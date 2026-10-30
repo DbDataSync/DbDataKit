@@ -69,7 +69,7 @@ tinyint	decimal:fraction	STORED Byte:1
 tinyint	double:NaN	REFUSED InvalidOperationException (names the column and value type)
 tinyint	double:Infinity	REFUSED InvalidOperationException (names the column and value type)
 tinyint	decimal:18digits	REFUSED InvalidOperationException (names the column and value type)
-tinyint	char	STORED Byte:97
+tinyint	char	REFUSED StagingValueException (names the column and value type)
 tinyint	string	REFUSED InvalidOperationException (names the column and value type)
 tinyint	string:1	STORED Byte:1
 tinyint	string:1.5	REFUSED InvalidOperationException (names the column and value type)
@@ -119,7 +119,7 @@ smallint	decimal:fraction	STORED Int16:1
 smallint	double:NaN	REFUSED InvalidOperationException (names the column and value type)
 smallint	double:Infinity	REFUSED InvalidOperationException (names the column and value type)
 smallint	decimal:18digits	REFUSED InvalidOperationException (names the column and value type)
-smallint	char	STORED Int16:97
+smallint	char	REFUSED StagingValueException (names the column and value type)
 smallint	string	REFUSED InvalidOperationException (names the column and value type)
 smallint	string:1	STORED Int16:1
 smallint	string:1.5	REFUSED InvalidOperationException (names the column and value type)
@@ -169,7 +169,7 @@ int	decimal:fraction	STORED Int32:1
 int	double:NaN	REFUSED InvalidOperationException (names the column and value type)
 int	double:Infinity	REFUSED InvalidOperationException (names the column and value type)
 int	decimal:18digits	REFUSED InvalidOperationException (names the column and value type)
-int	char	STORED Int32:97
+int	char	REFUSED StagingValueException (names the column and value type)
 int	string	REFUSED InvalidOperationException (names the column and value type)
 int	string:1	STORED Int32:1
 int	string:1.5	REFUSED InvalidOperationException (names the column and value type)
@@ -219,7 +219,7 @@ bigint	decimal:fraction	STORED Int64:1
 bigint	double:NaN	REFUSED InvalidOperationException (names the column and value type)
 bigint	double:Infinity	REFUSED InvalidOperationException (names the column and value type)
 bigint	decimal:18digits	STORED Int64:12345678901234568
-bigint	char	STORED Int64:97
+bigint	char	REFUSED StagingValueException (names the column and value type)
 bigint	string	REFUSED InvalidOperationException (names the column and value type)
 bigint	string:1	STORED Int64:1
 bigint	string:1.5	REFUSED InvalidOperationException (names the column and value type)
