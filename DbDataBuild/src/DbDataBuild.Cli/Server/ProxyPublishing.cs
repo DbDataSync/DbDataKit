@@ -84,38 +84,104 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
 
         var self = await identity.GetOrCreateAsync(ct);
         using var http = new HttpClient(PairingClient.Pinned(proxy.Fingerprint)) { BaseAddress = new Uri(proxy.Url), Timeout = TimeSpan.FromSeconds(60) };
-        async Task<HttpResponseMessage> Send(HttpMethod method, string path, object? body = null)
+        async Task<HttpResponseMessage> Send(HttpMethod method, string path, object? body = null, CancellationToken? token = null)
         {
             using var request = new HttpRequestMessage(method, path);
             request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, self.Issuer().Issue(new ConsoleTokenRequest(proxy.InstanceId, person.SubjectId, person.SubjectName, ServerRole.Publisher)));
             if (body is not null) request.Content = JsonContent.Create(body, options: Json);
-            return await http.SendAsync(request, ct);
+            return await http.SendAsync(request, token ?? ct);
+        }
+
+        var secretName = dataSource + "-read";
+        var secretPath = $"/api/v1/secrets/{Uri.EscapeDataString(secretName)}";
+        var storedNew = false;      // this call made the secret: only then does a failure take it away again
+        var replaced = false;       // this call overwrote one that was there, which cannot be undone
+
+        // What a failure after the secret was stored leaves behind, said in the refusal. A secret that was not there before is deleted again (with a token of its own: the call may have been cancelled); one that was is never deleted.
+        async Task<PublishResult> Undone(PublishResult failure)
+        {
+            var note = "";
+            if (storedNew)
+            {
+                try
+                {
+                    using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                    using var removed = await Send(HttpMethod.Delete, secretPath, token: cleanup.Token);
+                    note = removed.IsSuccessStatusCode ? $" The login '{secretName}' stored for it was removed again." : $" The login '{secretName}' stored for it could not be removed again (the proxy answered {(int)removed.StatusCode}); remove it with DELETE {secretPath}.";
+                }
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { note = $" The login '{secretName}' stored for it could not be removed again ({ex.GetType().Name}); remove it with DELETE {secretPath}."; }
+            }
+            else if (replaced) note = $" The proxy already held a login '{secretName}', which has been replaced; its previous value cannot be restored.";
+            failure.Body["error"] = (string?)failure.Body["error"] + note;
+            return failure;
+        }
+
+        async Task<(string Reference, PublishResult? Refusal)> StoreLogin()
+        {
+            using var stored = await Send(HttpMethod.Put, secretPath, new { value = login.RevealString() });
+            if (!stored.IsSuccessStatusCode) return ("", await Refused(stored, "storing the login"));
+            return ((string?)JsonNode.Parse(await stored.Content.ReadAsStringAsync(ct))?["reference"] ?? "", null);
         }
 
         try
         {
-            // 1. the login, once, into the proxy's own store
-            using var stored = await Send(HttpMethod.Put, $"/api/v1/secrets/{Uri.EscapeDataString(dataSource + "-read")}", new { value = login.RevealString() });
-            if (!stored.IsSuccessStatusCode) return await Refused(stored, "storing the login");
-            var reference = (string?)JsonNode.Parse(await stored.Content.ReadAsStringAsync(ct))?["reference"] ?? "";
-
-            // 2. the data source: new, or the one this server made before (its version is read first)
-            string? version = null;
+            // 1. the data source, read first: new, or the one this server made before (its version is read), and every refusal (the owner rule on a hand-made one) comes before anything is stored
+            string? version = null, current = null;
             using (var existing = await Send(HttpMethod.Get, $"/api/v1/data-sources/{Uri.EscapeDataString(dataSource)}"))
             {
-                if (existing.IsSuccessStatusCode) version = (string?)JsonNode.Parse(await existing.Content.ReadAsStringAsync(ct))?["version"];
+                if (existing.IsSuccessStatusCode)
+                {
+                    var found = JsonNode.Parse(await existing.Content.ReadAsStringAsync(ct));
+                    version = (string?)found?["version"];
+                    current = (string?)found?["text"];
+                }
                 else if (existing.StatusCode != System.Net.HttpStatusCode.NotFound) return await Refused(existing, "reading the data source", AdoptHint(self.Id, dataSource));
             }
+
+            // 2. is the login already there? (PUT overwrites, and on a re-publish it is the live login of a source this server manages)
+            bool exists;
+            using (var listed = await Send(HttpMethod.Get, "/api/v1/secrets"))
+            {
+                if (!listed.IsSuccessStatusCode) return await Refused(listed, "listing the stored logins");
+                exists = (JsonNode.Parse(await listed.Content.ReadAsStringAsync(ct))?["secrets"] as JsonArray)?.Any(n => (string?)n == secretName) ?? false;
+            }
+
+            // 3. the login goes before the source, because the source's file refers to the reference the proxy answers. Not when the source already refers to this very secret: its reference is known, so the source is written first and the
+            //    login (the live one, which an unaccepted source must not replace) is updated only after the proxy has accepted the file.
+            var reference = exists ? KnownReference(current, secretName) : null;
+            var loginFirst = reference is null;
+            if (loginFirst)
+            {
+                var (stored, refusal) = await StoreLogin();
+                if (refusal is not null) return refusal;
+                reference = stored;
+                (storedNew, replaced) = (!exists, exists);
+            }
+
             var text = $"schema: connection/1\nname: {dataSource}\nengine: {engine}\naccess: readonly\nconnection_string_secret: '{reference}'\n";
             using var written = await Send(HttpMethod.Put, $"/api/v1/data-sources/{Uri.EscapeDataString(dataSource)}", new { text, expected_version = version });
-            if (!written.IsSuccessStatusCode) return await Refused(written, "writing the data source", AdoptHint(self.Id, dataSource));
+            if (!written.IsSuccessStatusCode) return await Undone(await Refused(written, "writing the data source", AdoptHint(self.Id, dataSource)));
             var answer = JsonNode.Parse(await written.Content.ReadAsStringAsync(ct))!;
+
+            if (!loginFirst && await StoreLogin() is (_, { } notStored))
+            {
+                notStored.Body["error"] = $"{(string?)notStored.Body["error"]} The data source was written and keeps using the login it already had.";
+                return notStored;
+            }
             return new PublishResult(200, new JsonObject { ["proxy"] = proxyName, ["data_source"] = dataSource, ["created"] = (bool?)answer["created"] ?? version is null, ["version"] = (string?)answer["version"] });
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IncompatibleServerException)
         {
-            return Fail(502, $"The proxy '{proxyName}' did not answer ({ex.GetType().Name}).");
+            return await Undone(Fail(502, $"The proxy '{proxyName}' did not answer ({ex.GetType().Name})."));
         }
+    }
+
+    /// <summary>The reference a data source file's <c>connection_string_secret</c> holds when it names the secret <paramref name="secretName"/> (references end in the secret's name), else null.</summary>
+    private static string? KnownReference(string? file, string secretName)
+    {
+        if (file is null) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(file, @"^connection_string_secret:\s*'?([^'\s]+)'?\s*$", System.Text.RegularExpressions.RegexOptions.Multiline);
+        return match.Success && match.Groups[1].Value.EndsWith(":" + secretName, StringComparison.Ordinal) ? match.Groups[1].Value : null;
     }
 
     /// <summary>
