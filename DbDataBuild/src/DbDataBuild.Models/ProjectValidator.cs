@@ -263,6 +263,7 @@ public static class ProjectValidator
         }
 
         ResolveCopies(copies, models, descriptors, effectiveConfig, diags, WithParameters);
+        macros = macros.WithKeys(models.Select(m => (m.Definition, m.DefinitionFile)), diags);
         return new(models, diags, descriptors, macros);
     }
 

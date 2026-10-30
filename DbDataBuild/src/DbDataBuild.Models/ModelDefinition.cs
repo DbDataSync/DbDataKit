@@ -38,6 +38,21 @@ public static class TargetNames
 /// <param name="Trimmed">Declared: no value of this column ends in a space. Trailing spaces are the one difference between engines that data can make go away (SQL Server ignores them in a comparison, PostgreSQL keeps them), so a column that has none compares the same everywhere; `check` counts the rows that break the declaration.</param>
 public sealed record ColumnDefinition(string Name, string Type, bool Nullable = true, string? Collation = null, int Line = 0, int CollationLine = 0, bool Trimmed = false, ObjectInfo? Info = null);
 
+/// <summary>
+/// A surrogate key a model owns (plan 25 section 1a): <see cref="Name"/> is also the name of the function queries call, and <see cref="From"/> names its arguments in order. They need not be columns of the model: a fact
+/// passes whatever columns it can see.
+/// </summary>
+/// <param name="Method"><see cref="KeyMethods.Hash"/> (the default).</param>
+/// <param name="UnknownMember">A call with a NULL argument returns the reserved "unknown" key instead of NULL.</param>
+/// <param name="History">Names the extra argument that makes a history version key (the valid-from); with <see cref="VersionKey"/>, the name of that key's function. The key itself is then the durable key.</param>
+public sealed record KeyDefinition(string Name, IReadOnlyList<string> From, string Method = KeyMethods.Hash, bool UnknownMember = false, string? History = null, string? VersionKey = null, int Line = 0);
+
+public static class KeyMethods
+{
+    public const string Hash = "hash";
+    public const string KeyMap = "key_map";
+}
+
 public sealed record RenameDefinition(string From, string To);
 
 /// <summary>
@@ -81,8 +96,12 @@ public sealed record ModelDefinition(
     IReadOnlyDictionary<string, ParameterValue>? DeclaredParameters = null,
     bool LocalCopy = false,
     ObjectInfo? DeclaredInfo = null,
-    IReadOnlyList<RefreshMembership>? DeclaredRefresh = null)
+    IReadOnlyList<RefreshMembership>? DeclaredRefresh = null,
+    IReadOnlyList<KeyDefinition>? DeclaredKeys = null)
 {
+    /// <summary>The surrogate keys the model owns (`keys:`, plan 25 section 1a). Each is also a function, named after it, that queries call.</summary>
+    public IReadOnlyList<KeyDefinition> Keys => DeclaredKeys ?? [];
+
     /// <summary>The refresh plans the model's loads are in (`refresh:`, merged down the project files like `tags`). Empty when it says nothing, which puts a model with a default load in the plan `default`.</summary>
     public IReadOnlyList<RefreshMembership> Refresh => DeclaredRefresh ?? [];
 
