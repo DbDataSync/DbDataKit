@@ -38,6 +38,9 @@ public enum ScriptLanguage
 /// </summary>
 public sealed class ScriptConfig
 {
+    /// <summary>The hashes of the packages a <c>.csx</c> script names are in <c>scripts/&lt;name&gt;.lock</c>, committed beside it (S12).</summary>
+    public const string LockExtension = ".lock";
+
     /// <summary>The version of this file's format (plan 13, A03). Required: a file without it, or from an older format, is refused with a message rather than read as if it were current.</summary>
     public int SchemaVersion { get; set; } = ConfigSchema.Current;
 

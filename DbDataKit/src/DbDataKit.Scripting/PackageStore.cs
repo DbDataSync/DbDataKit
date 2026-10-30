@@ -32,22 +32,22 @@ public sealed class PackageStore(string root)
     private static string FileName(string id, NuGetVersion v) => $"{id.ToLowerInvariant()}.{v.ToNormalizedString().ToLowerInvariant()}.nupkg";
 
     /// <summary>Re-hashes the stored .nupkg and compares it with the recorded hash (and with a pinned one, if given). Returns the hash.</summary>
-    public string Verify(string id, NuGetVersion version, string? pinnedHash)
+    public string Verify(string id, NuGetVersion version, string? pinnedHash, string? lockName = null)
     {
         var nupkg = Path.Combine(DirectoryOf(id, version), FileName(id, version));
         var recorded = File.ReadAllText(nupkg + ".sha512").Trim();
         var actual = HashOf(nupkg);
         if (actual != recorded) throw new PackageIntegrityException($"{id} {version}: the cached package does not match its recorded SHA-512, so it was changed after it was stored");
-        if (pinnedHash is not null && pinnedHash != actual) throw new PackageIntegrityException($"{id} {version}: its SHA-512 is not the one pinned in the lock file");
+        if (pinnedHash is not null && pinnedHash != actual) throw new PackageIntegrityException(PinMismatch(id, version, "the stored package", lockName));
         return actual;
     }
 
     /// <summary>Stores a downloaded .nupkg (already written to <paramref name="downloaded"/>) and extracts it. Returns its hash.</summary>
-    public string Add(PackageIdentity identity, string downloaded, string? pinnedHash)
+    public string Add(PackageIdentity identity, string downloaded, string? pinnedHash, string? lockName = null)
     {
         var (id, version) = (identity.Id, identity.Version);
         var hash = HashOf(downloaded);
-        if (pinnedHash is not null && pinnedHash != hash) throw new PackageIntegrityException($"{id} {version}: the downloaded package's SHA-512 is not the one pinned in the lock file");
+        if (pinnedHash is not null && pinnedHash != hash) throw new PackageIntegrityException(PinMismatch(id, version, "the downloaded package", lockName));
         var final = DirectoryOf(id, version);
         var temp = final + ".tmp-" + Guid.NewGuid().ToString("N");
         Directory.CreateDirectory(temp);
@@ -66,6 +66,10 @@ public sealed class PackageStore(string root)
         }
         return hash;
     }
+
+    private static string PinMismatch(string id, NuGetVersion version, string what, string? lockName) =>
+        $"{id} {version}: the SHA-512 of {what} is not the one pinned in {(string.IsNullOrEmpty(lockName) ? "the lock file" : lockName)}, so the package is not the one that was first used. " +
+        $"If the change is expected, delete that package's line from {(string.IsNullOrEmpty(lockName) ? "the lock file" : lockName)} and resolve again.";
 
     public static string HashOf(string path)
     {

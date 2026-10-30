@@ -145,7 +145,9 @@ public sealed class ConfigRepository
         if (File.Exists(stalePath))
             File.Delete(stalePath);
 
-        _git.CommitChanges([manifestPath, codePath], $"Save script '{script.Manifest.Name}'", author);
+        // the lock file of the script's packages is written when the script is validated, just before it is saved (S12); it is committed with the script
+        var lockPath = ConfigPaths.ScriptLockFile(_configRoot, script.Manifest.Name);
+        _git.CommitChanges(File.Exists(lockPath) ? [manifestPath, codePath, lockPath] : [manifestPath, codePath], $"Save script '{script.Manifest.Name}'", author);
 
         return script;
     }
@@ -202,8 +204,11 @@ public sealed class ConfigRepository
             File.Delete(csPath);
         if (File.Exists(sqlPath))
             File.Delete(sqlPath);
+        var lockPath = ConfigPaths.ScriptLockFile(_configRoot, name);
+        if (File.Exists(lockPath))
+            File.Delete(lockPath);
 
-        _git.CommitChanges([manifestPath, csPath, sqlPath], $"Delete script '{name}'", author);
+        _git.CommitChanges([manifestPath, csPath, sqlPath, lockPath], $"Delete script '{name}'", author);
     }
 
     // ---- Replication tasks ----
