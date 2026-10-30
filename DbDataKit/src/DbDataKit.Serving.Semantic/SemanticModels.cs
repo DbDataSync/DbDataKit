@@ -37,6 +37,9 @@ public sealed class SemanticModels
     /// </summary>
     public Func<SemanticModel, string, ISourceExecutor, ISourceExecutor>? SsasExecutor { get; init; }
 
+    /// <summary>Where people keep saved queries of their own (J27); null when the host keeps none.</summary>
+    public IUserSavedQueries? UserQueries { get; set; }
+
     public IReadOnlyCollection<SemanticModel> All => _models.Values.ToList();
 
     public SemanticModels Add(Catalog catalog, IReadOnlyDictionary<string, string>? sources = null, IReadOnlyDictionary<string, string>? ssas = null)

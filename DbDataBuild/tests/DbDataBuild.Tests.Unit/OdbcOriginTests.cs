@@ -1,3 +1,4 @@
+using DbDataKit.Odbc.Metadata;
 using System.Data;
 using System.Data.Odbc;
 using DbDataBuild.Cli;
@@ -36,9 +37,9 @@ public class OdbcOriginTests
     [Fact]
     public void A_bare_name_is_a_dsn_and_a_connection_string_is_passed_as_it_is()
     {
-        Assert.Equal("DSN=warehouse", OdbcLogin.Normalize("  warehouse "));
-        Assert.Equal("DSN=w;UID=u;PWD=p", OdbcLogin.Normalize("DSN=w;UID=u;PWD=p"));
-        var pairs = OdbcLogin.Parse("Driver={A;B};Server=h; PWD = {x}}y} ;Port=5432");
+        Assert.Equal("DSN=warehouse", OdbcConnectionString.Normalize("  warehouse "));
+        Assert.Equal("DSN=w;UID=u;PWD=p", OdbcConnectionString.Normalize("DSN=w;UID=u;PWD=p"));
+        var pairs = OdbcConnectionString.Parse("Driver={A;B};Server=h; PWD = {x}}y} ;Port=5432");
         Assert.Equal([("driver", "A;B"), ("server", "h"), ("pwd", "x}y"), ("port", "5432")], pairs);
     }
 
