@@ -2,7 +2,9 @@
 **/obj/
 .git/
 .vs/
-DbDataSync/
+DbDataSync/*
+!DbDataSync/docs
+!DbDataSync/screenshots
 DbDataProxy/
 DbDataBuild/
 **/node_modules/

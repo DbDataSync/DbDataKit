@@ -159,3 +159,5 @@ jobs:
         run: dist/compose/check.sh dist/compose/build.yml dbdatabuild
       - name: Store server and console
         run: dist/compose/check.sh dist/compose/store.yml dbdatastore
+      - name: Proxy and console
+        run: dist/compose/check.sh dist/compose/proxy.yml dbdataproxy
