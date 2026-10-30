@@ -51,12 +51,12 @@ jobs:
       - run: dotnet test --project tests/DbDataConsole.Tests -c Release --no-build --minimum-expected-tests 10
 
   # The web app in a real browser against a real console: the first-run invitation, a passkey made in a virtual authenticator, signing out and back in with it, the users list,
-  # and pairing a real Build server.
+  # pairing a real Build server, and (M12) the Monitoring page across a Build server that runs a failing schedule, a Sync replication that lags and a Proxy that locked a user out.
   playwright:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     # A PostgreSQL for the deploy the browser test approves in the console.
     services:
       postgres:
