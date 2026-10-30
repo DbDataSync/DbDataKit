@@ -22,7 +22,7 @@ Reads Active Directory (no elevation needed) and does the obvious thing:
 
 A value that is already set is never overwritten. When both are set it prints the `enroll` command to run next.
 
-Saving a value is an ordinary config write: it lands in `dbdatasync.config.yaml` and is committed like every other
+Saving a value is an ordinary config write: it lands in `server.yaml` and is committed like every other
 config change.
 
 ### What discover does not decide

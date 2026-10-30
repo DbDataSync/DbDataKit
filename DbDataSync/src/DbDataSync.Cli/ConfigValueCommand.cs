@@ -8,7 +8,7 @@ namespace DbDataSync.Cli;
 /// <summary>
 /// <c>dbdatasync config get|set &lt;key&gt; [value]</c> — the CLI door onto the same settings the Admin Configuration screen
 /// and <c>setup</c> edit (phase 161). It exists so a setting reachable from the web console is reachable from a script too,
-/// rather than only by hand-editing <c>dbdatasync.config.yaml</c>.
+/// rather than only by hand-editing <c>server.yaml</c>.
 /// <para>
 /// It knows no keys of its own: what may be set, what it defaults to, and what to warn about all come from the Admin
 /// screen's catalog (<see cref="AdminConfigService.Writable"/>), so a key added there is settable here with no second edit,
@@ -58,7 +58,7 @@ public static class ConfigValueCommand
 
         DbDataSyncConfigFile.SetValue(root, "DbDataSync", LocalName(key), value);
         new GitCommitService(root).CommitChanges(
-            [DbDataSyncConfigFile.PathIn(root)], $"Set '{key.Key}' in dbdatasync.config.yaml", CurrentUser.SystemAuthor);
+            [DbDataSyncConfigFile.PathIn(root)], $"Set '{key.Key}' in server.yaml", CurrentUser.SystemAuthor);
 
         Console.WriteLine($"Set {key.Key} to {value} in {DbDataSyncConfigFile.PathIn(root)}. Restart the service for it to take effect.");
         return 0;

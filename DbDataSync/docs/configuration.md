@@ -47,7 +47,7 @@ These commands resolve their repo root the same way, via a shared resolver
 
 1. An explicit `--repo <path>` wins outright.
 2. Otherwise, walk upward from the current directory — the same shape `git` itself uses to find
-   `.git` — looking for `dbdatasync.config.yaml` at each parent in turn.
+   `.git` — looking for `server.yaml` at each parent in turn.
 3. Otherwise, `DbDataSync__App__RepoRoot` — the environment-variable form of the `DbDataSync:App:RepoRoot`
    config key, not a name invented for this resolver.
 4. Otherwise, fall back to one documented, **machine-wide** directory per platform
@@ -64,24 +64,25 @@ These commands resolve their repo root the same way, via a shared resolver
    repo with no `--repo` needed on either side — in earlier versions this was a per-user location
    (`%LOCALAPPDATA%\DbDataSync` / `~/.local/share/DbDataSync`), which put a Windows service (running
    as `LocalSystem`, a different profile than a person's) on a different repo than an interactive run.
-   An operator upgrading from an earlier version whose only configuration is still at that old location
-   sees a one-time message naming both paths (`LegacyRootMigration`) rather than silently finding
-   nothing at the new default.
+   An install whose only configuration is still at that old location is not moved and not read: `server run`,
+   `server setup` and `config check` stop with a message that names the old file and says to set the server up
+   again (see "Settings files of earlier releases," below).
 
 `dbdatasync service install` does **not** use this resolver for `--repo` — it's passed straight through
 to the registered service's `binPath` at install time. `--url` is different: it is **not**
 baked into `binPath` — only `--repo` is — so the registered service always resolves `App:Url` the same
 way `serve` does at every start (flag, absent here; then env var; then the config file). An explicit
-`--url` given to `service install` instead seeds `App:Url` into `dbdatasync.config.yaml` once (if the
+`--url` given to `service install` instead seeds `App:Url` into `server.yaml` once (if the
 file doesn't already have one), the same value `setup`'s General tab would write. This is what makes
 editing `App:Url` through the Admin screen actually take effect on the next restart — baking it into
 `binPath` would have made the install-time value win forever.
 
-### `dbdatasync.config.yaml`
+### `server.yaml`
 
-A git-tracked file at `<RepoRoot>/dbdatasync.config.yaml` — the same `DbDataSync:*` settings
-this document describes, in the format ASP.NET Core's own `appsettings.json` uses conceptually but
-written as YAML:
+A git-tracked file at `<RepoRoot>/server.yaml` — the same file every DbData server keeps its own settings in.
+It holds the `DbDataSync:*` settings this document describes, written as YAML, and, beside them, the server's
+`instanceId` and the `pairedClients` list that `server pair` maintains (those two are not settings and are never read as
+configuration). `server run` reads this file and nothing else: no `appsettings.json`, no other settings file.
 
 ```yaml
 DbDataSync:
@@ -92,7 +93,7 @@ DbDataSync:
     ConnectionString: "Server=sql01;Database=DbDataSyncState;"
 ```
 
-It sits in the *same* precedence slot `appsettings.json` occupies — behind environment variables and
+It sits behind environment variables and
 `--DbDataSync:Key`/CLI arguments, so either still overrides the file for a one-off run, and ahead of
 nothing but the defaults baked into code. `serve --repo <fresh-root>` writes a starter copy the first
 time it `git init`s a repo root (never touching one that already exists) with every key present but
@@ -169,7 +170,7 @@ entirely from the CLI so setting up HTTPS never depends on HTTPS already working
 | `retrieve --request-id <id> [--account]` | collects a pending enrollment from `enroll`/`renew` |
 | `templates [--ca]` | best-effort: templates published on the configured CA; empty-plus-a-reason on any failure (not domain-joined, LDAP unreachable, access denied, `CaConfig` unset), never blocking — `--template` stays free text regardless |
 | `discover` | finds the enterprise CA(s) and the templates they publish in Active Directory, unelevated. Exactly one CA (or one template) is saved to `DbDataSync:Certificates:CaConfig` (`Template`) automatically; several are printed with the `config set` command that saves one. A value already set is never overwritten |
-| `bind --thumbprint <thumbprint> [--location] [--allow-invalid\|--no-allow-invalid]` | binds an already-installed certificate by writing the four `Kestrel:Certificates:Default:*` keys (below) into `dbdatasync.config.yaml`, committed the same way every other config write is |
+| `bind --thumbprint <thumbprint> [--location] [--allow-invalid\|--no-allow-invalid]` | binds an already-installed certificate by writing the four `Kestrel:Certificates:Default:*` keys (below) into `server.yaml`, committed the same way every other config write is |
 
 `--account` on the issuing commands, because issuing and granting private-key read access are one
 operation from the operator's point of view — resolved as an explicit `--account`, else the account the
@@ -186,7 +187,7 @@ dbdatasync config get <key> [--repo <path>]
 dbdatasync config set <key> <value> [--repo <path>]
 ```
 
-Reads or writes one `DbDataSync:*` setting in `dbdatasync.config.yaml` — the same settings, and the same commit, as
+Reads or writes one `DbDataSync:*` setting in `server.yaml` — the same settings, and the same commit, as
 **Admin → Configuration** on the server's screens in the dbdatakit console; `dbdatasync server setup` edits some of the same ones. `<key>` is the name from the
 tables below, with or without the `DbDataSync:` prefix (`config set Notes:MarkdownRenderer rich`), and can be nested
 (`config set Auth:Windows:AdminGroup "DbDataSync Admins"`) — any depth works; only
@@ -241,7 +242,7 @@ going through a connection's own save flow. Never prints a stored value back.
 | `dbdatasync secret list [<ref> ...]` | reports whether each given ref is currently set (given none, checks the one fixed ref this build defines: `dbdata:sync:config:stateConnectionString`) |
 | `dbdatasync secret remove <ref>` | deletes a stored value |
 
-Example — setting the state store's password for a `dbdatasync.config.yaml`-configured deployment:
+Example — setting the state store's password for a `server.yaml`-configured deployment:
 
 ```
 dbdatasync secret set dbdata:sync:config:stateConnectionString "Password=..."
@@ -255,21 +256,19 @@ No flags.
 
 Read through ASP.NET Core's standard configuration chain — so every key below is settable
 interchangeably as a `--DbDataSync:Key value` CLI argument, a `DbDataSync__Key` environment variable
-(double underscore), under `"DbDataSync": { "Key": ... }` in `appsettings.json` /
-`appsettings.Development.json`, or under `DbDataSync:` in `dbdatasync.config.yaml` at the repo
-root. Neither shipped `appsettings*.json` sets any `DbDataSync:*` key today — every default below lives
-in code. `dbdatasync.config.yaml` sits in the same precedence slot `appsettings.json` occupies — behind
-environment variables and the command line — so a CLI flag or env var still overrides a value the file
-sets; see "`dbdatasync.config.yaml`," above, for the file itself.
+(double underscore), or under `DbDataSync:` in `server.yaml` at the repo root. Every default below lives
+in code. `server.yaml` is behind environment variables and the command line, so a CLI flag or env var still
+overrides a value the file sets; see "`server.yaml`," above, for the file itself. The host reads no
+`appsettings.json`.
 
 ### `DbDataSync:*`
 
 The key surface is grouped by area, and every bare boolean has been replaced with a named mode string
 (`enabled`/`disabled`, or something richer where a setting genuinely has more than two states) — a mode
 self-documents in `config get`/the Admin screen the way `true`/`false` never did, and leaves room for a
-setting to grow a third state without another schema change. An existing `dbdatasync.config.yaml` using
-the old flat names is migrated automatically the first time `server run`/`server setup` runs against it (see
-"Migrating an existing `dbdatasync.config.yaml`," below).
+setting to grow a third state without another schema change. Releases before plan 13 wrote these settings in
+`dbdatasync.config.yaml`, some of them under older flat names; that file is refused, not migrated (see
+"Settings files of earlier releases," below).
 
 #### `DbDataSync:App:*`
 
@@ -419,15 +418,17 @@ implicitly trusted, and `App:AlternateUrls` adds any others. Each one's host mus
 exactly what's wrong, rather than failing silently inside a browser API the first time someone tries to
 enroll a key.
 
-### Migrating an existing `dbdatasync.config.yaml`
+### Settings files of earlier releases
 
-An operator upgrading from an earlier version does not need to hand-edit anything: the first time
-`server run`/`server setup` runs against a `dbdatasync.config.yaml` still using the old flat key names, it rewrites
-each one to its new grouped location (and, for what used to be a bare boolean, to the closest mode
-string — `Auth:Disabled: true` becomes `Auth:Network:Admin: loopback`, deliberately narrower than the
-old flag's "admin from anywhere") and commits the result, the same one-line-per-change history every
-other config edit already produces. Environment variables and CLI flags using the old names are **not**
-migrated — update those by hand if you set configuration that way.
+Clean break. Sync's settings used to be in `dbdatasync.config.yaml` in the repository root (and the host
+also read ASP.NET Core's `appsettings.json`). Neither is read now, and neither is converted: if `server run`,
+`server setup` or `config check` finds one, it stops and prints a message that names the file. The same applies to
+an `appsettings.json` (or `appsettings.<environment>.json`) in the repository root, in its `config` folder or beside the
+executable, and to a `dbdatasync.config.yaml` left in the per-user folder earlier releases used as the default (while the default
+folder has no `server.yaml`). To set the server up again, move the old file away and run `dbdatasync server setup`, or write
+the settings you need in the `DbDataSync:` section of `server.yaml` by hand; the key names are the ones in this document
+(many were renamed, so the old file cannot be copied as it is). The old key-name migration and the
+per-user-folder check no longer exist. Environment variables and CLI flags are unchanged.
 
 ### `DbDataSync:Certificates:*`
 
@@ -444,7 +445,7 @@ The daily expiry check is a hosted service in the API process, registered only w
 ### `Kestrel:Certificates:Default:*`
 
 Not a `DbDataSync:*` key — ASP.NET Core's own Kestrel configuration, read the same way (config file,
-environment variable, CLI flag), and what `dbdatasync cert bind` writes into `dbdatasync.config.yaml`:
+environment variable, CLI flag), and what `dbdatasync cert bind` writes into `server.yaml`:
 
 | key | meaning |
 | --- | --- |

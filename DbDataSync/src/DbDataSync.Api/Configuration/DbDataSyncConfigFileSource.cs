@@ -1,7 +1,7 @@
 namespace DbDataSync.Api.Configuration;
 
 /// <summary>
-/// Wraps <c>dbdatasync.config.yaml</c>'s flattened contents as an <see cref="IConfigurationSource"/> —
+/// Wraps <c>server.yaml</c>'s flattened contents as an <see cref="IConfigurationSource"/> —
 /// what <see cref="DbDataSync.Api.DbDataSyncHost.InsertConfigFile"/> inserts into
 /// <c>builder.Configuration.Sources</c>.
 /// <para>

@@ -26,7 +26,7 @@ public static class SyncAuth
         public static PasskeyOptions FromConfiguration(IConfiguration configuration, ApiOptions apiOptions) =>
             PasskeyOptions.FromConfiguration(
                 configuration, Product, apiOptions.Url, apiOptions.AlternateUrls,
-                // Nothing configures App:Url or App:AlternateUrls at all: a fresh clone or `dotnet run` with no dbdatasync.config.yaml yet
+                // Nothing configures App:Url or App:AlternateUrls at all: a fresh clone or `dotnet run` with no server.yaml yet
                 // (ApiOptions.Url is then its own DefaultUrl).
                 apiOptions.Url == ApiOptions.DefaultUrl ? ["https://localhost:5080", "http://localhost:5173"] : []);
     }

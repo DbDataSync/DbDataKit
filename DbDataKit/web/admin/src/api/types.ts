@@ -261,7 +261,7 @@ export interface AdminConfigEntry {
    * Differs from `value` exactly when a change is queued and not yet applied — a save made here, or
    * an override that just moved this key from its environment/CLI/default source into the file. */
   runningValue: string | null
-  source: 'file' | 'environment variable' | 'command line' | 'appsettings.json' | 'default'
+  source: 'file' | 'environment variable' | 'command line' | 'default'
   editable: boolean
   canAdopt: boolean
   /** True for a file-sourced key with a known application default that `value` doesn't already equal —
@@ -283,7 +283,7 @@ export interface AdminConfigEntry {
    * a setting with no fixed set, or an open-ended one (State:Engine — a custom dialect can be registered
    * beyond the three built-ins). */
   allowedValues: string[] | null
-  /** The provider that outranks dbdatasync.config.yaml for this key — "environment variable" or
+  /** The provider that outranks server.yaml for this key — "environment variable" or
    * "command line" — or null, the normal case. `source` still reads "file" whenever the file carries
    * the key, since that is what this screen edits; this is whether editing it will change anything.
    * Without it a save that can never take effect looks exactly like one that did. */

@@ -4,7 +4,7 @@ using Xunit;
 namespace DbDataSync.Api.Tests;
 
 /// <summary>
-/// <c>dbdatasync.config.yaml</c> is wired into <see cref="DbDataSyncHost.Build"/> at the same precedence
+/// <c>server.yaml</c> is wired into <see cref="DbDataSyncHost.Build"/> at the same precedence
 /// slot <c>appsettings.json</c> occupies — behind environment variables and the command line, so
 /// either can still override a file value for a one-off run. Phase 79's whole point is that ordering;
 /// see <c>DbDataSyncHost.InsertConfigFile</c>.

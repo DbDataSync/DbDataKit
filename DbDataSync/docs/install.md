@@ -236,7 +236,7 @@ switches; the page keeps asking rather than reporting an error, and you don't ha
 the state database).
 
 Listing releases on the page calls GitHub, so it is **off by default**. Set `DbDataSync:Updates:Mode` to
-`manual` (Admin → Configuration, or `dbdatasync.config.yaml`) to turn it on. The commands are shown either way. Only
+`manual` (Admin → Configuration, or `server.yaml`) to turn it on. The commands are shown either way. Only
 `stable` is listed unless you allow more with `DbDataSync:Updates:Channels` (`stable`, `beta`, `snapshot`,
 comma-separated). A snapshot is a development build: its download is checked only against a checksum published beside
 it, which catches corruption, not tampering.

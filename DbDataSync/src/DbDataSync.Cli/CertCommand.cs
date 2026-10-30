@@ -33,7 +33,7 @@ public static class CertCommand
     /// <summary>
     /// The subcommands that issue or import a certificate into <c>LocalMachine\My</c> and therefore
     /// cannot work without elevation — see the guard in <see cref="Run"/>. <c>bind</c> is absent
-    /// deliberately: it only reads the store and writes <c>dbdatasync.config.yaml</c>, so it is usable
+    /// deliberately: it only reads the store and writes <c>server.yaml</c>, so it is usable
     /// unelevated, as are <c>status</c>, <c>list</c>, <c>templates</c> and <c>discover</c>.
     /// </summary>
     private static readonly HashSet<string> StoreWritingSubcommands =
@@ -48,7 +48,7 @@ public static class CertCommand
     /// not reach tier 2 from the CLI at all, while <c>DbDataSyncHost</c> would happily run tier 2's own
     /// renewal service there whenever the config named the managed path. A half-open door: the runtime
     /// supported a state the tool could not create, and a Windows operator who wanted a self-renewing
-    /// file certificate had to hand-edit <c>dbdatasync.config.yaml</c> and place the PFX themselves.
+    /// file certificate had to hand-edit <c>server.yaml</c> and place the PFX themselves.
     /// </para>
     /// <para>
     /// <c>--store</c> exists so the choice can be stated rather than inferred, and so asking for it
@@ -251,7 +251,7 @@ public static class CertCommand
         if (certificate is null)
         {
             Console.Error.WriteLine(
-                $"dbdatasync.config.yaml binds subject '{bound.Subject}' in {location}\\{bound.Store}, but " +
+                $"server.yaml binds subject '{bound.Subject}' in {location}\\{bound.Store}, but " +
                 "no matching certificate was found there.");
             return 1;
         }
@@ -449,7 +449,7 @@ public static class CertCommand
 
     /// <summary>
     /// <c>discover</c>: finds the enterprise CA(s) in AD and the templates they publish, and saves a CA or template
-    /// into <c>dbdatasync.config.yaml</c> when there is exactly one to save. What it decides is
+    /// into <c>server.yaml</c> when there is exactly one to save. What it decides is
     /// <see cref="CertDiscovery.Decide"/>'s; this reads the directory and config, prints, and writes.
     /// </summary>
     [SupportedOSPlatform("windows")]
@@ -487,7 +487,7 @@ public static class CertCommand
 
             new GitCommitService(root).CommitChanges(
                 [DbDataSyncConfigFile.PathIn(root)],
-                $"Set {string.Join(" and ", written.Select(k => $"'{k}'"))} in dbdatasync.config.yaml",
+                $"Set {string.Join(" and ", written.Select(k => $"'{k}'"))} in server.yaml",
                 CurrentUser.SystemAuthor);
         }
 
@@ -867,7 +867,7 @@ public static class CertCommand
         {
             Console.Error.WriteLine(
                 "Both a CA and a template are needed. Pass --ca/--template, set " +
-                "DbDataSync:Certificates:CaConfig/Template in dbdatasync.config.yaml, or run " +
+                "DbDataSync:Certificates:CaConfig/Template in server.yaml, or run " +
                 "'dbdatasync cert discover' to find them.");
             return (null, null);
         }

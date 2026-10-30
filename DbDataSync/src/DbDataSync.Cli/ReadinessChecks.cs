@@ -146,7 +146,7 @@ internal static class ReadinessChecks
     }
 }
 
-/// <summary>Resolvable, a valid git repository, and <c>dbdatasync.config.yaml</c> parses — the three
+/// <summary>Resolvable, a valid git repository, and <c>server.yaml</c> parses — the three
 /// things every other check assumes already hold.</summary>
 internal sealed class RepoCheck : IReadinessCheck
 {
@@ -165,6 +165,9 @@ internal sealed class RepoCheck : IReadinessCheck
                 "Repo", CheckStatus.Fail, $"'{context.Root}' is not a git repository.",
                 "Run `dbdatasync server run` once to initialise it."));
         }
+
+        if (DbDataSyncRoot.LegacyRefusal(context.Root) is { } refusal)
+            return Task.FromResult(new CheckResult("Repo", CheckStatus.Fail, refusal, null));
 
         try
         {

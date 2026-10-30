@@ -29,7 +29,7 @@ export const adminApi = {
   admin: {
     config: {
       list: () => request<AdminConfigEntry[]>('/api/admin/config'),
-      /** Writes one key into dbdatasync.config.yaml — the same call for a direct edit of a file-sourced
+      /** Writes one key into server.yaml — the same call for a direct edit of a file-sourced
        * key and an "adopt" of one that is not; the caller supplies the current effective value either
        * way. Does not take effect in the running process until it restarts. */
       set: (key: string, value: string) =>

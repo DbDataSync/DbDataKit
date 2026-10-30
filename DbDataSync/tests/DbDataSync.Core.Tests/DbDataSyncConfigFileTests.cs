@@ -3,7 +3,7 @@ using DbDataSync.Core.Config;
 namespace DbDataSync.Core.Tests;
 
 /// <summary>
-/// <c>dbdatasync.config.yaml</c>'s reader (flattens to ASP.NET Core's own <c>Section:Key</c> shape) and
+/// <c>server.yaml</c>'s reader (flattens to ASP.NET Core's own <c>Section:Key</c> shape) and
 /// writer (edits one key in place, keeping every other line — including comments — untouched; see
 /// architecture/implementation/done/phase-079-standardized-config-file.md for why this isn't a
 /// round trip through YamlDotNet's serializer).

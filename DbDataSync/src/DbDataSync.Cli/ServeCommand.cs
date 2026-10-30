@@ -35,15 +35,10 @@ public static class ServeCommand
 
         try
         {
-            // Phase 112: resolution fell through to the new machine-wide default, and the only real
-            // configuration this install has ever had is still sitting at the old per-user one.
-            // Printing and continuing would silently bootstrap a second, empty repo right next to a
-            // working one — refuse instead, and name both paths.
-            if (LegacyRootMigration.DetectAt(root) is { } legacyRoot)
-            {
-                Console.WriteLine(LegacyRootMigration.Message(legacyRoot, root));
-                return 1;
-            }
+            // Clean break (plan 13, E04): an appsettings.json or dbdatasync.config.yaml of an earlier release is refused, never read,
+            // and nothing is created next to it. The settings are server.yaml.
+            if (DbDataSyncRoot.LegacyRefusal(root) is { } refusal)
+                return Fail(new InvalidOperationException(refusal), refusal);
 
             var stateDb = CliOptions.Read(args, "--state-db") ?? Path.Combine(root, "state.db");
             // --url / DbDataSync__App__Url still override the file, exactly like every other
@@ -145,7 +140,7 @@ public static class ServeCommand
     /// fails for a reason nobody installed a tool expecting.
     /// </para>
     /// <para>
-    /// A genuinely fresh root also gets a starter <c>dbdatasync.config.yaml</c>, committed the same way
+    /// A genuinely fresh root also gets a starter <c>server.yaml</c> (when pairing has not made one already), committed the same way
     /// every other config write is — never a repo root that already existed before this run, so
     /// re-running <c>serve</c> against a real deployment can never overwrite an operator's own edits,
     /// or their decision to delete the file and configure entirely by flag/environment variable.
@@ -163,19 +158,7 @@ public static class ServeCommand
         {
             DbDataSyncConfigFile.WriteStarter(root);
             new GitCommitService(root).CommitChanges(
-                [DbDataSyncConfigFile.PathIn(root)], "Add starter dbdatasync.config.yaml", CurrentUser.SystemAuthor);
-        }
-        else
-        {
-            // A no-op for a fresh repo (nothing to migrate) or one already on phase 164's key names —
-            // only prints/commits when there was real old-shaped content to rewrite.
-            var migrated = LegacyConfigMigration.Migrate(root);
-            if (migrated.Count > 0)
-            {
-                Console.WriteLine("dbdatasync.config.yaml used the old flat key names — migrated automatically:");
-                foreach (var change in migrated)
-                    Console.WriteLine($"  {change}");
-            }
+                [DbDataSyncConfigFile.PathIn(root)], "Add starter server.yaml", CurrentUser.SystemAuthor);
         }
     }
 
@@ -289,7 +272,7 @@ public static class ServeCommand
     /// What actually reaches <see cref="DbDataSyncHost.Build"/> — every CLI-only flag *and its value*
     /// stripped out, plus the resolved root/state-db path/URL passed through as ordinary configuration
     /// (rather than mutated into the environment), so the same values reach the host the same way they
-    /// would from appsettings.json or an operator's own environment.
+    /// would from server.yaml or an operator's own environment.
     /// <para>
     /// **Stripping only the flag token, leaving its value behind, is a real bug this method exists to
     /// fix** — found while extracting it for phase 164's own regression test. <c>--DbDataSync:*</c>

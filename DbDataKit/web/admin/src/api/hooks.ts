@@ -223,7 +223,7 @@ export function useAdminConfig() {
   return useQuery({ queryKey: keys.adminConfig, queryFn: api.admin.config.list })
 }
 
-/** Writes one key into dbdatasync.config.yaml — a direct edit of a file-sourced row, or "adopt" of one
+/** Writes one key into server.yaml — a direct edit of a file-sourced row, or "adopt" of one
  * that is not. Same mutation either way; the page decides which value to send. */
 export function useSetAdminConfig() {
   const queryClient = useQueryClient()
@@ -237,7 +237,7 @@ export function useSetAdminConfig() {
 }
 
 /** StateConnectionString's password, through the secret store. A separate mutation from the value
- * above because it never touches dbdatasync.config.yaml and the page never sees what it sets. */
+ * above because it never touches server.yaml and the page never sees what it sets. */
 export function useSetAdminConfigSecret() {
   const queryClient = useQueryClient()
   return useMutation({

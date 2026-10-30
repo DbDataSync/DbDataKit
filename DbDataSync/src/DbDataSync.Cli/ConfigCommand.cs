@@ -47,12 +47,6 @@ public static class ConfigCommand
         }
         else
         {
-            if (LegacyRootMigration.DetectAt(context.Root) is { } legacyRoot)
-            {
-                Console.WriteLine(LegacyRootMigration.Message(legacyRoot, context.Root));
-                Console.WriteLine();
-            }
-
             foreach (var result in results)
             foreach (var line in ReadinessChecks.FormatResult(result))
                 Console.WriteLine(line);

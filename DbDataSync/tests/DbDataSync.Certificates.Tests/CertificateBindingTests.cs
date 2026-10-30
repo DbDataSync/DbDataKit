@@ -60,7 +60,7 @@ public sealed class CertificateBindingTests : IDisposable
         using var repo = new Repository(_root);
         var head = repo.Head.Tip;
         Assert.NotNull(head);
-        Assert.Contains("dbdatasync.config.yaml", head!.Tree.Select(e => e.Path));
+        Assert.Contains("server.yaml", head!.Tree.Select(e => e.Path));
         Assert.Contains(certificate.Thumbprint, head.Message);
     }
 
