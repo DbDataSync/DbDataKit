@@ -1,0 +1,30 @@
+# The console and a Store server, paired by announcement (see build.yml for the mechanism; the commands are the same with `-f dist/compose/store.yml`):
+#   docker compose -f dist/compose/store.yml exec console dotnet /app/dbdatakit.dll instance confirm dbdatastore
+# Run from the repository root.
+name: dbdatakit-store
+x-announce: &announce
+  DBDATAKIT_CONSOLE_ANNOUNCE_URL: http://console:8481
+services:
+  console:
+    build:
+      context: ../..
+      dockerfile: DbDataConsole/Dockerfile
+    environment: *announce
+    ports:
+      - "8480:8480"
+    volumes:
+      - console-data:/data
+  store:
+    build:
+      context: ../..
+      dockerfile: DbDataStore/Dockerfile
+    # the name the server announces; the service name is already a name of it on this network
+    hostname: store
+    environment: *announce
+    volumes:
+      - store-data:/data
+    depends_on:
+      - console
+volumes:
+  console-data:
+  store-data:

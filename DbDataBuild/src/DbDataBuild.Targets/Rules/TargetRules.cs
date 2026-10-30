@@ -91,6 +91,7 @@ public static partial class TargetRules
         if (target == "sqlserver") transpiled = TsqlLiterals.Nationalize(transpiled);
         if (target is "sqlserver" or "fabric") transpiled = ExpandOperatorMarkers(transpiled);
         if (target == "postgres") transpiled = ExpandPostgresMarkers(transpiled);
+        if (target is "sqlserver" or "fabric" or "postgres") transpiled = ExpandKeyMarkers(transpiled, target);
         foreach (var (marker, spelling, markerTarget) in Markers)
             if (markerTarget == target) transpiled = System.Text.RegularExpressions.Regex.Replace(transpiled, marker, spelling, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         return transpiled;

@@ -110,6 +110,19 @@ public static partial class QueryDescriber
     public static string PlanStatement(string sql) =>
         "SELECT json_serialize_plan('" + sql.Trim().TrimEnd(';').TrimEnd().Replace("'", "''") + "', optimize := false, skip_null := true, skip_empty := true)";
 
+    /// <summary>The names of the functions DuckDB has built in (lower case): a key's name may not be one of them, because the call would mean the built-in.</summary>
+    public static IReadOnlySet<string> BuiltInFunctionNames()
+    {
+        using var connection = new DuckDBConnection("DataSource=:memory:");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT DISTINCT lower(function_name) FROM duckdb_functions() WHERE internal";
+        using var reader = command.ExecuteReader();
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        while (reader.Read()) names.Add(reader.GetString(0));
+        return names;
+    }
+
     /// <summary>The DuckDB engine version, for recording next to anything derived from its plans.</summary>
     public static string DuckDbVersion()
     {
@@ -133,6 +146,7 @@ public static partial class QueryDescriber
             var columns = string.Join(", ", table.Columns.Select(c => $"{Quote(c.Name)} {c.Type.Trim()}{(c.Nullable ? "" : " NOT NULL")}"));
             Run(connection, $"CREATE TABLE {Quote(table.SchemaName)}.{Quote(table.Name)} ({columns})");
         }
+        KeyMarkers.Register(connection, prelude?.Macros ?? []);          // the macros of surrogate keys that call a marker (see KeyMarkers) bind it by name
         foreach (var statement in prelude?.Macros ?? []) RunMacroStatement(connection, statement);
     }
 
