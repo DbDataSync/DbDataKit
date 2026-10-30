@@ -185,6 +185,10 @@ public sealed class BuildServerWorkspacesTests : IAsyncLifetime
         Assert.True((bool)shown["uncommitted"]!);
         Assert.Single(changes);
         Assert.Contains("+-- a draft", (string)changes[0]!["patch"]!);
+        // both whole texts, for the console's side-by-side view
+        Assert.True((bool)changes[0]!["sides"]!);
+        Assert.Contains("-- a draft", (string)changes[0]!["after"]!);
+        Assert.DoesNotContain("-- a draft", (string)changes[0]!["before"]!);
 
         Assert.Equal(HttpStatusCode.Forbidden, (await Send("vic", ServerRole.Viewer, HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/commit", """{"message":"x"}""")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await Send("bob", ServerRole.Author, HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/commit", """{"message":"x"}""")).StatusCode);

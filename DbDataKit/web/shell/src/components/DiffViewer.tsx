@@ -5,7 +5,7 @@ export interface DiffViewerProps {
   before: string | null
   /** Null for one that does not exist after — a deletion. */
   after: string | null
-  language?: 'yaml' | 'csharp' | 'sql'
+  language?: 'yaml' | 'csharp' | 'sql' | 'plaintext'
   height?: number
   testId?: string
 }
