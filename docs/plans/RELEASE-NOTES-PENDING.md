@@ -59,6 +59,11 @@ to it in the pull request that makes the change; a release moves the entries int
   column, or its `Transform`, to a type the column takes (a date or timestamp for a date column; `CAST(... AS ...)` or a conversion in the Transform; text for a text column). What is still stored as before:
   anything that is only a question of the value, such as `1.5` into an integer column (rounded on SQL Server, truncated on PostgreSQL), a number out of range, a string that parses as a date or a number, and a
   string too long for its column. Cost: one type comparison per cell, as before; no change in speed. (A14b)
+- **Package hashes of scripts are pinned in the configuration repository.** A `.csx` script's `#r "nuget: Id, 1.2.3"` packages are recorded, with their SHA-512, in `scripts/<name>.lock` beside the script (a library's are in `libraries/<id>/library.lock`
+  already, and a compiled driver's in `drivers/<id>/driver.lock`; same file format). A configuration repository without lock files keeps working: the first time a script with packages is compiled (validated, saved, tested or run) its lock file is created, and saving the script
+  commits it; a lock file created by a run is not committed by Sync, so **commit the new `scripts/*.lock` files** of an existing repository. From then on a package whose bytes differ (another machine, or the feed changed under the same id and version) is refused with a message naming the package, the version
+  and the lock file; if the change is expected, delete that package's line from the lock file and validate again. A stored package that matches its pin needs no network. The lock reader is strict: a key other than `schema` and `packages` stops the load,
+  naming the file and the key. Deleting a script deletes its lock file. (S12)
 
 ## DbDataBuild
 
