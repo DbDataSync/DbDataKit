@@ -297,7 +297,13 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(page.getByTestId('commits-table').locator('[data-testid^="commit-"]').first()).toBeVisible()
 
   // Publishing (plan 13a, T11 and T12): the console links the Build server to the Proxy (no code typed), the Build screen publishes the starter's connection, and the Proxy lists the data source it made.
+  // The first Build pairing was forgotten above, so the server is paired again, with the second code made for it.
   await page.getByTestId('rail-home-link').click()
+  await page.getByTestId('pair-url-input').fill(buildUrl)
+  await page.getByTestId('pair-code-input').fill(fs.readFileSync(path.join(scratchDirectory, 'build-pairing-code-again.txt'), 'utf8').trim())
+  await page.getByTestId('pair-name-input').fill('Build one')
+  await page.getByTestId('pair-button').click()
+  await expect(page.getByTestId('instance-row-Build one').getByTestId('instance-status')).toHaveText('Ready')
   await expect(page.getByTestId('link-card')).toBeVisible()
   await page.getByTestId('link-from-select').selectOption({ label: 'Build one' })
   await page.getByTestId('link-to-select').selectOption({ label: 'Proxy one' })
