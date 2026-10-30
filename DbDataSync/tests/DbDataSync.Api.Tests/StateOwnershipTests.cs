@@ -27,18 +27,12 @@ public sealed class StateOwnershipTests
             .Order()
             .ToList();
 
-        // Phase 79 centralized this further: DbDataSyncHost.cs and InviteCommand.cs used to construct a
-        // StateDatabase directly (the API's composition root, and one named exception — see below for
-        // why InviteCommand gets one), and now both go through StateDatabase.FromOptions instead, so
-        // there is exactly one legitimate construction site rather than two.
+        // Phase 79 centralized this: DbDataSyncHost.cs (the API's composition root) and the command line go through StateDatabase.FromOptions, so there is
+        // exactly one legitimate construction site. (`dbdatasync invite` was the command line's one occasional writer next to the API; it is gone, plan 13, X05.)
         //
         // The rule exists because *runner processes* are spawned constantly and concurrently, and many
         // writers against one SQLite file is what phase 39 was fixing; they reach state over loopback
-        // instead. `dbdatasync invite` is a different risk profile: an operator runs it once, by hand,
-        // in the situation where nobody can sign in — which is precisely when an endpoint that needs a
-        // session is no help. One occasional writer alongside the API is what SQLite's busy_timeout
-        // and SqliteRetry already handle everywhere else in this codebase. FromOptions is what both of
-        // them call now, so the invariant holds without either of them needing an exception of its own.
+        // instead.
         //
         // Listed by name rather than by relaxing the rule, so the next file that wants an exception
         // has to argue for it here.

@@ -50,6 +50,7 @@ public static class DbDataSyncHost
             builder.Configuration.Sources.Remove(json);
         RefuseLegacySettings(builder);
         InsertConfigFile(builder);
+        RefuseRemovedSettings(builder);
         builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
 
         // Applied only when this process really is a service, so `dbdatasync server run` in a terminal is
@@ -116,8 +117,11 @@ public static class DbDataSyncHost
         DbDataSync.Api.Management.SyncManagement.AddServices(builder.Services);
         var authentication = builder.Services.AddSessionAuth(SyncAuth.Product,
             sp => sp.GetRequiredService<StateDatabase>(),
-            sp => PasskeyOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>(), sp.GetRequiredService<ApiOptions>()),
+            _ => PasskeyOptions.Disabled,
             sp => sp.GetRequiredService<ApiOptions>().RepoRoot);
+        // Sync writes no first-run invitation (plan 13, X05): its users and invitations are the console's, as the console's own host also removes this service.
+        foreach (var bootstrap in builder.Services.Where(d => d.ImplementationType == typeof(BootstrapInvite)).ToList())
+            builder.Services.Remove(bootstrap);
         builder.Services.AddSingleton(sp => CertificateOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
 
         builder.Services.AddSingleton(sp => SecretStore.Open(sp.GetRequiredService<ApiOptions>().RepoRoot));
@@ -382,12 +386,6 @@ public static class DbDataSyncHost
         // A fresh process has, by construction, already picked up whatever the marker was recording.
         app.Services.GetRequiredService<RestartRequiredState>().Clear();
 
-        // At startup, so a deployment whose passkeys cannot possibly work says so now rather than
-        // failing inside a browser API with a message that names nothing. A warning and not a refusal:
-        // Windows authentication may be the only method this deployment intends to use.
-        if (app.Services.GetRequiredService<PasskeyOptions>().Problem() is { } passkeyProblem)
-            app.Logger.LogWarning("Passkeys are misconfigured and will not work: {Problem}", passkeyProblem);
-
         if (webServer == WebServer.HttpSys)
             WarnAboutHttpSysTls(app);
 
@@ -455,6 +453,16 @@ public static class DbDataSyncHost
     {
         var repoRoot = builder.Configuration["DbDataSync:App:RepoRoot"] ?? Path.Combine(Directory.GetCurrentDirectory(), "dbdatasync-repo");
         if (LegacyHostSettings.Refusal(repoRoot, AppContext.BaseDirectory) is { } refusal)
+            throw new InvalidOperationException(refusal);
+    }
+
+    /// <summary>
+    /// Stops the host, naming the setting, when any layer (server.yaml, the environment, the command line) still sets one Sync no longer has (plan 13, X05). Checked after
+    /// the file is in, so it sees all of them; <c>dbdatasync server run</c> checks the file first and prints the same message before anything is created.
+    /// </summary>
+    private static void RefuseRemovedSettings(WebApplicationBuilder builder)
+    {
+        if (RemovedSettings.Refusal(builder.Configuration.AsEnumerable().Select(pair => pair.Key), "in server.yaml, the environment or the command line") is { } refusal)
             throw new InvalidOperationException(refusal);
     }
 

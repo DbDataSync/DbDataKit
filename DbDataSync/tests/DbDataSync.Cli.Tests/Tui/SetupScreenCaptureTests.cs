@@ -54,8 +54,8 @@ public sealed class SetupScreenCaptureTests : IDisposable
             Assert.Contains(tabTitle, plainText);
 
         // Every action-bar button must be reachable, not laid out past column 80 — the other failure
-        // this test caught: "Reissue invite" and "Exit" rendered off the right edge entirely.
-        foreach (var buttonLabel in new[] { "Save", "Start", "Print config", "Reissue invite", "Exit" })
+        // this test caught: the last buttons rendered off the right edge entirely.
+        foreach (var buttonLabel in new[] { "Save", "Start", "Print config", "Exit" })
             Assert.Contains(buttonLabel, plainText);
 
         Assert.DoesNotContain("Found '/etc/dotnet/install_", plainText); // a check line clipped mid-word
@@ -63,7 +63,7 @@ public sealed class SetupScreenCaptureTests : IDisposable
 
     /// <summary>
     /// Regression test for a real bug reported from manual testing on Windows: keyboard/mouse navigation
-    /// never reached the action bar (Save/Start/Print config/Reissue invite/Exit) at all, so Exit
+    /// never reached the action bar (Save/Start/Print config/Exit) at all, so Exit
     /// couldn't be triggered from the keyboard or (per the report) reliably by mouse either. Root cause —
     /// <c>actionBar</c> in <c>SetupScreen.cs</c> is a plain container <see cref="View"/>, which
     /// Terminal.Gui defaults to <c>CanFocus = false</c>. Every tab already has its own copy of this exact

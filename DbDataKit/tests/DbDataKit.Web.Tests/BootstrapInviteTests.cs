@@ -1,25 +1,24 @@
-using DbDataSync.Api.Auth;
-using DbDataSync.Api.Configuration;
-using DbDataSync.State;
-using Microsoft.Extensions.DependencyInjection;
+using DbDataKit.State;
+using DbDataKit.Web.Auth;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
-namespace DbDataSync.Api.Tests;
+namespace DbDataKit.Web.Tests;
 
 /// <summary>
 /// The only way into a fresh install, and what makes it possible for one to be closed by default
-/// rather than open.
+/// rather than open. These ran in Sync's suite until plan 13, X05 took the first-run invitation out of Sync (its users and invitations are the console's); the class is
+/// shared and the console still runs it, so its behaviour is pinned here, for a product that is not Sync.
 /// </summary>
-public sealed class BootstrapInviteTests(AuthenticatedApiFactory factory) : IClassFixture<AuthenticatedApiFactory>
+public sealed class BootstrapInviteTests
 {
-    private StateDatabase Database => factory.Services.GetRequiredService<StateDatabase>();
+    private static readonly AuthProduct Product = new("DbDataKit");
 
     private static BootstrapInvite Bootstrap(UserStore users, InviteStore invites, string root, bool networkAdminLoopback = false) =>
         new(users, invites,
             new AuthOptions
             {
-                Product = SyncAuth.Product,
+                Product = Product,
                 AdminGroup = "g",
                 NetworkAdmin = networkAdminLoopback ? AdminNetworkTrust.Loopback : AdminNetworkTrust.Disabled,
             },
@@ -31,7 +30,7 @@ public sealed class BootstrapInviteTests(AuthenticatedApiFactory factory) : ICla
     private (UserStore Users, InviteStore Invites, string Root) Fresh()
     {
         var root = Directory.CreateTempSubdirectory("dbdatasync-bootstrap-").FullName;
-        var database = new StateDatabase(Path.Combine(root, "state.db"));
+        var database = new StateDatabase(Path.Combine(root, "state.db"), new StateSchema([IdentitySchema.Accounts, IdentitySchema.Invites]));
         return (new UserStore(database), new InviteStore(database), root);
     }
 
@@ -50,6 +49,7 @@ public sealed class BootstrapInviteTests(AuthenticatedApiFactory factory) : ICla
         }
         finally
         {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             Directory.Delete(root, recursive: true);
         }
     }
@@ -72,6 +72,7 @@ public sealed class BootstrapInviteTests(AuthenticatedApiFactory factory) : ICla
         }
         finally
         {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             Directory.Delete(root, recursive: true);
         }
     }
@@ -93,6 +94,7 @@ public sealed class BootstrapInviteTests(AuthenticatedApiFactory factory) : ICla
         }
         finally
         {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             Directory.Delete(root, recursive: true);
         }
     }
@@ -114,6 +116,7 @@ public sealed class BootstrapInviteTests(AuthenticatedApiFactory factory) : ICla
         }
         finally
         {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             Directory.Delete(root, recursive: true);
         }
     }
@@ -131,6 +134,7 @@ public sealed class BootstrapInviteTests(AuthenticatedApiFactory factory) : ICla
         }
         finally
         {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             Directory.Delete(root, recursive: true);
         }
     }
@@ -152,6 +156,7 @@ public sealed class BootstrapInviteTests(AuthenticatedApiFactory factory) : ICla
         }
         finally
         {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             Directory.Delete(root, recursive: true);
         }
     }
@@ -175,6 +180,7 @@ public sealed class BootstrapInviteTests(AuthenticatedApiFactory factory) : ICla
         }
         finally
         {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             Directory.Delete(root, recursive: true);
         }
     }

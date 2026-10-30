@@ -100,27 +100,10 @@ internal static class SetupSteps
     /// draws between prompting and writing.
     /// </summary>
     internal static StepResult ApplyAuthentication(
-        string root, string choice, string? relyingPartyId, string? url, string? adminGroup, string? viewerGroup,
-        bool noAuthConfirmed)
+        string root, string choice, string? adminGroup, string? viewerGroup, bool noAuthConfirmed)
     {
-        if (choice == "passkeys")
-        {
-            var rp = string.IsNullOrEmpty(relyingPartyId) ? "localhost" : relyingPartyId;
-            DbDataSyncConfigFile.SetValue(root, "DbDataSync:Auth:Passkeys", "RelyingPartyId", rp);
-
-            // Origins is no longer stored — App:Url's own origin is always implicitly trusted at
-            // runtime (see PasskeyOptions.Origins). This is only an in-memory check before writing,
-            // using exactly the origin App:Url will resolve to.
-            var problem = new PasskeyOptions
-            {
-                RelyingPartyId = rp,
-                RelyingPartyName = "DbDataSync",
-                Origins = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { url ?? "" },
-            }.Problem();
-            return problem is not null
-                ? new StepResult(true, $"Warning: {problem}")
-                : new StepResult(false, "Passkeys configured.");
-        }
+        if (choice == "console")
+            return new StepResult(false, "Signed in at the console: nothing to set here. Add this server to a dbdatakit console (`dbdatasync server pair`).");
 
         if (choice == "windows")
         {
@@ -143,8 +126,7 @@ internal static class SetupSteps
                 "itself is Admin with no sign-in.");
         }
 
-        DbDataSyncConfigFile.SetValue(root, "DbDataSync:Auth:Passkeys", "RelyingPartyId", "localhost");
-        return new StepResult(true, "Not disabled — falling back to passkeys at localhost.");
+        return new StepResult(true, "Not disabled — signed in at the console (nothing was written).");
     }
 
     /// <summary>The console URL is the one field with no branching or validation of its own — General

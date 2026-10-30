@@ -165,18 +165,32 @@ public sealed class ReadinessChecksTests : IDisposable
         Assert.Contains("dbdatasync driver install", check.Detail);
     }
 
+    /// <summary>Plan 13, X05: a setting Sync no longer has is not ignored; the first check says which one, naming it.</summary>
     [Fact]
-    public async Task PasskeyRelyingPartyIdThatIsAUrl_AuthCheckFailsWithTheProblemText()
+    public async Task APasskeySettingOfAnEarlierRelease_FailsTheRepoCheckNamingIt()
     {
         ServeCommand.Prepare(_root);
-        DbDataSyncConfigFile.SetValue(_root, "DbDataSync:Auth:Passkeys", "RelyingPartyId", "https://example.com");
+        DbDataSyncConfigFile.SetValue(_root, "DbDataSync:Auth:Passkeys", "RelyingPartyId", "example.com");
+
+        var context = ReadinessChecks.BuildContext(["--repo", _root]);
+        var results = await ReadinessChecks.RunChecksAsync(context);
+
+        var check = Find(results, "Repo");
+        Assert.Equal(CheckStatus.Fail, check.Status);
+        Assert.Contains("DbDataSync:Auth:Passkeys:RelyingPartyId", check.Detail);
+    }
+
+    [Fact]
+    public async Task WithNoDirectSignIn_TheAuthCheckSaysPeopleSignInAtTheConsole()
+    {
+        ServeCommand.Prepare(_root);
 
         var context = ReadinessChecks.BuildContext(["--repo", _root]);
         var results = await ReadinessChecks.RunChecksAsync(context);
 
         var check = Find(results, "Auth");
-        Assert.Equal(CheckStatus.Fail, check.Status);
-        Assert.Contains("looks like a URL", check.Detail);
+        Assert.Equal(CheckStatus.Ok, check.Status);
+        Assert.Contains("console", check.Detail);
     }
 
     [Fact]
@@ -368,7 +382,7 @@ public sealed class ReadinessChecksTests : IDisposable
         Assert.Contains("Auth", names);
         Assert.Contains("Certificate", names);
         Assert.Contains("Binding", names);
-        Assert.Contains("First admin", names);
+        Assert.DoesNotContain("First admin", names); // Sync has no users of its own to check for (plan 13, X05)
     }
 
     /// <summary>Phase 109j: with no library installed at all, there is nothing to check yet — the new

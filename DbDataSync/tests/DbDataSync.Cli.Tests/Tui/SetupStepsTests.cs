@@ -120,37 +120,20 @@ public sealed class SetupStepsTests : IDisposable
     }
 
     [Fact]
-    public void ApplyAuthentication_PasskeysWithDefaults_WritesRelyingPartyWithNoWarning()
+    public void ApplyAuthentication_Console_WritesNothingAndPointsAtPairing()
     {
-        var result = SetupSteps.ApplyAuthentication(
-            _root, "passkeys", relyingPartyId: null, url: "http://localhost:5080",
-            adminGroup: null, viewerGroup: null, noAuthConfirmed: false);
+        var result = SetupSteps.ApplyAuthentication(_root, "console", adminGroup: null, viewerGroup: null, noAuthConfirmed: false);
 
         Assert.False(result.Warning);
-
-        var config = DbDataSyncConfigFile.Read(_root);
-        Assert.Equal("localhost", config["DbDataSync:Auth:Passkeys:RelyingPartyId"]);
-        // Origins is no longer stored — App:Url's own origin is always implicitly trusted at runtime.
-        Assert.False(config.ContainsKey("DbDataSync:Auth:Passkeys:Origins:0"));
-    }
-
-    [Fact]
-    public void ApplyAuthentication_PasskeysWithAUrlAsTheRelyingPartyId_ReturnsThePasskeyOptionsWarning()
-    {
-        var result = SetupSteps.ApplyAuthentication(
-            _root, "passkeys", relyingPartyId: "https://example.com", url: "https://example.com",
-            adminGroup: null, viewerGroup: null, noAuthConfirmed: false);
-
-        Assert.True(result.Warning);
-        Assert.Contains("looks like a URL", result.Message);
+        Assert.Contains("server pair", result.Message);
+        Assert.DoesNotContain(DbDataSyncConfigFile.Read(_root).Keys, key => key.Contains("Passkeys", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
     public void ApplyAuthentication_Windows_WritesAdminAndOptionalViewerGroup()
     {
         var result = SetupSteps.ApplyAuthentication(
-            _root, "windows", relyingPartyId: null, url: null, adminGroup: "DbDataSync Admins",
-            viewerGroup: "", noAuthConfirmed: false);
+            _root, "windows", adminGroup: "DbDataSync Admins", viewerGroup: "", noAuthConfirmed: false);
 
         Assert.False(result.Warning);
 
@@ -163,8 +146,7 @@ public sealed class SetupStepsTests : IDisposable
     public void ApplyAuthentication_NoneConfirmed_DisablesAuth()
     {
         var result = SetupSteps.ApplyAuthentication(
-            _root, "none", relyingPartyId: null, url: null, adminGroup: null, viewerGroup: null,
-            noAuthConfirmed: true);
+            _root, "none", adminGroup: null, viewerGroup: null, noAuthConfirmed: true);
 
         Assert.True(result.Warning);
         var config = DbDataSyncConfigFile.Read(_root);
@@ -173,18 +155,17 @@ public sealed class SetupStepsTests : IDisposable
     }
 
     [Fact]
-    public void ApplyAuthentication_NoneNotConfirmed_FallsBackToLocalhostPasskeys()
+    public void ApplyAuthentication_NoneNotConfirmed_WritesNothing()
     {
         var result = SetupSteps.ApplyAuthentication(
-            _root, "none", relyingPartyId: null, url: null, adminGroup: null, viewerGroup: null,
-            noAuthConfirmed: false);
+            _root, "none", adminGroup: null, viewerGroup: null, noAuthConfirmed: false);
 
         Assert.True(result.Warning);
-        Assert.Contains("falling back to passkeys", result.Message);
+        Assert.Contains("Not disabled", result.Message);
 
         var config = DbDataSyncConfigFile.Read(_root);
-        Assert.Equal("localhost", config["DbDataSync:Auth:Passkeys:RelyingPartyId"]);
         Assert.False(config.ContainsKey("DbDataSync:Auth:Network:Admin"));
+        Assert.DoesNotContain(config.Keys, key => key.Contains("Passkeys", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Phase 130 — printed, not invoked, matching every other certificate step in this
