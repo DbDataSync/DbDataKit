@@ -1,0 +1,111 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+
+namespace DbDataKit.Dialect;
+
+/// <summary>The type of one part of a business key. A part's type decides how its value is written as text before it is hashed.</summary>
+public enum KeyPartType
+{
+    /// <summary>Text, with the spaces at both ends removed (and nothing else changed: no case folding, no Unicode normalization).</summary>
+    Text,
+    /// <summary>A whole number, written in decimal with no leading zeros and a `-` for a negative one.</summary>
+    Integer,
+    /// <summary>A date, written `yyyy-MM-dd`.</summary>
+    Date,
+}
+
+/// <summary>One part of a business key: the SQL expression that produces its value, and its type.</summary>
+public sealed record KeyPart(string Expression, KeyPartType Type);
+
+/// <summary>
+/// The surrogate key of plan 25 section 1, defined once: a 64-bit integer that is the first 8 bytes (big-endian, signed) of SHA-256 over the normalized business key. <see cref="Hash"/> is the reference; <see cref="Sql"/>
+/// writes the same computation for an engine, and a test runs both over the same values, so a key is the same on every engine, in every channel and on every rebuild.
+/// <para>
+/// Normalization: each part is written as text by its type (<see cref="KeyPartType"/>), the parts are joined with U+001F (the unit separator) between them, and the text is encoded as UTF-8. A part that is NULL makes the
+/// key NULL (the owning model decides what an unknown member is). Text is not case-folded: upper-casing differs between engines for anything but ASCII, so a key that must ignore case is made from a column the source
+/// has already folded. A text part that itself holds U+001F can collide with another key; the generated uniqueness check (plan 23) is what finds that.
+/// </para>
+/// </summary>
+public static class SurrogateKey
+{
+    public const char Separator = '\u001f';
+
+    /// <summary>One part as text, or null when the value is NULL.</summary>
+    public static string? PartText(object? value) => value switch
+    {
+        null => null,
+        string s => s.Trim(' '),
+        DateOnly d => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        sbyte or byte or short or ushort or int or uint or long => Convert.ToString(value, CultureInfo.InvariantCulture),
+        _ => throw new ArgumentException($"A key part is text, a whole number or a date, not {value.GetType().Name}."),
+    };
+
+    /// <summary>The normalized business key, or null when any part is NULL.</summary>
+    public static string? Normalize(IReadOnlyList<object?> parts)
+    {
+        if (parts.Count == 0) throw new ArgumentException("A key has at least one part.", nameof(parts));
+        var texts = new string[parts.Count];
+        for (var i = 0; i < parts.Count; i++) texts[i] = PartText(parts[i]) ?? "";
+        return parts.Any(p => p is null) ? null : string.Join(Separator, texts);
+    }
+
+    /// <summary>The key of a normalized business key.</summary>
+    public static long Hash(string normalized) =>
+        System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)));
+
+    /// <summary>The key of a business key, or null when any part is NULL.</summary>
+    public static long? Compute(params object?[] parts) => Normalize(parts) is { } n ? Hash(n) : null;
+
+    /// <summary>The engines <see cref="Sql"/> writes for.</summary>
+    public static readonly IReadOnlyList<string> Engines = ["duckdb", "sqlserver", "fabric", "postgres"];
+
+    /// <summary>
+    /// The expression that computes the key on an engine from the parts' expressions. SQL Server and Fabric hash the UTF-8 bytes (a UTF-8 collation, available from SQL Server 2019); PostgreSQL's `sha256` and DuckDB's
+    /// are over UTF-8 already. DuckDB returns hex text, so it takes the first 8 bytes as two 32-bit halves, which also gives the signed value without an overflow.
+    /// </summary>
+    public static string Sql(string engine, IReadOnlyList<KeyPart> parts)
+    {
+        if (parts.Count == 0) throw new ArgumentException("A key has at least one part.", nameof(parts));
+        var e = engine.ToLowerInvariant();
+        if (!Engines.Contains(e)) throw new NotSupportedException($"No surrogate key is defined for engine '{engine}'; it is defined for {string.Join(", ", Engines)}.");
+        var texts = parts.Select(p => PartSql(e, p)).ToList();
+        var isNull = string.Join(" OR ", parts.Select(p => $"{p.Expression} IS NULL"));
+        var joined = e is "duckdb" or "postgres"
+            ? string.Join(e == "duckdb" ? " || chr(31) || " : " || chr(31) || ", texts)
+            : string.Join(" + NCHAR(31) + ", texts);
+        return $"CASE WHEN {isNull} THEN NULL ELSE {Wrap(e, joined)} END";
+    }
+
+    private static string PartSql(string e, KeyPart p) => (e, p.Type) switch
+    {
+        ("sqlserver" or "fabric", KeyPartType.Text) => $"LTRIM(RTRIM(CAST({p.Expression} AS NVARCHAR(4000))))",
+        ("sqlserver" or "fabric", KeyPartType.Integer) => $"CAST(CAST({p.Expression} AS BIGINT) AS NVARCHAR(20))",
+        ("sqlserver" or "fabric", KeyPartType.Date) => $"CONVERT(NVARCHAR(10), CAST({p.Expression} AS DATE), 23)",
+        ("postgres", KeyPartType.Text) => $"btrim(CAST({p.Expression} AS text), ' ')",
+        ("postgres", KeyPartType.Integer) => $"CAST(CAST({p.Expression} AS bigint) AS text)",
+        ("postgres", KeyPartType.Date) => $"to_char(CAST({p.Expression} AS date), 'YYYY-MM-DD')",
+        ("duckdb", KeyPartType.Text) => $"trim(CAST({p.Expression} AS VARCHAR), ' ')",
+        ("duckdb", KeyPartType.Integer) => $"CAST(CAST({p.Expression} AS BIGINT) AS VARCHAR)",
+        ("duckdb", KeyPartType.Date) => $"strftime(CAST({p.Expression} AS DATE), '%Y-%m-%d')",
+        _ => throw new NotSupportedException(),
+    };
+
+    private static string Wrap(string e, string joined) => e switch
+    {
+        "sqlserver" or "fabric" =>
+            $"CAST(SUBSTRING(HASHBYTES('SHA2_256', CAST({joined} AS VARCHAR(MAX)) COLLATE Latin1_General_100_CI_AS_SC_UTF8), 1, 8) AS BIGINT)",
+        "postgres" =>
+            $"CAST(CAST('x' || encode(substring(sha256(convert_to({joined}, 'UTF8')) from 1 for 8), 'hex') AS bit(64)) AS bigint)",
+        _ => DuckDbHash(joined),
+    };
+
+    private static string DuckDbHash(string joined)
+    {
+        // hi and lo are the first and second 32 bits as non-negative BIGINTs; hi is made signed by taking 2^32 off when its top bit is set
+        var h = $"sha256({joined})";
+        var hiValue = $"(CAST(('0x' || substr({h}, 1, 8)) AS BIGINT))";
+        var loValue = $"(CAST(('0x' || substr({h}, 9, 8)) AS BIGINT))";
+        return $"((CASE WHEN {hiValue} >= 2147483648 THEN {hiValue} - 4294967296 ELSE {hiValue} END) * 4294967296 + {loValue})";
+    }
+}

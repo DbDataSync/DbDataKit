@@ -1,6 +1,6 @@
 # Plan 25: surrogate keys and agent testing
 
-Status: **direction decided by the owner (2026-10-27)**, one question at a time. Not sliced yet.
+Status: **direction decided by the owner (2026-10-27)**, one question at a time. Sliced in section 4 (surrogate keys; the agent-testing sections are not sliced).
 
 ## 1. Surrogate keys
 
@@ -105,3 +105,22 @@ part of answering. This is the owner's addition, 2026-10-27.
    - a scripted conversation hits the mismatch;
    - the agent proposes a draft map, the user approves, and the query reruns with matching values;
    - a denied map leaves the query unanswered and nothing stored.
+
+## 4. Slices (surrogate keys; section 1 and 1a)
+
+One slice, one branch `suite/<id>-<short-name>`, one pull request, as in plan 13a. "Done when" is the test.
+
+| ID | Slice | Needs | Size | Done when |
+| --- | --- | --- | --- | --- |
+| K01 | The key hash, defined once: normalization, the C# reference and the SQL for DuckDB, SQL Server, Fabric and PostgreSQL (`SurrogateKey` in `DbDataKit.Dialect`) | | S | the reference matches SHA-256's first 8 bytes; DuckDB computes the reference value for text, integer and date parts, both signs, NULL; the other engines are checked live in K05. **Status: done** (branch `suite/k01-key-hash`). Chosen here, not by the owner: no case folding (upper-casing differs between engines outside ASCII, so a key that ignores case is made from a folded column), U+001F between parts, trimming of spaces only, a NULL part gives a NULL key. The SQL Server and PostgreSQL text was written from the engines' documentation and has **not run**: no engine was available in the session |
+| K02 | `keys:` in a model's YAML: name, `from`, `method` (`hash` default), `unknown_member`, `history`/`version_key`; closed schema, diagnostics with file and line | K01 | M | loader tests: a good file, an unknown setting, a key whose `from` names no column of the model, a key named like a DuckDB built-in |
+| K03 | The function per key: Build generates a DuckDB macro for each key; query analysis checks argument count and types against the definition (the "takes 2 arguments" error) | K02 | M | a fact that passes one argument is refused with the plan's message; the key computes in DuckDB |
+| K04 | Lowering: a call of a key function becomes the engine's hash expression (K01's SQL) in the rendered model | K03 | M | rendered golden files per target; a differential run against DuckDB |
+| K05 | Real engines: the hash of a fixed set of business keys on SQL Server 2022, PostgreSQL 17 and DuckDB agree with the reference | K04 | S | conformance test, run in CI on the test engines |
+| K06 | Generated uniqueness test for every hashed key (plan 23 check, severity block) and the collision message | K04, plan 23 | S | a table with two business keys that collide (forced with a fake hash in a test) fails the build |
+| K07 | Relationships inferred from calls: output column to owning model, roles from the column name (`order_date_key`, `return_date_key` to `dim_date`); into lineage | K03 | M | a model calling `date_key` twice records two relationships to `dim_date` |
+| K08 | `unknown_member: true`: the function returns the reserved key and Build adds the row to the owning model | K04 | M | a NULL argument gives the reserved key; the owning model holds that row after a load |
+| K09 | History keys: `version_key` and the durable key beside it, over `ColumnHistory` | K04 | M | a changed attribute gets a new version key and the same durable key |
+| K10 | `method: key_map`: the map table kept in the target, the lookup lowering, new keys on load | K04 | L | a business key keeps its integer across reloads and is never reused |
+| K11 | DbDataStore entity ids as UUID v7, made by the serving instance | | S | ids are time-ordered, unique across two instances in a test, and a draft keeps its id when submitted |
+| K12 | Later: keys defined in pure SQL (`surrogate_key(...)` in the select list), written back into the YAML | K03 | M | the definition is inferred and stored |
