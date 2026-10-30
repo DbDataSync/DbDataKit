@@ -28,6 +28,7 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
         ValidateUsers(o, cx);
         ValidateJwt(o, cx);
         ValidateSemantic(o, cx);
+        ValidateState(o, cx);
 
         if (!string.IsNullOrWhiteSpace(o.DataDirectory))
         {
@@ -42,6 +43,20 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
             cx.Warning("SchemaVersion", $"Schema version {o.SchemaVersion}: the statement `Classifier` of {string.Join(", ", sourcesWithoutClassifier)} defaults to warn. " +
                 $"Schema version {ProxyConfig.LatestSchemaVersion} defaults it to strict.",
                 $"Set `Classifier` on each data source, then set `SchemaVersion` to {ProxyConfig.LatestSchemaVersion}.");
+    }
+
+    private static void ValidateState(ProxyOptions o, IConfigValidationContext cx)
+    {
+        try
+        {
+            var settings = new DbDataKit.State.StateSettings(o.State.Engine, o.State.ConnectionString);
+            if (!settings.IsSqlite && string.IsNullOrWhiteSpace(o.State.ConnectionString))
+                cx.Error("State.ConnectionString", $"The state engine is `{o.State.Engine}`, which needs a connection string.", "Give the connection string of a database for the proxy's state, with the password as a secret reference, or use `sqlite`.");
+        }
+        catch (InvalidOperationException)
+        {
+            cx.Error("State.Engine", $"`{o.State.Engine}` is not a state engine.", "Use `sqlite`, `mssql` or `postgres`.");
+        }
     }
 
     private static void ValidateSemantic(ProxyOptions o, IConfigValidationContext cx)

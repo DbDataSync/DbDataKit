@@ -67,7 +67,7 @@ public static class ConsoleHost
             .AddApplicationPart(typeof(AuthController).Assembly)
             .AddApplicationPart(typeof(ConsoleHost).Assembly)
             .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
-        builder.Services.AddSingleton(_ => ConsoleState.Open(settings.Directory));
+        builder.Services.AddSingleton(_ => ConsoleState.Open(settings.Directory, settings.State));
         builder.Services.AddSingleton(sp => new NotificationStore(sp.GetRequiredService<StateDatabase>()));
         builder.Services.AddSessionAuth(Auth,
             sp => sp.GetRequiredService<StateDatabase>(),

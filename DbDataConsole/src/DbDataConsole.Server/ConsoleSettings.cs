@@ -6,8 +6,9 @@ namespace DbDataConsole.Server;
 /// <param name="Directory">The console's directory: <c>state.db</c> (users, sessions, invitations, notifications), `instances.yaml` (the servers it manages), `secrets/` (the key it signs for them with), its certificate, and <c>FIRST-RUN.txt</c> until the first administrator exists.</param>
 /// <param name="Listen">The address it listens on; HTTPS. A passkey is bound to the host name, so a name such as <c>localhost</c> works and a bare IP address does not.</param>
 /// <param name="AnnounceListen">A private address (plain HTTP) where servers on the network the console shares with them announce themselves, to wait for an administrator to confirm them; null: none. It serves nothing else, and must not be published outside that network.</param>
+/// <param name="State">The engine of the state database; null is SQLite in <see cref="Directory"/>. A server engine is a database of its own (the Proxy uses another), named by a connection string whose password is a secret reference.</param>
 /// <param name="PublicUrl">The address people open it at, when that is not the address it listens on (a container listens on every address; a proxy answers on a name of its own). A passkey is bound to this name and port, and an invitation link is made from it, so it has to be the one in the browser's address bar. Null: the address it listens on, or <c>localhost</c> on the same port where that is every address.</param>
-public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUrl = null, Uri? AnnounceListen = null)
+public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUrl = null, Uri? AnnounceListen = null, StateSettings? State = null)
 {
     /// <summary>The address a browser opens, and the origin a passkey is bound to.</summary>
     public Uri Public => PublicUrl ?? (IsEveryAddress(Listen.Host) ? new UriBuilder(Listen) { Host = "localhost" }.Uri : Listen);
@@ -38,9 +39,25 @@ public static class ConsoleState
 {
     public static StateSchema Schema { get; } = new([IdentitySchema.Accounts, IdentitySchema.Invites, NotificationSchema.Feed]);
 
-    public static StateDatabase Open(string directory)
+    public const string EngineVariable = "DBDATAKIT_CONSOLE_STATE_ENGINE";
+    public const string ConnectionVariable = "DBDATAKIT_CONSOLE_STATE_CONNECTION";
+
+    /// <summary>The state engine the flags or the environment name (the flags win); null when neither does, which is SQLite in the console's directory.</summary>
+    public static StateSettings? SettingsFrom(Func<string, string?>? environment, string? engineFlag = null, string? connectionFlag = null)
+    {
+        environment ??= Environment.GetEnvironmentVariable;
+        var engine = engineFlag ?? environment(EngineVariable);
+        var connection = connectionFlag ?? environment(ConnectionVariable);
+        return string.IsNullOrWhiteSpace(engine) && string.IsNullOrWhiteSpace(connection) ? null : new StateSettings(engine, connection);
+    }
+
+    public static StateDatabase Open(string directory, StateSettings? settings = null, Func<string, string?>? environment = null)
     {
         System.IO.Directory.CreateDirectory(directory);
-        return new StateDatabase(System.IO.Path.Combine(directory, "state.db"), Schema);
+        settings ??= new StateSettings();
+        if (settings.IsSqlite) return StateOpener.Open(settings, System.IO.Path.Combine(directory, "state.db"), Schema);
+        // the password of a server engine is a secret reference: the console's store, then the environment
+        var secrets = new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]);
+        return StateOpener.Open(settings, System.IO.Path.Combine(directory, "state.db"), Schema, secrets);
     }
 }
