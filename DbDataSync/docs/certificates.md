@@ -1,6 +1,6 @@
 # Certificates
 
-DbDataSync serves its console over HTTPS with one certificate. There are four ways to get it, and the right one
+DbDataSync serves its API over HTTPS with one certificate (the dbdatakit console, which has the screens, pins it when it pairs with the server). There are four ways to get it, and the right one
 depends on your platform and on whether you have a certificate authority (CA).
 
 | I want... | Use | Platform | Renewed by |

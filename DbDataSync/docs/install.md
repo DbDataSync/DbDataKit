@@ -112,7 +112,7 @@ cannot `dbdatasync update` itself or run the versioned slots; use the tool packa
 
 Every release also carries `dbdatasync-v<version>-<win-x64|linux-x64>.zip` and the repository's standard install scripts
 ([`dist/README.md`](https://github.com/DbDataSync/DbDataKit/blob/main/dist/README.md)). The zip is the program without a tool wrapper, so it needs the .NET 10 runtime on the machine
-(and the SDK, to install drivers from the console):
+(and the SDK, to install drivers from the Drivers screens):
 
 ```powershell
 irm https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.ps1 | iex
@@ -225,9 +225,9 @@ A **global tool** (`dotnet tool install -g`) cannot keep two versions side by si
 The launcher itself does not change when you update. `dbdatasync launcher repair` replaces it with the running
 version's copy and re-points a registered service at it; that is rarely needed.
 
-### From the web console
+### From the console
 
-Admin → **Updates** shows the running version and what each slot holds. It gives the commands above for this server,
+Open the server in the dbdatakit console (its **Servers** page), then Admin → **Updates**: it shows the running version and what each slot holds. It gives the commands above for this server,
 with its data directory filled in, each with a copy button. Each listed release has a **Commands…** button with that
 version's exact `--apply` command. The console does not apply updates itself: run the command on the server.
 
@@ -241,6 +241,21 @@ Listing releases on the page calls GitHub, so it is **off by default**. Set `DbD
 comma-separated). A snapshot is a development build: its download is checked only against a checksum published beside
 it, which catches corruption, not tampering.
 
+## Connecting a console
+
+`dbdatasync` serves no web app: the API, the scheduler and the runs are the server, and its screens are the web app of the **dbdatakit console**. Install and start the
+console once for all your servers (`DbDataConsole/README.md` in the repository), then pair each server with it:
+
+```sh
+dbdatasync server pair                      # on the server: a single-use code, valid for a few minutes
+dbdatakit instance add https://sync.example:5080 --code <code>     # or the console's Servers page
+```
+
+Pairing needs the server to listen on **HTTPS** (a certificate of its own: see [Certificates](certificates.md)), because the console pins the certificate the server
+presents. Behind a proxy that ends TLS, bind plain HTTP as described under [Plain HTTP and reverse proxies](configuration.md#plain-http-and-reverse-proxies) and give the
+server the fingerprint of the certificate the proxy presents in `DbDataSync:Management:CertificateFingerprint`. A person who opens the server's own address in a browser gets a message
+saying so; set `DbDataSync:Console:Url` (environment `DbDataSync__Console__Url`, or `DBDATAKIT_CONSOLE_URL`) to the console's address and the message names it.
+
 ## Running in a container
 
 Use this for a self-contained deployment with no `PATH` or service to manage.
@@ -249,8 +264,8 @@ Use this for a self-contained deployment with no `PATH` or service to manage.
 docker run -p 8080:8080 -v dbdatasync-data:/var/lib/dbdatasync ghcr.io/dbdatasync/dbdatasync:latest
 ```
 
-The image listens on plain HTTP and serves it to any client (it sets `DbDataSync__App__AllowInsecureHttp=true`), so a browser reaching
-it through Docker's port mapping works. That is fine for a first look; credentials cross the network unencrypted. For real use, put
+The image listens on plain HTTP and serves its API to any client (it sets `DbDataSync__App__AllowInsecureHttp=true`). The image carries no web app (the screens are the console's:
+see [Connecting a console](#connecting-a-console)), and a console pairs only with an HTTPS address. That is fine for a first look at the API; credentials cross the network unencrypted. For real use, put
 a TLS-terminating proxy in front and run the container with `-e DbDataSync__App__AllowInsecureHttp=false -e DbDataSync__App__TrustedProxies=<proxy address>`
 (see [Plain HTTP and reverse proxies](configuration.md#plain-http-and-reverse-proxies)); plain HTTP is then served only to the proxy's
 `X-Forwarded-Proto: https` requests and to the container itself.
@@ -261,7 +276,7 @@ machine.
 
 | tag | what it is |
 | --- | --- |
-| `latest`, `2026.9.20.2152` | the default image. It includes the .NET SDK, which the console needs to install a library that is not in the bundled catalog |
+| `latest`, `2026.9.20.2152` | the default image. It includes the .NET SDK, which the server needs to install a library that is not in the bundled catalog |
 | `runtime`, `2026.9.20.2152-runtime` | the smaller image, with no SDK: catalog drivers only, and a library outside the catalog is written down and left "pending restore" until `config library sync` runs somewhere that has an SDK |
 
 `latest` and `runtime` follow the newest **stable** release. A beta gets only its exact version tags (`…-beta`,

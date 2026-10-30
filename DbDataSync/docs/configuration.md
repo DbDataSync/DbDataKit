@@ -23,7 +23,7 @@ below applies no matter which entry point launched it — the CLI just supplies 
 defaults, then forwards them as the same `DbDataSync:*` configuration keys.
 
 **The three entry points default to three different ports** — the most common source of "why can't
-the SPA reach the API" confusion:
+the console's web app reach the API" confusion:
 
 | how it's started | default port |
 | --- | --- |
@@ -31,7 +31,7 @@ the SPA reach the API" confusion:
 | `dbdatasync server run` | `5080` |
 | the Docker image | `8080` |
 
-The SPA's dev-server proxy (`DBDATASYNC_API_URL`, below) defaults to `5183` — i.e. it assumes the raw
+The dev-server proxy of the Sync screens (`DBDATASYNC_API_URL`, below) defaults to `5183` — i.e. it assumes the raw
 `dotnet run` dev loop, not a CLI-launched backend. Point it at `5080` if you're running against
 `dbdatasync server run` instead.
 
@@ -107,7 +107,11 @@ this, and it and the connection string are spliced together at connect time.
 
 ### `dbdatasync server run`
 
-Starts the API, the scheduler and the web console in one process.
+Starts the API and the scheduler in one process. The server serves no web app: its screens are the
+dbdatakit console's, paired with the server once (`dbdatasync server pair`, see
+[Installing → Connecting a console](install.md#connecting-a-console)). A browser pointed at the server's address gets a plain-text
+message saying so, and naming the console when `DbDataSync:Console:Url` (environment `DbDataSync__Console__Url`, or
+`DBDATAKIT_CONSOLE_URL`) holds its address.
 
 | flag | default |
 | --- | --- |
@@ -183,18 +187,21 @@ dbdatasync config set <key> <value> [--repo <path>]
 ```
 
 Reads or writes one `DbDataSync:*` setting in `dbdatasync.config.yaml` — the same settings, and the same commit, as
-**Admin → Configuration** in the web console; `dbdatasync server setup` edits some of the same ones. `<key>` is the name from the
+**Admin → Configuration** on the server's screens in the dbdatakit console; `dbdatasync server setup` edits some of the same ones. `<key>` is the name from the
 tables below, with or without the `DbDataSync:` prefix (`config set Notes:MarkdownRenderer rich`), and can be nested
 (`config set Auth:Windows:AdminGroup "DbDataSync Admins"`) — any depth works; only
 `App:RepoRoot` (how the file itself is found) is refused. A setting with a caution — a mode that widens what an
-unauthenticated or unverified caller can reach — prints it before it is turned on, as the console and `setup` show it beside
+unauthenticated or unverified caller can reach — prints it before it is turned on, as that screen and `setup` show it beside
 the control. The change waits for a restart of the service; `config get` reports what the file says, not what a running
-process is using (the console's **Running** column compares the two).
+process is using (the **Running** column of that screen compares the two).
 
 ### `dbdatasync invite`
 
 Prints a fresh single-use invitation URL — for when the first-run one has scrolled off-screen, or the
-process is a service with no console to print to in the first place.
+process is a service with no terminal to print to in the first place.
+
+> **Since the web app moved to the console, no screen of this server redeems that URL**: people are made and sign in at the console
+> (`dbdatakit user invite`). The command and the server's own sign-in remain for the API; a server that is only used through a console needs neither.
 
 | flag | default |
 | --- | --- |
@@ -451,7 +458,7 @@ environment variable, CLI flag), and what `dbdatasync cert bind` writes into `db
 
 ### Sharing a port with HTTP.sys
 
-Opt-in, Windows only: set `DbDataSync:App:Server` to `httpsys` and the console is served by HTTP.sys, the
+Opt-in, Windows only: set `DbDataSync:App:Server` to `httpsys` and the server's API is served by HTTP.sys, the
 kernel-mode listener, instead of Kestrel. The reason to do it is that HTTP.sys lets several processes
 listen on the same port, routed by host name. Kestrel is still the default, and still what Linux, the
 container and the systemd unit use. The runner-state listener (`State:Port`) is a separate loopback-only
@@ -521,7 +528,7 @@ pool of consumers:
 A long-running reload on the bulk load lane can no longer take a slot an incremental pass needs. When
 the API spawns the runner it always passes both, from `changeProcessing.degreeOfParallelism` and
 `changeProcessing.bulkLoadDegreeOfParallelism` in `task.yaml` (both on the replication's Schedule
-card in the UI); the `4`s above are the fallback for a runner started by hand and for a replication
+card on the replication's screen); the `4`s above are the fallback for a runner started by hand and for a replication
 whose config does not set them. Each number is table mappings processed at once within that lane;
 a single mapping never occupies more than one slot in a lane regardless of the number, and the total
 concurrency ceiling for the replication is the two added.
@@ -587,17 +594,17 @@ When the store has no value, the environment answers: the name upper-cased, ever
 prefixed `DBDATA_SECRET_`. A connection named `orders-db` resolves to `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_ORDERS_DB`. A file named after the secret in
 the directory `CREDENTIALS_DIRECTORY` names (systemd `LoadCredential=`, a container secret mount) is the last place looked.
 
-## SPA dev server (`src/DbDataSync.Web`)
+## Sync screens' dev server (`DbDataKit/web/sync`)
 
 | env var | default | meaning |
 | --- | --- | --- |
 | `DBDATASYNC_API_URL` | `http://localhost:5183` | target for Vite's `/api` and `/hubs` dev-server proxy |
 
-No `.env` files ship with the project — this is the only variable Vite itself reads.
+No `.env` files ship with the project — this is the only variable Vite itself reads. The server serves no web app, so this dev server is a developer's way to work on the
+Sync screens against a running API; the product's screens are the console's (`DbDataKit/web/console`, whose own dev server proxies to a console).
 
-The dev server also serves this repository's `docs/` at `/docs/*.md`, and the pictures they show from `screenshots/` at
-`/screenshots/…` — the addresses a packaged build serves them at — so the console's **Docs** pages work under `npm run dev`
-and edits to a page appear on the next load.
+The docs are not served by either: the console's build generates them from this folder (`order.txt` lists the pages in order) into `/docs/sync`, and its dev server
+does the same from memory, so edits to a page appear on the next load of the console's dev server.
 
 ## Container image
 
@@ -610,8 +617,8 @@ see [Installing → Running in a container](install.md#running-in-a-container) f
 
 - `EXPOSE 8080`; entrypoint is `dbdatasync server run --url http://0.0.0.0:8080` — no trailing `--repo` argument; override at `docker run` time (`docker run ... <image> --repo /some/other/path`) to pass different `dbdatasync server run` flags.
 - `HEALTHCHECK` runs `dbdatasync health check --url http://127.0.0.1:8080`.
-- The image carries these docs (`/app/wwwroot/docs`) and the pictures they show, so **Docs** in the console works with no
-  network — see [Getting started](getting-started.md#reading-these-docs-in-the-console).
+- The image carries no web app and no docs: the screens, and these docs, are the dbdatakit console's (its own image, `DbDataConsole/Dockerfile`) — see
+  [Getting started](getting-started.md#reading-these-docs-in-the-console) and [Installing → Connecting a console](install.md#connecting-a-console).
 - `VOLUME ["/var/lib/dbdatasync"]` — one mount is a complete deployment: the config repository and the state database live together, so a backup of this directory is a backup of everything that isn't the image itself.
 - `ENV DbDataSync__App__RepoRoot=/var/lib/dbdatasync` — the environment-variable form of the `DbDataSync:App:RepoRoot` config key, honoured by the same repo-root resolver every command uses (below). `CliOptions.DefaultRoot` already resolves to the same path on Linux, so this is set explicitly rather than relied on as a coincidence.
 

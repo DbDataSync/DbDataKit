@@ -94,9 +94,9 @@ an SDK.
 | `dbdatasync library uninstall <id>` | deletes `<RepoRoot>/libraries/<id>` entirely |
 | `dbdatasync library validate <id> --connection <name>` | for a library backing a *built-in* driver only: opens the named connection for real and drives that driver's actual staging/writer pipeline against a real scratch table, reporting rows written — proof the library resolves correctly, not just that the manifest parses |
 
-### From the web console
+### From the console
 
-The Admin → **Libraries** tab does the same thing as `config library install`/`list`/`uninstall` —
+The Admin → **Libraries** tab (on the server's screens in the dbdatakit console) does the same thing as `config library install`/`list`/`uninstall` —
 including a NuGet search box, gated by the same `DbDataSync:Nuget:Search:Mode` setting documented in
 [Configuration](configuration.md). Both paths write the identical `<RepoRoot>/libraries/*` files, so
 either one is visible to the other.
@@ -256,9 +256,9 @@ implementation yourself — and is out of scope for this page beyond the command
 | `dbdatasync driver list` | every driver on disk — descriptor (`library: <id>`) or compiled (`assembly:`/`type:`) — plus a `[FAILED TO PARSE: ...]` line for one that doesn't, rather than crashing |
 | `dbdatasync driver uninstall <id>` | deletes `<RepoRoot>/drivers/<id>`. Its library is untouched — `config library uninstall` separately if nothing else still needs it |
 
-### From the web console
+### From the console
 
-Admin → **Drivers** lists every registered driver — the five built-ins plus whatever descriptors or
+Admin → **Drivers** (on the server's screens in the dbdatakit console) lists every registered driver — the five built-ins plus whatever descriptors or
 compiled plugins are on disk — and offers an "Add" flow for the same starter catalog `--from` draws
 from (`POST /api/drivers/from-catalog`). Admin → **Libraries** (above) is where the library a new
 driver needs gets installed, either before or as part of adding the driver. A newly installed driver
@@ -299,7 +299,7 @@ a slower path, an engine that also has a compiled driver now.
    }
    ```
 
-   (The same form in the web console: Connections → New Connection → pick `mysql.generic` from the
+   (The same form in the console, on the server's screens: Connections → New Connection → pick `mysql.generic` from the
    driver dropdown, exactly as you would `MsSql` or `Postgres`.)
 
 4. **Create the target connection** the ordinary way, `DriverType: "MsSql"`.

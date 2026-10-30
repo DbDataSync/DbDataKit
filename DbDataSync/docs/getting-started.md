@@ -3,13 +3,28 @@
 [DbDataSync](../README.md) · [Install](install.md) · [Configuration](configuration.md) · **Getting started** · [Replication concepts](replication-concepts.md) · [Drivers and libraries](drivers-and-libraries.md) · [State database](state-database.md) · [Building from source](development.md)
 
 This walks through setting up your first replication. If you haven't installed DbDataSync yet, see
-[Install](install.md) first. Everything below happens in the web UI, once DbDataSync is running.
+[Install](install.md) first. Everything below happens in the web app of the dbdatakit console, once DbDataSync is running and paired with it.
+
+## Open the server in the console
+
+DbDataSync serves no web app of its own; its screens are the console's, which manages every DbData server (Sync, Build, Proxy) from one place.
+
+1. **Start the console.** `dbdatakit server run` (see `DbDataConsole/README.md` in the repository) writes a first-run invitation to `FIRST-RUN.txt` in its directory and its log.
+   Open `https://localhost:8480/invite#<code>` once and make a passkey: you are the first administrator.
+2. **Make a pairing code on the server.** `dbdatasync server pair` prints a single-use code. The console must reach the server over HTTPS
+   (see [Install](install.md#connecting-a-console)).
+3. **Pair them.** In the console, **Servers → Pair a server**: the server's address and the code (or `dbdatakit instance add <https address> --code <code>`).
+   The console pins the server's certificate; the server's list of paired consoles is `dbdatasync server clients`.
+4. **Open it.** The server's row has an **Open** link: its screens are at `/servers/<id>/...` in the console, and a link to one can be bookmarked and shared with anyone who can sign in to the console.
+
+What a person may do on the server follows from their role in the console (an administrator everything, a viewer reading), limited by the most the console was allowed to grant when it was paired.
 
 ## Reading these docs in the console
 
-Everything in this documentation is also in the web console: the book icon on the left rail (**Docs**) opens the same pages,
-for the version of DbDataSync that is running — no network needed, so it works on a machine that cannot reach GitHub, and it
-cannot describe a different release than the one you have. It is there for every signed-in user, not only administrators.
+Everything in this documentation is also in the console. **Docs** on the console's left rail lists the docs of every product it has screens for, and DbDataSync's are
+at `/docs/sync`; the **Docs** icon on a Sync screen's own rail opens the same pages inside the server's screens. They are the files of this folder as they were when the
+console was built, so they need no network (they work on a machine that cannot reach GitHub), and they describe the console's version of the docs, which is the one
+that shipped with the pages you are reading in the app. They are there for every signed-in user, not only administrators.
 
 ## Your first replication
 

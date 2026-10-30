@@ -47,6 +47,31 @@ class CheckDocsCommands(unittest.TestCase):
         self.assertEqual([], check.check(root))
 
 
+class CheckSyncWebApp(unittest.TestCase):
+    def test_each_old_way_of_saying_sync_serves_a_web_app_is_found(self):
+        for text in ["Then open http://localhost:5080 in a browser.", "Open `http://localhost:8080`.",
+                     "dbdatasync server run starts the API and serves the web console.", "The image carries these docs (`/app/wwwroot/docs`).",
+                     "- `src/DbDataSync.Web` is the SPA."]:
+            with self.subTest(text=text):
+                problems = check.check_web_app(tree({"DbDataSync/docs/install.md": text + "\n"}))
+                self.assertEqual(1, len(problems), problems)
+                self.assertIn("DbDataSync/docs/install.md:1", problems[0])
+
+    def test_what_is_true_now_passes(self):
+        root = tree({"DbDataSync/docs/install.md": "`dbdatasync` serves no web app: its screens are the console's.\nOpen the server on the console's Servers page.\n"
+                                                   "The console serves the docs at /docs/sync.\n"})
+        self.assertEqual([], check.check_web_app(root))
+
+    def test_other_products_and_history_are_not_read(self):
+        root = tree({"DbDataConsole/README.md": "The console serves the web app from wwwroot/docs. Open http://localhost:8080.\n",
+                     "DbDataSync/architecture/implementation/p.md": "open http://localhost:5080\n"})
+        self.assertEqual([], check.check_web_app(root))
+
+    def test_a_line_can_say_it_on_purpose(self):
+        root = tree({"DbDataSync/docs/x.md": "<!-- retired-name-ok -->\nopen http://localhost:5080\n"})
+        self.assertEqual([], check.check_web_app(root))
+
+
 SHARED = {
     "DbDataKit/src/DbDataKit.Cli/Nouns/ServerNoun.cs": """
 public static class ServerNoun {

@@ -458,7 +458,7 @@ public static class DbDataSyncHost
         if (app.Urls.Any(u => Uri.TryCreate(u, UriKind.Absolute, out var uri) && uri.AbsolutePath.Length > 1))
         {
             app.Logger.LogWarning(
-                "A URL with a path prefix is bound under HTTP.sys. The web console is served from the root of " +
+                "A URL with a path prefix is bound under HTTP.sys. The API is served from the root of " +
                 "its origin, so share the port by host name, not by path.");
         }
     }

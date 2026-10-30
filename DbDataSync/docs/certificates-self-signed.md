@@ -1,7 +1,7 @@
 # Self-signed certificates
 
 A certificate this tool makes itself. Fine for a first run, a lab, or a single operator; every browser or client that
-reaches the console has to be told to trust it once, because no CA stands behind it.
+reaches the server has to be told to trust it once (the console, when it pairs with the server, pins this certificate instead), because no CA stands behind it.
 
 There are two places the certificate can live.
 
@@ -13,7 +13,7 @@ dbdatasync cert new-self-signed
 
 This is the default off Windows, and `--file` asks for it on Windows too. It writes `<repo>/tls/dbdatasync.pfx` and
 points Kestrel at it, and a `dbdatasync.cer` beside it that clients can import to trust it. The names on it are the
-machine's name, `localhost`, the loopback addresses and the console URL's host; `--url` overrides that host, and
+machine's name, `localhost`, the loopback addresses and the server URL's host; `--url` overrides that host, and
 `--days` sets how long it is valid (default 397).
 
 The PFX is encrypted with a random password kept in `dbdatasync.pfx.pwd` next to it (encrypted with DPAPI on Windows,
@@ -21,7 +21,7 @@ a file readable only by the service's user elsewhere). The password is never wri
 committed to git; the service reads it at start. The whole `tls/` directory is git-ignored.
 
 The running service **renews this file itself**, in place, once the certificate is within 30 days of expiring or no
-longer covers the console URL's host, and raises a notification saying a restart is needed to pick it up. It only ever
+longer covers the server URL's host, and raises a notification saying a restart is needed to pick it up. It only ever
 touches this one file; a certificate you supplied with `use-pem` or `use-pfx` is never replaced.
 
 **Upgrading from an earlier version:** older versions wrote the PFX with no password. That file keeps being served until

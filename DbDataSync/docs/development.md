@@ -9,13 +9,13 @@ instead; nothing here is needed for that.
 ## Quick start: the dev harness
 
 To get a working dev environment without following the manual steps below, one command does the lot —
-containers, databases, seed data, the API, the SPA, and a configured replication:
+containers, databases, seed data, the API, the Sync screens' dev server, and a configured replication:
 
 ```sh
 tools/dev-harness up          # tools\dev-harness up on Windows
 ```
 
-Open `http://localhost:5173` and pick the `dev-sync` replication. Ctrl+C stops the API and SPA
+Open `http://localhost:5173` (the Sync screens on their own dev server: the product's screens are the dbdatakit console's, see below) and pick the `dev-sync` replication. Ctrl+C stops the API and that server
 (the containers keep running; `tools/dev-harness down` stops those).
 
 In another terminal, put real traffic through it:
@@ -101,18 +101,22 @@ Secrets (connection passwords) are in the encrypted store under the repository r
 [Configuration](configuration.md)); the environment variables `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_<NAME>` (the connection name in capitals)
 answer for a connection the store has no password for — set these before triggering a run if you would rather not store one locally.
 
-## 4. Run the SPA
+## 4. Run the screens
+
+The server serves no web app: the product's screens are the web app of the dbdatakit console (`DbDataKit/web/console`), which shows Sync's at `/servers/<id>/...`
+once the server is paired with it ([Getting started](getting-started.md#open-the-server-in-the-console)). To work on the Sync screens themselves, run them on their own dev server against the API:
 
 ```sh
-cd src/DbDataSync.Web
+cd ../DbDataKit/web
 npm install
-npm run dev
+npm run dev -w @dbdatakit/sync
 ```
 
 Open `http://localhost:5173`. It proxies `/api` and `/hubs` to the API (`http://localhost:5183` by
-default — override with the `DBDATASYNC_API_URL` environment variable).
+default — override with the `DBDATASYNC_API_URL` environment variable). It has no docs and no console around it; for those, and for
+what a person sees, run the console's dev server (`npm run dev -w @dbdatakit/console`, which proxies to a running console) or build it.
 
-From here, [Getting started](getting-started.md) walks through the same UI regardless of how
+From here, [Getting started](getting-started.md) walks through the same screens regardless of how
 DbDataSync was started.
 
 ## Running the tests
@@ -148,7 +152,7 @@ The screens are shown inside the console's frame, so a run writes its pictures t
 
 - `src/DbDataSync.Api` — ASP.NET Core orchestrator: REST API, scheduler, process supervisor, SignalR
   live-run hub.
-- `src/DbDataSync.Web` — React/TypeScript SPA.
+- `../DbDataKit/web/sync` — the React/TypeScript Sync screens (`@dbdatakit/sync`), shown by the console (`../DbDataKit/web/console`), which also serves these docs (generated from this folder).
 - `src/DbDataSync.Core` — config models, git-backed config store, secrets.
 - `src/DbDataSync.State` — shared SQLite state store (runs, logs, watermarks, locks).
 - `src/DbDataSync.Drivers.Abstractions` — the driver interfaces and capability discovery.

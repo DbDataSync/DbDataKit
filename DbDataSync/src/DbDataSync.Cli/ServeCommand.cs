@@ -11,7 +11,7 @@ using LibGit2Sharp;
 namespace DbDataSync.Cli;
 
 /// <summary>
-/// Starts the product: the API, the scheduler, and the web console, in one process.
+/// Starts the product: the API and the scheduler, in one process (the screens are the dbdatakit console's, plan 13, U11).
 /// <para>
 /// It builds the <see cref="DbDataSyncHost"/> the API's own entry point builds — one composition root,
 /// not two that drift the first time a service is registered in one of them.
