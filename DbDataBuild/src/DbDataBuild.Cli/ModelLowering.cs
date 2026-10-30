@@ -245,7 +245,8 @@ internal sealed class ModelLowering(IReadOnlyList<ModelDefinition> models, IRead
         var upstream = UpstreamFor(name, authorSql, restrict);
 
         var policy = RewriteCatalog.For(config, definition);
-        var prelude = (macros ?? MacroLibrary.Empty).PreludeFor([authorSql]);
+        var prelude = (macros ?? MacroLibrary.Empty).PreludeFor([authorSql], planning: true);
+        if ((macros ?? MacroLibrary.Empty).KeyCallProblems(authorSql) is { Count: > 0 } keyProblems) return (null, Fail(keyProblems[0].TrimEnd('.')));
         if (SessionReads(authorSql, prelude) is { } session)
             return (null, Fail($"{session}() reads the DuckDB session (a variable, a setting, the search path or the environment), and DuckDB 2.0 folds the answer into a constant when it plans the query, so the lowered query would carry the answer of the day it was lowered. Write the value into the query or pass it as a parameter"));
         var (json, error) = QueryDescriber.SerializePlan(upstream, authorSql, prelude);

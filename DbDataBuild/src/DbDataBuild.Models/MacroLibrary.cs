@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using DbDataBuild.Core;
+using DbDataKit.Dialect;
 
 namespace DbDataBuild.Models;
 
@@ -8,8 +9,11 @@ namespace DbDataBuild.Models;
 /// <param name="Name">As written, with its schema name when it has one (`finance.net`).</param>
 /// <param name="Calls">The other macros its text calls, by name.</param>
 /// <param name="Uses">The types of the project its text mentions.</param>
-public sealed record MacroDefinition(string Name, bool IsType, string Sql, string File, int Line, IReadOnlyList<string> Calls, IReadOnlyList<string> Uses)
+public sealed record MacroDefinition(string Name, bool IsType, string Sql, string File, int Line, IReadOnlyList<string> Calls, IReadOnlyList<string> Uses, string? PlanningSql = null)
 {
+    /// <summary>The statement for a binding that lowers the query: a surrogate key calls its marker function there (see KeyMarkers) instead of expanding to DuckDB's hash. The text itself everywhere else.</summary>
+    public string SqlFor(bool planning) => planning ? PlanningSql ?? Sql : Sql;
+
     public string ShortName => Name[(Name.LastIndexOf('.') + 1)..];
     public string? SchemaName => Name.Contains('.') ? Name[..Name.LastIndexOf('.')] : null;
 }
@@ -61,6 +65,115 @@ public sealed class MacroLibrary
             found.AddRange(Parse(file, File.ReadAllText(path), diags));
         }
         return Build(found, diags);
+    }
+
+    /// <summary>
+    /// The library with a macro for every surrogate key the models own (plan 25 section 1a): `customer_key(source_system, customer_id)` is `CREATE MACRO` of the hash expression of <see cref="SurrogateKey"/> over its
+    /// arguments, so a query calls the key like any function and DuckDB expands it as it binds. A part's type comes from the owning model's column of the same name (a whole number or a date; anything else, or no such
+    /// column, is text, which DuckDB writes the same way). A key a user macro or another model already has the name of is a diagnostic; one named like a DuckDB built-in is found by <see cref="KeysNamedLikeBuiltIns"/>, which needs DuckDB.
+    /// </summary>
+    public MacroLibrary WithKeys(IEnumerable<(ModelDefinition Model, string File)> owners, List<Diagnostic> diags)
+    {
+        var generated = new List<MacroDefinition>();
+        var owned = new Dictionary<string, (string Model, int Line)>(StringComparer.Ordinal);
+        foreach (var (model, file) in owners)
+            foreach (var key in model.Keys)
+            {
+                var columns = model.Columns.ToDictionary(c => c.Name, c => c.Type, StringComparer.OrdinalIgnoreCase);
+                var arguments = key.History == null ? key.From : [.. key.From, key.History];
+                var targets = key.VersionKey == null
+                    ? [(key.Name, key.From)]
+                    : new[] { (key.Name, key.From), (key.VersionKey, (IReadOnlyList<string>)arguments) };
+                foreach (var (name, args) in targets)
+                {
+                    var at = new SourceLocation(file, key.Line, 0);
+                    if (owned.TryGetValue(name, out var first))
+                    {
+                        diags.Add(new Diagnostic(DiagnosticCatalog.DuplicateKey, at, $"The key `{name}` is defined in `{model.Name}` and in `{first.Model}` (line {first.Line}): a key is a function of the whole project.", Fix: "Rename one of them."));
+                        continue;
+                    }
+                    if (macros.ContainsKey(name))
+                    {
+                        diags.Add(new Diagnostic(DiagnosticCatalog.DuplicateKey, at, $"The key `{name}` has the name of a macro of the project.", Fix: "Rename the key or the macro."));
+                        continue;
+                    }
+                    owned[name] = (model.Name, key.Line);
+                    var parts = args.Select(a => new KeyPart("\"" + a.Replace("\"", "\"\"") + "\"", PartTypeOf(columns.GetValueOrDefault(a)))).ToList();
+                    var head = $"CREATE OR REPLACE MACRO {name}({string.Join(", ", args.Select(a => "\"" + a.Replace("\"", "\"\"") + "\""))}) AS ";
+                    // the lowering binds the marker, whose arguments are cast to the part types as the full text casts them
+                    var markerCall = SurrogateKey.MarkerName(parts.Select(p => p.Type).ToList()) + "(" + string.Join(", ", parts.Select(p => $"CAST({p.Expression} AS {p.Type switch { KeyPartType.Text => "VARCHAR", KeyPartType.Integer => "BIGINT", _ => "DATE" }})")) + ")";
+                    generated.Add(new MacroDefinition(name, false, head + SurrogateKey.Sql("duckdb", parts), file, key.Line, [], [], head + markerCall));
+                }
+            }
+        if (generated.Count == 0) return this;
+        var known = KeyArguments.ToDictionary(k => k.Key, k => k.Value, StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, args) in ArgumentsOf(generated)) known[name] = args;
+        return new MacroLibrary([.. Definitions, .. generated]) { KeyArguments = known };
+    }
+
+    /// <summary>The keys named like a function DuckDB has built in: a call of one would mean the built-in, not the key.</summary>
+    public static IEnumerable<Diagnostic> KeysNamedLikeBuiltIns(IEnumerable<(ModelDefinition Model, string File)> owners, IReadOnlySet<string> builtIns)
+    {
+        foreach (var (model, file) in owners)
+            foreach (var key in model.Keys)
+                foreach (var name in new[] { key.Name, key.VersionKey }.Where(n => n != null && builtIns.Contains(n)))
+                    yield return new Diagnostic(DiagnosticCatalog.InvalidValue, new(file, key.Line, 0), $"The key `{name}` has the name of a DuckDB function, so a call of it would mean that function.", Fix: "Name the key after what it keys, for example `customer_key`.");
+    }
+
+    /// <summary>The key functions of this library and the names of their arguments, for the check of a call.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> KeyArguments { get; private init; } = new Dictionary<string, IReadOnlyList<string>>();
+
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>> ArgumentsOf(List<MacroDefinition> generated) =>
+        generated.ToDictionary(g => g.Name, g => (IReadOnlyList<string>)ParameterNames(g.Sql), StringComparer.OrdinalIgnoreCase);
+
+    private static List<string> ParameterNames(string createMacro)
+    {
+        var open = createMacro.IndexOf('(');
+        var close = createMacro.IndexOf(") AS ", StringComparison.Ordinal);
+        return createMacro[(open + 1)..close].Split(", ").Select(a => a.Trim('"').Replace("\"\"", "\"")).ToList();
+    }
+
+    private static KeyPartType PartTypeOf(string? type) => type?.Trim().ToUpperInvariant() switch
+    {
+        "BIGINT" or "INTEGER" or "INT" or "SMALLINT" or "INT8" or "INT4" or "INT2" => KeyPartType.Integer,
+        "DATE" => KeyPartType.Date,
+        _ => KeyPartType.Text,
+    };
+
+    /// <summary>
+    /// The calls of key functions in a query whose argument count differs from the key's definition, as messages ("`customer_key` takes 2 arguments (`source_system`, `customer_id`), but this call passes 1."). Only the
+    /// count is checked: DuckDB casts the arguments, and the owning model's column types say how each is written.
+    /// </summary>
+    public IReadOnlyList<string> KeyCallProblems(string sql)
+    {
+        var problems = new List<string>();
+        if (KeyArguments.Count == 0) return problems;
+        var scrubbed = Scrub(sql);
+        foreach (Match m in Call.Matches(scrubbed))
+        {
+            if (m.Groups[1].Success || !KeyArguments.TryGetValue(m.Groups[2].Value, out var expected)) continue;
+            var passed = CountArguments(scrubbed, m.Index + m.Length);
+            if (passed != expected.Count)
+                problems.Add($"`{m.Groups[2].Value}` takes {expected.Count} argument{(expected.Count == 1 ? "" : "s")} ({string.Join(", ", expected.Select(e => $"`{e}`"))}), but this call passes {passed}.");
+        }
+        return problems;
+    }
+
+    /// <summary>The arguments of a call whose opening parenthesis is just before <paramref name="from"/>: the commas at its own depth, outside strings (the text is scrubbed).</summary>
+    private static int CountArguments(string scrubbed, int from)
+    {
+        var depth = 1;
+        var commas = 0;
+        var any = false;
+        for (var i = from; i < scrubbed.Length && depth > 0; i++)
+        {
+            var c = scrubbed[i];
+            if (c is '(' or '[' or '{') depth++;
+            else if (c is ')' or ']' or '}') { depth--; if (depth == 0) break; }
+            else if (c == ',' && depth == 1) commas++;
+            if (depth >= 1 && !char.IsWhiteSpace(c)) any = true;
+        }
+        return any ? commas + 1 : 0;
     }
 
     /// <summary>The statements of one file. Anything that is not a macro or a type is a diagnostic and is left out.</summary>
@@ -165,8 +278,8 @@ public sealed class MacroLibrary
         return Definitions.Where(d => reached.ContainsValue(d)).ToList();
     }
 
-    /// <summary>The statements for a binding of these queries: only what they reach, callees before callers.</summary>
-    public DuckPrelude PreludeFor(IEnumerable<string> sqlTexts)
+    /// <summary>The statements for a binding of these queries: only what they reach, callees before callers. <paramref name="planning"/>: the binding is one that lowers the query, where a surrogate key stays a call of its marker.</summary>
+    public DuckPrelude PreludeFor(IEnumerable<string> sqlTexts, bool planning = false)
     {
         var closure = Closure(sqlTexts);
         if (closure.Count == 0) return DuckPrelude.Empty;
@@ -181,7 +294,7 @@ public sealed class MacroLibrary
             ordered.Add(d);
         }
         foreach (var d in closure) Place(d);
-        return new DuckPrelude(schemas, ordered.Where(d => d.IsType).Select(d => d.Sql).ToList(), ordered.Where(d => !d.IsType).Select(d => d.Sql).ToList());
+        return new DuckPrelude(schemas, ordered.Where(d => d.IsType).Select(d => d.Sql).ToList(), ordered.Where(d => !d.IsType).Select(d => d.SqlFor(planning)).ToList());
     }
 
     /// <summary>A hash of the macros (and types) a set of queries reaches: a change to one changes what every query that reaches it expands to, so it is part of those queries' definition hash.</summary>
