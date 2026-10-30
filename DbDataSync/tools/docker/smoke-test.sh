@@ -60,15 +60,12 @@ expect() { # expect <path> <status> [content-type prefix]
   echo "   $2 $1"
 }
 
-echo "== web console and docs, for someone who has not signed in"
+echo "== the address of the server says the web app moved, and does not serve one"
 body="$(curl -s "$base/")"
-case "$body" in *"No web assets are published"*) fail "/ answered the no-web-assets message, not the console" ;; esac
-expect / 200 text/html
-expect /invite 200 text/html
-for page in "$root"/docs/*.md; do expect "/docs/$(basename "$page")" 200 text/markdown; done
-while IFS= read -r picture; do
-  [ -z "$picture" ] || expect "/$picture" 200 image/png
-done < <(tr -d '\r' < "$root/docs/images.txt")
+case "$body" in *"no longer serves a web app"*) ;; *) fail "/ did not say that the web app is the console's: $body" ;; esac
+expect / 200 text/plain
+expect /replications/anything 404 text/plain
+expect /docs/install.md 404 text/plain
 
 echo "== the API stays closed"
 expect /api/connections 401

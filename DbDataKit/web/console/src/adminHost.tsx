@@ -10,5 +10,4 @@ export const adminHost: AdminHost = {
   CodeEditor: ({ value, onChange, readOnly, testId }) => (
     <textarea className="input mono" value={value} readOnly={readOnly} data-testid={testId} onChange={(e) => onChange(e.target.value)} />
   ),
-  docPages: [],
 }

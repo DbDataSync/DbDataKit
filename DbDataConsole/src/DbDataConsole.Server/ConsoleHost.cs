@@ -113,7 +113,10 @@ public static class ConsoleHost
         {
             var files = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(webRoot);
             app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = files });
-            app.UseStaticFiles(new StaticFileOptions { FileProvider = files });
+            // The docs of the modules are Markdown files the viewer fetches (plan 13a, U11); the static file provider has no type for them, and an unknown type is not served.
+            var types = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+            types.Mappings[".md"] = "text/markdown; charset=utf-8";
+            app.UseStaticFiles(new StaticFileOptions { FileProvider = files, ContentTypeProvider = types });
         }
 
         app.UseWebSockets();

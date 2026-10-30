@@ -1,0 +1,17 @@
+# The order of the pages in the web app's docs index, one `slug: Title` a line (the slug is the file's name without .md).
+# The build that generates the docs for the console (DbDataKit/web/console/build/moduleDocs.mjs) fails if this and the folder disagree:
+# a page of docs/ that is not listed, or a line with no page. Not a page itself.
+install: Install
+configuration: Configuration
+certificates: Certificates
+certificates-ad-cs-enroll: Certificates: AD CS enrollment
+certificates-self-signed: Certificates: self-signed
+certificates-existing-windows-store: Certificates: existing Windows store certificate
+certificates-pem-and-pfx: Certificates: PEM and PFX files
+certificates-renewal-and-expiry: Certificates: renewal and expiry
+certificates-troubleshooting: Certificates: troubleshooting
+getting-started: Getting started
+replication-concepts: Replication concepts
+drivers-and-libraries: Drivers and libraries
+state-database: State database
+development: Building from source

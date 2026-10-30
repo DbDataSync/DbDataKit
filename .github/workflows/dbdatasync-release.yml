@@ -86,16 +86,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
-      # Phase 137: dotnet pack of DbDataSync.Cli.csproj never triggers DbDataSync.Api.csproj's own
-      # BuildSpa target — every released nupkg to date has shipped with an empty wwwroot as a result.
-      # Build the SPA here, ahead of the pack step below, so Cli.csproj's CopyPrebuiltSpa target has a
-      # dist/ to copy in.
-      - name: Build the SPA
-        working-directory: DbDataKit/web
-        run: |
-          npm ci
-          npm run build -w @dbdatakit/sync
-
       # The shipped version is computed here, from the clock — not typed by a human anywhere.
       # YYYY.MM.DD.HHmm in UTC, which is a valid four-part assembly version (every part is well under
       # the 65534 ceiling) and sorts as a NuGet version in the same order it was released in.
@@ -183,16 +173,21 @@ jobs:
       # Phase 160: a release is public and awkward to withdraw, so the package proves it carries the web console and
       # every page of docs/ before it is published. (ci.yml's own package job, which asserts the same, only runs on a
       # `release/v*` tag push, which this workflow no longer makes — so this is where the check actually runs.)
-      - name: Check that it contains the web console and the docs
+      - name: Check that it contains the launchers, and no web app
         env:
           NUPKG: ${{ steps.pack.outputs.nupkg }}
         run: |
           rm -rf /tmp/nupkg-contents
           mkdir -p /tmp/nupkg-contents
           unzip -q "$NUPKG" -d /tmp/nupkg-contents
-          wwwroot=$(find /tmp/nupkg-contents/tools -type d -name wwwroot | head -n1)
-          if [ -z "$wwwroot" ] || [ -z "$(find "$wwwroot" -type f -print -quit)" ]; then
-            echo "::error::the packed nupkg has no non-empty tools/<tfm>/any/wwwroot/ — the web console did not get packed"
+          # The tool root: the folder with the launchers. Sync serves no web app any more (plan 13, U11): the screens are the console's.
+          toolroot=$(dirname "$(find /tmp/nupkg-contents/tools -type d -name launcher | head -n1)")
+          if [ -z "$toolroot" ] || [ "$toolroot" = "." ]; then
+            echo "::error::the packed nupkg has no tools/<tfm>/any/launcher/"
+            exit 1
+          fi
+          if [ -n "$(find /tmp/nupkg-contents/tools -type d -name wwwroot -print -quit)" ]; then
+            echo "::error::the packed nupkg carries a wwwroot: Sync no longer serves a web app"
             exit 1
           fi
 
@@ -200,26 +195,11 @@ jobs:
           # and `update --apply` on a pre-196L install refuse to convert, and nothing else notices.
           for launcher in win-x64/dbdatasync.exe win-arm64/dbdatasync.exe linux-x64/dbdatasync linux-arm64/dbdatasync \
                           linux-musl-x64/dbdatasync linux-musl-arm64/dbdatasync osx-x64/dbdatasync osx-arm64/dbdatasync; do
-            if [ ! -s "$(dirname "$wwwroot")/launcher/$launcher" ]; then
+            if [ ! -s "$toolroot/launcher/$launcher" ]; then
               echo "::error::the packed nupkg is missing launcher/$launcher"
               exit 1
             fi
           done
-          for page in docs/*.md; do
-            if [ ! -s "$wwwroot/docs/$(basename "$page")" ]; then
-              echo "::error::the packed nupkg is missing or has an empty wwwroot/docs/$(basename "$page")"
-              exit 1
-            fi
-          done
-          # Phase 162: and the pictures those pages show, listed in docs/images.txt.
-          while IFS= read -r image; do
-            [ -z "$image" ] && continue
-            if [ ! -s "$wwwroot/$image" ]; then
-              echo "::error::the packed nupkg is missing or has an empty wwwroot/$image, which the docs show"
-              exit 1
-            fi
-          done < <(tr -d '\r' < docs/images.txt)
-
           # Phase 162: the README that shipped is the rewritten copy — no relative link left, and every doc link pinned to the
           # commit that was packed (HEAD of this checkout, which is the released commit).
           unzip -p "$NUPKG" README.md > /tmp/packed-readme.md
@@ -262,8 +242,8 @@ jobs:
               -p:Version="$SHIPPED" -p:DebugType=None -o "artifacts/publish/$rid"
             if [ "$rid" = win-x64 ]; then ext=.exe; else ext=; fi
             mv "artifacts/publish/$rid/DbDataSync.Cli$ext" "artifacts/publish/$rid/dbdatasync$ext"
-            if [ -z "$(find "artifacts/publish/$rid/wwwroot" -type f -print -quit)" ]; then
-              echo "::error::the $rid package has an empty wwwroot: the web console did not get published"
+            if [ -d "artifacts/publish/$rid/wwwroot" ]; then
+              echo "::error::the $rid package carries a wwwroot: Sync no longer serves a web app"
               exit 1
             fi
             (cd "artifacts/publish/$rid" && zip -qr "$OLDPWD/artifacts/dist/dbdatasync-v$SHIPPED-$rid.zip" .)

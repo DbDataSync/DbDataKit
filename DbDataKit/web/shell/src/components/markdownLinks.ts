@@ -22,10 +22,10 @@ export function isSafeImageUrl(src: string): boolean {
  *  formats only, one folder deep, and no path separators in the name: nothing here can point outside that folder. */
 const DOC_IMAGE = /^\.\.\/screenshots\/([a-z0-9-]+)\/([A-Za-z0-9._-]+\.(?:png|jpe?g|gif|webp))$/i
 
-/** Where the app serves a docs page's own picture, or null for anything that is not one. */
-export function resolveDocImage(src: string): string | null {
+/** Where the app serves a docs page's own picture, or null for anything that is not one. `assetBase` is where the module's assets are (`/docs/<module>/assets`), so each module's pictures are its own. */
+export function resolveDocImage(src: string, assetBase = ''): string | null {
   const match = DOC_IMAGE.exec(src)
-  return match ? `/screenshots/${match[1]}/${match[2]}` : null
+  return match ? `${assetBase.replace(/\/+$/, '')}/screenshots/${match[1]}/${match[2]}` : null
 }
 
 export type LinkTarget =
@@ -49,8 +49,9 @@ const DOC_LINK = /^(?:\.\/)?([a-z0-9-]+)\.md(#[A-Za-z0-9_-]*)?$/i
 /**
  * @param docSlugs the pages that ship. Present only for a renderer that is showing the docs: a note, which is not one
  * of the app's own pages, gets no relative resolution at all, so `[install](install.md)` in a note is not a link.
+ * @param docBase the route the docs being read are shown at (`/docs` for a module's own, `/docs/<module>` when the console lists every module's): a link to a page is `<docBase>/<slug>`.
  */
-export function resolveLink(href: string | undefined, docSlugs?: readonly string[]): LinkTarget {
+export function resolveLink(href: string | undefined, docSlugs?: readonly string[], docBase = '/docs'): LinkTarget {
   if (!href) return { kind: 'unavailable' }
   if (isSafeExternalUrl(href)) return { kind: 'external', href }
   // Any other scheme, or a protocol-relative URL, is a destination the reader did not agree to be sent to.
@@ -58,10 +59,10 @@ export function resolveLink(href: string | undefined, docSlugs?: readonly string
 
   if (docSlugs) {
     if (/^#[A-Za-z0-9_-]+$/.test(href)) return { kind: 'anchor', href }
-    if (README_LINK.test(href)) return { kind: 'doc', to: '/docs' }
+    if (README_LINK.test(href)) return { kind: 'doc', to: docBase }
     const match = DOC_LINK.exec(href)
     const slug = match?.[1].toLowerCase()
-    if (match && slug && docSlugs.includes(slug)) return { kind: 'doc', to: `/docs/${slug}${match[2] ?? ''}` }
+    if (match && slug && docSlugs.includes(slug)) return { kind: 'doc', to: `${docBase}/${slug}${match[2] ?? ''}` }
   }
 
   return { kind: 'unavailable' }

@@ -4,7 +4,7 @@ REM iteration loop for working on the CLI itself. See docs\install.md for a real
 REM this is the dev-loop shortcut, not that. See the sh script for the full option reference.
 REM
 REM Usage:
-REM   tools\install-local-tool [--global|--machine-wide|--tool-path <dir>] [--no-spa] [--uninstall]
+REM   tools\install-local-tool [--global|--machine-wide|--tool-path <dir>] [--uninstall]
 REM
 REM --machine-wide needs an elevated prompt (it writes to %ProgramFiles%\DbDataSync and the Machine
 REM PATH) — this script does not elevate itself; run it from one already.
@@ -26,7 +26,6 @@ if "%~1"=="" goto afterparse
 if "%~1"=="--global" (set "TARGET=global") & shift & goto parse
 if "%~1"=="--machine-wide" (set "TARGET=machine-wide") & (set "TOOL_PATH=%DEFAULT_TOOL_DIR%") & shift & goto parse
 if "%~1"=="--tool-path" (set "TARGET=tool-path") & (set "TOOL_PATH=%~2") & shift & shift & goto parse
-if "%~1"=="--no-spa" (set "PACK_ARGS=-p:SkipWebBuild=true") & shift & goto parse
 if "%~1"=="--uninstall" (set "DO_UNINSTALL=1") & shift & goto parse
 echo Unknown argument: %~1 1>&2
 exit /b 1

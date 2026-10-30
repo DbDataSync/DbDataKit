@@ -4,7 +4,6 @@ import type { UpdatePhase } from './types'
 
 // Query keys are centralized here so mutations know exactly what to invalidate.
 const keys = {
-  docPage: (slug: string) => ['docs', slug] as const,
   drivers: ['drivers'] as const,
   knownDriverKinds: ['known-driver-kinds'] as const,
   driverYaml: (id: string) => ['drivers', id, 'yaml'] as const,
@@ -311,16 +310,5 @@ export function useBindCertificate() {
       invalidateAdminCertificate(queryClient)
       queryClient.invalidateQueries({ queryKey: keys.adminCertificateCandidates })
     },
-  })
-}
-
-/** One page of the docs the build shipped. Baked into the build, so it never goes stale within a session. */
-export function useDocPage(slug: string | undefined) {
-  return useQuery({
-    queryKey: keys.docPage(slug ?? ''),
-    queryFn: () => api.docs.page(slug!),
-    enabled: !!slug,
-    staleTime: Infinity,
-    retry: false,
   })
 }

@@ -44,6 +44,13 @@ to it in the pull request that makes the change; a release moves the entries int
 - **Passkeys now work in a browser.** The options sent to the browser spelled two values with the C# names (`PublicKey`, `None`) where WebAuthn needs `public-key` and `none`, so `navigator.credentials` refused them. They are now sent as the passkey library writes them. If you could not register a passkey on a Sync install, this was why. (U07)
 - **`Microsoft.AspNetCore.Authentication.Negotiate` is 10.0.13** (GHSA-vrrp-6v32-2p8g, an elevation-of-privilege fix). Rebuild and redeploy to take it. (U07)
 - **The table picker no longer lists the engine's own tables.** For SQL Server and PostgreSQL connections the list of tables in the mapping editor comes from the shared catalog reader: base tables of every schema, without views and without system objects. Before, a SQL Server database that uses change data capture also offered `dbo.systranschemas`, and PostgreSQL offered the `pg_catalog` tables. Nothing else about a mapping changes; a mapping that names one of those tables still runs. (A11)
+- **Sync no longer serves a web app: its screens are the console's.** Open `dbdatasync server run`'s address in a browser and you now get a plain-text
+  message instead of the screens: `/` answers 200 with it and any other address except the API (`/api`, `/hubs`, `/version`, pairing) answers 404 with the same
+  words, so an old bookmark is told what changed. Add the server to a `dbdatakit` console (`dbdatasync server pair` on the server, then the console's Servers page or
+  `dbdatakit instance add <address> --code <code>`) and open it there, at `/servers/<id>`; Sync's own sign-in screen and its users and invitation pages are the console's now. To have
+  the message name the console, set `DbDataSync:Console:Url` (environment `DbDataSync__Console__Url`, or `DBDATAKIT_CONSOLE_URL`) to its address. The API, the realtime hub, `/version`, health and
+  pairing are unchanged. The docs that were served at `/docs/*.md` by the server are in the console now (its Docs entry, and each Sync screen's Docs link, at `/docs/sync`). Packages and the container image no longer
+  carry `wwwroot`; `tools/install-local-tool --no-spa` and `-p:SkipWebBuild` are gone. (U11)
 
 ## DbDataBuild
 

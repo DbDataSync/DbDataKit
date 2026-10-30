@@ -22,6 +22,8 @@ public sealed class ConsoleHostTests : IAsyncLifetime
         Directory.CreateDirectory(webRoot);
         File.WriteAllText(Path.Combine(webRoot, "index.html"), "<html><body>the app</body></html>");
         File.WriteAllText(Path.Combine(webRoot, "app.js"), "// code");
+        Directory.CreateDirectory(Path.Combine(webRoot, "docs", "widgets"));
+        File.WriteAllText(Path.Combine(webRoot, "docs", "widgets", "overview.md"), "# Widgets");
         var settings = new ConsoleSettings(directory, new Uri("https://localhost:0"));
         app = ConsoleHost.Build(settings, ConsoleHost.Certificate(directory), log.Add, webRoot);
         await app.StartAsync();
@@ -67,6 +69,18 @@ public sealed class ConsoleHostTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.OK, page.StatusCode);
         Assert.Contains("the app", await page.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task A_module_s_docs_are_served_as_markdown_to_anyone_and_their_routes_are_the_app()
+    {
+        var page = await http.GetAsync("/docs/widgets/overview.md");
+
+        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+        Assert.StartsWith("text/markdown", page.Content.Headers.ContentType?.ToString());
+        Assert.Equal("# Widgets", await page.Content.ReadAsStringAsync());
+        // The viewer's own address for the same page is the app, not a file.
+        Assert.Contains("the app", await http.GetStringAsync("/docs/widgets/overview"));
     }
 
     [Theory]
