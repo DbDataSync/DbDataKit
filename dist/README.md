@@ -12,7 +12,7 @@ own (DbDataSync is also a .NET tool package), but these always exist.
 | **PowerShell** | `install.ps1`: Windows PowerShell 5.1 and PowerShell 7 |
 | **bash** | `install.sh`: Linux and macOS |
 
-The products are `dbdatabuild`, `dbdatasync`, `dbdataproxy` and the console, `dbdatakit` (`DbDataConsole/dist.json`: the zip needs the .NET 10 runtime, the MSI registers the `DbDataKitConsole` service stopped, and its program folder is `DbDataKit`). Each has its own MSI: a product's MSI does not embed the console. To pair them after installing both, make a code on the product (`<program> server pair`) and run `dbdatakit instance add <https address> --code <code>`; `dist-msi-ci.yml` does exactly that on a Windows runner (`dist/tests/msi-pairing-e2e.ps1`).
+The products are `dbdatabuild`, `dbdatasync`, `dbdataproxy` and the console, `dbdatakit` (`DbDataConsole/dist.json`: the zip needs the .NET 10 runtime, the MSI registers the `DbDataKitConsole` service stopped, and its program folder is `DbDataKit`). Each has its own MSI: a product's MSI does not embed the console. To pair them after installing both, make a code on the product (`<program> server pair`) and run `dbdatakit instance add <https address> --code <code>`; `dist-msi-ci.yml` does that on a Windows runner (`dist/tests/msi-pairing-e2e.ps1`: the console's MSI installed, a Build server built from the same commit paired with it).
 
 Releases are tagged `<product>/v<version>` in this repository (`<version>` is CalVer `YYYY.M.D.HHmm`, `-beta` for a prerelease).
 

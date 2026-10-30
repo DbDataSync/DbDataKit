@@ -115,25 +115,37 @@ jobs:
           name: msi-logs-${{ matrix.product }}
           path: ${{ runner.temp }}/*.log
 
-  # Plan 13a, L04: the console and a product are installed from their own MSIs, then paired with the code the product prints.
+  
   pairing:
-    needs: build
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    needs: build
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-product
         with:
-          dotnet-version: '10.0.x'
+          product: DbDataBuild
+          duckdb: 'false'
+      - name: Prebuilt polyglot library and pinned DuckDB engine
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (cd DbDataBuild && scripts/fetch-native.sh)
+          scripts/fetch-duckdb.sh
+      # The product is built from this commit: the newest published package can predate `server pair`.
+      - name: Publish DbDataBuild
+        shell: bash
+        working-directory: DbDataBuild
+        run: scripts/publish.sh win-x64 "$RUNNER_TEMP/build-out"
       - uses: actions/download-artifact@v8
         with:
           name: msi
           path: msi
-      - name: Install the console and DbDataBuild, pair them
+      - name: Install the console and pair DbDataBuild with it
         shell: pwsh
         run: |
-          ./dist/tests/msi-pairing-e2e.ps1 -ConsoleMsi "$PWD\msi\dbdatakit\v1.msi" -ProductMsi "$PWD\msi\dbdatabuild\v1.msi" `
-            -ProductDisplayName DbDataBuild -ProductExe dbdatabuild.exe
+          ./dist/tests/msi-pairing-e2e.ps1 -ConsoleMsi "$PWD\msi\dbdatakit\v1.msi" -ProductExe "$env:RUNNER_TEMP\build-out\dbdatabuild.exe"
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

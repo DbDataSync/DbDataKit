@@ -1,21 +1,21 @@
 <#
 .SYNOPSIS
-  Installs a product's MSI and the console's MSI, pairs the two with the pairing code the product prints, and checks the console lists the product as
+  Installs the console's MSI, pairs it with a product server using the pairing code the product prints, and checks the console lists the product as
   ready and keeps its API closed to anyone not signed in. Run by .github/workflows/dist-msi-ci.yml (plan 13a, L04: separate MSIs, pairing is a step
-  after both are installed). The passkey sign-in itself needs a browser: DbDataConsole's Playwright suite does that.
+  after both are installed). The product is given as an executable, built from this commit: the newest published package can predate the `server`
+  command, and the product's own MSI is tested by the install, upgrade and removal jobs. Pass -ProductMsi to install it first once a release has it. The passkey sign-in itself needs a browser: DbDataConsole's Playwright suite does that.
 #>
 param(
   [Parameter(Mandatory)][string]$ConsoleMsi,
-  [Parameter(Mandatory)][string]$ProductMsi,
-  [Parameter(Mandatory)][string]$ProductDisplayName,   # DbDataBuild
-  [Parameter(Mandatory)][string]$ProductExe,           # dbdatabuild.exe
+  [string]$ProductMsi = '',
+  [string]$ProductDisplayName = '',                    # DbDataBuild: where -ProductMsi installs it
+  [Parameter(Mandatory)][string]$ProductExe,           # the product's executable: the installed one with -ProductMsi (a file name), else a full path
   [int]$ProductPort = 8470,
   [int]$ConsolePort = 8480,
   [string]$LogDir = $env:RUNNER_TEMP
 )
 $ErrorActionPreference = 'Stop'
 $consoleDir = Join-Path $env:ProgramFiles 'DbDataKit'
-$productDir = Join-Path $env:ProgramFiles $ProductDisplayName
 $work = Join-Path $LogDir 'pairing'
 New-Item -ItemType Directory -Force $work | Out-Null
 
@@ -39,14 +39,14 @@ function WaitHealthy([string]$exe, [string]$url) {
   throw "$url did not become healthy"
 }
 
-Write-Host '=== install both MSIs'
+Write-Host '=== install the MSIs'
 Msi $ConsoleMsi 'console'
-Msi $ProductMsi 'product'
+if ($ProductMsi) { Msi $ProductMsi 'product'; $ProductExe = Join-Path (Join-Path $env:ProgramFiles $ProductDisplayName) $ProductExe }
 $console = Join-Path $consoleDir 'dbdatakit.exe'
-$product = Join-Path $productDir $ProductExe
+$product = $ProductExe
 Assert (Test-Path $console) "the console is in $consoleDir"
 Assert (Test-Path (Join-Path $consoleDir 'wwwroot\index.html')) 'the console has its web app'
-Assert (Test-Path $product) "$ProductExe is in $productDir"
+Assert (Test-Path $product) "the product is at $product"
 
 Write-Host '=== start the product and the console'
 $productDirData = Join-Path $work 'product'; $consoleDirData = Join-Path $work 'console'
