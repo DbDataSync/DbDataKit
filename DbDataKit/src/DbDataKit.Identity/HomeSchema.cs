@@ -75,5 +75,5 @@ public static class HomeSchema
         """;
 
     /// <summary>Users, credentials, sessions and invites, then the home's own tables.</summary>
-    public static StateSchema Schema { get; } = new([IdentitySchema.Accounts, IdentitySchema.Invites, Directory, Provider]);
+    public static StateSchema Schema { get; } = new([IdentitySchema.Accounts, IdentitySchema.Invites, Directory, Provider, IdentitySchema.AccountKeys]);
 }

@@ -52,7 +52,7 @@ public static class Help
                   Re-copies the running version's launcher (what the service and PATH run) over the
                   installed one and re-points a registered service at it. Rarely needed.
 
-              dbdatasync invite [--role Admin|Viewer] [--repo <path>] [--url <url>]
+              dbdatasync invite --email <address> [--role Admin|Viewer] [--repo <path>] [--url <url>]
                   Prints a fresh single-use invitation URL. For when the first-run one has scrolled
                   away, or the process is a service with nowhere to print it.
 

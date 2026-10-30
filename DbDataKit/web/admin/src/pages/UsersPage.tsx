@@ -17,7 +17,7 @@ export function UsersPage() {
   const queryClient = useQueryClient()
   const users = useQuery({ queryKey: usersKey, queryFn: shellApi.users.list, enabled: isAdmin })
   const update = useMutation({
-    mutationFn: ({ id, changes }: { id: string; changes: { role?: string; enabled?: boolean } }) => shellApi.users.update(id, changes),
+    mutationFn: ({ id, changes }: { id: string; changes: { role?: string; enabled?: boolean; email?: string } }) => shellApi.users.update(id, changes),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: usersKey }),
   })
   const removeCredential = useMutation({
@@ -25,9 +25,10 @@ export function UsersPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: usersKey }),
   })
   const [inviteRole, setInviteRole] = useState('Viewer')
+  const [inviteEmail, setInviteEmail] = useState('')
   const [invite, setInvite] = useState<CreatedInvite | null>(null)
   const makeInvite = useMutation({
-    mutationFn: (forUserId?: string) => shellApi.invites.create(inviteRole, forUserId),
+    mutationFn: (forUserId?: string) => shellApi.invites.create(inviteRole, forUserId, forUserId ? undefined : inviteEmail.trim()),
     onSuccess: (created) => setInvite(created),
   })
 
@@ -63,6 +64,7 @@ export function UsersPage() {
               onEnabled={(enabled) => update.mutate({ id: user.id, changes: { enabled } })}
               onRemove={(credentialId) => removeCredential.mutate({ id: user.id, credentialId })}
               onInvite={() => makeInvite.mutate(user.id)}
+              onEmail={(email) => update.mutate({ id: user.id, changes: { email } })}
             />
           ))}
         </div>
@@ -75,7 +77,8 @@ export function UsersPage() {
                 <option value="Viewer">Viewer</option>
                 <option value="Admin">Administrator</option>
               </select>
-              <button type="button" className="btn btn-primary" disabled={makeInvite.isPending} onClick={() => makeInvite.mutate(undefined)} data-testid="invite-create-button">
+              <input className="input" type="email" placeholder="Their email address" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} data-testid="invite-email-field" />
+              <button type="button" className="btn btn-primary" disabled={makeInvite.isPending || !inviteEmail.trim()} onClick={() => makeInvite.mutate(undefined)} data-testid="invite-create-button">
                 Make an invitation link
               </button>
             </div>
@@ -92,18 +95,27 @@ export function UsersPage() {
   )
 }
 
-function UserRow({ user, busy, onRole, onEnabled, onRemove, onInvite }: {
+function UserRow({ user, busy, onRole, onEnabled, onRemove, onInvite, onEmail }: {
   user: UserSummary
   busy: boolean
   onRole: (role: string) => void
   onEnabled: (enabled: boolean) => void
   onRemove: (credentialId: string) => void
   onInvite: () => void
+  onEmail: (email: string) => void
 }) {
   return (
     <div className="grid-row" style={{ gridTemplateColumns: COLUMNS, gap: 14 }} data-testid={`user-row-${user.displayName}`}>
       <span>{user.displayName}</span>
-      <span className="mono">{user.email ?? '—'}</span>
+      <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <span className="mono" title={user.emailVerified ? 'Other ways this person signs in are matched on this address.' : 'Nobody has checked this address, so nothing is matched on it. Set it to link this account to the same person elsewhere.'}>
+          {user.email ?? '—'}{user.email && !user.emailVerified ? ' (unverified)' : ''}
+        </span>
+        <button type="button" className="btn btn-chrome" disabled={busy} data-testid="user-email-button" onClick={() => {
+          const email = window.prompt(`The email address of ${user.displayName} (a Windows account's user principal name, or the address at the identity home):`, user.email ?? '')
+          if (email && email.trim()) onEmail(email.trim())
+        }}>{user.emailVerified ? 'Change' : 'Set'}</button>
+      </span>
       <select className="input" value={user.role} disabled={busy} onChange={(e) => onRole(e.target.value)} data-testid="user-role-select">
         <option value="Viewer">Viewer</option>
         <option value="Admin">Administrator</option>

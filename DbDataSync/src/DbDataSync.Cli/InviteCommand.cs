@@ -55,6 +55,14 @@ public static class InviteCommand
             return 1;
         }
 
+        // A new account is for a person, and the address is how the same person is recognised whichever way they sign in (a passkey, Windows): so it is asked for (plan 13a U16).
+        var email = CliOptions.Read(args, "--email");
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            Console.Error.WriteLine("Name who the invitation is for: --email <address> (it is how the same person is recognised whether they sign in with a passkey or with Windows).");
+            return 1;
+        }
+
         var role = CliOptions.Read(args, "--role") ?? nameof(UserRole.Admin);
         if (!Enum.TryParse<UserRole>(role, ignoreCase: true, out var parsed))
         {
@@ -75,7 +83,13 @@ public static class InviteCommand
             return 1;
         }
 
-        var minted = new InviteStore(database).Create(parsed, forUserId: null, createdByUserId: null);
+        MintedInvite minted;
+        try { minted = new InviteStore(database).Create(parsed, forUserId: null, createdByUserId: null, email: email); }
+        catch (AccountConflictException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
 
         Console.WriteLine($"An invitation for a {parsed}, valid until {minted.Invite.ExpiresAtUtc:u}:");
         Console.WriteLine();

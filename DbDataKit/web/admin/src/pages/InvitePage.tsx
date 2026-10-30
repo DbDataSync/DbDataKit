@@ -34,9 +34,9 @@ export function InvitePage({ product }: { product: string }) {
     setBusy(true)
     setError(null)
     try {
-      const options = await shellApi.invites.beginRegistration(code, displayName, email || null)
+      const options = await shellApi.invites.beginRegistration(code, displayName, check.data?.emailAsked ? email || null : null)
       const attestation = await createCredential(options)
-      await shellApi.invites.completeRegistration(code, displayName, email || null, attestation)
+      await shellApi.invites.completeRegistration(code, displayName, check.data?.emailAsked ? email || null : null, attestation)
       // Signed in as of that call. Everything on screen was fetched as nobody.
       await queryClient.invalidateQueries()
       window.location.href = '/'
@@ -77,6 +77,7 @@ export function InvitePage({ product }: { product: string }) {
                   data-testid="invite-name-input"
                 />
               </Field>
+              {check.data?.emailAsked && (
               <Field label="Email">
                 <span className="hint">
                   Used to attribute the config changes you make, in the Version Control tab.
@@ -88,6 +89,7 @@ export function InvitePage({ product }: { product: string }) {
                   data-testid="invite-email-input"
                 />
               </Field>
+              )}
               <button
                 type="button"
                 className="btn btn-primary"

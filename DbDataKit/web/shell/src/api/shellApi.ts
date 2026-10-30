@@ -15,9 +15,10 @@ export const shellApi = {
       request<AuthStatus>('/api/auth/passkey/complete', { method: 'POST', body: JSON.stringify(assertion) }),
   },
   invites: {
-    create: (role: string, forUserId?: string) =>
-      request<CreatedInvite>('/api/invites', { method: 'POST', body: JSON.stringify({ role, forUserId: forUserId ?? null }) }),
-    check: (code: string) => request<{ valid: boolean }>(`/api/invites/check?code=${encodeURIComponent(code)}`),
+    /** A new user needs the person's `email` (the key their other ways of signing in are matched on); an invitation `forUserId` has none. */
+    create: (role: string, forUserId?: string, email?: string) =>
+      request<CreatedInvite>('/api/invites', { method: 'POST', body: JSON.stringify({ role, forUserId: forUserId ?? null, email: email ?? null }) }),
+    check: (code: string) => request<{ valid: boolean; emailAsked: boolean }>(`/api/invites/check?code=${encodeURIComponent(code)}`),
     beginRegistration: (code: string, displayName: string, email: string | null) =>
       request<unknown>('/api/invites/begin-registration', { method: 'POST', body: JSON.stringify({ code, displayName, email }) }),
     completeRegistration: (code: string, displayName: string, email: string | null, attestation: unknown) =>
@@ -29,7 +30,7 @@ export const shellApi = {
   },
   users: {
     list: () => request<UserSummary[]>('/api/users'),
-    update: (id: string, changes: { role?: string; enabled?: boolean }) =>
+    update: (id: string, changes: { role?: string; enabled?: boolean; email?: string }) =>
       put<UserSummary>(`/api/users/${encodeURIComponent(id)}`, changes),
     removeCredential: (id: string, credentialId: string) =>
       request<void>(`/api/users/${encodeURIComponent(id)}/credentials/${encodeURIComponent(credentialId)}`, { method: 'DELETE' }),

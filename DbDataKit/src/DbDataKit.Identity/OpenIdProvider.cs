@@ -112,7 +112,12 @@ public sealed class OpenIdProvider(StateDatabase database, UserStore users, Home
         var claims = new Dictionary<string, object?> { ["iss"] = Issuer, ["sub"] = user.Id, ["aud"] = request.ClientId, ["iat"] = now, ["exp"] = now + (long)TokenLifetime.TotalSeconds };
         if (grant.Nonce is not null) claims["nonce"] = grant.Nonce;
         if (scopes.Contains("profile")) claims["name"] = user.DisplayName;
-        if (scopes.Contains("email") && user.Email is not null) claims["email"] = user.Email;
+        if (scopes.Contains("email") && user.Email is not null)
+        {
+            claims["email"] = user.Email;
+            // Only an address an administrator entered (or the domain gave) is vouched for; one the person typed themselves is not, and a relying party must not link accounts on it (plan 13a U16).
+            claims["email_verified"] = user.EmailVerified;
+        }
         claims["groups"] = directory.GroupsOf(user.Id).Select(g => g.Name).ToList();
         claims["dbdata_roles"] = directory.AllRoles(user.Id);
         var access = new Dictionary<string, object?> { ["iss"] = Issuer, ["sub"] = user.Id, ["aud"] = Issuer, ["client_id"] = request.ClientId, ["scope"] = grant.Scope, ["iat"] = now, ["exp"] = now + (long)TokenLifetime.TotalSeconds };
@@ -127,7 +132,11 @@ public sealed class OpenIdProvider(StateDatabase database, UserStore users, Home
         var scopes = ((string?)claims.GetValueOrDefault("scope") ?? "").Split(' ');
         var info = new Dictionary<string, object?> { ["sub"] = user.Id };
         if (scopes.Contains("profile")) info["name"] = user.DisplayName;
-        if (scopes.Contains("email") && user.Email is not null) info["email"] = user.Email;
+        if (scopes.Contains("email") && user.Email is not null)
+        {
+            info["email"] = user.Email;
+            info["email_verified"] = user.EmailVerified;
+        }
         info["groups"] = directory.GroupsOf(user.Id).Select(g => g.Name).ToList();
         info["dbdata_roles"] = directory.AllRoles(user.Id);
         return info;

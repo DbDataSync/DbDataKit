@@ -6,7 +6,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DbDataKit.Web.Auth.Controllers;
 
-public sealed record CreateInviteRequest(string Role, string? ForUserId);
+/// <param name="Role">The role the new user gets.</param>
+/// <param name="ForUserId">Set to give an existing user another way in.</param>
+/// <param name="Email">Whose invitation it is: required for a new user (the address is the account's key, so a local user, a Windows account and the identity home all meet on it), and not allowed with <paramref name="ForUserId"/>, whose account has its own.</param>
+public sealed record CreateInviteRequest(string Role, string? ForUserId, string? Email = null);
 
 /// <param name="ExpiresAtUtc">When the invitation stops working.</param>
 /// <param name="Role">The role the person gets.</param>
@@ -17,7 +20,8 @@ public sealed record InviteSummary(
     string Id, string Role, string? UserId, DateTimeOffset CreatedAtUtc, DateTimeOffset ExpiresAtUtc);
 
 /// <param name="Code">The invitation's secret code, from the link.</param>
-/// <param name="Email">Optional, kept on the account.</param>
+/// <param name="Email">Used only by an invitation that carries no address (the first-run invitation, which nobody made), and then kept for display and git attribution, never matched on: nothing proves it is the person's. An invitation
+/// an administrator made carries the address the administrator entered, and this is ignored.</param>
 /// <param name="DisplayName">Ignored when the invite names an existing user — that person already has
 /// a name, and letting an invite rename them would be a rename disguised as an enrolment.</param>
 public sealed record RedeemInviteRequest(string Code, string DisplayName, string? Email);
@@ -53,7 +57,14 @@ public sealed class InvitesController(
         if (request.ForUserId is not null && users.Get(request.ForUserId) is null)
             return NotFound(new { error = "No such user." });
 
-        var minted = invites.Create(role, request.ForUserId, currentUser.Id);
+        if (request.ForUserId is null && string.IsNullOrWhiteSpace(request.Email))
+            return BadRequest(new { error = "An invitation for a new user needs the person's email address: it is how the same person is recognised whichever way they sign in." });
+        if (request.ForUserId is not null && !string.IsNullOrWhiteSpace(request.Email))
+            return BadRequest(new { error = "An invitation for an existing user carries no address: the account has its own." });
+
+        MintedInvite minted;
+        try { minted = invites.Create(role, request.ForUserId, currentUser.Id, email: string.IsNullOrWhiteSpace(request.Email) ? null : request.Email); }
+        catch (AccountConflictException ex) { return Conflict(new { error = ex.Message }); }
         return Ok(new CreatedInvite(UrlFor(minted.Code), minted.Invite.ExpiresAtUtc, role.ToString()));
     }
 
@@ -64,13 +75,13 @@ public sealed class InvitesController(
             .ToList());
 
     /// <summary>Whether a code is worth showing a redemption screen for. Deliberately says only yes or
-    /// no — "expired" and "already used" and "never existed" are one answer to somebody guessing.</summary>
+    /// no — "expired" and "already used" and "never existed" are one answer to somebody guessing. <c>emailAsked</c> says whether the redemption screen should ask for an address (the invitation carries none).</summary>
     [AllowAnonymous]
     [HttpGet("check")]
     public IActionResult Check([FromQuery] string code) =>
-        invites.Find(code) is null
+        invites.Find(code) is not { } invite
             ? NotFound(new { error = "This invitation is not valid. It may have been used already, or expired." })
-            : Ok(new { valid = true });
+            : Ok(new { valid = true, emailAsked = invite.Email is null && invite.UserId is null });
 
     /// <summary>Starts a passkey enrolment against an invite.</summary>
     [AllowAnonymous]
@@ -130,9 +141,19 @@ public sealed class InvitesController(
             return BadRequest(new { error = $"The passkey could not be verified: {ex.Message}" });
         }
 
-        var user = invite.UserId is { } existingId
-            ? users.Get(existingId)!
-            : users.CreateUser(displayName, email, invite.Role);
+        UserRecord user;
+        if (invite.UserId is { } existingId)
+            user = users.Get(existingId)!;
+        else if (invite.Email is { } invited)
+        {
+            try { user = users.CreateUser(displayName, invited, invite.Role, emailVerified: true); }
+            catch (AccountConflictException ex) { return Conflict(new { error = ex.Message }); }
+        }
+        else if (invite.CreatedByUserId is not null)
+            return BadRequest(new { error = "This invitation was made without the person's email address, which every new account needs now. Ask an administrator for a new one." });
+        else
+            // the first-run invitation: nobody made it, so nobody vouched for an address; what is typed is kept, and never matched on
+            user = users.CreateUser(displayName, string.IsNullOrWhiteSpace(email) ? null : email, invite.Role);
 
         // Redeemed *after* the user exists and before the credential is added, so a race that loses
         // here leaves an account with no passkey rather than an invitation somebody can use twice.

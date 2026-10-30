@@ -218,6 +218,26 @@ public sealed class OpenIdFlowTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_id_token_vouches_for_an_address_only_when_an_administrator_entered_it()
+    {
+        // plan 13a U16: Ada's address was typed (no key), so a client must not link accounts on it; Grace's was entered by an administrator
+        async Task<JsonElement> Claims(string userId)
+        {
+            var (verifier, challenge) = Pkce();
+            var token = await Token(CodeOf(await AuthorizeAs(userId, AuthorizeUri(challenge))), verifier);
+            var idToken = (await token.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id_token").GetString()!;
+            return JsonDocument.Parse(Base64UrlEncoder.Decode(idToken.Split('.')[1])).RootElement;
+        }
+
+        var typed = await Claims(_ada.Id);
+        Assert.Equal("ada@example.invalid", typed.GetProperty("email").GetString());
+        Assert.False(typed.GetProperty("email_verified").GetBoolean());
+
+        var grace = _home.Users.CreateUser("Grace", "Grace@Example.com", UserRole.Viewer, emailVerified: true);
+        Assert.True((await Claims(grace.Id)).GetProperty("email_verified").GetBoolean());
+    }
+
+    [Fact]
     public async Task Userinfo_answers_for_the_access_token_and_for_nothing_else()
     {
         var (verifier, challenge) = Pkce();

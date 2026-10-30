@@ -26,12 +26,13 @@ public sealed class FederatedUsers(StateDatabase database, UserStore users, stri
 {
     public string AppKey { get; } = "app:" + appId;
 
-    /// <summary>The user for this sign-in, or null when the home gives the person no role on this console (they may sign in to the home and still not to here).</summary>
+    /// <summary>The user for this sign-in, or null when the home gives the person no role on this console (they may sign in to the home and still not to here). Throws <see cref="AccountConflictException"/> when the person's verified address belongs to another account.</summary>
     public UserRecord? SignIn(HomeIdentity identity)
     {
         if (!identity.Roles.TryGetValue(AppKey, out var names) || names.Count == 0) return null;
         var role = names.Contains("admin", StringComparer.OrdinalIgnoreCase) ? UserRole.Admin : UserRole.Viewer;
-        var user = users.UpsertFederated(identity.UserId, identity.Name ?? identity.UserId, identity.Email, role);
+        // One account per person (U16): the home's verified address finds the local or Windows account that is the same person, which takes the home's id. Refuses (AccountConflictException, a message for the person) when the address is another account's.
+        var user = new AccountLinker(users).SignInHome(identity.UserId, identity.Name ?? identity.UserId, identity.Email, identity.EmailVerified, role);
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();

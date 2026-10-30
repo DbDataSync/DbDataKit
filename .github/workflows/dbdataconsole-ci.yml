@@ -141,7 +141,7 @@ jobs:
           curl -skf https://localhost:8480/version | grep -q '"product":"dbdatakit"'
           curl -skf https://localhost:8480/ | grep -q '<div id="root">'
           test "$(curl -sk -o /dev/null -w '%{http_code}' https://localhost:8480/api/users)" = 401
-          docker exec ddk dotnet /app/dbdatakit.dll user invite --url https://localhost:8480 | grep -q '/invite#'
+          docker exec ddk dotnet /app/dbdatakit.dll user invite --email ci@example.invalid --url https://localhost:8480 | grep -q '/invite#'
           test "$(docker exec ddk id -u)" != 0
 
   # Each compose file of dist/compose starts a product with the console: the product announces itself on the console's private port, waits as pending, and is paired when confirmed (plan 13a, L03).

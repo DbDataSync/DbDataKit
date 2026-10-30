@@ -47,6 +47,8 @@ public static class ConsoleFederation
                 return Results.Redirect(returnUrl ?? "/");
             }
             catch (OpenIdClientException e) { return Results.Text(e.Message, "text/plain", statusCode: StatusCodes.Status400BadRequest); }
+            // the person's verified address is another account's: nobody is signed in and nothing is merged
+            catch (AccountConflictException e) { return Results.Text(e.Message, "text/plain", statusCode: StatusCodes.Status409Conflict); }
         }).AllowAnonymous();
         return app;
     }

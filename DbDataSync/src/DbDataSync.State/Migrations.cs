@@ -659,6 +659,9 @@ internal static class Migrations
         WHERE Status = 'Queued';
 
         """ + "\n" + DbDataKit.Scheduling.WorkQueueSchema.Queue,
+
+        // One account per person (plan 13a U16): the address key and the address an invitation is for. Appended; nothing above changes.
+        IdentitySchema.AccountKeys,
     ];
 
     /// <summary>The schema, for <see cref="StateDatabase"/> to apply.</summary>

@@ -198,7 +198,9 @@ process is using (the **Running** column of that screen compares the two).
 ### `dbdatasync invite`
 
 Prints a fresh single-use invitation URL — for when the first-run one has scrolled off-screen, or the
-process is a service with no terminal to print to in the first place.
+process is a service with no terminal to print to in the first place. `--email <address>` is required: the invitation is
+for that person, and the address is how the same person is one account whether they sign in with a passkey or with Windows
+(the user principal name the domain gives is matched to it, ignoring case).
 
 > **Since the web app moved to the console, no screen of this server redeems that URL**: people are made and sign in at the console
 > (`dbdatakit user invite`). The command and the server's own sign-in remain for the API; a server that is only used through a console needs neither.
@@ -208,6 +210,7 @@ process is a service with no terminal to print to in the first place.
 | `--repo <path>` | see "Repo root resolution," above |
 | `--state-db <path>` | same as `serve` |
 | `--url <url>` | same as `serve` |
+| `--email <address>` | required: the address the invitation is for |
 | `--role Admin\|Viewer` | `Admin` |
 
 Opens the state database directly rather than calling a running API — the situation it exists for is
@@ -396,7 +399,7 @@ Windows authentication (`Negotiate`) is registered automatically when the proces
 Windows *and* at least one group is configured — it's additive to session-cookie auth, not a mode
 switch. If nothing here or under `Auth:Network:*`/`Auth:Passkeys:*` is configured, the only way in on a
 fresh install is the bootstrap invite: printed as a startup warning whenever no users exist yet, and
-always reprintable with `dbdatasync invite`.
+always reprintable with `dbdatasync invite --email <address>`.
 
 ### `DbDataSync:Auth:Passkeys:*`
 

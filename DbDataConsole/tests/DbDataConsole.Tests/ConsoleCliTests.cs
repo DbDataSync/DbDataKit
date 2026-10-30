@@ -38,14 +38,14 @@ public sealed class ConsoleCliTests : IDisposable
     {
         Assert.Equal(2, (await Run("server", "run", "--repo", directory, "--listen", "http://localhost:1")).Exit);
         Assert.Equal(2, (await Run("server", "run", "--repo", directory, "--bogus")).Exit);
-        Assert.Equal(2, (await Run("user", "invite", "--repo", directory, "--role", "emperor")).Exit);
+        Assert.Equal(2, (await Run("user", "invite", "--repo", directory, "--email", "x@example.com", "--role", "emperor")).Exit);
         Assert.Equal(1, (await Run("user", "invite", "--repo", directory, "--user", "nobody")).Exit);
     }
 
     [Fact]
     public async Task An_invitation_can_be_printed_before_the_console_has_ever_started_and_is_good()
     {
-        var made = await Run("user", "invite", "--repo", directory, "--role", "viewer", "--url", "https://console.example:8480/");
+        var made = await Run("user", "invite", "--repo", directory, "--email", "Grace@Example.com", "--role", "viewer", "--url", "https://console.example:8480/");
         Assert.Equal(0, made.Exit);
         var url = (string)made.Data["url"]!;
         Assert.StartsWith("https://console.example:8480/invite#", url);
@@ -55,6 +55,45 @@ public sealed class ConsoleCliTests : IDisposable
         var found = invites.Find(code);
         Assert.NotNull(found);
         Assert.Equal(UserRole.Viewer, found!.Role);
+        Assert.Equal("Grace@Example.com", found.Email);                // the address the invitation was made for: the new account's key
+    }
+
+    [Fact]
+    public async Task A_new_users_invitation_must_say_whose_it_is_and_an_address_an_account_holds_is_refused()
+    {
+        // plan 13a U16: the address is how one person is one account whichever way they sign in
+        var nobody = await Run("user", "invite", "--repo", directory);
+        Assert.Equal(2, nobody.Exit);
+        Assert.Contains("--email", nobody.Err);
+        Assert.Equal(2, (await Run("user", "invite", "--repo", directory, "--email", "a@example.com", "--user", "x")).Exit);
+
+        var users = new UserStore(ConsoleState.Open(directory));
+        var ada = users.CreateUser("Ada", "ada@example.com", UserRole.Admin, emailVerified: true);
+        var taken = await Run("user", "invite", "--repo", directory, "--email", "ADA@example.com");
+        Assert.Equal(1, taken.Exit);
+        Assert.Contains("already belongs to 'Ada'", taken.Err);
+        Assert.Contains(ada.Id, taken.Err);                              // and says how to give her another way in
+        Assert.Equal(0, (await Run("user", "invite", "--repo", directory, "--user", ada.Id)).Exit);
+    }
+
+    [Fact]
+    public async Task An_administrator_sets_a_users_address_from_the_command_line_and_a_held_address_is_refused()
+    {
+        var users = new UserStore(ConsoleState.Open(directory));
+        var old = users.CreateUser("Old", "typed@example.com", UserRole.Admin);         // made before addresses were keyed: shown, never matched
+        var ada = users.CreateUser("Ada", "ada@example.com", UserRole.Viewer, emailVerified: true);
+
+        var listed = await Run("user", "list", "--repo", directory);
+        Assert.Contains("typed@example.com (not verified", listed.Out);
+
+        Assert.Equal(0, (await Run("user", "set-email", "--repo", directory, "--user", old.Id, "--email", "Old@Example.com")).Exit);
+        Assert.True(users.Get(old.Id)!.EmailVerified);
+        var taken = await Run("user", "set-email", "--repo", directory, "--user", old.Id, "--email", "ada@example.com");
+        Assert.Equal(1, taken.Exit);
+        Assert.Contains("already used by another account", taken.Err);
+        Assert.Equal("Old@Example.com", users.Get(old.Id)!.Email);
+        Assert.Equal(2, (await Run("user", "set-email", "--repo", directory, "--user", ada.Id)).Exit);
+        Assert.Equal(1, (await Run("user", "set-email", "--repo", directory, "--user", "nobody", "--email", "n@example.com")).Exit);
     }
 
     [Fact]
