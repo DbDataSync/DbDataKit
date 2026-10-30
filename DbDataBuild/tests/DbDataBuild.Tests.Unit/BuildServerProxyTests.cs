@@ -27,7 +27,8 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
     private readonly string root = Path.Combine(Path.GetTempPath(), "ddb-proxy-" + Guid.NewGuid().ToString("N")[..8]);
     private readonly ConsoleIdentity console = new("console-1", ConsoleSigningKey.Generate());
     private readonly List<(string Method, string Path, string Body, ValidatedToken Token)> seen = [];
-    private int dataSourceStatus = 404;       // what the proxy says to a read of the data source; 200 means one exists
+    private int dataSourceStatus = 404;       // what the proxy says to a read of the data source; 200 means one exists (and refers to its login), 403 one made by hand
+    private readonly HashSet<string> storedSecrets = [];    // the names the proxy holds for this client; a PUT adds one, a DELETE removes it
     private HttpStatusCode writeAnswer = HttpStatusCode.OK;
     private HttpStatusCode modelAnswer = HttpStatusCode.OK;     // what the proxy says to publishing a model
     private WebApplication proxy = null!;
@@ -101,11 +102,19 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
             var body = await reader.ReadToEndAsync();
             seen.Add((context.Request.Method, context.Request.Path.Value!, body, context.ManagementToken()));
             var path = context.Request.Path.Value!;
-            if (path.StartsWith("/api/v1/secrets/", StringComparison.Ordinal)) return Results.Json(new { reference = "secret:dbdata:proxy:managed-x:" + path[(path.LastIndexOf('/') + 1)..] });
+            if (path == "/api/v1/secrets") return Results.Json(new { secrets = storedSecrets.Order(StringComparer.Ordinal).ToArray() });
+            if (path.StartsWith("/api/v1/secrets/", StringComparison.Ordinal))
+            {
+                var name = path[(path.LastIndexOf('/') + 1)..];
+                if (context.Request.Method == "DELETE") storedSecrets.Remove(name); else storedSecrets.Add(name);
+                return Results.Json(new { reference = "secret:dbdata:proxy:managed-x:" + name });
+            }
             if (path.StartsWith("/api/v1/semantic-models/", StringComparison.Ordinal))
                 return context.Request.Method == "GET" ? Results.Json(new { error = "none" }, statusCode: 404)
                     : modelAnswer == HttpStatusCode.OK ? Results.Json(new { version = 1, created = true }) : Results.Json(new { error = "The catalog does not load, so nothing was published." }, statusCode: (int)modelAnswer);
-            if (context.Request.Method == "GET") return dataSourceStatus == 200 ? Results.Json(new { version = "v1" }) : Results.Json(new { error = "none" }, statusCode: 404);
+            if (context.Request.Method == "GET")
+                return dataSourceStatus == 200 ? Results.Json(new { version = "v1", text = $"schema: connection/1\nname: x\nengine: sqlserver\naccess: readonly\nconnection_string_secret: 'secret:dbdata:proxy:managed-x:{path[(path.LastIndexOf('/') + 1)..]}-read'\n" })
+                    : Results.Json(new { error = dataSourceStatus == 404 ? "none" : "The object was not made by a publisher, so it is not this client's to change" }, statusCode: dataSourceStatus);
             return writeAnswer == HttpStatusCode.OK
                 ? Results.Json(new { version = "v2", created = dataSourceStatus != 200 })
                 : Results.Json(new { error = "The object was not made by a publisher, so it is not this client's to change" }, statusCode: (int)writeAnswer);
@@ -228,6 +237,129 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
         var refused = await Publish("ada", ServerRole.Approver, "edge", new { connection = "sqlserver" });
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
         Assert.Contains("not this client's to change", await refused.Content.ReadAsStringAsync());
+    }
+
+    private bool SecretWasTouched() => seen.Any(r => r.Path.StartsWith("/api/v1/secrets/", StringComparison.Ordinal));
+
+    [Fact]
+    public async Task A_refusal_on_a_data_source_made_by_hand_leaves_no_secret_behind_because_the_source_is_read_before_the_login_is_stored()
+    {
+        await Pair();
+        dataSourceStatus = 403;
+
+        var refused = await Publish("ada", ServerRole.Approver, "edge", new { connection = "sqlserver", data_source = "warehouse" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Contains("not this client's to change", await refused.Content.ReadAsStringAsync());
+        Assert.False(SecretWasTouched());                                                   // not stored, so nothing to remove
+        Assert.Empty(storedSecrets);
+        Assert.DoesNotContain(seen, r => r.Method == "PUT");
+    }
+
+    [Fact]
+    public async Task A_failed_write_of_a_new_data_source_removes_the_login_this_call_stored_and_says_so()
+    {
+        await Pair();
+        writeAnswer = HttpStatusCode.BadRequest;
+
+        var refused = await Publish("ada", ServerRole.Approver, "edge", new { connection = "sqlserver", data_source = "warehouse" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Contains("was removed again", await refused.Content.ReadAsStringAsync());
+        Assert.Empty(storedSecrets);
+        Assert.Contains(seen, r => r.Method == "PUT" && r.Path == "/api/v1/secrets/warehouse-read");   // it was stored (the source's file needs its reference) ...
+        Assert.Contains(seen, r => r.Method == "DELETE" && r.Path == "/api/v1/secrets/warehouse-read"); // ... and taken away again
+    }
+
+    [Fact]
+    public async Task A_login_that_was_already_there_is_never_deleted_and_the_live_one_of_a_managed_source_is_not_even_overwritten_by_a_write_the_proxy_refuses()
+    {
+        await Pair();
+
+        // a source this server manages, with its login: the file refers to the secret, so the source is written first and the login only after the proxy accepted it
+        dataSourceStatus = 200;
+        storedSecrets.Add("warehouse-read");
+        writeAnswer = HttpStatusCode.BadRequest;
+        var refused = await Publish("ada", ServerRole.Approver, "edge", new { connection = "sqlserver", data_source = "warehouse" });
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal(["warehouse-read"], storedSecrets);
+        Assert.False(SecretWasTouched());                                                   // neither overwritten nor deleted
+        Assert.DoesNotContain("replaced", await refused.Content.ReadAsStringAsync());
+
+        // a login of that name with no source that refers to it (left by an older publish): it has to be written to learn the reference, so it is replaced, and a failed write still does not delete it, and the answer says what happened
+        seen.Clear();
+        dataSourceStatus = 404;
+        var again = await Publish("ada", ServerRole.Approver, "edge", new { connection = "sqlserver", data_source = "warehouse" });
+        Assert.Equal(HttpStatusCode.BadRequest, again.StatusCode);
+        Assert.Contains("already held a login 'warehouse-read', which has been replaced", await again.Content.ReadAsStringAsync());
+        Assert.Equal(["warehouse-read"], storedSecrets);
+        Assert.DoesNotContain(seen, r => r.Method == "DELETE");
+    }
+
+    [Fact]
+    public async Task A_successful_publish_stores_the_login_and_writes_the_source_and_a_republish_keeps_the_login_current_after_the_source_is_accepted()
+    {
+        await Pair();
+
+        var first = await Publish("ada", ServerRole.Approver, "edge", new { connection = "sqlserver", data_source = "warehouse" });
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(["warehouse-read"], storedSecrets);
+        var order = seen.Select(r => (r.Method, r.Path)).ToList();
+        Assert.True(order.IndexOf(("GET", "/api/v1/data-sources/warehouse")) < order.IndexOf(("PUT", "/api/v1/secrets/warehouse-read")));       // the read before the login
+        Assert.True(order.IndexOf(("PUT", "/api/v1/secrets/warehouse-read")) < order.IndexOf(("PUT", "/api/v1/data-sources/warehouse")));        // the login before the file that refers to it
+        Assert.DoesNotContain(seen, r => r.Method == "DELETE");
+
+        // again, with the source there: written first, then the login follows
+        dataSourceStatus = 200;
+        seen.Clear();
+        var second = await Publish("ada", ServerRole.Approver, "edge", new { connection = "sqlserver", data_source = "warehouse" });
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        Assert.False((bool)JsonNode.Parse(await second.Content.ReadAsStringAsync())!["created"]!);
+        var again = seen.Select(r => (r.Method, r.Path)).ToList();
+        Assert.True(again.IndexOf(("PUT", "/api/v1/data-sources/warehouse")) < again.IndexOf(("PUT", "/api/v1/secrets/warehouse-read")));
+        Assert.Equal(ReadLogin, (string)JsonNode.Parse(seen.Single(r => r.Method == "PUT" && r.Path == "/api/v1/secrets/warehouse-read").Body)!["value"]!);
+        Assert.Equal(["warehouse-read"], storedSecrets);
+    }
+
+    [Fact]
+    public async Task Every_engine_the_proxy_serves_can_be_published_and_a_connection_of_another_engine_is_refused_in_a_sentence_before_anything_is_sent()
+    {
+        await Pair();
+        var secrets = ServerSecrets.Open(BuildDir);
+        // a connection file per driver (readonly where the driver can only be read), each with a read login of its own
+        var files = new Dictionary<string, string>
+        {
+            ["lake"] = "engine: odbc\naccess: readonly", ["local"] = "engine: duckdb\naccess: readonly", ["pg"] = "engine: postgres", ["flight"] = "engine: flightsql\naccess: readonly",
+        };
+        foreach (var (name, engine) in files)
+        {
+            File.WriteAllText(Path.Combine(project, "connections", name + ".yaml"), $"schema: connection/1\nname: {name}\n{engine}\n");
+            using var login = SecretValue.From($"login-of-{name}");
+            await secrets.SetAsync(ServerSecrets.NameOf(name, DbDataKit.Connections.LoginRole.Read), login);
+        }
+
+        foreach (var (name, driver) in new[] { ("lake", "odbc"), ("local", "duckdb") })
+        {
+            seen.Clear();
+            var reply = await Publish("ada", ServerRole.Approver, "edge", new { connection = name });
+            Assert.True(reply.StatusCode == HttpStatusCode.OK, await reply.Content.ReadAsStringAsync());
+            Assert.Equal($"login-of-{name}", (string)JsonNode.Parse(seen.Single(r => r.Path == $"/api/v1/secrets/{name}-read").Body)!["value"]!);
+            var definition = (string)JsonNode.Parse(seen.Single(r => r.Method == "PUT" && r.Path == $"/api/v1/data-sources/{name}").Body)!["text"]!;
+            Assert.Contains($"engine: {driver}", definition);
+            Assert.Contains("access: readonly", definition);
+            Assert.Contains($"connection_string_secret: 'secret:dbdata:proxy:managed-x:{name}-read'", definition);
+        }
+
+        foreach (var (name, driver) in new[] { ("pg", "postgres"), ("flight", "flightsql") })
+        {
+            seen.Clear();
+            var reply = await Publish("ada", ServerRole.Approver, "edge", new { connection = name });
+            Assert.Equal(HttpStatusCode.Conflict, reply.StatusCode);
+            var message = (string)JsonNode.Parse(await reply.Content.ReadAsStringAsync())!["error"]!;
+            Assert.Contains("sqlserver, odbc and duckdb", message);
+            Assert.Contains($"not {driver}", message);
+            Assert.Empty(seen);                                                             // not even the login was sent
+        }
     }
 
     [Fact]

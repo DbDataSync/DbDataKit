@@ -184,3 +184,26 @@ export interface GitCommit {
   author: string
   when: string
 }
+
+/** A proxy this Build server is paired with, as the server lists it. */
+export interface PairedProxy {
+  name: string
+  url: string
+  instance_id: string
+  paired_at: string
+}
+
+/** What publishing a connection to a proxy answered. */
+export interface PublishAnswer {
+  proxy: string
+  data_source: string
+  created: boolean
+  version: string | null
+}
+
+/** What a refused publish carries when a person could settle it by taking the data source over on the proxy (T12): the client id to name and the call to make there. */
+export interface AdoptHint {
+  client: string
+  data_source: string
+  call: string
+}
