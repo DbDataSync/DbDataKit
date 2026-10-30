@@ -45,23 +45,21 @@ RUN dotnet /app/DbDataSync.Cli.dll internal build-catalog-cache /app/library-cac
 # Build this one explicitly: `docker build -f DbDataSync/Dockerfile --target runtime -t dbdatasync:<v>-runtime .` (from the repository root)
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
-# The image listens on plain HTTP, and plain HTTP is otherwise served only to loopback or a trusted TLS-terminating proxy
-# (docs/configuration.md, "Plain HTTP and reverse proxies"). A browser reaching the container through Docker's port mapping is neither,
-# so the image allows it by default. For a deployment behind a proxy, set DbDataSync__App__AllowInsecureHttp=false and
-# DbDataSync__App__TrustedProxies to the proxy's address.
-ENV DbDataSync__App__AllowInsecureHttp=true
+# The image serves https, as the Build, Proxy, Store and console images do (plan 13a, L08): on its first start the server makes a self-signed certificate in the
+# volume (tls/dbdatasync.pfx), which a console pins when it pairs. Plain http is no longer the image's default; a deployment behind a proxy that ends TLS overrides the
+# entrypoint (docs/install.md, "Running in a container").
 ENV DbDataSync__App__RepoRoot=/var/lib/dbdatasync
 VOLUME ["/var/lib/dbdatasync"]
 
 WORKDIR /app
 COPY --from=build /app/ ./
 
-EXPOSE 8080
+EXPOSE 8443
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD ["dotnet", "/app/DbDataSync.Cli.dll", "health", "check", "--url", "http://127.0.0.1:8080"]
+    CMD ["dotnet", "/app/DbDataSync.Cli.dll", "health", "check", "--url", "https://127.0.0.1:8443"]
 
-ENTRYPOINT ["dotnet", "/app/DbDataSync.Cli.dll", "server", "run", "--url", "http://0.0.0.0:8080"]
+ENTRYPOINT ["dotnet", "/app/DbDataSync.Cli.dll", "server", "run", "--url", "https://0.0.0.0:8443"]
 
 # ── The default image ───────────────────────────────────────────────────────────
 # Debian, not Alpine. LibGit2Sharp, Microsoft.Data.Sqlite and DuckDB.NET all ship glibc natives, and
@@ -91,23 +89,21 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0
 # service points at its own machine-wide data directory with. This container happens to already
 # resolve /var/lib/dbdatasync as CliOptions.DefaultRoot's own Linux answer, but setting it explicitly
 # here means the image's behaviour doesn't depend on that coincidence continuing to hold.
-# The image listens on plain HTTP, and plain HTTP is otherwise served only to loopback or a trusted TLS-terminating proxy
-# (docs/configuration.md, "Plain HTTP and reverse proxies"). A browser reaching the container through Docker's port mapping is neither,
-# so the image allows it by default. For a deployment behind a proxy, set DbDataSync__App__AllowInsecureHttp=false and
-# DbDataSync__App__TrustedProxies to the proxy's address.
-ENV DbDataSync__App__AllowInsecureHttp=true
+# The image serves https, as the Build, Proxy, Store and console images do (plan 13a, L08): on its first start the server makes a self-signed certificate in the
+# volume (tls/dbdatasync.pfx), which a console pins when it pairs. Plain http is no longer the image's default; a deployment behind a proxy that ends TLS overrides the
+# entrypoint (docs/install.md, "Running in a container").
 ENV DbDataSync__App__RepoRoot=/var/lib/dbdatasync
 VOLUME ["/var/lib/dbdatasync"]
 
 WORKDIR /app
 COPY --from=build /app/ ./
 
-EXPOSE 8080
+EXPOSE 8443
 
 # The tool checks itself. The runtime image has no curl and no bash, so a shell-based check has to
 # pick its way around both — the first attempt used /dev/tcp under /bin/sh, which is a bash feature
 # under dash, and reported a healthy container as unhealthy every time.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD ["dotnet", "/app/DbDataSync.Cli.dll", "health", "check", "--url", "http://127.0.0.1:8080"]
+    CMD ["dotnet", "/app/DbDataSync.Cli.dll", "health", "check", "--url", "https://127.0.0.1:8443"]
 
-ENTRYPOINT ["dotnet", "/app/DbDataSync.Cli.dll", "server", "run", "--url", "http://0.0.0.0:8080"]
+ENTRYPOINT ["dotnet", "/app/DbDataSync.Cli.dll", "server", "run", "--url", "https://0.0.0.0:8443"]

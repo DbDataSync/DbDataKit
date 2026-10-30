@@ -27,6 +27,12 @@ to it in the pull request that makes the change; a release moves the entries int
   connection string or in properties are still honoured. A connect timeout in properties still wins. Any other property the shared policy reserves (credentials, host and database keys, `Application Intent`,
   `Multi Subnet Failover`, `Options`, `Search Path`, command timeouts) is now refused with a message naming it; put it in the connection string instead. (A08)
 - **Sync commands accept `--format json`.** `server`, `service`, `cert`, `secret`, `library`, `driver`, `config` and `health` print one JSON document (`schema`, `command`, `exit_code`, `ok`, `data`, `messages`, `errors`); an unknown command now exits 2 with "'x' is not a command" (it was 1 with "Unknown command 'x'"). (C07)
+- **The Docker image serves https on 8443, not plain http on 8080.** Like the Build, Proxy, Store and console images, it makes a self-signed certificate in the volume (`tls/dbdatasync.pfx`) on its first start and serves
+  `https://0.0.0.0:8443`; its health check is `dbdatasync health check --url https://127.0.0.1:8443`. A client, script, port mapping (`-p 8080:8080`) or health check that used `http://localhost:8080` gets a refused
+  connection: use `-p 8443:8443` and `https://` (`-k`, or trust the certificate; a console pins it when it pairs, and a Sync server on https now announces itself to a console, so `dist/compose/sync.yml` pairs the two).
+  The image no longer sets `DbDataSync__App__AllowInsecureHttp=true`. To run behind a proxy that ends TLS, override the entrypoint to `dotnet /app/DbDataSync.Cli.dll server run --url http://0.0.0.0:8080` and set
+  `DbDataSync__App__TrustedProxies` (the command is in `docs/install.md`). A server started with an `https://` address and no configured certificate now makes the managed one (`dbdatasync cert new-self-signed --file`'s file) instead of
+  failing at the first request; if it cannot, it exits 1 with a message naming `tls/dbdatasync.pfx`. (L08)
 - **Database errors show a fixed message and the engine's code, not the driver's text.** A failed connection test, run, preview, provisioning step or reconcile now reports for example
   `The login was rejected. [sqlserver 18456]` or `The server could not be reached. [postgres 08006]`; a run's stored error detail is empty for a driver failure. The driver's own text, with
   secrets scrubbed, is written to the server log. Set `Diagnostics:DriverDetails` to `true` (environment `Diagnostics__DriverDetails=true`) to append it to the response and keep it in the run

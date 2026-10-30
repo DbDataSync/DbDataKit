@@ -15,7 +15,7 @@ the pull request that settles it.
 | D6 | Where the product docs live: carried by the module and served by the console, or served by the paired server through the relay | U11 (#260) | Re-evaluate (decided "for now": module-carried). Many docs are about configuration, not screens. | The viewer reads a `DocsSource`, so a relay-backed source needs no viewer change. Docs then match the console's screens, not the paired server's version. |
 | D7 | Extend the docs check | X03 (#244) | Decide: the README-completeness rule for Sync, Proxy and Build (their READMEs would need filling in first); a rule for `.json` files, which are skipped now. | `scripts/check_docs_commands.py` reads commands from the sources. |
 | D8 | Show when a waiting server first announced | L03 (#254) | Decide. It needs a console API change: the pending entry is rewritten on every announcement, so only the last time is stored. | The list shows "last announced N s ago". |
-| D9 | The compose files for Proxy, Sync and Store (L03) | L03 (#254) | Slices to define. Proxy's management listener needs enabling and a stable address; Sync's image serves plain http, which pairing refuses; Store has none. | `dist/compose/build.yml` works and runs in CI. |
+| D9 | The compose files for Proxy, Sync and Store (L03) | L03 (#254) | Slices to define. Proxy's management listener needs enabling and a stable address; Store has none. (Sync's is L08: its image serves https now, by the owner's decision of 2026-10-30.) | `dist/compose/build.yml` works and runs in CI. |
 | D10 | Remove Sync's legacy migrations | X01 (#245) | Decide (E04 is the likely place). `LegacyConfigMigration.cs` and `LegacyRootMigration.cs` migrate old installs, which contradicts the plan's clean break. | They are not in plan 13 section 6. |
 | D11 | A slice for moving Build's CLI onto the shared router | X01 (#245) | A plan row. Build's `CliApp` (603 lines) has no C-lane slice, so that part of "three CLI parsers" waits on nothing. | Sync's own dispatch for `tool`, `update`, `launcher`, `invite`, `internal` and `version` also remains. |
 | D12 | Move relationships onto models as `references:` | J08 (#199) | Decide. Relationships are written in the semantic file between models; moving them is a model-schema change of its own. | Not done in J08. |
@@ -40,7 +40,7 @@ the pull request that settles it.
 ## 3. Paths that could not be run where the work was done
 
 - **A14a (#215):** MySQL, MariaDB and Oracle staging (the value gate covers SQL Server and PostgreSQL targets only); Oracle, JDBC and Flight reader types (documentation or code only).
-- **L03 (#254):** pairing a Sync server by announcement (its image serves plain http); the Postgres deploy part of the console story (`DBDATA_E2E_PG` not set).
+- **L03 (#254):** pairing a Sync server by announcement (its image now serves https, L08; the compose run is CI's); the Postgres deploy part of the console story (`DBDATA_E2E_PG` not set).
 - **Library-install specs:** `admin-library-install` cannot reach nuget.org in the sandbox. That is the machine, not a defect, but it means the specs have not run there.
 - **U13 (#263):** the identity home's SQL Server and PostgreSQL schemas render from the same templates as SQLite but have not run (its 18 tests ran on SQLite).
 - **J07 to J09 (#199):** the calendar template's T-SQL lowering was only checked by compile before CI; the `release` group, the slow engines and the Windows/Wine run were not run.

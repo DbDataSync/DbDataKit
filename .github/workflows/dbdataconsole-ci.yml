@@ -157,3 +157,5 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build server and console
         run: dist/compose/check.sh dist/compose/build.yml dbdatabuild
+      - name: Sync server and console
+        run: dist/compose/check.sh dist/compose/sync.yml dbdatasync

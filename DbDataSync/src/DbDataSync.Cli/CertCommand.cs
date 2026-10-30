@@ -681,6 +681,25 @@ public static class CertCommand
             return 1;
         }
 
+        BindManagedFile(root, host);
+
+        Console.WriteLine("Generated and configured a self-signed certificate:");
+        PrintCertificateSummary(certificate);
+        Console.WriteLine($"  file        {ManagedSelfSignedCertificate.PfxPath(root)}");
+        Console.WriteLine();
+        Console.WriteLine(
+            "Every client reaching this console will need to trust this certificate once — there is no " +
+            "CA behind it. A daily background check renews it automatically before it expires; nothing " +
+            "takes effect until the DbDataSync service restarts.");
+        return 0;
+    }
+
+    /// <summary>
+    /// Points Kestrel at the managed certificate file and commits the setting: what <c>new-self-signed</c> does after it has made the file, and what a first start of
+    /// <c>server run</c> over https does when nothing names a certificate (<see cref="ServeCommand.EnsureCertificate"/>).
+    /// </summary>
+    internal static void BindManagedFile(string root, string host)
+    {
         ClearStoreBasedBinding(root);
         // A PFX carries its own private key — no separate KeyPath, same as UsePfx.
         DbDataSyncConfigFile.RemoveValue(root, CertificateBinding.Section, "KeyPath");
@@ -692,16 +711,6 @@ public static class CertCommand
             [DbDataSyncConfigFile.PathIn(root)],
             $"Generate a self-signed certificate for '{host}'",
             CurrentUser.SystemAuthor);
-
-        Console.WriteLine("Generated and configured a self-signed certificate:");
-        PrintCertificateSummary(certificate);
-        Console.WriteLine($"  file        {ManagedSelfSignedCertificate.PfxPath(root)}");
-        Console.WriteLine();
-        Console.WriteLine(
-            "Every client reaching this console will need to trust this certificate once — there is no " +
-            "CA behind it. A daily background check renews it automatically before it expires; nothing " +
-            "takes effect until the DbDataSync service restarts.");
-        return 0;
     }
 
     /// <summary>The host tier 2's SANs are built from — <c>--url</c> if given (matching <c>serve</c>'s

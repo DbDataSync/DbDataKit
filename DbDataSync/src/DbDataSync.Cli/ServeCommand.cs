@@ -3,6 +3,7 @@ using DbDataSync.Api.Auth;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Api.Services;
 using Microsoft.Extensions.DependencyInjection;
+using DbDataSync.Certificates;
 using DbDataSync.Core.Config;
 using DbDataKit.Config.Git;
 using DbDataSync.Libraries;
@@ -62,6 +63,9 @@ public static class ServeCommand
             {
                 return Fail(ex, PrepareFailureMessage(root, ex));
             }
+
+            if (EnsureCertificate(root, url) is { } certificateFailure)
+                return Fail(new InvalidOperationException(certificateFailure), certificateFailure);
 
             await EnsureDuckDbInstalledAsync(root);
 
@@ -172,6 +176,40 @@ public static class ServeCommand
                 foreach (var change in migrated)
                     Console.WriteLine($"  {change}");
             }
+        }
+    }
+
+    /// <summary>
+    /// Serving https with nothing that names a certificate makes one, the way the other servers of the suite do on their first start (<c>DirectoryCertificate</c>): the managed self-signed file
+    /// <c>tls/dbdatasync.pfx</c> of the repository root, with its password beside it, bound in <c>dbdatasync.config.yaml</c> so the daily renewal check keeps it. A console that pairs with the server pins its fingerprint,
+    /// so nothing else about it needs to be trusted. Where a certificate is configured already (the file, an environment variable, the Windows store) it is left alone, and plain http needs none.
+    /// Returns null when there is nothing to report, otherwise the sentence that says why the server cannot start.
+    /// </summary>
+    internal static string? EnsureCertificate(string root, string url, Func<string, string?>? environment = null)
+    {
+        environment ??= Environment.GetEnvironmentVariable;
+        var normalized = url.Replace("://*", "://localhost").Replace("://+", "://localhost").Replace("://[::]", "://localhost").Replace("://0.0.0.0", "://localhost");
+        if (!Uri.TryCreate(normalized.Split(';')[0], UriKind.Absolute, out var address) || address.Scheme != Uri.UriSchemeHttps) return null;
+
+        var file = DbDataSyncConfigFile.Read(root);
+        // HTTP.sys takes its certificate from a binding made with netsh, never from Kestrel's settings
+        if (string.Equals(file.GetValueOrDefault(WebServerSelection.ConfigKey) ?? environment("DbDataSync__App__Server"), "httpsys", StringComparison.OrdinalIgnoreCase)) return null;
+        var configured = file.Keys.Any(key => key.StartsWith("Kestrel:Certificates:", StringComparison.OrdinalIgnoreCase) || key.StartsWith("Kestrel:Endpoints:", StringComparison.OrdinalIgnoreCase));
+        if (configured || environment("Kestrel__Certificates__Default__Path") is { Length: > 0 } || environment("Kestrel__Certificates__Default__Subject") is { Length: > 0 }
+            || environment("Kestrel__Endpoints__Https__Url") is { Length: > 0 }) return null;
+
+        var path = ManagedSelfSignedCertificate.PfxPath(root);
+        try
+        {
+            using var certificate = ManagedSelfSignedCertificate.LoadOrRenew(root, address.Host, ManagedSelfSignedCertificate.DefaultValidityDays, out _);
+            CertCommand.BindManagedFile(root, address.Host);
+            Console.WriteLine($"  certificate        {path} (self-signed, made for {address.Host})");
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or LibGit2SharpException or ArgumentException)
+        {
+            return $"DbDataSync is asked to serve {url}, which needs a certificate, and none is configured. Making one at '{path}' failed: {ex.Message} " +
+                   "Fix that file or its directory, point Kestrel:Certificates:Default:Path at a certificate of your own (`dbdatasync cert use-pfx`), or serve plain http behind a proxy that ends TLS (see docs/configuration.md).";
         }
     }
 
