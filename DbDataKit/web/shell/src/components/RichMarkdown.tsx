@@ -18,13 +18,17 @@ import { isSafeImageUrl, resolveDocImage, resolveLink } from './markdownLinks'
  *
  * @param docSlugs the pages of the shipped docs: resolve `other-page.md#section` to the in-app docs route when it names one of them, and `#section` to the heading on this page.
  * Absent unless the caller is showing the shipped docs, so a document that is not one of them cannot link into the app.
+ * @param docLinkBase the route the docs are shown at, `/docs` unless several modules' docs are shown side by side.
+ * @param resolveImage where a picture written in the docs is served (a module's `DocsSource.asset`), for the docs only.
  * @param inlineImages load an image where it is written. Off for Notes (phase 161): every reader's browser would fetch
  * whatever address the author chose the moment the note rendered — a tracking and privacy question as well as a safety
  * one — so there an image shows as a link the reader may choose to follow.
  */
-export function RichMarkdown({ text, docSlugs, inlineImages = true, testId }: {
+export function RichMarkdown({ text, docSlugs, docLinkBase = '/docs', resolveImage, inlineImages = true, testId }: {
   text: string
   docSlugs?: readonly string[]
+  docLinkBase?: string
+  resolveImage?: (src: string) => string | null
   inlineImages?: boolean
   testId?: string
 }) {
@@ -33,7 +37,7 @@ export function RichMarkdown({ text, docSlugs, inlineImages = true, testId }: {
 
   const components: Components = {
     a({ href, children }) {
-      const target = resolveLink(href, slugs)
+      const target = resolveLink(href, slugs, docLinkBase)
       switch (target.kind) {
         case 'external':
           return <a href={target.href} target="_blank" rel="noreferrer noopener">{children}</a>
@@ -53,7 +57,7 @@ export function RichMarkdown({ text, docSlugs, inlineImages = true, testId }: {
       // policy: a network address only, never a relative path, and no referrer sent with the request.
       // The docs' own pictures, shipped beside them: same-origin, so the strictest reading of the policy still holds — and
       // only for the docs, never for a note, which is not one of the app's own pages.
-      const local = docLinks && typeof src === 'string' ? resolveDocImage(src) : null
+      const local = docLinks && typeof src === 'string' ? (resolveImage ? resolveImage(src) : resolveDocImage(src)) : null
       if (local) return <img src={local} alt={alt ?? ''} loading="lazy" />
       if (typeof src !== 'string' || !isSafeImageUrl(src)) return <span>{alt}</span>
       if (!inlineImages) return <a href={src} target="_blank" rel="noreferrer noopener">{alt || src}</a>

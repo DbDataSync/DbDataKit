@@ -1,5 +1,5 @@
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react'
-import type { Crumb } from '@dbdatakit/shell'
+import type { Crumb, DocsSource } from '@dbdatakit/shell'
 
 /** The frame a product puts around a screen: its rail, crumbs and tab strip. The admin screens render inside whichever one the product gives them. */
 export type AdminFrame = ComponentType<{ crumbs: Crumb[]; tabs?: ReactNode; actions?: ReactNode; children: ReactNode }>
@@ -19,8 +19,8 @@ export type AdminCodeEditor = ComponentType<{
 export interface AdminHost {
   Frame: AdminFrame
   CodeEditor: AdminCodeEditor
-  /** The pages of the docs that shipped with the build, in the order the index lists them. */
-  docPages: readonly { slug: string; title: string }[]
+  /** Where the product's docs come from (plan 13a, U11); the shell's generic viewer shows them. A host with no docs of its own leaves it out. */
+  docs?: DocsSource
 }
 
 const HostContext = createContext<AdminHost | null>(null)

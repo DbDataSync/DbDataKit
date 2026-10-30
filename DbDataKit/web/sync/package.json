@@ -31,5 +31,12 @@
   },
   "exports": {
     ".": "./src/index.ts"
+  },
+  "dbdatakit": {
+    "docs": {
+      "id": "sync",
+      "title": "DbDataSync",
+      "dir": "../../../DbDataSync/docs"
+    }
   }
 }

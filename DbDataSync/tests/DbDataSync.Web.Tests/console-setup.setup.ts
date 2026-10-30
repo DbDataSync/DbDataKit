@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
 import { consoleScratch, consoleServerIdFile, consoleStorageState } from './console-paths'
-import { consoleDirectory, syncUrl } from './playwright.console.config'
+import { consoleDirectory, syncUrl } from './playwright.config'
 import { MSSQL_PORT, SA_PASSWORD } from './test-db'
 
 // The setup of the run through the console (plan 13a, U08): the person who installed the console redeems the first-run invitation with a passkey (a browser-side authenticator holds it), is

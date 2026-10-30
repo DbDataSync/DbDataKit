@@ -4,7 +4,7 @@
 # dev-loop shortcut, not that.
 #
 # Usage:
-#   tools/install-local-tool [--global|--machine-wide|--tool-path <dir>] [--no-spa] [--uninstall]
+#   tools/install-local-tool [--global|--machine-wide|--tool-path <dir>] [--uninstall]
 #
 #   --global        (default) installs on this developer's own PATH — `dotnet tool update --global`,
 #                   no elevation needed. Confirm this is what you expect: it is NOT an isolated
@@ -13,8 +13,6 @@
 #                   `<DefaultToolDir>/dbdatasync tool install` to (re)link PATH — the real thing phase
 #                   123 built, exercised against a local build instead of a published NuGet package.
 #   --tool-path DIR passes DIR straight through to `--tool-path`, no PATH wiring done for you.
-#   --no-spa        skips the SPA build (`-p:SkipWebBuild=true`) — faster, but `serve` has no web
-#                   console until a build without this flag runs at least once.
 #   --uninstall     reverses whichever target the same flags select.
 #
 # Packs every run, with no staleness check of its own — see tools/dev-harness's own comment for why:
@@ -49,7 +47,6 @@ while [ $# -gt 0 ]; do
         --global) target=global; shift ;;
         --machine-wide) target=machine-wide; tool_path="$default_tool_dir"; shift ;;
         --tool-path) target=tool-path; tool_path="$2"; shift 2 ;;
-        --no-spa) pack_args="-p:SkipWebBuild=true"; shift ;;
         --uninstall) uninstall=1; shift ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
     esac

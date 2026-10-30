@@ -11,12 +11,12 @@ const docsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..',
 const docPageCount = fs.readdirSync(docsDir).filter((name) => name.endsWith('.md')).length
 
 /**
- * Phase 160's Docs viewer against the real pages of `docs/` — in dev the Vite server serves the repo's own folder at
- * `/docs/*.md`, the same address the packaged build serves them at — plus scripted responses for what a real page can
- * never be made to do: be hostile, or not be Markdown.
+ * The Docs viewer against the real pages of `docs/` — the console serves them under `/docs/sync/` (plan 13a, U11: generated into its build from the
+ * folder), and the viewer shows them inside Sync's screens at `/servers/<id>/docs` — plus scripted responses for what a real page can never be made to do:
+ * be hostile, or not be Markdown.
  *
- * The suite runs with authentication off, so there is no Viewer to sign in as here. That a Viewer may read the version
- * behind these pages is `AboutControllerTests`' subject; nothing on the Docs screens depends on the role.
+ * The person signed in is the console's administrator; that a viewer may read the version behind these pages is `AboutControllerTests`' subject, and nothing on the
+ * Docs screens depends on the role.
  */
 
 test('the rail leads to an index of every page, for the version that is running', async ({ page }) => {
@@ -54,7 +54,7 @@ test("a page's pictures load from the app, not from the network", async ({ page 
   const pictures = page.getByTestId('docs-content').locator('img')
   await expect(pictures).toHaveCount(7)
   for (const src of await pictures.evaluateAll((imgs) => imgs.map((img) => (img as HTMLImageElement).getAttribute('src')))) {
-    expect(src).toMatch(/^\/screenshots\/golden-path\/[A-Za-z0-9._-]+\.png$/)
+    expect(src).toMatch(/^\/docs\/sync\/assets\/screenshots\/golden-path\/[A-Za-z0-9._-]+\.png$/)
   }
   // Every one decoded — a broken image has a naturalWidth of 0.
   await expect.poll(() => pictures.evaluateAll((imgs) => imgs.every((img) => (img as HTMLImageElement).naturalWidth > 0)))
@@ -105,7 +105,7 @@ test('a hostile document is shown as text and does nothing', async ({ page }) =>
   const dialogs: string[] = []
   page.on('dialog', async dialog => { dialogs.push(dialog.message()); await dialog.dismiss() })
 
-  await page.route('**/docs/install.md', route => route.fulfill({
+  await page.route('**/docs/sync/install.md', route => route.fulfill({
     contentType: 'text/markdown; charset=utf-8',
     body: [
       '# Hostile',
@@ -132,7 +132,7 @@ test('a hostile document is shown as text and does nothing', async ({ page }) =>
 })
 
 test('an answer that is not a document is refused, not rendered', async ({ page }) => {
-  await page.route('**/docs/install.md', route => route.fulfill({
+  await page.route('**/docs/sync/install.md', route => route.fulfill({
     contentType: 'text/html',
     body: '<html><body><h1>A proxy error page</h1></body></html>',
   }))

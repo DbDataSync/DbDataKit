@@ -1,16 +1,5 @@
 # syntax=docker/dockerfile:1
 
-# ── The SPA ────────────────────────────────────────────────────────────────────
-FROM node:22-bookworm-slim AS web
-WORKDIR /src/DbDataKit/web
-COPY DbDataKit/web/package*.json ./
-COPY DbDataKit/web/shell/package.json ./shell/
-COPY DbDataKit/web/admin/package.json ./admin/
-COPY DbDataKit/web/sync/package.json ./sync/
-RUN npm ci
-COPY DbDataKit/web/ ./
-RUN npm run build -w @dbdatakit/sync
-
 # ── The .NET side ──────────────────────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 # The shared libraries sit next to the product, as in the repository: DbDataSync's Directory.Build.props finds them at ../DbDataKit.
@@ -25,8 +14,7 @@ COPY DbDataSync/src/ ./src/
 COPY DbDataSync/tests/ ./tests/
 COPY DbDataSync/tools/ ./tools/
 
-# The SPA is built in its own stage above, so this one needs no node. SkipWebBuild is what stops the
-# publish target shelling out to npm inside an image that does not have it.
+# The image carries no web app (plan 13, U11): the screens are the console's, which has its own image (DbDataConsole/Dockerfile).
 #
 # VERSION is the release this image is built for (phase 163). Left empty — a local `docker build -f DbDataSync/Dockerfile .` from the repository root — the csproj's own
 # development default applies, which is what an image built by hand should say. Set, it is the version `dbdatasync version`
@@ -36,21 +24,7 @@ COPY DbDataSync/tools/ ./tools/
 # slots; an image is never one, and building them would fetch eight apphost packs for nothing.
 ARG VERSION=""
 RUN dotnet publish src/DbDataSync.Cli/DbDataSync.Cli.csproj \
-    -c Release -o /app -p:SkipWebBuild=true -p:LauncherRuntimeIdentifiers=none ${VERSION:+-p:Version=$VERSION}
-
-COPY --from=web /src/DbDataKit/web/sync/dist/ /app/wwwroot/
-
-# Phase 160: the docs, beside the SPA — the publish above ran in a stage that never had docs/ (only src, tests
-# and tools are copied in), so the csproj's CopyDocs target had nothing to copy and this is what ships them.
-# Phase 162: and the pictures they show — only those listed in docs/images.txt, at the same repo-relative path, so the
-# docs' own `../screenshots/...` references resolve unchanged. (tr strips a CR: a Windows checkout may have CRLF endings.)
-COPY DbDataSync/docs/ /src/docs/
-COPY DbDataSync/screenshots/ /src/screenshots/
-RUN mkdir -p /app/wwwroot/docs \
-    && cp /src/docs/*.md /app/wwwroot/docs/ \
-    && tr -d '\r' < /src/docs/images.txt | while IFS= read -r image; do \
-         [ -z "$image" ] || install -D "/src/$image" "/app/wwwroot/$image"; \
-       done
+    -c Release -o /app -p:LauncherRuntimeIdentifiers=none ${VERSION:+-p:Version=$VERSION}
 
 # Phase 121: every KnownLibraries entry, restored once at its pinned version, while this stage still
 # has both the SDK and the just-published CLI (the "internal" command exists only for this — see

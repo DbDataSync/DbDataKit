@@ -5,19 +5,14 @@ import { consoleServerIdFile } from './console-paths'
 export * from '@playwright/test'
 
 /**
- * The suite runs two ways (plan 13a, U08): directly against a Sync server (`playwright.config.ts`), and through the console against a paired one (`playwright.console.config.ts`).
- * The specs are written in the server's own addresses (`/replications/...`, `/api/...`). Through the console the same screens live under `/servers/<id>/...` and their API calls go
- * to the console's relay at `/relay/<id>/api/...`, so the page a spec gets is one that says the same addresses and has them translated: `goto`, and the `page.request` calls. Everything the
+ * The specs are written in the server's own addresses (`/replications/...`, `/api/...`). The suite runs through the console (`playwright.config.ts`), where the same screens live under `/servers/<id>/...` and
+ * their API calls go to the console's relay at `/relay/<id>/api/...`, so the page a spec gets is one that says the same addresses and has them translated: `goto`, and the `page.request` calls. Everything the
  * browser itself does (links, redirects, reloads, the app's own requests) is not translated: those are exactly what the run is there to test.
- * Only when `DBDATASYNC_E2E_CONSOLE=1` (set by that config) and the setup has named the server; otherwise (the direct run) the page is the plain one.
  */
-function serverId(): string | undefined {
-  if (process.env.DBDATASYNC_E2E_CONSOLE !== '1') return undefined
-  try {
-    return fs.readFileSync(consoleServerIdFile, 'utf8').trim() || undefined
-  } catch {
-    return undefined
-  }
+function serverId(): string {
+  const id = fs.existsSync(consoleServerIdFile) ? fs.readFileSync(consoleServerIdFile, 'utf8').trim() : ''
+  if (!id) throw new Error(`No paired server is named in ${consoleServerIdFile}: the console-setup project signs in and pairs the server first (run the suite with playwright.config.ts, not a single file without its dependency).`)
+  return id
 }
 
 const requestMethods = new Set(['get', 'post', 'put', 'patch', 'delete', 'head', 'fetch'])
@@ -52,7 +47,6 @@ function throughConsole(page: Page, id: string): Page {
 
 export const test = base.extend<object>({
   page: async ({ page }, use) => {
-    const id = serverId()
-    await use(id ? throughConsole(page, id) : page)
+    await use(throughConsole(page, serverId()))
   },
 })

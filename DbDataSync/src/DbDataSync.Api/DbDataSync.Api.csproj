@@ -69,30 +69,4 @@
     <ProjectReference Include="..\DbDataSync.Verification\DbDataSync.Verification.csproj" />
   </ItemGroup>
 
-  <!--
-    The SPA is built into wwwroot on publish, which is what makes the tool and the container one
-    artifact rather than two things somebody has to run. Publish only, and skippable: the inner loop
-    and the test suites run Vite separately against the API, and making `dotnet build` shell out to
-    npm would put a node install between a developer and a unit test.
-  -->
-  <PropertyGroup>
-    <SkipWebBuild Condition="'$(SkipWebBuild)' == ''">false</SkipWebBuild>
-    <WebProjectDir>$(MSBuildProjectDirectory)/../../../DbDataKit/web</WebProjectDir>
-  </PropertyGroup>
-
-  <Target Name="BuildSpa" BeforeTargets="PrepareForPublish" Condition="'$(SkipWebBuild)' != 'true'">
-    <Message Importance="high" Text="Building the SPA in $(WebProjectDir)" />
-    <Exec Command="npm ci" WorkingDirectory="$(WebProjectDir)" />
-    <Exec Command="npm run build -w @dbdatakit/sync" WorkingDirectory="$(WebProjectDir)" />
-    <ItemGroup>
-      <SpaOutput Include="$(WebProjectDir)/sync/dist/**/*" />
-      <!-- Published rather than copied into the source tree: a wwwroot full of build output is a
-           wwwroot somebody commits by accident. -->
-      <ResolvedFileToPublish Include="@(SpaOutput)">
-        <RelativePath>wwwroot/%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
-        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      </ResolvedFileToPublish>
-    </ItemGroup>
-  </Target>
-
 </Project>

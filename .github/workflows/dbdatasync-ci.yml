@@ -234,6 +234,126 @@ jobs:
           testenv/testenv.sh env dbdatasync --dotenv >> "$GITHUB_ENV"
       - name: Build the API and the worker
         # Debug, deliberately: playwright.config.ts's webServer runs
+        # src/DbDataSync.Cli/bin/Debug/net10.0/DbDataSync.Cli.dll (`server run`) through `dotnet exec`, so a Release
+        # build would leave that path empty and the server would never start.
+        #
+        # DbDataSync.TaskRunner too: the API spawns it as a separate process per run (ApiOptions
+        # resolves it in src/DbDataSync.TaskRunner/bin/Debug), and `dotnet build src/DbDataSync.Api`
+        # does not build it. Without it every triggered run sits Queued forever with nothing to claim
+        # it — which is what silently broke golden-path test 06 on this job.
+        #
+        # DbDataSync.Cli too, since phase 109i: globalSetup shells out to its Debug build
+        # (`config library install duckdb`) to seed a real DuckDB install rather than a hand-rolled
+        # fixture — this job never built the CLI project at all, so the whole suite has been failing
+        # at globalSetup with "The application to execute does not exist" ever since that phase landed.
+        run: |
+          dotnet build src/DbDataSync.Api
+          dotnet build src/DbDataSync.TaskRunner
+          dotnet build src/DbDataSync.Cli
+      - name: Build the console server
+        # The suite runs through the console (plan 13a, U08 and U11): Sync serves no web app, so a console and a paired
+        # `dbdatasync server run` are started together, and the specs' addresses become /servers/<id>/... and the relay
+        # (tests/DbDataSync.Web.Tests/fixtures.ts). `dotnet exec` on the built console DLL, as for the API above.
+        working-directory: DbDataConsole
+        run: dotnet build src/DbDataConsole.Server
+      - name: Install the web workspace's dependencies
+        working-directory: DbDataKit/web
+        run: npm ci
+      - name: Build the console's web app
+        # Includes the docs of every module (Sync's, from DbDataSync/docs), which the console serves under /docs/<module>.
+        working-directory: DbDataKit/web
+        run: npm run build -w @dbdatakit/console
+      - name: Install the suite's dependencies
+        # Its own package.json — @playwright/test lives here, not in the web workspace.
+        working-directory: DbDataSync/tests/DbDataSync.Web.Tests
+        run: npm ci
+      - name: Install Chromium
+        # The browser binary is not part of npm ci, and the runner has no usable one pre-installed.
+        working-directory: DbDataSync/tests/DbDataSync.Web.Tests
+        run: npx playwright install --with-deps chromium
+      - name: Test (Playwright)
+        # The config's webServer array starts and stops the console and the Sync server, its setup project signs in and pairs them,
+        # and globalSetup/globalTeardown build and drop the test database — nothing to orchestrate here.
+        working-directory: DbDataSync/tests/DbDataSync.Web.Tests
+        run: npx playwright test
+      - name: Stop the databases
+        if: always()
+        working-directory: .
+        run: testenv/testenv.sh down
+
+  web:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: DbDataKit/web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: DbDataKit/web/package-lock.json
+      - name: Install
+        run: npm ci
+      # Phase 160: the renderer's tests — what markup a document may and may not produce. Plain Node, no browser.
+      - name: Test
+        run: |
+          npm test -w @dbdatakit/shell
+          npm test -w @dbdatakit/admin
+          npm test -w @dbdatakit/sync
+      # Phase 162: the script that makes the package README's links absolute (tools/docs/nuget-readme.mjs), tested with
+      # node's own runner — plain Node, nothing to install. Run from the product root (DbDataSync/), not this job's working directory.
+      - name: Test the NuGet README rewriter
+        working-directory: DbDataSync
+        run: node --test tools/docs/*.test.mjs
+      - name: Build
+        run: npm run build -w @dbdatakit/sync
+
+  # The Playwright E2E suite. Not running it anywhere but a developer's machine is what let
+  # apply-button-does-not-cache-provisioned-columns.md's golden-path test 18 sit failing on main from
+  # phase 94 until somebody happened to run it (architecture/planning/done/playwright-suite-in-ci.md).
+  playwright:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # testenv/docker-compose.yml, the same file dotnet-integration above uses too. This job specifically
+    # needs one thing a GitHub Actions native `services:` container could never have given it, even
+    # before phase 154: the suite's tests/DbDataSync.Web.Tests/test-db.ts reaches SQL Server by
+    # `docker exec dbkit-test-mssql sqlcmd ...` — by container *name*, not through a published
+    # port — and a `services:` container is named by the runner, not by this file. Compose's
+    # container_name is what makes that name exist, and it is the same file the suite is already
+    # written against locally, so CI runs the topology unchanged rather than a lookalike.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-product
+        with:
+          product: DbDataSync
+          duckdb: 'false'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: |
+            DbDataKit/web/package-lock.json
+            DbDataSync/tests/DbDataSync.Web.Tests/package-lock.json
+      - name: Start the databases
+        # `up` blocks on the healthchecks testenv/docker-compose.yml already declares, so the suite never
+        # opens a connection to a SQL Server that is still coming up. mysql added alongside the
+        # original three for connection-test-preview.spec.ts (phase 177M) — the only Playwright-level
+        # proof that IConnectionPreviewer's redaction actually reaches the console, and the only
+        # bundled catalog driver (mysql.generic) that exercises it, since every hand-written built-in
+        # (MsSql/Postgres) doesn't implement that interface. Found missing by a real CI failure (three
+        # in a row), not anticipated when that spec was added.
+        working-directory: .
+        run: |
+          testenv/testenv.sh up mssql mssql-target postgres-logical mysql
+          testenv/testenv.sh env dbdatasync --dotenv >> "$GITHUB_ENV"
+      - name: Build the API and the worker
+        # Debug, deliberately: playwright.config.ts's webServer runs
         # src/DbDataSync.Api/bin/Debug/net10.0/DbDataSync.Api.dll through `dotnet exec`, so a Release
         # build would leave that path empty and the API would never start.
         #
@@ -275,7 +395,7 @@ jobs:
         working-directory: DbDataKit/web
       - name: Test (Playwright, through the console)
         working-directory: DbDataSync/tests/DbDataSync.Web.Tests
-        run: npx playwright test -c playwright.console.config.ts
+        run: npx playwright test
       - name: Stop the databases
         if: always()
         working-directory: .
@@ -287,9 +407,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: playwright-failure-artifacts
-          path: |
-            DbDataSync/tests/DbDataSync.Web.Tests/test-results/
-            DbDataSync/tests/DbDataSync.Web.Tests/test-results-console/
+          path: DbDataSync/tests/DbDataSync.Web.Tests/test-results/
           retention-days: 7
       # Phase 144: always, not just on failure — a few KB either way, and it's what lets a green run
       # actually prove the whole suite ran rather than being read only when something goes red.
@@ -300,7 +418,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report
-          path: |
-            DbDataSync/tests/DbDataSync.Web.Tests/test-results/results.json
-            DbDataSync/tests/DbDataSync.Web.Tests/test-results-console/results.json
+          path: DbDataSync/tests/DbDataSync.Web.Tests/test-results/results.json
           retention-days: 7

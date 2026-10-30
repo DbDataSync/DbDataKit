@@ -21,7 +21,6 @@ export {
   useBindCertificate,
   useCreateDriver,
   useCreateSelfSignedCertificate,
-  useDocPage,
   useDriverStatus,
   useDriverYaml,
   useDrivers,

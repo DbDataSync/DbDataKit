@@ -43,13 +43,7 @@ public static class DbDataSyncHost
 {
     public static WebApplication Build(string[] args)
     {
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
-        {
-            Args = args,
-            // Only the web root, not the content root: moving the content root would also change where appsettings.json is
-            // read from, which is a much larger change than "find the console".
-            WebRootPath = WebRootLocator.Resolve(Directory.GetCurrentDirectory(), AppContext.BaseDirectory),
-        });
+        var builder = WebApplication.CreateBuilder(args);
         InsertConfigFile(builder);
 
         // Applied only when this process really is a service, so `dbdatasync server run` in a terminal is
@@ -410,20 +404,8 @@ public static class DbDataSyncHost
             app.UseHttpsRedirection();
         }
 
-        // The SPA, served by the same process. In development Vite serves it on its own port and proxies
-        // /api and /hubs here; a published build puts it in wwwroot, which is what makes the tool and the
-        // container one artifact rather than two things to run.
-        //
-        // **Before authentication, and that is the point.** The fallback policy below closes everything that is not
-        // explicitly opened, and it applies to a request no endpoint claims — which is what a static file is. Placed
-        // after UseAuthorization, these answered 401 to `/` itself, so a default deployment (authentication on) could
-        // not serve its own sign-in screen. What is in wwwroot is the app's code and the docs the build shipped, the
-        // same text that is public on GitHub; the data is behind /api, which stays closed.
         // The management API version on every answer, so a console can tell what it is talking to (plan 13, T09).
         app.UseManagementApiVersion();
-
-        app.UseDefaultFiles();
-        app.UseStaticFiles();
 
         app.UseAuthentication();
         app.UseAuthorization();
@@ -434,11 +416,12 @@ public static class DbDataSyncHost
         app.MapControllers();
         app.MapHub<RunHub>("/hubs/run");
 
-        // Deep links are the SPA's routes, not this server's — /replications/x/mappings/y has to return the
-        // app. The exclusion is the load-bearing part: without it an unmatched /api route returns index.html
-        // with a 200, and the client parses HTML as JSON and reports something incomprehensible instead of a
-        // 404. Asserted in ApiFallbackTests rather than trusted to the routing table.
-        app.MapFallback(context =>
+        // This server no longer serves a web app (plan 13, U11): its screens are the console's. Any address that is not the API, a hub or a management call says so, and names the console when it was told where it is,
+        // so a person with an old bookmark is told what changed rather than shown a blank 404. An unmatched /api or /hubs path stays a plain 404, which is what a client of the API needs. The root answers 200 (a monitor
+        // that looks at `/` sees a live server); anything else is a 404 with the same words.
+        var consoleAddress = DbDataSync.Api.Management.ConsoleNotice.Address(app.Configuration[DbDataSync.Api.Management.ConsoleNotice.ConfigurationKey]);
+        // "{*path}", not the default pattern, which leaves out a path that looks like a file: an old bookmark of /docs/install.md is told too.
+        app.MapFallback("{*path}", context =>
         {
             var path = context.Request.Path.Value ?? "";
             if (path.StartsWith("/api", StringComparison.OrdinalIgnoreCase)
@@ -448,23 +431,11 @@ public static class DbDataSyncHost
                 return Task.CompletedTask;
             }
 
-            var index = Path.Combine(app.Environment.WebRootPath ?? "", "index.html");
-            if (!File.Exists(index))
-            {
-                // A published build always has one. Running the API straight out of the repo does not, and
-                // saying so beats a 404 that looks like a routing bug.
-                context.Response.StatusCode = StatusCodes.Status404NotFound;
-                return context.Response.WriteAsync(
-                    "No web assets are published with this build. Run the SPA's dev server, or publish the " +
-                    "API (which builds it into wwwroot).");
-            }
-
-            context.Response.ContentType = "text/html";
-            return context.Response.SendFileAsync(index);
+            context.Response.StatusCode = path is "" or "/" ? StatusCodes.Status200OK : StatusCodes.Status404NotFound;
+            context.Response.ContentType = "text/plain; charset=utf-8";
+            return context.Response.WriteAsync(DbDataSync.Api.Management.ConsoleNotice.Message(consoleAddress));
         })
-        // The app's own routes (/replications/x, /invite, /docs/...) are the SPA, which has to load before anyone has
-        // signed in — it is what draws the sign-in screen. Without this the fallback policy answers 401 with no body.
-        // Unmatched /api and /hubs paths still get the 404 above rather than the page, whoever asks.
+        // Said to anybody, signed in or not: it is the text a person with an old bookmark has to be able to read.
         .AllowAnonymous();
 
         return app;

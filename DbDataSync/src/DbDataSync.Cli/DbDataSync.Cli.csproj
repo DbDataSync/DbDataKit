@@ -119,46 +119,6 @@
   </ItemGroup>
 
   <!--
-    Phase 137: every released nupkg to date has shipped with an empty wwwroot. `dotnet pack`/`dotnet
-    publish` of THIS project never runs DbDataSync.Api.csproj's own BuildSpa target — that target only
-    fires when Api.csproj is published directly, which nothing in this repo's real release path does
-    (confirmed against the SDK's own Microsoft.NET.PackTool.targets, and by real dotnet pack/publish
-    runs). This mirrors the Dockerfile's own already-proven pattern instead: build the SPA once,
-    upstream (CI's own npm ci/npm run build step, ahead of `dotnet pack`), then copy the already-built
-    dist/ into place here — a copy step, not a build step, so an ordinary inner-loop `dotnet
-    build`/`dotnet test` with no dist/ present (and no npm available) is unaffected.
-  -->
-  <PropertyGroup>
-    <WebProjectDir>$(MSBuildProjectDirectory)/../../../DbDataKit/web</WebProjectDir>
-  </PropertyGroup>
-
-  <Target Name="CopyPrebuiltSpa" BeforeTargets="Publish" Condition="Exists('$(WebProjectDir)/sync/dist')">
-    <ItemGroup>
-      <_SpaDist Include="$(WebProjectDir)/sync/dist/**/*" />
-    </ItemGroup>
-    <Copy SourceFiles="@(_SpaDist)"
-          DestinationFiles="@(_SpaDist->'$(PublishDir)wwwroot/%(RecursiveDir)%(Filename)%(Extension)')" />
-  </Target>
-
-  <!--
-    Phase 160: the docs ship with the app so an operator — an offline one especially — can read the version they
-    are actually running instead of whatever GitHub's main says today. Same shape and same hook as CopyPrebuiltSpa
-    (and for the same reason: pack runs Publish, so this lands in the packed tool's wwwroot, which a build-time
-    copy elsewhere would not). Unconditional on dist/, because docs/ is source, not a build product; conditional
-    only on docs/ existing, which it does not in the Dockerfile's build stage — that stage copies docs/ itself.
-    All of docs/*.md ships, including development.md: other pages link to it.
-  -->
-  <PropertyGroup>
-    <DocsDir>$(MSBuildProjectDirectory)/../../docs</DocsDir>
-  </PropertyGroup>
-
-  <!--
-    Phase 162: the pictures the docs show. They are written `../screenshots/<folder>/<file>.png` — a path that works on GitHub
-    — and shipped at the same place relative to wwwroot/docs, so an embedded page needs no rewriting: `docs/images.txt` lists
-    them (one repo-relative path a line), a vitest test fails if it and the docs ever disagree, and only these ship rather than
-    the whole screenshots/ tree (test evidence, ~12 MB).
-  -->
-  <!--
     Phase 162: the README that ships in the package is a rewritten copy, not the repository's file. The repository's README
     (and every doc) is written with relative links, which GitHub renders and an offline checkout follows; nuget.org shows the
     README away from the repository, where those go nowhere. tools/docs/nuget-readme.mjs makes each one absolute and pins it to
@@ -183,20 +143,6 @@
       <None Remove="..\..\README.md" />
       <None Include="$(ReadmeForNuGet)" Pack="true" PackagePath="\" />
     </ItemGroup>
-  </Target>
-
-  <Target Name="CopyDocs" BeforeTargets="Publish" Condition="Exists('$(DocsDir)')">
-    <ReadLinesFromFile File="$(DocsDir)/images.txt" Condition="Exists('$(DocsDir)/images.txt')">
-      <Output TaskParameter="Lines" ItemName="_DocImageLine" />
-    </ReadLinesFromFile>
-    <ItemGroup>
-      <_Doc Include="$(DocsDir)/*.md" />
-      <_DocImage Include="$(DocsDir)/../%(_DocImageLine.Identity)" Condition="'%(_DocImageLine.Identity)' != ''">
-        <Dest>%(_DocImageLine.Identity)</Dest>
-      </_DocImage>
-    </ItemGroup>
-    <Copy SourceFiles="@(_Doc)" DestinationFolder="$(PublishDir)wwwroot/docs" />
-    <Copy SourceFiles="@(_DocImage)" DestinationFiles="@(_DocImage->'$(PublishDir)wwwroot/%(Dest)')" />
   </Target>
 
   <!--
