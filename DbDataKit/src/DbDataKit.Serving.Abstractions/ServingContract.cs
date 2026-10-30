@@ -117,7 +117,10 @@ public interface IServingCatalog
 
 /// <summary>What a client is told when it prepares a statement.</summary>
 /// <param name="ParameterCount">How many positional parameters the statement takes, by the source's own marker rules (<c>?</c>, <c>$1</c>). A statement with named markers reports none, because those are matched by the names the client sends.</param>
-public sealed record ServingStatementInfo(int ParameterCount);
+public sealed record ServingStatementInfo(int ParameterCount, IReadOnlyList<ServingParameterInfo>? Parameters = null);
+
+/// <summary>One parameter a prepared statement takes, for a source that knows more than a count (a semantic model): its name, the attribute it is for, its type (<c>string</c>, <c>integer</c>, <c>number</c>, <c>boolean</c>, or null) and whether it takes a list.</summary>
+public sealed record ServingParameterInfo(string Name, string? For, string? Type, bool Many);
 
 public interface IServingQueries
 {
