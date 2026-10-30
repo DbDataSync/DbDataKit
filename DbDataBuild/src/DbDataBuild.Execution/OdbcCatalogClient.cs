@@ -1,3 +1,4 @@
+using DbDataKit.Odbc.Metadata;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -238,7 +239,7 @@ internal sealed class OdbcNativeFunctions(string connectionString) : IOdbcCatalo
         SQLSetEnvAttr(env, 200, 3, 0);                                                             // SQL_ATTR_ODBC_VERSION = SQL_OV_ODBC3
         if (!Ok(SQLAllocHandle(HandleDbc, env, out var dbc))) throw new OdbcCatalogException("SQLAllocHandle", State(HandleEnv, env));
         SQLSetConnectAttr(dbc, 103, 30, 0);                                                        // SQL_ATTR_LOGIN_TIMEOUT
-        var ret = SQLDriverConnectW(dbc, 0, OdbcLogin.Normalize(connectionString), NullTerminated, 0, 0, out _, 0);   // SQL_DRIVER_NOPROMPT
+        var ret = SQLDriverConnectW(dbc, 0, OdbcConnectionString.Normalize(connectionString), NullTerminated, 0, 0, out _, 0);   // SQL_DRIVER_NOPROMPT
         if (!Ok(ret)) { var state = State(HandleDbc, dbc); SQLFreeHandle(HandleDbc, dbc); throw new OdbcCatalogException("SQLDriverConnect", state); }
         connection = dbc;
     }
