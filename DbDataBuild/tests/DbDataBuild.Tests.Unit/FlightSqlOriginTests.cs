@@ -1,3 +1,4 @@
+using DbDataKit.Connections.FlightSql;
 using System.Data;
 using System.Security.Authentication;
 using Apache.Arrow;
@@ -221,7 +222,7 @@ public class FlightSqlOriginTests
             ("ts", new TimestampArray.Builder(new TimestampType(TimeUnit.Microsecond, (string?)null)).Append(epoch).AppendNull().Build()),
             ("tstz", new TimestampArray.Builder(new TimestampType(TimeUnit.Microsecond, "UTC")).Append(epoch).AppendNull().Build()),
             ("time", new Time64Array.Builder(new Time64Type(TimeUnit.Microsecond)).Append(3_661_000_000L).AppendNull().Build()));
-        object? V(string name, int row) => ArrowConversions.Value(batch.Column(name), row);
+        object? V(string name, int row) => ArrowValueReader.Value(batch.Column(name), row);
 
         Assert.Equal(9_000_000_000L, V("i64", 0));
         Assert.Equal(-7, V("i32", 0));
@@ -249,10 +250,10 @@ public class FlightSqlOriginTests
         var dictionary = new StringArray.Builder().Append("red").Append("green").Build();
         var indices = new Int32Array.Builder().Append(1).Append(0).AppendNull().Build();
         var array = new DictionaryArray(new DictionaryType(Int32Type.Default, StringType.Default, false), indices, dictionary);
-        Assert.Equal(["green", "red", null], Enumerable.Range(0, 3).Select(i => ArrowConversions.Value(array, i)).ToArray());
+        Assert.Equal(["green", "red", null], Enumerable.Range(0, 3).Select(i => ArrowValueReader.Value(array, i)).ToArray());
 
         var list = new ListArray.Builder(Int32Type.Default).Append().Build();
-        var ex = Assert.Throws<ArrowTypeNotCarriedException>(() => ArrowConversions.Value(list, 0));
+        var ex = Assert.Throws<ArrowTypeNotCarriedException>(() => ArrowValueReader.Value(list, 0));
         Assert.Equal("list", ex.ArrowType);
         Assert.Contains("list", ex.Message);
     }
@@ -269,7 +270,7 @@ public class FlightSqlOriginTests
             ("b", new BinaryArray.Builder().Append(new byte[] { 9 }.AsSpan()).Build()),
             ("flag", new BooleanArray.Builder().Append(false).Build()),
             ("time", new Time32Array.Builder(new Time32Type(TimeUnit.Second)).Append(45).Build()));
-        object? Convert(string column, string type) => TransferValues.Convert(ArrowConversions.Value(batch.Column(column), 0), new TransferColumn(column, type));
+        object? Convert(string column, string type) => TransferValues.Convert(ArrowValueReader.Value(batch.Column(column), 0), new TransferColumn(column, type));
         Assert.Equal(41L, Convert("n", "BIGINT"));
         Assert.Equal(new DateOnly(2024, 2, 29), Convert("d", "DATE"));
         Assert.Equal(new DateTime(2024, 3, 5, 6, 7, 8), Convert("t", "TIMESTAMP"));
@@ -295,7 +296,7 @@ public class FlightSqlOriginTests
             new("n", new ListType(Int32Type.Default), true),
             new("o", new DictionaryType(Int32Type.Default, StringType.Default, false), true),
         }, null);
-        var columns = ArrowConversions.Columns(schema);
+        var columns = ArrowBinding.Columns(schema);
         Assert.Equal(["bigint", "integer", "smallint", "boolean", "double precision", "real", "decimal", "date", "timestamp", "timestamp with time zone", "character varying", "blob", "time", "list", "character varying"],
             columns.Select(c => c.Type).ToArray());
         Assert.Equal((18, 3), (columns[6].Precision, columns[6].Scale));
@@ -318,7 +319,7 @@ public class FlightSqlOriginTests
     [Fact]
     public void Parameters_are_one_row_of_arrow_values_in_the_order_the_plan_gives_and_a_name_used_twice_is_two_columns()
     {
-        var batch = ArrowConversions.ParameterBatch([
+        var batch = ArrowBinding.ParameterBatch([
             new GateParameter("p_region", DbType.String, "EU"),
             new GateParameter("watermark", DbType.DateTime2, new DateTime(2026, 3, 1, 4, 5, 6, DateTimeKind.Unspecified)),
             new GateParameter("p_region", DbType.String, "EU"),
@@ -334,7 +335,7 @@ public class FlightSqlOriginTests
         Assert.Equal((1, 11), (batch.Length, batch.ColumnCount));
         Assert.Equal(["StringType", "TimestampType", "StringType", "Date32Type", "Int64Type", "Int32Type", "StringType", "Int64Type", "Decimal128Type", "BooleanType", "DoubleType"],
             batch.Schema.FieldsList.Select(f => f.DataType.GetType().Name).ToArray());
-        var values = Enumerable.Range(0, 11).Select(i => ArrowConversions.Value(batch.Column(i), 0)).ToArray();
+        var values = Enumerable.Range(0, 11).Select(i => ArrowValueReader.Value(batch.Column(i), 0)).ToArray();
         Assert.Equal(["EU", new DateTime(2026, 3, 1, 4, 5, 6), "EU", new DateOnly(2026, 3, 1), 7L, 3, null, null, 12.340m, true, 0.5], values);
         Assert.Equal(3, ((Decimal128Type)batch.Schema.FieldsList[8].DataType).Scale);
     }
