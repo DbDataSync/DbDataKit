@@ -42,6 +42,23 @@ public sealed partial class QisEngine
         return rows.Select(r => r[Catalog.ColName(attribute)]?.ToString()).Where(v => v is not null).Select(v => v!).Distinct().Order().ToList();
     }
 
+    public const int MembersDefaultLimit = 100;
+    public const int MembersMaxLimit = 10_000;
+
+    /// <summary>
+    /// The distinct values of an attribute, to choose a parameter's value from (plan 19, J25): the catalog's list, or the dimension table the catalog names, or the values in the first source that binds it, read through the executor
+    /// (so through the caller's own access when the host runs the scans as the caller). <paramref name="search"/> keeps the members that contain it, in any case. Fails with <c>unknown_attribute</c> when the catalog has no such attribute.
+    /// </summary>
+    public (List<string> Members, bool Truncated, List<QisError>? Errors) Members(string attribute, string? search = null, int? limit = null)
+    {
+        if (!cat.Doc.Attributes.ContainsKey(attribute))
+            return ([], false, [Err("unknown_attribute", "$.attribute", $"The catalog has no attribute '{attribute}'.", "core")]);
+        var cap = Math.Clamp(limit ?? MembersDefaultLimit, 1, MembersMaxLimit);
+        var all = AttributeMembers(attribute);
+        var matching = string.IsNullOrWhiteSpace(search) ? all : all.Where(m => m.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
+        return (matching.Take(cap).ToList(), matching.Count > cap, null);
+    }
+
     // ---------- registration (table, bindings, value_map) ----------
 
     private Result RunRegistration(JsonObject doc)
