@@ -44,7 +44,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
 
         var explaining = false;
         if (isSql && text.TrimStart().StartsWith("EXPLAIN ", StringComparison.OrdinalIgnoreCase)) { explaining = true; text = text.TrimStart()[8..]; }
-        var document = isSql ? Translate(text, model, BoundParameters(request, text)) : Parse(text);
+        var document = isSql ? TranslateOrCall(text, model, BoundParameters(request, text)) : Parse(text);
         if (!isSql && document["kind"]?.GetValue<string>() == "explain" && document["query"] is JsonObject explained)
         {
             // {"kind":"explain","query":{...}} is the same request as a query, planned and not run
@@ -110,6 +110,19 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         var text = statement.Text.TrimStart();
         var isSql = !text.StartsWith('{');
         if (isSql && text.StartsWith("EXPLAIN ", StringComparison.OrdinalIgnoreCase)) text = text[8..];
+        if (isSql && SemanticSqlTranslator.TranslateCall(text, model.Catalog, null, describing: true) is (true, _, var called))
+        {
+            // a saved query called with markers: what it will be asked for is each marker, with what the saved query says of the parameter it fills
+            if (!called.Ok) throw new ServingInvalidException(string.Join("; ", called.Errors.Select(e => $"{e.Code}: {e.Message}")));
+            var fills = called.Request!["parameters"] as JsonObject ?? new JsonObject();
+            var definitions = called.Request["parameter_definitions"] as JsonObject ?? new JsonObject();
+            var asked = fills.Where(p => p.Value is JsonObject { Count: 1 } m && m["param"] is not null).Select(p =>
+            {
+                var d = definitions[p.Key] as JsonObject;
+                return new ServingParameterInfo(((JsonObject)p.Value!)["param"]!.GetValue<string>(), d?["for"]?.GetValue<string>(), d?["type"]?.GetValue<string>(), d?["many"]?.GetValue<bool>() ?? false);
+            }).ToList();
+            return Task.FromResult(new ServingStatementInfo(asked.Count, asked));
+        }
         var document = isSql ? Translate(text, model, null) : Parse(text);
         if (document["kind"]?.GetValue<string>() == "explain" && document["query"] is JsonObject query) document = new JsonObject { ["kind"] = "query", ["query"] = query.DeepClone(), ["parameter_definitions"] = document["parameter_definitions"]?.DeepClone() };
         var shapes = QueryParameters.Describe(document, model.Catalog);
@@ -181,6 +194,14 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         catch (Exception e) when (e is not OperationCanceledException) { return []; }
     }
 
+    /// <summary>The text as a call of a saved query of the model when it is one (J26), else as semantic SQL.</summary>
+    private static JsonObject TranslateOrCall(string sql, SemanticModel model, JsonObject? parameters)
+    {
+        var (isCall, _, call) = SemanticSqlTranslator.TranslateCall(sql, model.Catalog, parameters);
+        if (!isCall) return Translate(sql, model, parameters);
+        return call.Ok ? call.Request! : throw new ServingInvalidException(string.Join("; ", call.Errors.Select(e => $"{e.Code}: {e.Message}")));
+    }
+
     private static JsonObject Translate(string sql, SemanticModel model, JsonObject? parameters)
     {
         var translation = SemanticSqlTranslator.Translate(sql, model.Name, parameters);
@@ -212,6 +233,13 @@ internal sealed class SemanticCatalog(IServingCatalog inner, SemanticModels mode
         var doc = model.Catalog.Doc;
         var name = model.Name;
         yield return new ServingObject(ServingObjectKind.Model, [name]);
+        // the saved queries (J26): each is selected as SELECT * FROM <name>(arguments); the properties say how it is called
+        foreach (var (queryName, saved) in doc.Queries)
+        {
+            var properties = new Dictionary<string, string> { ["saved_query"] = "true", ["call"] = $"SELECT * FROM {queryName}({string.Join(", ", saved.Parameters.Select(p => p.Key))})" };
+            if (saved.Parameters.Count > 0) properties["parameters"] = saved.Parameters.ToJsonString();
+            yield return new ServingObject(ServingObjectKind.View, [name, queryName], saved.Description, Properties: properties);
+        }
         foreach (var (dimension, def) in doc.Dimensions)
         {
             yield return new ServingObject(ServingObjectKind.Dimension, [name, dimension], def.Label);

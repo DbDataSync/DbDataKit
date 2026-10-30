@@ -75,6 +75,41 @@ public sealed class AuthoredCatalogTests
         Assert.Single(result.Relationships);
     }
 
+    private const string SavedQueries = """
+        queries:
+          revenue_by_region:
+            description: Revenue by region
+            sql: SELECT customers.region, MEASURE(orders.revenue) FROM sales GROUP BY ALL LIMIT 100
+          revenue_for_region:
+            sql: SELECT customers.region, MEASURE(orders.revenue) FROM sales WHERE customers.region = :region GROUP BY ALL LIMIT 100
+            parameters:
+              region: {for: customers.region, type: string}
+        """;
+
+    [Fact]
+    public void Saved_queries_written_in_the_project_are_compiled_into_the_catalog_the_server_is_given()
+    {
+        var (result, problems) = Compile(Model + "\n" + SavedQueries);
+
+        Assert.Empty(problems);
+        Assert.Equal(["revenue_by_region", "revenue_for_region"], result!.Catalog.Doc.Queries.Keys.Order().ToArray());
+        Assert.Equal(["revenue_by_region", "revenue_for_region"], result.Json["queries"]!.AsObject().Select(q => q.Key).Order().ToArray());
+        // what the server loads is the same catalog, saved queries included
+        Assert.Equal(2, CatalogLoader.LoadText(result.Json.ToJsonString()).Doc.Queries.Count);
+    }
+
+    [Fact]
+    public void A_saved_query_that_does_not_translate_is_a_problem_naming_it()
+    {
+        var yaml = Model + "\nqueries:\n  broken:\n    sql: SELECT nonsense FROM\n";
+        var (read, problems) = Read(yaml);
+        Assert.NotNull(read);
+        var result = read.Compile(Standard, problems);
+
+        Assert.Null(result);
+        Assert.Equal(LineOf(yaml, "sql: SELECT nonsense"), Assert.Single(problems).Line);   // at the line of the saved query, as every other problem is
+    }
+
     [Fact]
     public void A_model_that_is_not_in_the_project_is_a_problem_at_the_line_that_names_it()
     {

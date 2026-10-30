@@ -227,6 +227,16 @@ public sealed class CalendarDef
     public CalendarDef? Base { get; set; }
 }
 
+/// <summary>A saved query (plan 19, J26): semantic SQL or a request, and what its parameters are.</summary>
+public sealed class SavedQueryDef
+{
+    public string? Description { get; set; }
+    public string? Sql { get; set; }
+    public JsonObject? Request { get; set; }
+    /// <summary>The parameters, by name, as <c>parameter_definitions</c> entries (for, type, many, default, required, empty).</summary>
+    public JsonObject Parameters { get; set; } = new();
+}
+
 public sealed class CatalogDoc
 {
     /// <summary>The business time zone (IANA): the zone in which a day, a month or a quarter of a datetime is read, unless a request names another.</summary>
@@ -235,6 +245,8 @@ public sealed class CatalogDoc
     public Dictionary<string, CalendarDef> Calendars { get; set; } = new();
     /// <summary>Named filters a query can name; their filters are added to the query's own (AND).</summary>
     public Dictionary<string, List<Filter>> Segments { get; set; } = new();
+    /// <summary>Saved queries, by name; the model offers each as a view or function.</summary>
+    public Dictionary<string, SavedQueryDef> Queries { get; set; } = new();
     /// <summary>Calendar shifts: for a unit (fiscal_year), each time dimension and the dimension holding its member one unit earlier.</summary>
     public Dictionary<string, Dictionary<string, string>> Shifts { get; set; } = new();
     public Dictionary<string, HierarchyDef> Hierarchies { get; set; } = new();
@@ -278,6 +290,7 @@ public sealed class Catalog
         Shifts = Doc.Shifts,
         Calendars = Doc.Calendars,
         Segments = Doc.Segments,
+        Queries = Doc.Queries,
         Timezone = Doc.Timezone,
     }, Source);
 
