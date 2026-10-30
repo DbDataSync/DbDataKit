@@ -21,6 +21,8 @@ The console's directory is `--repo`, or `DBDATAKIT_CONSOLE_DIR`, or a folder und
 ## First run
 
 With no user yet, the console writes an invitation to `FIRST-RUN.txt` and the log. Open `https://localhost:8480/invite#<code>` once and register a passkey: that person is the first administrator.
+**The state database** is SQLite (`state.db` in that directory) unless you name another engine: `--state-engine mssql|postgres --state-connection "<connection string>"` on `server run`, or `DBDATAKIT_CONSOLE_STATE_ENGINE` and `DBDATAKIT_CONSOLE_STATE_CONNECTION` (the commands that open it, such as `user invite`, read the variables too). The password belongs in a secret reference, not in the string: `Password=secret:state-db` (the console's own store: `dbdatakit secret set state-db`) or `Password=env:STATE_DB_PASSWORD`. The engine is chosen once; changing it starts an empty store. The console needs a database of its own: the Proxy's state database has tables of the same names.
+
 `dbdatakit user invite` prints a fresh invitation when that one has expired or scrolled away (it opens the state database directly, so it works when nobody can sign in).
 
 ## Servers

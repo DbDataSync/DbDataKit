@@ -36,7 +36,8 @@
     <DbDataKitReference Include="Hosting.Children" />
     <DbDataKitReference Include="Hosting.Cli" />
     <DbDataKitReference Include="Security.Acl" />
-    <DbDataKitReference Include="State" />   <!-- the proxy's state database; plan 13, P02 -->
+    <DbDataKitReference Include="State" />
+    <DbDataKitReference Include="State.Engines" />   <!-- SQLite, SQL Server or PostgreSQL for it, as the operator names; plan 13a, P11 -->   <!-- the proxy's state database; plan 13, P02 -->
     <DbDataKitReference Include="Web" />   <!-- the management API: pairing, tokens, roles; plan 13, P03 -->
     <DbDataKitReference Include="Config.Git" />   <!-- the configuration folder is a git repository; every change is a commit by the person who made it -->
     <DbDataKitReference Include="Hosting.Local" />   <!-- the local channel for the command line on this machine -->

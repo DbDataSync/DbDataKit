@@ -74,6 +74,19 @@ public sealed class ProxyOptions
 
     /// <summary>Semantic models served as sources named <c>semantic:&lt;model&gt;</c> (plan 19, J10). Read at start; a change needs a restart.</summary>
     public SemanticOptions Semantic { get; set; } = new();
+
+    /// <summary>Where the server keeps its state (notifications and what later slices add, such as saved queries). SQLite in the data directory unless an engine is named. Read at start; a change needs a restart.</summary>
+    public ProxyStateOptions State { get; set; } = new();
+}
+
+/// <summary>The state database's engine (plan 13a, P11).</summary>
+public sealed class ProxyStateOptions
+{
+    /// <summary><c>sqlite</c> (the default: <c>state.db</c> in the data directory), <c>mssql</c> or <c>postgres</c> (a database server you name in <see cref="ConnectionString"/>).</summary>
+    public string Engine { get; set; } = "sqlite";
+
+    /// <summary>For <c>mssql</c> and <c>postgres</c>: the connection string, with the password as a secret reference (<c>Password=secret:state-db</c>). The Proxy needs a database of its own; a console on the same server uses another.</summary>
+    public string ConnectionString { get; set; } = "";
 }
 
 /// <summary>The semantic models this server answers semantic requests and semantic SQL for. Their data is read through the data sources, as the signed-in client, so a client needs access to those.</summary>
