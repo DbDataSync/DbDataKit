@@ -99,6 +99,26 @@ public static class ArrowParameters
         return new RecordBatch(new Schema(fields, null), arrays, 1);
     }
 
+    /// <summary>A list parameter (a semantic model's filter values): an Arrow list of one value type, taken from the first element (strings, whole numbers, numbers or booleans).</summary>
+    private static (IArrowType, IArrowArray) BuildList(System.Collections.IEnumerable list)
+    {
+        var items = list.Cast<object?>().ToList();
+        var (itemType, _) = items.Count > 0 ? Build(items.First(i => i is not null) ?? "") : (StringType.Default, null);
+        var field = new Field("item", itemType, true);
+        var type = new ListType(field);
+        IArrowArray values = itemType switch
+        {
+            Int64Type => new Int64Array.Builder().AppendRange(items.Select(i => Convert.ToInt64(i, CultureInfo.InvariantCulture))).Build(),
+            DoubleType => new DoubleArray.Builder().AppendRange(items.Select(i => Convert.ToDouble(i, CultureInfo.InvariantCulture))).Build(),
+            BooleanType => new BooleanArray.Builder().AppendRange(items.Select(i => Convert.ToBoolean(i, CultureInfo.InvariantCulture))).Build(),
+            StringType => new StringArray.Builder().AppendRange(items.Select(i => Convert.ToString(i, CultureInfo.InvariantCulture) ?? "")).Build(),
+            _ => throw new UnsupportedValueException($"Cannot send a list of {itemType.Name} as a statement parameter."),
+        };
+        var offsets = new ArrowBuffer.Builder<int>().Append(0).Append(items.Count).Build();
+        var data = new ArrayData(type, 1, 0, 0, [ArrowBuffer.Empty, offsets], [values.Data]);
+        return (type, new ListArray(data));
+    }
+
     private static (IArrowType, IArrowArray) Build(object? value)
     {
         switch (value)
@@ -141,6 +161,8 @@ public static class ArrowParameters
                 return (BinaryType.Default, new BinaryArray.Builder().Append((ReadOnlySpan<byte>)bytes).Build());
             case Guid g:
                 return (StringType.Default, new StringArray.Builder().Append(g.ToString()).Build());
+            case System.Collections.IEnumerable list:
+                return BuildList(list);
             default:
                 throw new UnsupportedValueException($"Cannot send a {value.GetType().Name} as a statement parameter.");
         }

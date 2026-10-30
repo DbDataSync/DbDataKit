@@ -29,7 +29,7 @@ public sealed partial class ServingFlightServer
         {
             PreparedStatementHandle = ByteString.CopyFrom(handle),
             DatasetSchema = ByteString.CopyFrom(emptySchema),
-            ParameterSchema = ByteString.CopyFrom(SchemaExtensions.SerializeSchema(ParameterSchemaFor(info.ParameterCount))),
+            ParameterSchema = ByteString.CopyFrom(SchemaExtensions.SerializeSchema(info.Parameters is { Count: > 0 } described ? ParameterSchemaFor(described) : ParameterSchemaFor(info.ParameterCount))),
         };
         await output.WriteAsync(new FlightResult(Any.Pack(result).ToByteString())).ConfigureAwait(false);
     }
@@ -40,6 +40,26 @@ public sealed partial class ServingFlightServer
     /// </summary>
     internal static Schema ParameterSchemaFor(int count) =>
         new(Enumerable.Range(0, count).Select(i => new Apache.Arrow.Field("parameter_" + i, Apache.Arrow.Types.NullType.Default, true)).ToList(), null);
+
+    /// <summary>
+    /// For a source that describes its parameters (a semantic model): one field per parameter, named by it, typed (a list as an Arrow list), with the attribute it is for in the field's metadata as <c>qis.for</c>.
+    /// A parameter whose type is not known is Arrow Null ("any").
+    /// </summary>
+    internal static Schema ParameterSchemaFor(IReadOnlyList<ServingParameterInfo> parameters) =>
+        new(parameters.Select(p =>
+        {
+            Apache.Arrow.Types.IArrowType type = p.Type switch
+            {
+                "integer" => Apache.Arrow.Types.Int64Type.Default,
+                "number" => Apache.Arrow.Types.DoubleType.Default,
+                "boolean" => Apache.Arrow.Types.BooleanType.Default,
+                "string" => Apache.Arrow.Types.StringType.Default,
+                _ => Apache.Arrow.Types.NullType.Default,
+            };
+            if (p.Many) type = new Apache.Arrow.Types.ListType(new Apache.Arrow.Field("item", type, true));
+            var metadata = p.For is null ? null : new Dictionary<string, string> { ["qis.for"] = p.For };
+            return new Apache.Arrow.Field(p.Name, type, true, metadata);
+        }).ToList(), null);
 
     protected override Task ClosePreparedStatement(ActionClosePreparedStatementRequest request, FlightAction action, IAsyncStreamWriter<FlightResult> output, ServerCallContext context)
     {

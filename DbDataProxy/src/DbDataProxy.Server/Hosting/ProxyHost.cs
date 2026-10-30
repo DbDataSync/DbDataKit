@@ -168,6 +168,8 @@ public static class ProxyHost
             var current = sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue;
             var log = sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Semantic");
             var loaded = SemanticModelsLoader.Load(current, ResolveDataDirectory(current), sp.GetRequiredService<SecretsRuntime>(), problem => log.LogWarning("{Problem}", problem));
+            // the saved queries people keep for themselves (J27) are looked up in the state database
+            loaded.UserQueries = sp.GetRequiredService<DbDataProxy.Server.State.SavedQueryStore>();
             // a changed server.yaml is applied to the models without a restart; the first pass only learns which names the file gives
             var directory = ResolveDataDirectory(current);
             var configured = SemanticModelsLoader.Reload(loaded, current, directory, new HashSet<string>(), _ => { });
@@ -234,8 +236,10 @@ public static class ProxyHost
         string dataDirectory = ResolveDataDirectory(options);
         var holder = new TlsCertificateHolder();
         builder.Services.AddSingleton(holder);
-        builder.Services.AddSingleton(_ => DbDataProxy.Server.State.ProxyState.Open(dataDirectory));
+        builder.Services.AddSingleton(sp => DbDataProxy.Server.State.ProxyState.Open(dataDirectory, new DbDataKit.State.StateSettings(options.State.Engine, options.State.ConnectionString),
+            text => sp.GetRequiredService<SecretsRuntime>().ResolveConnectionString("Proxy:State:ConnectionString", text, "state")));
         builder.Services.AddSingleton(sp => new DbDataKit.State.NotificationStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
+        builder.Services.AddSingleton(sp => new DbDataProxy.Server.State.SavedQueryStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
         builder.Services.AddSingleton<ProxyEvents>();
         builder.Services.AddHostedService<DbDataProxy.Server.State.ProxyStateStartup>();
         builder.Services.AddSingleton<IReadinessProbe>(new CertificateReadinessProbe(() => holder.Current, CertificateProvider.RenewBeforeDays));

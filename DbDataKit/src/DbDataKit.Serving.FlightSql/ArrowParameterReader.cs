@@ -15,6 +15,27 @@ public static class ArrowParameterReader
         return parameters;
     }
 
+    private static string ListAsJson(string name, ListArray list, int row)
+    {
+        var start = list.ValueOffsets[row];
+        var end = list.ValueOffsets[row + 1];
+        var elements = new System.Text.Json.Nodes.JsonArray();
+        for (int i = start; i < end; i++)
+        {
+            var element = Read(name, list.Values, i);
+            elements.Add(element.Type switch
+            {
+                "null" => null,
+                "bool" => System.Text.Json.Nodes.JsonValue.Create(string.Equals(element.Text, "true", StringComparison.OrdinalIgnoreCase)),
+                "int64" => System.Text.Json.Nodes.JsonValue.Create(long.Parse(element.Text!, CultureInfo.InvariantCulture)),
+                "double" => System.Text.Json.Nodes.JsonValue.Create(double.Parse(element.Text!, CultureInfo.InvariantCulture)),
+                "decimal" => System.Text.Json.Nodes.JsonValue.Create(decimal.Parse(element.Text!, CultureInfo.InvariantCulture)),
+                _ => System.Text.Json.Nodes.JsonValue.Create(element.Text),
+            });
+        }
+        return elements.ToJsonString();
+    }
+
     private static ServingParameter Read(string name, IArrowArray array, int row)
     {
         var inv = CultureInfo.InvariantCulture;
@@ -41,6 +62,8 @@ public static class ArrowParameterReader
             Time32Array a => new(name, "time", TimeSpan.FromTicks(a.GetTime(row)!.Value.Ticks).ToString("c", inv)),
             Time64Array a => new(name, "time", TimeSpan.FromTicks(a.GetTime(row)!.Value.Ticks).ToString("c", inv)),
             BinaryArray a => new(name, "binary", Convert.ToBase64String(a.GetBytes(row))),
+            // a list parameter (a semantic model's): its elements as a JSON array
+            ListArray a => new(name, "list", ListAsJson(name, a, row)),
             _ => throw new ServingInvalidException($"Parameter '{name}' has Arrow type {array.Data.DataType.Name}, which is not supported."),
         };
     }

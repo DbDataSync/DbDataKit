@@ -95,6 +95,92 @@ public sealed class SemanticFlightTests : IAsyncLifetime
         Assert.Equal("complete", schema.Metadata["qis.status"]);
     }
 
+    private const string Marked = "SELECT customers.region, MEASURE(orders.net_revenue), MEASURE(orders.order_count) FROM sales_catalog WHERE date.fiscal_quarter = {0} GROUP BY ALL ORDER BY MEASURE(orders.net_revenue) DESC LIMIT 100";
+
+    private async Task<List<string>> BoundAsync(string sql, object values)
+    {
+        using var client = new ProxyFlightClient(_address);
+        await client.AuthenticateAsync("alice", "pw");
+        var options = new QueryOptions { DataSource = "semantic:sales_catalog" };
+        var result = values switch
+        {
+            IReadOnlyDictionary<string, object?> named => await client.QueryAsync(sql, named, options),
+            IReadOnlyList<object?> positional => await client.QueryAsync(sql, positional, options),
+            _ => throw new ArgumentException("named or positional"),
+        };
+        var rows = new List<string>();
+        await foreach (var batch in result)
+            for (int r = 0; r < batch.Length; r++)
+                rows.Add(string.Join("|", Enumerable.Range(0, batch.ColumnCount).Select(c => batch.Column(c) switch
+                {
+                    StringArray a => a.GetString(r),
+                    Int64Array a => a.GetValue(r)!.Value.ToString(),
+                    DoubleArray a => a.GetValue(r)!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture),
+                    var other => other.GetType().Name,
+                })));
+        return rows;
+    }
+
+    [Fact]
+    public async Task APreparedStatementOnAModelBindsNamedAndPositionalValuesAndAnswersTheLiteralRows()
+    {
+        var (_, expected) = await QueryAsync("alice", string.Format(Marked, "'FY27-Q1'"));
+
+        Assert.Equal(expected, await BoundAsync(string.Format(Marked, ":quarter"), new Dictionary<string, object?> { ["quarter"] = "FY27-Q1" }));
+        Assert.Equal(expected, await BoundAsync(string.Format(Marked, "?"), new List<object?> { "FY27-Q1" }));
+    }
+
+    [Fact]
+    public async Task APreparedStatementOnAModelReportsItsParametersWithTheAttributeEachIsFor()
+    {
+        using var client = new ProxyFlightClient(_address);
+        await client.AuthenticateAsync("alice", "pw");
+        var schema = await client.DescribeParametersAsync(
+            "SELECT customers.region, MEASURE(orders.net_revenue) FROM sales_catalog WHERE date.fiscal_quarter = :quarter AND customers.region IN :regions GROUP BY ALL LIMIT $top",
+            new QueryOptions { DataSource = "semantic:sales_catalog" });
+
+        Assert.Equal(["quarter", "regions", "top"], schema.FieldsList.Select(f => f.Name));
+        Assert.Equal("date.fiscal_quarter", schema.GetFieldByName("quarter").Metadata["qis.for"]);
+        Assert.IsType<Apache.Arrow.Types.StringType>(schema.GetFieldByName("quarter").DataType);
+        Assert.IsType<Apache.Arrow.Types.ListType>(schema.GetFieldByName("regions").DataType);
+        Assert.IsType<Apache.Arrow.Types.Int64Type>(schema.GetFieldByName("top").DataType);
+    }
+
+    [Fact]
+    public async Task AListValueBindsToAListParameter()
+    {
+        var literal = "SELECT customers.region, MEASURE(orders.net_revenue) FROM sales_catalog WHERE customers.region IN ('East', 'West') GROUP BY ALL LIMIT 100";
+        var (_, expected) = await QueryAsync("alice", literal);
+
+        var bound = await BoundAsync(literal.Replace("('East', 'West')", ":regions"), new Dictionary<string, object?> { ["regions"] = new[] { "East", "West" } });
+
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected, bound);
+    }
+
+    [Fact]
+    public async Task APersonsOwnSavedQueryIsCalledLikeAViewAndSharingItSharesNoData()
+    {
+        var store = _app!.Services.GetRequiredService<DbDataProxy.Server.State.SavedQueryStore>();
+        store.Save("alice", "sales_catalog", "my_revenue", new DbDataKit.Semantic.SavedQueryDef
+        {
+            Sql = "SELECT customers.region, MEASURE(orders.net_revenue) FROM sales_catalog WHERE date.fiscal_quarter = :quarter GROUP BY ALL LIMIT 100",
+            Parameters = System.Text.Json.Nodes.JsonNode.Parse("""{"quarter": {"for": "date.fiscal_quarter", "type": "string", "default": "FY27-Q1"}}""")!.AsObject(),
+        }, "alice");
+
+        var (_, expected) = await QueryAsync("alice", "SELECT customers.region, MEASURE(orders.net_revenue) FROM sales_catalog WHERE date.fiscal_quarter = 'FY27-Q1' GROUP BY ALL LIMIT 100");
+        var (_, called) = await QueryAsync("alice", "SELECT * FROM my_revenue");
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected, called);
+
+        // not shared: bob has no such saved query; shared: he can call it, but the data is still the data he may read, which is none here
+        var unknown = await Rpc.ExpectAsync(() => QueryAsync("bob", "SELECT * FROM my_revenue"));
+        Assert.Equal(StatusCode.InvalidArgument, unknown.StatusCode);   // to him there is no such view
+        store.Share("alice", "sales_catalog", "my_revenue", "user:bob");
+        var shared = await Rpc.ExpectAsync(() => QueryAsync("bob", "SELECT * FROM my_revenue"));
+        Assert.Equal(StatusCode.PermissionDenied, shared.StatusCode);
+    }
+
     [Fact]
     public async Task SemanticSqlAnswersWithTheSameRows()
     {

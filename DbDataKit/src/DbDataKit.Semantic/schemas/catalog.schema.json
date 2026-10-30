@@ -184,6 +184,80 @@
         }
       }
     },
+    "queries": {
+      "description": "Saved queries (plan 19, J26): a named semantic query the model offers as a view (no required parameter) or a function (parameters), run as the caller. Exactly one of sql and request.",
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "sql"
+            ]
+          },
+          {
+            "required": [
+              "request"
+            ]
+          }
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "sql": {
+            "description": "Semantic SQL on this model; its markers are the query's parameters.",
+            "type": "string",
+            "minLength": 1
+          },
+          "request": {
+            "description": "A semantic request of kind query; {\"param\": name} nodes are the query's parameters.",
+            "type": "object"
+          },
+          "parameters": {
+            "description": "What each parameter is: for (an attribute), type, many, default, required, empty. A positional marker is named 1, 2, ....",
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "for": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "string",
+                    "integer",
+                    "number",
+                    "boolean"
+                  ]
+                },
+                "many": {
+                  "type": "boolean"
+                },
+                "default": {},
+                "required": {
+                  "type": "boolean"
+                },
+                "empty": {
+                  "enum": [
+                    "matches_none"
+                  ]
+                },
+                "description": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "segments": {
       "type": "object",
       "propertyNames": {
