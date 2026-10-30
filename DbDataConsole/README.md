@@ -7,6 +7,10 @@ It is a separate host from the servers: a server runs without it, and it is not 
 dbdatakit server run [--repo <console directory>] [--listen https://localhost:8480]
 dbdatakit user list [--repo <console directory>]
 dbdatakit user invite [--role admin|viewer] [--user <id>] [--url <address>]
+dbdatakit instance add <https address> --code <code> [--name <label>] [--repo <console directory>]
+dbdatakit instance list [--offline] [--repo <console directory>]
+dbdatakit instance remove <id or name> [--repo <console directory>]
+dbdatakit instance rotate-key [--repo <console directory>]
 dbdatakit service install|uninstall|status|start|stop|restart|doctor|unit
 dbdatakit health check [--url <url>]
 ```
@@ -18,6 +22,12 @@ The console's directory is `--repo`, or `DBDATAKIT_CONSOLE_DIR`, or a folder und
 
 With no user yet, the console writes an invitation to `FIRST-RUN.txt` and the log. Open `https://localhost:8480/invite#<code>` once and register a passkey: that person is the first administrator.
 `dbdatakit user invite` prints a fresh invitation when that one has expired or scrolled away (it opens the state database directly, so it works when nobody can sign in).
+
+## Servers
+
+`dbdatakit instance add` pairs the console with a server (Sync, Proxy, Build or Store) using the single-use code that server's administrator made with `<program> server pair`; the server's certificate is pinned and the pairing is recorded in `instances.yaml`
+in the console's directory. `instance list` shows each server with its product, version and whether it answers, `instance remove` forgets one (it keeps listing the console until `server unpair` is run there) and `instance rotate-key` moves every server to a new signing key.
+In the web app, `/instances` lists them and `/servers/<id>/...` opens a server's own screens (Sync's replications and configuration so far), whose calls the console relays at `/relay/<server>/api/...` and `/relay/<server>/hubs/...`.
 
 ## What is served
 
