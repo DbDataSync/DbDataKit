@@ -4,6 +4,7 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\DbDataKit.Connections.DuckDb\DbDataKit.Connections.DuckDb.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Dialect\DbDataKit.Dialect.csproj" />
   </ItemGroup>
   <Import Project="..\..\build\DuckDb.Native.targets" />
 </Project>

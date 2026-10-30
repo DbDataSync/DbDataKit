@@ -29,7 +29,7 @@ jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataConsole/|DbDataKit/|DbDataBuild/|DbDataSync/|DbDataProxy/|dist/compose/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataconsole-|_)|actions/setup-product))'
+      paths: '^(DbDataConsole/|DbDataKit/|DbDataBuild/|DbDataSync/|DbDataProxy/|DbDataStore/|dist/compose/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataconsole-|_)|actions/setup-product))'
 
   # The host, its sign-in and its command line run on both systems; the Windows service registration is only exercised here against fakes.
   test:
@@ -51,12 +51,12 @@ jobs:
       - run: dotnet test --project tests/DbDataConsole.Tests -c Release --no-build --minimum-expected-tests 10
 
   # The web app in a real browser against a real console: the first-run invitation, a passkey made in a virtual authenticator, signing out and back in with it, the users list,
-  # and pairing a real Build server.
+  # pairing a real Build server, and (M12) the Monitoring page across a Build server that runs a failing schedule, a Sync replication that lags and a Proxy that locked a user out.
   playwright:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     # A PostgreSQL for the deploy the browser test approves in the console.
     services:
       postgres:
@@ -157,5 +157,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build server and console
         run: dist/compose/check.sh dist/compose/build.yml dbdatabuild
+      - name: Store server and console
+        run: dist/compose/check.sh dist/compose/store.yml dbdatastore
       - name: Proxy and console
         run: dist/compose/check.sh dist/compose/proxy.yml dbdataproxy

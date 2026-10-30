@@ -1,6 +1,7 @@
 using DbDataBuild.Core;
 using DbDataBuild.Models;
 using DbDataBuild.Sql.Analysis;
+using DbDataBuild.Targets.DuckDb;
 using DbDataBuild.Sql.Matrix;
 using DbDataBuild.Targets.Rendering;
 
@@ -29,6 +30,8 @@ internal sealed class ProjectContext
         var project = ProjectValidator.Validate(root);
         diags.AddRange(project.Diagnostics);
         var config = ProjectConfigLoader.LoadFromProject(root, diags);
+        var owners = project.BuiltModels.Where(m => m.Definition.Keys.Count > 0).Select(m => (m.Definition, m.DefinitionFile)).ToList();
+        if (owners.Count > 0) diags.AddRange(MacroLibrary.KeysNamedLikeBuiltIns(owners, QueryDescriber.BuiltInFunctionNames()));
 
         var matrixDiags = new List<Diagnostic>();
         var matrix = MatrixLoader.LoadEmbedded(matrixDiags);
