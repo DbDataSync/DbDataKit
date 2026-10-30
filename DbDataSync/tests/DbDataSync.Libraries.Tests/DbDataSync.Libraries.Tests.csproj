@@ -26,6 +26,7 @@
   <ItemGroup>
     <!-- Where the test engines are (DBDATASYNC_TEST_* variables); see its doc comment. -->
     <Compile Include="..\Shared\TestEngines.cs" Link="Shared\TestEngines.cs" />
+    <Compile Include="..\Shared\LocalPackageFeed.cs" Link="Shared\LocalPackageFeed.cs" />
   </ItemGroup>
 
 </Project>

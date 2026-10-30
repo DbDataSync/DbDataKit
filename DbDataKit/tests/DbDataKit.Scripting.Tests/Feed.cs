@@ -63,5 +63,12 @@ public sealed class Feed : IDisposable
         HostProvides = hostProvides ?? (_ => false),
     };
 
+    /// <summary>Options with another package store (a second machine's cache) over this feed.</summary>
+    public static PackageResolverOptions OptionsFor(Feed feed, PackageStore store, LockFile lockFile)
+    {
+        var o = feed.Options(lockFile: lockFile);
+        return new PackageResolverOptions { Store = store, Sources = o.Sources, Lock = lockFile, Rids = o.Rids };
+    }
+
     public void Dispose() { try { System.IO.Directory.Delete(Root, true); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
 }

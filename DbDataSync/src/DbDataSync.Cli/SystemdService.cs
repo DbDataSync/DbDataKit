@@ -98,7 +98,7 @@ internal static class SystemdService
         }
 
         var root = Path.GetFullPath(CliOptions.Read(args, "--repo") ?? CliOptions.DefaultRoot);
-        // Explicit vs. defaulted matters: an explicit --url is written into dbdatasync.config.yaml
+        // Explicit vs. defaulted matters: an explicit --url is written into server.yaml
         // (below) so it survives every future restart; a defaulted one is never written, or a bare
         // re-run to change --user would stomp whatever App:Url the operator has since configured
         // through the Admin screen.
@@ -174,7 +174,7 @@ internal static class SystemdService
         {
             DbDataSyncConfigFile.SetValue(root, "DbDataSync:App", "Url", explicitUrl);
             new GitCommitService(root).CommitChanges(
-                [DbDataSyncConfigFile.PathIn(root)], "Set 'DbDataSync:App:Url' in dbdatasync.config.yaml", CurrentUser.SystemAuthor);
+                [DbDataSyncConfigFile.PathIn(root)], "Set 'DbDataSync:App:Url' in server.yaml", CurrentUser.SystemAuthor);
         }
 
         if (CliOptions.Has(args, "--self-update"))
@@ -250,7 +250,7 @@ internal static class SystemdService
     /// </param>
     internal static string RenderUnit(string executable, string root, string user, string? dotnetRoot = null)
     {
-        // No --url baked in: serve already resolves DbDataSync:App:Url from dbdatasync.config.yaml
+        // No --url baked in: serve already resolves DbDataSync:App:Url from server.yaml
         // (flag > env var > file), so baking one in here would win over that file forever — an
         // operator editing Url through the Admin screen would see it silently ignored on every
         // restart. An explicit --url given to `service install` is written into the file itself

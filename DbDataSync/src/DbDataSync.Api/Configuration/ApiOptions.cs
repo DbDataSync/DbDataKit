@@ -14,7 +14,7 @@ public enum UpdatesMode { Disabled, Manual }
 public enum NotesRenderer { Basic, Rich }
 
 /// <summary>
-/// Deployment-specific paths, read from the "DbDataSync" configuration section (appsettings.json,
+/// Deployment-specific paths, read from the "DbDataSync" configuration section (server.yaml,
 /// environment variables, etc). RepoRoot/StateDbPath default to a local dev-friendly location so
 /// "just run the API" works out of the box; TaskRunnerDllPath defaults to the sibling
 /// DbDataSync.TaskRunner build output next to this project's own build output, which only holds for

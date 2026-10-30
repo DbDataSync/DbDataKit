@@ -86,8 +86,8 @@ public static class SyncCli
         new Noun("config", "The server's own configuration",
         [
             Forward("check", "Readiness check: repository, state store, libraries and drivers, auth, binding, first admin", EffectClass.OfflineOnly, "[--repo <path>]", a => ConfigCommand.RunAsync(["check", .. a])),
-            Forward("get", "One setting of dbdatasync.config.yaml", EffectClass.OfflineOnly, "<key> [--repo <path>]", a => ConfigCommand.RunAsync(["get", .. a])),
-            Forward("set", "Change one setting of dbdatasync.config.yaml", EffectClass.RepoFilesOnly, "<key> <value> [--repo <path>]", a => ConfigCommand.RunAsync(["set", .. a])),
+            Forward("get", "One setting of server.yaml", EffectClass.OfflineOnly, "<key> [--repo <path>]", a => ConfigCommand.RunAsync(["get", .. a])),
+            Forward("set", "Change one setting of server.yaml", EffectClass.RepoFilesOnly, "<key> <value> [--repo <path>]", a => ConfigCommand.RunAsync(["set", .. a])),
         ]),
         new Noun("health", "Is a running server answering",
         [

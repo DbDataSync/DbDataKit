@@ -7,7 +7,7 @@ dbdatasync cert use-pem --cert /path/fullchain.pem --key /path/privkey.pem
 dbdatasync cert use-pfx --pfx /path/server.pfx
 ```
 
-Each writes `Kestrel:Certificates:Default:Path` (and `KeyPath` for PEM) into `dbdatasync.config.yaml`, which Kestrel
+Each writes `Kestrel:Certificates:Default:Path` (and `KeyPath` for PEM) into `server.yaml`, which Kestrel
 reads directly. Add `--repo <path>` if you are not in the configuration directory.
 
 Limits:

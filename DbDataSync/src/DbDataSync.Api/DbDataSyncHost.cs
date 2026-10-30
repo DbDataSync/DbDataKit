@@ -44,7 +44,13 @@ public static class DbDataSyncHost
     public static WebApplication Build(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
+        // Plan 13, E04: the settings are server.yaml (and the environment and the command line over it), nothing else. The host adds appsettings.json and
+        // appsettings.<environment>.json by default; they are removed, and one an earlier release left behind is refused by name.
+        foreach (var json in builder.Configuration.Sources.OfType<Microsoft.Extensions.Configuration.Json.JsonConfigurationSource>().ToList())
+            builder.Configuration.Sources.Remove(json);
+        RefuseLegacySettings(builder);
         InsertConfigFile(builder);
+        builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
 
         // Applied only when this process really is a service, so `dbdatasync server run` in a terminal is
         // unaffected — UseWindowsService changes lifetime and logging, and doing that to an
@@ -119,7 +125,7 @@ public static class DbDataSyncHost
         // One GitCommitService per process, not one per consumer — its own doc comment explains why:
         // the in-process write lock that makes concurrent commits safe only holds if every writer to
         // this repo root shares the same instance. Phase 81 added a second writer (AdminConfigService,
-        // for dbdatasync.config.yaml) alongside ConfigRepository, which is what made this worth pulling
+        // for server.yaml) alongside ConfigRepository, which is what made this worth pulling
         // out of ConfigRepository's own registration rather than each constructing its own.
         builder.Services.AddSingleton(sp => new GitCommitService(sp.GetRequiredService<ApiOptions>().RepoRoot));
         builder.Services.AddSingleton(sp =>
@@ -442,6 +448,17 @@ public static class DbDataSyncHost
     }
 
     /// <summary>
+    /// Stops the host, naming the file, when the repository root (or the executable's folder) holds a settings file of an earlier release.
+    /// <c>dbdatasync server run</c> checks first and prints the same message; this is the guard for the API's own entry point.
+    /// </summary>
+    private static void RefuseLegacySettings(WebApplicationBuilder builder)
+    {
+        var repoRoot = builder.Configuration["DbDataSync:App:RepoRoot"] ?? Path.Combine(Directory.GetCurrentDirectory(), "dbdatasync-repo");
+        if (LegacyHostSettings.Refusal(repoRoot, AppContext.BaseDirectory) is { } refusal)
+            throw new InvalidOperationException(refusal);
+    }
+
+    /// <summary>
     /// HTTP.sys never reads <c>Kestrel:Certificates:*</c> — a certificate is bound to the port in the
     /// operating system (<c>netsh http add sslcert</c>). Said at startup because the failure is
     /// otherwise silent: the config looks right, the service starts, and https just is not there.
@@ -470,8 +487,8 @@ public static class DbDataSyncHost
         new[] { configuration["urls"], configuration["ASPNETCORE_URLS"], options.Url }.Where(u => !string.IsNullOrWhiteSpace(u))!;
 
     /// <summary>
-    /// Wires <c>dbdatasync.config.yaml</c> in as an <see cref="IConfigurationSource"/> at the same
-    /// precedence slot <c>appsettings.json</c> occupies — ahead of environment variables and the
+    /// Wires <c>server.yaml</c> in as an <see cref="IConfigurationSource"/> at the same
+    /// precedence slot <c>appsettings.json</c> used to occupy — ahead of environment variables and the
     /// command line, both of which must still be able to override a file value for a one-off run.
     /// <para>
     /// **Inserted, not appended.** <c>builder.Configuration.Sources</c> already holds
@@ -481,7 +498,7 @@ public static class DbDataSyncHost
     /// making it win over an env var or CLI flag, which is backwards: the whole point of the file is
     /// to hold a default that a one-off <c>--DbDataSync:App:Url</c> or <c>DbDataSync__App__Url</c> can still
     /// override. Finding the first <see cref="EnvironmentVariablesConfigurationSource"/> and inserting
-    /// there reproduces appsettings.json's own slot instead.
+    /// there keeps the slot appsettings.json had instead.
     /// </para>
     /// <para>
     /// The repo root is read straight off <c>builder.Configuration</c> rather than through

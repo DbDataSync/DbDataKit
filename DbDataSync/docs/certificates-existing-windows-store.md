@@ -11,7 +11,7 @@ dbdatasync cert bind --thumbprint <thumbprint>
 `list` shows the server-authentication certificates in the store (`--location CurrentUser` to look in the user store
 instead). A certificate without the server-authentication usage cannot serve TLS and is not listed.
 
-`bind` writes four keys into `dbdatasync.config.yaml`, committed like any other config change:
+`bind` writes four keys into `server.yaml`, committed like any other config change:
 
 | key | value |
 | --- | --- |

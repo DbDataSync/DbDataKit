@@ -4,10 +4,11 @@ using YamlDotNet.Serialization;
 namespace DbDataSync.Core.Config;
 
 /// <summary>
-/// Reads and writes <c>&lt;RepoRoot&gt;/dbdatasync.config.yaml</c> — phase 79's git-tracked,
-/// human-editable home for the <c>DbDataSync:*</c> settings docs/configuration.md documents (<c>Url</c>,
-/// <c>StateEngine</c>, <c>StateConnectionString</c>, ...), the same shape a CLI flag or
-/// <c>DbDataSync__Key</c> environment variable already sets.
+/// Reads and writes <c>&lt;RepoRoot&gt;/server.yaml</c> — the git-tracked, human-editable home for the
+/// <c>DbDataSync:*</c> settings docs/configuration.md documents (<c>App:Url</c>, <c>State:Engine</c>, ...), the same
+/// shape a CLI flag or <c>DbDataSync__Key</c> environment variable sets (plan 13, E04). It is the file every
+/// DbData server keeps its own settings in; the server's identity (<c>instanceId</c>) and the clients paired with it
+/// (<c>pairedClients</c>) share it and are not settings, so <see cref="Read"/> leaves them out.
 /// <para>
 /// Deliberately a sibling of <see cref="ConfigRepository"/>, not a method on it: this file lives at
 /// the repo root, not under <c>config/</c>, and every command that needs it (<c>serve</c>,
@@ -17,7 +18,10 @@ namespace DbDataSync.Core.Config;
 /// </summary>
 public static class DbDataSyncConfigFile
 {
-    public const string FileName = "dbdatasync.config.yaml";
+    public const string FileName = "server.yaml";
+
+    /// <summary>Keys of <c>server.yaml</c> that other code owns (the server's identity and its paired clients); never configuration.</summary>
+    private static readonly string[] IdentityKeys = ["instanceId", "pairedClients"];
 
     public static string PathIn(string repoRoot) => Path.Combine(repoRoot, FileName);
 
@@ -47,6 +51,10 @@ public static class DbDataSyncConfigFile
         var flattened = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         if (root is not null)
             Flatten(root, prefix: null, flattened);
+
+        foreach (var key in flattened.Keys.Where(k => IdentityKeys.Any(own =>
+                     k.Equals(own, StringComparison.OrdinalIgnoreCase) || k.StartsWith(own + ":", StringComparison.OrdinalIgnoreCase))).ToList())
+            flattened.Remove(key);
 
         return flattened;
     }
@@ -405,11 +413,13 @@ public static class DbDataSyncConfigFile
     private const string StarterContent =
         """
         # DbDataSync:
-        #   Url: http://localhost:5080
-        #   StateEngine: MsSql
-        #   # Connection string only — never a password. Set the password with:
-        #   #   dbdatasync secret set dbdata:sync:config:stateConnectionString "Password=..."
-        #   StateConnectionString: "Server=sql01;Database=DbDataSyncState;"
+        #   App:
+        #     Url: http://localhost:5080
+        #   State:
+        #     Engine: MsSql
+        #     # Connection string only - never a password. Set the password with:
+        #     #   dbdatasync secret set dbdata:sync:config:stateConnectionString "Password=..."
+        #     ConnectionString: "Server=sql01;Database=DbDataSyncState;"
 
         """;
 }

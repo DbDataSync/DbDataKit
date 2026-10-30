@@ -177,7 +177,7 @@ public sealed class PackageResolver(PackageResolverOptions options)
                 if (!await from.Source.CopyNupkgToStreamAsync(id, best, file, _cache, NullLogger.Instance, ct))
                     throw new PackageResolutionException($"{from.Name} listed {identity} but would not serve it.");
             RequirePin(id, best);
-            var hash = _store.Add(identity, temp, Pinned(id, best));
+            var hash = _store.Add(identity, temp, Pinned(id, best), options.Lock.Name);
             options.Lock.Pin(id, best.ToNormalizedString(), hash);
         }
         finally { File.Delete(temp); }
@@ -188,7 +188,7 @@ public sealed class PackageResolver(PackageResolverOptions options)
     {
         if (!options.IsAllowed(new PackageIdentity(id, version))) throw new PackageResolutionException($"{id} {version} is not on the allow-list.");
         RequirePin(id, version);
-        var hash = _store.Verify(id, version, Pinned(id, version));
+        var hash = _store.Verify(id, version, Pinned(id, version), options.Lock.Name);
         options.Lock.Pin(id, version.ToNormalizedString(), hash);           // a package that was cached before the lock file existed is recorded now
         return new ResolvedPackage(id, version, _store.DirectoryOf(id, version), hash);
     }

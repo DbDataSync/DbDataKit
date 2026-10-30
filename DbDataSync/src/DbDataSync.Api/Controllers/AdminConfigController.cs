@@ -27,7 +27,7 @@ public sealed class AdminConfigController(AdminConfigService service, CurrentUse
     public ActionResult<IReadOnlyList<AdminConfigEntry>> List() => Ok(service.List());
 
     /// <summary>
-    /// Writes one key into dbdatasync.config.yaml. The same call for a direct edit of a file-sourced key
+    /// Writes one key into server.yaml. The same call for a direct edit of a file-sourced key
     /// and an "adopt" of a non-file-sourced one — the SPA just supplies the current effective value in
     /// the adopt case. Does not take effect in this running process until it restarts.
     /// </summary>

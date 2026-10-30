@@ -257,6 +257,35 @@ public class ResolverTests
     }
 
     [Fact]
+    public async Task A_refusal_names_the_package_the_version_and_the_lock_file_whether_it_is_downloaded_or_already_stored()
+    {
+        using var feed = new Feed();
+        feed.Add("Named", "2.0.1", ["lib/net10.0/Named.dll"]);
+        var path = Path.Combine(feed.Root, "demo.lock");
+        var first = LockFile.Read(path, "scripts/demo.lock");
+        var closure = await new PackageResolver(feed.Options(lockFile: first)).ResolveAsync([Exact("Named", "2.0.1")]);
+        first.Replace(closure.Packages);
+        first.Write(path);
+
+        // a later fetch whose bytes differ (a fresh machine, the feed changed under the same id and version)
+        feed.Add("Named", "2.0.1", ["lib/net10.0/Named.dll", "lib/net10.0/Extra.dll"]);
+        var fresh = new PackageStore(Path.Combine(feed.Root, "other-machine"));
+        var downloaded = Feed.OptionsFor(feed, fresh, LockFile.Read(path, "scripts/demo.lock"));
+        var error = await Assert.ThrowsAsync<PackageIntegrityException>(() => new PackageResolver(downloaded).ResolveAsync([Exact("Named", "2.0.1")]));
+        Assert.Contains("Named 2.0.1", error.Message);
+        Assert.Contains("scripts/demo.lock", error.Message);
+        Assert.False(System.IO.Directory.Exists(fresh.DirectoryOf("Named", NuGet.Versioning.NuGetVersion.Parse("2.0.1"))), "nothing of the refused package is stored");
+
+        // the package already in the store is not the pinned one (the lock file was pulled from a repository that pinned other bytes)
+        var other = new LockFile();
+        other.Pin("Named", "2.0.1", "AAAA");
+        other.Write(path);
+        var stored = await Assert.ThrowsAsync<PackageIntegrityException>(() => new PackageResolver(feed.Options(lockFile: LockFile.Read(path, "scripts/demo.lock"))).ResolveAsync([Exact("Named", "2.0.1")]));
+        Assert.Contains("Named 2.0.1", stored.Message);
+        Assert.Contains("scripts/demo.lock", stored.Message);
+    }
+
+    [Fact]
     public async Task A_cached_package_that_was_changed_on_disk_is_refused_every_time_it_is_used()
     {
         using var feed = new Feed();

@@ -138,7 +138,7 @@ public static class ServiceCommand
 
         var env = environment ?? ServiceEnvironment.Real();
         var root = Path.GetFullPath(CliOptions.Read(args, "--repo") ?? CliOptions.DefaultRoot);
-        // Explicit vs. defaulted matters: an explicit --url is written into dbdatasync.config.yaml
+        // Explicit vs. defaulted matters: an explicit --url is written into server.yaml
         // (below) so it survives every future restart; a defaulted one is never written, or a bare
         // re-run to change --account would stomp whatever App:Url the operator has since configured
         // through the Admin screen.
@@ -192,7 +192,7 @@ public static class ServiceCommand
         {
             DbDataSyncConfigFile.SetValue(root, "DbDataSync:App", "Url", explicitUrl);
             new GitCommitService(root).CommitChanges(
-                [DbDataSyncConfigFile.PathIn(root)], "Set 'DbDataSync:App:Url' in dbdatasync.config.yaml", CurrentUser.SystemAuthor);
+                [DbDataSyncConfigFile.PathIn(root)], "Set 'DbDataSync:App:Url' in server.yaml", CurrentUser.SystemAuthor);
         }
 
         Console.WriteLine($"Registering the '{ServiceName}' service:");

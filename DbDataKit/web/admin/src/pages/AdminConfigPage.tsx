@@ -115,7 +115,7 @@ function ModeToggle({ value, options, onChange, disabled, testId }: {
 
 /**
  * Every DbDataSync:* key docs/configuration.md documents, its live effective value and source, and — for the keys
- * dbdatasync.config.yaml's writer can actually address — a way to change it (phase 81).
+ * server.yaml's writer can actually address — a way to change it (phase 81).
  *
  * Nothing here takes effect in the running process until it restarts: `ApiOptions` (and the sibling
  * `AuthOptions`/`PasskeyOptions`) are resolved once at startup, so a save or an adopt only changes what
@@ -273,7 +273,7 @@ function Row({ entry, onSave, onSaveSecret, busy }: {
           <span
             className="override-pill"
             title={
-              `Set by ${entry.overriddenBy}, which outranks dbdatasync.config.yaml` +
+              `Set by ${entry.overriddenBy}, which outranks server.yaml` +
               (entry.overriddenValue ? `: ${entry.overriddenValue}` : '') +
               '. Editing the value here writes the file, but this deployment will keep using the ' +
               `${entry.overriddenBy} until that is unset.`
@@ -289,7 +289,7 @@ function Row({ entry, onSave, onSaveSecret, busy }: {
             type="button"
             className="btn-link quiet"
             disabled={busy}
-            title="Write the current value into dbdatasync.config.yaml, making it the value used after a restart"
+            title="Write the current value into server.yaml, making it the value used after a restart"
             onClick={() => entry.value && onSave(entry.key, entry.value)}
             data-testid={`admin-config-adopt-${shortKey}`}
           >
@@ -420,7 +420,7 @@ function CautionFlag({ shortKey, caution }: { shortKey: string; caution: string 
 }
 
 /** StateConnectionString's password — a separate control from the value above, because it writes
- * through the secret store rather than dbdatasync.config.yaml and the page never learns what it holds. */
+ * through the secret store rather than server.yaml and the page never learns what it holds. */
 function SetSecretControl({ onSet, busy }: { onSet: (value: string) => void; busy: boolean }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')

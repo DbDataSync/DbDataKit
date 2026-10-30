@@ -33,7 +33,7 @@ public static class CertCommand
     /// <summary>
     /// The subcommands that issue or import a certificate into <c>LocalMachine\My</c> and therefore
     /// cannot work without elevation — see the guard in <see cref="Run"/>. <c>bind</c> is absent
-    /// deliberately: it only reads the store and writes <c>dbdatasync.config.yaml</c>, so it is usable
+    /// deliberately: it only reads the store and writes <c>server.yaml</c>, so it is usable
     /// unelevated, as are <c>status</c>, <c>list</c>, <c>templates</c> and <c>discover</c>.
     /// </summary>
     private static readonly HashSet<string> StoreWritingSubcommands =
@@ -48,7 +48,7 @@ public static class CertCommand
     /// not reach tier 2 from the CLI at all, while <c>DbDataSyncHost</c> would happily run tier 2's own
     /// renewal service there whenever the config named the managed path. A half-open door: the runtime
     /// supported a state the tool could not create, and a Windows operator who wanted a self-renewing
-    /// file certificate had to hand-edit <c>dbdatasync.config.yaml</c> and place the PFX themselves.
+    /// file certificate had to hand-edit <c>server.yaml</c> and place the PFX themselves.
     /// </para>
     /// <para>
     /// <c>--store</c> exists so the choice can be stated rather than inferred, and so asking for it
@@ -251,7 +251,7 @@ public static class CertCommand
         if (certificate is null)
         {
             Console.Error.WriteLine(
-                $"dbdatasync.config.yaml binds subject '{bound.Subject}' in {location}\\{bound.Store}, but " +
+                $"server.yaml binds subject '{bound.Subject}' in {location}\\{bound.Store}, but " +
                 "no matching certificate was found there.");
             return 1;
         }
@@ -449,7 +449,7 @@ public static class CertCommand
 
     /// <summary>
     /// <c>discover</c>: finds the enterprise CA(s) in AD and the templates they publish, and saves a CA or template
-    /// into <c>dbdatasync.config.yaml</c> when there is exactly one to save. What it decides is
+    /// into <c>server.yaml</c> when there is exactly one to save. What it decides is
     /// <see cref="CertDiscovery.Decide"/>'s; this reads the directory and config, prints, and writes.
     /// </summary>
     [SupportedOSPlatform("windows")]
@@ -487,7 +487,7 @@ public static class CertCommand
 
             new GitCommitService(root).CommitChanges(
                 [DbDataSyncConfigFile.PathIn(root)],
-                $"Set {string.Join(" and ", written.Select(k => $"'{k}'"))} in dbdatasync.config.yaml",
+                $"Set {string.Join(" and ", written.Select(k => $"'{k}'"))} in server.yaml",
                 CurrentUser.SystemAuthor);
         }
 
@@ -681,6 +681,25 @@ public static class CertCommand
             return 1;
         }
 
+        BindManagedFile(root, host);
+
+        Console.WriteLine("Generated and configured a self-signed certificate:");
+        PrintCertificateSummary(certificate);
+        Console.WriteLine($"  file        {ManagedSelfSignedCertificate.PfxPath(root)}");
+        Console.WriteLine();
+        Console.WriteLine(
+            "Every client reaching this console will need to trust this certificate once — there is no " +
+            "CA behind it. A daily background check renews it automatically before it expires; nothing " +
+            "takes effect until the DbDataSync service restarts.");
+        return 0;
+    }
+
+    /// <summary>
+    /// Points Kestrel at the managed certificate file and commits the setting: what <c>new-self-signed</c> does after it has made the file, and what a first start of
+    /// <c>server run</c> over https does when nothing names a certificate (<see cref="ServeCommand.EnsureCertificate"/>).
+    /// </summary>
+    internal static void BindManagedFile(string root, string host)
+    {
         ClearStoreBasedBinding(root);
         // A PFX carries its own private key — no separate KeyPath, same as UsePfx.
         DbDataSyncConfigFile.RemoveValue(root, CertificateBinding.Section, "KeyPath");
@@ -692,16 +711,6 @@ public static class CertCommand
             [DbDataSyncConfigFile.PathIn(root)],
             $"Generate a self-signed certificate for '{host}'",
             CurrentUser.SystemAuthor);
-
-        Console.WriteLine("Generated and configured a self-signed certificate:");
-        PrintCertificateSummary(certificate);
-        Console.WriteLine($"  file        {ManagedSelfSignedCertificate.PfxPath(root)}");
-        Console.WriteLine();
-        Console.WriteLine(
-            "Every client reaching this console will need to trust this certificate once — there is no " +
-            "CA behind it. A daily background check renews it automatically before it expires; nothing " +
-            "takes effect until the DbDataSync service restarts.");
-        return 0;
     }
 
     /// <summary>The host tier 2's SANs are built from — <c>--url</c> if given (matching <c>serve</c>'s
@@ -858,7 +867,7 @@ public static class CertCommand
         {
             Console.Error.WriteLine(
                 "Both a CA and a template are needed. Pass --ca/--template, set " +
-                "DbDataSync:Certificates:CaConfig/Template in dbdatasync.config.yaml, or run " +
+                "DbDataSync:Certificates:CaConfig/Template in server.yaml, or run " +
                 "'dbdatasync cert discover' to find them.");
             return (null, null);
         }
