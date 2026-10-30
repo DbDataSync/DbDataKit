@@ -465,7 +465,9 @@ A request may leave a value to be bound: a value node `{"param": "name"}` stands
 
 In semantic SQL a marker is `?` (named "1", "2", ... in order), `$n` or `$name`, or `:name` (rewritten to `$name`; not inside a string or a comment, and `::` is a cast). `IN :regions` stands for a list. The values come beside the text, as the request's `parameters` (`SemanticSqlTranslator.Translate(sql, model, parameters)`), or as a statement's bound values on a model source (`ServingRequest.Sql` / `SemanticSql` with `Parameters`: named, or in order for the unnamed ones). `LIMIT $top` and a transform's keyword argument can be markers too.
 
-Not yet: prepared statements on a model over Flight SQL (the parameter schema), the `members` call, `empty: matches_none`, and the range check of an argument's parameter (plan 19, J25).
+A **prepared statement** on a model source (Flight SQL) reads the text and reports its parameters as the parameter schema: one Arrow field per parameter, named by it (a `?` marker is `parameter_0`...), typed by what it stands for (`Utf8`, `Int64`, `Double`, `Boolean`; a list parameter, such as `IN :regions`, as an Arrow list; `Null` when nothing says), with the attribute it is for in the field's metadata as `qis.for`. A client binds by name (or by position for `?`; `p0`, `parameter_0` and the like mean the first marker) and executes; a list binds as an Arrow list. Nothing is sent to a source when a statement is prepared.
+
+Not yet: the `members` call, `empty: matches_none`, and the range check of an argument's parameter (plan 19, J25).
 
 ## Validation and canonicalization
 

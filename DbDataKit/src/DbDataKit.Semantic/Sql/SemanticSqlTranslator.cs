@@ -205,7 +205,9 @@ public static class SemanticSqlTranslator
                 var children = e["children"]!.AsArray();
                 var leaf = Subject(children[0]!.AsObject());
                 leaf["operator"] = type == "COMPARE_IN" ? "equals" : "not_equals";
-                leaf["values"] = new JsonArray(children.Skip(1).Select(c => Value(c!)!).ToArray());
+                var members = children.Skip(1).Select(c => Value(c!)!).ToArray();
+                // IN :regions is the whole of the values, which a list parameter fills (a single marker in the list)
+                leaf["values"] = members.Length == 1 && members[0] is JsonObject { Count: 1 } only && only["param"] is not null ? only.DeepClone() : new JsonArray(members);
                 return leaf;
             }
             case "COMPARE_BETWEEN":
