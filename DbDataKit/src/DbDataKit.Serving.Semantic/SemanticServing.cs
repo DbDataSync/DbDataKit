@@ -52,6 +52,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
             document = new JsonObject { ["kind"] = "query", ["query"] = explained.DeepClone() };
             foreach (var (key, value) in (JsonObject)Parse(text)) if (key is not ("kind" or "query")) document[key] = value?.DeepClone();
         }
+        if (document["kind"]?.GetValue<string>() == "members") return MembersAsync(context, model, document, text, cancellationToken);
         if (document["kind"]?.GetValue<string>() != "query") throw new ServingInvalidException("This server answers semantic queries ('kind': 'query'); registrations and the other request kinds are not served yet.");
         var limit = request.Asked?.MaxRows;
         var provenance = new ServingProvenance(isSql ? text : Canonical(document, model.Name, text), null, context.Channel, SemanticModels.SourcePrefix + model.Name);
@@ -81,6 +82,27 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
     /// A statement on a model is prepared by reading it: the text must translate or parse, and what it leaves to be bound is reported as the parameter schema (a name, the attribute it is for, a type, whether it takes a list).
     /// Nothing is sent to a source. A client binds the values by those names (or positionally for a <c>?</c> marker) and executes.
     /// </summary>
+    /// <summary>
+    /// <c>{"kind": "members", "attribute": "customers.region", "search": "ea", "limit": 50}</c>: the distinct values of an attribute to choose a parameter's value from, one column <c>member</c>. They are read through the host as the caller, so the caller sees
+    /// only what their access reaches; a catalog that lists its members (<c>members</c>) answers without a read.
+    /// </summary>
+    private Task<IServingAnswer> MembersAsync(ServingContext context, SemanticModel model, JsonObject request, string text, CancellationToken cancellationToken)
+    {
+        var attribute = request["attribute"]?.GetValue<string>() ?? throw new ServingInvalidException("A members request names an attribute: {\"kind\": \"members\", \"attribute\": \"customers.region\"}.");
+        var search = request["search"]?.GetValue<string>();
+        int? limit = request["limit"] is JsonValue v && v.TryGetValue<int>(out var n) ? n : null;
+        var provenance = new ServingProvenance(text, null, context.Channel, SemanticModels.SourcePrefix + model.Name);
+        return Task.Run<IServingAnswer>(() =>
+        {
+            var engine = new QisEngine(model.Catalog, new ServingSourceExecutor(inner, catalog, context, model, models, cancellationToken), new Validator(model.Catalog), models.Level);
+            (List<string> members, bool truncated, List<DbDataKit.Semantic.Abstractions.QisError>? errors) result;
+            try { result = engine.Members(attribute, search, limit); }
+            catch (SandboxLimitException stopped) { throw new ServingLimitException(stopped.Message, stopped.Limit); }
+            if (result.errors is { Count: > 0 } failed) throw new ServingInvalidException(string.Join("; ", failed.Select(e => $"{e.Code}: {e.Message}")));
+            return new MembersAnswer(result.members, result.truncated, provenance);
+        }, cancellationToken);
+    }
+
     public Task<ServingStatementInfo> PrepareAsync(ServingContext context, ServingRequest.Sql statement, CancellationToken cancellationToken = default)
     {
         if (!SemanticModels.IsModelSource(statement.Source)) return inner.PrepareAsync(context, statement, cancellationToken);
