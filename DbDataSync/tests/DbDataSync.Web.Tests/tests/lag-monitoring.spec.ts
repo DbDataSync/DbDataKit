@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from '../fixtures'
 import path from 'node:path'
 import { screenshotDir } from '../screenshots'
 
@@ -97,10 +97,10 @@ test.describe('lag monitoring', () => {
 
     // The states, as the rows themselves declare them. Four mappings, four different answers, and
     // no two rows claiming the same one.
-    const states = await Promise.all(
+    // Polled: the rows are there before the lag answer is, and an attribute read once, at that moment, saw `null` on a slower run (through the console, whose relay adds a hop).
+    await expect.poll(() => Promise.all(
       MAPPINGS.map((m) => page.getByTestId(`monitoring-row-${m}`).getAttribute('data-lag-state')),
-    )
-    expect(states).toEqual(['exact', 'estimated', 'not-applicable', 'no-data'])
+    )).toEqual(['exact', 'estimated', 'not-applicable', 'no-data'])
 
     // And as somebody reading the screen sees them. The point of the phase is that these are four
     // readings and not one dash, so the assertion is that the four cells differ from each other —

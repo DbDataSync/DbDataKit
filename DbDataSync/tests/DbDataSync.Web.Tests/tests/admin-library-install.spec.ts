@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { test, expect } from '@playwright/test'
+import { test, expect } from '../fixtures'
 import { screenshotDir } from '../screenshots'
 
 const screenshotsDir = screenshotDir('admin-library-install')

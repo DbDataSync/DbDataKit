@@ -14,16 +14,7 @@ const repoRoot = path.resolve(__dirname, '../..')
 // IsRepositoryAt XML doc) uses that discovery-based check.
 const scratchRepoRoot = path.join(os.tmpdir(), 'dbdatasync-web-e2e-scratch-repo')
 
-// The one bundled KnownDrivers catalog entry (phase 117) — admin-drivers-libraries.spec.ts installs
-// it itself, through the web console's own "Add" button (phase 120), rather than this config file
-// seeding it by shelling out to the CLI before the API starts (as an earlier phase-118-only version
-// of this suite did): now that installing is a real, tested feature, a test exercising it is a better
-// fixture than a shortcut around it.
-export const KNOWN_DRIVER_ID = 'mysql.generic'
-// The real NuGet package id, not the "mysql-connector" catalog shorthand the Add button's own request
-// names — a library's id is always its package id, see
-// architecture/planning/todo/follow-up-library-install-paths-disagree-on-the-resulting-library-id.md.
-export const KNOWN_DRIVER_LIBRARY = 'MySqlConnector'
+export { KNOWN_DRIVER_ID, KNOWN_DRIVER_LIBRARY } from './constants'
 
 // This block is synchronous, top-level code the config file must fully evaluate before Playwright can
 // even read `webServer` out of the object below — the only way to guarantee the scratch repo is

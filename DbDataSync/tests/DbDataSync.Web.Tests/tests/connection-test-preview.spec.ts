@@ -1,6 +1,6 @@
 import path from 'node:path'
-import { test, expect } from '@playwright/test'
-import { KNOWN_DRIVER_ID, KNOWN_DRIVER_LIBRARY } from '../playwright.config'
+import { test, expect } from '../fixtures'
+import { KNOWN_DRIVER_ID, KNOWN_DRIVER_LIBRARY } from '../constants'
 import { screenshotDir } from '../screenshots'
 import { MYSQL_PORT, MYSQL_ROOT_PASSWORD } from '../test-db'
 

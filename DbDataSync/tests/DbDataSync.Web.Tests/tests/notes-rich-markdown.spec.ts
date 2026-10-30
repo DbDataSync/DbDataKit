@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from '../fixtures'
 import { screenshotDir } from '../screenshots'
 
 const screenshotsDir = screenshotDir('notes-rich-markdown')

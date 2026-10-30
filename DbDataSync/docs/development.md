@@ -133,6 +133,18 @@ npx playwright install chromium
 npx playwright test
 ```
 
+The same specs also run through the console (plan 13a, U08): a console and a paired `dbdatasync server run` are started together, the console is signed in
+as an administrator with a passkey, and the specs' addresses become `/servers/<id>/...` and the console's relay (`fixtures.ts` does the translation; the
+specs are the same files). It needs the builds of the API, the worker, the CLI and the console server, and the console's web app (`npm run build -w @dbdatakit/console`
+in `DbDataKit/web`):
+
+```sh
+npx playwright test -c playwright.console.config.ts
+```
+
+`docs-viewer.spec.ts` is not part of that run: the Docs screens read files of the Sync web app's own web root, which the console does not carry yet.
+That run writes its pictures to a scratch folder, not to `screenshots/`.
+
 Screenshots of each screen land in `screenshots/`, one sub-folder per spec (`screenshots/README.md`
 indexes them) — including the ones embedded in [Getting started](getting-started.md).
 

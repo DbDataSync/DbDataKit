@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -12,7 +13,10 @@ const here = path.dirname(fileURLToPath(import.meta.url))
  * one folder per spec, so a numeric prefix reused across specs (`62-`, `90-`) never collides.
  */
 export function screenshotDir(group: string): string {
-  const dir = path.resolve(here, '..', '..', 'screenshots', group)
+  // The run through the console shows the console's frame around the screens: those pictures are not the committed ones and go to a scratch folder.
+  const dir = process.env.DBDATASYNC_E2E_CONSOLE === '1'
+    ? path.join(os.tmpdir(), 'dbdatasync-console-e2e-screenshots', group)
+    : path.resolve(here, '..', '..', 'screenshots', group)
   fs.mkdirSync(dir, { recursive: true })
   return dir
 }

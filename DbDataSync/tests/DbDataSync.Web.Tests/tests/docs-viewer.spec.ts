@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { test, expect } from '@playwright/test'
+import { test, expect } from '../fixtures'
 import { screenshotDir } from '../screenshots'
 
 const screenshotsDir = screenshotDir('docs-viewer')

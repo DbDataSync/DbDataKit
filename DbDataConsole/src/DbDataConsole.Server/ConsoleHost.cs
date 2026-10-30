@@ -123,7 +123,7 @@ public static class ConsoleHost
         app.MapRelay();
 
         // Deep links are the web app's routes, not this server's: /users has to return the app. An unmatched /api route is a 404, never the app.
-        app.MapFallback(async context =>
+        RequestDelegate webApp = async context =>
         {
             var path = context.Request.Path.Value ?? "";
             if (path.StartsWith("/api", StringComparison.OrdinalIgnoreCase)) { context.Response.StatusCode = StatusCodes.Status404NotFound; return; }
@@ -136,7 +136,11 @@ public static class ConsoleHost
             }
             context.Response.ContentType = "text/plain; charset=utf-8";
             await context.Response.WriteAsync("The dbdatakit console is running, but its web app is not installed here (no wwwroot).");
-        }).AllowAnonymous();
+        };
+        app.MapFallback(webApp).AllowAnonymous();
+        // The default fallback leaves out a path whose last segment has an extension, as a missing file's address does. A server's own names are routes too, and one with a dot in it (a Sync table mapping `dbo.Orders`)
+        // is a deep link under /servers/<id>/, so those paths are matched on their own: nothing under /servers/ is a file, which the static files above would have served before the routes saw it.
+        app.MapFallback("/servers/{*path}", webApp).AllowAnonymous();
         return app;
     }
 
