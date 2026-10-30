@@ -32,7 +32,7 @@ function Run([string]$exe, [string[]]$arguments) {
 }
 function WaitHealthy([string]$exe, [string]$url) {
   for ($i = 0; $i -lt 40; $i++) {
-    & $exe health check --url $url 2>&1 | Out-Null
+    & $exe health check --url "$url/health/live" 2>&1 | Out-Null
     if ($LASTEXITCODE -eq 0) { return }
     Start-Sleep -Seconds 2
   }
