@@ -43,13 +43,13 @@ export function MonitoringPage() {
             <div className="grid-head" style={{ gridTemplateColumns: '0.8fr 1fr 2.4fr 2.4fr 1.6fr', gap: 14 }}><span>State</span><span>Server</span><span>What</span><span>Detail</span><span /></div>
             {rows.map((row) => (
               <div key={row.key} className="grid-row" style={{ gridTemplateColumns: '0.8fr 1fr 2.4fr 2.4fr 1.6fr', gap: 14 }} data-testid="monitoring-row" data-state={row.state}>
-                <span data-testid="monitoring-state">{label[row.state]}</span>
+                <span data-testid="monitoring-state">{label[row.state]}{row.held && row.state !== 'paused' ? ' (held)' : ''}</span>
                 <span>{row.serverName}</span>
                 <span className="mono">{row.subject}</span>
                 <span>{row.detail}</span>
                 <span className="row" style={{ gap: 8 }}>
                   {row.target !== null && <>
-                  <button type="button" className="btn" disabled={act.isPending} onClick={() => act.mutate({ row, what: row.state === 'paused' ? 'resume' : 'pause' })} data-testid="monitoring-toggle">{row.state === 'paused' ? 'Resume' : 'Pause'}</button>
+                  <button type="button" className="btn" disabled={act.isPending} onClick={() => act.mutate({ row, what: row.held ? 'resume' : 'pause' })} data-testid="monitoring-toggle">{row.held ? 'Resume' : 'Pause'}</button>
                   <button type="button" className="btn" disabled={act.isPending} onClick={() => act.mutate({ row, what: 'run' })} data-testid="monitoring-run">Run now</button>
                   </>}
                 </span>

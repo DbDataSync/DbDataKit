@@ -25,6 +25,9 @@ describe('monitoring rows', () => {
     expect(buildRow(build, 'sales', job).state).toBe('ok')
     expect(buildRow(build, 'sales', { ...job, last_exit: 1 })).toMatchObject({ state: 'failed', detail: 'The last run ended with exit code 1' })
     expect(buildRow(build, 'sales', { ...job, paused: true, paused_by: 'Ada' })).toMatchObject({ state: 'paused', detail: 'Paused by Ada' })
+    // a hold on a plan that also failed is still a hold: the row stays a failure, and the button releases the hold
+    expect(buildRow(build, 'sales', { ...job, last_exit: 1, paused: true })).toMatchObject({ state: 'failed', held: true })
+    expect(buildRow(build, 'sales', job).held).toBe(false)
   })
 
   it('puts a failed Build run and a lagging Sync replication together at the top, ahead of what is fine', () => {

@@ -13,6 +13,8 @@ export interface MonitorRow {
   /** What to look at first: a failed last run, a lag past the limit, a notice from a Proxy, a hold, a run going, or nothing. */
   state: 'failed' | 'lagging' | 'event' | 'paused' | 'running' | 'ok'
   detail: string
+  /** Whether the person (or the server) holds it: a failed row can be held too, and then it is the hold that is released. */
+  held: boolean
   /** What the row's buttons act on. */
   target: { replication: string } | { project: string; connection: string; plan: string } | null
 }
@@ -49,7 +51,7 @@ export function syncRow(server: InstanceSummary, name: string, status: SyncStatu
   else if (status.paused) { state = 'paused'; detail = status.pauseNote ? `Paused: ${status.pauseNote}` : 'Paused' }
   else if (!status.enabled) { state = 'paused'; detail = 'Switched off' }
   else if (status.running) { state = 'running'; detail = 'Running now' }
-  return { key: `${server.id}/${name}`, server: server.id, serverName: server.name, product: 'dbdatasync', kind: 'replication', subject: name, state, detail, target: { replication: name } }
+  return { key: `${server.id}/${name}`, server: server.id, serverName: server.name, product: 'dbdatasync', kind: 'replication', subject: name, state, detail, held: status.paused, target: { replication: name } }
 }
 
 export interface BuildJob { connection: string; plan: string; schedule: string; next_due: string | null; last_started: string | null; last_exit: number | null; paused?: boolean; paused_by?: string | null }
@@ -60,7 +62,7 @@ export function buildRow(server: InstanceSummary, project: string, job: BuildJob
   let detail = job.next_due ? `Next ${new Date(job.next_due).toLocaleString()}` : 'No next time'
   if (job.last_exit !== null && job.last_exit !== 0) { state = 'failed'; detail = `The last run ended with exit code ${job.last_exit}` }
   else if (job.paused) { state = 'paused'; detail = job.paused_by ? `Paused by ${job.paused_by}` : 'Paused' }
-  return { key: `${server.id}/${project}/${job.connection}/${job.plan}`, server: server.id, serverName: server.name, product: 'dbdatabuild', kind: 'plan', subject: `${project}: ${job.connection}/${job.plan}`, state, detail, target: { project, connection: job.connection, plan: job.plan } }
+  return { key: `${server.id}/${project}/${job.connection}/${job.plan}`, server: server.id, serverName: server.name, product: 'dbdatabuild', kind: 'plan', subject: `${project}: ${job.connection}/${job.plan}`, state, detail, held: job.paused === true, target: { project, connection: job.connection, plan: job.plan } }
 }
 
 /** What a Proxy's notification feed says: `GET /api/v1/notifications` (a failed-login lockout, a refused statement, a limit reached). */
@@ -74,7 +76,7 @@ const noticeTitle: Record<string, string> = { LoginLockedOut: 'Login locked out'
 
 /** One notice of a Proxy as a row. It has no buttons: a notice is something that happened, not something that runs. */
 export function proxyRow(server: InstanceSummary, notice: ProxyNotification): MonitorRow {
-  return { key: `${server.id}/notice/${notice.id}`, server: server.id, serverName: server.name, product: 'dbdataproxy', kind: 'event', subject: noticeTitle[notice.kind] ?? notice.kind, state: 'event', detail: notice.message, target: null }
+  return { key: `${server.id}/notice/${notice.id}`, server: server.id, serverName: server.name, product: 'dbdataproxy', kind: 'event', subject: noticeTitle[notice.kind] ?? notice.kind, state: 'event', detail: notice.message, held: false, target: null }
 }
 
 const relay = (server: InstanceSummary, path: string) => `/relay/${server.id}${path}`
