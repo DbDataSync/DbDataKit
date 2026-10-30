@@ -303,7 +303,7 @@ internal static class BuildManagementApi
     }
 
     /// <summary>
-    /// Git for a workspace (plan 13, W08, D15): <c>GET .../changes</c> (what differs from where the draft started, with patches) and <c>GET .../history</c> are a viewer's; <c>POST .../commit</c> (<c>{"message"}</c>) and <c>POST .../push</c> are the owner's and need the
+    /// Git for a workspace (plan 13, W08, D15): <c>GET .../changes</c> (what differs from where the draft started, with patches and, for a text file, both whole texts) and <c>GET .../history</c> are a viewer's; <c>POST .../commit</c> (<c>{"message"}</c>) and <c>POST .../push</c> are the owner's and need the
     /// author role; <c>POST .../merge</c> needs the approver role, because it changes what the scheduler and the deploys read. A project with a git remote is pushed to (a branch, for a pull request opened where the remote lives) and never merged inside
     /// the server, since the server's copy of a remote is reset to the remote's branch; a project without one is merged inside the server, in the author's name. A merge that conflicts changes nothing and answers 409 with the files. A merged workspace is abandoned.
     /// </summary>
@@ -334,7 +334,7 @@ internal static class BuildManagementApi
             try
             {
                 var root = workspaces.RootOf(workspace);
-                var changes = DbDataKit.Config.Git.GitWorkspaceOperations.Changes(root, workspace.Base).Select(c => new { path = c.Path, status = c.Status, patch = c.Patch }).ToList();
+                var changes = DbDataKit.Config.Git.GitWorkspaceOperations.Changes(root, workspace.Base).Select(c => new { path = c.Path, status = c.Status, patch = c.Patch, before = c.Before, after = c.After, sides = c.Sides }).ToList();
                 // whether a commit has not taken some of them yet: a merge takes what is committed
                 return Results.Json(new { changes, uncommitted = DbDataKit.Config.Git.GitWorkspaceOperations.HasUncommitted(root) });
             }
