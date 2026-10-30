@@ -17,7 +17,7 @@ namespace DbDataConsole.Server;
 /// Only <c>api/...</c> and <c>hubs/...</c> are relayed, only to a registered server, and the path is not interpreted: nothing the browser sends can name another host.
 /// </para>
 /// </summary>
-public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore keys, CurrentUser current, ILogger<ConsoleRelay> log)
+public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore keys, CurrentUser current, ILogger<ConsoleRelay> log, DbDataKit.Identity.FederatedUsers? federated = null)
 {
     public const string Prefix = "/relay";
 
@@ -37,7 +37,12 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
         // The key this server knows: the current one, or the one a rotation is moving to if the server already has that.
         var identity = (instance.KeyFingerprint is { } fingerprint ? await keys.ForKeyAsync(fingerprint, ct) : null) ?? await keys.GetOrCreateAsync(ct);
         // A server paired before the ceiling was recorded is asked for reading only.
-        var roles = ServerRoles.Lower(RolesOf(role), instance.Ceiling == ServerRole.None ? ServerRole.Viewer : instance.Ceiling);
+        var ceiling = instance.Ceiling == ServerRole.None ? ServerRole.Viewer : instance.Ceiling;
+        // A person who signs in through the identity home holds what the home says on this server and its projects; the console's ceiling still limits it.
+        if (federated?.RolesOn(userId, instance.InstanceId) is { } held)
+            return identity.Issuer().Issue(new ConsoleTokenRequest(instance.InstanceId, userId, userName, ServerRoles.Lower(held.Roles, ceiling),
+                held.Projects.ToDictionary(p => p.Key, p => ServerRoles.Lower(p.Value, ceiling))));
+        var roles = ServerRoles.Lower(RolesOf(role), ceiling);
         return identity.Issuer().Issue(new ConsoleTokenRequest(instance.InstanceId, userId, userName, roles));
     }
 

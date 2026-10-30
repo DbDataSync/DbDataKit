@@ -27,6 +27,8 @@ With no user yet, the console writes an invitation to `FIRST-RUN.txt` and the lo
 
 ## Servers
 
+**Signing in through an identity home** (plan 13a U14): `server run --identity-home https://home.example --identity-client <id> --identity-secret-env HOME_SECRET [--identity-app console]` makes the console an OpenID Connect client of the home. It keeps no passwords or passkeys and writes no first-run invitation; people sign in at `/api/identity/sign-in`, are the same user id here as everywhere, may sign in only if the home gives them a role on `app:<identity-app>` (`admin` makes them an administrator here), and reach each server with the roles the home holds for them there, never above the ceiling this console was paired with.
+
 `dbdatakit instance add` pairs the console with a server (Sync, Proxy, Build or Store) using the single-use code that server's administrator made with `<program> server pair`; the server's certificate is pinned and the pairing is recorded in `instances.yaml`
 in the console's directory. `instance list` shows each server with its product, version and whether it answers, `instance remove` forgets one (it keeps listing the console until `server unpair` is run there) and `instance rotate-key` moves every server to a new signing key.
 A server started with `DBDATAKIT_CONSOLE_ANNOUNCE_URL` (and `DBDATAKIT_ADVERTISE_URL`, `DBDATAKIT_INSTANCE_NAME`) and not yet paired announces itself to the console's private `--announce-listen` port and waits: `instance pending` lists the waiting servers (never their codes),

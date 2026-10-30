@@ -42,10 +42,10 @@ public static class ConsoleCli
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context, Func<string, string?>? environment)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "listen", "public-url", "web-root", "announce-listen", "state-engine", "state-connection" });
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "listen", "public-url", "web-root", "announce-listen", "state-engine", "state-connection", "identity-home", "identity-client", "identity-secret-env", "identity-app" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
         {
-            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <console directory>] [--listen https://<name>:<port>] [--public-url https://<name>:<port>] [--announce-listen http://<address>:<port>] [--state-engine sqlite|mssql|postgres --state-connection <connection string>]");
+            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <console directory>] [--listen https://<name>:<port>] [--public-url https://<name>:<port>] [--announce-listen http://<address>:<port>] [--state-engine sqlite|mssql|postgres --state-connection <connection string>] [--identity-home <https address> --identity-client <id> [--identity-secret-env <variable>] [--identity-app <id>]]");
             return CliExit.Usage;
         }
         if (!Uri.TryCreate(parsed.Get("listen") ?? ConsoleSettings.DefaultListen, UriKind.Absolute, out var listen) || listen.Scheme != Uri.UriSchemeHttps)
@@ -72,7 +72,25 @@ public static class ConsoleCli
             return CliExit.Usage;
         }
 
-        var settings = new ConsoleSettings(DirectoryOf(parsed, environment), listen, publicUrl, announce, ConsoleState.SettingsFrom(environment, parsed.Get("state-engine"), parsed.Get("state-connection")));
+        // A console that keeps no users of its own signs people in through an identity home (plan 13a U14)
+        IdentityHomeSettings? home = null;
+        if (parsed.Get("identity-home") is { } homeText || parsed.Get("identity-client") is not null)
+        {
+            if (!Uri.TryCreate(parsed.Get("identity-home"), UriKind.Absolute, out var authority) || authority.Scheme is not ("https" or "http") || string.IsNullOrWhiteSpace(parsed.Get("identity-client")))
+            {
+                await context.Error.WriteLineAsync("--identity-home (the home's address) and --identity-client (the id it registered this console under) go together.");
+                return CliExit.Usage;
+            }
+            string? secret = null;
+            if (parsed.Get("identity-secret-env") is { Length: > 0 } variable && string.IsNullOrEmpty(secret = (environment ?? Environment.GetEnvironmentVariable)(variable)))
+            {
+                await context.Error.WriteLineAsync($"--identity-secret-env names {variable}, which is not set.");
+                return CliExit.Usage;
+            }
+            home = new IdentityHomeSettings(authority, parsed.Get("identity-client")!, secret, parsed.Get("identity-app") ?? "console");
+        }
+
+        var settings = new ConsoleSettings(DirectoryOf(parsed, environment), listen, publicUrl, announce, ConsoleState.SettingsFrom(environment, parsed.Get("state-engine"), parsed.Get("state-connection")), home);
         Directory.CreateDirectory(settings.Directory);
         var app = ConsoleHost.Build(settings, ConsoleHost.Certificate(settings.Directory), line => context.Error.WriteLine(line), parsed.Get("web-root"));
         await context.Out.WriteLineAsync($"The console is on {listen} (people open it at {settings.Public}). The first administrator redeems the invitation in {Path.Combine(settings.Directory, "FIRST-RUN.txt")}.");
