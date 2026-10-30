@@ -29,6 +29,9 @@ With no user yet, the console writes an invitation to `FIRST-RUN.txt` and the lo
 
 `dbdatakit instance add` pairs the console with a server (Sync, Proxy, Build or Store) using the single-use code that server's administrator made with `<program> server pair`; the server's certificate is pinned and the pairing is recorded in `instances.yaml`
 in the console's directory. `instance list` shows each server with its product, version and whether it answers, `instance remove` forgets one (it keeps listing the console until `server unpair` is run there) and `instance rotate-key` moves every server to a new signing key.
+A server started with `DBDATAKIT_CONSOLE_ANNOUNCE_URL` (and `DBDATAKIT_ADVERTISE_URL`, `DBDATAKIT_INSTANCE_NAME`) and not yet paired announces itself to the console's private `--announce-listen` port and waits: `instance pending` lists the waiting servers (never their codes),
+`instance confirm <id or name>` pairs with one and `instance reject` forgets it. In the web app the Servers page shows the same list above the paired servers, for administrators only: each waiting server with its name, product, advertised address and when it last announced,
+and a Confirm and a Reject button. The list refreshes every few seconds, Confirm moves the server into the list below (a failure, such as the server not answering or its code having expired, is shown under that server in the console's own words) and Reject removes it until it announces again (every half minute while it waits).
 In the web app, `/instances` lists them and `/servers/<id>/...` opens a server's own screens (Sync's replications and configuration so far), whose calls the console relays at `/relay/<server>/api/...` and `/relay/<server>/hubs/...`.
 
 ## What is served
