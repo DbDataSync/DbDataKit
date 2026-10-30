@@ -33,6 +33,7 @@ public sealed class ProxyConfigDirectoryProvider : ConfigurationProvider, IDispo
     private readonly ProxyConfigDirectorySource _source;
     private FileSystemWatcher? _watcher;
     private Timer? _debounce;
+    private readonly object _reloading = new();
 
     public ProxyConfigDirectoryProvider(ProxyConfigDirectorySource source)
     {
@@ -67,18 +68,22 @@ public sealed class ProxyConfigDirectoryProvider : ConfigurationProvider, IDispo
     /// <summary>Reads the directory again now and tells the options monitor; the file watcher calls this after a change settles.</summary>
     public void ReloadNow()
     {
-        try
+        // One reload at a time: the watcher's timer and a caller can arrive together, and a read that started before a file was deleted must not be the one that finishes last and is kept
+        lock (_reloading)
         {
-            var (data, origins, warnings) = Read(_source.Directory);
-            Data = data;
-            Origins = origins;
-            Warnings = warnings;
+            try
+            {
+                var (data, origins, warnings) = Read(_source.Directory);
+                Data = data;
+                Origins = origins;
+                Warnings = warnings;
+            }
+            catch (InvalidDataException ex)
+            {
+                _source.Guard?.Report(ex.Message);
+            }
+            OnReload();
         }
-        catch (InvalidDataException ex)
-        {
-            _source.Guard?.Report(ex.Message);
-        }
-        OnReload();
     }
 
     /// <summary>Reads every file of the layout. Throws one <see cref="InvalidDataException"/> listing every problem, each with file and line.</summary>

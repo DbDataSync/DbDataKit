@@ -24,11 +24,14 @@ public static class SemanticSqlTranslator
     private static Refused Unsupported(string what) => new("sql_unsupported", what);
 
     /// <summary>Translates the text. With <paramref name="model"/>, the name after FROM must be it (<c>sql_wrong_model</c>).</summary>
-    public static SqlTranslation Translate(string sql, string? model = null)
+    public static SqlTranslation Translate(string sql, string? model = null, JsonObject? parameters = null)
     {
         try
         {
-            return new SqlTranslation(Build(SqlParser.ParseSelect(sql), model), []);
+            var request = Build(SqlParser.ParseSelect(SqlMarkers.Rewrite(sql)), model);
+            // markers become {"param": name} nodes (a positional one is named "1", "2", ...); the values travel beside the query, as in the JSON form
+            if (parameters is { Count: > 0 }) request["parameters"] = parameters.DeepClone();
+            return new SqlTranslation(request, []);
         }
         catch (SqlSyntaxException e) { return Failed("sql_syntax", e.Message); }
         catch (Refused e) { return Failed(e.Code, e.Message); }
@@ -202,7 +205,9 @@ public static class SemanticSqlTranslator
                 var children = e["children"]!.AsArray();
                 var leaf = Subject(children[0]!.AsObject());
                 leaf["operator"] = type == "COMPARE_IN" ? "equals" : "not_equals";
-                leaf["values"] = new JsonArray(children.Skip(1).Select(c => Value(c!)!).ToArray());
+                var members = children.Skip(1).Select(c => Value(c!)!).ToArray();
+                // IN :regions is the whole of the values, which a list parameter fills (a single marker in the list)
+                leaf["values"] = members.Length == 1 && members[0] is JsonObject { Count: 1 } only && only["param"] is not null ? only.DeepClone() : new JsonArray(members);
                 return leaf;
             }
             case "COMPARE_BETWEEN":
@@ -383,6 +388,7 @@ public static class SemanticSqlTranslator
         switch (e["type"]?.GetValue<string>())
         {
             case "VALUE_CONSTANT": return Constant(e["literal"]!.AsObject());
+            case "VALUE_PARAMETER": return new JsonObject { ["param"] = e["identifier"]?.GetValue<string>() ?? throw Unsupported("a parameter marker has no name") };
             case "FUNCTION":
             {
                 var name = e["function_name"]!.GetValue<string>();
