@@ -58,6 +58,28 @@ public sealed class ConsoleHostTests : IAsyncLifetime
         Assert.Equal(ConsoleHost.Version, (string)version["version"]!);
     }
 
+    [Theory]
+    [InlineData("/users")]
+    [InlineData("/servers/sync-0123/replications/orders/mappings/dbo.Orders")]
+    public async Task A_deep_link_of_the_app_returns_the_app_even_when_a_server_s_own_name_has_a_dot_in_it(string path)
+    {
+        var page = await http.GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+        Assert.Contains("the app", await page.Content.ReadAsStringAsync());
+    }
+
+    [Theory]
+    [InlineData("/missing.js")]
+    [InlineData("/assets/missing.css")]
+    public async Task A_missing_file_is_not_the_app(string path)
+    {
+        var page = await http.GetAsync(path);
+
+        Assert.NotEqual(HttpStatusCode.OK, page.StatusCode);
+        Assert.DoesNotContain("the app", await page.Content.ReadAsStringAsync());
+    }
+
     [Fact]
     public async Task A_first_start_writes_the_first_run_invitation_and_the_invitation_is_good()
     {

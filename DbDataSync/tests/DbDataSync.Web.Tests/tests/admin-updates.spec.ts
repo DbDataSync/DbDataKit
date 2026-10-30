@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { test, expect, type Page, type Route } from '@playwright/test'
+import { test, expect, type Page, type Route } from '../fixtures'
 import { screenshotDir } from '../screenshots'
 
 const screenshotsDir = screenshotDir('admin-updates')

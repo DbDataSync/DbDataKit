@@ -35,7 +35,7 @@ jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataSync/|DbDataKit/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatasync-|_)|actions/setup-product))'
+      paths: '^(DbDataSync/|DbDataConsole/|DbDataKit/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatasync-|_)|actions/setup-product))'
 
   # ---- ported jobs ----
   dotnet:
@@ -266,6 +266,16 @@ jobs:
         # globalSetup/globalTeardown build and drop the test database — nothing to orchestrate here.
         working-directory: DbDataSync/tests/DbDataSync.Web.Tests
         run: npx playwright test
+      - name: Build the console and its web app
+        # The same specs again, through the console (plan 13a, U08): a console and a paired `dbdatasync server run`, the specs' addresses
+        # translated to /servers/<id>/... and the relay (tests/DbDataSync.Web.Tests/fixtures.ts). `dotnet exec` on the built console DLL, as above.
+        run: |
+          dotnet build ../../DbDataConsole/src/DbDataConsole.Server
+          npm run build -w @dbdatakit/console
+        working-directory: DbDataKit/web
+      - name: Test (Playwright, through the console)
+        working-directory: DbDataSync/tests/DbDataSync.Web.Tests
+        run: npx playwright test -c playwright.console.config.ts
       - name: Stop the databases
         if: always()
         working-directory: .
@@ -277,7 +287,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: playwright-failure-artifacts
-          path: DbDataSync/tests/DbDataSync.Web.Tests/test-results/
+          path: |
+            DbDataSync/tests/DbDataSync.Web.Tests/test-results/
+            DbDataSync/tests/DbDataSync.Web.Tests/test-results-console/
           retention-days: 7
       # Phase 144: always, not just on failure — a few KB either way, and it's what lets a green run
       # actually prove the whole suite ran rather than being read only when something goes red.
@@ -288,5 +300,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report
-          path: DbDataSync/tests/DbDataSync.Web.Tests/test-results/results.json
+          path: |
+            DbDataSync/tests/DbDataSync.Web.Tests/test-results/results.json
+            DbDataSync/tests/DbDataSync.Web.Tests/test-results-console/results.json
           retention-days: 7
