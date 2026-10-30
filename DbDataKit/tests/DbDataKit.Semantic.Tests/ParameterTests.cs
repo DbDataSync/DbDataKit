@@ -132,6 +132,18 @@ public sealed class ParameterTests : IDisposable
     }
 
     [Fact]
+    public void An_empty_list_defined_to_match_none_returns_no_rows_instead_of_every_row()
+    {
+        var everything = _engine.Run(Request("""{"attribute": "customers.region", "operator": "equals", "values": ["East", "West"]}"""));
+        var none = _engine.Run(Request("""{"attribute": "customers.region", "operator": "equals", "values": {"param": "regions"}}""",
+            """, "parameters": {"regions": []}, "parameter_definitions": {"regions": {"many": true, "empty": "matches_none"}}"""));
+
+        Assert.Equal("complete", none.Status);
+        Assert.NotEmpty(everything.Combined!.Rows);
+        Assert.Empty(none.Combined!.Rows);
+    }
+
+    [Fact]
     public void An_empty_list_is_refused_because_no_values_must_never_mean_no_filter()
     {
         var result = _engine.Run(Request("""{"attribute": "customers.region", "operator": "equals", "values": {"param": "regions"}}""",
