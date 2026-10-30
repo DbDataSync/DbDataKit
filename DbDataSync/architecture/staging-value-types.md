@@ -108,8 +108,8 @@ once per column and runtime type, from `StagingValueRules`:
   (`Staging into dbo.Orders: column 'Total' (decimal(18,2)) cannot take a value of type System.Guid from the source ...`). Before, the same failure arrived from the
   provider with whatever text it had: SqlClient usually names the column and the types; a PostgreSQL server error and a few client errors name neither.
 * **Refuse, the engine would store something else** (A14b, section 3a): a runtime type the provider takes but stores as a different value, whatever the value: PostgreSQL `date` from `int`/`ushort` (days since 2000),
-  `time`, `timestamp`, `timestamptz` from `uint`/`long` (microseconds since 2000), `text`/`varchar` from `byte[]`/`Stream` (bytes as characters); SQL Server integers from `char` (the code point). The message is the same
-  one, with the sentence that the engine "would store that type as a different value" in place of "refuses that type"; it carries no advice about the other Kind, whose behaviour for these pairs was not measured.
+  `time`, `timestamp`, `timestamptz` from `uint`/`long` (microseconds since 2000), `text`/`varchar` from `byte[]`/`Stream` (bytes as characters); SQL Server integers from `char` (the code point) and, since the decision of 2026-10-30, `varchar`/`nvarchar` from `DateTime` and `DateOnly` (client-formatted text). The message is the same
+  one, with the sentence that the engine "would store that type as a different value" in place of "refuses that type"; it carries no advice about the other Kind, whose behaviour for these pairs was not measured. The one pair with advice of its own is a date into SQL Server text: add a Transform to the mapped source column that formats the date or time as the text wanted.
   `StagingValueException.Reinterpreted` tells the two apart.
 * **Pass**: everything else, untouched: every cell section 2 shows as stored that is not in the list above, including the lenient ones (`1.5` into `tinyint` stored as 2; a number out of range, text that must parse, a string longer than the column,
   `bool` as 1, a number into `bit`), because **value-level strictness is explicitly not wanted** (it would need a look at every value); and every runtime type the matrix never measured (an `IPAddress`, a java object, a range), because
@@ -125,9 +125,9 @@ What changed in the matrices, cell by cell (1,900 cells, regenerated with `DBDAT
 
 | | A14a against the pre-gate matrices | A14b against A14a |
 | --- | --- | --- |
-| stored cells that changed | 0 | 20 stored became refused (16 PostgreSQL, 4 SQL Server): exactly the pairs of section 3a |
+| stored cells that changed | 0 | 30 stored became refused (16 PostgreSQL, 14 SQL Server): exactly the pairs of section 3a; of the SQL Server ones, 4 are the `char` cells and 10 the date-into-text cells (`DateTime` x 4 kinds and `DateOnly`, into `varchar(50)` and `nvarchar(50)`) |
 | refused cells that became stored | 0 | 0 |
-| refused cells whose exception changed | 1,074 (477 SQL Server, 597 PostgreSQL) now `StagingValueException` instead of a provider exception | 3 more, PostgreSQL: `time` with `long:2^40`, `text` and `character varying(5)` with `byte[]:16` (the gate refuses by type, so a value the provider happened to refuse is refused by the gate) |
+| refused cells whose exception changed | 1,074 (477 SQL Server, 597 PostgreSQL) now `StagingValueException` instead of a provider exception | 8 more: PostgreSQL `time` with `long:2^40`, `text` and `character varying(5)` with `byte[]:16`; SQL Server `nvarchar(5)` with the five `DateTime`/`DateOnly` values (the gate refuses by type, so a value the provider happened to refuse is refused by the gate) |
 | every other cell | unchanged | unchanged |
 
 ## 3a. A14b: the refusals (strict at the type level)
@@ -158,19 +158,25 @@ converted.
 | PostgreSQL | Timestamp with time zone (`timestamptz`) | `uint`, `long` | same as `timestamp`, kind `Utc` | same |
 | PostgreSQL | String (`text`, `character varying(n)`) | `byte[]`, `Stream` | `{1,2,3}` stores the characters U+0001 U+0002 U+0003 | bytes are re-read as UTF-8 characters (binary that is not valid UTF-8 is refused by the server today) |
 | SQL Server | Int8, Int16, Int32, Int64 (`tinyint`, `smallint`, `int`, `bigint`) | `char` | `'a'` stores 97 | a letter becomes its code point |
+| SQL Server (decided 2026-10-30) | String (`varchar(50)`, `nvarchar(50)`) | `DateTime` (every kind measured: `Unspecified`, `Utc`, midnight, year 1500), `DateOnly` | `DateTime` 2024-03-17 09:41:22 stores `03/17/2024 09:41:22` (fraction dropped); midnight stores `03/17/2024 00:00:00`; `DateOnly` stores `03/17/2024 00:00:00` (a time that was never there); year 1500 stores `01/01/1500 00:00:00` | `SqlBulkCopy` formats the date on the client: lossy, and the format follows the culture of the machine that runs Sync (the matrix ran in one culture, so the other cultures are inferred, not measured). The text is not the value the source held. Fix: add a **Transform** to the mapped source column that formats the date or time as the text wanted |
 
-Cells: 20 (16 on PostgreSQL, 4 on SQL Server) moved from `STORED` to `REFUSED StagingValueException`. The gate decides by runtime type, so three
-PostgreSQL cells that the provider **already refuses** change only their exception type, from `PostgresException` to `StagingValueException` (`time` with
-`long:2^40`; `text` and `character varying(5)` with `byte[]:16`): refused before and after, now with a message that names table, column and type. Nothing else is
+**The SQL Server date-into-text row was added after A14b's first commits** (owner decision, 2026-10-30, the same day: the borderline cell below was kept lenient and the owner refused it, because "a user could add a Transform to resolve the issue"). The message for exactly this pair adds the advice: "Add a Transform to the mapped source column that formats the date or time as the text you want" (it still never names the value). Which runtime types are in the rule, and why:
+
+* `DateTime` and `DateOnly`: the matrix measured both stored into `varchar(50)` and `nvarchar(50)` as client-formatted text. Included.
+* `DateTimeOffset`, `TimeOnly`, `TimeSpan` (and `TimeSpan` of three days): the matrix shows every one **refused** by SQL Server text columns already (the gate's `SqlServerNever` table), so none is stored as formatted text and none is added. Nothing to move.
+* `char`, `nchar`, `text`, `ntext`: not measured (no such column in the matrix), so they keep passing as before; the rule is per canonical kind and the kind String has only the measured `varchar` and `nvarchar` columns. If the matrix gains them and they store the same text, add them here.
+
+Cells: 30 (16 on PostgreSQL, 14 on SQL Server; the first 20 are A14b's first commit, the 10 date-into-text cells the decision of 2026-10-30) moved from `STORED` to `REFUSED StagingValueException`. The gate decides by runtime type, so eight
+cells that the provider **already refuses** change only their exception type, to `StagingValueException` (PostgreSQL `time` with
+`long:2^40`, `text` and `character varying(5)` with `byte[]:16`; SQL Server `nvarchar(5)` with the five date values): refused before and after, now with a message that names table, column and type. Nothing else is
 expected to change; the diff of the regenerated matrices in the pull request shows it.
 
-### Borderline cells kept lenient (the owner may flip any of them)
+### Borderline cells kept lenient (the owner may flip any of them; the `varchar`/`nvarchar` from `DateTime`/`DateOnly` cell was flipped on 2026-10-30 and is in the table above)
 
 | Engine and cell | Stored today | Why it stays lenient |
 | --- | --- | --- |
 | SQL Server `bit` from any number (`int` 300, `-1`, `double` `NaN`) | `true` | numeric 0/1 flags are the normal way a source holds a boolean, and what a non-0/1 number should mean is a value question |
 | SQL Server integer, `decimal`, `money` from `bool` | 1 | `true` as 1 is a convention, the same logical value; PostgreSQL refuses it, SQL Server's provider converts |
-| SQL Server `varchar`/`nvarchar` from `DateTime`, `DateOnly` | text `03/17/2024 09:41:22`, fraction dropped | the same instant written as text, lossy and formatted by the client; the format may follow the worker's culture, which the matrix did not vary (finding 3). The first candidate if the owner wants dates refused as text |
 | SQL Server `date`, `datetime`, `datetime2`, `datetimeoffset` from strings (`"1.5"` stores 2026-01-05) | a date | text that must parse is value-level by the decision |
 | SQL Server `datetimeoffset` from `DateTime` | offset +00:00 whatever the kind | the wall clock is kept; assigning an offset is the provider's convention and depends on the value's kind |
 | SQL Server `datetime`, `datetime2` from `DateOnly`; `date` from `DateTime` | midnight; time dropped | widening and truncation of the same date or instant, a precision question |
@@ -190,7 +196,7 @@ Engines other than SQL Server and PostgreSQL do not use the gate. All of these k
 
 1. **Resolved by A14b (2026-10-30): PostgreSQL `COPY` mis-read integers as dates, times and timestamps** (`int` into `date`, `uint`/`long` into `time`, `timestamp`, `timestamptz`): stored without error as a count of days or microseconds since 2000-01-01. Now refused by type, with a message naming table, column and type.
 2. **A PostgreSQL `timestamptz` target takes only `DateTime` of kind `Utc`** (deliberate, and the refusal explains it; but it is a cross-engine gap). SQL Server `datetime2`/`datetimeoffset`, MySQL `datetime` and DuckDB `TIMESTAMP` sources are refused. The logical-slot reader returns a `DateTimeOffset` with the offset of the decoded text, so it is refused whenever that offset is not zero.
-3. **`DateTime` into a SQL Server `varchar`/`nvarchar` is formatted by the client** (`03/17/2024 09:41:22`, fraction dropped), and a string such as `"1.5"` is read as a date by `date`/`datetime`/`datetime2`/`datetimeoffset` targets. Both are the client's parsing and formatting, so they very likely follow the worker's culture; the matrix ran in one culture only and that is **not verified** under another.
+3. **Resolved for the first half by A14b (2026-10-30): `DateTime`/`DateOnly` into a SQL Server `varchar`/`nvarchar` was formatted by the client** (`03/17/2024 09:41:22`, fraction dropped) and is now refused, with the advice to add a Transform that formats the date. A string such as `"1.5"` is still read as a date by `date`/`datetime`/`datetime2`/`datetimeoffset` targets (text that parses, lenient by decision), which very likely follows the worker's culture; the matrix ran in one culture only and that is **not verified** under another.
 4. **PostgreSQL `COPY` cannot stage `interval`, `jsonb`, `timetz`, `money`, arrays or any type missing from `PostgresNpgsqlTypes`.** The error says so and names the other staging Kind.
 5. **Readers that cannot hand a value over at all**: SQL Server `geography`, `geometry`, `hierarchyid` (missing assembly); PostgreSQL unbounded `numeric` above 28 digits, `NaN`, intervals with months; MySQL zero dates and non-GUID `char(36)`; DuckDB intervals with months. These fail in the source driver before staging sees them.
 6. **DuckDB `BLOB` is a `Stream`**, which SQL Server staging refuses and PostgreSQL staging accepts.

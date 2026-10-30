@@ -11,7 +11,7 @@ public sealed class StagingValueException(string table, string column, string na
     : InvalidOperationException(
         $"Staging into {table}: column '{column}' ({nativeType}) cannot take a value of type {valueType.FullName} from the source. " +
         (reinterpreted
-            ? "The target engine would store that type as a different value (a number as a date or time, a character as its code, bytes as text), whatever the value. "
+            ? "The target engine would store that type as a different value (a number as a date or time, a character as its code, bytes as text, a date as culture-dependent text), whatever the value. "
             : "The target engine refuses that type for every column of this kind, whatever the value. ") +
         "Change what the mapped source column or its Transform produces to a type the column takes." +
         (advice is null ? "" : " " + advice))
@@ -70,7 +70,9 @@ public sealed class StagingValueGate
         if (verdict != StagingValueRules.Outcome.Pass)
         {
             var reinterpreted = verdict == StagingValueRules.Outcome.Reinterpreted;
-            throw new StagingValueException(_table, _columns[column], _nativeTypes[column], type, reinterpreted ? null : _advice, reinterpreted);
+            throw new StagingValueException(
+                _table, _columns[column], _nativeTypes[column], type,
+                reinterpreted ? StagingValueRules.ReinterpretedAdvice(_engine, _types[column], type) : _advice, reinterpreted);
         }
         _passed[column] = type;
     }
