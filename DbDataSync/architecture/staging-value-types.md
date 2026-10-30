@@ -119,6 +119,62 @@ point of the load (the batch is not written either way).
 
 What the layer could do beyond this is the findings below, each a behaviour change the owner has not asked for.
 
+## 3a. A14b: the proposed refusals (strict at the type level, for the owner's review)
+
+Decision of the owner, 2026-10-30 (13c D1): **strict at the type level only, with no runtime impact.** The gate keeps its single check per cell (one type
+comparison against the column's last accepted type); its refusal table grows. A (runtime type, target kind) pair is refused when the provider's current
+lenient behaviour **reinterprets the value into something that is not the same logical value**. Whether a particular value fits (range, precision, length,
+rounding, text that has to parse) stays lenient exactly as today: it needs per-value inspection, which is not wanted. No value is parsed, range-checked or
+converted.
+
+**The rule I applied**, to every cell the two matrices show as `STORED`:
+
+1. Refuse when the stored result has a different meaning from the source value *because of the type pair*, whatever the value: a count becomes a date, a
+   letter becomes a number, bytes become characters.
+2. Keep lenient: numeric to numeric (widening and narrowing, rounding and truncation: `double` 1.5 into `tinyint` stored as 2 is a value-fit question),
+   text that the provider parses, number or boolean to text (the text form is the same value), date to a wider date type (`DateOnly` into `datetime2`),
+   anything where the outcome depends on the value (range, length, precision, culture), and every type the matrices did not measure.
+3. The gate decides per canonical kind, not per column type, so a pair is listed only when every column type of the kind that the matrices measured stores it
+   the same way (each kind below has one measured column type per engine, except the strings, which have two on each engine).
+
+### Proposed refusals: STORED today, REFUSED with `StagingValueException` after A14b
+
+| Engine | Target kind (measured column types) | Runtime types | What is stored today (matrix) | Why it is a reinterpretation |
+| --- | --- | --- | --- | --- |
+| PostgreSQL | Date (`date`) | `int`, `ushort` | `int` 1 stores 2000-01-02; `300` stores 2000-10-27; `-1` stores 1999-12-31 | a number is read as days since 2000-01-01 |
+| PostgreSQL | Time (`time`) | `uint`, `long` | `1` stores 00:00:00.000001 | a number is read as microseconds |
+| PostgreSQL | Timestamp (`timestamp`) | `uint`, `long` | `1` stores 2000-01-01 00:00:00.000001; `2^40` stores 2000-01-13 17:25:11.627776 | a number is read as microseconds since 2000-01-01 |
+| PostgreSQL | Timestamp with time zone (`timestamptz`) | `uint`, `long` | same as `timestamp`, kind `Utc` | same |
+| PostgreSQL | String (`text`, `character varying(n)`) | `byte[]`, `Stream` | `{1,2,3}` stores the characters U+0001 U+0002 U+0003 | bytes are re-read as UTF-8 characters (binary that is not valid UTF-8 is refused by the server today) |
+| SQL Server | Int8, Int16, Int32, Int64 (`tinyint`, `smallint`, `int`, `bigint`) | `char` | `'a'` stores 97 | a letter becomes its code point |
+
+Cells: 20 (16 on PostgreSQL, 4 on SQL Server) are expected to move from `STORED` to `REFUSED StagingValueException`. The gate decides by runtime type, so three
+PostgreSQL cells that the provider **already refuses** change only their exception type, from `PostgresException` to `StagingValueException` (`time` with
+`long:2^40`; `text` and `character varying(5)` with `byte[]:16`): refused before and after, now with a message that names table, column and type. Nothing else is
+expected to change; the diff of the regenerated matrices in the pull request shows it.
+
+### Borderline cells I decided to keep lenient (the owner may flip any of them)
+
+| Engine and cell | Stored today | Why it stays lenient |
+| --- | --- | --- |
+| SQL Server `bit` from any number (`int` 300, `-1`, `double` `NaN`) | `true` | numeric 0/1 flags are the normal way a source holds a boolean, and what a non-0/1 number should mean is a value question |
+| SQL Server integer, `decimal`, `money` from `bool` | 1 | `true` as 1 is a convention, the same logical value; PostgreSQL refuses it, SQL Server's provider converts |
+| SQL Server `varchar`/`nvarchar` from `DateTime`, `DateOnly` | text `03/17/2024 09:41:22`, fraction dropped | the same instant written as text, lossy and formatted by the client; the format may follow the worker's culture, which the matrix did not vary (finding 3). The first candidate if the owner wants dates refused as text |
+| SQL Server `date`, `datetime`, `datetime2`, `datetimeoffset` from strings (`"1.5"` stores 2026-01-05) | a date | text that must parse is value-level by the decision |
+| SQL Server `datetimeoffset` from `DateTime` | offset +00:00 whatever the kind | the wall clock is kept; assigning an offset is the provider's convention and depends on the value's kind |
+| SQL Server `datetime`, `datetime2` from `DateOnly`; `date` from `DateTime` | midnight; time dropped | widening and truncation of the same date or instant, a precision question |
+| both engines, integers from `float`, `double`, `decimal` | rounded (SQL Server) or truncated (PostgreSQL) | numeric narrowing, a value-fit question |
+| PostgreSQL `time` from `TimeSpan` | stored under 24 hours | value range |
+| PostgreSQL `numeric` from integers and `BigInteger` | exact | widening |
+| both engines, strings into numeric, boolean, `xml`, `time`, `uniqueidentifier` where stored | parsed | text that parses is lenient by the decision |
+
+### Not measured: left passing, as today
+
+The matrices have no value of: `Int128`/`UInt128`, `Half`, `IPAddress`, `NpgsqlRange<T>`, `BitArray`, `Dictionary<,>`; the only `DateTimeOffset` has offset +02:00 and the
+only `DateTime` kinds are `Unspecified` and `Utc`. No column type was measured for: SQL Server `smalldatetime`, `smallmoney`, `char`, `nchar`, `text`, `ntext`,
+`binary`, `rowversion`, `sql_variant`, `varchar(max)`; PostgreSQL `char(n)`, `citext`, `timetz`, `money`, enums, domains, arrays, `numeric` without precision.
+Engines other than SQL Server and PostgreSQL do not use the gate. All of these keep passing to the provider.
+
 ## 4. Findings (not changed here)
 
 1. **PostgreSQL `COPY` mis-reads integers as dates, times and timestamps** (`int` into `date`, `uint`/`long` into `time`, `timestamp`, `timestamptz`): stored without error as a count of days or microseconds since 2000-01-01. A source integer column mapped onto a date column is a mapping mistake the engine does not catch.
