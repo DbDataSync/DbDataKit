@@ -118,7 +118,7 @@ A table the engine computes from its own query: a table-valued function, `STRING
 
 ## Surrogate keys (`keys:`)
 
-A model that owns a surrogate key defines it once, `keys: {customer_key: {from: [source_system, customer_id]}}`; the key's name is the name of a function that queries will call. `from` lists the function's arguments in order (they need not be columns of the model), `method` is `hash` (a 64-bit hash of the normalized business key, the same on every engine) and `unknown_member` and `history`/`version_key` are read and checked. The definition is read and validated now; the function itself, its lowering for each engine and the checks arrive in the next slices (plan 25, K03 onward), so a `keys:` block has no effect on a build yet.
+A model that owns a surrogate key defines it once, `keys: {customer_key: {from: [source_system, customer_id]}}`; the key's name is the name of a function that queries will call. `from` lists the function's arguments in order (they need not be columns of the model), `method` is `hash` (a 64-bit hash of the normalized business key, the same on every engine) and `unknown_member` and `history`/`version_key` are read and checked. A query calls the key by name, `customer_key(c.source_system, c.customer_id)`, and a call with the wrong number of arguments is refused naming the arguments the key takes. A key name is a function of the whole project: two models cannot define the same name, and a name that DuckDB has as a function is refused. **Not yet:** lowering the call for SQL Server and PostgreSQL (a build for them still stops with DDB-324, plan 25 K04), `unknown_member`, history version keys and `key_map` (read, not acted on).
 
 ## Which one do I use?
 
