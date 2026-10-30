@@ -8,4 +8,4 @@ The identity home (plan 13a U13): who people are and what they may do, for every
 - **`SigningKeys`**: ES256 keys, the private half protected by the host's `ISigningKeyProtector` (there is no default, so there is no unprotected key); rotate, retire.
 - **`HomeTokens`**: the request for the console's token to a server (plan 13 T01) with the home's user id as the subject and the roles the home holds for that user there.
 
-Not here yet: federation of Windows (Negotiate) and Entra groups into roles (a row of its own), refresh tokens, the console as a client (U14), `dbdatakit identity run` (U15), the module in the serving layer (O06).
+Not here yet: federation of Windows (Negotiate) and Entra groups into roles (a row of its own), refresh tokens, the console as a client (U14), running the home on its own (U15), the module in the serving layer (O06).
