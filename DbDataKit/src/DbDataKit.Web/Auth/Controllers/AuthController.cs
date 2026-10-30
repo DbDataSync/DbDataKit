@@ -27,7 +27,7 @@ public sealed record AuthStatus(
 [ApiController]
 [Route("api/auth")]
 public sealed class AuthController(
-    AuthOptions options, PasskeyOptions passkeys, UserStore users, SessionStore sessions, CurrentUser currentUser)
+    AuthOptions options, PasskeyOptions passkeys, UserStore users, SessionStore sessions, CurrentUser currentUser, IEnumerable<ISignOutHandler> signOutHandlers)
     : ControllerBase
 {
     /// <summary>
@@ -100,13 +100,19 @@ public sealed class AuthController(
 
     [HttpPost("sign-out")]
     [AllowAnonymous]
-    public IActionResult SignOutOfProduct()
+    public async Task<IActionResult> SignOutOfProduct(CancellationToken ct)
     {
+        string? redirectTo = null;
         if (Request.Cookies[options.CookieName] is { } sessionId)
+        {
             sessions.Delete(sessionId);
+            // a console with an identity home has it end the person's session there too: the answer then says where to send the browser
+            foreach (var handler in signOutHandlers)
+                redirectTo ??= await handler.SignedOutAsync(sessionId, ct);
+        }
 
         Response.Cookies.Delete(options.CookieName);
-        return NoContent();
+        return redirectTo is null ? NoContent() : Ok(new { redirectTo });
     }
 
     private void IssueSession(UserRecord user)
