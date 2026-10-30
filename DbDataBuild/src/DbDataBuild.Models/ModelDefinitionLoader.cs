@@ -6,7 +6,8 @@ namespace DbDataBuild.Models;
 /// <summary>Loads and validates one model definition (.yml). All problems are reported in one pass.</summary>
 public static class ModelDefinitionLoader
 {
-    private static readonly string[] TopKeys = ["name", "kind", "grain", "connections", "columns", "renames", "loads", "indexes", "hooks", "lint_ignore", "rewrites", "parameters", "refresh", .. YamlFieldReader.InfoKeys];
+    private static readonly string[] TopKeys = ["name", "kind", "grain", "connections", "columns", "renames", "loads", "indexes", "hooks", "lint_ignore", "rewrites", "parameters", "refresh", "keys", .. YamlFieldReader.InfoKeys];
+    private static readonly string[] KeyKeys = ["from", "method", "unknown_member", "history", "version_key"];
     private static readonly string[] RenameKeys = ["from", "to"];
 
     /// <param name="file">Path shown in diagnostics.</param>
@@ -100,6 +101,7 @@ public static class ModelDefinitionLoader
 
             var info = ReadInfo(top);
             var refresh = ReadRefresh(top, kindType?.Value, loads);
+            var keys = ReadKeys(top, isCopy);
 
             var rewrites = ReadRewrites(top);
             var modelParameters = top.Get("parameters") is { } pn ? ParameterReferences.Read(pn, "`parameters`", (d, n, f) => Add(d, n, f)) : null;
@@ -133,7 +135,7 @@ public static class ModelDefinitionLoader
             return new ModelDefinition(name.Value, kindType.Value,
                 uniqueKey?.Select(k => k.Value).ToList() ?? [], timeColumn?.Value, lookback?.Value,
                 grain?.Select(g => g.Value).ToList() ?? [], targets?.Select(t => t.Value).ToList(),
-                columns, renames, loads, indexes, hooks, lintIgnore?.Select(c => c.Value).ToList(), rewrites, from?.Value, from?.Line ?? 0, slice, onMismatch, false, watermark, modelParameters, false, info, refresh);
+                columns, renames, loads, indexes, hooks, lintIgnore?.Select(c => c.Value).ToList(), rewrites, from?.Value, from?.Line ?? 0, slice, onMismatch, false, watermark, modelParameters, false, info, refresh, keys);
         }
 
         /// <summary>`watermark: {column, lookback}` of an incremental copy. It needs a `unique_key` (the rows it reads again replace the ones with the same key).</summary>
@@ -627,6 +629,52 @@ public static class ModelDefinitionLoader
                     Add(DiagnosticCatalog.InvalidValue, t, $"Unknown connection `{t.Value}`.", $"One of: {string.Join(", ", connections.Order(StringComparer.Ordinal))}.");
                 if (name == null || cols == null) continue;
                 result.Add(new IndexDefinition(name.Value, cols.Select(c => c.Value).ToList(), unique, include?.Select(c => c.Value).ToList() ?? [], idxTargets?.Select(t => t.Value).ToList(), m.Line, ReadInfo(m)));
+            }
+            return result;
+        }
+
+        /// <summary>`keys:` (plan 25 section 1a): a mapping from a key's name to its definition. A key name is a function name, so it is a plain lower-case identifier.</summary>
+        private List<KeyDefinition> ReadKeys(YamlMapping top, bool isCopy)
+        {
+            var result = new List<KeyDefinition>();
+            if (top.Get("keys") is not { } node) return result;
+            if (isCopy) { Add(DiagnosticCatalog.InvalidValue, node, "A copy has no `keys`: it has the rows of the model it copies.", "Remove `keys:`; define the key on the model that is copied."); return result; }
+            if (node is not YamlMapping map) { Add(DiagnosticCatalog.InvalidValue, node, "`keys` must be a mapping from a key's name to its definition, `customer_key: {from: [source_system, customer_id]}`."); return result; }
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var (nameNode, value) in map.Entries)
+            {
+                var name = nameNode.Value;
+                if (!System.Text.RegularExpressions.Regex.IsMatch(name, "^[a-z_][a-z0-9_]*$"))
+                    Add(DiagnosticCatalog.InvalidValue, nameNode, $"`{name}` is not a valid key name: it is a function name.", "Lower-case letters, digits and underscores, not starting with a digit.");
+                if (value is not YamlMapping def) { Add(DiagnosticCatalog.InvalidValue, value, $"The key `{name}` must be a mapping with `from`."); continue; }
+                CheckKeys(def, KeyKeys, "a key");
+                var from = StringList(def, "from", required: true, allowEmpty: false);
+                var method = KeyMethods.Hash;
+                if (Scalar(def, "method", required: false, at: def) is { } m)
+                {
+                    if (m.Value == KeyMethods.KeyMap) Add(DiagnosticCatalog.InvalidValue, m, "`method: key_map` is not available yet (plan 25, slice K10).", "Leave `method` out: the key is a hash of its business key.");
+                    else if (m.Value != KeyMethods.Hash) Add(DiagnosticCatalog.InvalidValue, m, $"method is `{m.Value}`.", "`hash` (the default).");
+                }
+                var unknown = false;
+                if (Scalar(def, "unknown_member", required: false, at: def) is { } u)
+                {
+                    if (u.Value is "true" or "false") unknown = u.Value == "true";
+                    else Add(DiagnosticCatalog.InvalidValue, u, $"unknown_member is `{u.Value}`.", "true or false (lowercase).");
+                }
+                var history = Scalar(def, "history", required: false, at: def);
+                var versionKey = Scalar(def, "version_key", required: false, at: def);
+                if ((history == null) != (versionKey == null))
+                    Add(DiagnosticCatalog.InvalidValue, (YamlNode?)history ?? versionKey!, "`history` and `version_key` go together: `history` names the valid-from argument and `version_key` the function that keys a version.");
+                if (versionKey != null && !System.Text.RegularExpressions.Regex.IsMatch(versionKey.Value, "^[a-z_][a-z0-9_]*$"))
+                    Add(DiagnosticCatalog.InvalidValue, versionKey, $"`{versionKey.Value}` is not a valid key name: it is a function name.", "Lower-case letters, digits and underscores, not starting with a digit.");
+                if (history != null && from?.Any(f => f.Value == history.Value) == true)
+                    Add(DiagnosticCatalog.InvalidValue, history, $"`{history.Value}` is in `from` and is also the history argument.", "`history` names an argument of the version key beyond `from`.");
+                foreach (var dup in (from ?? []).GroupBy(f => f.Value).Where(g => g.Count() > 1).Select(g => g.Skip(1).First()))
+                    Add(DiagnosticCatalog.DuplicateKey, dup, $"`{dup.Value}` appears twice in the arguments of `{name}`.");
+                foreach (var each in new[] { name, versionKey?.Value }.Where(n => n != null))
+                    if (!names.Add(each!)) Add(DiagnosticCatalog.DuplicateKey, nameNode, $"The key name `{each}` is used more than once in this model.");
+                if (from == null) continue;
+                result.Add(new KeyDefinition(name, from.Select(f => f.Value).ToList(), method, unknown, history?.Value, versionKey?.Value, nameNode.Line));
             }
             return result;
         }
