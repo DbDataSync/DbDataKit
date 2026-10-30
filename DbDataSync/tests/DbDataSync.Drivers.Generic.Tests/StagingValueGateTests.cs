@@ -92,6 +92,96 @@ public sealed class StagingValueGateTests
         Assert.EndsWith("Use the other Kind.", Assert.Throws<StagingValueException>(() => gate.Check(0, new DateTime(2024, 1, 1))).Message);
     }
 
+    // A14b: strict at the type level. A pair is refused when the provider would store a different value; neighbours that are value-fit questions pass.
+    [Theory]
+    [InlineData(CanonicalKind.Date, typeof(int), true)]
+    [InlineData(CanonicalKind.Date, typeof(ushort), true)]
+    [InlineData(CanonicalKind.Date, typeof(DateTime), false)]   // the neighbour that must still pass
+    [InlineData(CanonicalKind.Date, typeof(DateOnly), false)]
+    [InlineData(CanonicalKind.Time, typeof(uint), true)]
+    [InlineData(CanonicalKind.Time, typeof(long), true)]
+    [InlineData(CanonicalKind.Time, typeof(TimeSpan), false)]
+    [InlineData(CanonicalKind.Time, typeof(TimeOnly), false)]
+    [InlineData(CanonicalKind.Timestamp, typeof(uint), true)]
+    [InlineData(CanonicalKind.Timestamp, typeof(long), true)]
+    [InlineData(CanonicalKind.Timestamp, typeof(DateTime), false)]
+    [InlineData(CanonicalKind.String, typeof(byte[]), true)]
+    [InlineData(CanonicalKind.String, typeof(MemoryStream), true)]
+    [InlineData(CanonicalKind.String, typeof(char), false)]
+    [InlineData(CanonicalKind.String, typeof(string), false)]
+    [InlineData(CanonicalKind.Int32, typeof(double), false)]    // rounding is a value-fit question: stays lenient
+    [InlineData(CanonicalKind.Int32, typeof(int), false)]
+    public void PostgresRefusesWhatItWouldStoreAsADifferentValue(CanonicalKind kind, Type valueType, bool refused) =>
+        Assert.Equal(refused, StagingValueRules.Refuses(EngineId.Postgres, CanonicalType.Of(kind), valueType));
+
+    [Fact]
+    public void PostgresTimestampWithTimeZone_RefusesIntegersAsMicroseconds_ButTakesAUtcDateTime()
+    {
+        var tz = CanonicalType.Timestamp(tz: true);
+        Assert.True(StagingValueRules.Refuses(EngineId.Postgres, tz, typeof(long)));
+        Assert.True(StagingValueRules.Refuses(EngineId.Postgres, tz, typeof(uint)));
+        Assert.False(StagingValueRules.Refuses(EngineId.Postgres, tz, typeof(DateTime)));
+    }
+
+    [Theory]
+    [InlineData(CanonicalKind.Int8, typeof(char), true)]
+    [InlineData(CanonicalKind.Int16, typeof(char), true)]
+    [InlineData(CanonicalKind.Int32, typeof(char), true)]
+    [InlineData(CanonicalKind.Int64, typeof(char), true)]
+    [InlineData(CanonicalKind.Int32, typeof(bool), false)]      // true as 1 is a convention: lenient
+    [InlineData(CanonicalKind.Int32, typeof(double), false)]
+    [InlineData(CanonicalKind.Int32, typeof(string), false)]
+    [InlineData(CanonicalKind.String, typeof(char), false)]
+    [InlineData(CanonicalKind.Boolean, typeof(int), false)]     // a number into bit stays lenient
+    [InlineData(CanonicalKind.Date, typeof(string), false)]     // text that parses as a date stays lenient
+    [InlineData(CanonicalKind.Date, typeof(int), false)]        // SQL Server's provider refuses it itself: an engine refusal, not a reinterpretation
+    public void SqlServerRefusesACharacterAsItsCodePoint_AndNothingMoreThanThat(CanonicalKind kind, Type valueType, bool refusedAsReinterpreted) =>
+        Assert.Equal(refusedAsReinterpreted, StagingValueRules.Verdict(EngineId.SqlServer, CanonicalType.Of(kind), valueType) == StagingValueRules.Outcome.Reinterpreted);
+
+    [Fact]
+    public void AnIntegerIntoAPostgresDate_IsRefusedAsAReinterpretation_AndTheMessageNamesTableColumnAndTypeButNotTheValue()
+    {
+        var types = new Dictionary<string, string> { ["Due"] = "date" };
+        var schema = StagingBatches.Schema(EngineId.Postgres, ["Due"], types, false, "__Operation");
+        var gate = StagingValueGate.For(EngineId.Postgres, "public.invoices", ["Due"], types, schema, "Use the other Kind.");
+
+        var ex = Assert.Throws<StagingValueException>(() => gate.Check(0, 8675309));
+
+        Assert.True(ex.Reinterpreted);
+        Assert.Equal(typeof(int), ex.ValueType);
+        Assert.Contains("public.invoices", ex.Message);
+        Assert.Contains("'Due'", ex.Message);
+        Assert.Contains("(date)", ex.Message);
+        Assert.Contains("System.Int32", ex.Message);
+        Assert.Contains("different value", ex.Message);
+        Assert.Contains("Transform", ex.Message);
+        Assert.DoesNotContain("8675309", ex.Message);
+        Assert.DoesNotContain("Use the other Kind.", ex.Message); // the other Kind's behaviour for these pairs was not measured: no advice
+    }
+
+    [Fact]
+    public void ARefusedTypeStaysRefused_AndALenientNeighbourStillPassesOnTheSameColumn()
+    {
+        var types = new Dictionary<string, string> { ["Due"] = "date" };
+        var schema = StagingBatches.Schema(EngineId.Postgres, ["Due"], types, false, "__Operation");
+        var gate = StagingValueGate.For(EngineId.Postgres, "public.invoices", ["Due"], types, schema);
+
+        gate.Check(0, new DateTime(2024, 3, 17));
+        gate.Check(0, new DateOnly(2024, 3, 17));
+        Assert.Throws<StagingValueException>(() => gate.Check(0, 1));
+        Assert.Throws<StagingValueException>(() => gate.Check(0, 1));
+        gate.Check(0, new DateOnly(2024, 3, 18));
+    }
+
+    [Fact]
+    public void AnEngineRefusal_IsNotMarkedAsAReinterpretation()
+    {
+        var gate = Gate(EngineId.SqlServer, "Id");
+        var ex = Assert.Throws<StagingValueException>(() => gate.Check(0, Guid.Empty));
+        Assert.False(ex.Reinterpreted);
+        Assert.Contains("refuses that type", ex.Message);
+    }
+
     [Fact]
     public void ThroughTheBatchReader_ARefusedCellThrowsOnRead_AndEveryOtherCellIsUntouched()
     {
