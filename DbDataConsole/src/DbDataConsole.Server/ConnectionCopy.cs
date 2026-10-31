@@ -107,6 +107,9 @@ public static partial class ConnectionCopy
         }
         if (!dropped.Contains("connection_string_secret") && source.ConnectionStringSecret is { } wholeString) secrets.Add(wholeString);
 
+        if (targetProduct == Sync && source.Address is null && string.IsNullOrEmpty(source.ConnectionString))
+            return Refused("Sync reads a connection by `address` or `connection_string`, and this one holds its whole connection string in a secret, which Sync cannot use. Give it an address first.");
+
         if (problem is not null) return Refused("The file could not be changed for the target: " + problem);
 
         var check = ConnectionDefinitionLoader.Load(text, "copy", addressRequired: false);

@@ -104,6 +104,15 @@ public sealed class ConnectionCopyTests
     }
 
     [Fact]
+    public void A_connection_with_only_a_secret_connection_string_is_refused_for_Sync()
+    {
+        var text = "schema: connection/1\nname: erp\nengine: sqlserver\nconnection_string_secret: 'env:WHOLE'\n";
+
+        Assert.Contains("whole connection string in a secret", ConnectionCopy.Plan(text, ConnectionCopy.Proxy, ConnectionCopy.Sync, "e2").Problem);
+        Assert.Null(ConnectionCopy.Plan(text, ConnectionCopy.Proxy, ConnectionCopy.Proxy, "e2").Problem);
+    }
+
+    [Fact]
     public void A_scripts_and_hooks_note_is_made_for_a_Sync_copy_that_keeps_them()
     {
         var text = Base.Replace("'env:PW'", "'secret:dbdata:sync:connection:erp'") + "\nextensions:\n  sync:\n    scripts:\n      before: { name: warm-up }\n";
