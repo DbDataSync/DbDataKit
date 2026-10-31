@@ -6,7 +6,7 @@ namespace DbDataBuild.Models;
 /// <summary>Loads and validates one model definition (.yml). All problems are reported in one pass.</summary>
 public static class ModelDefinitionLoader
 {
-    private static readonly string[] TopKeys = ["name", "kind", "grain", "connections", "columns", "renames", "loads", "indexes", "hooks", "lint_ignore", "rewrites", "parameters", "refresh", "keys", .. YamlFieldReader.InfoKeys];
+    private static readonly string[] TopKeys = ["name", "kind", "grain", "connections", "columns", "renames", "loads", "indexes", "hooks", "lint_ignore", "rewrites", "parameters", "refresh", "keys", "foreign_keys", .. YamlFieldReader.InfoKeys];
     private static readonly string[] KeyKeys = ["from", "method", "unknown_member", "history", "version_key"];
     private static readonly string[] RenameKeys = ["from", "to"];
 
@@ -92,6 +92,7 @@ public static class ModelDefinitionLoader
             var loads = ReadLoads(top, kindType?.Value, uniqueKey, timeColumn, columns, slice);
             var renames = ReadRenames(top);
             var indexes = ReadIndexes(top, columns, targets?.Select(t => t.Value).ToList());
+            var foreignKeys = ReadForeignKeys(top, columns);
             if (kindType?.Value == ModelKinds.View && indexes.Count > 0) Add(DiagnosticCatalog.InvalidValue, top.Get("indexes")!, "A view cannot have indexes (indexed views are out of scope).");
             var hooks = top.Get("hooks") is { } hn ? HookReader.ReadList(hn, allowUse: true, "`hooks`", (d, n, f) => Add(d, n, f), connections) : [];
 
@@ -135,7 +136,7 @@ public static class ModelDefinitionLoader
             return new ModelDefinition(name.Value, kindType.Value,
                 uniqueKey?.Select(k => k.Value).ToList() ?? [], timeColumn?.Value, lookback?.Value,
                 grain?.Select(g => g.Value).ToList() ?? [], targets?.Select(t => t.Value).ToList(),
-                columns, renames, loads, indexes, hooks, lintIgnore?.Select(c => c.Value).ToList(), rewrites, from?.Value, from?.Line ?? 0, slice, onMismatch, false, watermark, modelParameters, false, info, refresh, keys);
+                columns, renames, loads, indexes, hooks, lintIgnore?.Select(c => c.Value).ToList(), rewrites, from?.Value, from?.Line ?? 0, slice, onMismatch, false, watermark, modelParameters, false, info, refresh, keys, foreignKeys);
         }
 
         /// <summary>`watermark: {column, lookback}` of an incremental copy. It needs a `unique_key` (the rows it reads again replace the ones with the same key).</summary>

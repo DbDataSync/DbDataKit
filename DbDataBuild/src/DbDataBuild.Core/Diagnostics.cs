@@ -540,6 +540,12 @@ public static class DiagnosticCatalog
         "Read the message: it starts with the validation code (in brackets) and is at the line of the file it is about. `docs/semantic/catalog.md` describes each block.",
         "Everything the semantic layer's own validation finds that has no code of its own here: a hierarchy level that is not a dimension, a calendar that is not a time dimension, a measure computed from itself, an attribute no relationship reaches, and the like.");
 
+    public static readonly DiagnosticDescriptor ForeignKeyInvalid = E("618", "A foreign key declared on a model does not match its target",
+        "a `foreign_keys:` entry of a built model whose `references.table` is a model of the project and whose `references.columns` are that model's declared columns and its grain",
+        "Point `references.table` at a model of the project, name its columns, and use the columns of its `grain`; or remove the key.",
+        "A foreign key on a built model is a claim about the data, never a constraint created in a database: a generated test (`connection check`) counts the rows whose key the target lacks, and a semantic model of the project reads the key as a many-to-one relationship named like the key. " +
+        "It is many-to-one by the target's grain, so the referenced columns are that grain.");
+
     // 5xx: state and safety (logins, the mutation gate, tracking tables)
     public static readonly DiagnosticDescriptor LoginNotConfigured = E("501", "Login not configured",
         "A connection string in the environment variable named in the message, for the login this command needs.",
@@ -604,7 +610,7 @@ public static class DiagnosticCatalog
         AnswerForUnknownQuestion, AnswerChoiceInvalid, AnswerValueMismatch, NoProposalToAccept, QuestionUnanswered,
         DefinitionOutOfSync, RenderedFileOutOfDate, ObjectChangedOutsideTool, LoadDefinitionChanged, AdoptionDeclined, UpstreamBlocked, ModelUnplannable, PlanFileInvalid, StepNeedsAllowance, PlanIsStale, PlanAlreadyStarted, ApplyLockHeld, StepFailed, RefreshPlanMissing, RefreshCheckFailed, RefreshFileChanged, RefreshPlanUndeclared, RefreshMembershipDuplicate, RefreshMembershipInvalid, KindWrittenOldWay, KindShapeInvalid, RefreshInputMissing, RefreshPlanUnknown, ReadOnlyConnectionNotWritable, DialectProfileInvalid, DialectLockInvalid, DialectLockMissing, DialectLockStale, OriginDialectChanged, ProjectUpdateDiffers, InputResolverInvalid, InputsDependOnEachOther, InputNotResolved, InputsMoved, StepResultDiffers, DirtyWorkingTree, HistoryInconsistent, DefinitionFileChanged, DefinitionNotEditable,
         TestFailed, TestCouldNotRun, TestNotASelect,
-        SemanticFileInvalid, SemanticUnknownModel, SemanticModelNotOnConnection, SemanticUnknownColumn, SemanticBindingTypeMismatch, SemanticRelationshipInvalid, SemanticUnknownConnection, SemanticModelInvalid,
+        SemanticFileInvalid, SemanticUnknownModel, SemanticModelNotOnConnection, SemanticUnknownColumn, SemanticBindingTypeMismatch, SemanticRelationshipInvalid, SemanticUnknownConnection, SemanticModelInvalid, ForeignKeyInvalid,
         LoginNotConfigured, GateRefused, StatementLogUnavailable, ReadStatementRefused, TrackingNotInitialized,
         InternalError, ProjectFilePathRefused, ProjectFileHashStale, ProjectFileUnusable,
         ConnectionFileInvalid, ConnectionsInProjectFile,

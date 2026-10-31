@@ -97,8 +97,12 @@ public sealed record ModelDefinition(
     bool LocalCopy = false,
     ObjectInfo? DeclaredInfo = null,
     IReadOnlyList<RefreshMembership>? DeclaredRefresh = null,
-    IReadOnlyList<KeyDefinition>? DeclaredKeys = null)
+    IReadOnlyList<KeyDefinition>? DeclaredKeys = null,
+    IReadOnlyList<ForeignKeyDefinition>? DeclaredForeignKeys = null)
 {
+    /// <summary>The foreign keys the model declares (`foreign_keys:`, plan 19 J29): a claim about the data that is tested and read by the semantic layer as relationships, and never created in a database.</summary>
+    public IReadOnlyList<ForeignKeyDefinition> ForeignKeys => DeclaredForeignKeys ?? [];
+
     /// <summary>The surrogate keys the model owns (`keys:`, plan 25 section 1a). Each is also a function, named after it, that queries call.</summary>
     public IReadOnlyList<KeyDefinition> Keys => DeclaredKeys ?? [];
 
