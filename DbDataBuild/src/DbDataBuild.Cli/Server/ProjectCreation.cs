@@ -29,6 +29,9 @@ internal sealed class ProjectCreator(string serverDirectory, ProjectsFile projec
             try
             {
                 NewCommand.Write(template, folder);
+                // rendered files are hashed and compared as committed, so a merge on a machine that converts line endings must not touch them
+                if (!File.Exists(Path.Combine(folder, ".gitattributes")))
+                    File.WriteAllText(Path.Combine(folder, ".gitattributes"), "* text=auto eol=lf\nrendered/** text eol=lf\n");
                 LibGit2Sharp.Repository.Init(folder);
                 GitWorkspaceOperations.Commit(folder, $"New project from the {template.Name} template", author);
                 var project = new HostedProject(id, folder, null, null);
