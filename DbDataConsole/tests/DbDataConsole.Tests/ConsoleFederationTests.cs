@@ -39,14 +39,7 @@ public sealed class ConsoleFederationTests : IAsyncLifetime
 
     private const string ServerAId = "server-a", ServerBId = "server-b";
 
-    private static int FreePort()
-    {
-        var l = new TcpListener(IPAddress.Loopback, 0);
-        l.Start();
-        var port = ((IPEndPoint)l.LocalEndpoint).Port;
-        l.Stop();
-        return port;
-    }
+    private static int FreePort() => TestPorts.Next();
 
     private sealed class Mask : ISigningKeyProtector
     {
