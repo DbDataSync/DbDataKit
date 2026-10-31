@@ -10,4 +10,6 @@ The identity home (plan 13a U13): who people are and what they may do, for every
 - **`OpenIdClient`** and **`FederatedUsers`** (U14, U17): the relying party and what a console keeps for people who sign in through the home: the mirrored user, the home's last word on their roles, and per session the protected refresh token. `RefreshAsync` asks again when the interval has passed; the roles lapse after the interval plus a grace when the home cannot be asked.
 - **`HomeTokens`**: the request for the console's token to a server (plan 13 T01) with the home's user id as the subject and the roles the home holds for that user there.
 
-Not here yet: federation of Windows (Negotiate) and Entra groups into roles (a row of its own), running the home on its own (U15), the module in the serving layer (O06).
+- **External groups** (plan 13a U18): `HomeDirectory.MapExternalGroup` maps an Entra group (the id token's `groups` claim) or a Windows group to roles on a server, a Build project or an app; `ExternalSignIns.SignIn` finds or makes the home user for an upstream sign-in (U16's rules) and records the groups the sign-in carried, replacing the last ones. What a person holds is their own assignments, their groups' and their external groups' mappings added together. `OpenIdClient` validates ES256 (the home) and RS256 (Entra) id tokens.
+
+Not here yet: the host that does the upstream sign-in and administers mappings (serving layer, O06), a feed of Windows (Negotiate) groups, Entra's group overage, running the home on its own (U15), the module in the serving layer (O06).
