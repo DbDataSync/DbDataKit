@@ -161,6 +161,86 @@
       }
     },
     {
+      "name": "semantic_describe",
+      "description": "What the model offers: its dimensions, attributes, measures, hierarchies and saved queries. [Offline only] Usage: semantic describe <model> [--address URL] --user U [--insecure]   (the password is DBPROXY_PASSWORD)",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "semantic_query",
+      "description": "Run a semantic query: semantic SQL (--sql) or a request (--request, JSON); the answer is read as the caller, at most --max-rows rows. [Offline only] Usage: semantic query <model> (--sql \"...\" | --request '{...}') [--max-rows N] [--address URL] --user U [--insecure]   (the password is DBPROXY_PASSWORD)",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "semantic_explain",
+      "description": "What a query would run on the sources, one row per scan, without running it. [Offline only] Usage: semantic explain <model> (--sql \"...\" | --request '{...}') [--address URL] --user U [--insecure]   (the password is DBPROXY_PASSWORD)",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "semantic_members",
+      "description": "The values an attribute takes, to choose a parameter's value from. [Offline only] Usage: semantic members <model> <attribute> [--search TEXT] [--limit N] [--address URL] --user U [--insecure]   (the password is DBPROXY_PASSWORD)",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
       "name": "health_check",
       "description": "Exit 0 when the running proxy answers /health/live (for a container's HEALTHCHECK). [Offline only] Usage: health check [--url <url>]",
       "inputSchema": {

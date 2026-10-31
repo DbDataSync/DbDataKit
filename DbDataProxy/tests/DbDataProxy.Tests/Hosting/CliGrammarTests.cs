@@ -31,6 +31,7 @@ public sealed class CliGrammarTests
               secret      The encrypted secret store, secret references and protected values
               config      The server's own configuration
               query       A client for smoke-testing a running proxy
+              semantic    A served semantic model: what it offers, a query on it, what a query would run, the values of an attribute
               datasource  The proxy's data sources (the name the query client's --datasource uses)
               health      Is a running proxy answering
               ui          The local interfaces
