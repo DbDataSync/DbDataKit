@@ -373,6 +373,45 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(page.getByTestId('build-publish-done')).toContainText('legacy')
   await expect(page.getByTestId('build-publish-done')).toContainText('updated')
 
+  // E05, the Connections view across servers: the Proxy's data sources are listed (the Sync server has none yet), one is copied to the Sync server and then back to the Proxy under another name. Each target reads the file with its own strict loader.
+  await page.goto('/connections')
+  await expect(page.getByTestId('connections-page')).toBeVisible()
+  const connection = (server: string, name: string) => page.locator(`[data-testid=connection-row][data-server="${server}"][data-name="${name}"]`)
+  await expect(connection('Proxy one', 'ledger')).toBeVisible()
+  await expect(page.locator('[data-testid=connection-row][data-server="Sync one"]')).toHaveCount(0)
+  // a data source Build republished holds its whole connection string in a secret; Sync cannot read that, and the copy says so
+  await expect(connection('Proxy one', 'legacy')).toBeVisible()
+  await connection('Proxy one', 'legacy').getByTestId('connection-copy-button').click()
+  await page.getByTestId('copy-target').selectOption({ label: 'Sync one (Sync)' })
+  await page.getByTestId('copy-submit').click()
+  await expect(page.getByTestId('copy-failed')).toContainText('whole connection string in a secret')
+  await page.goto('/connections')
+  await connection('Proxy one', 'ledger').getByTestId('connection-copy-button').click()
+  await expect(page.getByTestId('copy-submit')).toBeDisabled()   // a server first
+  await page.getByTestId('copy-target').selectOption({ label: 'Sync one (Sync)' })
+  await expect(page.getByTestId('copy-name')).toHaveValue('ledger')
+  // without a password Sync says what it lacks, naming the reference the copy would use, and nothing is kept
+  await page.getByTestId('copy-submit').click()
+  await expect(page.getByTestId('copy-failed')).toContainText('dbdata:sync:connection:ledger')
+  await expect(connection('Sync one', 'ledger')).toHaveCount(0)
+  // with the password typed once (it goes to Sync only, and is stored under the copy's own reference), the copy is made, with what was left out said
+  await page.getByTestId('copy-password').fill('e2e-password')
+  await page.getByTestId('copy-submit').click()
+  await expect(page.getByTestId('copy-done')).toContainText('Copied to Sync one as ledger')
+  await expect(page.getByTestId('copy-done')).toContainText('never copied')
+  await expect(connection('Sync one', 'ledger')).toBeVisible()
+  await expect(connection('Sync one', 'ledger').getByTestId('connection-detail')).toContainText('localhost')
+  // and from Sync to the Proxy, under another name; the Proxy has validated it when it is listed
+  await connection('Sync one', 'ledger').getByTestId('connection-copy-button').click()
+  await page.getByTestId('copy-target').selectOption({ label: 'Proxy one (Proxy)' })
+  await page.getByTestId('copy-name').fill('ledger-from-sync')
+  await page.getByTestId('copy-submit').click()
+  await expect(page.getByTestId('copy-done')).toContainText('Copied to Proxy one as ledger-from-sync')
+  await expect(connection('Proxy one', 'ledger-from-sync')).toBeVisible()
+  // a name the target already has is a conflict, and the file there is left alone
+  await page.getByTestId('copy-submit').click()
+  await expect(page.getByTestId('copy-failed')).toContainText('did not accept the copy')
+
   // One view across the servers: the Build, Sync and Proxy servers all answer, and none has a replication or a scheduled plan yet (a failed run and a lagging replication need real runs, so the rows themselves are tested on what the servers return)
   await page.goto('/monitoring')   // the rail inside a server's screens is that product's own
   await expect(page.getByTestId('monitoring-none')).toBeVisible()

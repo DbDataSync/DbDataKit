@@ -52,6 +52,22 @@ A server started with `DBDATAKIT_CONSOLE_ANNOUNCE_URL` (and `DBDATAKIT_ADVERTISE
 and a Confirm and a Reject button. The list refreshes every few seconds, Confirm moves the server into the list below (a failure, such as the server not answering or its code having expired, is shown under that server in the console's own words) and Reject removes it until it announces again (every half minute while it waits).
 In the web app, `/instances` lists them and `/servers/<id>/...` opens a server's own screens (Sync's replications and configuration so far), whose calls the console relays at `/relay/<server>/api/...` and `/relay/<server>/hubs/...`.
 
+## Connections across servers
+
+The Connections page (`/connections`, in the rail) lists the connections of every Sync server and the data sources of every Proxy the console manages, each asked of its server through the relay (a server that does not answer, or whose list it refuses, is named above the list and the others still show).
+A Sync connection and a Proxy data source are the same `connection/1` file, so a connection on one server can be **copied to another**: *Copy to...* on a row, choose the server and the name it will have there (the same name when it is another server).
+
+The console makes the copy as the person signed in: it reads the file from the first server (`GET /api/connections/<name>/file` on Sync, `GET /api/v1/data-sources/<name>` on a Proxy), changes only what belongs to that server, and creates the file on the second
+(`PUT` with no version, so a name the target already has is a conflict and the file there is never overwritten). The target reads it with its own strict loader, and what it refuses comes back on the page with the line of each fault, and nothing is written.
+What changes in the file, and what the page tells the person:
+
+- `name` is the new name; `managed_by` is dropped (it names a client of the source's server); `extensions.<product>` of another product is dropped (the target does not read it), the target's own kept (Sync to Sync, Proxy to Proxy). The rest of the file, its comments and its layout, stay as they were.
+- **A password is never copied.** It is a reference in the file (`password_secret`); the copy names the reference the target is to hold and says so. Sync reads one reference only, `secret:dbdata:sync:connection:<name>`, so a copy to Sync names that for the new name; a copy of a Sync connection to a Proxy names
+  `secret:dbdata:proxy:connection:<name>`, not Sync's store; every other reference (`env:ERP_DB_PASSWORD`) is kept as written. For a Sync target the page asks for the password (optional, for a connection that logs in with one): it is sent to that server only, in the same call, stored there under the copy's own reference
+  as Sync's own Connections page stores one, and kept nowhere else; without it Sync refuses a user-and-password connection, naming the reference. A Proxy takes its secrets from its own store, so no password is accepted for a Proxy target.
+- What the target does not support is its refusal, in its words: the Proxy serves `sqlserver`, `odbc`, `duckdb`, `postgres` and `flightsql` and refuses another engine; Sync refuses `tls`, `read_login`, `write_login`, `connection_string_secret` and `access`.
+- What a person may do is each server's decision from the token (the roles the console grants that person there, never above the server's ceiling): a Proxy takes a copy from an administrator only.
+
 ## What is served
 
 `/api/auth`, `/api/invites` and `/api/users` are the shared sign-in controllers of `DbDataKit.Web` (the same ones Sync serves), `/health` and `/version` answer without signing in, and everything else under `/api` is closed

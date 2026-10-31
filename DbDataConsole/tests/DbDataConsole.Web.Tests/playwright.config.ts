@@ -108,6 +108,10 @@ if (!isWorker) {
   fs.writeFileSync(path.join(proxyDirectory, 'config', 'connections', 'legacy.yaml'), [
     'schema: connection/1', 'name: legacy', 'engine: sqlserver', 'address: { host: localhost, database: Legacy }',
     "auth: { mode: sql, user: reader, password_secret: 'env:LEGACY_DB_PASSWORD' }", ''].join('\n'))
+  // one nothing hands over, for the Connections story to copy to a Sync server (a handed-over one is republished by Build with its connection string in a secret, which Sync cannot read)
+  fs.writeFileSync(path.join(proxyDirectory, 'config', 'connections', 'ledger.yaml'), [
+    'schema: connection/1', 'name: ledger', 'engine: sqlserver', 'address: { host: localhost, database: Ledger }',
+    "auth: { mode: sql, user: reader, password_secret: 'env:LEDGER_DB_PASSWORD' }", ''].join('\n'))
   const made = execFileSync('dotnet', ['exec', proxyDll, 'server', 'pair', '--repo', proxyDirectory, '--max-role', 'admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'proxy-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
