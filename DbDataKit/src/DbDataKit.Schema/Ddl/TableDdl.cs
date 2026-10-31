@@ -60,6 +60,18 @@ public abstract class TableDdl(string engine)
         $"CREATE {(index.Unique ? "UNIQUE " : "")}INDEX {Quote(index.Name)} ON {Qualified(schema, name)} ({string.Join(", ", index.Columns.Select(Quote))})" +
         $"{(index.Include.Count > 0 ? $" INCLUDE ({string.Join(", ", index.Include.Select(Quote))})" : "")};";
 
+    /// <summary>A primary key, added after the table exists (the same statement on SQL Server, Fabric and PostgreSQL). The columns must already be NOT NULL.</summary>
+    public string AddPrimaryKey(string schema, string name, string constraint, IReadOnlyList<string> columns) =>
+        $"ALTER TABLE {Qualified(schema, name)} ADD CONSTRAINT {Quote(constraint)} PRIMARY KEY ({string.Join(", ", columns.Select(Quote))});";
+
+    /// <summary>A unique constraint over the columns (a key other rows may point at).</summary>
+    public string AddUnique(string schema, string name, string constraint, IReadOnlyList<string> columns) =>
+        $"ALTER TABLE {Qualified(schema, name)} ADD CONSTRAINT {Quote(constraint)} UNIQUE ({string.Join(", ", columns.Select(Quote))});";
+
+    /// <summary>A foreign key from the columns of one table to the key (or unique columns) of another. No cascade: a row that is pointed at is not deleted by deleting something else.</summary>
+    public string AddForeignKey(string schema, string name, string constraint, IReadOnlyList<string> columns, string referencedSchema, string referencedTable, IReadOnlyList<string> referencedColumns) =>
+        $"ALTER TABLE {Qualified(schema, name)} ADD CONSTRAINT {Quote(constraint)} FOREIGN KEY ({string.Join(", ", columns.Select(Quote))}) REFERENCES {Qualified(referencedSchema, referencedTable)} ({string.Join(", ", referencedColumns.Select(Quote))});";
+
     public abstract string DropIndex(string schema, string table, string indexName);
 
     /// <param name="bodySql">The query written for this engine.</param>

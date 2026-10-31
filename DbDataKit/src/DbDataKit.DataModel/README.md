@@ -14,4 +14,10 @@ What is checked:
 - `history` is `none`, `audit` or `effective_dated`; `role` is `table`, `dimension`, `mapping` or `calendar`.
 - Rules are `sum_equals`, `no_overlap` or `no_cycle` with the attributes they need, all of which exist.
 
-Storage, writes and history behaviour are other slices (Z03 to Z05); this library only says what a valid model is.
+## Storage (plan 19, Z03)
+
+`ModelStorage.Plan(model, "sqlserver" | "postgres")` returns the statements that make a model's storage: a schema named like the model, a table per entity (columns in the engine's own types from the shared dialect, NOT NULL for a required attribute or a key attribute), a primary key, a unique constraint per unique attribute, and a foreign key for each reference to an entity of the same model (the type must be the same at both ends). A reference to another model's entity is checked on a write, with no foreign key, and the plan says so in `Notes`. The statements are `DbDataKit.Schema`'s `TableDdl`, so a later slice that changes a structure starts from the same text.
+
+`ModelStorage.CreateAsync(connection, plan)` runs them in one transaction. It only creates: a table that is already there refuses the whole creation (`StorageException`), writing nothing. Defaults, ranges, patterns, allowed values and the cross-row rules are the write path's (Z04), and the columns history needs (Z05) are added then; the database holds the shape and the keys.
+
+Writes and history behaviour are other slices (Z04, Z05); this library says what a valid model is and how it is stored.
