@@ -12,7 +12,13 @@ to it in the pull request that makes the change; a release moves the entries int
   (`dbdata:sync:config:stateConnectionString`). `secrets/` is added to the repository's `.gitignore`; back it up with its key. Names are
   lower-cased, so two connections whose names differ only in case share a password. The environment fallback is now
   `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_<NAME>` (was `DBDATASYNC_SECRET_DBDATASYNC_CONNECTION_<NAME>`); `DBDATASYNC_SECRETS_FILE` is gone. (A04, A05)
-- **Every config file needs a `schemaVersion`, and unknown keys are an error.** A file without one, or with an older one, is refused with a
+- **Connections are `connection/1` files, and the old form is refused.** `config/connections/<name>.yaml` is now the shared connection format that the Proxy and Build use: `schema: connection/1`, `name`, `engine`
+  (`sqlserver`, `postgres`, `mysql`, `oracle`, `duckdb`, `flightsql`, or a driver id), `address` (host, port, database) or `connection_string`, `auth` (`sql` with `user` and
+  `password_secret: secret:dbdata:sync:connection:<name>`, `integrated` or `none`), `timeouts`, and Sync's own settings (`segmentOrder`, `properties`, `scripts`, `hooks`, `testQuery`, and `database` with a `connection_string`)
+  under `extensions.sync`. A repository that still has the earlier files (`driverType`, `host`, `authMode`, `schemaVersion`) fails to load its connections, with a message that names every such file and the new form
+  (`dbdatasync config check` and the Connections page show it). **Rewrite each file by hand, or delete it and create the connection again**; nothing is converted, and the stored passwords keep their names so none needs setting again.
+  A connection name must now start with a letter and be at most 64 characters (it was any letters and digits). The API and the screens are unchanged. See `DbDataSync/docs/configuration.md`, "Connection files". (E01)
+- **Every config file needs a `schemaVersion`, and unknown keys are an error.** (Connection files carry `schema: connection/1` instead, see the entry above.) A file without one, or with an older one, is refused with a
   message naming the file. The retired per-stage `parallelism` keys under `reader` and `writer` in a replication's `task.yaml` are refused,
   naming each key: delete them. (A02, A03)
 - **Column types for some engines changed.** Oracle `uuid` stays `varchar2(36)`. Oracle `NUMBER(n,0)` up to 18 digits is read as an integer

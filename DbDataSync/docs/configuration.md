@@ -545,6 +545,42 @@ and an existing `task.yaml` carrying the old `backfillDegreeOfParallelism` key s
 ignored by the deserializer. **Every existing state database, and any config using the old key, must
 be recreated rather than upgraded.**
 
+## Connection files
+
+A connection is `config/connections/<name>.yaml` in the configuration repository, a **`connection/1`** file: the format the Proxy and Build keep their connections in
+too, so one reader checks all three. The file name is the connection's `name`: a letter, then letters, digits, `-`, `_` and `.`, at most 64 characters.
+
+```yaml
+schema: connection/1
+name: orders
+engine: sqlserver            # sqlserver, postgres, mysql, oracle, duckdb, flightsql (with dialect: for a variant), or the id of an installed driver
+address:                     # or connection_string: (an ODBC string, a JDBC URL, an Oracle EZConnect, ...), never both
+  host: sql01
+  port: 1433
+  database: Orders
+auth:                        # sql, integrated or none
+  mode: sql
+  user: sync
+  password_secret: secret:dbdata:sync:connection:orders
+timeouts: { connect_s: 20, command_s: 600 }   # unset: Sync's own defaults, 30 and 1800 seconds
+extensions:
+  sync:                      # what only Sync has; the keys are Sync's own, as in its other files
+    segmentOrder: Together
+    properties: { applicationName: sync }
+    testQuery: select 1
+```
+
+`extensions.sync` also holds `scripts` and `hooks` (the bindings of a connection), `database` (for a connection with a `connection_string`; with an `address` the
+database is `address.database`) and a `connectTimeoutSeconds` or `commandTimeoutSeconds` the shared `timeouts` cannot say (`0` for unlimited, or more than a day).
+The password is never in the file: `password_secret` is the reference `secret:dbdata:sync:connection:<name>` to the encrypted store (see "Secrets").
+Unknown keys are errors with their position; `tls`, `read_login`, `write_login`, `connection_string_secret`, `access` and `managed_by` are refused because Sync
+does not use them. Another product's `extensions.<product>` block is not read.
+
+**The form of earlier releases is refused.** A file with `driverType`, `host` or `authMode` at the top and no `schema:` makes every command and screen that reads
+connections fail with a message naming each such file and this form (`dbdatasync config check` lists them). Nothing is converted: rewrite the files by hand,
+or delete each (the Connections page can delete a connection it cannot read) and create it again. The passwords in the secret store keep their names, so the
+`password_secret` of a rewritten file needs no new `secret set`.
+
 ## Secrets
 
 Connection credentials and the state database's password are in an **encrypted store** under the repository root: `secrets/secrets.yaml`,
