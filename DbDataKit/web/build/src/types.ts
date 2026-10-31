@@ -207,3 +207,11 @@ export interface AdoptHint {
   data_source: string
   call: string
 }
+
+/** What the proxy answers when a data source is handed over (T13): `adopted` is false when it already was the client's. */
+export interface AdoptAnswer {
+  name: string
+  managed_by: string
+  adopted: boolean
+  previous_owner?: string | null
+}

@@ -1,6 +1,6 @@
 import { put, request } from '@dbdatakit/shell'
 import type {
-  CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SessionRow, TestResult, WriteDataSourceResult,
+  AdoptAnswer, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SessionRow, TestResult, WriteDataSourceResult,
 } from './types'
 
 const v1 = '/api/v1'
@@ -15,7 +15,11 @@ export const proxyApi = {
     write: (name: string, text: string, expectedVersion: string | null) => put<WriteDataSourceResult>(`${v1}/data-sources/${enc(name)}`, { text, expected_version: expectedVersion }),
     remove: (name: string, expectedVersion: string) => request<void>(`${v1}/data-sources/${enc(name)}?expected_version=${enc(expectedVersion)}`, { method: 'DELETE' }),
     test: (name: string) => request<TestResult>(`${v1}/data-sources/${enc(name)}/test`, { method: 'POST' }),
+    /** A person with the admin role hands a data source to a paired server client, which then manages it (T12). */
+    adopt: (name: string, client: string) => request<AdoptAnswer>(`${v1}/data-sources/${enc(name)}/adopt`, { method: 'POST', body: JSON.stringify({ client }) }),
   },
+  /** The paired server clients a data source can be handed to. */
+  clients: () => request<{ clients: ServerClient[] }>(`${v1}/clients`).then((r) => r.clients),
   identities: {
     get: () => request<Identities>(`${v1}/identities`),
     writeUser: (name: string, body: { auth_type: string; password?: string; data_sources: string[]; default_data_source?: string | null; expected_version?: string | null }) =>

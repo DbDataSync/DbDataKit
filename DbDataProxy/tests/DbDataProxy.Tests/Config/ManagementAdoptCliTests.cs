@@ -103,3 +103,23 @@ public sealed partial class ManagementTests
         Assert.Contains("did not answer", silent.Error);
     }
 }
+
+public sealed partial class ManagementTests
+{
+    [Fact]
+    public async Task The_clients_call_lists_the_server_clients_by_id_and_name_for_an_administrator_only()
+    {
+        await StartAsync();
+        var admin = await PairAsync();   // a console: not offered as a taker
+        await PairPublisherAsync(build1);
+
+        var listed = await CallAsync(admin, HttpMethod.Get, "/api/v1/clients", ServerRole.Admin);
+        Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
+        var text = await listed.Content.ReadAsStringAsync();
+        var clients = JsonNode.Parse(text)!["clients"]!.AsArray();
+        Assert.Equal("build-1", (string)clients.Single()!["id"]!);
+        Assert.Equal("build-1", (string)clients.Single()!["name"]!);
+        Assert.DoesNotContain("key", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(admin, HttpMethod.Get, "/api/v1/clients", ServerRole.Viewer)).StatusCode);
+    }
+}
