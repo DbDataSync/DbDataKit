@@ -81,7 +81,10 @@ test('end to end: a template, an edit, a commit and a merge, then a plan approve
   await page.getByTestId('build-edit-mode-yaml').click()
   await page.getByTestId('build-edit-editor').locator('.monaco-editor').click()
   await page.keyboard.press('Control+A')
-  await page.keyboard.insertText(postgresSettings())
+  // pasted, not inserted: the editor indents each new line of inserted text under the one before it, and a paste it leaves as it is
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.evaluate((text) => navigator.clipboard.writeText(text), postgresSettings())
+  await page.keyboard.press('Control+V')
   await page.getByTestId('build-edit-save').click()
   await check(page.getByTestId('build-edit-saved')).toBeVisible()
   await check(page.getByTestId('build-edit-clean')).toBeVisible()
