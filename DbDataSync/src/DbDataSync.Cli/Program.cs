@@ -26,6 +26,12 @@ if (!SyncCli.Legacy.Contains(command))
         Console.Error.WriteLine($"'dbdatasync config {rest[0]}' is now 'dbdatasync {moved}'.");
         return 2;
     }
+    // A command that is gone and has no new form says what replaced it.
+    if (RetiredCommands.RemovedBecause(command) is { } removed)
+    {
+        Console.Error.WriteLine(removed);
+        return 2;
+    }
     return await SyncCli.Router(InformationalVersion()).RunAsync(args, DbDataKit.Cli.CliContext.Console());
 }
 
@@ -34,7 +40,6 @@ return command switch
     "tool" => ToolCommand.Run(rest),
     "update" => await UpdateCommand.RunAsync(rest),
     "launcher" => await LauncherCommand.RunAsync(rest),
-    "invite" => InviteCommand.Run(rest),
     "internal" => await InternalCommand.RunAsync(rest),
     "version" => Version(),
     _ => Unknown(command),

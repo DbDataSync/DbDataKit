@@ -58,7 +58,11 @@ export function useSignOut() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => shellApi.auth.signOut(),
-    onSuccess: () => queryClient.invalidateQueries(),
+    onSuccess: (ended) => {
+      // the identity home ends its own session when the browser visits it, and brings the person back
+      if (ended && ended.redirectTo) window.location.assign(ended.redirectTo)
+      else queryClient.invalidateQueries()
+    },
   })
 }
 

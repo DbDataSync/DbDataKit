@@ -75,9 +75,8 @@ public static class DbDataSyncConfigFile
                 }
                 break;
 
-            // Array-shaped configuration (DbDataSync:Auth:Passkeys:Origins is the one example
-            // elsewhere in this codebase) flattens to indexed keys the same way ASP.NET Core's own
-            // JSON/environment providers do, on the chance a future DbDataSync:* setting is a list.
+            // Array-shaped configuration flattens to indexed keys the same way ASP.NET Core's own
+            // JSON/environment providers do, on the chance a DbDataSync:* setting is a list.
             case IList<object> list:
                 for (var i = 0; i < list.Count; i++)
                     Flatten(list[i], prefix is null ? i.ToString() : $"{prefix}:{i}", into);
@@ -260,8 +259,8 @@ public static class DbDataSyncConfigFile
 
     /// <summary>
     /// As <see cref="SetValue"/>, for a YAML block sequence rather than a scalar — <c>Auth:Passkeys:Origins</c>
-    /// (phase 110's <c>setup</c> command) is the one key documented so far that needs this shape; every
-    /// other <c>DbDataSync:*</c> setting is a plain value. Replaces the whole existing block (the key
+    /// (phase 110's <c>setup</c> command) was the one key that needed this shape, and it is gone with the passkey settings (plan 13, X05);
+    /// every <c>DbDataSync:*</c> setting is a plain value now. Replaces the whole existing block (the key
     /// line and every more-indented line under it), not just the key line, since a shorter new list
     /// left a stale trailing item behind otherwise.
     /// </summary>

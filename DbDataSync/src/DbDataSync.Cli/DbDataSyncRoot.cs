@@ -4,7 +4,7 @@ namespace DbDataSync.Cli;
 
 /// <summary>
 /// Where every <c>dbdatasync</c> command looks for its repo root — one resolver, used the same way by
-/// <c>serve</c>, <c>invite</c> and <c>health</c> alike (phase 79).
+/// <c>server run</c> and <c>health</c> alike (phase 79).
 /// <para>
 /// **Explicit <c>--repo</c> wins outright.** Otherwise this walks upward from the current directory —
 /// the same shape git itself uses to find <c>.git</c> — looking for <c>server.yaml</c> at
@@ -35,9 +35,8 @@ public static class DbDataSyncRoot
         // DbDataSync__App__RepoRoot is not a new name invented for this resolver — it's the
         // environment-variable form of the DbDataSync:App:RepoRoot config key the raw API's own
         // configuration chain already honours (phase 112, regrouped under App: in phase 164).
-        // serve/invite/health resolve the root *before* that chain exists, so it has to be read
-        // directly here too, the same way ServeCommand already reads DbDataSync__App__Url and
-        // InviteCommand reads DbDataSync__State__Engine.
+        // server run/health resolve the root *before* that chain exists, so it has to be read
+        // directly here too, the same way ServeCommand already reads DbDataSync__App__Url.
         return FindUpward(startDirectory)
             ?? Environment.GetEnvironmentVariable("DbDataSync__App__RepoRoot")
             ?? CliOptions.DefaultRoot;
@@ -48,7 +47,18 @@ public static class DbDataSyncRoot
     /// per-user folder earlier releases used as the default is looked at only when the root is the platform default, that is, when nobody named one.
     /// </summary>
     public static string? LegacyRefusal(string root, string? baseDirectory = null) =>
-        LegacyHostSettings.Refusal(root, baseDirectory ?? AppContext.BaseDirectory, root == CliOptions.DefaultRoot ? CliOptions.LegacyDefaultRoot : null);
+        LegacyHostSettings.Refusal(root, baseDirectory ?? AppContext.BaseDirectory, root == CliOptions.DefaultRoot ? CliOptions.LegacyDefaultRoot : null)
+        ?? RemovedSettingRefusal(root);
+
+    /// <summary>
+    /// The message for a setting of <c>server.yaml</c> that Sync no longer has (<c>Auth:Passkeys:*</c>, <c>App:AlternateUrls</c>; plan 13, X05), or null. The environment and
+    /// the command line are checked by the host itself (<c>DbDataSyncHost.Build</c>), which sees every layer. A file that does not parse is not this check's to report.
+    /// </summary>
+    private static string? RemovedSettingRefusal(string root)
+    {
+        try { return RemovedSettings.Refusal(DbDataSyncConfigFile.Read(root).Keys, $"in '{DbDataSyncConfigFile.PathIn(root)}'"); }
+        catch (YamlDotNet.Core.YamlException) { return null; }
+    }
 
     /// <summary>
     /// Walks from <paramref name="startDirectory"/> up through each parent looking for a

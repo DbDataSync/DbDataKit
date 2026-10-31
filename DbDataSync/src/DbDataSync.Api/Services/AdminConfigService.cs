@@ -14,12 +14,12 @@ namespace DbDataSync.Api.Services;
 /// it.
 /// <para>
 /// Phase 164 reorganized the whole key surface into groups (<c>App:*</c>, <c>State:*</c>,
-/// <c>Auth:Network:*</c>/<c>Auth:Windows:*</c>/<c>Auth:Passkeys:*</c>, <c>Updates:*</c>, <c>Nuget:Search:*</c>,
+/// <c>Auth:Network:*</c>/<c>Auth:Windows:*</c>, <c>Updates:*</c>, <c>Nuget:Search:*</c>,
 /// <c>Notes:*</c>) and replaced every bare boolean with a named mode string. That reorg also found that
 /// the earlier "only flat, top-level keys are file-writable" claim was never actually true for
 /// <see cref="DbDataSyncConfigFile.SetValue"/> — its text-editing writer tolerates a colon-containing
 /// plain-scalar key or section (the exact mechanism <c>SetupSteps.cs</c> already relied on for the TUI
-/// path), so nested keys under <c>Auth:Windows:*</c>/<c>Auth:Passkeys:*</c> are now genuinely
+/// path), so nested keys under <c>Auth:Windows:*</c> are now genuinely
 /// file-writable here too, not just display-only.
 /// </para>
 /// </summary>
@@ -27,7 +27,6 @@ public sealed class AdminConfigService(
     IConfiguration configuration,
     ApiOptions apiOptions,
     AuthOptions authOptions,
-    PasskeyOptions passkeyOptions,
     GitCommitService git,
     SecretStore secrets,
     RestartRequiredState restartRequired)
@@ -65,11 +64,6 @@ public sealed class AdminConfigService(
             "Kestrel:Certificates:* settings, so https needs a certificate bound with netsh instead, and " +
             "App:Url must be a host-name prefix, not a path. Takes effect on restart; see configuration.md.",
             SupportsWrite: true, AllowedValues: AllowedValuesFor<WebServer>()),
-        new("DbDataSync:App:AlternateUrls",
-            "Every other origin this deployment is also reached at, beyond App:Url — comma- or " +
-            "semicolon-separated. Purely additive: App:Url's own origin is always trusted for passkeys " +
-            "without needing to be listed here too.",
-            SupportsWrite: true),
         new("DbDataSync:App:TrustedProxies",
             "Proxies (IP addresses or CIDR ranges, comma- or semicolon-separated) whose X-Forwarded-For and " +
             "X-Forwarded-Proto headers are believed. Needed when a TLS-terminating proxy sits in front of a " +
@@ -166,17 +160,6 @@ public sealed class AdminConfigService(
             SupportsWrite: true),
         new("DbDataSync:Auth:Windows:ViewerGroup",
             "Windows group whose members are viewers.",
-            SupportsWrite: true),
-        new("DbDataSync:Auth:Passkeys:Mode",
-            "Whether passkey sign-in/enrollment is allowed at all: enabled or disabled. An operator can " +
-            "configure a relying-party id and still turn this off without clearing it.",
-            SupportsWrite: true, AllowedValues: AllowedValuesFor<FeatureMode>()),
-        new("DbDataSync:Auth:Passkeys:RelyingPartyId",
-            "Bare domain passkeys are scoped to. Deliberately independent of App:Url. " +
-            "Changing this invalidates every already-registered passkey, whatever sets it.",
-            SupportsWrite: true),
-        new("DbDataSync:Auth:Passkeys:RelyingPartyName",
-            "Shown in the OS passkey prompt.",
             SupportsWrite: true),
     ];
 
@@ -393,7 +376,7 @@ public sealed class AdminConfigService(
 
     /// <summary>
     /// What this key resolves to when nothing configures it — read off the same live options objects
-    /// (<see cref="ApiOptions"/>, <see cref="AuthOptions"/>, <see cref="PasskeyOptions"/>) the rest of
+    /// (<see cref="ApiOptions"/>, <see cref="AuthOptions"/>) the rest of
     /// the process uses, rather than a second copy of each default that could drift from theirs.
     /// </summary>
     private string? DefaultFor(string key) => key switch
@@ -401,7 +384,6 @@ public sealed class AdminConfigService(
         "DbDataSync:App:RepoRoot" => apiOptions.RepoRoot,
         "DbDataSync:App:Url" => apiOptions.Url,
         "DbDataSync:App:Server" => Lower(apiOptions.Server),
-        "DbDataSync:App:AlternateUrls" => string.Join(", ", apiOptions.AlternateUrls),
         "DbDataSync:App:TrustedProxies" => string.Join(", ", apiOptions.TrustedProxies),
         "DbDataSync:App:AllowInsecureHttp" => apiOptions.AllowInsecureHttp ? "true" : "false",
         "DbDataSync:App:TaskRunnerDllPath" => apiOptions.TaskRunnerDllPath,
@@ -422,9 +404,6 @@ public sealed class AdminConfigService(
         "DbDataSync:Auth:Windows:Mode" => Lower(authOptions.WindowsMode),
         "DbDataSync:Auth:Windows:AdminGroup" => authOptions.AdminGroup,
         "DbDataSync:Auth:Windows:ViewerGroup" => authOptions.ViewerGroup,
-        "DbDataSync:Auth:Passkeys:Mode" => Lower(passkeyOptions.Mode),
-        "DbDataSync:Auth:Passkeys:RelyingPartyId" => passkeyOptions.RelyingPartyId,
-        "DbDataSync:Auth:Passkeys:RelyingPartyName" => passkeyOptions.RelyingPartyName,
         _ => null,
     };
 
@@ -464,7 +443,6 @@ public sealed class AdminConfigService(
         "DbDataSync:Auth:Network:Admin" => Lower(AdminNetworkTrust.Disabled),
         "DbDataSync:Auth:Network:Viewer" => Lower(ViewerNetworkTrust.Disabled),
         "DbDataSync:Auth:Windows:Mode" => Lower(FeatureMode.Enabled),
-        "DbDataSync:Auth:Passkeys:Mode" => Lower(FeatureMode.Enabled),
         _ => null,
     };
 }

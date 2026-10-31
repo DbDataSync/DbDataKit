@@ -64,19 +64,16 @@ internal static class SetupScreen
         var exitCode = 0;
 
         // Two rows, not one growing chain — a first render showed a single Pos.Right(prev)+2 chain of
-        // all five buttons running well past column 80: "Reissue invite" and "Exit" were laid out, just
-        // never visible or reachable. Labels are shortened too (full sentences were most of the width
-        // problem), and the two rows plus their shadows fit inside actionBar's existing 4-row height.
+        // the buttons running well past column 80: the last ones were laid out, just never visible or
+        // reachable. Labels are shortened too (full sentences were most of the width problem), and the
+        // two rows plus their shadows fit inside actionBar's existing 4-row height.
         var saveButton = new Button { X = 0, Y = 0, Text = "Save", IsDefault = true };
         var startButton = new Button { X = Pos.Right(saveButton) + 2, Y = 0, Text = "Start" };
         var printButton = new Button { X = Pos.Right(startButton) + 2, Y = 0, Text = "Print config" };
-        var reissueButton = new Button { X = 0, Y = 2, Text = "Reissue invite" };
-        var exitButton = new Button { X = Pos.Right(reissueButton) + 2, Y = 2, Text = "Exit" };
+        var exitButton = new Button { X = 0, Y = 2, Text = "Exit" };
 
         saveButton.Accepted += async (_, _) => await SaveAsync();
         printButton.Accepted += (_, _) => PrintConfiguration();
-        reissueButton.Accepted += (_, _) =>
-            Dialogs.Message(app, "Invite", CaptureConsole(() => InviteCommand.Run(["--repo", root])));
         startButton.Accepted += (_, _) =>
         {
             startRequested = true;
@@ -89,12 +86,11 @@ internal static class SetupScreen
             X = 0, Y = Pos.AnchorEnd(4), Width = Dim.Fill(), Height = 4,
             CanFocus = true, // container Views default to non-focusable; without this the focus chain never reaches these buttons — same fix every tab already needed (see GeneralTab's own copy of this comment)
         };
-        actionBar.Add(saveButton, startButton, printButton, reissueButton, exitButton);
+        actionBar.Add(saveButton, startButton, printButton, exitButton);
 
         window.Add(tabs, sidebar, actionBar);
 
         await sidebar.RefreshAsync(root);
-        reissueButton.Visible = sidebar.FirstAdminOutstanding;
 
         app.Run(window);
 
@@ -113,14 +109,13 @@ internal static class SetupScreen
             if (driverResult is { } result)
                 messages.Add(result.Message);
 
-            messages.Add(authentication.Save(app, root, url, host).Message);
+            messages.Add(authentication.Save(app, root).Message);
 
             var serviceLines = service?.GetInstructions(root, url);
             var certificateLines = certificate.GetInstructions(root, host);
 
             SetupSteps.CommitChanges(root);
             await sidebar.RefreshAsync(root);
-            reissueButton.Visible = sidebar.FirstAdminOutstanding;
 
             if (serviceLines is not null)
                 messages.AddRange(["", .. serviceLines]);
@@ -136,25 +131,5 @@ internal static class SetupScreen
             var lines = SetupSteps.EffectiveConfigurationLines(configuration);
             Dialogs.Message(app, "Effective configuration", string.Join('\n', lines));
         }
-    }
-
-    /// <summary>Redirects a command's <c>Console</c> writes into the dialog they belong in, rather than
-    /// letting them land on the real console while a Terminal.Gui driver owns the screen —
-    /// <c>InviteCommand.Run</c> is an ordinary CLI command, not TUI-aware.</summary>
-    private static string CaptureConsole(Func<int> action)
-    {
-        var original = Console.Out;
-        var writer = new StringWriter();
-        Console.SetOut(writer);
-        try
-        {
-            action();
-        }
-        finally
-        {
-            Console.SetOut(original);
-        }
-
-        return writer.ToString();
     }
 }

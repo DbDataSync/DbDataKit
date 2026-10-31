@@ -56,7 +56,8 @@ public sealed class AdminConfigControllerTests(AuthenticatedApiFactory factory) 
         Assert.Contains(entries!, e => e.Key == UrlKey);
         Assert.Contains(entries!, e => e.Key == StateConnectionStringKey);
         Assert.Contains(entries!, e => e.Key == "DbDataSync:Auth:Network:Admin");
-        Assert.Contains(entries!, e => e.Key == "DbDataSync:Auth:Passkeys:RelyingPartyId");
+        // Sync has no passkeys of its own any more (plan 13, X05), so the screen does not offer their settings.
+        Assert.DoesNotContain(entries!, e => e.Key.StartsWith("DbDataSync:Auth:Passkeys", StringComparison.OrdinalIgnoreCase) || e.Key == "DbDataSync:App:AlternateUrls");
 
         // App:RepoRoot is the one key this screen never writes — it's how server.yaml itself
         // is found, so a value inside that same file could never relocate it.

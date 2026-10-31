@@ -12,6 +12,14 @@ public static class SyncAuth
     /// <summary>Sync reads <c>DbDataSync:Auth</c> and sets the cookie <c>dbdatasync.session</c>, as it always has.</summary>
     public static AuthProduct Product { get; } = new("DbDataSync");
 
+    private static readonly PasskeyOptions NoPasskeys = new()
+    {
+        RelyingPartyId = "localhost",
+        RelyingPartyName = "DbDataSync",
+        Mode = FeatureMode.Disabled,
+        Origins = new HashSet<string>(),
+    };
+
     extension(AuthOptions)
     {
         public static AuthOptions FromConfiguration(IConfiguration configuration) => AuthOptions.FromConfiguration(configuration, Product);
@@ -21,14 +29,12 @@ public static class SyncAuth
 
     extension(PasskeyOptions)
     {
-        /// <param name="configuration">Where the <c>Auth:Passkeys</c> section is read from.</param>
-        /// <param name="apiOptions">Already resolved <see cref="ApiOptions.Url"/> and <see cref="ApiOptions.AlternateUrls"/>.</param>
-        public static PasskeyOptions FromConfiguration(IConfiguration configuration, ApiOptions apiOptions) =>
-            PasskeyOptions.FromConfiguration(
-                configuration, Product, apiOptions.Url, apiOptions.AlternateUrls,
-                // Nothing configures App:Url or App:AlternateUrls at all: a fresh clone or `dotnet run` with no server.yaml yet
-                // (ApiOptions.Url is then its own DefaultUrl).
-                apiOptions.Url == ApiOptions.DefaultUrl ? ["https://localhost:5080", "http://localhost:5173"] : []);
+        /// <summary>
+        /// Sync has no passkeys of its own (plan 13, X05): people sign in at the console, and a console's call reaches Sync as a signed token. The shared sign-in code still asks
+        /// for the options, so this is the fixed answer: passkeys off, nothing read from configuration. The <c>Auth:Passkeys:*</c> settings and <c>App:AlternateUrls</c> (their
+        /// only reader) are refused by <see cref="RemovedSettings"/>, so a file that still sets one is not ignored in silence.
+        /// </summary>
+        public static PasskeyOptions Disabled => NoPasskeys;
     }
 
     extension(CurrentUser)

@@ -86,8 +86,21 @@ public static class ConsoleHost
             // No users of its own: the first-run invitation would make one, so it is not made, and sign-in is the home's.
             foreach (var d in builder.Services.Where(d => d.ImplementationType == typeof(BootstrapInvite)).ToList()) builder.Services.Remove(d);
             builder.Services.AddSingleton(new OpenIdClient(
-                new OpenIdClientOptions(home.Authority.AbsoluteUri, home.ClientId, home.ClientSecret, new Uri(settings.Public, ConsoleFederation.CallbackPath).AbsoluteUri), new HttpClient()));
-            builder.Services.AddSingleton(sp => new FederatedUsers(sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<UserStore>(), home.AppId));
+                new OpenIdClientOptions(home.Authority.AbsoluteUri, home.ClientId, home.ClientSecret, new Uri(settings.Public, ConsoleFederation.CallbackPath).AbsoluteUri, new Uri(settings.Public, "/").AbsoluteUri),
+                // a home that does not answer must not hold a request for the default 100 seconds
+                new HttpClient { Timeout = TimeSpan.FromSeconds(10) }));
+            builder.Services.AddSingleton(sp =>
+            {
+                // the home's tokens are kept protected by the framework's key ring, which is kept with the rest of what the console owns
+                var protector = sp.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>().CreateProtector("dbdatakit-console.federated-session");
+                var policy = FederationPolicy.With(protector.Protect, protector.Unprotect) with
+                {
+                    RefreshInterval = home.RefreshInterval ?? FederationPolicy.DefaultRefreshInterval,
+                    Grace = home.Grace ?? FederationPolicy.DefaultGrace,
+                };
+                return new FederatedUsers(sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<UserStore>(), sp.GetRequiredService<SessionStore>(), home.AppId, policy, sp.GetService<TimeProvider>());
+            });
+            builder.Services.AddSingleton<ISignOutHandler, FederationSignOut>();
         }
         configure?.Invoke(builder.Services);
 
@@ -129,6 +142,8 @@ public static class ConsoleHost
         }
 
         app.UseWebSockets();
+        // A session that came from the identity home asks the home again for the person's roles when the last answer is old (plan 13a U17); before authentication, so a session the home ended is refused on this very request.
+        if (settings.Home is not null) app.UseFederationRefresh();
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();

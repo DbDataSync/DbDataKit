@@ -118,9 +118,6 @@ What does exist:
   runs the full migration set) and reports `State store: OK — <engine> — schema current`, or a `FAIL`
   naming the fix — a writable-directory check for SQLite, or a connection-string/secret check for
   `MsSql`/`Postgres`.
-- **`dbdatasync invite`** opens the state database directly, the one deliberate exception to "only the
-  API touches this" — its whole purpose is recovering access when nobody can sign in, so it can't depend
-  on a running, reachable API.
 
 ## Next: Building from source
 

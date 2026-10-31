@@ -35,13 +35,13 @@ public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUr
             : System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dbdatakit", "console");
 }
 
-/// <summary>Where this console's people are signed in: the home's address, the client id the home registered this console under (and its secret, read from the variable named), and which app of the home is this console (its roles decide who may sign in here).</summary>
-public sealed record IdentityHomeSettings(Uri Authority, string ClientId, string? ClientSecret, string AppId = "console");
+/// <summary>Where this console's people are signed in: the home's address, the client id the home registered this console under (and its secret, read from the variable named), and which app of the home is this console (its roles decide who may sign in here). A session asks the home for the person's roles again every <paramref name="RefreshInterval"/> (default 5 minutes); when the home cannot be asked, the last roles are kept for <paramref name="Grace"/> more (default 10 minutes) and then the person holds no role on any server.</summary>
+public sealed record IdentityHomeSettings(Uri Authority, string ClientId, string? ClientSecret, string AppId = "console", TimeSpan? RefreshInterval = null, TimeSpan? Grace = null);
 
 /// <summary>The console's state database: the users, their sessions and invitations, and the notification feed.</summary>
 public static class ConsoleState
 {
-    public static StateSchema Schema { get; } = new([IdentitySchema.Accounts, IdentitySchema.Invites, NotificationSchema.Feed, DbDataKit.Identity.FederatedSchema.Roles]);
+    public static StateSchema Schema { get; } = new([IdentitySchema.Accounts, IdentitySchema.Invites, NotificationSchema.Feed, DbDataKit.Identity.FederatedSchema.Roles, DbDataKit.Identity.FederatedSchema.Sessions]);
 
     public const string EngineVariable = "DBDATAKIT_CONSOLE_STATE_ENGINE";
     public const string ConnectionVariable = "DBDATAKIT_CONSOLE_STATE_CONNECTION";
