@@ -36,12 +36,12 @@ function git(cwd: string, ...args: string[]) {
   execFileSync('git', ['-c', 'user.name=console-e2e', '-c', 'user.email=e2e@example.invalid', ...args], { cwd, stdio: 'ignore' })
 }
 
-/** Who the tracking tables say applied each plan: the approver the server recorded. */
+/** Who the tracking tables say applied each plan: the approver the server recorded (an apply logs a started row and a completed one; the completed ones are the applies). */
 async function appliedBy(): Promise<string[]> {
   const parts = Object.fromEntries(warehouseConnection!.split(';').filter(Boolean).map((p) => [p.slice(0, p.indexOf('=')).trim().toLowerCase(), p.slice(p.indexOf('=') + 1)]))
   const client = new pg.Client({ host: parts.host, port: Number(parts.port ?? 5432), user: parts.username, password: parts.password, database: parts.database })
   await client.connect()
-  try { return (await client.query('SELECT applied_by FROM dbdatabuild.migration_log ORDER BY applied_utc')).rows.map((r) => String(r.applied_by)) } finally { await client.end() }
+  try { return (await client.query("SELECT applied_by FROM dbdatabuild.migration_log WHERE status = 'completed' ORDER BY applied_utc")).rows.map((r) => String(r.applied_by)) } finally { await client.end() }
 }
 
 test('end to end: a template, an edit, a commit and a merge, then a plan approved by a second person and applied', async ({ page, context, browser, baseURL }) => {
