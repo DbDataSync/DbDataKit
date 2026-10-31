@@ -46,7 +46,7 @@ public sealed class ConnectionCopyTests
     [Fact]
     public void Another_products_extension_goes_the_targets_own_stays_and_nothing_empty_is_left_behind()
     {
-        var both = Base + "\nextensions:\n  sync:\n    testQuery: SELECT 1\n  proxy:\n    allow_writes: false\n  build:\n    x: 1\n";
+        var both = Base + "\nextensions:\n  sync:\n    test_query: SELECT 1\n  proxy:\n    allow_writes: false\n  build:\n    x: 1\n";
 
         var toProxy = Read(ConnectionCopy.Plan(both, ConnectionCopy.Sync, ConnectionCopy.Proxy, "e"));
         Assert.Equal(["proxy"], toProxy.Extensions.Items.Keys);
@@ -55,7 +55,7 @@ public sealed class ConnectionCopyTests
         Assert.Equal(["sync"], Read(toSync).Extensions.Items.Keys);
         Assert.Contains(toSync.Notes, n => n.Contains("extensions.build, extensions.proxy"));
 
-        var onlyForeign = ConnectionCopy.Plan(Base + "\nextensions:\n  sync:\n    testQuery: SELECT 1\n", ConnectionCopy.Sync, ConnectionCopy.Proxy, "e");
+        var onlyForeign = ConnectionCopy.Plan(Base + "\nextensions:\n  sync:\n    test_query: SELECT 1\n", ConnectionCopy.Sync, ConnectionCopy.Proxy, "e");
         Assert.DoesNotContain("extensions", onlyForeign.Text);
         Assert.Empty(Read(onlyForeign).Extensions.Items);
     }
@@ -78,7 +78,7 @@ public sealed class ConnectionCopyTests
     [Fact]
     public void A_flow_style_file_and_the_read_and_write_logins_of_a_Proxy_are_edited_too()
     {
-        var text = "schema: connection/1\nname: erp\nengine: sqlserver\nmanaged_by: c\nconnection_string: Server=s\nread_login: { mode: sql, user: r, password_secret: 'env:R' }\nwrite_login: { mode: sql, user: w, password_secret: 'env:W' }\nextensions: { proxy: { allow_writes: true }, sync: { testQuery: x } }\n";
+        var text = "schema: connection/1\nname: erp\nengine: sqlserver\nmanaged_by: c\nconnection_string: Server=s\nread_login: { mode: sql, user: r, password_secret: 'env:R' }\nwrite_login: { mode: sql, user: w, password_secret: 'env:W' }\nextensions: { proxy: { allow_writes: true }, sync: { test_query: x } }\n";
 
         var plan = ConnectionCopy.Plan(text, ConnectionCopy.Proxy, ConnectionCopy.Proxy, "e2");
 

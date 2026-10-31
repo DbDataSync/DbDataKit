@@ -564,14 +564,14 @@ auth:                        # sql, integrated or none
   password_secret: secret:dbdata:sync:connection:orders
 timeouts: { connect_s: 20, command_s: 600 }   # unset: Sync's own defaults, 30 and 1800 seconds
 extensions:
-  sync:                      # what only Sync has; the keys are Sync's own, as in its other files
-    segmentOrder: Together
+  sync:                      # what only Sync has; the keys are written like the shared ones, snake_case
+    segment_order: Together
     properties: { applicationName: sync }
-    testQuery: select 1
+    test_query: select 1
 ```
 
 `extensions.sync` also holds `scripts` and `hooks` (the bindings of a connection), `database` (for a connection with a `connection_string`; with an `address` the
-database is `address.database`) and a `connectTimeoutSeconds` or `commandTimeoutSeconds` the shared `timeouts` cannot say (`0` for unlimited, or more than a day).
+database is `address.database`) and a `connect_timeout_seconds` or `command_timeout_seconds` the shared `timeouts` cannot say (`0` for unlimited, or more than a day).
 The password is never in the file: `password_secret` is the reference `secret:dbdata:sync:connection:<name>` to the encrypted store (see "Secrets").
 Unknown keys are errors with their position; `tls`, `read_login`, `write_login`, `connection_string_secret`, `access` and `managed_by` are refused because Sync
 does not use them. Another product's `extensions.<product>` block is not read.

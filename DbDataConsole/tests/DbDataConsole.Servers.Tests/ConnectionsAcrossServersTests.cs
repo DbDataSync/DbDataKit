@@ -120,7 +120,7 @@ public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
         Assert.True(toProxy.Status == HttpStatusCode.OK, $"copy to proxy: {toProxy.Status} {toProxy.Body}");
         var written = File.ReadAllText(ProxyFile("orders-edge"));
         Assert.Contains("name: orders-edge", written);
-        Assert.DoesNotContain("testQuery", written);                         // extensions.sync is Sync's
+        Assert.DoesNotContain("test_query", written);                         // extensions.sync is Sync's
         Assert.DoesNotContain("sync-typed-pw", written);
         Assert.Equal("secret:dbdata:proxy:connection:orders-edge", DbDataKit.Connections.ConnectionDefinitionLoader.Load(written, "orders-edge.yaml").Require().Auth!.PasswordSecret);
         var listed = (await AsPerson(HttpMethod.Get, $"/relay/{proxyId}/api/v1/data-sources")).Body!["data_sources"]!.AsArray().Single(d => (string)d!["name"]! == "orders-edge")!;

@@ -27,7 +27,7 @@ public sealed class ConsoleConnectionsTests : IAsyncLifetime
         auth: { mode: sql, user: svc_erp, password_secret: 'secret:dbdata:sync:connection:erp' }
         extensions:
           sync:
-            testQuery: SELECT 1
+            test_query: SELECT 1
             scripts:
               before: { name: warm-up }
         """;

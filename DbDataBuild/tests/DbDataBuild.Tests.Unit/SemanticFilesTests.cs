@@ -62,6 +62,20 @@ public class SemanticFilesTests : IDisposable
     }
 
     [Fact]
+    public void A_PostgreSQL_connection_is_a_postgres_source_of_the_catalog_not_a_sqlserver_one()
+    {
+        var dir = Retail();
+        Edit(Path.Combine(dir, "dbdatabuild.yml"), "defaults: {connections: [sqlserver]}", "defaults: {connections: [postgres]}");
+        Edit(Path.Combine(dir, "dbdatabuild.yml"), "tracking: { connection: sqlserver }", "tracking: { connection: postgres }");
+
+        var model = Assert.Single(ProjectContext.Load(dir).Semantic.Models);
+
+        Assert.NotNull(model.Compilation);
+        Assert.Equal("postgres", model.Connections["default"]);
+        Assert.All(model.Compilation.Catalog.Doc.Sources.Values, source => Assert.Equal("postgres", source.Kind));
+    }
+
+    [Fact]
     public void A_model_that_is_not_in_the_project_is_a_diagnostic_with_the_file_and_the_line()
     {
         var dir = Retail();
