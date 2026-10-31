@@ -18,6 +18,11 @@ const ServersIcon = () => (
     <rect x="3" y="4" width="18" height="6" rx="1.5" /><rect x="3" y="14" width="18" height="6" rx="1.5" /><path d="M7 7h.01M7 17h.01" />
   </svg>
 )
+const ConnectionsIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="M8.3 11l7.4-3.7M8.3 13l7.4 3.7" />
+  </svg>
+)
 const MonitoringIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M3 12h4l3-8 4 16 3-8h4" />
@@ -43,6 +48,7 @@ const Mark = () => (
 const rail: RailItem[] = [
   { to: '/', title: 'Home', icon: <HomeIcon />, testId: 'rail-home' },
   { to: '/instances', title: 'Servers', icon: <ServersIcon />, testId: 'rail-instances', adminOnly: true },
+  { to: '/connections', title: 'Connections', icon: <ConnectionsIcon />, testId: 'rail-connections-all' },
   { to: '/monitoring', title: 'Monitoring', icon: <MonitoringIcon />, testId: 'rail-monitoring' },
   { to: '/views', title: 'Views', icon: <ViewsIcon />, testId: 'rail-views' },
   { to: '/docs', title: 'Docs', icon: <DocsIcon />, testId: 'rail-docs' },
