@@ -576,6 +576,12 @@ The password is never in the file: `password_secret` is the reference `secret:db
 Unknown keys are errors with their position; `tls`, `read_login`, `write_login`, `connection_string_secret`, `access` and `managed_by` are refused because Sync
 does not use them. Another product's `extensions.<product>` block is not read.
 
+**As a file through the API.** `GET /api/connections/<name>/file` answers `{name, text, version}` (the file as kept, with the SHA-256 of its text as the version; viewers may read it) and
+`PUT /api/connections/<name>/file` with `{text, expectedVersion, password}` creates (`expectedVersion` null; a name that exists is a 409 with `currentVersion`) or changes (the version read) a connection from a whole
+file (administrators). The text is read exactly as a file on disk is and checked as a save is: a file Sync would not read is a 400 with `diagnostics` (code, key, line, column, message, fix) and nothing is written, and a
+`password_secret` that is not `secret:dbdata:sync:connection:<name>` is refused. A `password` beside the file, for a connection that logs in with one, is stored as the Connections page stores one; it is never in the file. The console
+uses these to copy a connection to or from another server (see the console's README).
+
 **The form of earlier releases is refused.** A file with `driverType`, `host` or `authMode` at the top and no `schema:` makes every command and screen that reads
 connections fail with a message naming each such file and this form (`dbdatasync config check` lists them). Nothing is converted: rewrite the files by hand,
 or delete each (the Connections page can delete a connection it cannot read) and create it again. The passwords in the secret store keep their names, so the

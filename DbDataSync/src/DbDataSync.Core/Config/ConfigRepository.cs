@@ -116,6 +116,46 @@ public sealed class ConfigRepository
         return loaded;
     }
 
+    /// <summary>
+    /// The text of a connection's file as it is kept, or null when there is none (plan 13, E05: the console copies a connection to another server as the <c>connection/1</c> file it is). The name is checked first, so it cannot name another path.
+    /// </summary>
+    public string? ReadConnectionFileText(string name)
+    {
+        SyncConnectionFile.ValidateName(name);
+        return TryReadAllTextAllowingConcurrentReplace(ConfigPaths.ConnectionFile(_configRoot, name));
+    }
+
+    /// <summary>
+    /// A <c>connection/1</c> file read as a save of the connection called <paramref name="name"/> (plan 13, E05): the same strict reading a file on disk gets (<see cref="ConfigFileException"/> naming each fault with its line), and the checks a save makes.
+    /// The password is never in a file; a login names <c>secret:dbdata:sync:connection:&lt;name&gt;</c>, the one reference Sync reads, so a file naming another connection's secret is refused rather than saved under the wrong one.
+    /// </summary>
+    public ConnectionInput ConnectionInputFromFile(string text, string name, string? password)
+    {
+        SyncConnectionFile.ValidateName(name);
+        var config = SyncConnectionFile.Read(text, ConfigPaths.ConnectionFile(_configRoot, name), name);
+        if (config.CredentialSecretRef is { } secretRef && secretRef != SecretRefs.ForConnection(name))
+            throw new ConfigValidationException($"`auth.password_secret` is `secret:{secretRef}`; Sync keeps this connection's password as `secret:{SecretRefs.ForConnection(name)}`.");
+        return new ConnectionInput
+        {
+            Name = config.Name,
+            DriverType = config.DriverType,
+            Host = config.Host,
+            Port = config.Port,
+            ConnectionString = config.ConnectionString,
+            Database = config.Database,
+            AuthMode = config.AuthMode,
+            UserId = config.UserId,
+            Password = password,
+            ConnectTimeoutSeconds = config.ConnectTimeoutSeconds,
+            CommandTimeoutSeconds = config.CommandTimeoutSeconds,
+            SegmentOrder = config.SegmentOrder,
+            Properties = config.Properties,
+            Scripts = config.Scripts,
+            Hooks = config.Hooks,
+            TestQuery = config.TestQuery,
+        };
+    }
+
     public IReadOnlyList<string> ListConnections() =>
         ListFileNamesWithoutExtension(ConfigPaths.ConnectionsDir(_configRoot));
 

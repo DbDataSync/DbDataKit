@@ -96,6 +96,8 @@ internal static class Programs
 
     public static string Proxy => Built("DbDataProxy/src/DbDataProxy.Server", "dbdataproxy.dll");
 
+    public static string Sync => Built("DbDataSync/src/DbDataSync.Cli", "DbDataSync.Cli.dll");
+
     public static int FreePort()
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);
