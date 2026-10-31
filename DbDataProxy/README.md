@@ -147,7 +147,7 @@ config/
   connections/<name>.yaml  one data source per file, in the shared connection format (connection/1); the file name is the data source name
 ```
 
-A data source is the same file a Sync or Build connection is (`schema: connection/1`): `engine` (`sqlserver`, `odbc` or `duckdb`), `connection_string` (or `address` for SQL Server, or a whole-string `connection_string_secret`), the login as `auth: { mode: sql, user: ..., password_secret: env:NAME }` (a reference, never the password; a plaintext credential in the connection string is refused), `tls`, `timeouts: { command_s: ... }`, and what only the proxy has under `extensions.proxy` (`pass_through`, `bitness`, `classifier`, `allow_writes`, `metadata`, `allowed_directories`, the limits, `batch_size`, `compression`; snake_case keys). A source that cannot write connects with the read login and one that can with the write login. A data source file of earlier releases (no `schema:`) is refused with a message naming it.
+A data source is the same file a Sync or Build connection is (`schema: connection/1`): `engine` (`sqlserver`, `odbc`, `duckdb`, `postgres` or `flightsql`), `connection_string` (or `address` for SQL Server, or a whole-string `connection_string_secret`), the login as `auth: { mode: sql, user: ..., password_secret: env:NAME }` (a reference, never the password; a plaintext credential in the connection string is refused), `tls`, `timeouts: { command_s: ... }`, and what only the proxy has under `extensions.proxy` (`pass_through`, `bitness`, `classifier`, `allow_writes`, `metadata`, `allowed_directories`, the limits, `batch_size`, `compression`; snake_case keys). A source that cannot write connects with the read login and one that can with the write login. A data source file of earlier releases (no `schema:`) is refused with a message naming it.
 
 `service install` creates `server.yaml` with only `schemaVersion: 2` if there is none. Defaults are in the code, not in a shipped file, and
 `config.example/` beside the executable has one example of each file with every option. Keys are camelCase in the files (matched ignoring case).
@@ -224,9 +224,11 @@ Clients never send connection strings. They name a configured data source with t
 |---|---|
 | `sqlserver` | Microsoft.Data.SqlClient |
 | `duckdb` | DuckDB.NET (handy for local testing) |
+| `flightsql` | Another Arrow Flight SQL server, through the shared `DbDataKit.Connections.FlightSql` client; read only. The connection string is `grpc://host:port;user=...;password=...` or `grpc+tls://host:port;token=...` (see below) |
+| `postgres` | Npgsql. Takes a `Host=...;Database=...` connection string (`address:` is SQL Server only); can pass the caller's credentials through |
 | `odbc` | System.Data.Odbc. `"Bitness": "x86"` runs the query in the 32-bit worker process |
 
-Connections are made by the shared `DbDataKit.Connections` providers (SQL Server, DuckDB, ODBC): the data source's
+Connections are made by the shared `DbDataKit.Connections` providers (SQL Server, DuckDB, ODBC, PostgreSQL, Flight SQL): the data source's
 settings become a shared `ConnectionDefinition` (the Proxy-only ones, such as bitness, pass-through, metadata mode and
 batch size, travel in its `extensions.proxy`), the composer builds the connection string, and failures are classified by
 the shared failure model. The configuration keys are unchanged. Statements are read-only unless the data
@@ -240,6 +242,22 @@ What the shared composer does to a configured connection string (behaviour chang
   setting in the string is kept as written (`TrustServerCertificate=True`, `Encrypt=False`, `Encrypt=Strict`). The legacy
   Windows ODBC driver named just `SQL Server` knows none of these keys and is left alone. ODBC PostgreSQL drivers get
   `sslmode=verify-full` unless the string sets `sslmode`.
+* **PostgreSQL** (the `postgres` provider, Npgsql): `SSL Mode=VerifyFull` unless the string sets `SSL Mode` (`Require` encrypts without verifying, `Disable` turns
+  encryption off; both are named in the startup warning). A source that cannot write sets `default_transaction_read_only=on` on the session, which the
+  session itself can turn off, so the statement check below and a read-only database role are the real controls. `?` markers are sent as named
+  parameters (`@p1`, `@p2`, ...), which Npgsql binds; a `?` operator of PostgreSQL's `jsonb` is read as a marker, so write such a test with
+  `jsonb_exists(...)`. A NULL parameter is sent untyped, so the server takes its type from the statement. A column of an array type arrives as text
+  holding its JSON (`[1,2,3]`); types without an Arrow type of their own (`jsonb`, `uuid`) arrive as their text; a `numeric` wider than
+  .NET's `decimal` (about 28 digits, or `NaN`) fails the query, so cast it (`::text` or `::numeric(20,4)`). Catalog metadata is read from `pg_catalog`
+  and covers the connected database.
+* **Flight SQL** (the `flightsql` provider): the connection string is the address and the login of the upstream server in one value: `grpc+tls://host:port` (or `grpc://` and `grpc+tcp://`, without TLS), then `;option=value` parts
+  written like an ODBC string (a value in braces may hold `;` and `=`): `token` (a bearer token), or `user` and `password` (the server's handshake), `tls_skip_verify`, `ca_file` (a PEM file of the authority to trust) and
+  `header.<name>` (sent with every call; `header.x-datasource=duck` chooses the data source of an upstream Proxy). Write a token or password as a secret reference (`token=env:UPSTREAM_TOKEN`, or the whole string as `connection_string_secret`).
+  `token_command` and `token_env`, which the same grammar has for Build's own logins, are **refused** here: the first would run a program a data source's author chose, the second would read an environment variable they named.
+  The data source is read only (`allow_writes` is an error) and takes no pass-through credentials. A statement is checked with the ANSI deny list (the system behind the server is not known), and the upstream server's own login and
+  checks are the real control. `?` markers are sent as a prepared statement with bound values (never written into the text); an upstream server that does not implement prepared statements cannot be given parameters.
+  Catalog metadata is read with `INFORMATION_SCHEMA` queries on the upstream server, so a server that does not answer them has no metadata through this Proxy; a `decimal(p,s)` column of 28 digits or fewer arrives as a decimal, a wider one as text.
+  `grpc://` and `tls_skip_verify=true` are named in the startup warning like the other TLS opt-outs.
 * **Timeouts**: a connect timeout in the string is kept (default 15 s); every command now runs with the data source's
   `CommandTimeoutSeconds`, else a `Command Timeout` in the string, else 300 s (before: the driver's default, 30 s for
   SqlClient and ODBC, none for DuckDB).
@@ -410,8 +428,8 @@ What the proxy enforces and where the responsibility stays with the database (de
     instance: **it does not stop writes**. Use a dedicated read login with only `db_datareader` for real enforcement.
   * *ODBC*: known drivers get their read-only keyword and `SQL_ATTR_ACCESS_MODE=SQL_MODE_READ_ONLY` is set after connecting (best effort; many drivers ignore
     it). The database login is the control.
-* **TLS to SQL Server**: encrypt and verify the certificate unless the connection string says otherwise explicitly (see Data sources). Each source that
-  opts out (`TrustServerCertificate=True`, `Encrypt=False`) is named in one startup warning; the setting keeps working.
+* **TLS to SQL Server and PostgreSQL**: encrypt and verify the certificate unless the connection string says otherwise explicitly (see Data sources). Each source that
+  opts out (`TrustServerCertificate=True`, `Encrypt=False`, `SSL Mode=Require` or `Disable`) is named in one startup warning; the setting keeps working.
 * **Pass-through credentials** go through the shared composer: every integrated-security style key of the administrator's string (`Trusted_Connection`,
   `Integrated Security`, `Authentication=...`, Kerberos and GSS keywords, client-certificate keys) is removed before the caller's user and password are written with the
   engine's own quoting, control characters and over-long values (512) are refused, and the result is asserted free of integrated keys.

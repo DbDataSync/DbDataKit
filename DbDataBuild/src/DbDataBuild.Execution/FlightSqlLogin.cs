@@ -1,4 +1,4 @@
-using DbDataKit.Odbc.Metadata;
+using DbDataKit.Connections.FlightSql;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
@@ -35,51 +35,15 @@ public sealed record FlightSqlLogin(string Scheme, string Host, int Port, string
     public string AuthenticationDescription => Token != null ? "bearer token" : TokenEnv != null ? "bearer token from the environment" : TokenCommand != null ? "bearer token from a command"
         : User != null ? $"user {User}" : "no credentials";
 
-    private static readonly string[] Options = ["token", "token_env", "token_command", "user", "password", "tls_skip_verify", "ca_file", "header.<name>"];
-
-    private static FlightSqlLoginException Bad(string what) => new($"The Flight SQL login {what}. It is grpc://host:port or grpc+tls://host:port, then ;option=value parts: {string.Join(", ", Options)}.");
-
-    /// <summary>Reads the value. Throws <see cref="FlightSqlLoginException"/> (a sentence of ours, no part of the value in it) when it does not follow the grammar.</summary>
+    /// <summary>Reads the value (the grammar is the shared one, <see cref="FlightSqlLoginValue"/>). Throws <see cref="FlightSqlLoginException"/> (a sentence of ours, no part of the value in it) when it does not follow the grammar.</summary>
     public static FlightSqlLogin Parse(string value)
     {
-        var text = value.Trim();
-        var split = text.IndexOf(';');
-        var uriText = (split < 0 ? text : text[..split]).Trim();
-        if (!Uri.TryCreate(uriText, UriKind.Absolute, out var uri) || uri.Host.Length == 0) throw Bad("does not start with a URI");
-        var scheme = uri.Scheme.ToLowerInvariant();
-        if (scheme is not ("grpc" or "grpc+tcp" or "grpc+tls")) throw Bad("has a scheme that is not grpc, grpc+tcp or grpc+tls");
-        if (uri.Port <= 0) throw Bad("has no port");
-        if (uri.AbsolutePath.Trim('/').Length > 0 || uri.Query.Length > 0 || uri.UserInfo.Length > 0) throw Bad("has a path, query or user in the URI (credentials are options)");
-        string? token = null, tokenEnv = null, tokenCommand = null, user = null, password = null, caFile = null;
-        var skip = false;
-        var headers = new List<(string, string)>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (key, v) in split < 0 ? [] : OdbcConnectionString.Parse(text[(split + 1)..]))
+        try
         {
-            if (!seen.Add(key) && !key.StartsWith("header.", StringComparison.Ordinal)) throw Bad("repeats an option");
-            switch (key)
-            {
-                case "token": token = v; break;
-                case "token_env": tokenEnv = v; break;
-                case "token_command": tokenCommand = v; break;
-                case "user": user = v; break;
-                case "password": password = v; break;
-                case "ca_file": caFile = v; break;
-                case "tls_skip_verify":
-                    skip = v.Trim().ToLowerInvariant() switch { "true" or "1" or "yes" => true, "false" or "0" or "no" => false, _ => throw Bad("has a tls_skip_verify that is not true or false") };
-                    break;
-                default:
-                    if (key.StartsWith("header.", StringComparison.Ordinal) && key.Length > 7) { headers.Add((key[7..], v)); break; }
-                    throw Bad("has an option that is not one it knows");
-            }
+            var v = FlightSqlLoginValue.Parse(value);
+            return new(v.Scheme, v.Host, v.Port, v.Token, v.TokenEnv, v.TokenCommand, v.User, v.Password, v.TlsSkipVerify, v.CaFile, v.Headers);
         }
-        var methods = new[] { token != null, tokenEnv != null, tokenCommand != null, user != null || password != null }.Count(b => b);
-        if (methods > 1) throw Bad("names more than one way to authenticate (token, token_env, token_command, or user and password)");
-        if ((user == null) != (password == null)) throw Bad("has a user without a password, or a password without a user");
-        if (token is { Length: 0 } || tokenEnv is { Length: 0 } || tokenCommand is { Length: 0 } || user is { Length: 0 }) throw Bad("has an empty credential option");
-        if (!(scheme == "grpc+tls") && (skip || caFile != null)) throw Bad("sets a TLS option on a connection without TLS");
-        if (skip && caFile != null) throw Bad("sets both tls_skip_verify and ca_file");
-        return new(scheme, uri.DnsSafeHost, uri.Port, token, tokenEnv, tokenCommand, user, password, skip, caFile, headers);
+        catch (FlightSqlLoginValueException ex) { throw new FlightSqlLoginException(ex.Message); }
     }
 
     /// <summary>The user of a value, or null when it names none or cannot be read (the command header only).</summary>

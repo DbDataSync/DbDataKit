@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Globalization;
 using DbDataKit.Connections;
+using DbDataKit.Connections.FlightSql;
 using DbDataKit.Odbc.Metadata;
 
 namespace DbDataProxy.Data;
@@ -19,6 +20,12 @@ public static class ConnectionHints
     public static TlsSpec TlsFrom(string engine, string connectionString)
     {
         var tls = new TlsSpec();
+        if (engine.Equals("flightsql", StringComparison.OrdinalIgnoreCase))
+        {
+            // The scheme says whether the channel is encrypted, tls_skip_verify whether the certificate is checked.
+            if (TryFlightSql(connectionString) is { } login) { tls.Encrypt = login.Tls; if (login.TlsSkipVerify) tls.TrustServerCertificate = true; }
+            return tls;
+        }
         var keys = Read(engine, connectionString);
 
         if (keys.TryGetValue("encrypt", out var encrypt) && ParseBool(encrypt) is bool e) tls.Encrypt = e;
@@ -48,6 +55,12 @@ public static class ConnectionHints
         if (keys.TryGetValue("commandtimeout", out var c) && int.TryParse(c, NumberStyles.None, CultureInfo.InvariantCulture, out int command)) timeouts.CommandS = command;
         if (commandTimeoutSeconds is > 0) timeouts.CommandS = commandTimeoutSeconds.Value;
         return timeouts;
+    }
+
+    private static FlightSqlLoginValue? TryFlightSql(string connectionString)
+    {
+        try { return FlightSqlLoginValue.Parse(connectionString); }
+        catch (FlightSqlLoginValueException) { return null; }
     }
 
     private static bool? ParseBool(string value) => value.Trim().ToLowerInvariant() switch
