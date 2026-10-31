@@ -9,7 +9,8 @@ namespace DbDataKit.Identity;
 /// <param name="CurrentUserId">The home's user id of the signed-in person on this request (from the session cookie), or null.</param>
 /// <param name="SignInPath">Where a person who is not signed in is sent; the original address goes in <c>returnUrl</c>.</param>
 /// <param name="EndSession">Ends the host's own session for the person on this request (clears the cookie, deletes the session row), called by the end-session endpoint. The home's session is the host's: without this the endpoint ends only the refresh tokens.</param>
-public sealed record OpenIdHostOptions(Func<HttpContext, string?> CurrentUserId, string SignInPath = "/sign-in", Func<HttpContext, Task>? EndSession = null);
+/// <param name="EndSessionOf">Ends every session the host holds for the person the id token hint named (plan 13a U15). A console sends the browser to the end-session endpoint from another site, so a session cookie that is SameSite Strict does not come with it and <paramref name="EndSession"/> sees nobody; the hint does name the person. Called only when the hint is this home's.</param>
+public sealed record OpenIdHostOptions(Func<HttpContext, string?> CurrentUserId, string SignInPath = "/sign-in", Func<HttpContext, Task>? EndSession = null, Func<HttpContext, string, Task>? EndSessionOf = null);
 
 public static class OpenIdEndpoints
 {
@@ -63,6 +64,7 @@ public static class OpenIdEndpoints
             var result = provider.EndSession(new EndSessionRequest(Get("id_token_hint"), Get("client_id"), Get("post_logout_redirect_uri"), Get("state")));
             if (host.CurrentUserId(context) is { } current) provider.RevokeUser(current);
             if (host.EndSession is { } end) await end(context);
+            if (result.UserId is { } named && host.EndSessionOf is { } endOf) await endOf(context, named);
             return result.RedirectTo is { } to ? Results.Redirect(to) : Results.Text("You are signed out.", "text/plain");
         }
         app.MapGet("/identity/end-session", (Delegate)EndSession);

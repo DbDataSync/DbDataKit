@@ -39,6 +39,21 @@ public sealed class OidcClients(StateDatabase database)
 
     public OidcClient? Find(string clientId) => Read(clientId)?.Client;
 
+    /// <summary>Every registered client, oldest first (the secret is never kept, only its hash).</summary>
+    public IReadOnlyList<OidcClient> List()
+    {
+        var ids = database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(connection, "SELECT ClientId FROM OidcClients ORDER BY CreatedAtUtc, ClientId;");
+            using var reader = cmd.ExecuteReader();
+            var found = new List<string>();
+            while (reader.Read()) found.Add(reader.GetString(0));
+            return found;
+        });
+        return [.. ids.Select(Find).OfType<OidcClient>()];
+    }
+
     /// <summary>Whether <paramref name="secret"/> is the client's (a public client has none: any secret is wrong, and none is right).</summary>
     public bool Authenticates(string clientId, string? secret)
     {
