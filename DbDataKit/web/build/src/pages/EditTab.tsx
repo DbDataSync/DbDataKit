@@ -3,7 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { CodeEditor, ErrorBanner, SchemaForm, SchemaSet, schemaFor, type EditorDiagnostic } from '@dbdatakit/shell'
 import { buildApi } from '../api'
+import { DefinitionPanel } from './DefinitionPanel'
 import { GitPanel } from './GitPanel'
+import { ImportPanel } from './ImportPanel'
+import { NewModelPanel } from './NewModelPanel'
 import { PreviewPanel, isModelQuery } from './PreviewPanel'
 import type { Diagnostic, ProjectFile, Workspace } from '../types'
 
@@ -43,6 +46,8 @@ export function EditTab() {
   const [newName, setNewName] = useState('')
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([])
   const [refused, setRefused] = useState<string | null>(null)
+  // the panel above the files: a new model, or an import from a connection
+  const [panel, setPanel] = useState<'model' | 'import' | null>(null)
   // a file with a schema can be edited as a form or as its YAML; both change the same text
   const [mode, setMode] = useState<'form' | 'yaml'>('form')
   const fileSchemas = useQuery({ queryKey: ['build', 'file-schemas'], queryFn: () => buildApi.fileSchemas(), staleTime: Infinity })
@@ -55,10 +60,15 @@ export function EditTab() {
   const mine = useMemo(() => (workspaces.data ?? []).filter((w) => w.mine), [workspaces.data])
   const files = useQuery({ queryKey: ['build', project, workspace, 'files'], queryFn: () => buildApi.files(project, workspace!), enabled: workspace !== null })
 
+  // only someone the server lets change files is offered the controls that create them (the server checks every call all the same)
+  const commands = useQuery({ queryKey: ['build', project, 'commands'], queryFn: () => buildApi.commands(project) })
+  const canAuthor = commands.data?.find((c) => c.tool === 'project_model_create')?.allowed === true
+
   const choose = (id: string | null) => {
     setParams(id ? { workspace: id } : {}, { replace: true })
     setOpen(null)
     setDiagnostics([])
+    setPanel(null)
   }
   const make = useMutation({
     mutationFn: () => buildApi.makeWorkspace(project, newName.trim()),
@@ -107,6 +117,13 @@ export function EditTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace])
 
+  // what a new model or an import wrote is checked like a save is: the file list and the git panel follow, and the compiler looks at the draft again
+  const wrote = async () => {
+    await client.invalidateQueries({ queryKey: ['build', project, workspace, 'files'] })
+    await client.invalidateQueries({ queryKey: ['build', project, workspace, 'git'] })
+    check.mutate()
+  }
+
   const tree = groupByFolder(files.data?.document?.data.files ?? [])
   const problems = diagnostics.filter((d) => d.severity !== 'note' && !d.location.file.startsWith('rendered/'))
   const dirty = open !== null && text !== saved
@@ -123,6 +140,23 @@ export function EditTab() {
         <span className="hint">A workspace is your own copy of the project. Nothing you change in it is run until it is merged.</span>
       </div>
       <ErrorBanner error={make.error ?? workspaces.error} />
+      {workspace !== null && canAuthor && (
+        <div className="row" style={{ gap: 12, marginBottom: 14 }}>
+          <button type="button" className={panel === 'model' ? 'btn btn-primary' : 'btn'} aria-pressed={panel === 'model'} onClick={() => setPanel(panel === 'model' ? null : 'model')} data-testid="build-edit-new-model">New model</button>
+          <button type="button" className={panel === 'import' ? 'btn btn-primary' : 'btn'} aria-pressed={panel === 'import'} onClick={() => setPanel(panel === 'import' ? null : 'import')} data-testid="build-edit-import">Import from a connection</button>
+        </div>
+      )}
+      {workspace !== null && canAuthor && panel === 'model' && (
+        <NewModelPanel
+          project={project}
+          workspace={workspace}
+          onCancel={() => setPanel(null)}
+          onCreated={async (query) => { setPanel(null); await wrote(); if (query) read.mutate(query) }}
+        />
+      )}
+      {workspace !== null && canAuthor && panel === 'import' && (
+        <ImportPanel project={project} workspace={workspace} onWritten={() => void wrote()} onOpen={(file) => read.mutate(file)} onCancel={() => setPanel(null)} />
+      )}
       {workspace === null && <div className="empty" data-testid="build-edit-none">Choose or start a workspace to edit the project’s files.</div>}
       {workspace !== null && (
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 260px) 1fr', gap: 14, alignItems: 'start' }}>
@@ -168,6 +202,7 @@ export function EditTab() {
                   : <CodeEditor value={text} language={languageOf(open)} onChange={setText} diagnostics={markersFor(open, diagnostics)} minLines={12} maxLines={32} testId="build-edit-editor" />}
               </>
             )}
+            {open !== null && workspace !== null && canAuthor && isModelQuery(open) && <DefinitionPanel project={project} workspace={workspace} path={open} dirty={dirty} onWritten={() => void wrote()} />}
             {open !== null && workspace !== null && isModelQuery(open) && <PreviewPanel project={project} workspace={workspace} path={open} version={hash} />}
             <ErrorBanner error={read.error ?? save.error ?? check.error} />
             <div className="card flush" style={{ marginTop: 14 }} data-testid="build-edit-diagnostics">

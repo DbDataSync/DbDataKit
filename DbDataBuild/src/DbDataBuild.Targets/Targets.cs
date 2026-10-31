@@ -59,5 +59,8 @@ public static class TargetRegistry
 
     public static ITarget Get(string name) => Targets.TryGetValue(name, out var t) ? t : throw new ArgumentException($"Unknown target `{name}`.", nameof(name));
 
+    /// <summary>The engine, or null for a name that is not one the tool builds on (a read origin such as DuckDB, which a mapped model can be declared on but nothing is built to).</summary>
+    public static ITarget? Find(string name) => Targets.TryGetValue(name, out var t) ? t : null;
+
     public static IReadOnlyCollection<ITarget> All => Targets.Values.ToList();
 }

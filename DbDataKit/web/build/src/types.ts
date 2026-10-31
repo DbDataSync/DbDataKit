@@ -215,3 +215,93 @@ export interface AdoptAnswer {
   adopted: boolean
   previous_owner?: string | null
 }
+
+/** A project template built into the server (`GET /api/v1/templates`). */
+export interface ProjectTemplateInfo {
+  name: string
+  description: string
+  files: number
+}
+
+/** The templates, and whether the caller may make a project from one (the author role on the server). */
+export interface TemplateCatalog {
+  templates: ProjectTemplateInfo[]
+  can_create: boolean
+}
+
+/** One command of a project as the server lists it, with whether this caller may run it. */
+export interface CommandOffer {
+  tool: string
+  name: string
+  role: string | null
+  allowed: boolean
+}
+
+/** One option of a definition question. A choice that takes a value (a type, a column name) says what to type. */
+export interface QuestionOption {
+  key: string
+  description: string
+  consequence?: string | null
+  takes_value: boolean
+  value_hint?: string | null
+}
+
+/** What the tool inferred as the answer, never taken unless the person says so. */
+export interface QuestionProposal {
+  option: string
+  value?: string | null
+  certainty: string
+  evidence?: string[]
+}
+
+/** A question `project model update` asks about a model's definition: a stable id, the words, the choices and perhaps a proposal. */
+export interface DefinitionQuestion {
+  id: string
+  prompt: string
+  context: string[]
+  options: QuestionOption[]
+  proposal?: QuestionProposal | null
+}
+
+/** One answer, as the answers file has it: a choice (with its value) or the inferred proposal accepted. */
+export type DefinitionAnswer = { id: string; choice: string; value?: string } | { id: string; accept: 'inferred' }
+
+/** What `project model update` says for one model query. */
+export interface DefinedModel {
+  query: string
+  definition: string
+  status: string
+  notes: string[]
+  open_questions: DefinitionQuestion[]
+}
+
+export interface DefineResult {
+  mode: string
+  models: DefinedModel[]
+  written?: string[]
+}
+
+/** A table or view of a connection, as `project import` shows it: what it would become as a mapped model. */
+export interface ImportRow {
+  name: string
+  object_kind: string
+  file: string | null
+  /** new (no mapped model yet), changed, unchanged, stale (a model but no table), invalid (a file that does not load). */
+  status: string
+  columns?: { name: string; native_type: string; logical_type: string | null; nullable: boolean }[]
+  changes: { kind: string; column: string | null; detail: string }[]
+  notes: string[]
+}
+
+export interface ImportResult {
+  connection: string
+  mode: string
+  mapped_models: ImportRow[]
+  skipped: { object: string; reason: string }[]
+  written?: string[]
+}
+
+/** The connections a project names, from its metadata. */
+export interface ProjectConnections {
+  project: { config: { connections: Record<string, { engine: string }> } }
+}
