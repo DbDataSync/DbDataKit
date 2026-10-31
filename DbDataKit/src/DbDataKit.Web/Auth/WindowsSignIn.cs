@@ -7,10 +7,12 @@ using DbDataKit.State;
 namespace DbDataKit.Web.Auth;
 
 /// <param name="Sid">The security identifier: the subject a user is keyed on.</param>
-/// <param name="Name">The account name, for display.</param>
+/// <param name="Name">The account name, for display (a SAM name, <c>DOMAIN\user</c>, which is never matched on).</param>
+/// <param name="Upn">The user principal name (<c>user@domain</c>) the domain issued for the account, or null when it carries none. It is the account's key (plan 13a U16): it is what makes the same person, signing in with a passkey
+/// or through the identity home, one user.</param>
 /// <param name="Role">Null when this identity is in neither configured group — which is "not a user
 /// here", not "a user with no permissions".</param>
-public sealed record WindowsIdentityResult(string Sid, string Name, UserRole? Role);
+public sealed record WindowsIdentityResult(string Sid, string Name, UserRole? Role, string? Upn = null);
 
 /// <summary>
 /// Turning a negotiated Windows identity into one of this application's users.
@@ -59,33 +61,20 @@ public static class WindowsSignIn
         var isViewer = !string.IsNullOrWhiteSpace(options.ViewerGroup) && windowsPrincipal.IsInRole(options.ViewerGroup);
 
         var role = isAdmin ? UserRole.Admin : isViewer ? UserRole.Viewer : (UserRole?)null;
-        return new WindowsIdentityResult(sid, identity.Name ?? sid, role);
+        // The UPN is the domain's own claim in the Kerberos ticket, not anything the browser sent: that is why it may link accounts. Only an address counts; a SAM name in its place is no key.
+        var upn = identity.FindFirst(ClaimTypes.Upn)?.Value;
+        return new WindowsIdentityResult(sid, identity.Name ?? sid, role, AccountKey.Normalize(upn) is null ? null : upn);
     }
 
     /// <summary>
-    /// The user this SID maps to, created on first sign-in and kept in step with the directory after.
+    /// The user this Windows account is, created on first sign-in and kept in step with the directory after (plan 13a U16: through <see cref="AccountLinker"/>, so the account is the one that holds the person's UPN, whichever way it
+    /// was made). Throws <see cref="AccountConflictException"/> with a message for the person when the account cannot be matched (no UPN) or its UPN is another account's.
     /// <para>
     /// The role is written back on every sign-in because the group is the authority — a user moved
     /// from the viewer group to the admin group should be an admin the next time they sign in, without
     /// anybody editing them here.
     /// </para>
     /// </summary>
-    public static UserRecord Upsert(UserStore users, WindowsIdentityResult identity, UserRole role)
-    {
-        var existing = users.FindByCredential(CredentialMethods.Windows, identity.Sid);
-        if (existing is null)
-        {
-            var created = users.CreateUser(identity.Name, email: null, role);
-            users.AddCredential(created.Id, CredentialMethods.Windows, identity.Sid, label: identity.Name);
-            return created;
-        }
-
-        if (existing.Role != role)
-        {
-            users.SetRole(existing.Id, role);
-            return existing with { Role = role };
-        }
-
-        return existing;
-    }
+    public static UserRecord Upsert(UserStore users, WindowsIdentityResult identity, UserRole role) =>
+        new AccountLinker(users).SignInWindows(identity.Sid, identity.Name, identity.Upn, role);
 }

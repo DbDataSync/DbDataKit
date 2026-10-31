@@ -76,12 +76,13 @@ public sealed class FederatedUsers(StateDatabase database, UserStore users, Sess
 
     public string AppKey { get; } = "app:" + appId;
 
-    /// <summary>The user for this sign-in, or null when the home gives the person no role on this console (they may sign in to the home and still not to here).</summary>
+    /// <summary>The user for this sign-in, or null when the home gives the person no role on this console (they may sign in to the home and still not to here). Throws <see cref="AccountConflictException"/> when the person's verified address belongs to another account.</summary>
     public UserRecord? SignIn(HomeIdentity identity)
     {
         if (!identity.Roles.TryGetValue(AppKey, out var names) || names.Count == 0) return null;
         var role = names.Contains("admin", StringComparer.OrdinalIgnoreCase) ? UserRole.Admin : UserRole.Viewer;
-        var user = users.UpsertFederated(identity.UserId, identity.Name ?? identity.UserId, identity.Email, role);
+        // One account per person (U16): the home's verified address finds the local or Windows account that is the same person, which takes the home's id. Refuses (AccountConflictException, a message for the person) when the address is another account's.
+        var user = new AccountLinker(users).SignInHome(identity.UserId, identity.Name ?? identity.UserId, identity.Email, identity.EmailVerified, role);
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
@@ -178,7 +179,11 @@ public sealed class FederatedUsers(StateDatabase database, UserStore users, Sess
                 var (identity, grant) = await client.RefreshAsync(held.RefreshToken, ct);
                 _failedAt.TryRemove(sessionId, out _);
                 // a token that names someone else is not this session's person
-                if (identity.UserId != held.UserId || SignIn(identity) is not { Enabled: true }) return End(sessionId, held.UserId, everySession: true);
+                if (identity.UserId != held.UserId) return End(sessionId, held.UserId, everySession: true);
+                UserRecord? user;
+                try { user = SignIn(identity); }
+                catch (AccountConflictException) { return End(sessionId, held.UserId); }   // plan 13a U16: the home's word cannot be applied (its address is now held by another account), so this session ends and keeps none of it
+                if (user is not { Enabled: true }) return End(sessionId, held.UserId, everySession: true);
                 Remember(sessionId, held.UserId, grant);
                 return RefreshOutcome.Refreshed;
             }

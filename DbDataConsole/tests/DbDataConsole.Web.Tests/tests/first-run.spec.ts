@@ -70,6 +70,7 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   // An invitation for someone else: a link, shown once.
   await page.getByTestId('rail-users').click()
   await expect(page.getByTestId('users-page')).toBeVisible()
+  await page.getByTestId('invite-email-field').fill('grace@example.com')
   await page.getByTestId('invite-create-button').click()
   await expect(page.getByTestId('invite-link')).toHaveValue(/\/invite#.+/)
 

@@ -30,7 +30,7 @@ public sealed class BootstrapInviteTests
     private (UserStore Users, InviteStore Invites, string Root) Fresh()
     {
         var root = Directory.CreateTempSubdirectory("dbdatasync-bootstrap-").FullName;
-        var database = new StateDatabase(Path.Combine(root, "state.db"), new StateSchema([IdentitySchema.Accounts, IdentitySchema.Invites]));
+        var database = new StateDatabase(Path.Combine(root, "state.db"), new StateSchema([IdentitySchema.Accounts, IdentitySchema.Invites, IdentitySchema.AccountKeys]));
         return (new UserStore(database), new InviteStore(database), root);
     }
 

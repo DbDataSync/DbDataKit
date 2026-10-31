@@ -59,6 +59,8 @@ export interface UserSummary {
   id: string
   displayName: string
   email: string | null
+  /** Whether the address is one other ways of signing in are matched on (an administrator entered it, the domain or the identity home vouched for it); false with an address means the person typed it and nobody checked. */
+  emailVerified: boolean
   role: string
   enabled: boolean
   credentials: UserCredentialSummary[]

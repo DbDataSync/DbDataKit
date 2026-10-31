@@ -53,6 +53,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
             foreach (var (key, value) in (JsonObject)Parse(text)) if (key is not ("kind" or "query")) document[key] = value?.DeepClone();
         }
         if (document["kind"]?.GetValue<string>() == "members") return MembersAsync(context, model, document, text, cancellationToken);
+        if (document["kind"]?.GetValue<string>() == "describe") return DescribeAsync(context, model, text, cancellationToken);
         if (document["kind"]?.GetValue<string>() != "query") throw new ServingInvalidException("This server answers semantic queries ('kind': 'query'); registrations and the other request kinds are not served yet.");
         var limit = request.Asked?.MaxRows;
         var provenance = new ServingProvenance(isSql ? text : Canonical(document, model.Name, text), null, context.Channel, SemanticModels.SourcePrefix + model.Name);
@@ -101,6 +102,14 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
             if (result.errors is { Count: > 0 } failed) throw new ServingInvalidException(string.Join("; ", failed.Select(e => $"{e.Code}: {e.Message}")));
             return new MembersAnswer(result.members, result.truncated, provenance);
         }, cancellationToken);
+    }
+
+    /// <summary><c>{"kind": "describe"}</c>: the model's objects as a table (<see cref="DescribeAnswer"/>), the same the source's description lists, under the caller's own view of the catalog.</summary>
+    private async Task<IServingAnswer> DescribeAsync(ServingContext context, SemanticModel model, string text, CancellationToken cancellationToken)
+    {
+        var objects = new List<ServingObject>();
+        await foreach (var o in new SemanticCatalog(catalog, models).DescribeAsync(context, [], source: SemanticModels.SourcePrefix + model.Name, cancellationToken: cancellationToken).ConfigureAwait(false)) objects.Add(o);
+        return new DescribeAnswer(objects, new ServingProvenance(text, null, context.Channel, SemanticModels.SourcePrefix + model.Name));
     }
 
     public Task<ServingStatementInfo> PrepareAsync(ServingContext context, ServingRequest.Sql statement, CancellationToken cancellationToken = default)

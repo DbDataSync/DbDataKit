@@ -25,7 +25,7 @@ public sealed class SignInTests : IDisposable
     }
 
     private StateDatabase Open() =>
-        new(Path.Combine(_dir, "state.db"), new StateSchema([IdentitySchema.Accounts, IdentitySchema.Invites]));
+        new(Path.Combine(_dir, "state.db"), new StateSchema([IdentitySchema.Accounts, IdentitySchema.Invites, IdentitySchema.AccountKeys]));
 
     private static IConfiguration Config(params (string Key, string Value)[] values) =>
         new ConfigurationBuilder().AddInMemoryCollection(values.Select(v => new KeyValuePair<string, string?>(v.Key, v.Value))).Build();

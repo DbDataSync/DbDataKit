@@ -21,7 +21,7 @@ public sealed record HomeGrant(string? RefreshToken, string? IdToken);
 public sealed record HomeSignIn(HomeIdentity Identity, string? ReturnUrl, HomeGrant Grant);
 
 /// <summary>Who the home says a person is: the stable user id, the name, the groups, and the roles held on every server and app (<c>dbdata_roles</c>: <c>server:&lt;id&gt;</c>, <c>server:&lt;id&gt;/&lt;project&gt;</c>, <c>app:&lt;id&gt;</c>).</summary>
-public sealed record HomeIdentity(string UserId, string? Name, string? Email, IReadOnlyList<string> Groups, IReadOnlyDictionary<string, IReadOnlyList<string>> Roles);
+public sealed record HomeIdentity(string UserId, string? Name, string? Email, IReadOnlyList<string> Groups, IReadOnlyDictionary<string, IReadOnlyList<string>> Roles, bool EmailVerified = false);
 
 /// <summary>A sign-in that cannot be completed; the message is ours and never holds a token or a code.</summary>
 public sealed class OpenIdClientException(string message, bool homeRefused = false) : Exception(message)
@@ -162,7 +162,9 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
                 claims.TryGetProperty("name", out var name) ? name.GetString() : null,
                 claims.TryGetProperty("email", out var email) ? email.GetString() : null,
                 claims.TryGetProperty("groups", out var groups) ? [.. groups.EnumerateArray().Select(e => e.GetString()!)] : [],
-                roles);
+                roles,
+                // only a JSON true counts (not the string "true", not a missing claim): an address the home does not vouch for links nothing
+                claims.TryGetProperty("email_verified", out var verified) && verified.ValueKind == JsonValueKind.True);
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException or ArgumentException)
         {

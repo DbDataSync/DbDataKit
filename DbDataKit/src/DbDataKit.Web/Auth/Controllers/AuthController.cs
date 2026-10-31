@@ -90,7 +90,9 @@ public sealed class AuthController(
             });
         }
 
-        var user = WindowsSignIn.Upsert(users, identity, role);
+        UserRecord user;
+        try { user = WindowsSignIn.Upsert(users, identity, role); }
+        catch (AccountConflictException ex) { return StatusCode(409, new { error = ex.Message }); }
         if (!user.Enabled)
             return StatusCode(403, new { error = $"'{user.DisplayName}' is disabled in {options.Product.Name}." });
 

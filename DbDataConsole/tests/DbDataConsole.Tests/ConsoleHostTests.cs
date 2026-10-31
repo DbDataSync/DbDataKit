@@ -156,7 +156,7 @@ public sealed class ConsoleHostTests : IAsyncLifetime
     public async Task An_administrator_makes_an_invitation_and_signing_out_ends_the_session()
     {
         var admin = SessionFor(UserRole.Admin);
-        var made = new HttpRequestMessage(HttpMethod.Post, "/api/invites") { Content = JsonContent.Create(new { role = "Viewer" }) };
+        var made = new HttpRequestMessage(HttpMethod.Post, "/api/invites") { Content = JsonContent.Create(new { role = "Viewer", email = "new.person@example.com" }) };
         made.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={admin}");
         var created = await http.SendAsync(made);
         Assert.Equal(HttpStatusCode.OK, created.StatusCode);
@@ -165,6 +165,68 @@ public sealed class ConsoleHostTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.NoContent, (await http.SendAsync(Request(HttpMethod.Post, "/api/auth/sign-out", admin))).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await http.SendAsync(Request(HttpMethod.Get, "/api/users", admin))).StatusCode);
+    }
+
+    private async Task<(HttpStatusCode Status, JsonNode? Body)> Send(HttpMethod method, string path, string session, object? body = null)
+    {
+        var request = Request(method, path, session);
+        if (body is not null) request.Content = JsonContent.Create(body);
+        var response = await http.SendAsync(request);
+        var text = await response.Content.ReadAsStringAsync();
+        return (response.StatusCode, text.Length > 0 ? JsonNode.Parse(text) : null);
+    }
+
+    [Fact]
+    public async Task An_invitation_for_a_new_user_needs_the_persons_address_and_one_account_holds_an_address_once()
+    {
+        // plan 13a U16: the administrator's entry is the account's key; a second account at the same address, in any case, is refused with a message
+        var admin = SessionFor(UserRole.Admin);
+
+        var without = await Send(HttpMethod.Post, "/api/invites", admin, new { role = "Viewer" });
+        Assert.Equal(HttpStatusCode.BadRequest, without.Status);
+        Assert.Contains("needs the person's email", (string)without.Body!["error"]!);
+
+        var bad = await Send(HttpMethod.Post, "/api/invites", admin, new { role = "Viewer", email = "CORP\\ada" });
+        Assert.Equal(HttpStatusCode.Conflict, bad.Status);                    // not an address, so no account could be matched on it
+        Assert.Contains("not an email address", (string)bad.Body!["error"]!);
+
+        var users = app.Services.GetRequiredService<UserStore>();
+        var ada = users.CreateUser("Ada", "Ada@Example.com", UserRole.Viewer, emailVerified: true);
+        var taken = await Send(HttpMethod.Post, "/api/invites", admin, new { role = "Viewer", email = "ADA@example.com" });
+        Assert.Equal(HttpStatusCode.Conflict, taken.Status);
+        Assert.Contains("already belongs to 'Ada'", (string)taken.Body!["error"]!);
+
+        var forExisting = await Send(HttpMethod.Post, "/api/invites", admin, new { role = "Viewer", forUserId = ada.Id, email = "other@example.com" });
+        Assert.Equal(HttpStatusCode.BadRequest, forExisting.Status);          // an existing account has its own address
+        Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Post, "/api/invites", admin, new { role = "Viewer", forUserId = ada.Id })).Status);
+
+        var made = await Send(HttpMethod.Post, "/api/invites", admin, new { role = "Viewer", email = "new.person@example.com" });
+        Assert.Equal(HttpStatusCode.OK, made.Status);
+        var code = ((string)made.Body!["url"]!).Split('#')[1];
+        var check = JsonNode.Parse(await http.GetStringAsync($"/api/invites/check?code={code}"))!;
+        Assert.False((bool)check["emailAsked"]!);                              // the page does not ask the person for what the administrator vouched for
+    }
+
+    [Fact]
+    public async Task An_administrator_sets_an_address_through_the_users_api_and_the_list_says_whether_it_is_verified()
+    {
+        var admin = SessionFor(UserRole.Admin);
+        var users = app.Services.GetRequiredService<UserStore>();
+        var typed = users.CreateUser("Typed", "typed@example.com", UserRole.Viewer);                 // an address nobody checked
+        var ada = users.CreateUser("Ada", "ada@example.com", UserRole.Viewer, emailVerified: true);
+
+        var list = (await Send(HttpMethod.Get, "/api/users", admin)).Body!.AsArray();
+        Assert.False((bool)list.Single(u => (string)u!["displayName"]! == "Typed")!["emailVerified"]!);
+        Assert.True((bool)list.Single(u => (string)u!["displayName"]! == "Ada")!["emailVerified"]!);
+
+        var refused = await Send(HttpMethod.Put, $"/api/users/{typed.Id}", admin, new { email = "ADA@example.com" });
+        Assert.Equal(HttpStatusCode.Conflict, refused.Status);
+        Assert.Contains("already used by another account", (string)refused.Body!["error"]!);
+
+        var set = await Send(HttpMethod.Put, $"/api/users/{typed.Id}", admin, new { email = "Typed.Person@Example.com" });
+        Assert.Equal(HttpStatusCode.OK, set.Status);
+        Assert.True((bool)set.Body!["emailVerified"]!);
+        Assert.Equal("Typed.Person@Example.com", (string)set.Body["email"]!);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using Apache.Arrow;
+using DbDataKit.Cli;
 using DbDataProxy.Client;
 using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Hosting;
@@ -179,6 +180,39 @@ public sealed class SemanticFlightTests : IAsyncLifetime
         store.Share("alice", "sales_catalog", "my_revenue", "user:bob");
         var shared = await Rpc.ExpectAsync(() => QueryAsync("bob", "SELECT * FROM my_revenue"));
         Assert.Equal(StatusCode.PermissionDenied, shared.StatusCode);
+    }
+
+    private async Task<(int Code, string Out, string Error, CliContext Context)> SemanticCli(params string[] args)
+    {
+        Environment.SetEnvironmentVariable("DBPROXY_PASSWORD", "pw");
+        var (output, error) = (new StringWriter(), new StringWriter());
+        var context = new CliContext(output, error, TextReader.Null);
+        var code = await DbDataProxy.Server.Hosting.Cli.RunAsync(["semantic", .. args, "--address", _address, "--user", "alice"], context);
+        return (code, output.ToString(), error.ToString(), context);
+    }
+
+    [Fact]
+    public async Task TheSemanticCommandsDescribeQueryExplainAndListMembersAsTheUser()
+    {
+        var described = await SemanticCli("describe", "sales_catalog");
+        Assert.True(described.Code == 0, described.Error);
+        Assert.Contains("dimension | customers", described.Out);
+        Assert.Contains("measure |", described.Out);
+
+        var members = await SemanticCli("members", "sales_catalog", "customers.region", "--search", "ea");
+        Assert.True(members.Code == 0, members.Error);
+        Assert.Contains("East", members.Out);
+        Assert.DoesNotContain("West", members.Out);
+
+        var query = await SemanticCli("query", "sales_catalog", "--sql", "SELECT customers.region, MEASURE(orders.net_revenue) FROM sales_catalog WHERE date.fiscal_quarter = 'FY27-Q1' GROUP BY ALL ORDER BY MEASURE(orders.net_revenue) DESC LIMIT 100", "--max-rows", "1");
+        Assert.True(query.Code == 0, query.Error);
+        Assert.Contains("West | 500", query.Out);
+        Assert.Equal(true, query.Context.Data["truncated"]);                       // two regions, one row asked for
+        Assert.Equal("complete", ((Dictionary<string, object?>)query.Context.Data["notes"]!)["qis.status"]);
+
+        var explained = await SemanticCli("explain", "sales_catalog", "--sql", "SELECT customers.region, MEASURE(orders.net_revenue) FROM sales_catalog GROUP BY ALL LIMIT 10");
+        Assert.True(explained.Code == 0, explained.Error);
+        Assert.Contains("sqlserver_sales", explained.Out);
     }
 
     [Fact]

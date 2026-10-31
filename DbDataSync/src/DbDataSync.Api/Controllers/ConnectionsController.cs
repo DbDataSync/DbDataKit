@@ -31,7 +31,7 @@ public sealed class ConnectionsController(
     [Authorize(Policies.Viewer)]
     [HttpGet]
     public ActionResult<IReadOnlyList<ConnectionConfig>> List() =>
-        Ok(configRepository.ListConnections().Select(configRepository.LoadConnection).ToList());
+        Ok(configRepository.LoadAllConnections());
 
     [Authorize(Policies.Viewer)]
     [HttpGet("{name}")]

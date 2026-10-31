@@ -73,4 +73,21 @@ public static class IdentitySchema
 
         CREATE UNIQUE INDEX UX_Invites_CodeHash ON Invites(CodeHash);
         """;
+
+    /// <summary>
+    /// Appended after <see cref="Accounts"/> and <see cref="Invites"/>, which have shipped (plan 13a U16): the account's key and the address an invitation was made for. A host appends it to its schema list as the next entry.
+    /// </summary>
+    public const string AccountKeys =
+        """
+        -- One account per person (plan 13a U16). EmailKey is the normalised address of an account whose address a source vouches for (an administrator typed it at the invitation, the domain
+        -- gave it as the UPN, the identity home's verified id token carried it). It is what a local user, a Windows account and a person who signs in through the home are matched on, and it is unique:
+        -- a second account cannot hold the same address. Null for an address nobody checked (and for every account made before this column: their addresses were typed by the person redeeming the
+        -- invitation, which proves nothing, so none is trusted until an administrator sets it).
+        ALTER TABLE Users {{addcolumn}} EmailKey {{key}} NULL;
+
+        CREATE UNIQUE INDEX UX_Users_EmailKey ON Users(EmailKey) WHERE EmailKey IS NOT NULL;
+
+        -- The address the administrator invited this person at. It becomes the new account's verified address; what the person types when redeeming is not used.
+        ALTER TABLE Invites {{addcolumn}} Email {{text}} NULL;
+        """;
 }

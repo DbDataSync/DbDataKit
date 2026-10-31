@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>The semantic noun of a command line: describe, query, explain and members against a served semantic model, with documents that validate against schemas. A product supplies how it connects.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Cli\DbDataKit.Cli.csproj" />
+  </ItemGroup>
+</Project>

@@ -104,6 +104,19 @@ public sealed class SemanticModuleTests : IDisposable
     }
 
     [Fact]
+    public async Task DescribeListsWhatTheModelOffersAsATable()
+    {
+        var rows = await RowsOf(await Members("""{"kind": "describe"}"""));
+
+        Assert.Contains(rows, r => r.StartsWith("model|sales_catalog|"));
+        Assert.Contains(rows, r => r.StartsWith("dimension|customers|"));
+        Assert.Contains(rows, r => r.StartsWith("column|customers.region|customers|string|"));      // an attribute is a column of its dimension
+        Assert.Contains(rows, r => r.StartsWith("measure|orders.net_revenue|") || r.StartsWith("measure|net_revenue|"));
+    }
+
+    private static async Task<List<string>> RowsOf(IServingAnswer answer) => await RowsAsync(answer);
+
+    [Fact]
     public async Task MembersAreReadAsTheCallerAndAnUnknownAttributeIsRefused()
     {
         await Assert.ThrowsAsync<ServingInvalidException>(() => Members("""{"kind": "members", "attribute": "customers.no_such"}"""));
