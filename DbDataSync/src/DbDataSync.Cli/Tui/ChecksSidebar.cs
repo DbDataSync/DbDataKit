@@ -59,13 +59,7 @@ internal sealed class ChecksSidebar : FrameView
                 _rowStatuses.Add(result.Status);
             }
         }
-
-        FirstAdminOutstanding = results.Any(r => r.Name == "First admin" && r.Status != CheckStatus.Ok);
     }
-
-    /// <summary>Read by the bottom action bar — "Reissue invite" only makes sense while no admin exists
-    /// yet, the same predicate <c>ReviewAsync</c>'s menu used.</summary>
-    public bool FirstAdminOutstanding { get; private set; }
 
     private static TGAttribute ColorFor(CheckStatus status) => status switch
     {

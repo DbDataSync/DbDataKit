@@ -39,7 +39,7 @@ public sealed class ServeCommandHostArgsTests
     public void StripsTheCliOnlyFlagsAndTheirValues()
     {
         var hostArgs = ServeCommand.BuildHostArgs(
-            args: ["--repo", "/ignored", "--state-db", "/ignored", "--url", "/ignored", "--DbDataSync:App:AlternateUrls", "http://alt/"],
+            args: ["--repo", "/ignored", "--state-db", "/ignored", "--url", "/ignored", "--DbDataSync:App:TrustedProxies", "10.0.0.1"],
             root: "/srv/dbdatasync", stateDb: "/srv/dbdatasync/state.db", url: "http://localhost:5080");
 
         Assert.DoesNotContain("--repo", hostArgs);
@@ -48,7 +48,7 @@ public sealed class ServeCommandHostArgsTests
         // The literal --url flag is stripped; the resolved --urls (Kestrel's own flag) still appears.
         Assert.DoesNotContain("--url", hostArgs);
         Assert.Contains("--urls", hostArgs);
-        Assert.Contains("--DbDataSync:App:AlternateUrls", hostArgs);
+        Assert.Contains("--DbDataSync:App:TrustedProxies", hostArgs);
     }
 
     /// <summary>

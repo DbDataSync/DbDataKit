@@ -25,7 +25,7 @@ public sealed class SyncCliTests
 
     [Fact]
     public void TheCommandsOutsideTheRouterAreTheOnesThatStayUnchanged() =>
-        Assert.Equal(["internal", "invite", "launcher", "tool", "update", "version"], SyncCli.Legacy.Order(StringComparer.Ordinal));
+        Assert.Equal(["internal", "launcher", "tool", "update", "version"], SyncCli.Legacy.Order(StringComparer.Ordinal));
 
     private static string McpToolsPath() => Path.Combine(Path.GetDirectoryName(SchemaPath())!, "mcp-tools.json");
 

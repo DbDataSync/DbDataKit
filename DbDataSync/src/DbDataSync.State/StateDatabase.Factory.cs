@@ -7,15 +7,10 @@ public sealed partial class StateDatabase
 {
     /// <summary>
     /// The one place that turns "which engine, which connection string" into an open
-    /// <see cref="StateDatabase"/> — used by <c>DbDataSyncHost.cs</c> (the API's own startup) and
-    /// <c>InviteCommand</c> alike, so the two never drift on how a non-SQLite state store is reached.
-    /// <para>
-    /// Before phase 79, <c>InviteCommand</c> didn't make this decision at all — it called
-    /// <c>new StateDatabase(stateDb)</c> unconditionally, so an admin locked out of a
-    /// <see cref="StateEngineIds.MsSql"/> or <see cref="StateEngineIds.Postgres"/> deployment had no way to
-    /// mint a recovery invite. Extracting the branch <c>DbDataSyncHost.cs</c> already had, rather than
-    /// writing a second one, is what makes that fix safe.
-    /// </para>
+    /// <see cref="StateDatabase"/> — used by <c>DbDataSyncHost.cs</c> (the API's own startup) and by the command line's readiness check and
+    /// setup, so they never drift on how a non-SQLite state store is reached. (<c>dbdatasync invite</c>, which also used it, is gone: plan 13, X05.)
+    /// </summary>
+    /// <remarks>
     /// <para>
     /// Lives here rather than in <c>DbDataSync.Api</c> (where <c>ApiOptions</c> is defined) because
     /// <c>DbDataSync.Api</c> already depends on <c>DbDataSync.State</c> for <see cref="StateDatabase"/>
@@ -32,7 +27,7 @@ public sealed partial class StateDatabase
     /// be doing a caller a favour. Ignored for SQLite — see <see cref="StateDialectRegistry"/>'s own doc
     /// comment for why only MsSql and Postgres need one at all.
     /// </para>
-    /// </summary>
+    /// </remarks>
     public static StateDatabase FromOptions(
         string engine, string stateDbPath, string? stateConnectionString, SecretStore secrets,
         LibraryRegistry libraryRegistry)

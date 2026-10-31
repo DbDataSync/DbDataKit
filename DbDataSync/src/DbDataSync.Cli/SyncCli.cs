@@ -7,15 +7,15 @@ namespace DbDataSync.Cli;
 /// <summary>
 /// Sync's command line as nouns and verbs on the shared router (plan 13, C07): the same grammar and the same <c>--format json</c> document as the other products. Each verb forwards to the
 /// command class that has always done the work. Those classes write with <see cref="Console"/>, so while a verb runs the console is pointed at the command context (see
-/// <see cref="ContextScope"/>) and the JSON form captures what the text form prints. <c>tool</c>, <c>update</c>, <c>launcher</c>, <c>invite</c>, <c>internal</c> and <c>version</c> are not verbs of a
-/// noun and keep their own dispatch in <c>Program.cs</c> until the updater is reopened (plan 13, D5) and users move to the console.
+/// <see cref="ContextScope"/>) and the JSON form captures what the text form prints. <c>tool</c>, <c>update</c>, <c>launcher</c>, <c>internal</c> and <c>version</c> are not verbs of a
+/// noun and keep their own dispatch in <c>Program.cs</c> until the updater is reopened (plan 13, D5).
 /// </summary>
 public static class SyncCli
 {
     public const string Program = "dbdatasync";
 
     /// <summary>The commands that stay outside the router: flag-driven or retired from the suite's grammar for now.</summary>
-    public static readonly IReadOnlySet<string> Legacy = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "tool", "update", "launcher", "invite", "internal", "version" };
+    public static readonly IReadOnlySet<string> Legacy = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "tool", "update", "launcher", "internal", "version" };
 
     /// <summary>What <c>ui mcp</c> never offers: nothing that sets a secret or loads an installed library, and nothing that is long-running or interactive (<see cref="McpOptions.Always"/>).</summary>
     private static readonly string[] NotForAgents = ["secret set", "secret remove", "library validate", "server pair", "server unpair"];

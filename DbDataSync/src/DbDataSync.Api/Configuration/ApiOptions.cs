@@ -65,14 +65,6 @@ public sealed class ApiOptions
     public WebServer Server { get; init; } = WebServerSelection.Default;
 
     /// <summary>
-    /// Every other origin this deployment is also legitimately reached at, beyond <see cref="Url"/> —
-    /// purely additive, never a replacement (see <see cref="Auth.PasskeyOptions.Origins"/>, its one
-    /// consumer today). Comma- or semicolon-separated in configuration, matching
-    /// <see cref="SelfUpdateChannels"/>'s own list shape.
-    /// </summary>
-    public IReadOnlyList<string> AlternateUrls { get; init; } = [];
-
-    /// <summary>
     /// Which database backs the state store — see phase 63.
     /// <para>
     /// **Two fields rather than one connection string with a provider hint**, resolving the phase
@@ -226,7 +218,6 @@ public sealed class ApiOptions
             RepoRoot = repoRoot,
             Url = string.IsNullOrWhiteSpace(app["Url"]) ? DefaultUrl : app["Url"]!,
             Server = WebServerSelection.Resolve(configuration),
-            AlternateUrls = ReadList(app["AlternateUrls"]),
             TrustedProxies = ReadList(app["TrustedProxies"]),
             AllowInsecureHttp = bool.TryParse(app["AllowInsecureHttp"], out var allowInsecure) && allowInsecure,
             StateDbPath = stateDbPath,
