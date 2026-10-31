@@ -90,6 +90,20 @@ public sealed class ConnectionCopyTests
     }
 
     [Fact]
+    public void A_copy_to_Sync_leaves_out_the_settings_only_a_Proxy_reads_and_says_so()
+    {
+        var text = "schema: connection/1\nname: erp\nengine: sqlserver\naccess: readonly\nconnection_string: Server=s\nread_login: { mode: sql, user: r, password_secret: 'env:R' }\n";
+
+        var plan = ConnectionCopy.Plan(text, ConnectionCopy.Proxy, ConnectionCopy.Sync, "e2");
+
+        Assert.Null(plan.Problem);
+        Assert.DoesNotContain("access", plan.Text);
+        Assert.DoesNotContain("read_login", plan.Text);
+        Assert.Empty(plan.Secrets);
+        Assert.Contains(plan.Notes, n => n.Contains("read_login, access") && n.Contains("left out"));
+    }
+
+    [Fact]
     public void A_scripts_and_hooks_note_is_made_for_a_Sync_copy_that_keeps_them()
     {
         var text = Base.Replace("'env:PW'", "'secret:dbdata:sync:connection:erp'") + "\nextensions:\n  sync:\n    scripts:\n      before: { name: warm-up }\n";

@@ -74,8 +74,22 @@ public static partial class ConnectionCopy
             notes.Add($"The settings under extensions.{string.Join(", extensions.", foreign)} were left out: the target does not read them.");
         }
 
+        // Sync's loader refuses the settings only a Proxy reads; they go, and the copy says which
+        var dropped = new List<string>();
+        if (targetProduct == Sync)
+        {
+            var map = StrictYamlReader.Read(sourceText, "source", []) as YamlMapping;
+            foreach (var key in new[] { "tls", "read_login", "write_login", "connection_string_secret", "access" })
+                if (problem is null && map?.GetEntry(key) is not null)
+                {
+                    problem = Edit(t => YamlEditor.Remove(t, key));
+                    dropped.Add(key);
+                }
+            if (dropped.Count > 0) notes.Add($"{string.Join(", ", dropped)} {(dropped.Count == 1 ? "was" : "were")} left out: Sync does not use {(dropped.Count == 1 ? "it" : "them")}.");
+        }
+
         // a password is named by reference; Sync reads one name only, and a Sync reference means nothing in a Proxy's store
-        var logins = new[] { ("auth", source.Auth), ("read_login", source.ReadLogin), ("write_login", source.WriteLogin) };
+        var logins = new[] { ("auth", source.Auth), ("read_login", dropped.Contains("read_login") ? null : source.ReadLogin), ("write_login", dropped.Contains("write_login") ? null : source.WriteLogin) };
         var secrets = new List<string>();
         foreach (var (path, login) in logins)
         {
@@ -91,7 +105,7 @@ public static partial class ConnectionCopy
             if (login.ConnectionStringSecret is { } whole) secrets.Add(whole);
             if (login.TokenSecret is { } token) secrets.Add(token);
         }
-        if (source.ConnectionStringSecret is { } wholeString) secrets.Add(wholeString);
+        if (!dropped.Contains("connection_string_secret") && source.ConnectionStringSecret is { } wholeString) secrets.Add(wholeString);
 
         if (problem is not null) return Refused("The file could not be changed for the target: " + problem);
 
