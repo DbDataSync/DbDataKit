@@ -50,7 +50,7 @@ public sealed class ConnectionsController(ConsoleInstances instances, ConsoleRel
 
         // the target creates it (no version: a name that is taken is a conflict, never overwritten) and validates it with its own reading of the file
         var write = to.Product == ConnectionCopy.Sync
-            ? await relay.CallAsync(toInstance, HttpMethod.Put, $"/api/connections/{Uri.EscapeDataString(newName)}/file", new { text = plan.Text, expectedVersion = (string?)null, password = string.IsNullOrEmpty(request.Password) ? null : request.Password }, cancellationToken)
+            ? await relay.CallAsync(toInstance, HttpMethod.Put, $"/api/connections/{Uri.EscapeDataString(newName)}/file", new { text = plan.Text, expected_version = (string?)null, password = string.IsNullOrEmpty(request.Password) ? null : request.Password }, cancellationToken)
             : await relay.CallAsync(toInstance, HttpMethod.Put, $"/api/v1/data-sources/{Uri.EscapeDataString(newName)}", new { text = plan.Text, expected_version = (string?)null }, cancellationToken);
         if (write.Status != 200)
             return Failure(write.Status, write.Body, $"{toInstance.Name} did not accept the copy", plan.Notes);
@@ -69,6 +69,6 @@ public sealed class ConnectionsController(ConsoleInstances instances, ConsoleRel
     private ObjectResult Failure(int status, JsonNode? body, string what, IEnumerable<string>? notes = null)
     {
         var reason = body?["error"]?.GetValue<string>() ?? (status == 502 ? "no answer" : $"status {status}");
-        return StatusCode(status is >= 400 and < 600 ? status : 502, new { error = $"{what}: {reason}", diagnostics = body?["diagnostics"], notes = notes ?? [], currentVersion = body?["currentVersion"] ?? body?["current_version"] });
+        return StatusCode(status is >= 400 and < 600 ? status : 502, new { error = $"{what}: {reason}", diagnostics = body?["diagnostics"], notes = notes ?? [], current_version = body?["current_version"] });
     }
 }
