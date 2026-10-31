@@ -37,7 +37,7 @@ The semantic file is written **against** models and never describes tables itsel
 | **Relationship** | Only on **mapped** models, as `foreign_keys:` (`columns`, `references: {table, columns}`), imported from a table that already exists. A built model has none | `relationships:` in the semantic file: many-to-one `from`/`to` with column lists, optional `x_role` for role-playing dimensions | **The D12 overlap.** The only place a built model's join is stated is the semantic file |
 | **Description, title, tags, properties** | On the model and on each column (`title` up to 200 characters, `description` up to 4000, `tags`, `properties`) | `label`, `synonyms` on dimensions, attributes and measures | Two vocabularies for documentation. Nothing copies one to the other |
 | **Where it lives** | `connections` (built natively on each) | Source = connection; `default`; `totals` and `datetime_zone` per source | The semantic side reuses the model's connection names. Its source `kind` comes from the connection (D13: `postgres` for a PostgreSQL connection) |
-| **Time** | `timezone` and the column types | Hierarchies, calendars and shifts, time zones, `is_time` columns, date tables | Semantic only, apart from the column types underneath |
+| **Time** | A connection's `timezone` setting and the column types | Hierarchies, calendars and shifts, time zones, `is_time` columns, date tables | Semantic only, apart from the column types underneath |
 | **Naming** | One physical name, the same everywhere | Logical names, role names (`order_date`), synonyms | Deliberately different: physical names stay in models and bindings, logical names everywhere else in the catalog |
 
 ## 4. Only on one side
