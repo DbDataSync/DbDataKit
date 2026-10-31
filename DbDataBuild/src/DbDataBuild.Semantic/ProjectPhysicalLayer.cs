@@ -42,6 +42,15 @@ public sealed partial class ProjectPhysicalLayer : IPhysicalLayer
             ? kind.Driver == TargetNames.Postgres ? "postgres" : "sqlserver"
             : null;
 
+    /// <summary>
+    /// The foreign keys of the project's models (J29): a built model declares them, a mapped model has them from the table it describes. A key whose target is not a model of the project is not a relationship (the
+    /// semantic layer can only join models it has); one whose columns the models lack is left to the key's own check, <see cref="ModelForeignKeys"/>.
+    /// </summary>
+    public IReadOnlyList<DeclaredRelationship> DeclaredRelationships =>
+        models.Values.OrderBy(m => m.Name, StringComparer.Ordinal)
+            .SelectMany(m => m.ForeignKeys.Where(f => models.ContainsKey(f.Table)).Select(f => new DeclaredRelationship(f.Name, m.Name, models[f.Table].Name, f.Columns, f.ReferencedColumns, m.DefinitionFile, f.Line)))
+            .ToList();
+
     /// <inheritdoc />
     public bool KnowsModel(string model) => models.ContainsKey(model);
 

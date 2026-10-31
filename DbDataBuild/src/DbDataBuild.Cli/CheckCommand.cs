@@ -38,7 +38,8 @@ internal static class CheckCommand
             return CliApp.ExitFindings;
         }
         var generated = ctx.Semantic.Models.Select(m => SemanticChecks.Generate(m, ctx.Config)).ToList();
-        var checks = generated.SelectMany(g => g.Checks).Where(c => c.Connection == connection.Name).ToList();
+        var foreignKeys = ForeignKeyChecks.Generate(ProjectModels.Of(ctx.Project, ctx.Config.DefaultConnections), ctx.Config);
+        var checks = generated.SelectMany(g => g.Checks).Concat(foreignKeys).Where(c => c.Connection == connection.Name).ToList();
         var skipped = generated.SelectMany(g => g.Skipped).ToList();
         if (checks.Count == 0)
         {
@@ -46,7 +47,7 @@ internal static class CheckCommand
             output.Payload("counts", new { total = 0, passed = 0, failed = 0, errored = 0 });
             output.Payload("checks", Array.Empty<object>());
             output.Payload("skipped", Skipped(skipped));
-            output.WriteLine(ctx.Semantic.Models.Count == 0 ? $"No checks: the project has no semantic models ({SemanticProject.Folder}/)." : $"No checks: no hierarchy or relationship of a semantic model is on `{connection.Name}`.");
+            output.WriteLine(ctx.Semantic.Models.Count == 0 ? $"No checks: the project has no semantic models ({SemanticProject.Folder}/) and no foreign keys on its models." : $"No checks: no hierarchy, relationship or foreign key is on `{connection.Name}`.");
             return CliApp.ExitOk;
         }
         if (missing != null) { error.Diag(missing); return CliApp.ExitFindings; }

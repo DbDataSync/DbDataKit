@@ -42,6 +42,7 @@ public sealed class SemanticProject
     public static SemanticProject Load(string root, IReadOnlyList<ProjectModel> models, ProjectConfig config, List<Diagnostic> diagnostics)
     {
         var layer = new ProjectPhysicalLayer(models, config);
+        ModelForeignKeys.Validate(models, diagnostics);       // the models' own foreign keys, whether or not a semantic file reads them
         var loaded = new List<SemanticModelFile>();
         foreach (var file in Discover(root))
         {

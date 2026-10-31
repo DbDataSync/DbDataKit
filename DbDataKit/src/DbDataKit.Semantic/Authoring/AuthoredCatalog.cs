@@ -31,7 +31,13 @@ public interface IPhysicalLayer
 
     /// <summary>The table of a model on a source, or null when the model is not on that source.</summary>
     PhysicalTable? Table(string model, string source);
+
+    /// <summary>The joins the host's models declare themselves (a foreign key of a model, plan 19 J29), by model. The semantic file reads them as relationships where both models are used and it says nothing of its own about that pair.</summary>
+    IReadOnlyList<DeclaredRelationship> DeclaredRelationships => [];
 }
+
+/// <summary>A join a model declares: the foreign key's name (the relationship's), the two models and the columns of each, and where it is written (the model's file and line).</summary>
+public sealed record DeclaredRelationship(string Name, string FromModel, string ToModel, IReadOnlyList<string> FromColumns, IReadOnlyList<string> ToColumns, string File, int Line);
 
 /// <summary>A use of a model in a semantic file: where a binding, a measure or a relationship names it. <see cref="Source"/> is null for a relationship, which holds on every source.</summary>
 public sealed record ModelUse(string Model, string? Source, string Path, int Line, int Column);
@@ -46,7 +52,11 @@ public sealed record GeneratedTable(string Name, string Model, string Source, Ph
 public sealed record MemberBinding(string Member, string Kind, string Source, string Model, string Column, string? Aggregate = null);
 
 /// <summary>A relationship of the generated physical layer: an authored relationship on one source, between the generated tables of its two models.</summary>
-public sealed record GeneratedRelationship(string Name, string FromModel, string ToModel, string Source, IReadOnlyList<string> FromColumns, IReadOnlyList<string> ToColumns, string? Role, int AuthoredIndex);
+public sealed record GeneratedRelationship(string Name, string FromModel, string ToModel, string Source, IReadOnlyList<string> FromColumns, IReadOnlyList<string> ToColumns, string? Role, int AuthoredIndex)
+{
+    /// <summary>The model file and line of the foreign key a relationship was derived from (<see cref="AuthoredIndex"/> is then -1); null for one the semantic file wrote.</summary>
+    public (string File, int Line)? DeclaredAt { get; init; }
+}
 
 /// <summary>A semantic model compiled against a physical layer: the validated catalog and the physical layer that was generated for it.</summary>
 public sealed class AuthoredCompilation
@@ -297,6 +307,37 @@ public sealed class AuthoredCatalog
                     relationships.Add(new GeneratedRelationship(generated["name"]!.GetValue<string>(), from, to, source, Strings(r["from_columns"]), Strings(r["to_columns"]), r["x_role"]?.GetValue<string>(), i));
                 }
             }
+        // a foreign key of a model is a relationship too (J29), where both its models are used by this file and the file says nothing of its own between them (roles and several keys
+        // between two models stay in the file); a name the file already uses for another join is a problem at the key, not a silent second join
+        var authoredNames = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+        var authoredPairs = new HashSet<(string, string)>();
+        if (_json["relationships"] is JsonArray written)
+            foreach (var w in written.OfType<JsonObject>()) { authoredNames[w["name"]!.GetValue<string>()] = w; authoredPairs.Add((w["from"]!.GetValue<string>(), w["to"]!.GetValue<string>())); }
+        var usedModels = tables.Select(t => t.Model).ToHashSet(StringComparer.Ordinal);
+        foreach (var group in layer.DeclaredRelationships.Where(d => usedModels.Contains(d.FromModel) && usedModels.Contains(d.ToModel)).GroupBy(d => (d.FromModel, d.ToModel)))
+        {
+            if (authoredPairs.Contains(group.Key) || group.Count() != 1) continue;
+            var d = group.Single();
+            if (authoredNames.ContainsKey(d.Name))
+            {
+                problems.Add(new AuthoredProblem("relationship_name_taken", d.File, d.Line, 1, $"the foreign key `{d.Name}` of `{d.FromModel}` would be the relationship `{d.Name}`, a name `{File}` already uses for another join: rename one of them."));
+                continue;
+            }
+            foreach (var source in kinds.Keys.Order(StringComparer.Ordinal))
+            {
+                if (!tables.Any(t => t.Model == d.FromModel && t.Source == source) || !tables.Any(t => t.Model == d.ToModel && t.Source == source)) continue;
+                var generated = new JsonObject
+                {
+                    ["name"] = kinds.Count > 1 ? $"{d.Name}@{source}" : d.Name,
+                    ["from"] = TableName(d.FromModel, source),
+                    ["to"] = TableName(d.ToModel, source),
+                    ["from_columns"] = new JsonArray(d.FromColumns.Select(c => (JsonNode)JsonValue.Create(c)!).ToArray()),
+                    ["to_columns"] = new JsonArray(d.ToColumns.Select(c => (JsonNode)JsonValue.Create(c)!).ToArray()),
+                };
+                relationshipJson.Add(generated);
+                relationships.Add(new GeneratedRelationship(generated["name"]!.GetValue<string>(), d.FromModel, d.ToModel, source, d.FromColumns, d.ToColumns, null, -1) { DeclaredAt = (d.File, d.Line) });
+            }
+        }
         json["relationships"] = relationshipJson;
         if (relationshipJson.Count == 0) json.Remove("relationships");
 
@@ -362,6 +403,8 @@ public sealed class AuthoredCatalog
     {
         var path = error.Path;
         // $.relationships[i] of the generated list is the authored one it came from
+        if (System.Text.RegularExpressions.Regex.Match(path, @"^\$\.relationships\[(\d+)\]") is { Success: true } derived && int.Parse(derived.Groups[1].Value) < relationships.Count && relationships[int.Parse(derived.Groups[1].Value)].DeclaredAt is { } at)
+            return new AuthoredProblem(error.Code, at.File, at.Line, 1, $"the foreign key `{relationships[int.Parse(derived.Groups[1].Value)].Name.Split('@')[0]}`, read as a relationship: {error.Message}", error.Suggestions);
         if (System.Text.RegularExpressions.Regex.Match(path, @"^\$\.relationships\[(\d+)\]") is { Success: true } m && int.Parse(m.Groups[1].Value) < relationships.Count)
             path = $"$.relationships[{relationships[int.Parse(m.Groups[1].Value)].AuthoredIndex}]" + path[m.Length..];
         else if (path.StartsWith("$.tables", StringComparison.Ordinal)) path = "$";

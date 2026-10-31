@@ -182,4 +182,39 @@ internal abstract class YamlFieldReader(string file, List<Diagnostic> diags)
             }
             return result;
         }
+
+    /// <summary>`foreign_keys:` of a model file, the same list on a mapped model (what the table has) and a built one (what it declares, never created): each key is named, and lists its columns and the table and columns it references.</summary>
+    protected List<ForeignKeyDefinition> ReadForeignKeys(YamlMapping top, List<ColumnDefinition> columns)
+    {
+        var result = new List<ForeignKeyDefinition>();
+        if (top.Get("foreign_keys") is not { } node) return result;
+        if (node is not YamlSequence seq) { Add(DiagnosticCatalog.InvalidValue, node, "`foreign_keys` must be a list."); return result; }
+        var declared = columns.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in seq.Items)
+        {
+            if (item is not YamlMapping m) { Add(DiagnosticCatalog.InvalidValue, item, "Each foreign key must be a mapping with `name`, `columns` and `references`."); continue; }
+            CheckKeys(m, ["name", "columns", "references"], "a foreign key");
+            var name = Scalar(m, "name", required: true, at: m);
+            var cols = StringList(m, "columns", required: true, allowEmpty: false, unique: true);
+            string? table = null;
+            List<YamlScalar>? refCols = null;
+            if (m.Get("references") is not { } r) Add(DiagnosticCatalog.MissingKey, m, "Required key `references` is missing.", fix: "Add `references: {table: schema_name.table_name, columns: [...]}`.");
+            else if (r is not YamlMapping rm) Add(DiagnosticCatalog.InvalidValue, r, "`references` must be a mapping with `table` and `columns`.");
+            else
+            {
+                CheckKeys(rm, ["table", "columns"], "`references`");
+                table = Scalar(rm, "table", required: true, at: rm)?.Value;
+                refCols = StringList(rm, "columns", required: true, allowEmpty: false, unique: true);
+            }
+            if (name != null && !names.Add(name.Value)) Add(DiagnosticCatalog.DuplicateKey, name, $"The foreign key name `{name.Value}` is used more than once.");
+            foreach (var c in (cols ?? []).Where(c => columns.Count > 0 && !declared.Contains(c.Value)))
+                Add(DiagnosticCatalog.UnknownColumnReference, c, $"Foreign key `{name?.Value}` refers to `{c.Value}`, which is not declared in `columns`.");
+            if (cols != null && refCols != null && cols.Count != refCols.Count)
+                Add(DiagnosticCatalog.InvalidValue, m, $"Foreign key `{name?.Value}` has {cols.Count} column(s) and references {refCols.Count}.");
+            if (name != null && cols != null && table != null && refCols != null)
+                result.Add(new ForeignKeyDefinition(name.Value, cols.Select(c => c.Value).ToList(), table, refCols.Select(c => c.Value).ToList(), m.Line));
+        }
+        return result;
+    }
 }

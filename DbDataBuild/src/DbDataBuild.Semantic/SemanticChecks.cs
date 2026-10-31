@@ -66,6 +66,7 @@ public static class SemanticChecks
         // relationships: orphan keys on the many side, repeated keys on the one side
         foreach (var r in compiled.Relationships)
         {
+            if (r.DeclaredAt is not null) continue;       // a foreign key of a model: tested by ForeignKeyChecks, whether or not a semantic file reads it
             if (Dialect(r.Source) is not { } dialect) continue;
             var from = compiled.Tables.First(t => t.Model == r.FromModel && t.Source == r.Source).Physical.Name;
             var to = compiled.Tables.First(t => t.Model == r.ToModel && t.Source == r.Source).Physical.Name;

@@ -943,6 +943,28 @@
             "$ref": "#/$defs/index"
           }
         },
+        "foreign_keys": {
+          "description": "Foreign keys the model declares (plan 19 J29): a claim about the data, never created in a database. `connection check` counts the rows whose key the target lacks, and a semantic model of the project reads each as a many-to-one relationship named like the key. `references.table` is a model of the project and `references.columns` are its grain.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "columns", "references"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "columns": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+              "references": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["table", "columns"],
+                "properties": {
+                  "table": { "description": "schema_name.table_name: a model of the project.", "type": "string", "minLength": 1 },
+                  "columns": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+                }
+              }
+            }
+          }
+        },
         "hooks": {
           "description": "Ordered hooks: native-SQL scripts run before or after plan steps (events pre_/post_ create, alter, load, backfill), or `use:` a group of hooks defined in dbdatabuild.yml.",
           "type": "array",
