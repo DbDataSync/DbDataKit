@@ -9,8 +9,8 @@ name: DbDataBuild CI
 #   nightly       dbdatabuild-conformance-full.yml, every engine in one job.
 #
 # Each run starts with `changes`: a push or PR that touches nothing of DbDataBuild's skips the suites and still reports success.
-# The quick, apply and templates groups run on the shared engines in testenv/ (SQL Server 2022 and PostgreSQL 17); the slow engines still
-# start from scripts/test-engines.sh.
+# Every group starts its engines with testenv/testenv.sh: the quick, apply and templates groups on SQL Server 2022 and PostgreSQL 17, the
+# slow groups on the slow profiles (mssql2025, oracle, spark, bigquery).
 #
 # Ported from the product's own ci.yml (kept in this repo's history under DbDataBuild/).
 
@@ -177,12 +177,14 @@ jobs:
         working-directory: .
         run: scripts/fetch-duckdb.sh
       - run: dotnet build DbDataBuild.slnf -c Release
-      - name: Start the engines
-        run: scripts/test-engines.sh up ${{ matrix.engines }}
+      - name: Start the engines (shared test engines)
+        working-directory: .
+        run: testenv/testenv.sh up ${{ matrix.engines }}
       - name: Conformance tests
         run: |
-          eval "$(scripts/test-engines.sh env)"
+          eval "$(../testenv/testenv.sh env dbdatabuild)"
           dotnet test tests/DbDataBuild.Tests.Conformance -c Release --no-build --filter "${{ matrix.filter }}"
       - name: Stop the engines
         if: always()
-        run: scripts/test-engines.sh down
+        working-directory: .
+        run: testenv/testenv.sh down

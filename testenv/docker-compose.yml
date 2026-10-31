@@ -12,6 +12,15 @@
 #   mariadb            13307   MariaDB 11, user root
 #   oracle             15210   Oracle Database Free 23ai (gvenzl/oracle-free:23-slim), service FREEPDB1, user dbkit (sys/system: the same password)
 #
+# The slow engines, which only DbDataBuild's conformance suite uses (its nightly full run starts them; `testenv.sh up` with no engine
+# named leaves them out, `testenv.sh up all` starts everything):
+#
+#   mssql2025          14332   SQL Server 2025, user sa (no Agent): Build's probes and one load at database compatibility levels 170 and 160
+#   spark              10000   Apache Spark 4.0 Thrift server (HiveServer2, http mode), ANSI mode: dialect probes only
+#   bigquery            9050   the goccy BigQuery emulator, project ddb: dialect probes only
+#   flight             31337   an Arrow Flight SQL server (voltrondata/sqlflite, DuckDB behind it), plain, user sqlflite_username: an origin only
+#   flight-tls         31338   the same with TLS (a certificate made when it starts; `testenv.sh env` copies its CA out for the `ca_file` option)
+#
 # This is the one test-engine environment of the repository: DbDataSync's own docker-compose.yml is gone, its engines are the profiles
 # above, and every suite starts what it needs with `testenv.sh up`. The two things Sync needed that the other suites do not:
 #
@@ -190,3 +199,72 @@ services:
       timeout: 10s
       retries: 30
       start_period: 90s
+
+  # ---- the slow engines (see the header): DbDataBuild's conformance suite only ----
+  # None of these has a healthcheck of its own that the image can be trusted to run (the images are minimal), so testenv.sh waits for
+  # their readiness from the host (a log line or an HTTP answer) after `docker compose up --wait`.
+
+  mssql2025:
+    profiles: [mssql2025]
+    image: ${DBKIT_TEST_MSSQL2025_IMAGE:-mcr.microsoft.com/mssql/server:2025-latest}
+    container_name: dbkit-test-mssql2025
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: *password
+    ports:
+      - "14332:1433"
+    healthcheck: *mssql-health
+
+  # The Thrift server (HiveServer2) in http mode, which the ADBC Spark driver speaks; Spark 4 in its default ANSI mode.
+  spark:
+    profiles: [spark]
+    image: ${DBKIT_TEST_SPARK_IMAGE:-apache/spark:4.0.0}
+    container_name: dbkit-test-spark
+    command:
+      - /opt/spark/bin/spark-submit
+      - --class
+      - org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
+      - --name
+      - thrift
+      - /opt/spark/jars/spark-hive-thriftserver_2.13-4.0.0.jar
+      - --hiveconf
+      - hive.server2.transport.mode=http
+      - --hiveconf
+      - hive.server2.thrift.http.port=10000
+      - --hiveconf
+      - hive.server2.thrift.http.path=cliservice
+      - --hiveconf
+      - hive.server2.thrift.bind.host=0.0.0.0
+    ports:
+      - "10000:10000"
+
+  bigquery:
+    profiles: [bigquery]
+    image: ${DBKIT_TEST_BIGQUERY_IMAGE:-ghcr.io/goccy/bigquery-emulator:latest}
+    container_name: dbkit-test-bigquery
+    command: ["--project=ddb", "--port=9050"]
+    ports:
+      - "9050:9050"
+
+  flight:
+    profiles: [flight]
+    image: &flight-image ${DBKIT_TEST_FLIGHT_IMAGE:-voltrondata/sqlflite:latest}
+    container_name: dbkit-test-flight
+    environment:
+      SQLFLITE_PASSWORD: *password
+      TLS_ENABLED: "0"
+      PRINT_QUERIES: "0"
+    ports:
+      - "31337:31337"
+
+  flight-tls:
+    profiles: [flight-tls]
+    image: *flight-image
+    container_name: dbkit-test-flight-tls
+    environment:
+      SQLFLITE_PASSWORD: *password
+      TLS_ENABLED: "1"
+      PRINT_QUERIES: "0"
+    ports:
+      - "31338:31337"
