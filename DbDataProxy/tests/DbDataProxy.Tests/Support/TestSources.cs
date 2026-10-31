@@ -12,6 +12,9 @@ public static class TestSources
     public static SourceConnection SqlClient(string connectionString) =>
         SourceConnection.Create(new DbDataKit.Connections.SqlServer.SqlServerProvider(), "test", connectionString);
 
+    public static SourceConnection Postgres(string connectionString, bool readOnly = false) =>
+        SourceConnection.Create(new DbDataKit.Connections.Postgres.PostgresProvider(), "test", connectionString, readOnly);
+
     public static SourceConnection Odbc(string connectionString) =>
         SourceConnection.Create(new DbDataKit.Connections.Odbc.OdbcProvider(), "test", connectionString);
 
@@ -20,5 +23,6 @@ public static class TestSources
         new DbDataKit.Connections.Odbc.OdbcProvider(),
         new DbDataKit.Connections.SqlServer.SqlServerProvider(),
         new DbDataKit.Connections.DuckDb.DuckDbProvider(),
+        new DbDataKit.Connections.Postgres.PostgresProvider(),
     ]);
 }

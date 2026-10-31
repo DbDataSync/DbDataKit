@@ -32,7 +32,7 @@ describe('publishing a connection to a proxy', () => {
     const text = html()
     expect(text).toContain('read</strong> login')
     expect(text).toContain('approver role')
-    expect(text).toContain('SQL Server, ODBC and DuckDB')
+    expect(text).toContain('SQL Server, ODBC, DuckDB and PostgreSQL')
     expect(text).toContain('data-testid="build-publish-proxy"')
     expect(text).toContain('>edge</option>')
   })
@@ -83,7 +83,7 @@ describe('publishing a connection to a proxy', () => {
   })
 
   it('offers no adoption for a refusal that has nothing to adopt', () => {
-    expect(html({ failure: refusal(409, 'The connection \'x\' is postgres; a proxy serves sqlserver, odbc and duckdb connections, not postgres.') })).not.toContain('build-publish-adopt')
+    expect(html({ failure: refusal(409, 'The connection \'x\' is flightsql; a proxy serves sqlserver, odbc, duckdb and postgres connections, not flightsql.') })).not.toContain('build-publish-adopt')
     expect(html({ failure: refusal(403, 'This needs the approver role.') })).not.toContain('build-publish-adopt')
     expect(adoptHintOf(new Error('x'))).toBeNull()
     expect(adoptHintOf(refusal(403, 'x', { adopt: { client: 1 } }))).toBeNull()

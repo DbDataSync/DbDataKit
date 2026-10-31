@@ -9,14 +9,17 @@ public static class ProviderDialects
 
     public static ISqlDialect DuckDb { get; } = DialectCatalog.Builtin.Get("duckdb");
 
+    public static ISqlDialect Postgres { get; } = DialectCatalog.Builtin.Get("postgres");
+
     /// <summary>ODBC before the driver has said anything about itself: double-quoted identifiers, positional markers, ANSI deny list.</summary>
     public static ISqlDialect Odbc { get; } = OdbcDialect.FromFacts(new OdbcFacts("generic"));
 
-    /// <summary>The dialect for a configured provider name ("sqlserver", "duckdb"; anything else is generic ODBC).</summary>
+    /// <summary>The dialect for a configured provider name ("sqlserver", "duckdb", "postgres"; anything else is generic ODBC).</summary>
     public static ISqlDialect For(string? provider) => provider?.ToLowerInvariant() switch
     {
         "sqlserver" => SqlServer,
         "duckdb" => DuckDb,
+        "postgres" => Postgres,
         _ => Odbc,
     };
 

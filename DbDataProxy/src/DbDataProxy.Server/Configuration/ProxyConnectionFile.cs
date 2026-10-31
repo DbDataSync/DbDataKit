@@ -11,7 +11,7 @@ namespace DbDataProxy.Server.Configuration;
 /// <c>extensions.proxy</c>. It is read with the shared strict loader (unknown keys, no plaintext credential, secret references that parse, a login that is complete) and then <em>mapped</em> onto the settings the proxy has always run on,
 /// so the strict validation of those settings, and everything that consumes them, is unchanged:
 /// <list type="bullet">
-/// <item><c>engine</c> is the provider (<c>sqlserver</c>, <c>odbc</c>, <c>duckdb</c>).</item>
+/// <item><c>engine</c> is the provider (<c>sqlserver</c>, <c>odbc</c>, <c>duckdb</c>, <c>postgres</c>).</item>
 /// <item>The connection string is <c>connection_string</c>, or the one made of <c>address</c> (SQL Server only); TLS opt-outs and the login are added to it: the user, and the password as the secret reference it is (<c>Password=env:X</c>), which the proxy resolves when it connects.
 /// A data source that can write uses the write login, one that cannot the read login; a read login is never replaced by the write one.</item>
 /// <item><c>connection_string_secret</c> is the whole connection string as a secret reference.</item>
@@ -22,7 +22,7 @@ namespace DbDataProxy.Server.Configuration;
 /// </summary>
 internal static class ProxyConnectionFile
 {
-    private static readonly string[] Engines = ["sqlserver", "odbc", "duckdb"];
+    private static readonly string[] Engines = ["sqlserver", "odbc", "duckdb", "postgres"];
 
     /// <summary>Reads one file. Adds its diagnostics (errors and warnings) to <paramref name="diags"/>; on success calls <paramref name="add"/> for every flattened setting with the node it came from.</summary>
     public static void Read(string path, string name, string text, List<ConfigDiagnostic> diags, Action<string, string?, YamlNode?> add)

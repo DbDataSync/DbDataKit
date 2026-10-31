@@ -176,6 +176,11 @@ internal sealed class ArrowColumnWriter
         var sb = new StringArray.Builder();
         if (clr == typeof(string))
             return Make(name, StringType.Default, sb, (r, i) => sb.Append(r.GetString(i)), () => sb.AppendNull(), () => { var a = sb.Build(); sb.Clear(); return a; });
+        // An array column (PostgreSQL int[], text[]) is its JSON text, [1,2,3]; Convert.ToString would give the type name.
+        if (clr.IsArray || clr == typeof(System.Array))
+            return Make(name, StringType.Default, sb,
+                (r, i) => { var array = r.GetValue(i); sb.Append(System.Text.Json.JsonSerializer.Serialize(array, array.GetType())); },   // read once: a sequential reader cannot go back
+                () => sb.AppendNull(), () => { var a = sb.Build(); sb.Clear(); return a; });
         return Make(name, StringType.Default, sb,
             (r, i) => sb.Append(Convert.ToString(r.GetValue(i), System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty),
             () => sb.AppendNull(), () => { var a = sb.Build(); sb.Clear(); return a; });

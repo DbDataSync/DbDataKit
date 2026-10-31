@@ -12,10 +12,10 @@ namespace DbDataProxy.Server.Configuration;
 public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutClassifier = null) : IConfigValidator<ProxyOptions>
 {
     /// <summary>Provider names the server registers (a test compares this with the registered <c>IDbProvider</c>s).</summary>
-    public static readonly IReadOnlyList<string> KnownProviders = ["odbc", "sqlserver", "duckdb"];
+    public static readonly IReadOnlyList<string> KnownProviders = ["odbc", "sqlserver", "duckdb", "postgres"];
 
     /// <summary>Providers that can connect with the caller's own credentials (DuckDB has no user authentication).</summary>
-    public static readonly IReadOnlyList<string> PassThroughProviders = ["odbc", "sqlserver"];
+    public static readonly IReadOnlyList<string> PassThroughProviders = ["odbc", "sqlserver", "postgres"];
 
     private static readonly string[] MetadataModes = ["auto", "odbc", "informationschema"];
 

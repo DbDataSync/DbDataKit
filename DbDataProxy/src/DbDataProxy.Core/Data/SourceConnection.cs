@@ -21,7 +21,7 @@ public sealed class SourceConnection
     public ConnectionContext Context { get; }
     public ConnectionDefinition Definition => Context.Definition;
 
-    /// <summary>"odbc", "sqlserver" or "duckdb".</summary>
+    /// <summary>"odbc", "sqlserver", "duckdb" or "postgres".</summary>
     public string Engine => Provider.Engine.Value;
 
     public bool ReadOnly => Context.ReadOnly;
@@ -32,7 +32,7 @@ public sealed class SourceConnection
             ? scalar.Value.ToLowerInvariant()
             : "auto";
 
-    public ParameterStyle ParameterStyle => Engine == "sqlserver" ? ParameterStyle.NamedAtSign : ParameterStyle.Positional;
+    public ParameterStyle ParameterStyle => Engine is "sqlserver" or "postgres" ? ParameterStyle.NamedAtSign : ParameterStyle.Positional;
 
     /// <summary>Marker scanning, quoting and statement classification for this engine.</summary>
     public DbDataKit.Dialect.ISqlDialect Dialect => ProviderDialects.For(Engine);

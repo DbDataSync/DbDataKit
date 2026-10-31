@@ -55,6 +55,20 @@ public sealed class ConnectionFormatTests
     }
 
     [Fact]
+    public void A_postgres_login_uses_the_npgsql_keys_and_the_engine_is_the_postgres_provider()
+    {
+        var load = LoadOne("pg", Conn.Yaml("pg", "postgres", "Host=db;Database=d", "auth: { mode: sql, user: reader, password_secret: 'env:PG_PW' }"));
+        Assert.True(load.Ok, Errors(load));
+        var source = Assert.Single(load.Value!.DataSources).Value;
+        Assert.Equal("postgres", source.Provider);
+        Assert.Equal("Host=db;Database=d;User Id=reader;Password=env:PG_PW", source.ConnectionString);
+
+        // the address form makes a SQL Server string; a PostgreSQL source says its connection string
+        using var config = TempConfig.Create(("connections/pg.yaml", Conn.Yaml("pg", "postgres", connectionString: null, extra: "address: { host: h }")));
+        Assert.Contains("needs `connection_string`", Assert.Throws<InvalidDataException>(() => new ConfigurationBuilder().Add(new ProxyConfigDirectorySource(config.Directory)).Build()).Message);
+    }
+
+    [Fact]
     public void A_source_that_cannot_write_uses_the_read_login_and_one_that_can_uses_the_write_login_and_neither_stands_in_for_the_other()
     {
         const string logins = "read_login: { mode: sql, user: r, password_secret: 'env:R' }\nwrite_login: { mode: sql, user: w, password_secret: 'env:W' }";
@@ -85,7 +99,7 @@ public sealed class ConnectionFormatTests
 
     [Theory]
     [InlineData("name: other", "file is called")]                                        // the file name is the name
-    [InlineData("engine: oracle", "serves sqlserver, odbc, duckdb")]
+    [InlineData("engine: oracle", "serves sqlserver, odbc, duckdb, postgres")]
     public void What_the_proxy_cannot_serve_or_cannot_name_is_an_error_at_the_key(string replace, string message)
     {
         var yaml = Conn.Yaml("erp").Replace(replace.StartsWith("name") ? "name: erp" : "engine: sqlserver", replace);

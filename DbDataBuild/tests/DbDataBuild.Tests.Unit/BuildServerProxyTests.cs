@@ -329,7 +329,7 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
         // a connection file per driver (readonly where the driver can only be read), each with a read login of its own
         var files = new Dictionary<string, string>
         {
-            ["lake"] = "engine: odbc\naccess: readonly", ["local"] = "engine: duckdb\naccess: readonly", ["pg"] = "engine: postgres", ["flight"] = "engine: flightsql\naccess: readonly",
+            ["lake"] = "engine: odbc\naccess: readonly", ["local"] = "engine: duckdb\naccess: readonly", ["pg"] = "engine: postgres", ["flight"] = "engine: flightsql\naccess: readonly", ["fab"] = "engine: fabric",
         };
         foreach (var (name, engine) in files)
         {
@@ -338,7 +338,7 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
             await secrets.SetAsync(ServerSecrets.NameOf(name, DbDataKit.Connections.LoginRole.Read), login);
         }
 
-        foreach (var (name, driver) in new[] { ("lake", "odbc"), ("local", "duckdb") })
+        foreach (var (name, driver) in new[] { ("lake", "odbc"), ("local", "duckdb"), ("pg", "postgres") })
         {
             seen.Clear();
             var reply = await Publish("ada", ServerRole.Approver, "edge", new { connection = name });
@@ -350,13 +350,13 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
             Assert.Contains($"connection_string_secret: 'secret:dbdata:proxy:managed-x:{name}-read'", definition);
         }
 
-        foreach (var (name, driver) in new[] { ("pg", "postgres"), ("flight", "flightsql") })
+        foreach (var (name, driver) in new[] { ("flight", "flightsql"), ("fab", "fabric") })
         {
             seen.Clear();
             var reply = await Publish("ada", ServerRole.Approver, "edge", new { connection = name });
             Assert.Equal(HttpStatusCode.Conflict, reply.StatusCode);
             var message = (string)JsonNode.Parse(await reply.Content.ReadAsStringAsync())!["error"]!;
-            Assert.Contains("sqlserver, odbc and duckdb", message);
+            Assert.Contains("sqlserver, odbc, duckdb and postgres", message);
             Assert.Contains($"not {driver}", message);
             Assert.Empty(seen);                                                             // not even the login was sent
         }

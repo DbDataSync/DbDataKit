@@ -17,7 +17,8 @@ out="$(t mssql dbdataproxy --dotenv)"
 check "proxy: server, user, password" '[[ "$out" == *"DBPROXY_TEST_SQLSERVER=127.0.0.1,14330"* && "$out" == *"DBPROXY_TEST_SQLSERVER_USER=sa"* && "$out" == *"DBPROXY_TEST_SQLSERVER_PASSWORD=DbKit_Test_Pw1"* ]]'
 check "proxy: SQL Server is required when it was started" '[[ "$out" == *"DBPROXY_REQUIRE_SQLSERVER=true"* ]]'
 out="$(t postgres dbdataproxy --dotenv)"
-check "proxy: nothing mapped without SQL Server" '[[ "$out" != *DBPROXY_* ]]'
+check "proxy: nothing about SQL Server mapped without it" '[[ "$out" != *DBPROXY_TEST_SQLSERVER* && "$out" != *DBPROXY_REQUIRE_SQLSERVER* ]]'
+check "proxy: the PostgreSQL string, and it is required when it was started" '[[ "$out" == *"DBPROXY_TEST_POSTGRES=Host=127.0.0.1;Port=15432;"* && "$out" == *"DBPROXY_REQUIRE_POSTGRES=true"* ]]'
 
 # Shared libraries mapping
 out="$(t "mssql postgres" dbdatakit --dotenv)"

@@ -54,7 +54,7 @@ jobs:
         run: ./build/package.ps1 -Version 0.0.0-ci
         shell: pwsh
 
-  # Linux against a real SQL Server (the ODBC and SqlClient paths), plus everything that is not Windows-specific. The server is the
+  # Linux against a real SQL Server (the ODBC and SqlClient paths) and a real PostgreSQL, plus everything that is not Windows-specific. The server is the
   # shared one from testenv/, the same SQL Server the shared libraries' live tests use.
   linux:
     needs: changes
@@ -71,10 +71,10 @@ jobs:
       - name: Test the test-environment scripts
         working-directory: .
         run: testenv/selftest.sh
-      - name: Start SQL Server (shared test engines)
+      - name: Start SQL Server and PostgreSQL (shared test engines)
         working-directory: .
-        run: testenv/testenv.sh up mssql
-      - name: Point the suite at it
+        run: testenv/testenv.sh up mssql postgres
+      - name: Point the suite at them
         working-directory: .
         run: testenv/testenv.sh env dbdataproxy --dotenv >> "$GITHUB_ENV"
       - name: Install the SQL Server ODBC driver
