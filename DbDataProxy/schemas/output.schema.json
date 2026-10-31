@@ -880,6 +880,190 @@
       "if": {
         "properties": {
           "command": {
+            "const": "semantic describe"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_semantic_describe"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "semantic describe"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_semantic_describe_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "semantic explain"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_semantic_explain"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "semantic explain"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_semantic_explain_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "semantic members"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_semantic_members"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "semantic members"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_semantic_members_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "semantic query"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_semantic_query"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "semantic query"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_semantic_query_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "server clients"
           },
           "ok": {
@@ -1608,6 +1792,402 @@
     "data_secret_set": {
       "type": "object",
       "additionalProperties": false
+    },
+    "data_semantic_describe": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "type"
+            ]
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array"
+          }
+        },
+        "row_count": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "model",
+        "columns",
+        "rows",
+        "row_count",
+        "truncated"
+      ]
+    },
+    "data_semantic_describe_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "type"
+            ]
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array"
+          }
+        },
+        "row_count": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "data_semantic_explain": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "type"
+            ]
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array"
+          }
+        },
+        "row_count": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "model",
+        "columns",
+        "rows",
+        "row_count",
+        "truncated"
+      ]
+    },
+    "data_semantic_explain_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "type"
+            ]
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array"
+          }
+        },
+        "row_count": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "data_semantic_members": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "type"
+            ]
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array"
+          }
+        },
+        "row_count": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "model",
+        "columns",
+        "rows",
+        "row_count",
+        "truncated"
+      ]
+    },
+    "data_semantic_members_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "type"
+            ]
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array"
+          }
+        },
+        "row_count": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "data_semantic_query": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "type"
+            ]
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array"
+          }
+        },
+        "row_count": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "model",
+        "columns",
+        "rows",
+        "row_count",
+        "truncated"
+      ]
+    },
+    "data_semantic_query_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "type"
+            ]
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array"
+          }
+        },
+        "row_count": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
     },
     "data_server_clients": {
       "type": "object",

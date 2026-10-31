@@ -35,6 +35,7 @@ public static class Cli
         SecretNoun(),
         ConfigNoun(),
         QueryNoun(),
+        DbDataKit.Semantic.Cli.SemanticNoun.Create(ProxySemanticSession.ConnectAsync, ProxySemanticSession.Options, ProxySemanticSession.Flags, ProxySemanticSession.Usage),
         DataSourceNoun(),
         HealthNoun(),
         UiNoun.Create(self, Program, ProxyHost.Version, NotForAgents),
