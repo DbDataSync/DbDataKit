@@ -327,38 +327,57 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
         await Pair();
         var secrets = ServerSecrets.Open(BuildDir);
         // a connection file per driver (readonly where the driver can only be read), each with a read login of its own
-        var files = new Dictionary<string, string>
+        var logins = new Dictionary<string, (string File, string Login)>
         {
-            ["lake"] = "engine: odbc\naccess: readonly", ["local"] = "engine: duckdb\naccess: readonly", ["pg"] = "engine: postgres", ["flight"] = "engine: flightsql\naccess: readonly",
+            ["lake"] = ("engine: odbc\naccess: readonly", "login-of-lake"),
+            ["local"] = ("engine: duckdb\naccess: readonly", "login-of-local"),
+            ["pg"] = ("engine: postgres", "Host=pg.example.com;Database=d;Username=reader;Password=env:PG_PW"),
+            ["flight"] = ("engine: flightsql\naccess: readonly", "grpc+tls://upstream.example.com:31337;user=reader;password=hunter2;header.x-datasource=duck"),
+            ["flight_cmd"] = ("engine: flightsql\naccess: readonly", "grpc+tls://upstream.example.com:31337;token_command={az account get-access-token}"),
+            ["flight_env"] = ("engine: flightsql\naccess: readonly", "grpc+tls://upstream.example.com:31337;token_env=UPSTREAM_TOKEN"),
+            ["flight_bad"] = ("engine: flightsql\naccess: readonly", "not a flight login"),
+            ["fab"] = ("engine: fabric", "login-of-fab"),
         };
-        foreach (var (name, engine) in files)
+        foreach (var (name, (engine, text)) in logins)
         {
             File.WriteAllText(Path.Combine(project, "connections", name + ".yaml"), $"schema: connection/1\nname: {name}\n{engine}\n");
-            using var login = SecretValue.From($"login-of-{name}");
+            using var login = SecretValue.From(text);
             await secrets.SetAsync(ServerSecrets.NameOf(name, DbDataKit.Connections.LoginRole.Read), login);
         }
 
-        foreach (var (name, driver) in new[] { ("lake", "odbc"), ("local", "duckdb") })
+        foreach (var (name, driver) in new[] { ("lake", "odbc"), ("local", "duckdb"), ("pg", "postgres"), ("flight", "flightsql") })
         {
             seen.Clear();
             var reply = await Publish("ada", ServerRole.Approver, "edge", new { connection = name });
             Assert.True(reply.StatusCode == HttpStatusCode.OK, await reply.Content.ReadAsStringAsync());
-            Assert.Equal($"login-of-{name}", (string)JsonNode.Parse(seen.Single(r => r.Path == $"/api/v1/secrets/{name}-read").Body)!["value"]!);
+            Assert.Equal(logins[name].Login, (string)JsonNode.Parse(seen.Single(r => r.Path == $"/api/v1/secrets/{name}-read").Body)!["value"]!);
             var definition = (string)JsonNode.Parse(seen.Single(r => r.Method == "PUT" && r.Path == $"/api/v1/data-sources/{name}").Body)!["text"]!;
             Assert.Contains($"engine: {driver}", definition);
             Assert.Contains("access: readonly", definition);
             Assert.Contains($"connection_string_secret: 'secret:dbdata:proxy:managed-x:{name}-read'", definition);
+            Assert.DoesNotContain("hunter2", definition);                                   // the login is in the secret, never in the file
         }
 
-        foreach (var (name, driver) in new[] { ("pg", "postgres"), ("flight", "flightsql") })
+        // an engine the Proxy has no provider for
+        seen.Clear();
+        var fabric = await Publish("ada", ServerRole.Approver, "edge", new { connection = "fab" });
+        Assert.Equal(HttpStatusCode.Conflict, fabric.StatusCode);
+        var message = (string)JsonNode.Parse(await fabric.Content.ReadAsStringAsync())!["error"]!;
+        Assert.Contains("sqlserver, odbc, duckdb, postgres and flightsql", message);
+        Assert.Contains("not fabric", message);
+        Assert.Empty(seen);                                                                 // not even the login was sent
+
+        // a Flight SQL login the Proxy would not use: a token from a program or an environment variable, or not the grammar at all
+        foreach (var (name, mentions) in new[] { ("flight_cmd", "token_command"), ("flight_env", "token_env"), ("flight_bad", "grammar") })
         {
             seen.Clear();
             var reply = await Publish("ada", ServerRole.Approver, "edge", new { connection = name });
             Assert.Equal(HttpStatusCode.Conflict, reply.StatusCode);
-            var message = (string)JsonNode.Parse(await reply.Content.ReadAsStringAsync())!["error"]!;
-            Assert.Contains("sqlserver, odbc and duckdb", message);
-            Assert.Contains($"not {driver}", message);
-            Assert.Empty(seen);                                                             // not even the login was sent
+            var refusal = (string)JsonNode.Parse(await reply.Content.ReadAsStringAsync())!["error"]!;
+            Assert.Contains(mentions, refusal);
+            Assert.DoesNotContain("az account", refusal);
+            Assert.DoesNotContain("not a flight login", refusal);
+            Assert.Empty(seen);
         }
     }
 

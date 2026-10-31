@@ -187,12 +187,12 @@ internal static class ServerCli
         }
     }
 
-    private const string ProjectUsage = "add <id> (--path <folder> | --git <address> [--branch <name>]) | remove <id> | list | pull <id>   [--repo <server directory>]";
+    private const string ProjectUsage = "add <id> (--path <folder> | --git <address> [--branch <name>] [--git-credential <name>]) | remove <id> | list | pull <id>   [--repo <server directory>]";
 
     /// <summary><c>server project add|remove|list|pull</c>: the projects this server hosts. A running server notices a change on its next call, so none of these needs it stopped.</summary>
     private static async Task<int> ProjectAsync(string[] args, CliContext context)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "path", "git", "branch" });
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "path", "git", "branch", "git-credential" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count == 0)
         {
             await context.Error.WriteLineAsync($"Usage: server project {ProjectUsage}");
@@ -207,15 +207,15 @@ internal static class ServerCli
                 foreach (var problem in projects.Problems) await context.Error.WriteLineAsync(problem);
                 if (projects.All().Count == 0) await context.Out.WriteLineAsync("No project is hosted. Add one with 'server project add'.");
                 foreach (var p in projects.All())
-                    await context.Out.WriteLineAsync($"{p.Id,-20} {(p.IsRemote ? $"git {p.Git}" + (p.Branch is not null ? $" ({p.Branch})" : "") : $"path {p.Path}")}");
-                context.Data["projects"] = projects.All().Select(p => new Dictionary<string, object?> { ["id"] = p.Id, ["path"] = p.Path, ["git"] = p.Git, ["branch"] = p.Branch }).ToList();
+                    await context.Out.WriteLineAsync($"{p.Id,-20} {(p.IsRemote ? $"git {p.Git}" + (p.Branch is not null ? $" ({p.Branch})" : "") + (p.GitCredential is not null ? $", credential {p.GitCredential}" : "") : $"path {p.Path}")}");
+                context.Data["projects"] = projects.All().Select(p => new Dictionary<string, object?> { ["id"] = p.Id, ["path"] = p.Path, ["git"] = p.Git, ["branch"] = p.Branch, ["git_credential"] = p.GitCredential }).ToList();
                 return CliExit.Ok;
 
             case "add" when id is not null && parsed.Words.Count == 2:
                 try
                 {
                     var path = parsed.Get("path") is { } given ? Path.GetFullPath(given) : null;
-                    var project = new HostedProject(id, path, parsed.Get("git"), parsed.Get("branch"));
+                    var project = new HostedProject(id, path, parsed.Get("git"), parsed.Get("branch"), parsed.Get("git-credential") is { } named ? ProjectsFile.ReferenceFor(named) : null);
                     if (project.Branch is not null && !project.IsRemote) throw new ArgumentException("--branch goes with --git.");
                     projects.Add(project);
                     if (project.IsRemote)

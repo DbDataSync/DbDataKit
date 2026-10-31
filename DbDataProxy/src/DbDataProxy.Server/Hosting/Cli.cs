@@ -17,8 +17,8 @@ public static class Cli
 
     public static Task<int> RunAsync(string[] args, CliContext context) => Router().RunAsync(args, context);
 
-    /// <summary>What <c>ui mcp</c> never offers: secrets (they read standard input, which is the protocol's channel) and queries (they return rows; an agent works without data).</summary>
-    private static readonly string[] NotForAgents = ["secret", "query", "server pair", "server unpair"];
+    /// <summary>What <c>ui mcp</c> never offers: secrets (they read standard input, which is the protocol's channel), queries (they return rows; an agent works without data) and adopting (a person's act).</summary>
+    private static readonly string[] NotForAgents = ["secret", "query", "server pair", "server unpair", "datasource adopt"];
 
     public static NounRouter Router()
     {
@@ -35,6 +35,7 @@ public static class Cli
         SecretNoun(),
         ConfigNoun(),
         QueryNoun(),
+        DataSourceNoun(),
         HealthNoun(),
         UiNoun.Create(self, Program, ProxyHost.Version, NotForAgents),
     ], ProxyHost.Version);
@@ -168,6 +169,15 @@ public static class Cli
         new Verb("run", "Run one query against a proxy and print the result", EffectClass.OfflineOnly,
             "--user U --password P --sql \"...\" [--address URL] [--datasource N] [--compression none|gzip|zstd|lz4] [--max-rows N] [--insecure]",
             (args, context) => QueryCommand.RunAsync(args, context.Out, context.Error), DataSchemas.None),
+    ]);
+
+    // ---- datasource ----
+
+    private static Noun DataSourceNoun() => new("datasource", "The proxy's data sources (the name the query client's --datasource uses)",
+    [
+        new Verb("adopt", "Hand a data source to a paired server client (a Build server), which then manages it; the running proxy must have its local channel on", EffectClass.TargetWrites,
+            DataSourceCommand.Usage, (args, context) => DataSourceCommand.AdoptAsync(args, context, PairingFilesOf),
+            DataSchemas.Object([("name", DataSchemas.String), ("client", DataSchemas.String), ("adopted", DataSchemas.Boolean), ("previous_owner", DataSchemas.String)], "name", "client", "adopted")),
     ]);
 
     // ---- health ----

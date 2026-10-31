@@ -328,6 +328,52 @@
       "if": {
         "properties": {
           "command": {
+            "const": "datasource adopt"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_datasource_adopt"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "datasource adopt"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_datasource_adopt_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "health check"
           },
           "ok": {
@@ -1453,6 +1499,47 @@
     "data_config_show": {
       "type": "object",
       "additionalProperties": false
+    },
+    "data_datasource_adopt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "client": {
+          "type": "string"
+        },
+        "adopted": {
+          "type": "boolean"
+        },
+        "previous_owner": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "client",
+        "adopted"
+      ]
+    },
+    "data_datasource_adopt_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "client": {
+          "type": "string"
+        },
+        "adopted": {
+          "type": "boolean"
+        },
+        "previous_owner": {
+          "type": "string"
+        }
+      }
     },
     "data_health_check": {
       "type": "object",

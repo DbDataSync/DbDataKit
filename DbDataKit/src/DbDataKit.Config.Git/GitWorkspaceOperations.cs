@@ -77,16 +77,24 @@ public static class GitWorkspaceOperations
         return [.. repo.Commits.QueryBy(filter).Select(c => new CommitInfo(c.Sha, c.MessageShort, c.Author.Name, c.Author.Email, c.Author.When.ToUniversalTime()))];
     }
 
-    /// <summary>Pushes <paramref name="branch"/> to the remote <c>origin</c>. The address is used as it is (credentials in it, or none), as for a clone.</summary>
-    public static void Push(string worktree, string branch)
+    /// <summary>
+    /// Pushes <paramref name="branch"/> to the remote <c>origin</c>, as <paramref name="credential"/> when the remote needs a login (plan 13, W12; presented through libgit2's callback, never written anywhere). A refusal says which
+    /// credential was refused, in words and without the token.
+    /// </summary>
+    public static void Push(string worktree, string branch, GitCredential? credential = null)
     {
+        var session = new CredentialSession(credential);
         try
         {
             using var repo = new Repository(worktree);
             var remote = repo.Network.Remotes["origin"] ?? throw new GitOperationException("The repository has no remote called origin.");
-            repo.Network.Push(remote, $"refs/heads/{branch}:refs/heads/{branch}", new PushOptions());
+            repo.Network.Push(remote, $"refs/heads/{branch}:refs/heads/{branch}", new PushOptions { CredentialsProvider = session.Handler });
         }
-        catch (LibGit2SharpException ex) { throw new GitOperationException($"The push failed: {GitRemote.Redact(ex.Message)}", ex); }
+        catch (Exception ex) when (ex is LibGit2SharpException || CredentialSession.IsRefusal(ex))
+        {
+            var reason = session.Explain(ex) ?? credential?.Scrub(GitRemote.Redact(ex.Message)) ?? GitRemote.Redact(ex.Message);
+            throw new GitOperationException($"The push failed: {reason}", ex);
+        }
     }
 
     /// <summary>

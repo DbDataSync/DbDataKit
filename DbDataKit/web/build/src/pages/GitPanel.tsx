@@ -25,6 +25,18 @@ export function ChangeDiff({ change }: { change: GitChange }) {
   return <pre className="mono" style={{ margin: 0, overflow: 'auto', maxHeight: 220 }} data-testid="build-git-patch">{change.patch}</pre>
 }
 
+/** After a push: the branch is on the remote; for GitHub, Azure DevOps and GitLab the server sends the address of the page where a pull request is opened (no token, no provider API), and any other remote gets none. */
+export function PushedNotice({ branch, pullRequestUrl }: { branch: string; pullRequestUrl: string | null }) {
+  return (
+    <div className="hint" data-testid="build-git-pushed">
+      Pushed {branch}.{' '}
+      {pullRequestUrl
+        ? <a href={pullRequestUrl} target="_blank" rel="noopener noreferrer" data-testid="build-git-pull-request">Open a pull request</a>
+        : <span data-testid="build-git-no-pull-request">Open the pull request where the remote lives.</span>}
+    </div>
+  )
+}
+
 /**
  * Taking a draft into the project (plan 13, W08, D15): what it changes, committing it, and then either merging it (a project the server keeps itself; an approver does it) or pushing its branch (a project that follows a git remote,
  * which is merged where the remote lives).
@@ -77,7 +89,7 @@ export function GitPanel({ project, workspace, remote, onMerged }: { project: st
       </div>
       {!remote && uncommitted && commits.length > 0 && <div className="hint" data-testid="build-git-uncommitted">There are changes no commit has taken; commit them before merging.</div>}
       {remote && <div className="hint">This project follows a git remote: push the branch and merge it where the remote lives.</div>}
-      {push.isSuccess && <div className="hint" data-testid="build-git-pushed">Pushed {push.data.branch}.</div>}
+      {push.isSuccess && <PushedNotice branch={push.data.branch} pullRequestUrl={push.data.pull_request_url ?? null} />}
       {conflicts.length > 0 && (
         <div className="empty" data-testid="build-git-conflicts">Nothing was merged. These files conflict with the project: {conflicts.join(', ')}</div>
       )}

@@ -21,11 +21,12 @@ public sealed record ManagementResult(int Status, JsonNode Body)
 /// <list type="bullet">
 /// <item><c>GET /api/v1/about</c>: which server this is (viewer).</item>
 /// <item><c>GET /api/v1/config</c>: every effective setting with where it came from, secrets masked, and what the validator says about the current configuration (admin).</item>
+/// <item><c>GET /api/v1/clients</c>: the paired server clients, by id and name, for handing a data source over (admin).</item>
 /// <item><c>POST /api/v1/config/validate</c>: body <c>{"files": {"server.yaml": "...", "connections/erp.yaml": "..."}}</c>: whether the configuration would be valid with those files in place of the current ones; nothing is written (admin).</item>
 /// </list>
 /// A secret is never part of an answer: the settings are shown the way <c>config show</c> shows them, and the sentinel test puts a value in every place a secret can be and looks for it in every answer.
 /// </summary>
-public sealed partial class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null, ProxyActivity? activity = null, ProxyCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, ProxySecrets? secrets = null, PairingCodes? pairingCodes = null, ProxySemanticModels? semanticModels = null)
+public sealed partial class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null, ProxyActivity? activity = null, ProxyCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, ProxySecrets? secrets = null, PairingCodes? pairingCodes = null, ProxySemanticModels? semanticModels = null, Func<IReadOnlyList<PairedClient>>? pairedClients = null)
 {
     public const string Prefix = "/api/v1";
 
@@ -42,6 +43,11 @@ public sealed partial class ProxyManagement(IConfigurationRoot configuration, st
                 return caller.Holds(ServerRole.Viewer) ? ManagementResult.Ok(About()) : Denied(ServerRole.Viewer);
             case ("GET", Prefix + "/config"):
                 return caller.Holds(ServerRole.Admin) ? ManagementResult.Ok(Config()) : Denied(ServerRole.Admin);
+            case ("GET", Prefix + "/clients") when pairedClients is not null:
+                // T13: the server clients (a Build server) a data source can be handed to; ids and names only, never a key
+                return caller.Holds(ServerRole.Admin)
+                    ? ManagementResult.Ok(new JsonObject { ["clients"] = new JsonArray([.. pairedClients().Where(c => c.Kind == ClientKind.Server).Select(c => (JsonNode)new JsonObject { ["id"] = c.Id, ["name"] = c.Name })]) })
+                    : Denied(ServerRole.Admin);
             case ("POST", PairingCodeIssuer.Path) when pairingCodes is not null:
             {
                 // T11: the code a console asks for so that another server (a Build server) can pair as a publisher without anyone typing it
