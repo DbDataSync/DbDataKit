@@ -22,11 +22,7 @@ public sealed class ConsoleAnnouncementTests : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         server = await PairableServer.StartAsync();
-        var probe = new TcpListener(IPAddress.Loopback, 0);
-        probe.Start();
-        var port = ((IPEndPoint)probe.LocalEndpoint).Port;
-        probe.Stop();
-        announce = new Uri($"http://127.0.0.1:{port}");
+        announce = new Uri($"http://127.0.0.1:{TestPorts.Next()}");
         app = ConsoleHost.Build(new ConsoleSettings(directory, new Uri("https://localhost:0"), null, announce), ConsoleHost.Certificate(directory), _ => { }, webRoot: Path.Combine(directory, "none"));
         await app.StartAsync();
         http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true, UseCookies = false }) { BaseAddress = new Uri(app.Urls.First(u => u.StartsWith("https"))) };

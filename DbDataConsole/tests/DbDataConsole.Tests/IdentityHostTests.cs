@@ -36,14 +36,7 @@ public sealed class IdentityHostTests : IAsyncLifetime
         public override DateTimeOffset GetUtcNow() => base.GetUtcNow() + Offset;
     }
 
-    private static int FreePort()
-    {
-        var l = new TcpListener(IPAddress.Loopback, 0);
-        l.Start();
-        var port = ((IPEndPoint)l.LocalEndpoint).Port;
-        l.Stop();
-        return port;
-    }
+    private static int FreePort() => TestPorts.Next();
 
     private static async Task<(int Exit, string Out, string Err, IDictionary<string, object?> Data)> Cli(params string[] args)
     {

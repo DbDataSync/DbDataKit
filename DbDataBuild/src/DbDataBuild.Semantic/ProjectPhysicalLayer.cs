@@ -34,11 +34,13 @@ public sealed partial class ProjectPhysicalLayer : IPhysicalLayer
     }
 
     /// <summary>
-    /// `sqlserver` for any connection the tool builds on. The catalog format only has emitters for SQL Server and Analysis Services (plan 19 J05 adds PostgreSQL), so the kind is what the catalog
-    /// validation needs to accept the source; the connection's real engine is reported by `project show semantic`, and a package for a PostgreSQL connection waits for the emitter.
+    /// The catalog's kind for a connection the tool builds on: `postgres` for a PostgreSQL connection (the catalog is then validated, and its SQL emitted, as PostgreSQL, plan 19 J05), `sqlserver` for the T-SQL
+    /// ones (SQL Server and Fabric). The connection's own engine is reported by `project show semantic`.
     /// </summary>
     public string? SourceKind(string source) =>
-        ConnectionOf(source) is { } connection && config.Connections[connection].Kind.IsBuildTarget && SourceName().IsMatch(source) ? "sqlserver" : null;
+        ConnectionOf(source) is { } connection && config.Connections[connection].Kind is { IsBuildTarget: true } kind && SourceName().IsMatch(source)
+            ? kind.Driver == TargetNames.Postgres ? "postgres" : "sqlserver"
+            : null;
 
     /// <inheritdoc />
     public bool KnowsModel(string model) => models.ContainsKey(model);

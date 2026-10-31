@@ -63,11 +63,21 @@ public sealed class StrictConnectionFileTests : IDisposable
         var shared = Refused(Valid.Replace("address: { host: sql01 }", "address: { hots: sql01 }"));
         Assert.Contains(shared.Diagnostics, d => d.Code == "DBD-104" && d.Message.Contains("`hots` in `address`. Did you mean `host`?", StringComparison.Ordinal));
 
-        var ext = Refused(Valid.Replace("properties: { applicationName: x }", "testQury: select 1"));
+        var ext = Refused(Valid.Replace("properties: { applicationName: x }", "test_qury: select 1"));
         var d = Assert.Single(ext.Diagnostics);
         Assert.Equal("DBD-104", d.Code);
-        Assert.Equal("extensions.sync.testQury", d.KeyPath);
-        Assert.Contains("Did you mean `extensions.sync.testQuery`?", d.Message);
+        Assert.Equal("extensions.sync.test_qury", d.KeyPath);
+        Assert.Contains("Did you mean `extensions.sync.test_query`?", d.Message);
+    }
+
+    [Fact]
+    public void The_camelCase_spelling_of_an_extensions_sync_key_is_refused_with_the_snake_case_one_suggested()
+    {
+        var refused = Refused(Valid.Replace("properties: { applicationName: x }", "testQuery: select 1"));
+
+        var d = Assert.Single(refused.Diagnostics);
+        Assert.Equal("extensions.sync.testQuery", d.KeyPath);
+        Assert.Contains("`extensions.sync.test_query`", d.Message);
     }
 
     [Fact]

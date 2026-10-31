@@ -6,7 +6,7 @@ using YamlDotNet.Serialization;
 namespace DbDataSync.Core.Config;
 
 /// <summary>
-/// What Sync keeps in a connection file beside the shared fields, under <c>extensions.sync</c> (plan 13, E01). The keys are Sync's own, spelled as in every other Sync file, so the nested script and hook bindings are the shapes they always were.
+/// What Sync keeps in a connection file beside the shared fields, under <c>extensions.sync</c> (plan 13, E01). The keys are written like the shared ones, snake_case (D28; the camelCase spelling of E01's first form is refused as an unknown key); the nested script and hook bindings are the shapes they always were.
 /// </summary>
 public sealed class SyncConnectionExtension
 {
@@ -14,15 +14,19 @@ public sealed class SyncConnectionExtension
     public string? Database { get; set; }
 
     /// <summary>A connect timeout the shared <c>timeouts</c> block cannot say: <c>0</c> (unlimited) or more than a day.</summary>
+    [YamlMember(Alias = "connect_timeout_seconds", ApplyNamingConventions = false)]
     public int? ConnectTimeoutSeconds { get; set; }
 
     /// <summary>A command timeout the shared <c>timeouts</c> block cannot say.</summary>
+    [YamlMember(Alias = "command_timeout_seconds", ApplyNamingConventions = false)]
     public int? CommandTimeoutSeconds { get; set; }
 
+    [YamlMember(Alias = "segment_order", ApplyNamingConventions = false)]
     public SegmentOrder? SegmentOrder { get; set; }
     public Dictionary<string, string>? Properties { get; set; }
     public Dictionary<string, ScriptBinding?>? Scripts { get; set; }
     public Dictionary<string, List<HookConfig>?>? Hooks { get; set; }
+    [YamlMember(Alias = "test_query", ApplyNamingConventions = false)]
     public string? TestQuery { get; set; }
 }
 
@@ -240,7 +244,7 @@ internal static partial class SyncConnectionFile
         DefaultDiagnosticCatalog.Instance.Create(SharedCodes.SchemaVersionInvalid, path, 1, 1,
             $"'{name}.yaml' is a connection in the form of earlier releases (it has `driverType` or `schemaVersion` and no `schema: connection/1`), which Sync no longer reads.",
             "Rewrite it as a connection/1 file: `schema: connection/1`, `name`, `engine` (sqlserver, postgres, mysql, oracle, duckdb, flightsql, or a driver id), `address: {host, port, database}` or `connection_string`, " +
-            $"`auth: {{mode: sql, user, password_secret: 'secret:dbdata:sync:connection:{name}'}}` (or `mode: integrated` / `none`), `timeouts: {{connect_s, command_s}}`, and `extensions.sync` for `segmentOrder`, `properties`, `scripts`, `hooks`, `testQuery` and, with a `connection_string`, `database`. " +
+            $"`auth: {{mode: sql, user, password_secret: 'secret:dbdata:sync:connection:{name}'}}` (or `mode: integrated` / `none`), `timeouts: {{connect_s, command_s}}`, and `extensions.sync` for `segment_order`, `properties`, `scripts`, `hooks`, `test_query` and, with a `connection_string`, `database`. " +
             "The password stays in the secret store; see docs/configuration.md.", keyPath: null);
 
     private static (string? Driver, string? Error) DriverFor(ConnectionDefinition d)
