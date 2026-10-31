@@ -303,7 +303,7 @@ internal static class BuildManagementApi
     }
 
     /// <summary>
-    /// Git for a workspace (plan 13, W08, D15): <c>GET .../changes</c> (what differs from where the draft started, with patches and, for a text file, both whole texts) and <c>GET .../history</c> are a viewer's; <c>POST .../commit</c> (<c>{"message"}</c>) and <c>POST .../push</c> are the owner's and need the
+    /// Git for a workspace (plan 13, W08, D15): <c>GET .../changes</c> (what differs from where the draft started, with patches and, for a text file, both whole texts) and <c>GET .../history</c> are a viewer's; <c>POST .../commit</c> (<c>{"message"}</c>) and <c>POST .../push</c> (which answers <c>pull_request_url</c> for a remote at GitHub, Azure DevOps or GitLab, and presents the project's <c>git_credential</c>, W12) are the owner's and need the
     /// author role; <c>POST .../merge</c> needs the approver role, because it changes what the scheduler and the deploys read. A project with a git remote is pushed to (a branch, for a pull request opened where the remote lives) and never merged inside
     /// the server, since the server's copy of a remote is reset to the remote's branch; a project without one is merged inside the server, in the author's name. A merge that conflicts changes nothing and answers 409 with the files. A merged workspace is abandoned.
     /// </summary>
@@ -368,10 +368,13 @@ internal static class BuildManagementApi
             if (!hosted.IsRemote) return Results.Json(new { error = "This project has no git remote to push to; merge it inside the server instead." }, statusCode: StatusCodes.Status409Conflict);
             try
             {
-                DbDataKit.Config.Git.GitWorkspaceOperations.Push(workspaces.RootOf(workspace), workspace.Branch);
-                return Results.Json(new { pushed = true, branch = workspace.Branch });
+                var root = workspaces.RootOf(workspace);
+                DbDataKit.Config.Git.GitWorkspaceOperations.Push(root, workspace.Branch, projects.CredentialFor(hosted));
+                // where the person opens the pull request: a link built from the remote's address (GitHub, Azure DevOps, GitLab), null for any other remote
+                return Results.Json(new { pushed = true, branch = workspace.Branch, pull_request_url = DbDataKit.Config.Git.GitPullRequestLink.For(hosted.Git, workspace.Branch) });
             }
             catch (DbDataKit.Config.Git.GitOperationException ex) { return Failed(ex); }
+            catch (DbDataKit.Config.Git.GitRemoteException ex) { return Failed(new DbDataKit.Config.Git.GitOperationException(ex.Message, ex)); }
         });
 
         app.MapPost("/api/v1/projects/{project}/workspaces/{id}/merge", (string project, string id, HttpContext context) =>

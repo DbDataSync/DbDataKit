@@ -80,7 +80,7 @@ export const buildApi = {
   history: (id: string, workspace: string) => request<{ commits: GitCommit[] }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/history`).then((r) => r.commits),
   commit: (id: string, workspace: string, message: string) => request<{ committed: boolean; sha: string | null }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/commit`, { method: 'POST', body: JSON.stringify({ message }) }),
   /** For a project that follows a git remote: sends the draft's branch there. */
-  push: (id: string, workspace: string) => request<{ pushed: boolean; branch: string }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/push`, { method: 'POST' }),
+  push: (id: string, workspace: string) => request<{ pushed: boolean; branch: string; pull_request_url: string | null }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/push`, { method: 'POST' }),
   /** For a project without a remote: merges the draft into the project, for an approver. A conflict changes nothing. */
   merge: (id: string, workspace: string) => request<{ merged: boolean; sha: string }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/merge`, { method: 'POST' }),
 }
