@@ -43,11 +43,11 @@ public sealed class ModelStorageTests
     {
         var plan = ModelStorage.Plan(Model(), engine);
 
-        Assert.Equal(["sales_territories.territory", "sales_territories.territory_share"], plan.Tables);
+        Assert.Equal(["sales_territories.territory", "sales_territories.territory_share", "sales_territories._audit"], plan.Tables);
         Assert.Equal(
-            ["create schema sales_territories", "create table sales_territories.territory", "create table sales_territories.territory_share",
+            ["create schema sales_territories", "create table sales_territories.territory", "create table sales_territories.territory_share", "create table sales_territories._audit",
              "primary key of sales_territories.territory", "unique name of sales_territories.territory", "primary key of sales_territories.territory_share",
-             "foreign key territory_code of sales_territories.territory_share"],
+             "primary key of sales_territories._audit", "index of sales_territories._audit", "foreign key territory_code of sales_territories.territory_share"],
             plan.Statements.Select(s => s.Description));
         var territory = plan.Statements[1].Text;
         var key = territory.Split('\n').Single(l => l.Contains("territory_code"));
@@ -56,6 +56,7 @@ public sealed class ModelStorageTests
         Assert.EndsWith(" NULL", budget.TrimEnd(',', ' '));                          // neither required nor key
         Assert.DoesNotContain("NOT NULL", budget);
         Assert.Contains("FOREIGN KEY", plan.Statements[^1].Text);
+        Assert.Contains("_version", territory);                                      // the version a write names
         Assert.Contains(plan.Notes, n => n.Contains("crm_reference.region") && n.Contains("no foreign key"));
     }
 
@@ -77,12 +78,12 @@ public sealed class ModelStorageTests
 
         Assert.Equal(plan.Tables, await ModelStorage.ExistingAsync(engines.Connection, plan));
         var s = engine == Engines.SqlServer ? "[sales_territories]" : "sales_territories";
-        await engines.ExecuteAsync($"INSERT INTO {s}.territory (territory_code, name) VALUES ('EMEA-01', 'Europe')");
-        await engines.ExecuteAsync($"INSERT INTO {s}.territory_share (territory_code, region, share) VALUES ('EMEA-01', 'DE', 0.5)");
-        await Assert.ThrowsAnyAsync<DbException>(() => engines.ExecuteAsync($"INSERT INTO {s}.territory (territory_code, name) VALUES ('EMEA-01', 'Again')"));        // the key
-        await Assert.ThrowsAnyAsync<DbException>(() => engines.ExecuteAsync($"INSERT INTO {s}.territory (territory_code, name) VALUES ('EMEA-02', 'Europe')"));       // unique
-        await Assert.ThrowsAnyAsync<DbException>(() => engines.ExecuteAsync($"INSERT INTO {s}.territory (territory_code) VALUES ('EMEA-03')"));                        // required
-        await Assert.ThrowsAnyAsync<DbException>(() => engines.ExecuteAsync($"INSERT INTO {s}.territory_share (territory_code, region) VALUES ('NOWHERE', 'DE')"));  // the reference
+        await engines.ExecuteAsync($"INSERT INTO {s}.territory (territory_code, name, _version) VALUES ('EMEA-01', 'Europe', 1)");
+        await engines.ExecuteAsync($"INSERT INTO {s}.territory_share (territory_code, region, share, _version) VALUES ('EMEA-01', 'DE', 0.5, 1)");
+        await Assert.ThrowsAnyAsync<DbException>(() => engines.ExecuteAsync($"INSERT INTO {s}.territory (territory_code, name, _version) VALUES ('EMEA-01', 'Again', 1)"));        // the key
+        await Assert.ThrowsAnyAsync<DbException>(() => engines.ExecuteAsync($"INSERT INTO {s}.territory (territory_code, name, _version) VALUES ('EMEA-02', 'Europe', 1)"));       // unique
+        await Assert.ThrowsAnyAsync<DbException>(() => engines.ExecuteAsync($"INSERT INTO {s}.territory (territory_code, _version) VALUES ('EMEA-03', 1)"));                        // required
+        await Assert.ThrowsAnyAsync<DbException>(() => engines.ExecuteAsync($"INSERT INTO {s}.territory_share (territory_code, region, _version) VALUES ('NOWHERE', 'DE', 1)"));  // the reference
     }
 
     [Theory, MemberData(nameof(Engines.Both), MemberType = typeof(Engines))]

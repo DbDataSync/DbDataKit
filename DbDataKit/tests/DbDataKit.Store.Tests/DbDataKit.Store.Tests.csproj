@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Npgsql" />
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\DbDataKit.Store\DbDataKit.Store.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Metadata\DbDataKit.Metadata.csproj" />
+    <!-- the throwaway database per test that the structure tests use -->
+    <Compile Include="..\DbDataKit.Schema.Tests\Engines.cs" Link="Engines.cs" />
+  </ItemGroup>
+</Project>
