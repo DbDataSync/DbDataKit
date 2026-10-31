@@ -4,18 +4,19 @@ using DbDataKit.State;
 
 namespace DbDataKit.Identity;
 
-public sealed record OidcClient(string ClientId, string Name, IReadOnlyList<string> RedirectUris, bool Confidential);
+public sealed record OidcClient(string ClientId, string Name, IReadOnlyList<string> RedirectUris, bool Confidential, IReadOnlyList<string>? PostLogoutRedirectUris = null);
 
 /// <summary>The applications that sign in through the home. A confidential client has a secret (shown once, kept as a hash); a public one has none and relies on PKCE.</summary>
 public sealed class OidcClients(StateDatabase database)
 {
     /// <summary>Registers a client. Returns the secret once for a confidential client, null for a public one.</summary>
-    public (OidcClient Client, string? Secret) Register(string name, IReadOnlyList<string> redirectUris, bool confidential)
+    public (OidcClient Client, string? Secret) Register(string name, IReadOnlyList<string> redirectUris, bool confidential, IReadOnlyList<string>? postLogoutRedirectUris = null)
     {
         if (redirectUris.Count == 0) throw new ArgumentException("A client needs at least one redirect URI.", nameof(redirectUris));
-        foreach (var uri in redirectUris)
+        postLogoutRedirectUris ??= [];
+        foreach (var uri in redirectUris.Concat(postLogoutRedirectUris))
             if (!Uri.TryCreate(uri, UriKind.Absolute, out var u) || u.Fragment.Length > 0 || uri.Contains('\n')) throw new ArgumentException("A redirect URI is an absolute URI with no fragment.", nameof(redirectUris));
-        var client = new OidcClient(Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant(), name, redirectUris, confidential);
+        var client = new OidcClient(Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant(), name, redirectUris, confidential, postLogoutRedirectUris);
         var secret = confidential ? Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).Replace('+', '-').Replace('/', '_').TrimEnd('=') : null;
         database.Retry(() =>
         {
@@ -27,6 +28,11 @@ public sealed class OidcClients(StateDatabase database)
             cmd.Bind(database, "uris", string.Join('\n', redirectUris));
             cmd.Bind(database, "at", DateTimeOffset.UtcNow.ToString("O"));
             cmd.ExecuteNonQuery();
+            if (postLogoutRedirectUris.Count == 0) return;
+            using var logout = database.Command(connection, "INSERT INTO OidcClientLogout (ClientId, PostLogoutRedirectUris) VALUES ($id, $uris);");
+            logout.Bind(database, "id", client.ClientId);
+            logout.Bind(database, "uris", string.Join('\n', postLogoutRedirectUris));
+            logout.ExecuteNonQuery();
         });
         return (client, secret);
     }
@@ -50,7 +56,12 @@ public sealed class OidcClients(StateDatabase database)
         using var reader = cmd.ExecuteReader();
         if (!reader.Read()) return ((OidcClient, string?)?)null;
         var hash = reader.IsDBNull(2) ? null : reader.GetString(2);
-        return (new OidcClient(reader.GetString(0), reader.GetString(1), reader.GetString(3).Split('\n'), hash is not null), hash);
+        var (id, name, uris) = (reader.GetString(0), reader.GetString(1), reader.GetString(3).Split('\n'));
+        reader.Close();
+        using var logout = database.Command(connection, "SELECT PostLogoutRedirectUris FROM OidcClientLogout WHERE ClientId = $id;");
+        logout.Bind(database, "id", clientId);
+        var after = logout.ExecuteScalar() is string text ? text.Split('\n') : [];
+        return (new OidcClient(id, name, uris, hash is not null, after), hash);
     });
 
     private static string Hash(string secret) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(secret))).ToLowerInvariant();
