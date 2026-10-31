@@ -1,5 +1,5 @@
 import { request, type SchemaAssociation, type SchemaNode } from '@dbdatakit/shell'
-import type { AdoptAnswer, PairedProxy, PublishAnswer, GitChange, GitCommit, RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
+import type { CommandOffer, DefineResult, DefinitionAnswer, ImportResult, ProjectConnections, ProjectTemplateInfo, TemplateCatalog, AdoptAnswer, PairedProxy, PublishAnswer, GitChange, GitCommit, RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
 
 const project = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}`
 
@@ -15,7 +15,37 @@ export interface FileSchemaDocument {
   schemas: Record<string, SchemaNode>
 }
 
+/** The text of an answers file for these answers: what `project model update --answers` reads (schemas/answers.schema.json). */
+export function answersYaml(answers: DefinitionAnswer[]): string {
+  const quote = (text: string) => JSON.stringify(text)
+  return `answers:\n${answers.map((a) => ('accept' in a ? `  - id: ${a.id}\n    accept: inferred\n` : `  - id: ${a.id}\n    choice: ${a.choice}\n${a.value !== undefined ? `    value: ${quote(a.value)}\n` : ''}`)).join('')}`
+}
+
 export const buildApi = {
+  /** The templates a new project can be made from, and whether this person may make one. */
+  templates: () => request<TemplateCatalog>('/api/v1/templates'),
+  /** Makes a project on the server from a template (the author role); the server hosts it from then on. */
+  createProject: (id: string, template: ProjectTemplateInfo['name']) => request<BuildProject>('/api/v1/projects', { method: 'POST', body: JSON.stringify({ id, template }) }),
+  /** The commands of a project and whether this person may run each: the console shows only the controls they may use. */
+  commands: (id: string) => request<{ commands: CommandOffer[] }>(`${project(id)}/commands`).then((r) => r.commands),
+  /** The connections the project names (from its metadata), for choosing where a model lives and what to import from. */
+  connections: (id: string) => run<ProjectConnections>(id, 'project_show_metadata').then((a) => Object.keys(a.document?.data?.project?.config?.connections ?? {}).sort()),
+  /** Makes a model to start from, in the draft: its definition and a query that runs. */
+  createModel: (id: string, workspace: string, model: string, kind: string, connections: string[]) =>
+    run<{ model: string; kind: string; files: string[] }>(id, 'project_model_create', { model, kind, ...(connections.length > 0 ? { connection: connections } : {}) }, workspace),
+  /** Asks the definition of a model's query to be brought in line with it. Writes the definition when nothing is open; otherwise answers with the questions and writes nothing. No connection is read. */
+  updateDefinition: (id: string, workspace: string, query: string, answers?: string) =>
+    run<DefineResult>(id, 'project_model_update', { paths: [query], write: true, offline: true, ...(answers ? { answers } : {}) }, workspace),
+  /** Writes an answers file in the draft (a folder the project's git ignores) and says where. */
+  writeAnswers: async (id: string, workspace: string, answers: DefinitionAnswer[]) => {
+    const path = `.dbdatabuild/console-answers-${Date.now()}.yml`
+    const answer = await run<{ path: string }>(id, 'project_file_write', { path, content: answersYaml(answers), create: true }, workspace)
+    return answer.document?.ok ? path : null
+  },
+  /** The tables and views of a connection and what each would become as a mapped model; writes nothing. */
+  importPreview: (id: string, workspace: string, connection: string) => run<ImportResult>(id, 'project_import', { connection, tables: ['*.*'] }, workspace),
+  /** Writes the chosen tables as mapped models in the draft (the author role; the connection's read login stays on the server). */
+  importTables: (id: string, workspace: string, connection: string, tables: string[]) => run<ImportResult>(id, 'project_import', { connection, tables, write: true }, workspace),
   fileSchemas: () => request<FileSchemaDocument>('/api/v1/schemas'),
   projects: () => request<{ projects: BuildProject[] }>('/api/v1/projects').then((r) => r.projects),
   graph: (id: string) => run<ProjectGraph>(id, 'project_show_graph'),

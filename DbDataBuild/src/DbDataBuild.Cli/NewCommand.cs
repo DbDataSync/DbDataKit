@@ -29,19 +29,12 @@ internal static class NewCommand
             return CliApp.ExitUsage;
         }
         var target = Path.GetFullPath(directory ?? found.Name);
-        var clashes = found.Files.Where(f => File.Exists(Path.Combine(target, f.Path))).Select(f => f.Path).ToList();
-        if (clashes.Count > 0)
+        if (Clashes(found, target) is { Count: > 0 } clashes)
         {
             error.WriteLine($"{target} already has {string.Join(", ", clashes.Take(5))}{(clashes.Count > 5 ? $" and {clashes.Count - 5} more" : "")} of this template; nothing was written. Use an empty or new directory.");
             return CliApp.ExitUsage;
         }
-        var utf8 = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-        foreach (var f in found.Files)
-        {
-            var path = Path.Combine(target, f.Path.Replace('/', Path.DirectorySeparatorChar));
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, f.Text, utf8);
-        }
+        Write(found, target);
         output.Payload("directory", target);
         output.Payload("written", found.Files.Select(f => f.Path).ToList());
         output.WriteLine();
@@ -49,5 +42,21 @@ internal static class NewCommand
         output.WriteLine("Read README.md in it first. The commands below take --project (or run them from inside the directory).");
         output.Next($"project compile --project {target}", $"project seed --project {target}", $"project tests run --project {target}");
         return CliApp.ExitOk;
+    }
+
+    /// <summary>The files of the template that already exist under <paramref name="target"/>; the template is written only when there are none (the server's new-project route asks the same question).</summary>
+    public static List<string> Clashes(ProjectTemplate template, string target) =>
+        template.Files.Where(f => File.Exists(Path.Combine(target, f.Path))).Select(f => f.Path).ToList();
+
+    /// <summary>Writes the template's files under <paramref name="target"/> as UTF-8 without a byte order mark, creating folders. Call <see cref="Clashes"/> first: this overwrites.</summary>
+    public static void Write(ProjectTemplate template, string target)
+    {
+        var utf8 = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        foreach (var f in template.Files)
+        {
+            var path = Path.Combine(target, f.Path.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, f.Text, utf8);
+        }
     }
 }
