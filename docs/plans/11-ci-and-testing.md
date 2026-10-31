@@ -158,7 +158,7 @@ and the NuGet cache are cached; the shared libraries' job runs once (`dbdatakit-
 | 2 | `testenv/`: port DbDataSync's compose and DbDataBuild's engines, canonical variables and mapping files; wire the Proxy and the shared libraries first, since they have the least to migrate; the shared libraries' live tests start running | needs decisions 2, 3 |
 | 3 | `_dotnet-test.yml`; move each product's CI onto it; skipped-test summary; one action version | |
 | 4 | Nightly full matrix on each `*/test`; release gate on it | needs decision 4 |
-| 5 | DbDataBuild moves in; its CI, nightly full conformance and release are on the trunk model (plan 09) | done; its engines are still started by `DbDataBuild/scripts/test-engines.sh`, not `testenv/` |
+| 5 | DbDataBuild moves in; its CI, nightly full conformance and release are on the trunk model (plan 09) | done; its engines started from `DbDataBuild/scripts/test-engines.sh` until F12 and F16 moved them all into `testenv/` (the script is gone) |
 
 ## Decisions needed
 

@@ -27,6 +27,7 @@ public static class ConsoleCli
         ServerNoun.Create((args, context) => RunServerAsync(args, context, environment)),
         InstanceNoun(environment),
         UserNoun(environment),
+        IdentityCli.Noun(environment),
         ConsoleService.Noun(ConsoleServiceEnvironment.Real()),
         HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl),
     ], ConsoleHost.Version);
