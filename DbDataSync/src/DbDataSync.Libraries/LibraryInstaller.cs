@@ -30,6 +30,7 @@ public static class LibraryInstaller
         var libraryDir = LibraryPaths.LibraryDir(repoRoot, id);
         var libDir = LibraryPaths.LibDir(libraryDir);
         Directory.CreateDirectory(libraryDir);
+        LibraryPaths.EnsureStoreGitignored(repoRoot);
 
         // A fresh store each install: a version downgrade or a dropped transitive dependency must not leave an old package behind. The lock keeps the pins of what stays.
         if (Directory.Exists(libDir)) Directory.Delete(libDir, recursive: true);
@@ -136,6 +137,7 @@ public static class LibraryInstaller
     {
         var libraryDir = LibraryPaths.LibraryDir(repoRoot, id);
         var libDir = LibraryPaths.LibDir(libraryDir);
+        LibraryPaths.EnsureStoreGitignored(repoRoot);
         if (Directory.Exists(libDir))
             Directory.Delete(libDir, recursive: true);
         Directory.CreateDirectory(libDir);

@@ -204,9 +204,11 @@ services:
   # None of these has a healthcheck of its own that the image can be trusted to run (the images are minimal), so testenv.sh waits for
   # their readiness from the host (a log line or an HTTP answer) after `docker compose up --wait`.
 
+  # The four images below are pinned by digest (D29): a moving tag changes answers without a change of ours. To move one, read the new digest with
+  # `docker buildx imagetools inspect <image:tag>`, put it after the tag, and run the Build conformance suite on that engine before merging.
   mssql2025:
     profiles: [mssql2025]
-    image: ${DBKIT_TEST_MSSQL2025_IMAGE:-mcr.microsoft.com/mssql/server:2025-latest}
+    image: ${DBKIT_TEST_MSSQL2025_IMAGE:-mcr.microsoft.com/mssql/server:2025-latest@sha256:245f6b1c8903edae52cb20fa31419cefcde1a49938bb8c3447099011fc871ca3}
     container_name: dbkit-test-mssql2025
     environment:
       ACCEPT_EULA: "Y"
@@ -219,7 +221,7 @@ services:
   # The Thrift server (HiveServer2) in http mode, which the ADBC Spark driver speaks; Spark 4 in its default ANSI mode.
   spark:
     profiles: [spark]
-    image: ${DBKIT_TEST_SPARK_IMAGE:-apache/spark:4.0.0}
+    image: ${DBKIT_TEST_SPARK_IMAGE:-apache/spark:4.0.0@sha256:a89782d90529a623fc4471cdddb0f9c32d6eed10a81b256a80207b23c3b1df00}
     container_name: dbkit-test-spark
     command:
       - /opt/spark/bin/spark-submit
@@ -241,7 +243,7 @@ services:
 
   bigquery:
     profiles: [bigquery]
-    image: ${DBKIT_TEST_BIGQUERY_IMAGE:-ghcr.io/goccy/bigquery-emulator:latest}
+    image: ${DBKIT_TEST_BIGQUERY_IMAGE:-ghcr.io/goccy/bigquery-emulator:latest@sha256:f4e428d265a93dc5ce36c294e1c584c7c9b384117d47ab8ddbb63d8d50b7f393}
     container_name: dbkit-test-bigquery
     command: ["--project=ddb", "--port=9050"]
     ports:
@@ -249,7 +251,7 @@ services:
 
   flight:
     profiles: [flight]
-    image: &flight-image ${DBKIT_TEST_FLIGHT_IMAGE:-voltrondata/sqlflite:latest}
+    image: &flight-image ${DBKIT_TEST_FLIGHT_IMAGE:-voltrondata/sqlflite:latest@sha256:4fc872838d71d26757bf4bbe7c23e128cae2c3e008df0f15f30fb513d6be26ba}
     container_name: dbkit-test-flight
     environment:
       SQLFLITE_PASSWORD: *password
