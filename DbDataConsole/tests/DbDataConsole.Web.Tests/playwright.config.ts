@@ -21,7 +21,7 @@ if (!isWorker) {
 export const buildDirectory = path.join(os.tmpdir(), 'dbdatakit-console-e2e-build')
 export const buildPort = 8482
 export const buildUrl = `https://localhost:${buildPort}`
-const buildDll = path.join(repoRoot, 'DbDataBuild/src/DbDataBuild.Cli/bin/Debug/net10.0/dbdatabuild.dll')
+export const buildDll = path.join(repoRoot, 'DbDataBuild/src/DbDataBuild.Cli/bin/Debug/net10.0/dbdatabuild.dll')
 if (!isWorker) {
   fs.rmSync(buildDirectory, { recursive: true, force: true })
   fs.mkdirSync(buildDirectory, { recursive: true })
@@ -186,6 +186,16 @@ if (!isWorker) {
   fs.writeFileSync(path.join(scratchDirectory, 'authoring-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
+// A Build server for the end-to-end story (plan 13a, W10): it hosts no project, so the story makes one from the starter template, edits, commits and merges it, and (when there is a PostgreSQL, DBDATA_E2E_PG) plans, approves and applies it
+// there. Its own directory and port, so nothing the other stories leave in the servers above is in its way. Its commands read the PostgreSQL login from the environment the server is started with, as the first Build server's do.
+export const endToEndBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-end-to-end-build'), port: 8494 }
+if (!isWorker) {
+  fs.rmSync(endToEndBuild.directory, { recursive: true, force: true })
+  fs.mkdirSync(endToEndBuild.directory, { recursive: true })
+  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', endToEndBuild.directory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'end-to-end-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
+}
+
 // A passkey is bound to the host name and the port it was made on, and the server builds its list of allowed origins from the address it is told to listen on,
 // so the address is fixed here and the test opens exactly that.
 const port = 8481
@@ -238,6 +248,16 @@ export default defineConfig({
       timeout: 60_000,
       stdout: 'pipe' as const,
       stderr: 'pipe' as const,
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(endToEndBuild.directory), '--listen', `https://localhost:${endToEndBuild.port}`].join(' '),
+      url: `https://localhost:${endToEndBuild.port}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+      env: warehouseConnection ? { DBDATA_BUILD_POSTGRES_READ: warehouseConnection, DBDATA_BUILD_POSTGRES_WRITE: warehouseConnection } : {},
     },
     ...announcers.map((announcer) => ({
       command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(announcer.directory), '--listen', `https://localhost:${announcer.port}`].join(' '),

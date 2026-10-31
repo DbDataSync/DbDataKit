@@ -50,6 +50,14 @@ describe('the calls the new-project, new-model and import screens make', () => {
     expect(calls[0].body).toEqual({ path, content: 'answers:\n  - id: Q-define-a.b-name\n    accept: inferred\n', create: true })
   })
 
+  it('compiles the draft for real with an empty body, and a check never writes', async () => {
+    const calls = serve({ exit: 0, document: { ok: true, data: {} } })
+    await buildApi.compileDraft('shop', 'ada-draft')
+    await buildApi.checkDraft('shop', 'ada-draft')
+    expect(calls[0]).toEqual({ url: '/api/v1/projects/shop/commands/project_compile?workspace=ada-draft', method: 'POST', body: {} })
+    expect(calls[1].body).toEqual({ check: true })
+  })
+
   it('lists a connection’s tables without writing, and writes only the chosen ones', async () => {
     const calls = serve({ exit: 0, document: { ok: true, data: {} } })
     await buildApi.importPreview('shop', 'ada-draft', 'origin')
