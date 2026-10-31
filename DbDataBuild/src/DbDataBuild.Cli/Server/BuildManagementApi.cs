@@ -41,7 +41,7 @@ internal static class BuildManagementApi
     /// <param name="projects">The projects served, read again on every call so one added or removed is served or gone at once.</param>
     /// <param name="commands">All the commands there are; each project is offered the read-only ones.</param>
     /// <param name="surfaceFor">Which of them a project is offered and how their inputs are checked; the read-only rules unless a test or a later slice says otherwise.</param>
-    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null, PairingCodes? pairingCodes = null, string? clientName = null)
+    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null, PairingCodes? pairingCodes = null, string? clientName = null, ProjectCreator? creator = null)
     {
         surfaceFor ??= FullSurface;
         var specs = CommandSpecs.All.ToDictionary(s => s.Name);
@@ -50,6 +50,8 @@ internal static class BuildManagementApi
         {
             projects = projects.All().Select(p => new { id = p.Id, name = p.Id, source = p.IsRemote ? "git" : "path", branch = p.Branch }),
         }));
+
+        if (creator is not null) MapNewProjects(app, creator);
 
         // The schemas of the project's files and which file each describes, for the console's forms (the viewer role may read them: they are the tool's own, not the project's)
         app.MapGet("/api/v1/schemas", () => Results.Text(FileSchemas.Document().ToJsonString(), "application/json"));
@@ -170,12 +172,54 @@ internal static class BuildManagementApi
             if (!surface.TryBuildArguments(command, arguments, out var argv, out var problem))
                 return Results.Json(new { error = problem }, statusCode: StatusCodes.Status400BadRequest);
 
+            // a command that reads a connection (a viewer's) but writes the project's files when a flag says so (`project import --write`, `project model update --write`) needs the role of someone who changes files
+            if (command.Impact == Impact.RepoFiles && WriteRules.Changes(command, flag => argv.Contains(flag), repoFiles: true))
+            {
+                var writing = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Author, projectId);
+                if (!writing.Allowed) return Results.Json(new { error = $"Writing the project's files with `{command.Name}` needs the author role." }, statusCode: StatusCodes.Status403Forbidden);
+            }
+
             var result = await commandRunner.RunAsync(argv, projectRoot, ActorOf(context.ManagementToken()), context.RequestAborted);
             JsonNode? document = null;
             try { document = JsonNode.Parse(result.Out); } catch (JsonException) { }
             return Results.Json(new JsonObject { ["exit"] = result.Exit, ["document"] = document, ["text"] = document is null ? (result.Out.Length > 0 ? result.Out : result.Err) : null });
         });
     }
+    /// <summary>
+    /// New projects from templates (plan 13, W07): <c>GET /api/v1/templates</c> lists the templates built into the server, each with its name, description and file count, and says whether the caller may make a project (<c>can_create</c>);
+    /// <c>POST /api/v1/projects</c> (<c>{"id", "template"}</c>) makes one. Making a project adds it to what the server hosts, so it needs the author role on the server itself (a role held in one project only does not reach it). The CLI's own
+    /// <c>project create</c> cannot be run through the commands route, which keeps every path inside a project that already exists.
+    /// </summary>
+    private static void MapNewProjects(IEndpointRouteBuilder app, ProjectCreator creator)
+    {
+        app.MapGet("/api/v1/templates", (HttpContext context) => Results.Json(new
+        {
+            templates = TemplateStore.All.Select(t => new { name = t.Name, description = t.Description, files = t.Files.Count }),
+            can_create = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Author).Allowed,
+        }));
+
+        app.MapPost("/api/v1/projects", async (HttpContext context) =>
+        {
+            var token = context.ManagementToken();
+            var decision = ManagementAuthorization.Authorize(token, ServerRole.Author);
+            if (!decision.Allowed) return Results.Json(new { error = "Making a project needs the author role on this server." }, statusCode: StatusCodes.Status403Forbidden);
+            string? id, template;
+            try
+            {
+                var body = await JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body, cancellationToken: context.RequestAborted);
+                (id, template) = (body?["id"]?.GetValue<string>(), body?["template"]?.GetValue<string>());
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException) { (id, template) = (null, null); }
+            if (id is null || template is null) return Results.Json(new { error = "The body is a JSON object with the project's \"id\" and the \"template\" to make it from." }, statusCode: StatusCodes.Status400BadRequest);
+            try
+            {
+                var made = creator.Create(id, template, new DbDataKit.Config.Git.GitAuthor(token.SubjectName ?? token.SubjectId, $"{token.SubjectId}@dbdatabuild.local"));
+                return Results.Json(new { id = made.Id, name = made.Id, source = "path", branch = (string?)null, template }, statusCode: StatusCodes.Status201Created);
+            }
+            catch (ProjectCreationException ex) { return Results.Json(new { error = ex.Message }, statusCode: ex.Status); }
+        });
+    }
+
     /// <summary>
     /// <c>GET|POST /api/v1/projects/{project}/workspaces</c> and <c>DELETE .../workspaces/{id}</c> (plan 13, W02). Listing is a viewer's; making one and abandoning one needs the author role, and only the owner abandons theirs.
     /// A command runs in a workspace when the call says <c>?workspace=&lt;id&gt;</c>, and only for its owner; without it the command runs in the project's own checkout, which is what the scheduler reads.

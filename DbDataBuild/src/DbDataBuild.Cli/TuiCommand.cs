@@ -70,15 +70,15 @@ internal static class TuiCommand
         private static string? WriteFlagOf(string command) => command switch
         {
             "project compile" or "project update" => "!--check",
-            "project model update" => "--write",
+            "project model update" or "project import" => "--write",
             "connection init" or "connection seed" => "--apply",
             "connection deploy" => "--apply-plan|--yes|--ack",
             "connection refresh" => "!--dry-run",
             _ => null,
         };
 
-        // the two update commands read connections (a read login) and write the project's files: a person is asked before the second, an agent is not (project files are its work)
-        private static Impact ImpactOf(CommandSpec spec) => spec.Name is "project update" or "project model update" ? Impact.RepoFiles : ImpactOf(spec.Effect);
+        // the update commands and the import read connections (a read login) and write the project's files: a person is asked before the second, an agent is not (project files are its work)
+        private static Impact ImpactOf(CommandSpec spec) => spec.Name is "project update" or "project model update" or "project import" ? Impact.RepoFiles : ImpactOf(spec.Effect);
 
         private static Impact ImpactOf(EffectClass e) => e switch
         {
