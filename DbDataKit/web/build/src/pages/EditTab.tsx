@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { CodeEditor, ErrorBanner, SchemaForm, SchemaSet, schemaFor, type EditorDiagnostic } from '@dbdatakit/shell'
 import { buildApi } from '../api'
+import { CompilePanel } from './CompilePanel'
 import { DefinitionPanel } from './DefinitionPanel'
 import { GitPanel } from './GitPanel'
 import { ImportPanel } from './ImportPanel'
@@ -126,6 +127,7 @@ export function EditTab() {
 
   const tree = groupByFolder(files.data?.document?.data.files ?? [])
   const problems = diagnostics.filter((d) => d.severity !== 'note' && !d.location.file.startsWith('rendered/'))
+  const outOfDateCount = check.data?.document ? (check.data.document.data.out_of_date?.length ?? 0) : null
   const dirty = open !== null && text !== saved
 
   return (
@@ -156,6 +158,9 @@ export function EditTab() {
       )}
       {workspace !== null && canAuthor && panel === 'import' && (
         <ImportPanel project={project} workspace={workspace} onWritten={() => void wrote()} onOpen={(file) => read.mutate(file)} onCancel={() => setPanel(null)} />
+      )}
+      {workspace !== null && canAuthor && (
+        <CompilePanel project={project} workspace={workspace} outOfDate={outOfDateCount} onWritten={() => check.mutate()} />
       )}
       {workspace === null && <div className="empty" data-testid="build-edit-none">Choose or start a workspace to edit the project’s files.</div>}
       {workspace !== null && (

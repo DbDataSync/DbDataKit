@@ -99,6 +99,8 @@ export const buildApi = {
   writeFile: (id: string, workspace: string, path: string, content: string, hash: string) => run<{ path: string; hash: string }>(id, 'project_file_write', { path, content, expect_hash: hash }, workspace),
   /** Compiles the workspace without writing rendered files: what the compiler finds in the draft. */
   checkDraft: (id: string, workspace: string) => run<CompileSummary>(id, 'project_compile', { check: true }, workspace),
+  /** Compiles the workspace and writes the rendered files a deploy plans from (the author role). */
+  compileDraft: (id: string, workspace: string) => run<CompileSummary>(id, 'project_compile', {}, workspace),
   /** Runs the models on generated rows, offline: what they would produce. */
   sample: (id: string, rows?: number) => run<SampleResult>(id, 'project_sample', rows ? { rows } : {}),
   /** The lowered and rendered text of one model file of a workspace (the compiler's own files, not written anywhere). */

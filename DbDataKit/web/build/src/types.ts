@@ -45,6 +45,9 @@ export interface ProjectGraph {
 export interface CompileSummary {
   counts: { models: number; errors: number; warnings: number; notes: number; by_kind: Record<string, number> }
   out_of_date?: string[]
+  /** After a compile that writes: the rendered files it wrote and the stale ones it removed. */
+  wrote?: string[]
+  removed?: string[]
 }
 
 /** One line of `connection status`: an object the models declare and where it stands on the target. */

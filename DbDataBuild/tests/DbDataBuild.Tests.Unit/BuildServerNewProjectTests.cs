@@ -231,4 +231,48 @@ public sealed class BuildServerNewProjectTests : IAsyncLifetime
         Assert.All(questions, q => Assert.StartsWith("Q-define-", (string)q!["id"]!));
         Assert.False(File.Exists(Path.Combine(ServerDir, "workspaces", project, workspace, "models", "marts", "fct_new.yml")));
     }
+
+    [Fact]
+    public async Task The_rendered_files_a_deploy_plans_from_are_written_in_the_draft_by_an_author_and_reach_the_project_only_by_a_merge()
+    {
+        // plan 13a, W10: a deploy refuses a project whose committed rendered/ differs from a fresh render (DDB-424), so a project made in the console needs a compile that writes, in the draft, and a commit and merge that carry it
+        Assert.Equal(HttpStatusCode.Created, (await AsAda(HttpMethod.Post, "/api/v1/projects", """{"id":"made","template":"starter"}""")).StatusCode);
+        var checkout = Path.Combine(ServerDir, "projects", "made");
+        Assert.False(Directory.Exists(Path.Combine(checkout, "rendered")));
+        var workspace = (string)(await Json(await AsAda(HttpMethod.Post, "/api/v1/projects/made/workspaces", """{"name":"draft"}""")))["id"]!;
+        var run = "/api/v1/projects/made/commands/project_compile";
+
+        // the check says the rendered files are not there yet and writes none; a viewer may not compile into the project
+        var check = await Document(await AsAda(HttpMethod.Post, $"{run}?workspace={workspace}", """{"check":true}"""));
+        Assert.NotEmpty(check["data"]!["out_of_date"]!.AsArray());
+        var draft = Path.Combine(ServerDir, "workspaces", "made", workspace);
+        Assert.False(Directory.Exists(Path.Combine(draft, "rendered")));
+        var refused = await AsVic(HttpMethod.Post, run, "{}");
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Contains("author", (string)(await Json(refused))["error"]!);
+        Assert.False(Directory.Exists(Path.Combine(checkout, "rendered")));
+
+        // the author's compile writes them in the draft, and the draft shows them as its changes; the checkout the scheduler reads has none
+        var compiled = await Document(await AsAda(HttpMethod.Post, $"{run}?workspace={workspace}", "{}"));
+        Assert.True((bool)compiled["ok"]!, compiled.ToJsonString());
+        var wrote = compiled["data"]!["wrote"]!.AsArray().Select(f => "rendered/" + (string)f!).ToArray();   // the compiler names them relative to rendered/
+        Assert.NotEmpty(wrote);
+        Assert.All(wrote, f => Assert.True(File.Exists(Path.Combine(draft, f))));
+        var changes = (await Json(await AsAda(HttpMethod.Get, $"/api/v1/projects/made/workspaces/{workspace}/changes")))["changes"]!.AsArray().Select(c => (string)c!["path"]!).ToArray();
+        Assert.All(wrote, f => Assert.Contains(f, changes));
+        Assert.False(Directory.Exists(Path.Combine(checkout, "rendered")));
+
+        // a second compile has nothing left to write
+        var again = await Document(await AsAda(HttpMethod.Post, $"{run}?workspace={workspace}", "{}"));
+        Assert.Empty(again["data"]!["wrote"]!.AsArray());
+
+        // committed and merged (an approver's act), they are the project's, and the project is no longer out of date
+        Assert.True((bool)(await Json(await AsAda(HttpMethod.Post, $"/api/v1/projects/made/workspaces/{workspace}/commit", """{"message":"Compiled"}""")))["committed"]!);
+        var merged = await Send("grace", ServerRole.Approver, HttpMethod.Post, $"/api/v1/projects/made/workspaces/{workspace}/merge");
+        Assert.Equal(HttpStatusCode.OK, merged.StatusCode);
+        Assert.All(wrote, f => Assert.True(File.Exists(Path.Combine(checkout, f))));
+        var after = await Document(await AsAda(HttpMethod.Post, run, """{"check":true}"""));
+        Assert.True((bool)after["ok"]!, after.ToJsonString());
+        Assert.True(after["data"]!["out_of_date"] is null || after["data"]!["out_of_date"]!.AsArray().Count == 0);
+    }
 }
