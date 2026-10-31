@@ -36,6 +36,7 @@ the pull request that settles it.
 | T5 | Sync TaskRunner integration tests | A14/A15 (#202) | Four tests failed in one run on a busy shared machine (each about 34 s), then the node died; they passed on three reruns. The evidence points to the environment but it is not proven. The tests now fail with the failed run's own log (`AssertSucceeded`). | Watch CI; if it recurs, the log now says why. |
 | T6 | Build `WebServerTests.A_request_without_the_token_for_another_host_or_from_another_origin_is_refused` | B06 (#213) | Failed once in the full Build unit suite; passes alone (9 of 9, twice). | An audit of what in the full run it depends on. |
 | T8 | `pending-servers.spec.ts` reject case | L03 (#254) | A rejected server re-announces within 30 s, so there is a very small window where it could reappear before the assertion. | Close the window or assert after the next announcement. |
+| T14 | Sync `BulkLoadIntegrationTests.AMultiSegmentInitialLoad_ThatPartlyCollides_RollsBackWhatItAlreadyEnqueued` | U16 (#292) | Failed once in `dotnet-integration` (expected `Failed`, got `Succeeded`, line 312) on a branch that does not touch bulk load; passed on the one re-run and on main's last runs. | An audit of whether the collision is guaranteed before the first segment completes, or depends on timing. |
 
 ## 3. Paths that could not be run where the work was done
 
