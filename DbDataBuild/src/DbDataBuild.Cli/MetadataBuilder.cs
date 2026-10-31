@@ -209,8 +209,9 @@ internal static class MetadataBuilder
     public static object Model(ProjectContext ctx, DeclaredModel d)
     {
         var targets = d.Connections ?? ctx.Config.DefaultConnections;
-        var ddls = targets.ToDictionary(t => t, t => TargetRegistry.Get(ctx.Config.EngineOf(t) ?? t).CreateDdl(ctx.Config.ForConnection(t)));
-        object Native(ColumnDefinition c) => targets.ToDictionary(t => t, t =>
+        // a mapped model may be declared on a read origin (`project import` writes them so), which is not an engine tables are built on: it has no DDL, so no native column types, and is not an error
+        var ddls = targets.Where(t => TargetRegistry.Find(ctx.Config.EngineOf(t) ?? t) is not null).ToDictionary(t => t, t => TargetRegistry.Get(ctx.Config.EngineOf(t) ?? t).CreateDdl(ctx.Config.ForConnection(t)));
+        object Native(ColumnDefinition c) => ddls.Keys.ToDictionary(t => t, t =>
         {
             try { var n = ddls[t].Map(d.Name, c); return (object)new { type = n.Declaration, collation = n.Collation }; }
             catch (DdlUnsupportedException ex) { return new { error = ex.Diagnostic.Code, found = ex.Diagnostic.Found }; }
