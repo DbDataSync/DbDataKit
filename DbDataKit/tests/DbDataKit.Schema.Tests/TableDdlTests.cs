@@ -23,6 +23,15 @@ public class TableDdlTests
     }
 
     [Fact]
+    public void Keys_are_added_after_the_table_with_the_same_text_on_both_families()
+    {
+        Assert.Equal("ALTER TABLE [s].[t] ADD CONSTRAINT [pk_t] PRIMARY KEY ([a], [b]);", SqlServer.AddPrimaryKey("s", "t", "pk_t", ["a", "b"]));
+        Assert.Equal("ALTER TABLE \"s\".\"t\" ADD CONSTRAINT \"uq_t_a\" UNIQUE (\"a\");", Postgres.AddUnique("s", "t", "uq_t_a", ["a"]));
+        Assert.Equal("ALTER TABLE [s].[t] ADD CONSTRAINT [fk_t_a] FOREIGN KEY ([a]) REFERENCES [s].[u] ([id]);", SqlServer.AddForeignKey("s", "t", "fk_t_a", ["a"], "s", "u", ["id"]));
+        Assert.Equal("ALTER TABLE \"s\".\"t\" ADD CONSTRAINT \"fk_t_a\" FOREIGN KEY (\"a\") REFERENCES \"s\".\"u\" (\"id\");", Postgres.AddForeignKey("s", "t", "fk_t_a", ["a"], "s", "u", ["id"]));
+    }
+
+    [Fact]
     public void Altering_a_column_differs_by_engine_the_way_the_engines_do()
     {
         var c = Col("amount", "numeric(18, 4)", false);

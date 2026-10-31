@@ -6,7 +6,13 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Npgsql" />
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\DbDataKit.DataModel\DbDataKit.DataModel.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Schema\DbDataKit.Schema.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Metadata\DbDataKit.Metadata.csproj" />
+    <!-- the throwaway database per test that the structure tests use -->
+    <Compile Include="..\DbDataKit.Schema.Tests\Engines.cs" Link="Engines.cs" />
   </ItemGroup>
 </Project>
