@@ -9,7 +9,8 @@ export const shellApi = {
     /** Negotiates a Windows identity and mints a session. Windows deployments only — the endpoint
      * says so where it is not one. */
     signInWithWindows: () => request<AuthStatus>('/api/auth/windows', { method: 'POST' }),
-    signOut: () => request<void>('/api/auth/sign-out', { method: 'POST' }),
+    /** Ends the session. A console that signs people in through an identity home answers with where to send the browser so the home ends its session too (`redirectTo`); otherwise there is no body. */
+    signOut: () => request<{ redirectTo?: string } | undefined>('/api/auth/sign-out', { method: 'POST' }),
     beginPasskey: () => request<unknown>('/api/auth/passkey/begin', { method: 'POST' }),
     completePasskey: (assertion: unknown) =>
       request<AuthStatus>('/api/auth/passkey/complete', { method: 'POST', body: JSON.stringify(assertion) }),

@@ -74,6 +74,30 @@ public static class HomeSchema
         );
         """;
 
+    /// <summary>Refresh tokens and the addresses a person may be sent back to after signing out (plan 13a U17). Appended after <see cref="Provider"/>, which has shipped.</summary>
+    public const string Sessions =
+        """
+        -- A refresh token is returned once, only its hash is kept, and it works once: using it makes the next one in the same family. A token used a second time means it was copied, so the whole family is revoked.
+        CREATE TABLE RefreshTokens (
+            TokenHash    {{key}} PRIMARY KEY,
+            FamilyId     {{key}} NOT NULL,
+            ClientId     {{key}} NOT NULL,
+            UserId       {{key}} NOT NULL,
+            Scope        {{text}} NOT NULL,
+            ExpiresAtUtc {{text}} NOT NULL,   -- the family's, fixed when the person signed in: rotation does not extend it
+            UsedAtUtc    {{text}} NULL,
+            RevokedAtUtc {{text}} NULL
+        );
+        CREATE INDEX IX_RefreshTokens_User ON RefreshTokens(UserId);
+        CREATE INDEX IX_RefreshTokens_Family ON RefreshTokens(FamilyId);
+
+        -- Where the end-session endpoint may send a person back to (OpenID Connect RP-Initiated Logout), one per line, compared exactly. A client without a row has none.
+        CREATE TABLE OidcClientLogout (
+            ClientId             {{key}} PRIMARY KEY,
+            PostLogoutRedirectUris {{text}} NOT NULL
+        );
+        """;
+
     /// <summary>Users, credentials, sessions and invites, then the home's own tables.</summary>
-    public static StateSchema Schema { get; } = new([IdentitySchema.Accounts, IdentitySchema.Invites, Directory, Provider, IdentitySchema.AccountKeys]);
+    public static StateSchema Schema { get; } = new([IdentitySchema.Accounts, IdentitySchema.Invites, Directory, Provider, Sessions, IdentitySchema.AccountKeys]);
 }

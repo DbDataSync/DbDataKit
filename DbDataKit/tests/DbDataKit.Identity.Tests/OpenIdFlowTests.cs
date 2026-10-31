@@ -19,7 +19,7 @@ namespace DbDataKit.Identity.Tests;
 /// </summary>
 public sealed class OpenIdFlowTests : IAsyncLifetime
 {
-    private const string Redirect = "https://console.example.invalid/signed-in", Server = "build-1";
+    private const string Redirect = "https://console.example.invalid/signed-in", Server = "build-1", PostLogout = "https://console.example.invalid/";
 
     private readonly HomeFixture _home = new();
     private WebApplication _app = null!;
@@ -50,7 +50,7 @@ public sealed class OpenIdFlowTests : IAsyncLifetime
         _home.Directory.AddMember(ops.Id, _ada.Id);
         _home.Directory.Assign(AssignmentSubject.Group(ops.Id), Server, ServerRole.Operator);
         _home.Directory.Assign(AssignmentSubject.User(_ada.Id), Server, ServerRole.Author, project: "retail");
-        _clientId = _home.Clients.Register("Operations console", [Redirect], confidential: false).Client.ClientId;
+        _clientId = _home.Clients.Register("Operations console", [Redirect], confidential: false, postLogoutRedirectUris: [PostLogout]).Client.ClientId;
     }
 
     public async ValueTask DisposeAsync()
@@ -281,5 +281,122 @@ public sealed class OpenIdFlowTests : IAsyncLifetime
     private sealed class Consoles(params PairedClient[] list) : IPairedClients
     {
         public PairedClient? Find(string id) => list.FirstOrDefault(c => c.Id == id);
+    }
+
+    // ---- plan 13a U17: refresh tokens and RP-Initiated Logout ----
+
+    private async Task<(string Refresh, string IdToken)> SignInOffline()
+    {
+        var (verifier, challenge) = Pkce();
+        var code = CodeOf(await AuthorizeAs(_ada.Id, AuthorizeUri(challenge, scope: "openid profile email offline_access")));
+        var token = await (await Token(code, verifier)).Content.ReadFromJsonAsync<JsonElement>();
+        return (token.GetProperty("refresh_token").GetString()!, token.GetProperty("id_token").GetString()!);
+    }
+
+    private Task<HttpResponseMessage> Refresh(string refreshToken, string? client = null) =>
+        _http.PostAsync("/identity/token", new FormUrlEncodedContent(new Dictionary<string, string> { ["grant_type"] = "refresh_token", ["refresh_token"] = refreshToken, ["client_id"] = client ?? _clientId }));
+
+    private static async Task<string> ErrorOf(HttpResponseMessage response) => (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString()!;
+
+    [Fact]
+    public async Task A_refresh_token_is_given_only_for_offline_access_and_discovery_says_what_the_provider_can_do()
+    {
+        var (verifier, challenge) = Pkce();
+        var plain = await (await Token(CodeOf(await AuthorizeAs(_ada.Id, AuthorizeUri(challenge))), verifier)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.False(plain.TryGetProperty("refresh_token", out var none) && none.ValueKind == JsonValueKind.String);
+
+        Assert.False(string.IsNullOrEmpty((await SignInOffline()).Refresh));
+        var discovery = await _http.GetFromJsonAsync<JsonElement>("/.well-known/openid-configuration");
+        Assert.Equal(_issuer + "/identity/end-session", discovery.GetProperty("end_session_endpoint").GetString());
+        Assert.Contains("refresh_token", discovery.GetProperty("grant_types_supported").EnumerateArray().Select(e => e.GetString()));
+    }
+
+    [Fact]
+    public async Task A_refresh_reads_the_roles_again_and_the_token_works_once()
+    {
+        var (refresh, _) = await SignInOffline();
+        _home.Directory.Assign(AssignmentSubject.User(_ada.Id), Server, ServerRole.Author, project: "retail");
+        _home.Directory.Assign(AssignmentSubject.Group(_home.Directory.Groups().Single().Id), Server, ServerRole.None);     // the group's operator role is removed
+
+        var first = await Refresh(refresh);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        var body = await first.Content.ReadFromJsonAsync<JsonElement>();
+        var idToken = new JsonWebTokenHandler().ReadJsonWebToken(body.GetProperty("id_token").GetString()!);
+        Assert.Equal(_ada.Id, idToken.Subject);
+        Assert.False(idToken.TryGetPayloadValue<string>("nonce", out _));
+        var roles = idToken.GetPayloadValue<JsonElement>("dbdata_roles");
+        Assert.False(roles.TryGetProperty($"server:{Server}", out _));                       // the removed role is gone, not copied from the sign-in
+        Assert.True(roles.TryGetProperty($"server:{Server}/retail", out _));
+
+        // rotation: the answer carries the next token; the one used is spent, and using it again ends the whole family, the new token with it
+        var next = body.GetProperty("refresh_token").GetString()!;
+        Assert.NotEqual(refresh, next);
+        var again = await Refresh(refresh);
+        Assert.Equal("invalid_grant", await ErrorOf(again));
+        Assert.Equal("invalid_grant", await ErrorOf(await Refresh(next)));
+    }
+
+    [Fact]
+    public async Task A_refresh_is_refused_for_a_disabled_user_another_client_an_unknown_token_and_an_expired_family()
+    {
+        var (refresh, _) = await SignInOffline();
+        Assert.Equal("invalid_grant", await ErrorOf(await Refresh("not-a-token")));
+        var other = _home.Clients.Register("Another", [Redirect], confidential: false).Client.ClientId;
+        Assert.Equal("invalid_grant", await ErrorOf(await Refresh(refresh, other)));
+
+        _home.Users.SetEnabled(_ada.Id, false);
+        Assert.Equal("invalid_grant", await ErrorOf(await Refresh(refresh)));
+        _home.Users.SetEnabled(_ada.Id, true);
+        Assert.Equal("invalid_grant", await ErrorOf(await Refresh(refresh)));              // it was spent by the refusal: a disabled person's family is revoked
+
+        // a family lasts the length of a session from the sign-in and no longer, however often it is used
+        var late = new OpenIdProvider(_home.Database, _home.Users, _home.Directory, _home.Clients, _home.Keys, _issuer, new Later(OpenIdProvider.RefreshLifetime + TimeSpan.FromMinutes(1)));
+        var (kept, _) = await SignInOffline();
+        var ex = Assert.Throws<OAuthException>(() => late.Exchange(new TokenRequest("refresh_token", null, null, _clientId, null, null, kept)));
+        Assert.Equal("invalid_grant", ex.Error);
+    }
+
+    private sealed class Later(TimeSpan by) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => base.GetUtcNow() + by;
+    }
+
+    [Fact]
+    public async Task Ending_the_session_revokes_the_persons_refresh_tokens_and_goes_back_only_to_a_registered_address()
+    {
+        var (refresh, idToken) = await SignInOffline();
+        var uri = $"/identity/end-session?id_token_hint={Uri.EscapeDataString(idToken)}&client_id={_clientId}&post_logout_redirect_uri={Uri.EscapeDataString(PostLogout)}&state=bye";
+        var response = await _http.GetAsync(uri);
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal(PostLogout + "?state=bye", response.Headers.Location!.ToString());
+        Assert.Equal("invalid_grant", await ErrorOf(await Refresh(refresh)));
+    }
+
+    [Theory]
+    [InlineData("https://evil.example/")]
+    [InlineData("")]
+    public async Task Ending_the_session_never_redirects_to_an_address_the_client_did_not_register(string address)
+    {
+        var (refresh, idToken) = await SignInOffline();
+        var response = await _http.GetAsync($"/identity/end-session?id_token_hint={Uri.EscapeDataString(idToken)}&post_logout_redirect_uri={Uri.EscapeDataString(address)}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Null(response.Headers.Location);
+        Assert.Equal("invalid_grant", await ErrorOf(await Refresh(refresh)));                // the session is ended all the same
+    }
+
+    [Fact]
+    public async Task An_end_session_request_with_a_hint_that_is_not_this_homes_ends_nothing_and_redirects_nowhere()
+    {
+        var (refresh, idToken) = await SignInOffline();
+        var parts = idToken.Split('.');
+        var forged = $"{parts[0]}.{parts[1]}.{parts[2][..^2]}AA";
+        var response = await _http.GetAsync($"/identity/end-session?id_token_hint={Uri.EscapeDataString(forged)}&post_logout_redirect_uri={Uri.EscapeDataString(PostLogout)}");
+        Assert.Null(response.Headers.Location);
+        Assert.Equal(HttpStatusCode.OK, (await Refresh(refresh)).StatusCode);
+        // an access token is not an id token hint either
+        var (verifier, challenge) = Pkce();
+        var access = (await (await Token(CodeOf(await AuthorizeAs(_ada.Id, AuthorizeUri(challenge))), verifier)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("access_token").GetString()!;
+        var viaAccess = await _http.GetAsync($"/identity/end-session?id_token_hint={Uri.EscapeDataString(access)}&post_logout_redirect_uri={Uri.EscapeDataString(PostLogout)}");
+        Assert.Null(viaAccess.Headers.Location);
     }
 }

@@ -13,7 +13,7 @@ distinction matters more than any individual setting below, so it's worth readin
 - **`dbdatasync`** — a dotnet global tool (`src/DbDataSync.Cli`, `PackAsTool=true`,
   `ToolCommandName=dbdatasync`, [on NuGet](https://www.nuget.org/packages/DbDataSync)). This is the
   actual product distribution: `dbdatasync server setup`, `dbdatasync server run`,
-  `dbdatasync service install|uninstall|status`, `dbdatasync cert ...`, `dbdatasync invite`,
+  `dbdatasync service install|uninstall|status`, `dbdatasync cert ...`,
   `dbdatasync health check`, `dbdatasync version`. It's also what the Docker image runs. See
   [Install](install.md) for every way to install and run it.
 
@@ -40,7 +40,7 @@ The dev-server proxy of the Sync screens (`DBDATASYNC_API_URL`, below) defaults 
 Parsing is a simple `--flag value` scan (`CliOptions.Read`/`Has`) — no positional magic, no `=`
 syntax. Run `dbdatasync --help` or any subcommand's `--help` for the same text.
 
-### Repo root resolution (`serve`, `invite`, `health`, `setup`, `config check`)
+### Repo root resolution (`server run`, `health`, `server setup`, `config check`)
 
 These commands resolve their repo root the same way, via a shared resolver
 (`DbDataSyncRoot.Resolve`):
@@ -196,33 +196,6 @@ unauthenticated or unverified caller can reach — prints it before it is turned
 the control. The change waits for a restart of the service; `config get` reports what the file says, not what a running
 process is using (the **Running** column of that screen compares the two).
 
-### `dbdatasync invite`
-
-Prints a fresh single-use invitation URL — for when the first-run one has scrolled off-screen, or the
-process is a service with no terminal to print to in the first place. `--email <address>` is required: the invitation is
-for that person, and the address is how the same person is one account whether they sign in with a passkey or with Windows
-(the user principal name the domain gives is matched to it, ignoring case).
-
-> **Since the web app moved to the console, no screen of this server redeems that URL**: people are made and sign in at the console
-> (`dbdatakit user invite`). The command and the server's own sign-in remain for the API; a server that is only used through a console needs neither.
-
-| flag | default |
-| --- | --- |
-| `--repo <path>` | see "Repo root resolution," above |
-| `--state-db <path>` | same as `serve` |
-| `--url <url>` | same as `serve` |
-| `--email <address>` | required: the address the invitation is for |
-| `--role Admin\|Viewer` | `Admin` |
-
-Opens the state database directly rather than calling a running API — the situation it exists for is
-"nobody can sign in," and an endpoint that needs a session is no help there. Resolves
-`DbDataSync:State:Engine`/`DbDataSync:State:ConnectionString` the same way `serve` does (the resolved
-config file, then `DbDataSync__*` environment variables), so it works against a `MsSql`- or
-`Postgres`-backed deployment, not only the SQLite default — earlier versions opened SQLite
-unconditionally and had no way to reach the other two. For SQLite, requires the state database file
-to already exist (i.e., DbDataSync has been started at least once); for the other two engines, it
-connects to whatever `State:Engine`/`State:ConnectionString` (plus the secret store, if needed) name.
-
 ### `dbdatasync health check`
 
 | flag | default |
@@ -278,9 +251,8 @@ setting to grow a third state without another schema change. Releases before pla
 | key | env var | default | notes |
 | --- | --- | --- | --- |
 | `App:RepoRoot` | `DbDataSync__App__RepoRoot` | `<cwd>/dbdatasync-repo` under raw `dotnet run`; the CLI's `--repo` default under `dbdatasync server run` | git-tracked config store root |
-| `App:Url` | `DbDataSync__App__Url` | `http://localhost:5080` | `dbdatasync server run`/`dbdatasync health check` read this themselves (see above) and translate it to `--urls`/Kestrel's bind address; also this deployment's own always-trusted passkey origin (see `Auth:Passkeys:*`, below) |
+| `App:Url` | `DbDataSync__App__Url` | `http://localhost:5080` | `dbdatasync server run`/`dbdatasync health check` read this themselves (see above) and translate it to `--urls`/Kestrel's bind address |
 | `App:Server` | `DbDataSync__App__Server` | `kestrel` | `kestrel` or `httpsys`. `httpsys` is Windows-only and exists so the port can be shared with other processes — see "Sharing a port with HTTP.sys," below. Anything else refuses to start. Takes effect on restart |
-| `App:AlternateUrls` | `DbDataSync__App__AlternateUrls` | none | every other origin this deployment is also reached at, beyond `App:Url` — comma- or semicolon-separated. Purely additive: `App:Url`'s own origin is always trusted for passkeys without needing to be listed here too |
 | `App:TrustedProxies` | `DbDataSync__App__TrustedProxies` | none | proxies (IP addresses or CIDR ranges such as `10.0.0.0/8`, comma- or semicolon-separated) whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are believed. Set it when a TLS-terminating reverse proxy sits in front of a plain-HTTP bind; see [Plain HTTP](#plain-http-and-reverse-proxies) |
 | `App:AllowInsecureHttp` | `DbDataSync__App__AllowInsecureHttp` | `false` | serve plain HTTP to every client. Credentials and data then cross the network in clear text |
 | `App:TaskRunnerDllPath` | `DbDataSync__App__TaskRunnerDllPath` | none | start replication workers as `dotnet exec` of this `DbDataSync.TaskRunner.dll`, see below |
@@ -377,7 +349,7 @@ verification run's `TaskRuns` row is pruned, but its result file and index entry
 
 These replace the old blanket `Auth:Disabled` (which trusted *every* request, from anywhere, as
 Admin) with these two role-scoped, network-trust settings — deliberately narrower for Admin, and able to
-act as a fallback *alongside* Windows/Passkeys auth being configured, not only as a replacement for it:
+act as a fallback *alongside* Windows auth being configured, not only as a replacement for it:
 a real session cookie always wins first if present.
 
 **A real security consideration, not a formality**: on a shared host, loopback does not distinguish the
@@ -396,30 +368,22 @@ instance).
 
 Windows authentication (`Negotiate`) is registered automatically when the process is running on
 Windows *and* at least one group is configured — it's additive to session-cookie auth, not a mode
-switch. If nothing here or under `Auth:Network:*`/`Auth:Passkeys:*` is configured, the only way in on a
-fresh install is the bootstrap invite: printed as a startup warning whenever no users exist yet, and
-always reprintable with `dbdatasync invite --email <address>`.
+switch. If nothing here or under `Auth:Network:*` is configured, nobody reaches the API directly: people sign in at the
+dbdatakit console, and a console's calls reach this server as signed tokens (`dbdatasync server pair`, see below).
 
-### `DbDataSync:Auth:Passkeys:*`
+### Sign-in is the console's; settings Sync no longer has
 
-| key | env var | default |
-| --- | --- | --- |
-| `Auth:Passkeys:Mode` | `DbDataSync__Auth__Passkeys__Mode` | `enabled` |
-| `Auth:Passkeys:RelyingPartyId` | `DbDataSync__Auth__Passkeys__RelyingPartyId` | `localhost` |
-| `Auth:Passkeys:RelyingPartyName` | `DbDataSync__Auth__Passkeys__RelyingPartyName` | `DbDataSync` |
+Sync has no sign-in of its own to configure (plan 13, X05). People and invitations are the dbdatakit console's (`dbdatakit user invite`), and the console reaches this
+server with a short-lived signed token that names the person; `Auth:Windows:*` and `Auth:Network:*` above are what is left for a client that calls the API directly.
+These are gone, and a `server.yaml` (or an environment variable or command-line flag) that still sets one stops `server run` and `config check` with a message that names the setting:
 
-`RelyingPartyId` is a **bare domain** — no scheme, no port, and it cannot be an IP address (WebAuthn
-requires a real domain name). Deliberately independent of `App:Url`, not derived from it: a
-relying-party id is cryptographically bound into every passkey at the moment it's created, so silently
-tracking `App:Url`'s hostname would invalidate every already-registered passkey the moment that URL
-changed. Moving a deployment to a different host name therefore means re-registering its passkeys.
+| removed | why |
+| --- | --- |
+| `Auth:Passkeys:Mode`, `Auth:Passkeys:RelyingPartyId`, `Auth:Passkeys:RelyingPartyName`, `Auth:Passkeys:Origins` | no screen of this server registers or uses a passkey; the console does |
+| `App:AlternateUrls` | its one reader was the passkey origin check |
+| the `invite` command, `FIRST-RUN.txt` | there is no first-run invitation to print (the command now exits 2 and names `dbdatakit user invite`): the console makes the first administrator. An old `FIRST-RUN.txt` in the repository root is not read; delete it |
 
-The set of origins a ceremony may come from (this server's own allow-list, separate from the browser's
-own relying-party check) is **not** a setting of its own any more — `App:Url`'s origin is always
-implicitly trusted, and `App:AlternateUrls` adds any others. Each one's host must match
-`RelyingPartyId` or a subdomain of it, checked at startup — a misconfiguration logs a warning naming
-exactly what's wrong, rather than failing silently inside a browser API the first time someone tries to
-enroll a key.
+Delete the settings and start again. Passkeys that people registered with the server's own sign-in stay in the state database and are not used.
 
 ### Settings files of earlier releases
 

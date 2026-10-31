@@ -30,11 +30,10 @@ internal sealed class ReadinessContext
     public required IConfiguration Configuration { get; init; }
     public required ApiOptions ApiOptions { get; init; }
     public required AuthOptions AuthOptions { get; init; }
-    public required PasskeyOptions PasskeyOptions { get; init; }
     public required CertificateOptions CertificateOptions { get; init; }
 
     /// <summary>Opens the configured state database, or null with the exception that stopped it — a
-    /// check that needs the store (state store itself, first admin) calls this rather than each
+    /// check that needs the store (the state store itself) calls this rather than each
     /// building its own connection string / secret-store plumbing.</summary>
     public (StateDatabase? Database, Exception? Error) TryOpenStateDatabase()
     {
@@ -82,7 +81,6 @@ internal static class ReadinessChecks
         new AuthCheck(),
         new CertificateCheck(),
         new BindingCheck(),
-        new FirstAdminCheck(),
     ];
 
     internal static async Task<IReadOnlyList<CheckResult>> RunChecksAsync(ReadinessContext context)
@@ -140,7 +138,6 @@ internal static class ReadinessChecks
             Configuration = configuration,
             ApiOptions = apiOptions,
             AuthOptions = AuthOptions.FromConfiguration(configuration),
-            PasskeyOptions = PasskeyOptions.FromConfiguration(configuration, apiOptions),
             CertificateOptions = CertificateOptions.FromConfiguration(configuration),
         };
     }
@@ -437,8 +434,8 @@ internal sealed class RuntimeDiscoverabilityCheck : IReadinessCheck
     }
 }
 
-/// <summary>A method is configured or authentication is explicitly disabled; the passkey
-/// configuration (if any) is internally consistent.</summary>
+/// <summary>How a person reaches this server directly: network trust (a warning, it is no sign-in) or Windows groups. Otherwise the server is reached through a
+/// console, whose calls carry a signed token (plan 13, X05: Sync has no passkey sign-in of its own).</summary>
 internal sealed class AuthCheck : IReadinessCheck
 {
     public Task<CheckResult> RunAsync(ReadinessContext context, CancellationToken cancellationToken)
@@ -457,15 +454,11 @@ internal sealed class AuthCheck : IReadinessCheck
                 "DbDataSync:Auth:Network:Viewer is remote — any request, from anywhere, is accepted as Viewer with no sign-in."));
         }
 
-        var problem = context.PasskeyOptions.Problem();
-        if (problem is not null)
-            return Task.FromResult(new CheckResult("Auth", CheckStatus.Fail, problem));
-
         return Task.FromResult(new CheckResult(
             "Auth", CheckStatus.Ok,
             context.AuthOptions.WindowsEnabled
-                ? $"Windows groups configured (admin: {context.AuthOptions.AdminGroup ?? "none"})."
-                : $"Passkeys — relying party '{context.PasskeyOptions.RelyingPartyId}'."));
+                ? $"Windows groups configured (admin: {context.AuthOptions.AdminGroup ?? "none"}), and the console."
+                : "Signed in at the console (`server pair`)."));
     }
 }
 
@@ -557,7 +550,7 @@ internal sealed class CertificateCheck : IReadinessCheck
 }
 
 /// <summary>The console URL actually answers. Warns rather than fails on plain HTTP off loopback —
-/// passkeys need HTTPS there, but the console can still be reachable.</summary>
+/// tokens and sign-in need HTTPS there, but the server can still be reachable.</summary>
 internal sealed class BindingCheck : IReadinessCheck
 {
     public async Task<CheckResult> RunAsync(ReadinessContext context, CancellationToken cancellationToken)
@@ -595,36 +588,6 @@ internal sealed class BindingCheck : IReadinessCheck
             && (uri.IsLoopback || uri.Scheme == "https");
         return new CheckResult(
             "Binding", isLoopback ? CheckStatus.Ok : CheckStatus.Warn, url,
-            isLoopback ? null : "Plain HTTP off loopback — passkeys need HTTPS here; terminate TLS in front of this.");
-    }
-}
-
-/// <summary>A user exists, or the bootstrap invite is still outstanding — a fresh install with
-/// neither is one nobody can sign into.</summary>
-internal sealed class FirstAdminCheck : IReadinessCheck
-{
-    public Task<CheckResult> RunAsync(ReadinessContext context, CancellationToken cancellationToken)
-    {
-        if (context.AuthOptions.NetworkAdmin == AdminNetworkTrust.Loopback)
-            return Task.FromResult(new CheckResult("First admin", CheckStatus.Ok, "Auth:Network:Admin grants Admin from loopback."));
-
-        var (database, error) = context.TryOpenStateDatabase();
-        if (database is null)
-        {
-            return Task.FromResult(new CheckResult(
-                "First admin", CheckStatus.Warn, $"Could not check — the state store did not open: {error?.Message}"));
-        }
-
-        if (new UserStore(database).Any())
-            return Task.FromResult(new CheckResult("First admin", CheckStatus.Ok, "At least one user exists."));
-
-        var outstanding = new InviteStore(database).ListOutstanding();
-        return Task.FromResult(outstanding.Count > 0
-            ? new CheckResult(
-                "First admin", CheckStatus.Warn, "No users yet — a bootstrap invite is outstanding.",
-                "Start DbDataSync and open the invite URL it printed, or run `dbdatasync invite`.")
-            : new CheckResult(
-                "First admin", CheckStatus.Fail, "No users and no outstanding invite.",
-                "Run `dbdatasync invite`."));
+            isLoopback ? null : "Plain HTTP off loopback — sign-in and the console's tokens cross the network in clear text; terminate TLS in front of this.");
     }
 }

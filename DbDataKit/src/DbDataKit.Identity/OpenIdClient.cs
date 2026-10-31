@@ -11,13 +11,24 @@ namespace DbDataKit.Identity;
 /// <param name="ClientId">The id the home registered this application under.</param>
 /// <param name="ClientSecret">The secret, for a confidential client; null for a public one.</param>
 /// <param name="RedirectUri">Where the home sends the browser back: this application's callback, as registered.</param>
-public sealed record OpenIdClientOptions(string Authority, string ClientId, string? ClientSecret, string RedirectUri);
+/// <param name="PostLogoutRedirectUri">Where the home sends the browser back after it ends the person's session, as registered; null: the home shows its own page.</param>
+public sealed record OpenIdClientOptions(string Authority, string ClientId, string? ClientSecret, string RedirectUri, string? PostLogoutRedirectUri = null);
+
+/// <summary>What the home gave besides who the person is: the refresh token (the means to ask again, and to be told no) and the id token (what proves to the home, at sign-out, whose session to end). Both are secrets.</summary>
+public sealed record HomeGrant(string? RefreshToken, string? IdToken);
+
+/// <summary>A completed sign-in: the person, where they were going, and the grant.</summary>
+public sealed record HomeSignIn(HomeIdentity Identity, string? ReturnUrl, HomeGrant Grant);
 
 /// <summary>Who the home says a person is: the stable user id, the name, the groups, and the roles held on every server and app (<c>dbdata_roles</c>: <c>server:&lt;id&gt;</c>, <c>server:&lt;id&gt;/&lt;project&gt;</c>, <c>app:&lt;id&gt;</c>).</summary>
 public sealed record HomeIdentity(string UserId, string? Name, string? Email, IReadOnlyList<string> Groups, IReadOnlyDictionary<string, IReadOnlyList<string>> Roles, bool EmailVerified = false);
 
 /// <summary>A sign-in that cannot be completed; the message is ours and never holds a token or a code.</summary>
-public sealed class OpenIdClientException(string message) : Exception(message);
+public sealed class OpenIdClientException(string message, bool homeRefused = false) : Exception(message)
+{
+    /// <summary>True when the home answered and said no (the refresh token is revoked, expired or used, or the person is disabled): the sign-in is over. False when the home could not be asked.</summary>
+    public bool HomeRefused { get; } = homeRefused;
+}
 
 /// <summary>
 /// The relying party of the identity home (plan 13a U14): what a second console, an app host or an agent uses to sign people in through the home instead of keeping users of its own. It sends the browser to the home with a
@@ -47,14 +58,14 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
         var challenge = Base64Url.EncodeToString(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
         var query = string.Join('&', new (string, string)[]
         {
-            ("response_type", "code"), ("client_id", options.ClientId), ("redirect_uri", options.RedirectUri), ("scope", "openid profile email"),
+            ("response_type", "code"), ("client_id", options.ClientId), ("redirect_uri", options.RedirectUri), ("scope", "openid profile email offline_access"),
             ("state", state), ("nonce", nonce), ("code_challenge", challenge), ("code_challenge_method", "S256"),
         }.Select(p => $"{p.Item1}={Uri.EscapeDataString(p.Item2)}"));
         return new Uri(discovery.AuthorizationEndpoint + (discovery.AuthorizationEndpoint.Contains('?') ? "&" : "?") + query);
     }
 
     /// <summary>Completes a sign-in from the home's redirect (<paramref name="state"/> and <paramref name="code"/>, or <paramref name="error"/>). A state works once.</summary>
-    public async Task<(HomeIdentity Identity, string? ReturnUrl)> CompleteAsync(string? state, string? code, string? error, CancellationToken ct)
+    public async Task<HomeSignIn> CompleteAsync(string? state, string? code, string? error, CancellationToken ct)
     {
         if (state is null || !_attempts.TryRemove(state, out var attempt) || attempt.Expires < _clock.GetUtcNow()) throw new OpenIdClientException("This sign-in was not started here, or it has taken too long. Start again.");
         if (!string.IsNullOrEmpty(error)) throw new OpenIdClientException($"The identity home refused the sign-in ({error}).");
@@ -70,10 +81,53 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
         if (!response.IsSuccessStatusCode) throw new OpenIdClientException($"The identity home did not accept the code ({(int)response.StatusCode}).");
         var token = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
         var idToken = token.TryGetProperty("id_token", out var t) ? t.GetString() : null;
-        return (await ValidateAsync(idToken, attempt.Nonce, discovery, ct), attempt.ReturnUrl);
+        var identity = await ValidateAsync(idToken, attempt.Nonce, discovery, ct);
+        return new HomeSignIn(identity, attempt.ReturnUrl, new HomeGrant(token.TryGetProperty("refresh_token", out var r) ? r.GetString() : null, idToken));
     }
 
-    private async Task<HomeIdentity> ValidateAsync(string? jwt, string nonce, Discovery discovery, CancellationToken ct)
+    /// <summary>
+    /// Asks the home who the person is now, with the refresh token from the sign-in (or the last refresh: each is used once and answered with the next). The roles are the home's current word. When the home says no,
+    /// <see cref="OpenIdClientException.HomeRefused"/> is true; when it cannot be reached or answers with an error of its own, it is false and the caller decides how long to go on trusting the last answer.
+    /// </summary>
+    public async Task<(HomeIdentity Identity, HomeGrant Grant)> RefreshAsync(string refreshToken, CancellationToken ct)
+    {
+        try
+        {
+            var discovery = await DiscoveryAsync(ct);
+            var form = new Dictionary<string, string> { ["grant_type"] = "refresh_token", ["refresh_token"] = refreshToken, ["client_id"] = options.ClientId };
+            if (options.ClientSecret is not null) form["client_secret"] = options.ClientSecret;
+            using var response = await http.PostAsync(discovery.TokenEndpoint, new FormUrlEncodedContent(form), ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                string? error = null;
+                try { error = (await response.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("error").GetString(); } catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException) { }
+                throw new OpenIdClientException($"The identity home did not refresh the sign-in ({(int)response.StatusCode}).", homeRefused: error == "invalid_grant");
+            }
+            var token = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
+            var idToken = token.TryGetProperty("id_token", out var t) ? t.GetString() : null;
+            var identity = await ValidateAsync(idToken, null, discovery, ct);
+            return (identity, new HomeGrant(token.TryGetProperty("refresh_token", out var r) ? r.GetString() : null, idToken));
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or OperationCanceledException && !ct.IsCancellationRequested)
+        {
+            throw new OpenIdClientException("The identity home could not be reached.");
+        }
+    }
+
+    /// <summary>Where to send the browser to end the person's session at the home (OpenID Connect RP-Initiated Logout), or null when the home publishes no end-session endpoint.</summary>
+    public async Task<Uri?> EndSessionUriAsync(string? idTokenHint, string? state, CancellationToken ct)
+    {
+        var discovery = await DiscoveryAsync(ct);
+        if (discovery.EndSessionEndpoint is not { } endpoint) return null;
+        var query = new List<(string, string)>();
+        if (idTokenHint is not null) query.Add(("id_token_hint", idTokenHint));
+        query.Add(("client_id", options.ClientId));
+        if (options.PostLogoutRedirectUri is { } back) query.Add(("post_logout_redirect_uri", back));
+        if (state is not null) query.Add(("state", state));
+        return new Uri(endpoint + (endpoint.Contains('?') ? "&" : "?") + string.Join('&', query.Select(p => $"{p.Item1}={Uri.EscapeDataString(p.Item2)}")));
+    }
+
+    private async Task<HomeIdentity> ValidateAsync(string? jwt, string? nonce, Discovery discovery, CancellationToken ct)
     {
         var parts = (jwt ?? "").Split('.');
         if (parts.Length != 3) throw new OpenIdClientException("The identity home sent no id token.");
@@ -97,7 +151,8 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
             if (claims.GetProperty("iss").GetString() != discovery.Issuer || discovery.Issuer.TrimEnd('/') != _authority) throw new OpenIdClientException("The id token is from another issuer.");
             if (claims.GetProperty("aud").GetString() != options.ClientId) throw new OpenIdClientException("The id token is for another client.");
             if (claims.GetProperty("exp").GetInt64() <= _clock.GetUtcNow().ToUnixTimeSeconds()) throw new OpenIdClientException("The id token has expired.");
-            if (!claims.TryGetProperty("nonce", out var n) || n.GetString() != nonce) throw new OpenIdClientException("The id token answers another sign-in (nonce).");
+            // a refresh answers no sign-in request, so it carries no nonce
+            if (nonce is not null && (!claims.TryGetProperty("nonce", out var n) || n.GetString() != nonce)) throw new OpenIdClientException("The id token answers another sign-in (nonce).");
 
             var roles = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
             if (claims.TryGetProperty("dbdata_roles", out var held))
@@ -117,7 +172,7 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
         }
     }
 
-    private sealed record Discovery(string Issuer, string AuthorizationEndpoint, string TokenEndpoint, string JwksUri);
+    private sealed record Discovery(string Issuer, string AuthorizationEndpoint, string TokenEndpoint, string JwksUri, string? EndSessionEndpoint);
 
     private Discovery? _discovery;
 
@@ -127,7 +182,7 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
         JsonElement d;
         try { d = await http.GetFromJsonAsync<JsonElement>(_authority + "/.well-known/openid-configuration", ct); }
         catch (Exception ex) when (ex is HttpRequestException or JsonException) { throw new OpenIdClientException("The identity home could not be reached."); }
-        try { return _discovery = new Discovery(d.GetProperty("issuer").GetString()!, d.GetProperty("authorization_endpoint").GetString()!, d.GetProperty("token_endpoint").GetString()!, d.GetProperty("jwks_uri").GetString()!); }
+        try { return _discovery = new Discovery(d.GetProperty("issuer").GetString()!, d.GetProperty("authorization_endpoint").GetString()!, d.GetProperty("token_endpoint").GetString()!, d.GetProperty("jwks_uri").GetString()!, d.TryGetProperty("end_session_endpoint", out var end) ? end.GetString() : null); }
         catch (KeyNotFoundException) { throw new OpenIdClientException("The identity home's discovery document is incomplete."); }
     }
 

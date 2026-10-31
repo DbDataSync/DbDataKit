@@ -52,17 +52,13 @@ public static class Help
                   Re-copies the running version's launcher (what the service and PATH run) over the
                   installed one and re-points a registered service at it. Rarely needed.
 
-              dbdatasync invite --email <address> [--role Admin|Viewer] [--repo <path>] [--url <url>]
-                  Prints a fresh single-use invitation URL. For when the first-run one has scrolled
-                  away, or the process is a service with nowhere to print it.
-
               dbdatasync health check [--url <url>]
                   Exits 0 if a running DbDataSync answers, 1 if it does not. What the container's
                   health check runs.
 
               dbdatasync config check [--repo <path>] [--json]
                   Non-interactive readiness check — repo, state store, libraries/drivers,
-                  auth, binding, first admin. Exits 1 if anything fails; what `server setup`'s
+                  auth, binding. Exits 1 if anything fails; what `server setup`'s
                   review screen runs.
               dbdatasync config get <key> | set <key> <value> [--repo <path>]
                   Reads or changes one setting of server.yaml.

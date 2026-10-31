@@ -37,7 +37,6 @@ public sealed class AdminConfigServiceTests : IDisposable
             configuration,
             apiOptions,
             AuthOptions.FromConfiguration(configuration),
-            PasskeyOptions.FromConfiguration(configuration, apiOptions),
             new GitCommitService(_repoRoot),
             SecretStore.ForProviders([new InMemorySecretProvider()]),
             new RestartRequiredState(apiOptions));
@@ -511,7 +510,6 @@ public sealed class AdminConfigServiceTests : IDisposable
             ConfigurationWithFile(),
             apiOptions,
             AuthOptions.FromConfiguration(ConfigurationWithFile()),
-            PasskeyOptions.FromConfiguration(ConfigurationWithFile(), apiOptions),
             new GitCommitService(_repoRoot),
             secrets,
             new RestartRequiredState(apiOptions));
@@ -537,7 +535,6 @@ public sealed class AdminConfigServiceTests : IDisposable
             ConfigurationWithFile(),
             apiOptions,
             AuthOptions.FromConfiguration(ConfigurationWithFile()),
-            PasskeyOptions.FromConfiguration(ConfigurationWithFile(), apiOptions),
             new GitCommitService(_repoRoot),
             secrets,
             new RestartRequiredState(apiOptions));

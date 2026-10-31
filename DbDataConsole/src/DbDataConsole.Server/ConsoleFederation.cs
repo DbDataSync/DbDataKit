@@ -2,6 +2,7 @@ using DbDataKit.Identity;
 using DbDataKit.State;
 using DbDataKit.Web.Auth;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 
@@ -31,10 +32,11 @@ public static class ConsoleFederation
             var q = context.Request.Query;
             try
             {
-                var (identity, returnUrl) = await client.CompleteAsync(q["state"], q["code"], q["error"], context.RequestAborted);
+                var (identity, returnUrl, grant) = await client.CompleteAsync(q["state"], q["code"], q["error"], context.RequestAborted);
                 if (federated.SignIn(identity) is not { Enabled: true } user)
                     return Results.Text("You are signed in to the identity home, but it gives you no access to this console.", "text/plain", statusCode: StatusCodes.Status403Forbidden);
                 var session = sessions.Create(user.Id);
+                federated.Remember(session.Id, user.Id, grant);
                 context.Response.Cookies.Append(options.CookieName, session.Id, new CookieOptions
                 {
                     HttpOnly = true,
@@ -52,4 +54,22 @@ public static class ConsoleFederation
         }).AllowAnonymous();
         return app;
     }
+
+    /// <summary>
+    /// Before authentication: a request that carries a session from the home asks the home for the person's roles again when the last answer is older than the refresh interval. The sign-out request is left alone (it needs the session
+    /// as it is). A session the home ended is gone by the time authentication looks for it.
+    /// </summary>
+    public static IApplicationBuilder UseFederationRefresh(this IApplicationBuilder app) => app.Use(async (context, next) =>
+    {
+        var options = context.RequestServices.GetRequiredService<AuthOptions>();
+        if (context.Request.Cookies[options.CookieName] is { Length: > 0 } sessionId && !context.Request.Path.Equals("/api/auth/sign-out", StringComparison.OrdinalIgnoreCase))
+            await context.RequestServices.GetRequiredService<FederatedUsers>().RefreshAsync(context.RequestServices.GetRequiredService<OpenIdClient>(), sessionId, context.RequestAborted);
+        await next();
+    });
+}
+
+/// <summary>Signing out of a console that has an identity home ends the person's session at the home too: the browser is sent to the home's end-session endpoint (OpenID Connect RP-Initiated Logout), which brings it back.</summary>
+public sealed class FederationSignOut(FederatedUsers federated, OpenIdClient client) : ISignOutHandler
+{
+    public Task<string?> SignedOutAsync(string sessionId, CancellationToken ct) => federated.SignOutAsync(client, sessionId, ct);
 }
