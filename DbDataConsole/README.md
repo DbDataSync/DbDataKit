@@ -6,7 +6,8 @@ It is a separate host from the servers: a server runs without it, and it is not 
 ```
 dbdatakit server run [--repo <console directory>] [--listen https://localhost:8480]
 dbdatakit user list [--repo <console directory>]
-dbdatakit user invite [--role admin|viewer] [--user <id>] [--url <address>]
+dbdatakit user invite [--role admin|viewer] (--email <address> | --user <id>) [--url <address>]
+dbdatakit user set-email --user <id> --email <address>
 dbdatakit instance add <https address> --code <code> [--name <label>] [--repo <console directory>]
 dbdatakit instance list [--offline] [--repo <console directory>]
 dbdatakit instance remove <id or name> [--repo <console directory>]
@@ -24,6 +25,17 @@ With no user yet, the console writes an invitation to `FIRST-RUN.txt` and the lo
 **The state database** is SQLite (`state.db` in that directory) unless you name another engine: `--state-engine mssql|postgres --state-connection "<connection string>"` on `server run`, or `DBDATAKIT_CONSOLE_STATE_ENGINE` and `DBDATAKIT_CONSOLE_STATE_CONNECTION` (the commands that open it, such as `user invite`, read the variables too). The password belongs in a reference, not in the string: `Password=env:STATE_DB_PASSWORD` (the console has no secret command yet, so its own store holds only its keys). The engine is chosen once; changing it starts an empty store. The console needs a database of its own: the Proxy's state database has tables of the same names.
 
 `dbdatakit user invite` prints a fresh invitation when that one has expired or scrolled away (it opens the state database directly, so it works when nobody can sign in).
+
+## One account per person
+
+A person is one user however they sign in: a local passkey, a Windows (Negotiate) account, or the identity home (plan 13a U16). The **email address is the account's key** (for a Windows account, its user principal name, `user@domain`): it is
+trimmed and compared without regard to case, and one address is one account. The first sign-in by a way no account has seen joins the account that holds the person's address, so they have the same id (the audit's) and the same roles;
+a person the home knows takes over the local account with the home's id, and everything the account had (its passkeys, Windows accounts, sessions) moves with it. A sign-in that would take an address another account holds is refused with a message.
+
+What is trusted to say whose an address is: an **administrator's entry** (the invitation is made for an address: `user invite --email`, or the Users page; `user set-email` or the Set button changes it), the **user principal name the domain issued**
+(never a `DOMAIN\user` name, which is not an address and is never guessed into one: a Windows account with no UPN signs in by its SID if it already has an account, and is refused as a new one), and the identity home's **verified** id token
+(`email_verified`; without it nothing is linked). What a person types when redeeming an invitation is never used (only the first-run invitation, which nobody made, keeps it, for display). An address nobody vouched for, including every
+address of an account made before this slice, is shown (marked unverified) and never links; those accounts keep signing in as they did, and an administrator sets their address to link them.
 
 ## Servers
 

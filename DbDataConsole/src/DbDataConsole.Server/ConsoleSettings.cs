@@ -41,7 +41,7 @@ public sealed record IdentityHomeSettings(Uri Authority, string ClientId, string
 /// <summary>The console's state database: the users, their sessions and invitations, and the notification feed.</summary>
 public static class ConsoleState
 {
-    public static StateSchema Schema { get; } = new([IdentitySchema.Accounts, IdentitySchema.Invites, NotificationSchema.Feed, DbDataKit.Identity.FederatedSchema.Roles, DbDataKit.Identity.FederatedSchema.Sessions]);
+    public static StateSchema Schema { get; } = new([IdentitySchema.Accounts, IdentitySchema.Invites, NotificationSchema.Feed, DbDataKit.Identity.FederatedSchema.Roles, DbDataKit.Identity.FederatedSchema.Sessions, IdentitySchema.AccountKeys]);
 
     public const string EngineVariable = "DBDATAKIT_CONSOLE_STATE_ENGINE";
     public const string ConnectionVariable = "DBDATAKIT_CONSOLE_STATE_CONNECTION";

@@ -342,6 +342,19 @@ public sealed class ConsoleFederationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_refresh_that_would_take_an_address_another_account_holds_ends_that_session_and_keeps_none_of_the_homes_word()
+    {
+        var (sessionA, _) = await SignIn(consoleA, ada.Id);
+        // another account on this console holds an address the home now gives Ada, verified (plan 13a U16)
+        appA.Services.GetRequiredService<UserStore>().CreateUser("Local Lovelace", "ada.work@example.invalid", UserRole.Viewer, emailVerified: true);
+        new UserStore(new StateDatabase(Path.Combine(root, "home.db"), HomeSchema.Schema)).SetVerifiedEmail(ada.Id, "ada.work@example.invalid");
+        Assert.Equal(HttpStatusCode.OK, await EchoStatus(consoleA, sessionA!, ServerAId));       // not before the interval
+        clockA.Offset = PastTheInterval;
+        Assert.Equal(HttpStatusCode.Unauthorized, await EchoStatus(consoleA, sessionA!, ServerAId));
+        Assert.Null(appA.Services.GetRequiredService<FederatedUsers>().RolesOn(ada.Id, ServerAId));
+    }
+
+    [Fact]
     public async Task A_home_that_cannot_be_reached_keeps_the_last_roles_for_the_grace_and_then_none()
     {
         var (sessionA, _) = await SignIn(consoleA, ada.Id);

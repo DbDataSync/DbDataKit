@@ -16,10 +16,9 @@ test('the docs of every module are listed, and a module\'s page opens in the con
   await cdp.send('WebAuthn.addVirtualAuthenticator', {
     options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
   })
-  const made = execFileSync('dotnet', ['exec', consoleDll, 'user', 'invite', '--role', 'viewer', '--url', baseURL!, '--repo', scratchDirectory], { encoding: 'utf8' })
+  const made = execFileSync('dotnet', ['exec', consoleDll, 'user', 'invite', '--email', 'reader@example.com', '--role', 'viewer', '--url', baseURL!, '--repo', scratchDirectory], { encoding: 'utf8' })
   await page.goto(`/invite#${/\/invite#(\S+)/.exec(made)![1]}`)
   await page.getByTestId('invite-name-input').fill('Docs Reader')
-  await page.getByTestId('invite-email-input').fill('reader@example.com')
   await page.getByTestId('invite-enrol-button').click()
   await expect(page.getByTestId('home-page')).toBeVisible()
 

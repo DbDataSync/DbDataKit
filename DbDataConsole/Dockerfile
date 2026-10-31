@@ -2,7 +2,7 @@
 #   docker build -f DbDataConsole/Dockerfile -t dbdatakit .        (run from the repository root: the build needs DbDataKit/ too)
 #   docker run -p 8480:8480 -v ./console-data:/data dbdatakit        (/data holds the users, sessions, invitations, the servers it manages, its signing key and its certificate)
 # The first administrator redeems the invitation the console prints in its log and writes to /data/FIRST-RUN.txt; one more can be made at any time:
-#   docker exec <container> dbdatakit user invite --url https://<the address people use>
+#   docker exec <container> dbdatakit user invite --email <their address> --url https://<the address people use>
 # Pair a server with it (the code is made on the server with 'server pair'):
 #   docker exec <container> dbdatakit instance add https://build.example:8470 --code <code>
 # A passkey is bound to the address people open the console at, so tell it that address: add  --public-url https://<name>:8480  to the run command (the image says https://localhost:8480).

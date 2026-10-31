@@ -7,9 +7,10 @@ namespace DbDataKit.State;
 /// than creating a new user. That is how a Windows-authenticated person enrols a passkey for when they
 /// are off the domain — the "one user, both methods" case made concrete.</param>
 /// <param name="CreatedByUserId">Null for the bootstrap invite, because nobody made it.</param>
+/// <param name="Email">The address the administrator invited the person at (plan 13a U16); it becomes the new account's verified address. Null for an invitation to an existing user, and for the first-run invitation, which nobody made.</param>
 public sealed record InviteRecord(
     string Id, UserRole Role, string? UserId, string? CreatedByUserId,
-    DateTimeOffset CreatedAtUtc, DateTimeOffset ExpiresAtUtc, DateTimeOffset? RedeemedAtUtc);
+    DateTimeOffset CreatedAtUtc, DateTimeOffset ExpiresAtUtc, DateTimeOffset? RedeemedAtUtc, string? Email = null);
 
 /// <summary>A freshly minted invite. The code is returned **once** and never stored — see
 /// <see cref="InviteStore"/>.</summary>
@@ -33,22 +34,31 @@ public sealed class InviteStore(StateDatabase database)
     public static TimeSpan DefaultLifetime { get; } = TimeSpan.FromHours(24);
 
     public MintedInvite Create(
-        UserRole role, string? forUserId = null, string? createdByUserId = null, TimeSpan? lifetime = null)
+        UserRole role, string? forUserId = null, string? createdByUserId = null, TimeSpan? lifetime = null, string? email = null)
     {
+        // An invitation that makes a new account says whose: the address is the account's key. One that adds a way in to an existing account needs none.
+        if (email is not null)
+        {
+            if (forUserId is not null) throw new ArgumentException("An invitation for an existing user carries no address: the account has its own.", nameof(email));
+            if (AccountKey.Normalize(email) is null) throw new AccountConflictException($"'{email}' is not an email address (user@domain).");
+            if (new UserStore(database).FindByEmail(email) is { } holder)
+                throw new AccountConflictException(
+                    $"The address '{email.Trim()}' already belongs to '{holder.DisplayName}'. One address is one account: invite that person for their existing account (the user's id is {holder.Id}) to add a way to sign in.", holder.Id);
+        }
         // URL-safe, and long enough that guessing is not a strategy. Base64Url of 32 bytes.
         var code = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
             .Replace('+', '-').Replace('/', '_').TrimEnd('=');
 
         var invite = new InviteRecord(
             Guid.NewGuid().ToString("N"), role, forUserId, createdByUserId,
-            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow + (lifetime ?? DefaultLifetime), null);
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow + (lifetime ?? DefaultLifetime), null, email?.Trim());
 
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
             using var cmd = database.Command(connection, """
-                INSERT INTO Invites (Id, CodeHash, Role, UserId, CreatedByUserId, CreatedAtUtc, ExpiresAtUtc)
-                VALUES ($id, $hash, $role, $userId, $createdBy, $createdAt, $expiresAt);
+                INSERT INTO Invites (Id, CodeHash, Role, UserId, CreatedByUserId, CreatedAtUtc, ExpiresAtUtc, Email)
+                VALUES ($id, $hash, $role, $userId, $createdBy, $createdAt, $expiresAt, $email);
                 """);
             cmd.Bind(database, "id", invite.Id);
             cmd.Bind(database, "hash", Hash(code));
@@ -57,6 +67,7 @@ public sealed class InviteStore(StateDatabase database)
             cmd.Bind(database, "createdBy", (object?)createdByUserId ?? DBNull.Value);
             cmd.Bind(database, "createdAt", invite.CreatedAtUtc.ToString("O"));
             cmd.Bind(database, "expiresAt", invite.ExpiresAtUtc.ToString("O"));
+            cmd.Bind(database, "email", (object?)invite.Email ?? DBNull.Value);
             cmd.ExecuteNonQuery();
         });
 
@@ -73,7 +84,7 @@ public sealed class InviteStore(StateDatabase database)
         {
             using var connection = database.OpenConnection();
             using var cmd = database.Command(connection, """
-                SELECT Id, Role, UserId, CreatedByUserId, CreatedAtUtc, ExpiresAtUtc, RedeemedAtUtc
+                SELECT Id, Role, UserId, CreatedByUserId, CreatedAtUtc, ExpiresAtUtc, RedeemedAtUtc, Email
                 FROM Invites WHERE CodeHash = $hash;
                 """);
             cmd.Bind(database, "hash", Hash(code));
@@ -89,7 +100,8 @@ public sealed class InviteStore(StateDatabase database)
                 reader.IsDBNull(3) ? null : reader.GetString(3),
                 Time(reader.GetString(4)),
                 Time(reader.GetString(5)),
-                reader.IsDBNull(6) ? null : Time(reader.GetString(6)));
+                reader.IsDBNull(6) ? null : Time(reader.GetString(6)),
+                reader.IsDBNull(7) ? null : reader.GetString(7));
 
             return invite is { RedeemedAtUtc: null } && invite.ExpiresAtUtc > DateTimeOffset.UtcNow
                 ? invite
@@ -133,7 +145,7 @@ public sealed class InviteStore(StateDatabase database)
         {
             using var connection = database.OpenConnection();
             using var cmd = database.Command(connection, """
-                SELECT Id, Role, UserId, CreatedByUserId, CreatedAtUtc, ExpiresAtUtc, RedeemedAtUtc
+                SELECT Id, Role, UserId, CreatedByUserId, CreatedAtUtc, ExpiresAtUtc, RedeemedAtUtc, Email
                 FROM Invites WHERE RedeemedAtUtc IS NULL AND ExpiresAtUtc > $now ORDER BY CreatedAtUtc DESC;
                 """);
             cmd.Bind(database, "now", DateTimeOffset.UtcNow.ToString("O"));
@@ -146,7 +158,8 @@ public sealed class InviteStore(StateDatabase database)
                     reader.IsDBNull(2) ? null : reader.GetString(2),
                     reader.IsDBNull(3) ? null : reader.GetString(3),
                     Time(reader.GetString(4)), Time(reader.GetString(5)),
-                    reader.IsDBNull(6) ? null : Time(reader.GetString(6))));
+                    reader.IsDBNull(6) ? null : Time(reader.GetString(6)),
+                    reader.IsDBNull(7) ? null : reader.GetString(7)));
             return (IReadOnlyList<InviteRecord>)invites;
         });
 

@@ -26,7 +26,7 @@ public sealed class InviteTests(AuthenticatedApiFactory factory) : IClassFixture
     {
         var client = await factory.SignedInAsAsync(UserRole.Admin);
 
-        var response = await client.PostAsJsonAsync("/api/invites", new { role = "Viewer" });
+        var response = await client.PostAsJsonAsync("/api/invites", new { role = "Viewer", email = $"{Guid.NewGuid():N}@example.invalid" });
         response.EnsureSuccessStatusCode();
         var created = await response.Content.ReadFromJsonAsync<JsonElement>(JsonOptions);
 

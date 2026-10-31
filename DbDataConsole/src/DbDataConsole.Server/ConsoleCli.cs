@@ -274,11 +274,14 @@ public static class ConsoleCli
         new Verb("list", "The users: name, role, whether enabled, and how many ways each can sign in", EffectClass.OfflineOnly, "[--repo <console directory>]",
             (args, context) => UserListAsync(args, context, environment),
             DataSchemas.Object([("users", DataSchemas.ListOf(DataSchemas.Object(
-                [("id", DataSchemas.String), ("name", DataSchemas.String), ("role", DataSchemas.String), ("enabled", DataSchemas.Boolean), ("credentials", DataSchemas.Integer)],
+                [("id", DataSchemas.String), ("name", DataSchemas.String), ("role", DataSchemas.String), ("enabled", DataSchemas.Boolean), ("credentials", DataSchemas.Integer), ("email", DataSchemas.String), ("emailVerified", DataSchemas.Boolean)],
                 "id", "name", "role", "enabled", "credentials")))], "users")),
-        new Verb("invite", "Print an invitation: for a new user, or for an existing one who has lost their way in", EffectClass.RepoFilesOnly, "[--role admin|viewer] [--user <id>] [--url <address>] [--repo <console directory>]",
+        new Verb("invite", "Print an invitation: for a new user, or for an existing one who has lost their way in", EffectClass.RepoFilesOnly, "[--role admin|viewer] (--email <address> | --user <id>) [--url <address>] [--repo <console directory>]",
             (args, context) => UserInviteAsync(args, context, environment),
             DataSchemas.Object([("url", DataSchemas.String), ("expires", DataSchemas.String), ("role", DataSchemas.String)], "url", "expires", "role")),
+        new Verb("set-email", "Set a user's email address: the key their other ways of signing in (a Windows account, the identity home) are matched on", EffectClass.RepoFilesOnly, "--user <id> --email <address> [--repo <console directory>]",
+            (args, context) => UserSetEmailAsync(args, context, environment),
+            DataSchemas.Object([("id", DataSchemas.String), ("email", DataSchemas.String)], "id", "email")),
     ]);
 
     /// <summary>Opens the state database the way the server does. It is made if there is none, so an invitation can be printed before the first start.</summary>
@@ -293,18 +296,27 @@ public static class ConsoleCli
         var all = users.List();
         if (all.Count == 0) await context.Out.WriteLineAsync("No user yet. Start the console and redeem the invitation it writes, or run: user invite");
         foreach (var user in all)
-            await context.Out.WriteLineAsync($"{user.DisplayName}  {user.Role}  {(user.Enabled ? "enabled" : "disabled")}  {users.CredentialsOf(user.Id).Count} way(s) to sign in  id {user.Id}");
+            await context.Out.WriteLineAsync(
+                $"{user.DisplayName}  {user.Role}  {(user.Enabled ? "enabled" : "disabled")}  {users.CredentialsOf(user.Id).Count} way(s) to sign in  " +
+                $"{(user.EmailVerified ? user.Email : user.Email is null ? "no email (set one: user set-email)" : user.Email + " (not verified: set it with user set-email)")}  id {user.Id}");
         context.Data["users"] = all.Select(u => new Dictionary<string, object?>
         {
-            ["id"] = u.Id, ["name"] = u.DisplayName, ["role"] = u.Role.ToString(), ["enabled"] = u.Enabled, ["credentials"] = users.CredentialsOf(u.Id).Count,
+            ["id"] = u.Id, ["name"] = u.DisplayName, ["role"] = u.Role.ToString(), ["enabled"] = u.Enabled, ["credentials"] = users.CredentialsOf(u.Id).Count, ["email"] = u.Email, ["emailVerified"] = u.EmailVerified,
         }).ToList();
         return CliExit.Ok;
     }
 
     private static async Task<int> UserInviteAsync(string[] args, CliContext context, Func<string, string?>? environment)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "role", "user", "url" });
-        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync("Usage: user invite [--role admin|viewer] [--user <id>] [--url <address>] [--repo <console directory>]"); return CliExit.Usage; }
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "role", "user", "url", "email" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync("Usage: user invite [--role admin|viewer] (--email <address> | --user <id>) [--url <address>] [--repo <console directory>]"); return CliExit.Usage; }
+        // A new account is for a person, and the address is how the same person is recognised whichever way they sign in (a passkey, Windows, the identity home): so it is asked for.
+        var email = parsed.Get("email");
+        if (parsed.Get("user") is null == string.IsNullOrWhiteSpace(email))
+        {
+            await context.Error.WriteLineAsync("Name who the invitation is for: --email <address> for a new user, or --user <id> to give an existing user another way in ('user list' shows the ids).");
+            return CliExit.Usage;
+        }
         if (!Enum.TryParse<UserRole>(parsed.Get("role") ?? nameof(UserRole.Admin), ignoreCase: true, out var role))
         {
             await context.Error.WriteLineAsync($"'{parsed.Get("role")}' is not a role. Use admin or viewer.");
@@ -317,7 +329,9 @@ public static class ConsoleCli
             await context.Error.WriteLineAsync($"No user has the id '{forUser}'. 'user list' shows them.");
             return CliExit.Failure;
         }
-        var minted = new InviteStore(database).Create(role, forUser, createdByUserId: null);
+        MintedInvite minted;
+        try { minted = new InviteStore(database).Create(role, forUser, createdByUserId: null, email: email); }
+        catch (AccountConflictException ex) { await context.Error.WriteLineAsync(ex.Message); return CliExit.Failure; }
         // the code goes in the fragment, which a browser never sends to a server and an access log never records
         var url = $"{(parsed.Get("url") ?? ConsoleSettings.DefaultListen).TrimEnd('/')}/invite#{minted.Code}";
         await context.Out.WriteLineAsync($"An invitation for a {role}, valid until {minted.Invite.ExpiresAtUtc:u}:");
@@ -326,5 +340,34 @@ public static class ConsoleCli
         context.Data["expires"] = minted.Invite.ExpiresAtUtc.UtcDateTime.ToString("O");
         context.Data["role"] = role.ToString();
         return CliExit.Ok;
+    }
+
+    private static async Task<int> UserSetEmailAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "user", "email" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("user") is not { Length: > 0 } id || parsed.Get("email") is not { Length: > 0 } email)
+        {
+            await context.Error.WriteLineAsync("Usage: user set-email --user <id> --email <address> [--repo <console directory>]");
+            return CliExit.Usage;
+        }
+        var users = new UserStore(OpenState(parsed, environment));
+        if (users.Get(id) is null)
+        {
+            await context.Error.WriteLineAsync($"No user has the id '{id}'. 'user list' shows them.");
+            return CliExit.Failure;
+        }
+        try
+        {
+            var user = users.SetVerifiedEmail(id, email);
+            await context.Out.WriteLineAsync($"{user.DisplayName} is {user.Email} now; a Windows account or an identity home person with that address signs in as this user.");
+            context.Data["id"] = user.Id;
+            context.Data["email"] = user.Email;
+            return CliExit.Ok;
+        }
+        catch (AccountConflictException ex)
+        {
+            await context.Error.WriteLineAsync(ex.Message);
+            return CliExit.Failure;
+        }
     }
 }

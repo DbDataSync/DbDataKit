@@ -6,11 +6,21 @@ namespace DbDataKit.Web.Auth.Controllers;
 public sealed record UserCredentialSummary(
     string Id, string Method, string? Label, DateTimeOffset CreatedAtUtc, DateTimeOffset? LastUsedAtUtc);
 
+/// <param name="Id">The account's id.</param>
+/// <param name="DisplayName">The person's name.</param>
+/// <param name="Email">The account's address, if any.</param>
+/// <param name="Role">Admin or Viewer.</param>
+/// <param name="Enabled">Whether the person may sign in.</param>
+/// <param name="Credentials">The ways the person signs in.</param>
+/// <param name="EmailVerified">Whether the address is one this installation matches other ways of signing in on. False with an address: it was typed by the person and nobody checked it; an administrator can set it.</param>
 public sealed record UserSummary(
     string Id, string DisplayName, string? Email, string Role, bool Enabled,
-    IReadOnlyList<UserCredentialSummary> Credentials);
+    IReadOnlyList<UserCredentialSummary> Credentials, bool EmailVerified = false);
 
-public sealed record UpdateUserRequest(string? Role, bool? Enabled);
+/// <param name="Role">Admin or Viewer.</param>
+/// <param name="Enabled">Whether the person may sign in.</param>
+/// <param name="Email">Sets the account's address: an administrator vouches for it, so it is the key the person's other ways of signing in are matched on (plan 13a U16). Refused when another account holds it.</param>
+public sealed record UpdateUserRequest(string? Role, bool? Enabled, string? Email = null);
 
 /// <summary>
 /// Who exists, what they may do, and how they get in. Admin-only by the fallback policy.
@@ -29,6 +39,12 @@ public sealed class UsersController(UserStore users, SessionStore sessions)
     {
         if (users.Get(id) is not { } user)
             return NotFound();
+
+        if (request.Email is { } email)
+        {
+            try { users.SetVerifiedEmail(id, email); }
+            catch (AccountConflictException ex) { return Conflict(new { error = ex.Message }); }
+        }
 
         if (request.Role is { } roleName)
         {
@@ -107,5 +123,6 @@ public sealed class UsersController(UserStore users, SessionStore sessions)
         user.Id, user.DisplayName, user.Email, user.Role.ToString(), user.Enabled,
         users.CredentialsOf(user.Id)
             .Select(c => new UserCredentialSummary(c.Id, c.Method, c.Label, c.CreatedAtUtc, c.LastUsedAtUtc))
-            .ToList());
+            .ToList(),
+        user.EmailVerified);
 }

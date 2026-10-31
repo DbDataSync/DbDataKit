@@ -35,7 +35,7 @@ public sealed class StateEngines : IDisposable
     };
 
     /// <summary>The standard schema every shared store needs.</summary>
-    public static StateSchema Schema { get; } = new([IdentitySchema.Accounts, IdentitySchema.Invites, NotificationSchema.Feed]);
+    public static StateSchema Schema { get; } = new([IdentitySchema.Accounts, IdentitySchema.Invites, NotificationSchema.Feed, IdentitySchema.AccountKeys]);
 
     public StateDatabase Open(string engine, StateSchema? schema = null)
     {
