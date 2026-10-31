@@ -73,6 +73,119 @@ public sealed class HomeDirectory(StateDatabase database)
     /// <summary>Gives a user or a group roles in an app (an app's users hold app roles only).</summary>
     public void AssignApp(AssignmentSubject subject, string app, ServerRole roles) => Write(subject, "app", app, null, roles);
 
+    // ---- external groups (plan 13a U18) ----
+
+    /// <summary>
+    /// Maps an external group to roles on a server (or, with <paramref name="project"/>, on one Build project of it): everyone whose last sign-in through <paramref name="source"/> (<see cref="ExternalSources"/>) carried the group holds
+    /// the roles, in addition to what they hold otherwise. Mapping again replaces what the group was given there; <see cref="ServerRole.None"/> removes the mapping. Applies to people at once (their roles are read each time a token is made).
+    /// </summary>
+    public void MapExternalGroup(string source, string group, string server, ServerRole roles, string? project = null) =>
+        WriteMapping(source, group, project is null ? "server" : "project", server, project, roles);
+
+    /// <summary>Maps an external group to roles in an app.</summary>
+    public void MapExternalGroupToApp(string source, string group, string app, ServerRole roles) => WriteMapping(source, group, "app", app, null, roles);
+
+    private void WriteMapping(string source, string group, string scope, string target, string? project, ServerRole roles)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(target);
+        var key = ExternalSources.Key(source, group);
+        var projectKey = scope == "project" ? project ?? "" : "";
+        var slot = SlotOf(source, key, scope, target, projectKey);
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using (var delete = database.Command(connection, "DELETE FROM GroupMappings WHERE Slot = $slot;"))
+            {
+                delete.Bind(database, "slot", slot);
+                delete.ExecuteNonQuery();
+            }
+            if (roles == ServerRole.None) return;
+            using var cmd = database.Command(connection, """
+                INSERT INTO GroupMappings (Id, Slot, Source, ExternalGroup, ExternalKey, Scope, Target, Project, Roles, CreatedAtUtc)
+                VALUES ($id, $slot, $source, $group, $key, $scope, $target, $project, $roles, $at);
+                """);
+            cmd.Bind(database, "id", Guid.NewGuid().ToString("N"));
+            cmd.Bind(database, "slot", slot);
+            cmd.Bind(database, "source", source);
+            cmd.Bind(database, "group", group.Trim());
+            cmd.Bind(database, "key", key);
+            cmd.Bind(database, "scope", scope);
+            cmd.Bind(database, "target", target);
+            cmd.Bind(database, "project", projectKey);
+            cmd.Bind(database, "roles", string.Join(',', ServerRoles.Names(roles)));
+            cmd.Bind(database, "at", DateTimeOffset.UtcNow.ToString("O"));
+            cmd.ExecuteNonQuery();
+        });
+    }
+
+    /// <summary>Removes a mapping by its id; the people it gave roles lose them at once.</summary>
+    public void RemoveExternalMapping(string id) => database.Retry(() =>
+    {
+        using var connection = database.OpenConnection();
+        using var cmd = database.Command(connection, "DELETE FROM GroupMappings WHERE Id = $id;");
+        cmd.Bind(database, "id", id);
+        cmd.ExecuteNonQuery();
+    });
+
+    public IReadOnlyList<ExternalGroupMapping> ExternalMappings() => database.Retry(() =>
+    {
+        using var connection = database.OpenConnection();
+        using var cmd = database.Command(connection, "SELECT Id, Source, ExternalGroup, Scope, Target, Project, Roles FROM GroupMappings ORDER BY Source, ExternalKey, Scope, Target, Project;");
+        using var reader = cmd.ExecuteReader();
+        var list = new List<ExternalGroupMapping>();
+        while (reader.Read())
+        {
+            ServerRoles.TryParse(reader.GetString(6).Split(',', StringSplitOptions.RemoveEmptyEntries), out var roles);
+            list.Add(new ExternalGroupMapping(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5) is { Length: > 0 } p ? p : null, roles));
+        }
+        return (IReadOnlyList<ExternalGroupMapping>)list;
+    });
+
+    /// <summary>
+    /// Records the external groups a person's sign-in through <paramref name="source"/> carried, replacing what the last one recorded for that source (so a group they left stops counting). Values that cannot be mapped (blank, or longer
+    /// than <see cref="ExternalSources.MaxLength"/>) are ignored.
+    /// </summary>
+    public void SetExternalGroups(string userId, string source, IEnumerable<string> groups)
+    {
+        ExternalSources.Require(source);
+        var keys = groups.Select(g => ExternalSources.TryKey(g)).Where(k => k is not null).Select(k => k!).Distinct(StringComparer.Ordinal).ToList();
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var transaction = connection.BeginTransaction();
+            using (var delete = database.Command(connection, transaction, "DELETE FROM ExternalMemberships WHERE UserId = $u AND Source = $source;"))
+            {
+                delete.Bind(database, "u", userId);
+                delete.Bind(database, "source", source);
+                delete.ExecuteNonQuery();
+            }
+            var at = DateTimeOffset.UtcNow.ToString("O");
+            foreach (var key in keys)
+            {
+                using var insert = database.Command(connection, transaction, "INSERT INTO ExternalMemberships (Slot, UserId, Source, ExternalKey, SeenAtUtc) VALUES ($slot, $u, $source, $key, $at);");
+                insert.Bind(database, "slot", SlotOf(userId, source, key));
+                insert.Bind(database, "u", userId);
+                insert.Bind(database, "source", source);
+                insert.Bind(database, "key", key);
+                insert.Bind(database, "at", at);
+                insert.ExecuteNonQuery();
+            }
+            transaction.Commit();
+        });
+    }
+
+    /// <summary>The external groups (normalised, as compared) the person was last seen in, per source.</summary>
+    public IReadOnlyList<(string Source, string Group)> ExternalGroupsOf(string userId) => database.Retry(() =>
+    {
+        using var connection = database.OpenConnection();
+        using var cmd = database.Command(connection, "SELECT Source, ExternalKey FROM ExternalMemberships WHERE UserId = $u ORDER BY Source, ExternalKey;");
+        cmd.Bind(database, "u", userId);
+        using var reader = cmd.ExecuteReader();
+        var list = new List<(string, string)>();
+        while (reader.Read()) list.Add((reader.GetString(0), reader.GetString(1)));
+        return (IReadOnlyList<(string, string)>)list;
+    });
+
     private void Write(AssignmentSubject subject, string scope, string target, string? project, ServerRole roles)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(target);
@@ -113,7 +226,7 @@ public sealed class HomeDirectory(StateDatabase database)
         cmd.ExecuteNonQuery();
     });
 
-    /// <summary>What the user holds on <paramref name="server"/>: its own assignments and its groups', added together.</summary>
+    /// <summary>What the user holds on <paramref name="server"/>: its own assignments, its groups' and those its external groups map to (<see cref="MapExternalGroup"/>), added together.</summary>
     public ServerRolesOf RolesOn(string userId, string server) => Held(userId, "server", server, "project", server);
 
     /// <summary>What the user holds in <paramref name="app"/>.</summary>
@@ -125,7 +238,10 @@ public sealed class HomeDirectory(StateDatabase database)
         using var connection = database.OpenConnection();
         using var cmd = database.Command(connection, """
             SELECT Scope, Target, Project, Roles FROM RoleAssignments
-            WHERE (SubjectKind = 'user' AND SubjectId = $u) OR (SubjectKind = 'group' AND SubjectId IN (SELECT GroupId FROM GroupMembers WHERE UserId = $u));
+            WHERE (SubjectKind = 'user' AND SubjectId = $u) OR (SubjectKind = 'group' AND SubjectId IN (SELECT GroupId FROM GroupMembers WHERE UserId = $u))
+            UNION ALL
+            SELECT m.Scope, m.Target, m.Project, m.Roles FROM GroupMappings m
+            WHERE EXISTS (SELECT 1 FROM ExternalMemberships e WHERE e.UserId = $u AND e.Source = m.Source AND e.ExternalKey = m.ExternalKey);
             """);
         cmd.Bind(database, "u", userId);
         using var reader = cmd.ExecuteReader();
@@ -145,7 +261,11 @@ public sealed class HomeDirectory(StateDatabase database)
         using var cmd = database.Command(connection, """
             SELECT Scope, Project, Roles FROM RoleAssignments
             WHERE Target = $target AND (Scope = $scope OR Scope = $projectScope)
-              AND ((SubjectKind = 'user' AND SubjectId = $u) OR (SubjectKind = 'group' AND SubjectId IN (SELECT GroupId FROM GroupMembers WHERE UserId = $u)));
+              AND ((SubjectKind = 'user' AND SubjectId = $u) OR (SubjectKind = 'group' AND SubjectId IN (SELECT GroupId FROM GroupMembers WHERE UserId = $u)))
+            UNION ALL
+            SELECT m.Scope, m.Project, m.Roles FROM GroupMappings m
+            WHERE m.Target = $target AND (m.Scope = $scope OR m.Scope = $projectScope)
+              AND EXISTS (SELECT 1 FROM ExternalMemberships e WHERE e.UserId = $u AND e.Source = m.Source AND e.ExternalKey = m.ExternalKey);
             """);
         cmd.Bind(database, "u", userId);
         cmd.Bind(database, "target", projectTarget ?? target);
@@ -169,4 +289,48 @@ public readonly record struct AssignmentSubject(string Kind, string Id)
 {
     public static AssignmentSubject User(string id) => new("user", id);
     public static AssignmentSubject Group(string id) => new("group", id);
+}
+
+/// <summary>One mapping of an external group to roles on a server, a Build project (<paramref name="Project"/>) or an app.</summary>
+/// <param name="Id">The mapping's id (to remove it).</param>
+/// <param name="Source">One of <see cref="ExternalSources"/>.</param>
+/// <param name="Group">The group value as it was written.</param>
+/// <param name="Scope">server, project or app.</param>
+/// <param name="Target">The server's instance id, or the app.</param>
+/// <param name="Project">The Build project when <paramref name="Scope"/> is project; otherwise null.</param>
+/// <param name="Roles">The roles the group gives there.</param>
+public sealed record ExternalGroupMapping(string Id, string Source, string Group, string Scope, string Target, string? Project, ServerRole Roles);
+
+/// <summary>Where a person's external groups come from. Each is a way of signing in whose groups the home does not manage.</summary>
+public static class ExternalSources
+{
+    /// <summary>Microsoft Entra ID (or another OpenID Connect provider): the values of the id token's <c>groups</c> claim (Entra sends group object ids).</summary>
+    public const string Entra = "entra";
+
+    /// <summary>A Windows (Negotiate) sign-in: group SIDs or <c>DOMAIN\group</c> names. The mapping and the records are here; no host feeds them yet (plan 13a U18, not done).</summary>
+    public const string Windows = "windows";
+
+    /// <summary>The longest group value that can be mapped (an index key on every engine).</summary>
+    public const int MaxLength = 300;
+
+    public static void Require(string source)
+    {
+        if (source is not (Entra or Windows)) throw new ArgumentException($"'{source}' is not a source of external groups (use '{Entra}' or '{Windows}').", nameof(source));
+    }
+
+    /// <summary>What two spellings of the same group are compared on: trimmed, Unicode form C, invariant lower case (a group id's case and a Windows name's are not significant). Null for a value that cannot be a group.</summary>
+    public static string? TryKey(string? group)
+    {
+        var key = group?.Trim().Normalize(System.Text.NormalizationForm.FormC).ToLowerInvariant();
+        return string.IsNullOrEmpty(key) || key.Length > MaxLength ? null : key;
+    }
+
+    public static string Key(string source, string group)
+    {
+        Require(source);
+        return TryKey(group) ?? throw new ArgumentException($"A group is a non-blank value of at most {MaxLength} characters.", nameof(group));
+    }
+
+    /// <summary>The credential method that names an account made from an external sign-in (a Windows one is the console's own, so one person stays one account).</summary>
+    public static string CredentialMethod(string source) { Require(source); return source == Windows ? CredentialMethods.Windows : "External:" + source; }
 }

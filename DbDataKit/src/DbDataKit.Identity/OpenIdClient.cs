@@ -32,7 +32,7 @@ public sealed class OpenIdClientException(string message, bool homeRefused = fal
 
 /// <summary>
 /// The relying party of the identity home (plan 13a U14): what a second console, an app host or an agent uses to sign people in through the home instead of keeping users of its own. It sends the browser to the home with a
-/// PKCE challenge and a nonce, and when the browser comes back it trades the code for tokens, checks the id token (ES256 against the home's published keys, issuer, audience, expiry, nonce) and reads who the person is.
+/// PKCE challenge and a nonce, and when the browser comes back it trades the code for tokens, checks the id token (ES256, or RS256 for another provider, against the home's published keys, issuer, audience, expiry, nonce) and reads who the person is.
 /// </summary>
 public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, TimeProvider? clock = null)
 {
@@ -134,18 +134,32 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
         try
         {
             var header = JsonSerializer.Deserialize<JsonElement>(Base64Url.DecodeFromChars(parts[0]));
-            if (header.GetProperty("alg").GetString() != "ES256") throw new OpenIdClientException("The id token is not signed with ES256.");
+            var alg = header.GetProperty("alg").GetString();
+            if (alg is not ("ES256" or "RS256")) throw new OpenIdClientException("The id token is not signed with ES256 or RS256.");
             var kid = header.GetProperty("kid").GetString();
             var jwks = await http.GetFromJsonAsync<JsonElement>(discovery.JwksUri, ct);
             var jwk = jwks.GetProperty("keys").EnumerateArray().FirstOrDefault(k => k.GetProperty("kid").GetString() == kid);
             if (jwk.ValueKind != JsonValueKind.Object) throw new OpenIdClientException("The id token is signed with a key the identity home does not publish.");
-            using var key = ECDsa.Create(new ECParameters
+            var signed = Encoding.ASCII.GetBytes(parts[0] + "." + parts[1]);
+            var signature = Base64Url.DecodeFromChars(parts[2]);
+            // the home signs with ES256; an Entra tenant (or any other OpenID Connect provider a home signs people in through, plan 13a U18) with RS256. The key must be of the algorithm the header names and the key's own type says.
+            bool valid;
+            if (alg == "ES256" && jwk.GetProperty("kty").GetString() == "EC")
             {
-                Curve = ECCurve.NamedCurves.nistP256,
-                Q = new ECPoint { X = Base64Url.DecodeFromChars(jwk.GetProperty("x").GetString()!), Y = Base64Url.DecodeFromChars(jwk.GetProperty("y").GetString()!) },
-            });
-            if (!key.VerifyData(Encoding.ASCII.GetBytes(parts[0] + "." + parts[1]), Base64Url.DecodeFromChars(parts[2]), HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation))
-                throw new OpenIdClientException("The id token's signature is not valid.");
+                using var key = ECDsa.Create(new ECParameters
+                {
+                    Curve = ECCurve.NamedCurves.nistP256,
+                    Q = new ECPoint { X = Base64Url.DecodeFromChars(jwk.GetProperty("x").GetString()!), Y = Base64Url.DecodeFromChars(jwk.GetProperty("y").GetString()!) },
+                });
+                valid = key.VerifyData(signed, signature, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+            }
+            else if (alg == "RS256" && jwk.GetProperty("kty").GetString() == "RSA")
+            {
+                using var key = RSA.Create(new RSAParameters { Modulus = Base64Url.DecodeFromChars(jwk.GetProperty("n").GetString()!), Exponent = Base64Url.DecodeFromChars(jwk.GetProperty("e").GetString()!) });
+                valid = key.VerifyData(signed, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            }
+            else throw new OpenIdClientException("The id token's algorithm does not match its key.");
+            if (!valid) throw new OpenIdClientException("The id token's signature is not valid.");
 
             var claims = JsonSerializer.Deserialize<JsonElement>(Base64Url.DecodeFromChars(parts[1]));
             if (claims.GetProperty("iss").GetString() != discovery.Issuer || discovery.Issuer.TrimEnd('/') != _authority) throw new OpenIdClientException("The id token is from another issuer.");
@@ -166,7 +180,7 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
                 // only a JSON true counts (not the string "true", not a missing claim): an address the home does not vouch for links nothing
                 claims.TryGetProperty("email_verified", out var verified) && verified.ValueKind == JsonValueKind.True);
         }
-        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException or ArgumentException)
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException or ArgumentException or CryptographicException)
         {
             throw new OpenIdClientException("The id token could not be read.");
         }
