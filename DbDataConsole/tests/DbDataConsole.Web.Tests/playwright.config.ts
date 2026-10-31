@@ -166,6 +166,22 @@ if (!isWorker) {
   fs.writeFileSync(path.join(scratchDirectory, 'monitor-proxy-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeProxy)![1])
 }
 
+// A Build server for the authoring story (plan 13a, W07): it hosts no project, so the story makes one from a template. Its connection `origin` (added by the story to the project it makes) is a DuckDB file, which needs no engine:
+// the tables of the adventureworks template, seeded, with the login for it (the file's path) in the server's own store. The story imports some of them as mapped models.
+export const authoringBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-authoring-build'), port: 8493, origin: path.join(os.tmpdir(), 'dbdatakit-console-e2e-origin.duckdb') }
+if (!isWorker) {
+  fs.rmSync(authoringBuild.directory, { recursive: true, force: true })
+  fs.mkdirSync(authoringBuild.directory, { recursive: true })
+  const source = path.join(os.tmpdir(), 'dbdatakit-console-e2e-origin-project')
+  fs.rmSync(source, { recursive: true, force: true })
+  fs.rmSync(authoringBuild.origin, { force: true })
+  execFileSync('dotnet', ['exec', buildDll, 'project', 'create', 'adventureworks', source], { stdio: 'ignore' })
+  execFileSync('dotnet', ['exec', buildDll, 'project', 'seed', '--project', source, '--out', authoringBuild.origin], { stdio: 'ignore' })
+  execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdata:build:connection:origin:read', '--stdin', '--repo', authoringBuild.directory], { input: authoringBuild.origin + '\n', stdio: ['pipe', 'ignore', 'inherit'] })
+  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', authoringBuild.directory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'authoring-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
+}
+
 // A passkey is bound to the host name and the port it was made on, and the server builds its list of allowed origins from the address it is told to listen on,
 // so the address is fixed here and the test opens exactly that.
 const port = 8481
@@ -209,6 +225,15 @@ export default defineConfig({
       stdout: 'pipe',
       stderr: 'pipe',
       env: warehouseConnection ? { DBDATA_BUILD_POSTGRES_READ: warehouseConnection, DBDATA_BUILD_POSTGRES_WRITE: warehouseConnection } : {},
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(authoringBuild.directory), '--listen', `https://localhost:${authoringBuild.port}`].join(' '),
+      url: `https://localhost:${authoringBuild.port}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
     },
     ...announcers.map((announcer) => ({
       command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(announcer.directory), '--listen', `https://localhost:${announcer.port}`].join(' '),
