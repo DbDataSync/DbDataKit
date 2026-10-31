@@ -293,16 +293,19 @@ internal sealed class LibrariesAndDriversCheck : IReadinessCheck
             var configRoot = Path.Combine(context.Root, "config");
             var repository = new ConfigRepository(
                 configRoot, new GitCommitService(context.Root), SecretStore.Open(context.Root));
-            foreach (var name in repository.ListConnections())
+            foreach (var connection in repository.LoadAllConnections())
             {
-                var connection = repository.LoadConnection(name);
                 if (!driverIds.Contains(connection.DriverType))
                 {
                     problems.Add(
-                        $"connection '{name}' names driver '{connection.DriverType}', which is not installed — " +
+                        $"connection '{connection.Name}' names driver '{connection.DriverType}', which is not installed — " +
                         $"run `dbdatasync driver install {connection.DriverType} ...`.");
                 }
             }
+        }
+        catch (ConfigFileException ex)
+        {
+            problems.Add($"connections cannot be read: {ex.Message}");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

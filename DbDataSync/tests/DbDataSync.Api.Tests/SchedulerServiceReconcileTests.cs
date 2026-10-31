@@ -39,11 +39,13 @@ public sealed class SchedulerServiceReconcileTests(TestApiFactory factory) : ICl
         [System.Runtime.CompilerServices.CallerMemberName] string testName = "")
     {
         var replicationName = $"rc-sched-{testName}-{Guid.NewGuid():N}";
+        // a connection name is at most 64 characters (connection/1), and a test's name can be longer than that
+        var connectionName = $"rc-src-{(testName.Length > 40 ? testName[..40] : testName)}";
         const string mappingName = "orders";
 
-        (await _client.PutAsJsonAsync($"/api/connections/rc-src-{testName}", new ConnectionInput
+        (await _client.PutAsJsonAsync($"/api/connections/{connectionName}", new ConnectionInput
         {
-            Name = $"rc-src-{testName}",
+            Name = connectionName,
             DriverType = DriverIds.MsSql,
             Host = "localhost",
             Database = "App",
@@ -57,8 +59,8 @@ public sealed class SchedulerServiceReconcileTests(TestApiFactory factory) : ICl
             Name = replicationName,
             Endpoints = new TaskEndpoints
             {
-                Source = new EndpointRef { ConnectionName = $"rc-src-{testName}", Database = "App" },
-                Target = new EndpointRef { ConnectionName = $"rc-src-{testName}", Database = "DW" },
+                Source = new EndpointRef { ConnectionName = connectionName, Database = "App" },
+                Target = new EndpointRef { ConnectionName = connectionName, Database = "DW" },
             },
             Scheduling = new SchedulingConfig { Mode = ScheduleMode.Continuous, FrequencySeconds = 3600 },
             ChangeProcessing = new ChangeProcessingConfig

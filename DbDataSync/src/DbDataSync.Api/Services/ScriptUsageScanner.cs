@@ -57,11 +57,8 @@ public sealed class ScriptUsageScanner(ConfigRepository configRepository)
             }
         }
 
-        foreach (var name in configRepository.ListConnections())
-        {
-            var connection = configRepository.LoadConnection(name);
-            RecordAll(connection.Scripts, connection.Hooks, BindingLevels.Connection, name);
-        }
+        foreach (var connection in configRepository.LoadAllConnections())
+            RecordAll(connection.Scripts, connection.Hooks, BindingLevels.Connection, connection.Name);
 
         foreach (var replicationName in configRepository.ListReplications())
         {

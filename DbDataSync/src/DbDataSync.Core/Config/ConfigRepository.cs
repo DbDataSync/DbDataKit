@@ -30,6 +30,7 @@ public sealed class ConfigRepository
     public ConnectionConfig SaveConnection(ConnectionInput input, GitAuthor author)
     {
         ConfigValidation.ValidateName(input.Name, nameof(input.Name));
+        SyncConnectionFile.ValidateName(input.Name);
         // Before anything with a side effect. This used to sit after the credential block, which meant
         // a save rejected for having a password in its connection string had already written that
         // password to the secret store on the way to being rejected.
@@ -82,7 +83,7 @@ public sealed class ConfigRepository
 
         var path = ConfigPaths.ConnectionFile(_configRoot, input.Name);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        WriteAtomically(path, YamlConfigSerializer.Serialize(config));
+        WriteAtomically(path, SyncConnectionFile.Write(config));
         _git.CommitChanges([path], $"Save connection '{input.Name}'", author);
 
         return config;
@@ -94,7 +95,25 @@ public sealed class ConfigRepository
         var text = TryReadAllTextAllowingConcurrentReplace(path)
             ?? throw new FileNotFoundException($"Connection '{name}' was not found.", path);
 
-        return StrictConfigFile.Load(text, path, YamlConfigSerializer.Deserialize<ConnectionConfig>);
+        return SyncConnectionFile.Read(text, path, name);
+    }
+
+    /// <summary>
+    /// Every connection, or one <see cref="ConfigFileException"/> naming each file that cannot be read (plan 13, E01: a repository holding connections in the form of earlier releases fails as a whole, with every such file named, not at the first).
+    /// </summary>
+    public IReadOnlyList<ConnectionConfig> LoadAllConnections()
+    {
+        var loaded = new List<ConnectionConfig>();
+        var failures = new List<ConfigFileException>();
+        foreach (var name in ListConnections())
+        {
+            try { loaded.Add(LoadConnection(name)); }
+            catch (ConfigFileException ex) { failures.Add(ex); }
+        }
+        if (failures.Count == 1) throw failures[0];
+        if (failures.Count > 1)
+            throw new ConfigFileException(ConfigPaths.ConnectionsDir(_configRoot), [.. failures.SelectMany(f => f.Diagnostics)]);
+        return loaded;
     }
 
     public IReadOnlyList<string> ListConnections() =>
@@ -106,9 +125,10 @@ public sealed class ConfigRepository
         if (!File.Exists(path))
             return;
 
-        var existing = YamlConfigSerializer.Deserialize<ConnectionConfig>(ReadAllTextAllowingConcurrentReplace(path));
-        if (existing.CredentialSecretRef is not null)
-            _secrets.Delete(existing.CredentialSecretRef);
+        // read as leniently as possible: a file that can no longer be loaded can still be deleted
+        var credentialRef = SyncConnectionFile.TryReadCredentialRef(ReadAllTextAllowingConcurrentReplace(path));
+        if (credentialRef is not null)
+            _secrets.Delete(credentialRef);
 
         File.Delete(path);
         _git.CommitChanges([path], $"Delete connection '{name}'", author);

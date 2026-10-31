@@ -56,12 +56,22 @@ internal static class StrictConfigFile
     public static T Load<T>(string text, string file, Func<string, T> bind)
     {
         Check<T>(text, file);
+        return Bind(text, file, bind);
+    }
+
+    /// <summary>Binds without the key check (the caller made it); a value of the wrong shape is reported with its position.</summary>
+    public static T Bind<T>(string text, string file, Func<string, T> bind)
+    {
         try { return bind(text); }
         catch (YamlDotNet.Core.YamlException ex)
         {
             throw new ConfigFileException(file, [DefaultDiagnosticCatalog.Instance.Create(SharedCodes.InvalidValue, file, (int)ex.Start.Line, (int)ex.Start.Column, ex.InnerException?.Message ?? ex.Message)]);
         }
     }
+
+    /// <summary>The key check on one part of a file: <paramref name="node"/> against the properties of <typeparamref name="T"/>, reported under <paramref name="path"/>.</summary>
+    public static void CheckNode<T>(YamlNode node, string path, string file, List<ConfigDiagnostic> diagnostics) =>
+        Walk(node, typeof(T), path, file, diagnostics);
 
     private static void Walk(YamlNode node, Type type, string path, string file, List<ConfigDiagnostic> diagnostics)
     {
