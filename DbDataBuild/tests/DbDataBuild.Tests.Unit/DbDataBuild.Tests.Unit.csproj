@@ -30,6 +30,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- the stand-in git server that requires a login, shared with the library's tests; plan 13, W12 -->
+    <Compile Include="..\..\..\DbDataKit\tests\DbDataKit.Config.Git.Tests\AuthenticatedGitServer.cs" Link="AuthenticatedGitServer.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\DbDataBuild.Core\DbDataBuild.Core.csproj" />
     <ProjectReference Include="..\..\src\DbDataBuild.Tui\DbDataBuild.Tui.csproj" />
     <ProjectReference Include="..\..\src\DbDataBuild.Models\DbDataBuild.Models.csproj" />

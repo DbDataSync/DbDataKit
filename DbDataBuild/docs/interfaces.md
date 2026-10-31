@@ -100,3 +100,15 @@ What differs between hosts is what is worth looking at. In Claude Desktop or VS 
 7. Does a result of the page's own tool calls reach the model? It should not.
 
 Report what you see with the host name and version.
+
+## A project on a git remote that needs a login
+
+`dbdatabuild server project add <id> --git <https address>` clones a remote into the server and `push` sends a workspace's branch back to it. When the remote asks for a login, the project names one credential, used for every author and for the server's own pulls:
+
+1. Make an access token at the provider with read and write access to that one repository: a personal, project or group access token on GitLab, a fine-grained or classic personal access token on GitHub, a personal access token (scope Code: read and write) on Azure DevOps.
+2. Store it under `dbdata:build:git:<name>` on the server: `dbdatabuild secret set dbdata:build:git:sales` (it asks for the value without showing it, or reads standard input). The value is the token; write `<user>:<token>` only when the provider needs a particular user name (the default, `oauth2`, is accepted by GitLab and, with a token, by GitHub and Azure DevOps).
+3. Register the project with it: `dbdatabuild server project add sales --git https://git.example.com/acme/sales.git --git-credential sales`. The entry in `build/projects.yaml` then holds only the name, `git_credential: secret:dbdata:build:git:sales`.
+
+The token is read from the server's secret store for each clone, pull and push and handed to git in memory; it is not in the address, the process list, `.git/config`, a log or an API answer. If the token is wrong, expired or may not push, the push says which credential was refused; if the secret is missing the message names it and the command above. SSH keys are not supported.
+
+After a push, the Edit tab links to the page where a pull request is opened, for a remote at github.com, dev.azure.com (or `*.visualstudio.com`) and gitlab.com, in their https and ssh forms. For any other remote there is no link and the branch is merged where the remote lives.
