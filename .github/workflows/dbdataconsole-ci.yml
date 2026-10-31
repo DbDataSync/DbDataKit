@@ -51,7 +51,7 @@ jobs:
       - run: dotnet test --project tests/DbDataConsole.Tests -c Release --no-build --minimum-expected-tests 10
 
   # The real programs in one run (plan 13a, T12): a Build server and a Proxy started from their built output, a console in the test between them. A Build server publishes and updates its own data source on the Proxy, is refused on
-  # one made by hand and on extensions.proxy, cannot adopt for itself, and the Proxy's audit names the person and the Build server. No browser and no database: nothing connects to the connections it publishes.
+  # one made by hand and on extensions.proxy, cannot adopt for itself, and the Proxy's audit names the person and the Build server. The second test (J12) publishes a project's semantic model and queries it, so a SQL Server from testenv/ is up for that job.
   servers:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
@@ -72,7 +72,12 @@ jobs:
         working-directory: DbDataProxy
         run: dotnet build src/DbDataProxy.Server -c Debug
       - run: dotnet build tests/DbDataConsole.Servers.Tests -c Debug
-      - run: dotnet test --project tests/DbDataConsole.Servers.Tests -c Debug --no-build --minimum-expected-tests 1
+      - name: Start the test SQL Server
+        working-directory: .
+        run: |
+          testenv/testenv.sh up mssql
+          testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
+      - run: dotnet test --project tests/DbDataConsole.Servers.Tests -c Debug --no-build --minimum-expected-tests 2
 
   # The web app in a real browser against a real console: the first-run invitation, a passkey made in a virtual authenticator, signing out and back in with it, the users list,
   # pairing a real Build server, and (M12) the Monitoring page across a Build server that runs a failing schedule, a Sync replication that lags and a Proxy that locked a user out.
