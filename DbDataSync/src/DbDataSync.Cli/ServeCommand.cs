@@ -3,6 +3,7 @@ using DbDataSync.Api.Auth;
 using DbDataSync.Api.Configuration;
 using DbDataSync.Api.Services;
 using Microsoft.Extensions.DependencyInjection;
+using DbDataSync.Certificates;
 using DbDataSync.Core.Config;
 using DbDataKit.Config.Git;
 using DbDataSync.Libraries;
@@ -34,15 +35,10 @@ public static class ServeCommand
 
         try
         {
-            // Phase 112: resolution fell through to the new machine-wide default, and the only real
-            // configuration this install has ever had is still sitting at the old per-user one.
-            // Printing and continuing would silently bootstrap a second, empty repo right next to a
-            // working one — refuse instead, and name both paths.
-            if (LegacyRootMigration.DetectAt(root) is { } legacyRoot)
-            {
-                Console.WriteLine(LegacyRootMigration.Message(legacyRoot, root));
-                return 1;
-            }
+            // Clean break (plan 13, E04): an appsettings.json or dbdatasync.config.yaml of an earlier release is refused, never read,
+            // and nothing is created next to it. The settings are server.yaml.
+            if (DbDataSyncRoot.LegacyRefusal(root) is { } refusal)
+                return Fail(new InvalidOperationException(refusal), refusal);
 
             var stateDb = CliOptions.Read(args, "--state-db") ?? Path.Combine(root, "state.db");
             // --url / DbDataSync__App__Url still override the file, exactly like every other
@@ -62,6 +58,9 @@ public static class ServeCommand
             {
                 return Fail(ex, PrepareFailureMessage(root, ex));
             }
+
+            if (EnsureCertificate(root, url) is { } certificateFailure)
+                return Fail(new InvalidOperationException(certificateFailure), certificateFailure);
 
             await EnsureDuckDbInstalledAsync(root);
 
@@ -141,7 +140,7 @@ public static class ServeCommand
     /// fails for a reason nobody installed a tool expecting.
     /// </para>
     /// <para>
-    /// A genuinely fresh root also gets a starter <c>dbdatasync.config.yaml</c>, committed the same way
+    /// A genuinely fresh root also gets a starter <c>server.yaml</c> (when pairing has not made one already), committed the same way
     /// every other config write is — never a repo root that already existed before this run, so
     /// re-running <c>serve</c> against a real deployment can never overwrite an operator's own edits,
     /// or their decision to delete the file and configure entirely by flag/environment variable.
@@ -159,19 +158,41 @@ public static class ServeCommand
         {
             DbDataSyncConfigFile.WriteStarter(root);
             new GitCommitService(root).CommitChanges(
-                [DbDataSyncConfigFile.PathIn(root)], "Add starter dbdatasync.config.yaml", CurrentUser.SystemAuthor);
+                [DbDataSyncConfigFile.PathIn(root)], "Add starter server.yaml", CurrentUser.SystemAuthor);
         }
-        else
+    }
+
+    /// <summary>
+    /// Serving https with nothing that names a certificate makes one, the way the other servers of the suite do on their first start (<c>DirectoryCertificate</c>): the managed self-signed file
+    /// <c>tls/dbdatasync.pfx</c> of the repository root, with its password beside it, bound in <c>dbdatasync.config.yaml</c> so the daily renewal check keeps it. A console that pairs with the server pins its fingerprint,
+    /// so nothing else about it needs to be trusted. Where a certificate is configured already (the file, an environment variable, the Windows store) it is left alone, and plain http needs none.
+    /// Returns null when there is nothing to report, otherwise the sentence that says why the server cannot start.
+    /// </summary>
+    internal static string? EnsureCertificate(string root, string url, Func<string, string?>? environment = null)
+    {
+        environment ??= Environment.GetEnvironmentVariable;
+        var normalized = url.Replace("://*", "://localhost").Replace("://+", "://localhost").Replace("://[::]", "://localhost").Replace("://0.0.0.0", "://localhost");
+        if (!Uri.TryCreate(normalized.Split(';')[0], UriKind.Absolute, out var address) || address.Scheme != Uri.UriSchemeHttps) return null;
+
+        var file = DbDataSyncConfigFile.Read(root);
+        // HTTP.sys takes its certificate from a binding made with netsh, never from Kestrel's settings
+        if (string.Equals(file.GetValueOrDefault(WebServerSelection.ConfigKey) ?? environment("DbDataSync__App__Server"), "httpsys", StringComparison.OrdinalIgnoreCase)) return null;
+        var configured = file.Keys.Any(key => key.StartsWith("Kestrel:Certificates:", StringComparison.OrdinalIgnoreCase) || key.StartsWith("Kestrel:Endpoints:", StringComparison.OrdinalIgnoreCase));
+        if (configured || environment("Kestrel__Certificates__Default__Path") is { Length: > 0 } || environment("Kestrel__Certificates__Default__Subject") is { Length: > 0 }
+            || environment("Kestrel__Endpoints__Https__Url") is { Length: > 0 }) return null;
+
+        var path = ManagedSelfSignedCertificate.PfxPath(root);
+        try
         {
-            // A no-op for a fresh repo (nothing to migrate) or one already on phase 164's key names —
-            // only prints/commits when there was real old-shaped content to rewrite.
-            var migrated = LegacyConfigMigration.Migrate(root);
-            if (migrated.Count > 0)
-            {
-                Console.WriteLine("dbdatasync.config.yaml used the old flat key names — migrated automatically:");
-                foreach (var change in migrated)
-                    Console.WriteLine($"  {change}");
-            }
+            using var certificate = ManagedSelfSignedCertificate.LoadOrRenew(root, address.Host, ManagedSelfSignedCertificate.DefaultValidityDays, out _);
+            CertCommand.BindManagedFile(root, address.Host);
+            Console.WriteLine($"  certificate        {path} (self-signed, made for {address.Host})");
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or LibGit2SharpException or ArgumentException)
+        {
+            return $"DbDataSync is asked to serve {url}, which needs a certificate, and none is configured. Making one at '{path}' failed: {ex.Message} " +
+                   "Fix that file or its directory, point Kestrel:Certificates:Default:Path at a certificate of your own (`dbdatasync cert use-pfx`), or serve plain http behind a proxy that ends TLS (see docs/configuration.md).";
         }
     }
 
@@ -251,7 +272,7 @@ public static class ServeCommand
     /// What actually reaches <see cref="DbDataSyncHost.Build"/> — every CLI-only flag *and its value*
     /// stripped out, plus the resolved root/state-db path/URL passed through as ordinary configuration
     /// (rather than mutated into the environment), so the same values reach the host the same way they
-    /// would from appsettings.json or an operator's own environment.
+    /// would from server.yaml or an operator's own environment.
     /// <para>
     /// **Stripping only the flag token, leaving its value behind, is a real bug this method exists to
     /// fix** — found while extracting it for phase 164's own regression test. <c>--DbDataSync:*</c>

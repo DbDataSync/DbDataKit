@@ -49,8 +49,8 @@ public sealed class ScriptCompiler(ScriptCacheDirectory cache, string? scriptsDi
         catch (ScriptDirectiveException ex) { return ScriptCompilation.Failed([new ScriptDiagnostic(ex.Line, 1, ex.Message)]); }
 
         Closure closure;
-        try { closure = ResolvePackages(requests); }
-        catch (Exception ex) when (ex is PackageResolutionException or PackageIntegrityException)
+        try { closure = ResolvePackages(script.Manifest.Name, requests); }
+        catch (Exception ex) when (ex is PackageResolutionException or PackageIntegrityException or InvalidDataException or IOException or UnauthorizedAccessException)
         {
             return ScriptCompilation.Failed([new ScriptDiagnostic(0, 0, $"The packages of script '{script.Manifest.Name}' could not be resolved: {ex.Message}")]);
         }
@@ -89,18 +89,29 @@ public sealed class ScriptCompiler(ScriptCacheDirectory cache, string? scriptsDi
         }
     }
 
-    // exact versions that are in the package store need no network; a script's packages are fetched when it is first validated (saved or previewed), and a run finds them there
-    private Closure ResolvePackages(IReadOnlyList<PackageRequest> requests)
+    // exact versions that are in the package store need no network; a script's packages are fetched when it is first validated (saved or previewed), and a run finds them there.
+    // The hashes are pinned in scripts/<name>.lock beside the script (S12): the first resolution writes it, a package whose bytes differ later is refused naming the file. A compiler with no scripts folder (a test, a preview of an
+    // unsaved script with no repository) has nowhere to keep a lock file and trusts the first download, as before.
+    private Closure ResolvePackages(string scriptName, IReadOnlyList<PackageRequest> requests)
     {
         var closure = new Closure();
         if (requests.Count == 0) return closure;
+        var lockPath = scriptsDirectory is null ? null : Path.Combine(scriptsDirectory, scriptName + ScriptConfig.LockExtension);
+        var pins = lockPath is null ? new LockFile() : LockFile.Read(lockPath, $"{Path.GetFileName(scriptsDirectory!.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))}/{scriptName}{ScriptConfig.LockExtension}");
         var options = new PackageResolverOptions
         {
             Store = new PackageStore(Path.Combine(cache.Root, "packages")),
             Sources = [new PackageSource(packageSource ?? "https://api.nuget.org/v3/index.json")],
             HostProvides = n => Platform.FrameworkAssemblies().ContainsKey(n),
+            Lock = pins,
         };
-        return new PackageResolver(options).ResolveAsync(requests).GetAwaiter().GetResult();
+        closure = new PackageResolver(options).ResolveAsync(requests).GetAwaiter().GetResult();
+        if (lockPath is not null)
+        {
+            pins.Replace(closure.Packages);
+            pins.Write(lockPath);
+        }
+        return closure;
     }
 }
 

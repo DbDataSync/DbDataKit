@@ -4,7 +4,7 @@ using LibGit2Sharp;
 namespace DbDataSync.Cli.Tests;
 
 /// <summary>
-/// <c>ServeCommand.Prepare</c> writes a starter <c>dbdatasync.config.yaml</c> only for a repo root that
+/// <c>ServeCommand.Prepare</c> writes a starter <c>server.yaml</c> only for a repo root that
 /// had no git repository before this run — see the phase 79 doc.
 /// </summary>
 public sealed class ServeCommandPrepareTests : IDisposable
@@ -35,7 +35,7 @@ public sealed class ServeCommandPrepareTests : IDisposable
         using var repo = new Repository(_root);
         var head = repo.Head.Tip;
         Assert.NotNull(head);
-        Assert.Contains("dbdatasync.config.yaml", head!.Tree.Select(e => e.Path));
+        Assert.Contains("server.yaml", head!.Tree.Select(e => e.Path));
     }
 
     [Fact]
@@ -53,7 +53,7 @@ public sealed class ServeCommandPrepareTests : IDisposable
     [Fact]
     public void ARepoRootThatAlreadyHadGit_NeverGetsAStarterFile()
     {
-        // A pre-existing git repository (not created by Prepare) that simply has no dbdatasync.config.yaml —
+        // A pre-existing git repository (not created by Prepare) that simply has no server.yaml —
         // e.g. an operator who deleted it deliberately to configure entirely by flag/environment variable.
         Repository.Init(_root);
 

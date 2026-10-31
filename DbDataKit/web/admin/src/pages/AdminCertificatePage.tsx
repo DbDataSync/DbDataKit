@@ -64,7 +64,7 @@ export function AdminCertificatePage() {
 
   const closeDialog = () => { setDialog(null); setRenewSeed(null) }
 
-  // Self-signed and enroll only add a certificate to the store — nothing dbdatasync.config.yaml names
+  // Self-signed and enroll only add a certificate to the store — nothing server.yaml names
   // changes until Bind runs, so only Bind (and a pending-enrollment Retrieve that ends in an install)
   // marks the restart banner.
   const doSelfSigned = async (dnsNames: string[], validityDays: number | null) => {
@@ -244,12 +244,12 @@ function BindingCard({ binding }: { binding: BindingInfo | null }) {
       <div className="card-head"><span className="card-title">Binding</span></div>
       <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {(!binding || binding.subject === null) && (
-          <span className="faint">dbdatasync.config.yaml names no certificate.</span>
+          <span className="faint">server.yaml names no certificate.</span>
         )}
         {binding && binding.subject !== null && (
           <>
             <span>
-              dbdatasync.config.yaml binds subject <span className="mono">{binding.subject}</span> in{' '}
+              server.yaml binds subject <span className="mono">{binding.subject}</span> in{' '}
               <span className="mono">{binding.location}\{binding.store}</span>.
             </span>
             {!binding.certificateFound && (

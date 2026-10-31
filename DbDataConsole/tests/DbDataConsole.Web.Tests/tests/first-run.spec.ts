@@ -304,6 +304,45 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await page.getByTestId('rail-config').click()
   await expect(page.getByTestId('commits-table').locator('[data-testid^="commit-"]').first()).toBeVisible()
 
+  // Publishing (plan 13a, T11 and T12): the console links the Build server to the Proxy (no code typed), the Build screen publishes the starter's connection, and the Proxy lists the data source it made.
+  // The first Build pairing was forgotten above, so the server is paired again, with the second code made for it.
+  await page.getByTestId('rail-home-link').click()
+  await page.getByTestId('pair-url-input').fill(buildUrl)
+  await page.getByTestId('pair-code-input').fill(fs.readFileSync(path.join(scratchDirectory, 'build-pairing-code-again.txt'), 'utf8').trim())
+  await page.getByTestId('pair-name-input').fill('Build one')
+  await page.getByTestId('pair-button').click()
+  await expect(page.getByTestId('instance-row-Build one').getByTestId('instance-status')).toHaveText('Ready')
+  await expect(page.getByTestId('link-card')).toBeVisible()
+  await page.getByTestId('link-from-select').selectOption({ label: 'Build one' })
+  await page.getByTestId('link-to-select').selectOption({ label: 'Proxy one' })
+  await page.getByTestId('link-button').click()
+  await expect(page.getByTestId('link-done')).toBeVisible()
+  await page.getByTestId('instance-row-Build one').getByTestId('instance-open-link').click()
+  await page.getByTestId('build-project-starter').getByTestId('build-project-link').click()
+  await page.getByTestId('build-tab-publish').click()
+  await expect(page.getByTestId('build-publish-button')).toBeDisabled()   // a proxy and a connection first
+  await page.getByTestId('build-publish-proxy').selectOption({ label: 'proxy-one' })
+  await page.getByTestId('build-publish-connection').fill('sqlserver')
+  await page.getByTestId('build-publish-data-source').fill('warehouse')
+  await page.getByTestId('build-publish-button').click()
+  await expect(page.getByTestId('build-publish-done')).toContainText('warehouse')
+  await expect(page.getByTestId('build-publish-done')).toContainText('(new)')
+  // a second time is a change to the data source the Build server made, not another one
+  await page.getByTestId('build-publish-button').click()
+  await expect(page.getByTestId('build-publish-done')).toContainText('updated')
+  await expect(page.getByTestId('build-publish-done')).not.toContainText('(new)')
+  // a data source made by hand on the Proxy (erp) is refused, in the Proxy's words, with the way an administrator settles it
+  await page.getByTestId('build-publish-data-source').fill('erp')
+  await page.getByTestId('build-publish-button').click()
+  await expect(page.getByTestId('build-publish-failed')).toContainText('not made by a publisher')
+  await expect(page.getByTestId('build-publish-adopt')).toBeVisible()
+  // the Proxy shows what was made
+  await page.getByTestId('rail-home-link').click()
+  await page.getByTestId('instance-row-Proxy one').getByTestId('instance-open-link').click()
+  await page.getByTestId('rail-data-sources').click()
+  await expect(page.getByTestId('data-source-warehouse')).toBeVisible()
+  await expect(page.getByTestId('data-source-erp')).toBeVisible()
+
   // One view across the servers: the Build, Sync and Proxy servers all answer, and none has a replication or a scheduled plan yet (a failed run and a lagging replication need real runs, so the rows themselves are tested on what the servers return)
   await page.goto('/monitoring')   // the rail inside a server's screens is that product's own
   await expect(page.getByTestId('monitoring-none')).toBeVisible()

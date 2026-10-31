@@ -236,7 +236,7 @@ switches; the page keeps asking rather than reporting an error, and you don't ha
 the state database).
 
 Listing releases on the page calls GitHub, so it is **off by default**. Set `DbDataSync:Updates:Mode` to
-`manual` (Admin → Configuration, or `dbdatasync.config.yaml`) to turn it on. The commands are shown either way. Only
+`manual` (Admin → Configuration, or `server.yaml`) to turn it on. The commands are shown either way. Only
 `stable` is listed unless you allow more with `DbDataSync:Updates:Channels` (`stable`, `beta`, `snapshot`,
 comma-separated). A snapshot is a development build: its download is checked only against a checksum published beside
 it, which catches corruption, not tampering.
@@ -261,14 +261,26 @@ saying so; set `DbDataSync:Console:Url` (environment `DbDataSync__Console__Url`,
 Use this for a self-contained deployment with no `PATH` or service to manage.
 
 ```sh
-docker run -p 8080:8080 -v dbdatasync-data:/var/lib/dbdatasync ghcr.io/dbdatasync/dbdatasync:latest
+docker run -p 8443:8443 -v dbdatasync-data:/var/lib/dbdatasync ghcr.io/dbdatasync/dbdatasync:latest
 ```
 
-The image listens on plain HTTP and serves its API to any client (it sets `DbDataSync__App__AllowInsecureHttp=true`). The image carries no web app (the screens are the console's:
-see [Connecting a console](#connecting-a-console)), and a console pairs only with an HTTPS address. That is fine for a first look at the API; credentials cross the network unencrypted. For real use, put
-a TLS-terminating proxy in front and run the container with `-e DbDataSync__App__AllowInsecureHttp=false -e DbDataSync__App__TrustedProxies=<proxy address>`
-(see [Plain HTTP and reverse proxies](configuration.md#plain-http-and-reverse-proxies)); plain HTTP is then served only to the proxy's
-`X-Forwarded-Proto: https` requests and to the container itself.
+The image serves **https** on port 8443, as the other images of the suite do. On its first start the server makes a self-signed certificate in the volume (`tls/dbdatasync.pfx`, with its password beside it, bound in
+`dbdatasync.config.yaml` and renewed by the server's daily check). A console pins that certificate's fingerprint when it pairs, so nothing else needs to trust it; a browser or `curl` needs `-k` or the certificate added
+to its trust. To use a certificate of your own, put it in the volume and point `Kestrel:Certificates:Default:Path` at it (`dbdatasync cert use-pfx`, see [certificates](certificates.md)); the image makes none when one is configured.
+The image carries no web app (the screens are the console's: see [Connecting a console](#connecting-a-console)).
+
+Earlier images served plain HTTP on 8080. That port is gone: a client or script that used `http://localhost:8080` gets a refused connection, and the health check moved with it (`dbdatasync health check --url https://127.0.0.1:8443`).
+To run behind a proxy that ends TLS instead, override the entrypoint to bind plain HTTP, allow it, and turn the image's health check off or point it at that address
+(see [Plain HTTP and reverse proxies](configuration.md#plain-http-and-reverse-proxies)):
+
+```sh
+docker run -p 8080:8080 -v dbdatasync-data:/var/lib/dbdatasync \
+  -e DbDataSync__App__TrustedProxies=<proxy address> \
+  --health-cmd 'dotnet /app/DbDataSync.Cli.dll health check --url http://127.0.0.1:8080' \
+  --entrypoint dotnet ghcr.io/dbdatasync/dbdatasync:latest /app/DbDataSync.Cli.dll server run --url http://0.0.0.0:8080
+```
+
+Plain HTTP is then served only to the proxy's `X-Forwarded-Proto: https` requests and to the container itself (or to everyone, with `-e DbDataSync__App__AllowInsecureHttp=true`, which sends credentials in clear text).
 
 One volume, at `/var/lib/dbdatasync`, holds both the config repository and the state database. Images are published for
 **linux/amd64 and linux/arm64** (an Arm server, a Raspberry Pi 4 or 5, AWS Graviton); Docker picks the one that matches the

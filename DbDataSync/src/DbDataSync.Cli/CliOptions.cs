@@ -42,7 +42,7 @@ public static class CliOptions
             : "/var/lib/dbdatasync";
 
     /// <summary>The per-user default this tool used before phase 112 — still checked so an upgrade
-    /// does not silently strand a working install; see <see cref="LegacyRootMigration"/>.</summary>
+    /// does not silently strand a working install; <see cref="DbDataSync.Core.Config.LegacyHostSettings"/> refuses it, naming the file.</summary>
     public static string LegacyDefaultRoot =>
         Path.Combine(
             Environment.GetFolderPath(

@@ -27,6 +27,7 @@
     <Project Path="DbDataConsole/src/DbDataConsole.Server/DbDataConsole.Server.csproj" />
   </Folder>
   <Folder Name="/DbDataConsole/tests/">
+    <Project Path="DbDataConsole/tests/DbDataConsole.Servers.Tests/DbDataConsole.Servers.Tests.csproj" />
     <Project Path="DbDataConsole/tests/DbDataConsole.Tests/DbDataConsole.Tests.csproj" />
   </Folder>
   <Folder Name="/DbDataKit/benchmarks/">

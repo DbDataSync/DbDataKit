@@ -23,15 +23,15 @@ cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 echo "== starting $image"
-docker run -d --name "$name" -p 127.0.0.1::8080 "$image" >/dev/null
-port="$(docker port "$name" 8080/tcp | head -n1 | sed 's/.*://')"
+docker run -d --name "$name" -p 127.0.0.1::8443 "$image" >/dev/null
+port="$(docker port "$name" 8443/tcp | head -n1 | sed 's/.*://')"
 [ -n "$port" ] || fail "no published port"
-base="http://127.0.0.1:$port"
+base="https://127.0.0.1:$port"
 
 echo "== waiting for the container's own health check"
 healthy=false
 for _ in $(seq 1 45); do
-  if docker exec "$name" dotnet /app/DbDataSync.Cli.dll health check --url http://127.0.0.1:8080 >/dev/null 2>&1; then healthy=true; break; fi
+  if docker exec "$name" dotnet /app/DbDataSync.Cli.dll health check --url https://127.0.0.1:8443 >/dev/null 2>&1; then healthy=true; break; fi
   [ "$(docker inspect -f '{{.State.Running}}' "$name")" = "true" ] || fail "the container exited"
   sleep 2
 done
@@ -48,20 +48,21 @@ if [ -n "$expected_version" ]; then
   esac
 fi
 
-status() { curl -s -o /dev/null -w '%{http_code}' "$base$1"; }
+# the image's own certificate is self-signed: -k, as the health check accepts it
+status() { curl -sk -o /dev/null -w '%{http_code}' "$base$1"; }
 expect() { # expect <path> <status> [content-type prefix]
   local got type
   got="$(status "$1")"
   [ "$got" = "$2" ] || fail "GET $1 answered $got, expected $2"
   if [ -n "${3:-}" ]; then
-    type="$(curl -s -o /dev/null -w '%{content_type}' "$base$1")"
+    type="$(curl -sk -o /dev/null -w '%{content_type}' "$base$1")"
     case "$type" in "$3"*) ;; *) fail "GET $1 was '$type', expected '$3…'" ;; esac
   fi
   echo "   $2 $1"
 }
 
 echo "== the address of the server says the web app moved, and does not serve one"
-body="$(curl -s "$base/")"
+body="$(curl -sk "$base/")"
 case "$body" in *"no longer serves a web app"*) ;; *) fail "/ did not say that the web app is the console's: $body" ;; esac
 expect / 200 text/plain
 expect /replications/anything 404 text/plain

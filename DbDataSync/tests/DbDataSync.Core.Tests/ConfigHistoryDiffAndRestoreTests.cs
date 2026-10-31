@@ -352,22 +352,22 @@ public sealed class ConfigHistoryDiffAndRestoreTests : IDisposable
 
     /// <summary>
     /// Phase 81 left this open and phase 35 was named as the phase that would take it: the repo-root
-    /// `dbdatasync.config.yaml` is git-tracked and was invisible to every query here, because a
+    /// `server.yaml` is git-tracked and was invisible to every query here, because a
     /// directory-prefix match only ever matches paths *below* the prefix and a bare file has none.
     /// </summary>
     [Fact]
     public void ARepoRootFile_HasHistoryAndADiffLikeAnythingElse()
     {
-        var path = Path.Combine(_repoRoot, "dbdatasync.config.yaml");
+        var path = Path.Combine(_repoRoot, "server.yaml");
         var git = new GitCommitService(_repoRoot);
         File.WriteAllText(path, "port: 5001\n");
         git.CommitChanges([path], "Set the console port", Author);
 
-        var history = git.GetHistory("dbdatasync.config.yaml");
+        var history = git.GetHistory("server.yaml");
         Assert.Equal("Set the console port", Assert.Single(history).Message);
 
-        var diff = git.GetCommitDiff("dbdatasync.config.yaml", history[0].Sha);
-        Assert.Equal("dbdatasync.config.yaml", Assert.Single(diff.Changes).Path);
+        var diff = git.GetCommitDiff("server.yaml", history[0].Sha);
+        Assert.Equal("server.yaml", Assert.Single(diff.Changes).Path);
         Assert.Contains("port: 5001", diff.Changes[0].After);
     }
 }

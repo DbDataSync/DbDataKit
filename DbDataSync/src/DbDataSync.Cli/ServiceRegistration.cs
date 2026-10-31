@@ -14,7 +14,7 @@ public sealed record ServiceRegistrationInfo(string Account, string Platform, Da
 /// error message and <c>dbdatasync config check</c> can both answer it without an operator having to
 /// remember what <c>service install</c> printed the first time they ran it.
 /// <para>
-/// **Deliberately not <c>dbdatasync.config.yaml</c>, and never git-committed** — same reasoning as
+/// **Deliberately not <c>server.yaml</c>, and never git-committed** — same reasoning as
 /// <see cref="Certificates.PendingEnrollmentStore"/>: per-machine operational state, not configuration
 /// meant to be reviewed or diffed. A plain JSON file beside the config repository, gitignored the same
 /// way.

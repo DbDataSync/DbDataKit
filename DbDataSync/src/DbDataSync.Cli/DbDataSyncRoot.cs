@@ -7,7 +7,7 @@ namespace DbDataSync.Cli;
 /// <c>serve</c>, <c>invite</c> and <c>health</c> alike (phase 79).
 /// <para>
 /// **Explicit <c>--repo</c> wins outright.** Otherwise this walks upward from the current directory —
-/// the same shape git itself uses to find <c>.git</c> — looking for <c>dbdatasync.config.yaml</c> at
+/// the same shape git itself uses to find <c>.git</c> — looking for <c>server.yaml</c> at
 /// each parent in turn, so a command run from anywhere inside a repo root finds it, not just from the
 /// root itself. Otherwise <c>DbDataSync__App__RepoRoot</c> (phase 112), and only then
 /// <see cref="CliOptions.DefaultRoot"/>.
@@ -44,8 +44,15 @@ public static class DbDataSyncRoot
     }
 
     /// <summary>
+    /// The message for a settings file of an earlier release in this root (or beside the executable), or null when there is none (plan 13, E04). The
+    /// per-user folder earlier releases used as the default is looked at only when the root is the platform default, that is, when nobody named one.
+    /// </summary>
+    public static string? LegacyRefusal(string root, string? baseDirectory = null) =>
+        LegacyHostSettings.Refusal(root, baseDirectory ?? AppContext.BaseDirectory, root == CliOptions.DefaultRoot ? CliOptions.LegacyDefaultRoot : null);
+
+    /// <summary>
     /// Walks from <paramref name="startDirectory"/> up through each parent looking for a
-    /// <c>dbdatasync.config.yaml</c>. Stops at the filesystem root rather than at the user's home
+    /// <c>server.yaml</c>. Stops at the filesystem root rather than at the user's home
     /// directory — the phase doc left this bound open as "whatever's simplest to implement correctly,"
     /// and the filesystem root needs no extra logic to detect (<see cref="DirectoryInfo.Parent"/> is
     /// null there) where a home-directory bound would need one more thing to get right for no benefit

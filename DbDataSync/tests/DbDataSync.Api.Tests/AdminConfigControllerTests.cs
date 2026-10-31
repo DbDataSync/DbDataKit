@@ -10,11 +10,11 @@ namespace DbDataSync.Api.Tests;
 
 /// <summary>
 /// The admin config screen (phase 81): every documented DbDataSync:* key, its live effective value and
-/// source, and — for the keys dbdatasync.config.yaml's writer can address — editing or adopting it.
+/// source, and — for the keys server.yaml's writer can address — editing or adopting it.
 /// <para>
 /// Every test that cares whether a key is "file-sourced" builds its own <see cref="AuthenticatedApiFactory"/>
 /// rather than sharing the class fixture: <c>DbDataSyncHost.InsertConfigFile</c> only wires
-/// dbdatasync.config.yaml in as a configuration source if the file already exists the moment the host
+/// server.yaml in as a configuration source if the file already exists the moment the host
 /// boots (the first request any test makes against a shared factory), so the file has to be written
 /// before that — and once the host is up, nothing here reloads it. The shared <paramref name="factory"/>
 /// is used only for tests that do not depend on what, if anything, is already on disk.
@@ -58,7 +58,7 @@ public sealed class AdminConfigControllerTests(AuthenticatedApiFactory factory) 
         Assert.Contains(entries!, e => e.Key == "DbDataSync:Auth:Network:Admin");
         Assert.Contains(entries!, e => e.Key == "DbDataSync:Auth:Passkeys:RelyingPartyId");
 
-        // App:RepoRoot is the one key this screen never writes — it's how dbdatasync.config.yaml itself
+        // App:RepoRoot is the one key this screen never writes — it's how server.yaml itself
         // is found, so a value inside that same file could never relocate it.
         var repoRoot = entries!.Single(e => e.Key == "DbDataSync:App:RepoRoot");
         Assert.False(repoRoot.Editable);
@@ -83,7 +83,7 @@ public sealed class AdminConfigControllerTests(AuthenticatedApiFactory factory) 
         Assert.Equal("loopback", DbDataSyncConfigFile.Read(scoped.RepoRoot)["DbDataSync:Auth:Network:Admin"]);
     }
 
-    /// <summary>App:RepoRoot is how dbdatasync.config.yaml itself is found, so a PUT refuses it rather
+    /// <summary>App:RepoRoot is how server.yaml itself is found, so a PUT refuses it rather
     /// than writing something that could never take effect from inside that same file.</summary>
     [Fact]
     public async Task ANonWritableKey_CannotBeWritten()
@@ -96,7 +96,7 @@ public sealed class AdminConfigControllerTests(AuthenticatedApiFactory factory) 
     }
 
     /// <summary>The secret endpoint writes through SecretStore under the fixed ref, exactly like
-    /// `dbdatasync secret set` — never through dbdatasync.config.yaml.</summary>
+    /// `dbdatasync secret set` — never through server.yaml.</summary>
     [Fact]
     public async Task TheSecretEndpoint_StoresThroughSecretStore_NotTheFile()
     {
@@ -212,7 +212,7 @@ public sealed class AdminConfigControllerTests(AuthenticatedApiFactory factory) 
     /// <summary>
     /// State:ConnectionString's secret is never present in any response body — file-sourced (where phase
     /// 79 guarantees there is none to begin with) or, here, sourced from an environment variable that an
-    /// operator seeded with a raw Password= the old way, before adopting dbdatasync.config.yaml.
+    /// operator seeded with a raw Password= the old way, before adopting server.yaml.
     /// </summary>
     [Fact]
     public async Task AnEnvVarStateConnectionStringWithAPassword_IsNeverSentToTheBrowser()

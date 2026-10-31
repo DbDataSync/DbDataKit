@@ -136,7 +136,7 @@ public sealed class AdminCertificateService(ApiOptions apiOptions, CertificateOp
         if (string.IsNullOrWhiteSpace(caConfig))
         {
             return CertificateActionResult.Failed(
-                "No CA is configured. Set DbDataSync:Certificates:CaConfig in dbdatasync.config.yaml first.");
+                "No CA is configured. Set DbDataSync:Certificates:CaConfig in server.yaml first.");
         }
 
         CertificateSpec spec;

@@ -55,8 +55,11 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    /// <summary>The engines the Proxy serves that a Build connection can be: SQL Server.</summary>
-    private static string? ProxyEngineOf(ConnectionConfig connection) => connection.Engine == "sqlserver" && !connection.ReadOnly ? "sqlserver" : null;
+    /// <summary>
+    /// The engines the Proxy serves (its providers: SQL Server, ODBC and DuckDB) and what a Build connection's driver is called there: the same word. The read login of such a connection is a connection string, which the Proxy takes whole as
+    /// <c>connection_string_secret</c> whatever the engine; <c>access: readonly</c> is what is written, because only the read login goes. A driver the Proxy has no provider for (postgres, fabric, flightsql) is not published.
+    /// </summary>
+    private static string? ProxyEngineOf(ConnectionConfig connection) => connection.Kind.Driver is "sqlserver" or "odbc" or "duckdb" ? connection.Kind.Driver : null;
 
     /// <summary>
     /// Pairs this server with the Proxy at <paramref name="url"/> as a server client, with the code its administrator made (or a console asked it for, T11), and remembers it as <paramref name="name"/>. The key this server signs with is its own, kept in its secret store.
@@ -74,45 +77,111 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
     {
         if (proxies.Find(proxyName) is not { } proxy) return Fail(404, $"This server is not paired with a proxy called '{proxyName}'.");
         if (!project.Connections.TryGetValue(connection, out var config)) return Fail(404, $"The project has no connection '{connection}'.");
-        if (ProxyEngineOf(config) is not { } engine) return Fail(409, $"The connection '{connection}' is {config.Engine}; a proxy serves SQL Server from here.");
+        if (ProxyEngineOf(config) is not { } engine) return Fail(409, $"The connection '{connection}' is {config.Kind.Describe()}; a proxy serves sqlserver, odbc and duckdb connections, not {config.Kind.Driver}.");
 
         using var login = await secrets.TryResolveAsync(ServerSecrets.NameOf(connection, LoginRole.Read).ToRef(), ct);
         if (login is null || login.IsEmpty) return Fail(409, $"No read login is stored for '{connection}' (dbdatabuild secret set {ServerSecrets.NameOf(connection, LoginRole.Read)}); there is nothing to publish.");
 
         var self = await identity.GetOrCreateAsync(ct);
         using var http = new HttpClient(PairingClient.Pinned(proxy.Fingerprint)) { BaseAddress = new Uri(proxy.Url), Timeout = TimeSpan.FromSeconds(60) };
-        async Task<HttpResponseMessage> Send(HttpMethod method, string path, object? body = null)
+        async Task<HttpResponseMessage> Send(HttpMethod method, string path, object? body = null, CancellationToken? token = null)
         {
             using var request = new HttpRequestMessage(method, path);
             request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, self.Issuer().Issue(new ConsoleTokenRequest(proxy.InstanceId, person.SubjectId, person.SubjectName, ServerRole.Publisher)));
             if (body is not null) request.Content = JsonContent.Create(body, options: Json);
-            return await http.SendAsync(request, ct);
+            return await http.SendAsync(request, token ?? ct);
+        }
+
+        var secretName = dataSource + "-read";
+        var secretPath = $"/api/v1/secrets/{Uri.EscapeDataString(secretName)}";
+        var storedNew = false;      // this call made the secret: only then does a failure take it away again
+        var replaced = false;       // this call overwrote one that was there, which cannot be undone
+
+        // What a failure after the secret was stored leaves behind, said in the refusal. A secret that was not there before is deleted again (with a token of its own: the call may have been cancelled); one that was is never deleted.
+        async Task<PublishResult> Undone(PublishResult failure)
+        {
+            var note = "";
+            if (storedNew)
+            {
+                try
+                {
+                    using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                    using var removed = await Send(HttpMethod.Delete, secretPath, token: cleanup.Token);
+                    note = removed.IsSuccessStatusCode ? $" The login '{secretName}' stored for it was removed again." : $" The login '{secretName}' stored for it could not be removed again (the proxy answered {(int)removed.StatusCode}); remove it with DELETE {secretPath}.";
+                }
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { note = $" The login '{secretName}' stored for it could not be removed again ({ex.GetType().Name}); remove it with DELETE {secretPath}."; }
+            }
+            else if (replaced) note = $" The proxy already held a login '{secretName}', which has been replaced; its previous value cannot be restored.";
+            failure.Body["error"] = (string?)failure.Body["error"] + note;
+            return failure;
+        }
+
+        async Task<(string Reference, PublishResult? Refusal)> StoreLogin()
+        {
+            using var stored = await Send(HttpMethod.Put, secretPath, new { value = login.RevealString() });
+            if (!stored.IsSuccessStatusCode) return ("", await Refused(stored, "storing the login"));
+            return ((string?)JsonNode.Parse(await stored.Content.ReadAsStringAsync(ct))?["reference"] ?? "", null);
         }
 
         try
         {
-            // 1. the login, once, into the proxy's own store
-            using var stored = await Send(HttpMethod.Put, $"/api/v1/secrets/{Uri.EscapeDataString(dataSource + "-read")}", new { value = login.RevealString() });
-            if (!stored.IsSuccessStatusCode) return await Refused(stored, "storing the login");
-            var reference = (string?)JsonNode.Parse(await stored.Content.ReadAsStringAsync(ct))?["reference"] ?? "";
-
-            // 2. the data source: new, or the one this server made before (its version is read first)
-            string? version = null;
+            // 1. the data source, read first: new, or the one this server made before (its version is read), and every refusal (the owner rule on a hand-made one) comes before anything is stored
+            string? version = null, current = null;
             using (var existing = await Send(HttpMethod.Get, $"/api/v1/data-sources/{Uri.EscapeDataString(dataSource)}"))
             {
-                if (existing.IsSuccessStatusCode) version = (string?)JsonNode.Parse(await existing.Content.ReadAsStringAsync(ct))?["version"];
-                else if (existing.StatusCode != System.Net.HttpStatusCode.NotFound) return await Refused(existing, "reading the data source");
+                if (existing.IsSuccessStatusCode)
+                {
+                    var found = JsonNode.Parse(await existing.Content.ReadAsStringAsync(ct));
+                    version = (string?)found?["version"];
+                    current = (string?)found?["text"];
+                }
+                else if (existing.StatusCode != System.Net.HttpStatusCode.NotFound) return await Refused(existing, "reading the data source", AdoptHint(self.Id, dataSource));
             }
+
+            // 2. is the login already there? (PUT overwrites, and on a re-publish it is the live login of a source this server manages)
+            bool exists;
+            using (var listed = await Send(HttpMethod.Get, "/api/v1/secrets"))
+            {
+                if (!listed.IsSuccessStatusCode) return await Refused(listed, "listing the stored logins");
+                exists = (JsonNode.Parse(await listed.Content.ReadAsStringAsync(ct))?["secrets"] as JsonArray)?.Any(n => (string?)n == secretName) ?? false;
+            }
+
+            // 3. the login goes before the source, because the source's file refers to the reference the proxy answers. Not when the source already refers to this very secret: its reference is known, so the source is written first and the
+            //    login (the live one, which an unaccepted source must not replace) is updated only after the proxy has accepted the file.
+            var reference = exists ? KnownReference(current, secretName) : null;
+            var loginFirst = reference is null;
+            if (loginFirst)
+            {
+                var (stored, refusal) = await StoreLogin();
+                if (refusal is not null) return refusal;
+                reference = stored;
+                (storedNew, replaced) = (!exists, exists);
+            }
+
             var text = $"schema: connection/1\nname: {dataSource}\nengine: {engine}\naccess: readonly\nconnection_string_secret: '{reference}'\n";
             using var written = await Send(HttpMethod.Put, $"/api/v1/data-sources/{Uri.EscapeDataString(dataSource)}", new { text, expected_version = version });
-            if (!written.IsSuccessStatusCode) return await Refused(written, "writing the data source");
+            if (!written.IsSuccessStatusCode) return await Undone(await Refused(written, "writing the data source", AdoptHint(self.Id, dataSource)));
             var answer = JsonNode.Parse(await written.Content.ReadAsStringAsync(ct))!;
+
+            if (!loginFirst && await StoreLogin() is (_, { } notStored))
+            {
+                notStored.Body["error"] = $"{(string?)notStored.Body["error"]} The data source was written and keeps using the login it already had.";
+                return notStored;
+            }
             return new PublishResult(200, new JsonObject { ["proxy"] = proxyName, ["data_source"] = dataSource, ["created"] = (bool?)answer["created"] ?? version is null, ["version"] = (string?)answer["version"] });
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IncompatibleServerException)
         {
-            return Fail(502, $"The proxy '{proxyName}' did not answer ({ex.GetType().Name}).");
+            return await Undone(Fail(502, $"The proxy '{proxyName}' did not answer ({ex.GetType().Name})."));
         }
+    }
+
+    /// <summary>The reference a data source file's <c>connection_string_secret</c> holds when it names the secret <paramref name="secretName"/> (references end in the secret's name), else null.</summary>
+    private static string? KnownReference(string? file, string secretName)
+    {
+        if (file is null) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(file, @"^connection_string_secret:\s*'?([^'\s]+)'?\s*$", System.Text.RegularExpressions.RegexOptions.Multiline);
+        return match.Success && match.Groups[1].Value.EndsWith(":" + secretName, StringComparison.Ordinal) ? match.Groups[1].Value : null;
     }
 
     /// <summary>
@@ -165,11 +234,24 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
 
     private static PublishResult Fail(int status, string message) => new(status, new JsonObject { ["error"] = message });
 
+    /// <summary>
+    /// What a person can do about a data source this server may not touch (plan 13, T12): taking it over is an administrator's act on the proxy (<c>POST /api/v1/data-sources/{name}/adopt</c>, never a server client's, so Build cannot do it for them), which needs
+    /// this server's client id on the proxy. The id and the call are returned with the refusal.
+    /// </summary>
+    private static JsonObject AdoptHint(string clientId, string dataSource) => new() { ["client"] = clientId, ["data_source"] = dataSource, ["call"] = $"POST /api/v1/data-sources/{dataSource}/adopt", ["body"] = new JsonObject { ["client"] = clientId } };
+
     /// <summary>The proxy's refusal, in its own words (they name the rule), under the status it gave.</summary>
-    private static async Task<PublishResult> Refused(HttpResponseMessage response, string step)
+    private static async Task<PublishResult> Refused(HttpResponseMessage response, string step, JsonObject? adopt = null)
     {
         var message = "";
         try { message = (string?)JsonNode.Parse(await response.Content.ReadAsStringAsync())?["error"] ?? ""; } catch (JsonException) { }
-        return Fail((int)response.StatusCode, $"The proxy refused {step}: {(message.Length > 0 ? message : response.ReasonPhrase)}");
+        var refused = Fail((int)response.StatusCode, $"The proxy refused {step}: {(message.Length > 0 ? message : response.ReasonPhrase)}");
+        // a refusal on owner grounds (403) can be settled by a person taking the object over; say how
+        if (adopt is not null && response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            refused.Body["error"] = $"{(string?)refused.Body["error"]} An administrator of the proxy can hand this data source to this server (adopt it, client {(string?)adopt["client"]}); a server cannot adopt for itself.";
+            refused.Body["adopt"] = adopt;
+        }
+        return refused;
     }
 }

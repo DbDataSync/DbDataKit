@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Real servers in one run (plan 13a, T12): a Build server and a Proxy as the programs they are, started from their built output, with a console in this process between them. The two programs are not
+    project references on purpose: this project builds on its own, and the job that runs it (dbdataconsole-ci.yml, `servers`) builds Build's and the Proxy's first, as the Playwright job does.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <Using Include="Xunit" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\..\src\DbDataConsole.Server\DbDataConsole.Server.csproj" />
+  </ItemGroup>
+</Project>
