@@ -22,10 +22,9 @@ async function signIn(page: Page, context: BrowserContext, baseURL: string, role
   await cdp.send('WebAuthn.addVirtualAuthenticator', {
     options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
   })
-  const made = execFileSync('dotnet', ['exec', consoleDll, 'user', 'invite', '--role', role, '--url', baseURL, '--repo', scratchDirectory], { encoding: 'utf8' })
+  const made = execFileSync('dotnet', ['exec', consoleDll, 'user', 'invite', '--email', email, '--role', role, '--url', baseURL, '--repo', scratchDirectory], { encoding: 'utf8' })
   await page.goto(`/invite#${/\/invite#(\S+)/.exec(made)![1]}`)
   await page.getByTestId('invite-name-input').fill(name)
-  await page.getByTestId('invite-email-input').fill(email)
   await page.getByTestId('invite-enrol-button').click()
   await expect(page.getByTestId('home-page')).toBeVisible()
 }
