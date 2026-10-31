@@ -341,6 +341,62 @@ public sealed class ConnectionsController(
     }
 
     /// <summary>
+    /// The connection as the <c>connection/1</c> file it is kept in (plan 13, E05), with the version a write names: the console reads this to copy a connection to another server, as it reads a Proxy's data source.
+    /// The file never holds a password, only the reference to it.
+    /// </summary>
+    [Authorize(Policies.Viewer)]
+    [HttpGet("{name}/file")]
+    public IActionResult GetFile(string name)
+    {
+        try
+        {
+            return configRepository.ReadConnectionFileText(name) is { } text
+                ? Ok(new ConnectionFileAnswer(name, text, ConnectionFileVersion.Of(text)))
+                : NotFound(new { error = $"There is no connection '{name}'." });
+        }
+        catch (ConfigValidationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Creates or changes a connection from a whole <c>connection/1</c> file (plan 13, E05), checked as a file on disk is and as a save is, so a file that Sync would not read is refused with its diagnostics and nothing is written. It names the version it is based on
+    /// (<c>null</c> to create): a connection that exists and was not read, or changed since, is a 409 with the current version. A password, when the connection logs in with one, is sent beside the file and stored as a save stores it; it is never in the file.
+    /// </summary>
+    [HttpPut("{name}/file")]
+    public IActionResult PutFile(string name, [FromBody] ConnectionFileInput input)
+    {
+        if (string.IsNullOrWhiteSpace(input.Text))
+            return BadRequest(new { error = "The body is a JSON object with the file's text and the version it is based on: {\"text\": \"schema: connection/1 ...\", \"expectedVersion\": \"<hash>\" or null to create}." });
+        try
+        {
+            var current = configRepository.ReadConnectionFileText(name);
+            if ((current is null ? null : ConnectionFileVersion.Of(current)) != input.ExpectedVersion)
+                return Conflict(new { error = current is null ? $"There is no connection '{name}' to change." : "The connection changed since it was read; read it again and make the change on that.", currentVersion = current is null ? null : ConnectionFileVersion.Of(current) });
+
+            var parsed = configRepository.ConnectionInputFromFile(input.Text, name, input.Password);
+            parameterCheck.ThrowIfInvalid(parsed);
+            configRepository.SaveConnection(parsed, currentUser.Author);
+            var saved = configRepository.ReadConnectionFileText(name)!;
+            return Ok(new { name, version = ConnectionFileVersion.Of(saved), created = current is null });
+        }
+        catch (ConfigFileException ex)
+        {
+            return BadRequest(new
+            {
+                error = "The connection is not valid, so nothing was written.",
+                valid = false,
+                diagnostics = ex.Diagnostics.Select(d => new { code = d.Code, severity = d.Severity.ToString().ToLowerInvariant(), key = d.KeyPath, file = d.Path, line = d.Line, column = d.Column, message = d.Message, fix = d.Fix }),
+            });
+        }
+        catch (ConfigValidationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Runs a query against this connection and returns its columns and first few rows.
     /// <para>
     /// **On the connection, not on the mapping**, because that is what the request actually needs: the
@@ -386,6 +442,18 @@ public sealed class ConnectionsController(
         configRepository.DeleteConnection(name, currentUser.Author);
         return NoContent();
     }
+}
+
+/// <summary>A connection's <c>connection/1</c> file, with the version a write names.</summary>
+public sealed record ConnectionFileAnswer(string Name, string Text, string Version);
+
+/// <summary>A write of a connection's file: the text, the version it is based on (null to create) and, for a login with a password, the password.</summary>
+public sealed record ConnectionFileInput(string? Text, string? ExpectedVersion, string? Password);
+
+/// <summary>The version of a connection file: the SHA-256 of its text, the form a Proxy's data sources use.</summary>
+internal static class ConnectionFileVersion
+{
+    public static string Of(string text) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 }
 
 /// <param name="ConnectMs">Time to open the connection — usually the dominant cost, and the part that
