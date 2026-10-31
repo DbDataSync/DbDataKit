@@ -368,12 +368,12 @@ public sealed class ConnectionsController(
     public IActionResult PutFile(string name, [FromBody] ConnectionFileInput input)
     {
         if (string.IsNullOrWhiteSpace(input.Text))
-            return BadRequest(new { error = "The body is a JSON object with the file's text and the version it is based on: {\"text\": \"schema: connection/1 ...\", \"expectedVersion\": \"<hash>\" or null to create}." });
+            return BadRequest(new { error = "The body is a JSON object with the file's text and the version it is based on: {\"text\": \"schema: connection/1 ...\", \"expected_version\": \"<hash>\" or null to create}." });
         try
         {
             var current = configRepository.ReadConnectionFileText(name);
             if ((current is null ? null : ConnectionFileVersion.Of(current)) != input.ExpectedVersion)
-                return Conflict(new { error = current is null ? $"There is no connection '{name}' to change." : "The connection changed since it was read; read it again and make the change on that.", currentVersion = current is null ? null : ConnectionFileVersion.Of(current) });
+                return Conflict(new { error = current is null ? $"There is no connection '{name}' to change." : "The connection changed since it was read; read it again and make the change on that.", current_version = current is null ? null : ConnectionFileVersion.Of(current) });
 
             var parsed = configRepository.ConnectionInputFromFile(input.Text, name, input.Password);
             parameterCheck.ThrowIfInvalid(parsed);
@@ -448,7 +448,7 @@ public sealed class ConnectionsController(
 public sealed record ConnectionFileAnswer(string Name, string Text, string Version);
 
 /// <summary>A write of a connection's file: the text, the version it is based on (null to create) and, for a login with a password, the password.</summary>
-public sealed record ConnectionFileInput(string? Text, string? ExpectedVersion, string? Password);
+public sealed record ConnectionFileInput(string? Text, [property: System.Text.Json.Serialization.JsonPropertyName("expected_version")] string? ExpectedVersion, string? Password);
 
 /// <summary>The version of a connection file: the SHA-256 of its text, the form a Proxy's data sources use.</summary>
 internal static class ConnectionFileVersion

@@ -83,7 +83,7 @@ public sealed class ConsoleConnectionsTests : IAsyncLifetime
                 }
                 if (refusals.Count > 0)
                     return Results.Json(new { error = "The connection is not valid, so nothing was written.", valid = false, diagnostics = refusals.Select(r => new { r.code, severity = "error", key = (string?)null, file = $"{name}.yaml", r.line, column = 1, r.message, fix = (string?)null }) }, statusCode: 400);
-                if (syncFiles.ContainsKey(name)) return Results.Json(new { error = "The connection changed since it was read.", currentVersion = Version(syncFiles[name]) }, statusCode: 409);
+                if (syncFiles.ContainsKey(name)) return Results.Json(new { error = "The connection changed since it was read.", current_version = Version(syncFiles[name]) }, statusCode: 409);
                 syncFiles[name] = text;
                 return Results.Json(new { name, version = Version(text), created = true });
             });
@@ -214,7 +214,7 @@ public sealed class ConsoleConnectionsTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.Conflict, status);
         Assert.Equal(before, proxyFiles["taken"]);
-        Assert.NotNull(body["currentVersion"]);
+        Assert.NotNull(body["current_version"]);
     }
 
     [Fact]

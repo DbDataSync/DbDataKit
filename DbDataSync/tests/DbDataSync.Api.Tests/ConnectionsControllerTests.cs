@@ -191,7 +191,7 @@ public sealed class ConnectionsControllerTests : IClassFixture<TestApiFactory>
     public async Task PutFile_CreatesFromAFileAndAPassword_ThenReadsBackAsTheSameConnection()
     {
         var name = $"copy-{Guid.NewGuid():N}";
-        var response = await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text = FileText(name), expectedVersion = (string?)null, password = "typed-once" }, JsonOptions);
+        var response = await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text = FileText(name), expected_version = (string?)null, password = "typed-once" }, JsonOptions);
         response.EnsureSuccessStatusCode();
         Assert.True((await Json(response)).GetProperty("created").GetBoolean());
 
@@ -205,7 +205,7 @@ public sealed class ConnectionsControllerTests : IClassFixture<TestApiFactory>
     public async Task PutFile_WithoutAPasswordTheTargetHasNotGot_IsRefusedNamingTheReference()
     {
         var name = $"copy-{Guid.NewGuid():N}";
-        var response = await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text = FileText(name), expectedVersion = (string?)null }, JsonOptions);
+        var response = await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text = FileText(name), expected_version = (string?)null }, JsonOptions);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains($"dbdata:sync:connection:{name}", (await Json(response)).GetProperty("error").GetString());
@@ -218,7 +218,7 @@ public sealed class ConnectionsControllerTests : IClassFixture<TestApiFactory>
     public async Task PutFile_ThatSyncWouldNotRead_IsRefusedWithDiagnosticsAndWritesNothing(string extra, string expected)
     {
         var name = $"copy-{Guid.NewGuid():N}";
-        var response = await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text = FileText(name) + extra, expectedVersion = (string?)null, password = "x" }, JsonOptions);
+        var response = await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text = FileText(name) + extra, expected_version = (string?)null, password = "x" }, JsonOptions);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var body = await Json(response);
@@ -232,7 +232,7 @@ public sealed class ConnectionsControllerTests : IClassFixture<TestApiFactory>
     public async Task PutFile_NamingAnotherConnectionsSecret_IsRefused()
     {
         var name = $"copy-{Guid.NewGuid():N}";
-        var response = await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text = FileText(name, "secret:dbdata:sync:connection:other"), expectedVersion = (string?)null, password = "x" }, JsonOptions);
+        var response = await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text = FileText(name, "secret:dbdata:sync:connection:other"), expected_version = (string?)null, password = "x" }, JsonOptions);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains($"dbdata:sync:connection:{name}", (await Json(response)).GetProperty("error").GetString());
@@ -247,12 +247,12 @@ public sealed class ConnectionsControllerTests : IClassFixture<TestApiFactory>
         var text = read.GetProperty("text").GetString()!.Replace("host: sql01", "host: sql02");
 
         // creating over an existing name, and a stale version, are conflicts that name the current version
-        var create = await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text, expectedVersion = (string?)null }, JsonOptions);
+        var create = await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text, expected_version = (string?)null }, JsonOptions);
         Assert.Equal(HttpStatusCode.Conflict, create.StatusCode);
-        Assert.Equal(read.GetProperty("version").GetString(), (await Json(create)).GetProperty("currentVersion").GetString());
-        Assert.Equal(HttpStatusCode.Conflict, (await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text, expectedVersion = "0000" }, JsonOptions)).StatusCode);
+        Assert.Equal(read.GetProperty("version").GetString(), (await Json(create)).GetProperty("current_version").GetString());
+        Assert.Equal(HttpStatusCode.Conflict, (await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text, expected_version = "0000" }, JsonOptions)).StatusCode);
 
-        var change = await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text, expectedVersion = read.GetProperty("version").GetString() }, JsonOptions);
+        var change = await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text, expected_version = read.GetProperty("version").GetString() }, JsonOptions);
         change.EnsureSuccessStatusCode();
         Assert.False((await Json(change)).GetProperty("created").GetBoolean());
         Assert.Equal("sql02", (await _client.GetFromJsonAsync<ConnectionConfig>($"/api/connections/{name}", JsonOptions))!.Host);
