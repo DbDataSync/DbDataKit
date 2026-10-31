@@ -335,12 +335,42 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await page.getByTestId('build-publish-button').click()
   await expect(page.getByTestId('build-publish-failed')).toContainText('not made by a publisher')
   await expect(page.getByTestId('build-publish-adopt')).toBeVisible()
-  // the Proxy shows what was made
+  // T13: the administrator hands it over from the offer (the call goes to the Proxy through the console's relay), and the next publish is a change to a data source that is the Build server's now
+  await page.getByTestId('build-publish-adopt-button').click()
+  await expect(page.getByTestId('build-publish-adopted')).toContainText('erp')
+  await expect(page.getByTestId('build-publish-failed')).toHaveCount(0)
+  await page.getByTestId('build-publish-button').click()
+  await expect(page.getByTestId('build-publish-done')).toContainText('erp')
+  await expect(page.getByTestId('build-publish-done')).toContainText('updated')
+  // the other hand-made data source is refused the same way, and handed over from the Proxy's own page instead
+  await page.getByTestId('build-publish-data-source').fill('legacy')
+  await page.getByTestId('build-publish-button').click()
+  await expect(page.getByTestId('build-publish-failed')).toContainText('not made by a publisher')
+  await expect(page.getByTestId('build-publish-adopt')).toBeVisible()
+  // the Proxy shows what was made, and who manages each data source
   await page.getByTestId('rail-home-link').click()
   await page.getByTestId('instance-row-Proxy one').getByTestId('instance-open-link').click()
   await page.getByTestId('rail-data-sources').click()
   await expect(page.getByTestId('data-source-warehouse')).toBeVisible()
-  await expect(page.getByTestId('data-source-erp')).toBeVisible()
+  await expect(page.getByTestId('data-source-erp').getByTestId('data-source-owner')).not.toHaveText('by hand')
+  const legacy = page.getByTestId('data-source-legacy')
+  await expect(legacy.getByTestId('data-source-owner')).toHaveText('by hand')
+  await expect(legacy.getByTestId('hand-over-button')).toBeDisabled()   // a server first
+  await legacy.getByTestId('hand-over-client').selectOption({ index: 1 })
+  await legacy.getByTestId('hand-over-button').click()
+  await expect(legacy.getByTestId('hand-over-done')).toContainText('Handed to')
+  await expect(legacy.getByTestId('data-source-owner')).not.toHaveText('by hand')
+  // and the Build server publishes it now
+  await page.getByTestId('rail-home-link').click()
+  await page.getByTestId('instance-row-Build one').getByTestId('instance-open-link').click()
+  await page.getByTestId('build-project-starter').getByTestId('build-project-link').click()
+  await page.getByTestId('build-tab-publish').click()
+  await page.getByTestId('build-publish-proxy').selectOption({ label: 'proxy-one' })
+  await page.getByTestId('build-publish-connection').fill('sqlserver')
+  await page.getByTestId('build-publish-data-source').fill('legacy')
+  await page.getByTestId('build-publish-button').click()
+  await expect(page.getByTestId('build-publish-done')).toContainText('legacy')
+  await expect(page.getByTestId('build-publish-done')).toContainText('updated')
 
   // One view across the servers: the Build, Sync and Proxy servers all answer, and none has a replication or a scheduled plan yet (a failed run and a lagging replication need real runs, so the rows themselves are tested on what the servers return)
   await page.goto('/monitoring')   // the rail inside a server's screens is that product's own

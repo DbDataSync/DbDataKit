@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
-import { ApiError, ErrorBanner } from '@dbdatakit/shell'
+import { ApiError, ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { buildApi } from '../api'
-import type { AdoptHint, PairedProxy, PublishAnswer } from '../types'
+import type { AdoptAnswer, AdoptHint, PairedProxy, PublishAnswer } from '../types'
 
 /** What the person reads when a publish failed: the server's own words (they name the rule or the proxy that refused), or a plain sentence for what it did not say. */
 export function publishFailure(error: unknown): string {
@@ -21,6 +21,12 @@ export function adoptHintOf(error: unknown): AdoptHint | null {
   return adopt && typeof adopt.client === 'string' && typeof adopt.data_source === 'string' && typeof adopt.call === 'string' ? (adopt as AdoptHint) : null
 }
 
+/** What the person reads when handing a data source over failed: the proxy's own words, or a plain sentence for what it did not say. */
+export function adoptFailureText(error: unknown): string {
+  if (error instanceof ApiError) return error.status === 403 ? `The proxy refused: ${error.message}` : error.message
+  return 'The proxy did not answer. Try again.'
+}
+
 export interface PublishViewProps {
   proxies: PairedProxy[] | undefined
   loading: boolean
@@ -34,6 +40,15 @@ export interface PublishViewProps {
   done: PublishAnswer | null
   /** The last publish that was refused or failed. */
   failure: unknown
+  /** Whether the person may hand a data source to this server: an administrator (the proxy decides again). */
+  canAdopt: boolean
+  /** A hand-over is under way. */
+  adopting: boolean
+  /** The last hand-over that went through, shown until the next try. */
+  adopted: AdoptAnswer | null
+  /** The last hand-over that was refused or failed. */
+  adoptFailure: unknown
+  onAdopt: (hint: AdoptHint) => void
   onProxy: (name: string) => void
   onConnection: (name: string) => void
   onDataSource: (name: string) => void
@@ -49,7 +64,7 @@ export function PublishView(p: PublishViewProps) {
     <div data-testid="build-publish">
       <div className="hint" style={{ marginBottom: 14 }} data-testid="build-publish-about">
         Makes a connection of this project available through a proxy, as a read-only data source. Only the connection&apos;s <strong>read</strong> login is sent, once, to the proxy&apos;s own secret store; the write login never leaves this server.
-        Needs the approver role. SQL Server, ODBC and DuckDB connections can be published, the engines a proxy serves; a connection of another engine is refused with a message.
+        Needs the approver role. SQL Server, ODBC, DuckDB, PostgreSQL and Flight SQL connections can be published, the engines a proxy serves; a connection of another engine is refused with a message.
       </div>
       <ErrorBanner error={p.listError} />
       {p.loading && <div className="empty">Loading…</div>}
@@ -79,8 +94,13 @@ export function PublishView(p: PublishViewProps) {
         <div className="hint" style={{ marginBottom: 14 }} data-testid="build-publish-adopt">
           This data source was made by hand or by another client. An administrator of the proxy can hand it to this server: <span className="mono">{offer.call}</span> with <span className="mono">{`{"client": "${offer.client}"}`}</span>.
           This server cannot do that for itself.
+          {p.canAdopt
+            ? <div style={{ marginTop: 8 }}><button type="button" className="btn" disabled={p.adopting} onClick={() => p.onAdopt(offer)} data-testid="build-publish-adopt-button">{p.adopting ? 'Handing over…' : 'Hand it to this server'}</button></div>
+            : <div style={{ marginTop: 4 }} data-testid="build-publish-adopt-ask">Ask an administrator of the console to do it.</div>}
         </div>
       )}
+      {p.adoptFailure != null && <div className="banner error" role="alert" data-testid="build-publish-adopt-failed"><span className="mark">!</span><span>{adoptFailureText(p.adoptFailure)}</span></div>}
+      {p.adopted && <div className="hint" style={{ marginBottom: 14 }} data-testid="build-publish-adopted"><span className="mono">{p.adopted.name}</span> is managed by this server now. Publish again.</div>}
       {p.done && (
         <div className="card" data-testid="build-publish-done">
           <div className="card-body">
@@ -100,13 +120,20 @@ export function PublishTab() {
   const [dataSource, setDataSource] = useState('')
   const proxies = useQuery({ queryKey: ['build', 'proxies'], queryFn: () => buildApi.proxies() })
   const publish = useMutation({ mutationFn: () => buildApi.publish(project, proxy, connection.trim(), dataSource.trim() || undefined) })
+  const isAdmin = useIsAdmin()
+  const adopt = useMutation({
+    mutationFn: (hint: AdoptHint) => buildApi.adoptOnProxy(proxies.data?.find((x) => x.name === proxy)?.instance_id ?? '', hint.data_source, hint.client),
+    onSuccess: () => publish.reset(),   // the refusal is settled: what is left is to publish again
+  })
+  const forget = () => { publish.reset(); adopt.reset() }
   return (
     <PublishView
       proxies={proxies.data} loading={proxies.isLoading} listError={proxies.error}
       proxy={proxy} connection={connection} dataSource={dataSource}
       busy={publish.isPending} done={publish.data ?? null} failure={publish.error}
-      onProxy={(v) => { setProxy(v); publish.reset() }} onConnection={(v) => { setConnection(v); publish.reset() }} onDataSource={(v) => { setDataSource(v); publish.reset() }}
-      onPublish={() => publish.mutate()}
+      canAdopt={isAdmin} adopting={adopt.isPending} adopted={adopt.data ?? null} adoptFailure={adopt.error} onAdopt={(hint) => adopt.mutate(hint)}
+      onProxy={(v) => { setProxy(v); forget() }} onConnection={(v) => { setConnection(v); forget() }} onDataSource={(v) => { setDataSource(v); forget() }}
+      onPublish={() => { adopt.reset(); publish.mutate() }}
     />
   )
 }

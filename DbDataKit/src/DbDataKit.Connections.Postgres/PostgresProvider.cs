@@ -70,8 +70,11 @@ public sealed class PostgresProvider : DbProviderBase
         new Dictionary<string, string> { ["Options"] = "-c default_transaction_read_only=on" },
         "A session can undo it. Use a read-only role for enforcement.");
 
-    public PostgresProvider(DialectCatalog? dialects = null)
-        : base(EngineId.Postgres, new PostgresComposer(), ReadOnlyRecipe, new PostgresFailureMapper(), dialects) { }
+    /// <param name="dialects">Dialect catalog; null for the built-in one.</param>
+    /// <param name="redactor">Scrubs the raw driver text kept when <paramref name="includeRawFailures"/> is on.</param>
+    /// <param name="includeRawFailures">Keep the redacted driver text on <c>ConnectionFailure.Raw</c> (local diagnostics only).</param>
+    public PostgresProvider(DialectCatalog? dialects = null, DbDataKit.Secrets.IRedactor? redactor = null, bool includeRawFailures = false)
+        : base(EngineId.Postgres, new PostgresComposer(), ReadOnlyRecipe, new PostgresFailureMapper(), dialects, redactor, includeRawFailures) { }
 
     protected override DbConnection NewConnection(string connectionString, ConnectionContext context) => new NpgsqlConnection(connectionString);
 }

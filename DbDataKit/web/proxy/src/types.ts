@@ -18,7 +18,11 @@ export interface Overview {
   failures_last_hour: number
 }
 
-export interface DataSourceSummary { name: string; version: string; valid: boolean; engine: string | null; access: string | null }
+export interface DataSourceSummary { name: string; version: string; valid: boolean; engine: string | null; access: string | null; managed_by?: string | null }
+/** A paired server client (a Build server) a data source can be handed to (T13). */
+export interface ServerClient { id: string; name: string }
+/** The proxy's answer to a hand-over: `adopted` is false when the data source already was the client's. */
+export interface AdoptAnswer { name: string; managed_by: string; adopted: boolean; previous_owner?: string | null }
 export interface DataSourceFile { name: string; text: string; version: string }
 export interface Diagnostic { code: string; severity: string; key: string | null; file: string; line: number; column: number; message: string; fix: string | null }
 export interface WriteDataSourceResult { name: string; version: string; created: boolean; diagnostics: Diagnostic[] }

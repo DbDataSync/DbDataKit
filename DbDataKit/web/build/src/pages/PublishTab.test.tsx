@@ -2,12 +2,12 @@ import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@dbdatakit/shell'
-import { adoptHintOf, publishFailure, PublishView, type PublishViewProps } from './PublishTab'
+import { adoptFailureText, adoptHintOf, publishFailure, PublishView, type PublishViewProps } from './PublishTab'
 
 const edge = { name: 'edge', url: 'https://proxy:8485', instance_id: 'proxy-1', paired_at: '2026-10-30T10:00:00Z' }
 
 function props(over: Partial<PublishViewProps> = {}): PublishViewProps {
-  return { proxies: [edge], loading: false, listError: null, proxy: '', connection: '', dataSource: '', busy: false, done: null, failure: null, onProxy: () => {}, onConnection: () => {}, onDataSource: () => {}, onPublish: () => {}, ...over }
+  return { proxies: [edge], loading: false, listError: null, proxy: '', connection: '', dataSource: '', busy: false, done: null, failure: null, canAdopt: true, adopting: false, adopted: null, adoptFailure: null, onAdopt: () => {}, onProxy: () => {}, onConnection: () => {}, onDataSource: () => {}, onPublish: () => {}, ...over }
 }
 
 const html = (over?: Partial<PublishViewProps>) => renderToStaticMarkup(PublishView(props(over)))
@@ -32,7 +32,7 @@ describe('publishing a connection to a proxy', () => {
     const text = html()
     expect(text).toContain('read</strong> login')
     expect(text).toContain('approver role')
-    expect(text).toContain('SQL Server, ODBC and DuckDB')
+    expect(text).toContain('SQL Server, ODBC, DuckDB, PostgreSQL and Flight SQL')
     expect(text).toContain('data-testid="build-publish-proxy"')
     expect(text).toContain('>edge</option>')
   })
@@ -83,7 +83,7 @@ describe('publishing a connection to a proxy', () => {
   })
 
   it('offers no adoption for a refusal that has nothing to adopt', () => {
-    expect(html({ failure: refusal(409, 'The connection \'x\' is postgres; a proxy serves sqlserver, odbc and duckdb connections, not postgres.') })).not.toContain('build-publish-adopt')
+    expect(html({ failure: refusal(409, 'The connection \'x\' is fabric; a proxy serves sqlserver, odbc, duckdb, postgres and flightsql connections, not fabric.') })).not.toContain('build-publish-adopt')
     expect(html({ failure: refusal(403, 'This needs the approver role.') })).not.toContain('build-publish-adopt')
     expect(adoptHintOf(new Error('x'))).toBeNull()
     expect(adoptHintOf(refusal(403, 'x', { adopt: { client: 1 } }))).toBeNull()
@@ -94,5 +94,31 @@ describe('publishing a connection to a proxy', () => {
     expect(publishFailure(refusal(502, 'The proxy \'edge\' did not answer (HttpRequestException).'))).toContain('did not answer')
     expect(publishFailure(refusal(409, 'No read login is stored for \'sqlserver\'.'))).toContain('No read login')
     expect(publishFailure(new TypeError('failed to fetch'))).toBe('The server did not answer. Try again.')
+  })
+
+  it('gives an administrator a button that hands the data source to this server, naming the client and the data source of the offer', () => {
+    const onAdopt = vi.fn()
+    const button = find(PublishView(props({ failure: handMade, onAdopt })), 'build-publish-adopt-button')!
+    expect(button.props.disabled).toBe(false)
+    ;(button.props.onClick as () => void)()
+    expect(onAdopt).toHaveBeenCalledWith({ client: 'build-1', data_source: 'erp', call: 'POST /api/v1/data-sources/erp/adopt', body: { client: 'build-1' } })
+    expect(find(PublishView(props({ failure: handMade, adopting: true })), 'build-publish-adopt-button')!.props.disabled).toBe(true)
+  })
+
+  it('shows no button to a person who is not an administrator, and no button when there is nothing to adopt', () => {
+    const text = html({ failure: handMade, canAdopt: false })
+    expect(text).toContain('data-testid="build-publish-adopt"')
+    expect(text).not.toContain('build-publish-adopt-button')
+    expect(text).toContain('Ask an administrator')
+    expect(html({ failure: refusal(403, 'This needs the approver role.') })).not.toContain('build-publish-adopt-button')
+  })
+
+  it('says that the data source is this server\'s now, so the person publishes again, and gives the proxy\'s words when the hand-over was refused', () => {
+    expect(html({ adopted: { name: 'erp', managed_by: 'build-1', adopted: true } })).toContain('<span class="mono">erp</span> is managed by this server now. Publish again.')
+    const refused = html({ adoptFailure: refusal(409, 'The data source carries a serving policy (extensions.proxy).') })
+    expect(refused).toContain('data-testid="build-publish-adopt-failed"')
+    expect(refused).toContain('serving policy')
+    expect(adoptFailureText(refusal(403, 'This call needs the admin role.'))).toBe('The proxy refused: This call needs the admin role.')
+    expect(adoptFailureText(new TypeError('failed to fetch'))).toBe('The proxy did not answer. Try again.')
   })
 })

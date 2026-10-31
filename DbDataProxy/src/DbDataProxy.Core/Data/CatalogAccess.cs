@@ -49,6 +49,7 @@ public sealed class CatalogAccess(SourceConnection source)
         {
             "sqlserver" => new SqlServerCatalogReader(connection, options: options),
             "duckdb" => new DuckDbCatalogReader(connection, options: options),
+            "postgres" => new PostgresCatalogReader(connection, options: options),
             _ => new InformationSchemaCatalogReader(connection, source.Dialect, options),
         };
         return await action(reader).ConfigureAwait(false);

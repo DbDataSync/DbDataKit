@@ -175,7 +175,7 @@ public enum ParameterStyle
     /// <summary>Positional <c>?</c> markers, bound in order (ODBC, DuckDB).</summary>
     Positional,
 
-    /// <summary>Named <c>@name</c> markers (SQL Server); <c>?</c> markers are rewritten to <c>@p1</c>, <c>@p2</c>, ...</summary>
+    /// <summary>Named <c>@name</c> markers (SQL Server; Npgsql for PostgreSQL, which has no <c>?</c>; the Flight SQL client, which finds a parameter by its name and sends <c>?</c> upstream); <c>?</c> markers are rewritten to <c>@p1</c>, <c>@p2</c>, ...</summary>
     NamedAtSign,
 }
 
@@ -203,7 +203,9 @@ internal static class ParameterBinder
             if (dbType == DbType.Date && value is DateTime day && command.GetType().Name == "DuckDBCommand")
                 value = DateOnly.FromDateTime(day);
             var parameter = command.CreateParameter();
-            parameter.DbType = dbType;
+            // A NULL carries no type, and Npgsql sends a typed NULL as that type: a text NULL does not go into a numeric or date column (42804).
+            // Left untyped, it is sent as "unknown" and the server takes the type from the statement, as the other engines do on their own.
+            if (!(value is DBNull && command.GetType().Name == "NpgsqlCommand")) parameter.DbType = dbType;
             parameter.Value = value;
             // Positional markers need no name for ODBC/DuckDB; the named style always does.
             if (style == ParameterStyle.NamedAtSign)

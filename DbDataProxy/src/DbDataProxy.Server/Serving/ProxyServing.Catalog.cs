@@ -35,6 +35,10 @@ public sealed partial class ProxyServing
                 case "duckdb":
                     (product, quote, caseInsensitive, nullsLow) = ("DuckDB", "\"", true, false);
                     break;
+                case "postgres":
+                    // names fold to lower case unquoted and text compares exactly; NULLs sort last in an ascending order
+                    (product, quote, caseInsensitive, nullsLow) = ("PostgreSQL", "\"", false, false);
+                    break;
             }
 
             // Ask the database itself for what a static table cannot know: the version, and for ODBC the product and the driver's identifier quote. A database that cannot be reached still gets the static answers.
