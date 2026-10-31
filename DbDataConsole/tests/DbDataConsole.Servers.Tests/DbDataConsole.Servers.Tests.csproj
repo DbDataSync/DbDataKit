@@ -12,6 +12,9 @@
     <PackageReference Include="xunit.v3" />
     <Using Include="Xunit" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
     <ProjectReference Include="..\..\src\DbDataConsole.Server\DbDataConsole.Server.csproj" />
+    <ProjectReference Include="..\..\..\DbDataProxy\src\DbDataProxy.Core\DbDataProxy.Core.csproj" />   <!-- the Flight client (a library; the Proxy itself is still the program) -->
+    <DbDataKitReference Include="Secrets" />
   </ItemGroup>
 </Project>
