@@ -237,6 +237,8 @@ public sealed partial class EncryptedFileSecretStore : ISecretStore, ISecretProv
                     return new Release(stream, _gate);
                 }
                 catch (IOException) when (deadline.Elapsed < LockWait) { await Task.Delay(Random.Shared.Next(10, 40), ct); }
+                // Windows answers "access denied", not a sharing violation, to an open of a file whose last holder has just closed it with the delete still pending
+                catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows() && deadline.Elapsed < LockWait) { await Task.Delay(Random.Shared.Next(10, 40), ct); }
                 catch (IOException ex) { throw new SecretStoreException($"Could not lock the secret store '{_directory}' for writing: another process is holding it.", ex); }
             }
         }
