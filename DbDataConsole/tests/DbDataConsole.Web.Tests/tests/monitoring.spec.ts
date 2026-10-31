@@ -25,7 +25,7 @@ async function signInAsAdmin(page: Page, context: BrowserContext, baseURL: strin
   await cdp.send('WebAuthn.addVirtualAuthenticator', {
     options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
   })
-  const made = execFileSync('dotnet', ['exec', consoleDll, 'user', 'invite', '--email', 'monitoring@example.com', '--role', 'admin', '--url', baseURL, '--repo', scratchDirectory], { encoding: 'utf8' })
+  const made = execFileSync('dotnet', ['exec', consoleDll, 'user', 'invite', '--email', `monitoring-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`, '--role', 'admin', '--url', baseURL, '--repo', scratchDirectory], { encoding: 'utf8' })
   await page.goto(`/invite#${/\/invite#(\S+)/.exec(made)![1]}`)
   await page.getByTestId('invite-name-input').fill('Monitoring Tester')
   await page.getByTestId('invite-enrol-button').click()

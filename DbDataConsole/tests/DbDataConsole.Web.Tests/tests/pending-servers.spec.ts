@@ -22,7 +22,7 @@ async function addAuthenticator(context: BrowserContext, page: Page) {
 test.describe.serial('servers waiting for confirmation', () => {
   test.beforeEach(async ({ page, context, baseURL }) => {
     await addAuthenticator(context, page)
-    const made = execFileSync('dotnet', ['exec', consoleDll, 'user', 'invite', '--email', 'pending@example.com', '--role', 'admin', '--url', baseURL!, '--repo', scratchDirectory], { encoding: 'utf8' })
+    const made = execFileSync('dotnet', ['exec', consoleDll, 'user', 'invite', '--email', `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`, '--role', 'admin', '--url', baseURL!, '--repo', scratchDirectory], { encoding: 'utf8' })
     await page.goto(`/invite#${/\/invite#(\S+)/.exec(made)![1]}`)
     await page.getByTestId('invite-name-input').fill('Pending Tester')
     await page.getByTestId('invite-enrol-button').click()
