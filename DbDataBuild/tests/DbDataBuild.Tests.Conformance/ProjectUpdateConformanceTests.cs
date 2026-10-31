@@ -63,7 +63,7 @@ public class ProjectUpdateConformanceTests
     public async Task An_odbc_origin_is_brought_up_to_date_with_its_keys_and_indexes()
     {
         var driver = EngineEnv.Get("DBDATABUILD_TEST_ODBC_PG_DRIVER");
-        Skip.If(driver == null, "Set DBDATABUILD_TEST_ODBC_PG_DRIVER to the psqlodbc driver (scripts/fetch-psqlodbc.sh, then eval \"$(scripts/test-engines.sh env)\").");
+        Skip.If(driver == null, "Set DBDATABUILD_TEST_ODBC_PG_DRIVER to the psqlodbc driver (scripts/fetch-psqlodbc.sh, then eval \"$(scripts/psqlodbc-env.sh)\").");
         var from = new PostgresEngine();
         await from.StartAsync();
         await using var _ = from;

@@ -30,7 +30,7 @@ internal sealed class SqlFliteSession : IAsyncDisposable
     public static async Task<SqlFliteSession> OpenAsync()
     {
         var value = EngineEnv.Get("DBDATABUILD_TEST_FLIGHT");
-        Skip.If(value == null, "Set DBDATABUILD_TEST_FLIGHT to the login of a local Flight SQL test server (run scripts/test-engines.sh up flight, then eval \"$(scripts/test-engines.sh env)\").");
+        Skip.If(value == null, "Set DBDATABUILD_TEST_FLIGHT to the login of a local Flight SQL test server (run testenv/testenv.sh up flight flight-tls, then eval \"$(testenv/testenv.sh env dbdatabuild)\").");
         var login = FlightSqlLogin.Parse(value!);
         if (login.Host is not ("127.0.0.1" or "localhost" or "::1")) throw new InvalidOperationException($"Refusing to run conformance tests against `{login.Host}`: only local throwaway servers are allowed.");
         var channel = GrpcChannel.ForAddress(login.Address);
@@ -60,7 +60,7 @@ internal sealed class SqlFliteSession : IAsyncDisposable
 }
 
 /// <summary>
-/// Read-only origins, step 4, against a real server: voltrondata/sqlflite (Arrow's C++ Flight SQL server, DuckDB behind it), started by `scripts/test-engines.sh up flight` as two containers, one plain and one with TLS.
+/// Read-only origins, step 4, against a real server: voltrondata/sqlflite (Arrow's C++ Flight SQL server, DuckDB behind it), started by `testenv/testenv.sh up flight flight-tls` as two containers, one plain and one with TLS.
 /// It answers the user and password handshake with a JWT, the metadata calls, prepared statements and TLS. It binds every prepared-statement parameter as text, so a typed comparison against a watermark cannot
 /// be tried here (the tests with the in-process server do that); a native query that casts its parameters can. Without the containers every test here is skipped, and says why.
 /// </summary>
@@ -177,7 +177,7 @@ public class FlightSqlServerConformanceTests
     {
         var tls = EngineEnv.Get("DBDATABUILD_TEST_FLIGHT_TLS");
         var ca = EngineEnv.Get("DBDATABUILD_TEST_FLIGHT_CA");
-        Skip.If(tls == null || ca == null || !File.Exists(ca), "Set DBDATABUILD_TEST_FLIGHT_TLS and DBDATABUILD_TEST_FLIGHT_CA (run scripts/test-engines.sh up flight, then eval \"$(scripts/test-engines.sh env)\").");
+        Skip.If(tls == null || ca == null || !File.Exists(ca), "Set DBDATABUILD_TEST_FLIGHT_TLS and DBDATABUILD_TEST_FLIGHT_CA (run testenv/testenv.sh up flight flight-tls, then eval \"$(testenv/testenv.sh env dbdatabuild)\").");
         using var run = await FlightRun.SetUpAsync("postgres", tls!);
         await using var to = run.Destination;
         Ok(run.Cli("connection", "init", "postgres", "--apply"), "init");                                          // so that a clean inspect exits 0

@@ -18,7 +18,7 @@ public partial class ApplyConformanceTests
     [SkippableFact]
     public async Task A_project_at_version_17_loads_regular_expressions_on_SQL_Server_2025_and_gets_DuckDBs_rows()
     {
-        Skip.If(EngineEnv.Get(EngineEnv.SqlServer2025) == null, $"Set {EngineEnv.SqlServer2025} (scripts/test-engines.sh up mssql2025).");
+        Skip.If(EngineEnv.Get(EngineEnv.SqlServer2025) == null, $"Set {EngineEnv.SqlServer2025} (testenv/testenv.sh up mssql2025).");
         var run = await SetUp("sqlserver", () => new SqlServerEngine(EngineEnv.SqlServer2025, 170, "sqlserver2025", 17), "connections:\n  sqlserver: { version: 17 }\n");
         await using var engine = run.Engine;
         try

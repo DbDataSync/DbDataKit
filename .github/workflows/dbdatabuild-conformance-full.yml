@@ -66,12 +66,14 @@ jobs:
         working-directory: .
         run: scripts/fetch-duckdb.sh
       - run: dotnet build -c Release
-      - name: Start every engine
-        run: scripts/test-engines.sh up all
+      - name: Start every engine (shared test engines)
+        working-directory: .
+        run: testenv/testenv.sh up mssql postgres mssql2025 oracle spark bigquery flight flight-tls
       - name: Conformance tests
         run: |
-          eval "$(scripts/test-engines.sh env)"
+          eval "$(../testenv/testenv.sh env dbdatabuild)"
           dotnet test tests/DbDataBuild.Tests.Conformance -c Release --no-build
       - name: Stop the engines
         if: always()
-        run: scripts/test-engines.sh down
+        working-directory: .
+        run: testenv/testenv.sh down

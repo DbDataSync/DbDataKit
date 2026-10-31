@@ -48,7 +48,7 @@ public class FunctionMatrixRun
     {
         var outDir = Environment.GetEnvironmentVariable("DDB_FUNCTION_MATRIX_OUT");
         Skip.If(string.IsNullOrEmpty(outDir), "Set DDB_FUNCTION_MATRIX_OUT to a directory (scripts/function-matrix.sh does, with the engines running).");
-        Skip.If(EngineEnv.Get(EngineEnv.SqlServer) == null || EngineEnv.Get(EngineEnv.Postgres) == null, "Set DBDATABUILD_TEST_MSSQL and DBDATABUILD_TEST_PG (scripts/test-engines.sh up; eval \"$(scripts/test-engines.sh env)\").");
+        Skip.If(EngineEnv.Get(EngineEnv.SqlServer) == null || EngineEnv.Get(EngineEnv.Postgres) == null, "Set DBDATABUILD_TEST_MSSQL and DBDATABUILD_TEST_PG (testenv/testenv.sh up mssql postgres; eval \"$(../testenv/testenv.sh env dbdatabuild)\").");
         var only = Environment.GetEnvironmentVariable("DDB_FUNCTION_MATRIX_ONLY");          // a comma list of names, for a quick look
         Directory.CreateDirectory(outDir!);
 

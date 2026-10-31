@@ -1,6 +1,6 @@
 # DbDataKit.Identity
 
-The identity home (plan 13a U13): who people are and what they may do, for every server, console and app of an install. A component, not a host: the serving layer hosts it (plan 20, O06) and it can run on its own (U15).
+The identity home (plan 13a U13): who people are and what they may do, for every server, console and app of an install. A component, not a host: the serving layer hosts it (plan 20, O06), and `dbdatakit identity run` (U15, in `DbDataConsole.Server`: `IdentityHost`) runs it on its own with the shared sign-in, its own state and directory.
 
 - **`HomeSchema`**: the tables, over `DbDataKit.State`'s users, credentials and sessions: groups, members, role assignments, OpenID Connect clients, authorization codes, signing keys. SQLite, SQL Server and PostgreSQL by the state dialect.
 - **`HomeDirectory`**: groups, and roles assigned to a user or a group on a server, on one Build project of a server, or in an app. What a user holds is the union of their own and their groups'.
@@ -12,4 +12,4 @@ The identity home (plan 13a U13): who people are and what they may do, for every
 
 - **External groups** (plan 13a U18): `HomeDirectory.MapExternalGroup` maps an Entra group (the id token's `groups` claim) or a Windows group to roles on a server, a Build project or an app; `ExternalSignIns.SignIn` finds or makes the home user for an upstream sign-in (U16's rules) and records the groups the sign-in carried, replacing the last ones. What a person holds is their own assignments, their groups' and their external groups' mappings added together. `OpenIdClient` validates ES256 (the home) and RS256 (Entra) id tokens.
 
-Not here yet: the host that does the upstream sign-in and administers mappings (serving layer, O06), a feed of Windows (Negotiate) groups, Entra's group overage, running the home on its own (U15), the module in the serving layer (O06).
+Not here yet: the host that does the upstream sign-in and administers mappings (serving layer, O06), a feed of Windows (Negotiate) groups, Entra's group overage, the serving layer forwarding a home that runs on its own (O07), the module in the serving layer (O06).
