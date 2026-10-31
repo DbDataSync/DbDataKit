@@ -204,4 +204,18 @@ public static class LibraryPaths
     public static string LibraryDir(string repoRoot, string id) => Path.Combine(LibrariesDir(repoRoot), id);
     public static string ManifestPath(string libraryDir) => Path.Combine(libraryDir, ManifestFileName);
     public static string LibDir(string libraryDir) => Path.Combine(libraryDir, LibDirName);
+
+    /// <summary>The extracted packages are rebuilt from <c>library.csx</c> and <c>library.lock</c>, which are what the repository keeps; a repository that is a git repository ignores the store. Appended once, the first time a library is installed.</summary>
+    public static void EnsureStoreGitignored(string repoRoot)
+    {
+        if (!Directory.Exists(Path.Combine(repoRoot, ".git"))) return;
+        const string entry = "libraries/*/lib/";
+        var path = Path.Combine(repoRoot, ".gitignore");
+        var existing = File.Exists(path) ? File.ReadAllLines(path) : [];
+        if (existing.Contains(entry)) return;
+
+        using var writer = new StreamWriter(path, append: true);
+        if (existing.Length > 0 && !string.IsNullOrEmpty(existing[^1])) writer.WriteLine();
+        writer.WriteLine(entry);
+    }
 }
