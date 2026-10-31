@@ -35,7 +35,7 @@ public class OdbcOriginConformanceTests
     private static string RequireDriver()
     {
         var driver = EngineEnv.Get("DBDATABUILD_TEST_ODBC_PG_DRIVER");
-        Skip.If(driver == null, "Set DBDATABUILD_TEST_ODBC_PG_DRIVER to the psqlodbc driver (run scripts/fetch-psqlodbc.sh, then eval \"$(scripts/test-engines.sh env)\"; or install unixodbc and odbc-postgresql). The ODBC origin tests need a driver manager and a driver on this machine.");
+        Skip.If(driver == null, "Set DBDATABUILD_TEST_ODBC_PG_DRIVER to the psqlodbc driver (run scripts/fetch-psqlodbc.sh, then eval \"$(scripts/psqlodbc-env.sh)\"; or install unixodbc and odbc-postgresql). The ODBC origin tests need a driver manager and a driver on this machine.");
         return driver!;
     }
 

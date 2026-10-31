@@ -42,6 +42,18 @@ check "mariadb: its own port and names" '[[ "$out" == *"DBKIT_TEST_MARIADB=Serve
 out="$(t oracle --dotenv)"
 check "oracle: an ODP.NET string for the pluggable database" '[[ "$out" == *"DBKIT_TEST_ORACLE=Data Source=127.0.0.1:15210/FREEPDB1;User Id=dbkit;Password=DbKit_Test_Pw1"* && "$out" == *"DBKIT_TEST_ORACLE_SERVICE=FREEPDB1"* ]]'
 
+# The slow engines (DbDataBuild's full conformance run)
+out="$(t "mssql postgres mssql2025 oracle spark bigquery flight flight-tls" dbdatabuild --dotenv)"
+check "build slow: SQL Server 2025 on its own port, beside the 2022 one" '[[ "$out" == *"DBDATABUILD_TEST_MSSQL2025=Server=127.0.0.1,14332;User Id=sa;Password=DbKit_Test_Pw1;"* && "$out" == *"DBDATABUILD_TEST_MSSQL=Server=127.0.0.1,14330;"* ]]'
+check "build slow: Oracle in the Host/Port/Service form the probe reads" '[[ "$out" == *"DBDATABUILD_TEST_ORACLE=Host=127.0.0.1;Port=15210;User Id=dbkit;Password=DbKit_Test_Pw1;Service=FREEPDB1"* ]]'
+check "build slow: Spark and the BigQuery emulator" '[[ "$out" == *"DBDATABUILD_TEST_SPARK=Host=127.0.0.1;Port=10000"* && "$out" == *"DBDATABUILD_TEST_BIGQUERY=Host=127.0.0.1;Port=9050"* ]]'
+check "build slow: the two Flight SQL servers, the TLS one by name and with its CA file" '[[ "$out" == *"DBDATABUILD_TEST_FLIGHT=grpc://127.0.0.1:31337;user=sqlflite_username;password=DbKit_Test_Pw1"* && "$out" == *"DBDATABUILD_TEST_FLIGHT_TLS=grpc+tls://localhost:31338;user=sqlflite_username;"* && "$out" == *"DBDATABUILD_TEST_FLIGHT_CA="*"flight-root-ca.pem"* ]]'
+out="$(t "mssql postgres" dbdatabuild --dotenv)"
+check "build slow: nothing of the slow engines is set while they are not running" '[[ "$out" != *MSSQL2025* && "$out" != *ORACLE* && "$out" != *SPARK* && "$out" != *BIGQUERY* && "$out" != *FLIGHT* ]]'
+out="$(t flight --dotenv)"
+check "flight: the plain server does not set the TLS variables" '[[ "$out" == *"DBKIT_TEST_FLIGHT=grpc://"* && "$out" != *FLIGHT_TLS* ]]'
+check "up with no engine named leaves the slow ones out, and 'all' names every profile" '[[ "$(grep "^engines_default=" "$here/testenv.sh")" != *mssql2025* && "$(grep "^engines_all=" "$here/testenv.sh")" == *mssql2025*flight-tls* ]]'
+
 # The second SQL Server and the logical-decoding PostgreSQL
 out="$(t mssql-target --dotenv)"
 check "mssql-target: its own port, and nothing of the first SQL Server" '[[ "$out" == *"DBKIT_TEST_MSSQL_TARGET=Server=127.0.0.1,14331;User Id=sa;Password=DbKit_Test_Pw1;"* && "$out" == *"DBKIT_TEST_MSSQL_TARGET_SERVER=127.0.0.1,14331"* && "$out" != *"DBKIT_TEST_MSSQL="* ]]'
@@ -72,6 +84,8 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
   check "compose: the logical server is wal_level=logical with wal2json" '[[ "$cfg" == *"wal_level=logical"* && "$cfg" == *"wal2json"* ]]'
   check "compose: SQL Server Agent on for the first SQL Server only" '[ "$(grep -c "MSSQL_AGENT_ENABLED" <<<"$cfg")" -eq 1 ]'
   check "compose: Oracle runs the init scripts" '[[ "$cfg" == *"/container-entrypoint-initdb.d"* ]]'
+  check "compose: the slow engines have their own ports (14332, 10000, 9050, 31337, 31338)" '[[ "$cfg" == *"published: \"14332\""* && "$cfg" == *"published: \"10000\""* && "$cfg" == *"published: \"9050\""* && "$cfg" == *"published: \"31337\""* && "$cfg" == *"published: \"31338\""* ]]'
+  check "compose: only the TLS Flight server has TLS on, and both share one image" '[ "$(grep -c "TLS_ENABLED: \"1\"" <<<"$cfg")" -eq 1 ] && [ "$(grep -E "^\s+image: voltrondata|^\s+image: .*sqlflite" <<<"$cfg" | sort -u | wc -l)" -eq 1 ]'
   check "each profile named in testenv.sh exists in the compose file" '[ "$(docker compose -f "$here/docker-compose.yml" --profile "*" config --services | sort | tr "\n" " ")" = "$(grep "^engines_all=" "$here/testenv.sh" | sed "s/.*(\(.*\))/\1/" | tr " " "\n" | sort | tr "\n" " ")" ]'
 fi
 

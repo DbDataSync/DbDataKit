@@ -3,7 +3,7 @@ using Xunit;
 namespace DbDataBuild.Tests.Conformance;
 
 /// <summary>
-/// Environment variables that point the conformance suite at throwaway local engines. `scripts/test-engines.sh up` starts them and prints
+/// Environment variables that point the conformance suite at throwaway local engines. `testenv/testenv.sh up` starts them and `testenv/testenv.sh env dbdatabuild` prints
 /// the exports. Without them the tests are reported as skipped, with this reason; they are never silently passed.
 /// </summary>
 public static class EngineEnv
@@ -21,7 +21,7 @@ public static class EngineEnv
     public static Engine Require(string engine)
     {
         var variable = engine == "sqlserver" ? SqlServer : Postgres;
-        Skip.If(Get(variable) == null, $"Set {variable} to a connection string for a local throwaway {engine} (run scripts/test-engines.sh up).");
+        Skip.If(Get(variable) == null, $"Set {variable} to a connection string for a local throwaway {engine} (run testenv/testenv.sh up mssql postgres).");
         return engine == "sqlserver" ? new SqlServerEngine() : new PostgresEngine();
     }
 
@@ -31,7 +31,7 @@ public static class EngineEnv
     public static IProbeEngine RequireProbe(string engine)
     {
         var variable = engine switch { "sqlserver" => SqlServer, "sqlserver2025" or "sqlserver2025-160" => SqlServer2025, "postgres" => Postgres, "oracle" => Oracle, "spark" => Spark, "bigquery" => BigQuery, _ => throw new ArgumentException($"Unknown engine `{engine}`.") };
-        Skip.If(Get(variable) == null, $"Set {variable} to a connection for a local throwaway {engine} (run scripts/test-engines.sh up {engine}).");
+        Skip.If(Get(variable) == null, $"Set {variable} to a connection for a local throwaway {engine} (run testenv/testenv.sh up {engine}).");
         return engine switch
         {
             "sqlserver" => new SqlServerEngine(version: 16),

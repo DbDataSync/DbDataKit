@@ -39,7 +39,7 @@ engines), `scripts/` (repository checks). `DbDataKit.slnx` lists every project; 
 
 - Repository: `python3 -I -m unittest discover -s scripts/tests`, `python3 -I scripts/check_package_versions.py`, `python3 -I scripts/check_solution.py`.
 - Engines: `testenv/testenv.sh up mssql postgres`, then `eval "$(testenv/testenv.sh env <product>)"`. Build's slow engines (SQL Server 2025, Oracle,
-  Spark, BigQuery, Flight SQL) still start from `DbDataBuild/scripts/test-engines.sh`.
+  Spark, BigQuery, Flight SQL) are profiles too (`mssql2025`, `oracle`, `spark`, `bigquery`, `flight`, `flight-tls`; `up all` starts everything).
 - Shared libraries and Proxy use xunit v3 on the Microsoft Testing Platform (run the built test executable if `dotnet test` cannot start the host);
   Sync and Build use xunit v2.
 - CI is one workflow per product plus `dbdatakit-ci.yml`, `repo-checks.yml` and the `dist-*` workflows; product jobs start from

@@ -1,5 +1,12 @@
-# DbDataBuild's conformance suite (the quick, apply and templates groups): connection strings for SQL Server 2022 and PostgreSQL 17.
-# The slow engines (SQL Server 2025, Oracle, Spark SQL, the BigQuery emulator, the Flight SQL servers) are still started by
-# DbDataBuild/scripts/test-engines.sh.
-DBDATABUILD_TEST_MSSQL <- DBKIT_TEST_MSSQL
-DBDATABUILD_TEST_PG    <- DBKIT_TEST_POSTGRES
+# DbDataBuild's conformance suite. The quick, apply and templates groups need SQL Server 2022 and PostgreSQL 17; the slow groups and
+# the nightly full run add the engines below (`testenv/testenv.sh up mssql postgres mssql2025 oracle spark bigquery flight flight-tls`,
+# or `up all`, which also starts the others).
+DBDATABUILD_TEST_MSSQL     <- DBKIT_TEST_MSSQL
+DBDATABUILD_TEST_PG        <- DBKIT_TEST_POSTGRES
+DBDATABUILD_TEST_MSSQL2025 <- DBKIT_TEST_MSSQL2025
+DBDATABUILD_TEST_ORACLE    <- DBKIT_TEST_ORACLE_KV
+DBDATABUILD_TEST_SPARK     <- DBKIT_TEST_SPARK
+DBDATABUILD_TEST_BIGQUERY  <- DBKIT_TEST_BIGQUERY
+DBDATABUILD_TEST_FLIGHT     <- DBKIT_TEST_FLIGHT
+DBDATABUILD_TEST_FLIGHT_TLS <- DBKIT_TEST_FLIGHT_TLS
+DBDATABUILD_TEST_FLIGHT_CA  <- DBKIT_TEST_FLIGHT_TLS_CA

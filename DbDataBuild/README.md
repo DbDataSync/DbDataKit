@@ -66,7 +66,7 @@ dotnet test tests/DbDataBuild.Tests.Unit
 scripts/publish.sh linux-x64  # one self-contained executable
 ```
 
-The real-engine suite uses throwaway SQL Server and PostgreSQL containers (`scripts/test-engines.sh up`; see `CLAUDE.md`). linux-x64 is built and tested; win-x64 builds from Linux and has been run under Wine only (the Windows unit job in CI loads the library on real Windows); the SQL library and why it is the published build: `docs/native-library.md`.
+The real-engine suite uses throwaway SQL Server and PostgreSQL containers (`testenv/testenv.sh up mssql postgres`; see `CLAUDE.md`). linux-x64 is built and tested; win-x64 builds from Linux and has been run under Wine only (the Windows unit job in CI loads the library on real Windows); the SQL library and why it is the published build: `docs/native-library.md`.
 
 ## Documentation
 

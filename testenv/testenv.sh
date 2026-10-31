@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The shared test engines (docs/plans/11-ci-and-testing.md): start, stop, and print the connection variables every suite needs.
 #
-#   testenv/testenv.sh up mssql postgres         start the engines and wait until they are healthy
+#   testenv/testenv.sh up mssql postgres         start the engines and wait until they are healthy (`up` alone: the seven everyday ones;
+#                                                `up all`: also the slow ones, mssql2025 spark bigquery flight flight-tls)
 #   testenv/testenv.sh down                      stop and remove them (and their data)
 #   testenv/testenv.sh status                    list the engines that are running
 #   testenv/testenv.sh env [product] [--dotenv]  print the variables for what is running
@@ -27,6 +28,14 @@
 #             DBKIT_TEST_MYSQL_HOST / _PORT / _USER / _PASSWORD / _DB (and DBKIT_TEST_MARIADB_...)
 #   oracle    DBKIT_TEST_ORACLE           ODP.NET connection string (user dbkit, service FREEPDB1)
 #             DBKIT_TEST_ORACLE_HOST / _PORT / _SERVICE / _USER / _PASSWORD
+#             DBKIT_TEST_ORACLE_KV        the same as Host=...;Port=...;User Id=...;Password=...;Service=... (Build's probe reads this form)
+# The slow engines (DbDataBuild's conformance suite; `up` with no engine named leaves them out, `up all` starts everything):
+#   mssql2025 DBKIT_TEST_MSSQL2025        ADO.NET connection string for SQL Server 2025 (port 14332)
+#   spark     DBKIT_TEST_SPARK            Host=...;Port=10000
+#   bigquery  DBKIT_TEST_BIGQUERY         Host=...;Port=9050
+#   flight    DBKIT_TEST_FLIGHT           grpc://127.0.0.1:31337;user=sqlflite_username;password=...
+#   flight-tls DBKIT_TEST_FLIGHT_TLS      grpc+tls://localhost:31338;user=...;password=...
+#             DBKIT_TEST_FLIGHT_TLS_CA    the server's CA certificate, copied out of the container into $DBKIT_TEST_CACHE (default ~/.cache/dbdatakit-testenv)
 #
 # Set TESTENV_ASSUME_RUNNING="mssql postgres mysql" to print variables without Docker (testenv/selftest.sh does).
 set -euo pipefail
@@ -35,7 +44,9 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 compose=(docker compose -f "$here/docker-compose.yml")
 password="${DBKIT_TEST_PASSWORD:-DbKit_Test_Pw1}"
 host=127.0.0.1
-engines_all=(mssql mssql-target postgres postgres-logical mysql mariadb oracle)
+engines_all=(mssql mssql-target postgres postgres-logical mysql mariadb oracle mssql2025 spark bigquery flight flight-tls)
+engines_default=(mssql mssql-target postgres postgres-logical mysql mariadb oracle)   # what `up` with no engine named starts
+cache="${DBKIT_TEST_CACHE:-$HOME/.cache/dbdatakit-testenv}"
 
 running() {
   if [ -n "${TESTENV_ASSUME_RUNNING+x}" ]; then
@@ -114,7 +125,42 @@ canonical() {
     echo "DBKIT_TEST_ORACLE_USER=dbkit"
     echo "DBKIT_TEST_ORACLE_PASSWORD=$password"
     echo "DBKIT_TEST_ORACLE=Data Source=$host:15210/FREEPDB1;User Id=dbkit;Password=$password"
+    echo "DBKIT_TEST_ORACLE_KV=Host=$host;Port=15210;User Id=dbkit;Password=$password;Service=FREEPDB1"
   fi
+  if grep -qx mssql2025 <<<"$up"; then
+    echo "DBKIT_TEST_MSSQL2025=Server=$host,14332;User Id=sa;Password=$password;TrustServerCertificate=True;Encrypt=False"
+  fi
+  if grep -qx spark <<<"$up"; then echo "DBKIT_TEST_SPARK=Host=$host;Port=10000"; fi
+  if grep -qx bigquery <<<"$up"; then echo "DBKIT_TEST_BIGQUERY=Host=$host;Port=9050"; fi
+  if grep -qx flight <<<"$up"; then
+    echo "DBKIT_TEST_FLIGHT=grpc://$host:31337;user=sqlflite_username;password=$password"
+  fi
+  if grep -qx flight-tls <<<"$up"; then
+    # `localhost`, not the address: the server's certificate is made for that name
+    echo "DBKIT_TEST_FLIGHT_TLS=grpc+tls://localhost:31338;user=sqlflite_username;password=$password"
+    # The certificate is made when the container starts: copy its CA out (only with a real container), and name the file either way.
+    if [ -n "${TESTENV_ASSUME_RUNNING+x}" ]; then
+      echo "DBKIT_TEST_FLIGHT_TLS_CA=$cache/flight-root-ca.pem"
+    elif mkdir -p "$cache" && docker cp dbkit-test-flight-tls:/opt/sqlflite/tls/root-ca.pem "$cache/flight-root-ca.pem" >/dev/null 2>&1; then
+      echo "DBKIT_TEST_FLIGHT_TLS_CA=$cache/flight-root-ca.pem"
+    fi
+  fi
+}
+
+# Readiness of the engines that have no compose healthcheck: wait_ready <engine> returns when it answers, or exits 1 after its timeout.
+wait_until() {   # wait_until <seconds> <description> <command...>
+  local seconds=$1 what=$2; shift 2
+  for _ in $(seq 1 "$seconds"); do "$@" >/dev/null 2>&1 && return 0; sleep 1; done
+  echo "timed out waiting for $what" >&2; return 1
+}
+logged() { "${compose[@]}" --profile "$1" logs "$1" 2>&1 | grep -q "$2"; }
+wait_ready() {
+  case "$1" in
+    spark) wait_until 180 "Spark's Thrift server" logged spark "Started ThriftHttpCLIService" ;;
+    bigquery) wait_until 60 "the BigQuery emulator" curl -fs "http://$host:9050/bigquery/v2/projects/ddb/datasets" ;;
+    flight) wait_until 90 "Flight SQL" logged flight "SQLFlite server - started" ;;
+    flight-tls) wait_until 90 "Flight SQL (TLS)" logged flight-tls "SQLFlite server - started" ;;
+  esac
 }
 
 # Translate with testenv/env/<product>.map. Two line forms (blank lines and # comments are ignored):
@@ -154,10 +200,12 @@ emit() {  # name=value lines on stdin -> shell exports, or dotenv lines
 cmd="${1:-}"; shift || true
 case "$cmd" in
   up)
-    [ "$#" -gt 0 ] || set -- "${engines_all[@]}"
+    if [ "$#" -eq 0 ]; then set -- "${engines_default[@]}"; elif [ "$1" = all ]; then set -- "${engines_all[@]}"; fi
     profiles_for "$@"
     # --build: postgres-logical is built from testenv/postgres-logical (a no-op for the engines that are pulled).
     "${compose[@]}" "${PROFILES[@]}" up -d --build --wait --wait-timeout 240
+    # The slow engines have no healthcheck in their (minimal) images: wait for them from here.
+    for e in "$@"; do wait_ready "$e"; done
     ;;
   down)
     "${compose[@]}" --profile '*' down -v --remove-orphans
@@ -171,7 +219,7 @@ case "$cmd" in
     { canonical; if [ -n "$product" ]; then mapped "$product"; fi; } | emit "$format"
     ;;
   *)
-    sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
+    sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
     exit 2
     ;;
 esac
