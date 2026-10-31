@@ -104,6 +104,10 @@ if (!isWorker) {
   fs.writeFileSync(path.join(proxyDirectory, 'config', 'connections', 'erp.yaml'), [
     'schema: connection/1', 'name: erp', 'engine: sqlserver', 'address: { host: localhost, database: Erp }',
     "auth: { mode: sql, user: reader, password_secret: 'env:ERP_DB_PASSWORD' }", ''].join('\n'))
+  // a second data source made by hand: the story hands `erp` over from the Build screen and this one from the Proxy's own page (plan 13a, T13)
+  fs.writeFileSync(path.join(proxyDirectory, 'config', 'connections', 'legacy.yaml'), [
+    'schema: connection/1', 'name: legacy', 'engine: sqlserver', 'address: { host: localhost, database: Legacy }',
+    "auth: { mode: sql, user: reader, password_secret: 'env:LEGACY_DB_PASSWORD' }", ''].join('\n'))
   const made = execFileSync('dotnet', ['exec', proxyDll, 'server', 'pair', '--repo', proxyDirectory, '--max-role', 'admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'proxy-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }

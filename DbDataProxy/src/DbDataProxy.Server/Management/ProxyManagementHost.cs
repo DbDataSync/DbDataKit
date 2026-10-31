@@ -96,7 +96,8 @@ public static class ProxyManagementHost
         management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version, dataSources, identities, activity, certificate, git,
             new ProxySecrets(SecretsRuntime.OpenStore(options), audit), files.Codes(),
             new ProxySemanticModels(new Serving.PublishedSemanticModels(dataDirectory), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),
-                () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, configDirectory, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit));
+                () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, configDirectory, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit),
+            pairedClients: clients.All);
         var validator = new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache());
         var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management");
 

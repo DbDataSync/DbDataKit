@@ -25,14 +25,15 @@ public sealed class CliGrammarTests
             Usage: dbdataproxy <noun> <verb> [options]
 
             Commands:
-              server   The long-running process
-              service  Registration of 'server run' with Windows or systemd
-              cert     The server's TLS certificate
-              secret   The encrypted secret store, secret references and protected values
-              config   The server's own configuration
-              query    A client for smoke-testing a running proxy
-              health   Is a running proxy answering
-              ui       The local interfaces
+              server      The long-running process
+              service     Registration of 'server run' with Windows or systemd
+              cert        The server's TLS certificate
+              secret      The encrypted secret store, secret references and protected values
+              config      The server's own configuration
+              query       A client for smoke-testing a running proxy
+              datasource  The proxy's data sources (the name the query client's --datasource uses)
+              health      Is a running proxy answering
+              ui          The local interfaces
 
             Run 'dbdataproxy <noun> help' for the verbs of one.
             Add --format json to any command for a JSON document instead of text.
@@ -113,7 +114,7 @@ public sealed class CliGrammarTests
     [Fact]
     public async Task The_checked_in_mcp_tool_list_is_current()
     {
-        var server = new DbDataKit.Cli.McpServer(Cli.Router(), new DbDataKit.Cli.McpOptions(new HashSet<string>(["secret", "query", "server pair", "server unpair"])), Cli.Program, "0");
+        var server = new DbDataKit.Cli.McpServer(Cli.Router(), new DbDataKit.Cli.McpOptions(new HashSet<string>(["secret", "query", "server pair", "server unpair", "datasource adopt"])), Cli.Program, "0");
         var reply = (await server.HandleAsync(System.Text.Json.Nodes.JsonNode.Parse("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}""")!)).Single();
         string actual = reply["result"]!.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }).Replace("\r\n", "\n") + "\n";
         if (Environment.GetEnvironmentVariable("UPDATE_GOLDEN") == "1") File.WriteAllText(McpToolsPath(), actual);

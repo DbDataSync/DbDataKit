@@ -1,5 +1,5 @@
 import { request, type SchemaAssociation, type SchemaNode } from '@dbdatakit/shell'
-import type { PairedProxy, PublishAnswer, GitChange, GitCommit, RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
+import type { AdoptAnswer, PairedProxy, PublishAnswer, GitChange, GitCommit, RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
 
 const project = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}`
 
@@ -52,6 +52,12 @@ export const buildApi = {
   /** Publishes a connection of a project to a paired proxy as a read-only data source (T10, T12): only its read login goes. The server needs the approver role for it; a proxy's refusal comes back in its own words. */
   publish: (id: string, proxy: string, connection: string, dataSource?: string) =>
     request<PublishAnswer>(`${project(id)}/proxies/${encodeURIComponent(proxy)}/publish`, { method: 'POST', body: JSON.stringify({ connection, ...(dataSource ? { data_source: dataSource } : {}) }) }),
+  /**
+   * An administrator hands a data source of a paired proxy to this server (T13): the same call as the Proxy's own adopt, made through the console's relay for that proxy (`proxyInstance` is the id the console knows it by,
+   * which is the instance id this server paired with), not through this server's, because this server cannot adopt for itself. The proxy decides what the person may do.
+   */
+  adoptOnProxy: (proxyInstance: string, dataSource: string, client: string) =>
+    request<AdoptAnswer>(`/relay/${encodeURIComponent(proxyInstance)}/api/v1/data-sources/${encodeURIComponent(dataSource)}/adopt`, { method: 'POST', body: JSON.stringify({ client }) }),
   /** The drafts of a project (W02): a git worktree per person and name, where editing happens. */
   workspaces: (id: string) => request<{ workspaces: Workspace[] }>(`${project(id)}/workspaces`).then((r) => r.workspaces),
   makeWorkspace: (id: string, name: string) => request<Workspace>(`${project(id)}/workspaces`, { method: 'POST', body: JSON.stringify({ name }) }),
