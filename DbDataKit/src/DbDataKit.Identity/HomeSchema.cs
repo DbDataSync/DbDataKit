@@ -98,6 +98,38 @@ public static class HomeSchema
         );
         """;
 
+    /// <summary>Which external groups (an Entra group id or claim value, a Windows group) give which roles where, and the external groups each person was last seen in (plan 13a U18). Appended after <see cref="IdentitySchema.AccountKeys"/>.</summary>
+    public const string ExternalGroups =
+        """
+        -- An external group maps to roles on a server, a Build project of a server or an app, as RoleAssignments does for a home group. Source is entra | windows. ExternalGroup is the value as written (for display);
+        -- ExternalKey is what it is compared on (trimmed, Unicode form C, lower case). Slot is a hash of source, key, scope, target and project: one mapping per place.
+        CREATE TABLE GroupMappings (
+            Id            {{key}} PRIMARY KEY,
+            Slot          {{key}} NOT NULL,
+            Source        {{key}} NOT NULL,
+            ExternalGroup {{text}} NOT NULL,
+            ExternalKey   {{key}} NOT NULL,
+            Scope         {{key}} NOT NULL,   -- server | project | app
+            Target        {{key}} NOT NULL,
+            Project       {{key}} NOT NULL,   -- empty unless Scope is project
+            Roles         {{text}} NOT NULL,
+            CreatedAtUtc  {{text}} NOT NULL
+        );
+        CREATE UNIQUE INDEX UX_GroupMappings ON GroupMappings(Slot);
+        CREATE INDEX IX_GroupMappings_Group ON GroupMappings(Source, ExternalKey);
+
+        -- The external groups a person was in at their last sign-in through that source, replaced whole at each one. A mapping applies to a person only through a row here.
+        CREATE TABLE ExternalMemberships (
+            Slot        {{key}} PRIMARY KEY,   -- a hash of user, source and key
+            UserId      {{key}} NOT NULL REFERENCES Users(Id),
+            Source      {{key}} NOT NULL,
+            ExternalKey {{key}} NOT NULL,
+            SeenAtUtc   {{text}} NOT NULL
+        );
+        CREATE INDEX IX_ExternalMemberships_User ON ExternalMemberships(UserId);
+        CREATE INDEX IX_ExternalMemberships_Group ON ExternalMemberships(Source, ExternalKey);
+        """;
+
     /// <summary>Users, credentials, sessions and invites, then the home's own tables.</summary>
-    public static StateSchema Schema { get; } = new([IdentitySchema.Accounts, IdentitySchema.Invites, Directory, Provider, Sessions, IdentitySchema.AccountKeys]);
+    public static StateSchema Schema { get; } = new([IdentitySchema.Accounts, IdentitySchema.Invites, Directory, Provider, Sessions, IdentitySchema.AccountKeys, ExternalGroups]);
 }
