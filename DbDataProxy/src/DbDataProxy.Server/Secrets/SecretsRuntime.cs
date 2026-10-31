@@ -114,7 +114,7 @@ public sealed class SecretsRuntime
             }
         }
 
-        ConnectionStringReferences.QuoteValue quote = provider.Equals("odbc", StringComparison.OrdinalIgnoreCase)
+        ConnectionStringReferences.QuoteValue quote = provider.Equals("odbc", StringComparison.OrdinalIgnoreCase) || provider.Equals("flightsql", StringComparison.OrdinalIgnoreCase)   // both are written in braces
             ? ConnectionStringReferences.QuoteBraces
             : ConnectionStringReferences.QuoteDouble;
         try

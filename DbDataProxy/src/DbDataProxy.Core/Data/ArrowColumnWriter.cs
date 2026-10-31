@@ -64,6 +64,13 @@ internal sealed class ArrowColumnWriter
                 $"Convert it in the query, for example CAST({name} AS nvarchar(40)).", ex);
         }
 
+        // A reader that cannot say decimal in its CLR type (the Flight SQL one reports object, a value being a decimal or, beyond decimal's range, text) says it in the type name: decimal(p,s).
+        if (clr == typeof(object) && DeclaredDecimal(typeName) is var (declaredPrecision, declaredScale))
+        {
+            clr = typeof(decimal);
+            meta = new ColumnMeta(declaredPrecision, declaredScale);
+        }
+
         if (clr == typeof(bool))
         {
             var b = new BooleanArray.Builder();
@@ -184,6 +191,14 @@ internal sealed class ArrowColumnWriter
         return Make(name, StringType.Default, sb,
             (r, i) => sb.Append(Convert.ToString(r.GetValue(i), System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty),
             () => sb.AppendNull(), () => { var a = sb.Build(); sb.Clear(); return a; });
+    }
+
+    /// <summary>The precision and scale of <c>decimal(p,s)</c> when every value of it fits a .NET decimal (28 digits); null otherwise.</summary>
+    private static (int, int)? DeclaredDecimal(string typeName)
+    {
+        if (!typeName.StartsWith("decimal(", StringComparison.OrdinalIgnoreCase) || !typeName.EndsWith(')')) return null;
+        var parts = typeName[8..^1].Split(',');
+        return parts.Length == 2 && int.TryParse(parts[0], out var p) && int.TryParse(parts[1], out var s) && p is > 0 and <= 28 && s >= 0 && s <= p ? (p, s) : null;
     }
 
     private static string SafeTypeName(DbDataReader reader, int ordinal)

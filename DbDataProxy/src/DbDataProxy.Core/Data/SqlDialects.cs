@@ -11,6 +11,9 @@ public static class ProviderDialects
 
     public static ISqlDialect Postgres { get; } = DialectCatalog.Builtin.Get("postgres");
 
+    /// <summary>A Flight SQL source: the system behind it is not known, so statements are checked with the ANSI deny list (the strictest generic one); the upstream server's own login and checks are the real control.</summary>
+    public static ISqlDialect FlightSql { get; } = DialectCatalog.Builtin.Get("ansi");
+
     /// <summary>ODBC before the driver has said anything about itself: double-quoted identifiers, positional markers, ANSI deny list.</summary>
     public static ISqlDialect Odbc { get; } = OdbcDialect.FromFacts(new OdbcFacts("generic"));
 
@@ -20,6 +23,7 @@ public static class ProviderDialects
         "sqlserver" => SqlServer,
         "duckdb" => DuckDb,
         "postgres" => Postgres,
+        "flightsql" => FlightSql,
         _ => Odbc,
     };
 

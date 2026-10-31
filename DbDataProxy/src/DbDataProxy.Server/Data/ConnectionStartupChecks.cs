@@ -8,7 +8,7 @@ namespace DbDataProxy.Server.Data;
 public static class ConnectionStartupChecks
 {
     /// <summary>
-    /// SQL Server and PostgreSQL sources encrypt and verify the certificate by default. A source whose connection string says otherwise explicitly
+    /// SQL Server, PostgreSQL and Flight SQL sources encrypt and verify the certificate by default. A source whose connection string says otherwise explicitly
     /// (<c>TrustServerCertificate=True</c>, <c>Encrypt=False</c>, <c>SSL Mode=Require</c>) keeps that setting, and gets one warning naming the source (never the string).
     /// Returns the names, for tests.
     /// </summary>
@@ -18,7 +18,7 @@ public static class ConnectionStartupChecks
         foreach (var (name, source) in options.DataSources)
         {
             string engine = source.Provider.ToLowerInvariant();
-            if (engine is not ("sqlserver" or "odbc" or "postgres")) continue;
+            if (engine is not ("sqlserver" or "odbc" or "postgres" or "flightsql")) continue;
 
             string connectionString;
             try { connectionString = secrets?.ResolveConnectionString($"Proxy:DataSources:{name}:ConnectionString", source.ConnectionString, source.Provider) ?? source.ConnectionString; }
@@ -29,9 +29,9 @@ public static class ConnectionStartupChecks
 
             named.Add(name);
             log.LogWarning(
-                "Data source {Source} turns TLS protection off in its connection string ({Setting}). It keeps working as configured, but the default for SQL Server and PostgreSQL sources is to encrypt and verify the server certificate; " +
+                "Data source {Source} turns TLS protection off in its connection string ({Setting}). It keeps working as configured, but the default for SQL Server, PostgreSQL and Flight SQL sources is to encrypt and verify the server certificate; " +
                 "install a trusted certificate on the server (or pin it) and remove the setting.",
-                name, !tls.Encrypt ? "Encrypt=false" : "TrustServerCertificate=true");
+                name, engine == "flightsql" ? (!tls.Encrypt ? "grpc:// without TLS" : "tls_skip_verify=true") : !tls.Encrypt ? "Encrypt=false" : "TrustServerCertificate=true");
         }
         return named;
     }

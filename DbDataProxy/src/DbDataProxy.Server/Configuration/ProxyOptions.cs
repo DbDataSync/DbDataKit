@@ -283,7 +283,7 @@ public sealed class WorkerOptions
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class DataSourceOptions
 {
-    /// <summary>"odbc", "sqlserver", "duckdb" or "postgres".</summary>
+    /// <summary>"odbc", "sqlserver", "duckdb", "postgres" or "flightsql".</summary>
     public string Provider { get; set; } = "odbc";
     // Not [Secret]: `config show` masks only the credential parts of a connection string (references stay visible).
     public string ConnectionString { get; set; } = "";

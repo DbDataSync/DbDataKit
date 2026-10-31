@@ -12,7 +12,7 @@ namespace DbDataProxy.Server.Configuration;
 public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutClassifier = null) : IConfigValidator<ProxyOptions>
 {
     /// <summary>Provider names the server registers (a test compares this with the registered <c>IDbProvider</c>s).</summary>
-    public static readonly IReadOnlyList<string> KnownProviders = ["odbc", "sqlserver", "duckdb", "postgres"];
+    public static readonly IReadOnlyList<string> KnownProviders = ["odbc", "sqlserver", "duckdb", "postgres", "flightsql"];
 
     /// <summary>Providers that can connect with the caller's own credentials (DuckDB has no user authentication).</summary>
     public static readonly IReadOnlyList<string> PassThroughProviders = ["odbc", "sqlserver", "postgres"];
@@ -157,6 +157,9 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
                 else if (!OperatingSystem.IsWindows())
                     cx.Warning($"{at}.Bitness", "Bitness x86 needs the 32-bit worker, which exists only on Windows.");
             }
+
+            if (provider == "flightsql" && source.AllowWrites)
+                cx.Error($"{at}.AllowWrites", "A Flight SQL data source is read only: the client has no write path.", "Remove `AllowWrites`.");
 
             if (source.PassThrough && KnownProviders.Contains(provider) && !PassThroughProviders.Contains(provider))
                 cx.Error($"{at}.PassThrough", $"The {provider} provider cannot connect with the caller's credentials.", $"Pass-through works with: {string.Join(", ", PassThroughProviders)}.");

@@ -49,7 +49,7 @@ export function PublishView(p: PublishViewProps) {
     <div data-testid="build-publish">
       <div className="hint" style={{ marginBottom: 14 }} data-testid="build-publish-about">
         Makes a connection of this project available through a proxy, as a read-only data source. Only the connection&apos;s <strong>read</strong> login is sent, once, to the proxy&apos;s own secret store; the write login never leaves this server.
-        Needs the approver role. SQL Server, ODBC, DuckDB and PostgreSQL connections can be published, the engines a proxy serves; a connection of another engine is refused with a message.
+        Needs the approver role. SQL Server, ODBC, DuckDB, PostgreSQL and Flight SQL connections can be published, the engines a proxy serves; a connection of another engine is refused with a message.
       </div>
       <ErrorBanner error={p.listError} />
       {p.loading && <div className="empty">Loading…</div>}

@@ -24,5 +24,6 @@ public static class TestSources
         new DbDataKit.Connections.SqlServer.SqlServerProvider(),
         new DbDataKit.Connections.DuckDb.DuckDbProvider(),
         new DbDataKit.Connections.Postgres.PostgresProvider(),
+        new DbDataKit.Connections.FlightSql.FlightSqlProvider(),
     ]);
 }

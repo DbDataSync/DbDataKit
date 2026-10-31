@@ -204,6 +204,7 @@ public static class ProxyHost
                 new DbDataKit.Connections.SqlServer.SqlServerProvider(redactor: redactor, includeRawFailures: raw),
                 new DbDataKit.Connections.DuckDb.DuckDbProvider(redactor: redactor, includeRawFailures: raw),
                 new DbDataKit.Connections.Postgres.PostgresProvider(redactor: redactor, includeRawFailures: raw),
+                new DbDataKit.Connections.FlightSql.FlightSqlProvider(redactor: redactor, includeRawFailures: raw),
             ]);
         });
         services.AddSingleton<QueryLimits>();

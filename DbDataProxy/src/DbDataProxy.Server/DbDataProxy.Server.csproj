@@ -18,6 +18,7 @@
     <DbDataKitReference Include="Semantic.Ssas" />   <!-- Analysis Services sources of a semantic model (Windows only at run time); plan 19, J16 -->
     <DbDataKitReference Include="Connections.Abstractions" />   <!-- connection/1, the data source format; plan 13, E02 -->
     <DbDataKitReference Include="Connections.SqlServer" />
+    <DbDataKitReference Include="Connections.FlightSql" />   <!-- an upstream Flight SQL server as a data source; plan 13a, P12 -->
     <DbDataKitReference Include="Connections.Postgres" />   <!-- PostgreSQL data sources; plan 13a, P12 -->
     <DbDataKitReference Include="Connections.DuckDb" />
     <DbDataKitReference Include="Config.Yaml" />

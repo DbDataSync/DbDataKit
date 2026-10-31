@@ -175,7 +175,7 @@ public enum ParameterStyle
     /// <summary>Positional <c>?</c> markers, bound in order (ODBC, DuckDB).</summary>
     Positional,
 
-    /// <summary>Named <c>@name</c> markers (SQL Server, and Npgsql for PostgreSQL, which has no <c>?</c>); <c>?</c> markers are rewritten to <c>@p1</c>, <c>@p2</c>, ...</summary>
+    /// <summary>Named <c>@name</c> markers (SQL Server; Npgsql for PostgreSQL, which has no <c>?</c>; the Flight SQL client, which finds a parameter by its name and sends <c>?</c> upstream); <c>?</c> markers are rewritten to <c>@p1</c>, <c>@p2</c>, ...</summary>
     NamedAtSign,
 }
 

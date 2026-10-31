@@ -56,10 +56,10 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     /// <summary>
-    /// The engines the Proxy serves (its providers: SQL Server, ODBC, DuckDB and PostgreSQL) and what a Build connection's driver is called there: the same word. The read login of such a connection is a connection string, which the Proxy takes whole as
-    /// <c>connection_string_secret</c> whatever the engine; <c>access: readonly</c> is what is written, because only the read login goes. A driver the Proxy has no provider for (fabric, flightsql: plan 13a, P12) is not published.
+    /// The engines the Proxy serves (its providers: SQL Server, ODBC, DuckDB and PostgreSQL) and what a Build connection's driver is called there: the same word. The read login of such a connection is a connection string (for flightsql the login value, <c>grpc+tls://host:port;token=...</c>), which the Proxy takes whole as
+    /// <c>connection_string_secret</c> whatever the engine; <c>access: readonly</c> is what is written, because only the read login goes. A driver the Proxy has no provider for (fabric: plan 13a, P12) is not published.
     /// </summary>
-    private static readonly string[] ProxyEngines = ["sqlserver", "odbc", "duckdb", "postgres"];
+    private static readonly string[] ProxyEngines = ["sqlserver", "odbc", "duckdb", "postgres", "flightsql"];
 
     private static string ProxyEngineList => string.Join(", ", ProxyEngines[..^1]) + " and " + ProxyEngines[^1];
 
@@ -85,6 +85,13 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
 
         using var login = await secrets.TryResolveAsync(ServerSecrets.NameOf(connection, LoginRole.Read).ToRef(), ct);
         if (login is null || login.IsEmpty) return Fail(409, $"No read login is stored for '{connection}' (dbdatabuild secret set {ServerSecrets.NameOf(connection, LoginRole.Read)}); there is nothing to publish.");
+
+        // A Proxy does not take a token from a program or from its own environment for a data source, so a Flight SQL login that asks for either (or is not the grammar) is refused here, before anything is sent.
+        if (engine == "flightsql")
+        {
+            try { _ = DbDataKit.Connections.FlightSql.FlightSqlComposer.Check(login.RevealString()); }
+            catch (DbDataKit.Connections.ConnectionPolicyException ex) { return Fail(409, $"The read login of '{connection}' cannot be published: {ex.Rule}."); }
+        }
 
         var self = await identity.GetOrCreateAsync(ct);
         using var http = new HttpClient(PairingClient.Pinned(proxy.Fingerprint)) { BaseAddress = new Uri(proxy.Url), Timeout = TimeSpan.FromSeconds(60) };
