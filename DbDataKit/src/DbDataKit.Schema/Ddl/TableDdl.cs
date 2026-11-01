@@ -72,6 +72,10 @@ public abstract class TableDdl(string engine)
     public string AddForeignKey(string schema, string name, string constraint, IReadOnlyList<string> columns, string referencedSchema, string referencedTable, IReadOnlyList<string> referencedColumns) =>
         $"ALTER TABLE {Qualified(schema, name)} ADD CONSTRAINT {Quote(constraint)} FOREIGN KEY ({string.Join(", ", columns.Select(Quote))}) REFERENCES {Qualified(referencedSchema, referencedTable)} ({string.Join(", ", referencedColumns.Select(Quote))});";
 
+    /// <summary>A unique index over only the rows that satisfy a condition (a filtered index on SQL Server, a partial one on PostgreSQL): the same text for both.</summary>
+    public string CreateUniqueIndexWhere(string schema, string name, string index, IReadOnlyList<string> columns, string condition) =>
+        $"CREATE UNIQUE INDEX {Quote(index)} ON {Qualified(schema, name)} ({string.Join(", ", columns.Select(Quote))}) WHERE {condition};";
+
     public abstract string DropIndex(string schema, string table, string indexName);
 
     /// <param name="bodySql">The query written for this engine.</param>

@@ -20,4 +20,4 @@ What is checked:
 
 Every entity table also has a `_version` column (the version a write names, plan 19 Z04) and the schema has an `_audit` table (`ModelStorage.AuditColumns`) that the write path fills. `ModelStorage.CreateAsync(connection, plan)` runs them in one transaction. It only creates: a table that is already there refuses the whole creation (`StorageException`), writing nothing. Defaults, ranges, patterns, allowed values and the cross-row rules are the write path's (`DbDataKit.Store`, Z04), and the columns history needs (Z05) are added then; the database holds the shape and the keys.
 
-History behaviour is another slice (Z05); this library says what a valid model is and how it is stored.
+For an entity with `history: effective_dated` the table has `_valid_from` and `_valid_to`, the primary key is the key and `_valid_from`, one version of a key is open at a time (a filtered unique index), a unique attribute is unique among the open versions, and a reference to such an entity is checked on a write with no foreign key. This library says what a valid model is and how it is stored.

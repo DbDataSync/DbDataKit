@@ -32,6 +32,10 @@ public static class ModelStorage
     /// <summary>The table beside a model's entities that records every write: who, when, what changed (plan 15 section 5).</summary>
     public const string AuditTable = "_audit";
 
+    /// <summary>The columns of an effective-dated entity beside its attributes (plan 19 Z05): when this version of the row starts to hold, and when it stopped (null while it holds). A change made from a date closes the open version at it and adds the next.</summary>
+    public const string ValidFromColumn = "_valid_from";
+    public const string ValidToColumn = "_valid_to";
+
     /// <summary>The columns of the audit table, in order: name and canonical type. The write path (<c>DbDataKit.Store</c>) fills them.</summary>
     public static IReadOnlyList<(string Name, CanonicalType Type, bool Nullable)> AuditColumns { get; } =
     [
@@ -82,10 +86,29 @@ public static class ModelStorage
             }
             columns.Add(new NativeColumn(VersionColumn, dialect.ColumnType(CanonicalType.Of(CanonicalKind.Int64)).Require(), null, false,
                 new ColumnShape(VersionColumn, dialect.ColumnType(CanonicalType.Of(CanonicalKind.Int64)).Require().Split('(')[0], null, null, null, false, null)));
+            var dated = entity.History == HistoryMode.EffectiveDated;
+            if (dated)
+            {
+                var instant = dialect.ColumnType(CanonicalType.Timestamp(null, tz: true)).Require();
+                var instantType = instant.Split('(')[0];
+                columns.Add(new NativeColumn(ValidFromColumn, instant, null, false, new ColumnShape(ValidFromColumn, instantType, null, null, null, false, null)));
+                columns.Add(new NativeColumn(ValidToColumn, instant, null, true, new ColumnShape(ValidToColumn, instantType, null, null, null, true, null)));
+            }
             statements.Add(new($"{schema}.{entity.Name}", $"create table {schema}.{entity.Name}", ddl.CreateTable(schema, entity.Name, columns)));
-            constraints.Add(new($"{schema}.{entity.Name}", $"primary key of {schema}.{entity.Name}", ddl.AddPrimaryKey(schema, entity.Name, Name("pk", entity.Name), entity.Key)));
-            foreach (var unique in entity.Attributes.Where(a => a.Unique && !(entity.Key is [var only] && only == a.Name)))
-                constraints.Add(new($"{schema}.{entity.Name}", $"unique {unique.Name} of {schema}.{entity.Name}", ddl.AddUnique(schema, entity.Name, Name("uq", entity.Name, unique.Name), [unique.Name])));
+            if (dated)
+            {
+                // each version is a row, so the key alone is not the primary key: the key and when the version starts are; one version of a key is open at a time, and a unique value is unique among the open ones
+                constraints.Add(new($"{schema}.{entity.Name}", $"primary key of {schema}.{entity.Name}", ddl.AddPrimaryKey(schema, entity.Name, Name("pk", entity.Name), [.. entity.Key, ValidFromColumn])));
+                constraints.Add(new($"{schema}.{entity.Name}", $"one open version of each key of {schema}.{entity.Name}", ddl.CreateUniqueIndexWhere(schema, entity.Name, Name("ux", entity.Name, "open"), entity.Key, $"{dialect.Quote(ValidToColumn)} IS NULL")));
+                foreach (var unique in entity.Attributes.Where(a => a.Unique && !(entity.Key is [var only] && only == a.Name)))
+                    constraints.Add(new($"{schema}.{entity.Name}", $"unique {unique.Name} among the open versions of {schema}.{entity.Name}", ddl.CreateUniqueIndexWhere(schema, entity.Name, Name("ux", entity.Name, unique.Name), [unique.Name], $"{dialect.Quote(ValidToColumn)} IS NULL")));
+            }
+            else
+            {
+                constraints.Add(new($"{schema}.{entity.Name}", $"primary key of {schema}.{entity.Name}", ddl.AddPrimaryKey(schema, entity.Name, Name("pk", entity.Name), entity.Key)));
+                foreach (var unique in entity.Attributes.Where(a => a.Unique && !(entity.Key is [var only] && only == a.Name)))
+                    constraints.Add(new($"{schema}.{entity.Name}", $"unique {unique.Name} of {schema}.{entity.Name}", ddl.AddUnique(schema, entity.Name, Name("uq", entity.Name, unique.Name), [unique.Name])));
+            }
         }
 
         var auditColumns = AuditColumns.Select(c =>
@@ -107,6 +130,11 @@ public static class ModelStorage
                     continue;
                 }
                 var target = model.Entity(reference.Entity)!;
+                if (target.History == HistoryMode.EffectiveDated)
+                {
+                    notes.Add($"`{entity.Name}.{attribute.Name}` points at `{target.Name}`, which keeps its history in versions: the key repeats there, so the reference is checked on a write against the open version, with no foreign key.");
+                    continue;
+                }
                 var targetAttribute = reference.Attribute ?? target.Key[0];
                 if (declarations[(entity.Name, attribute.Name)] != declarations[(target.Name, targetAttribute)])
                     throw new StorageException($"`{entity.Name}.{attribute.Name}` is `{attribute.Type}` and points at `{target.Name}.{targetAttribute}`, which is `{target.Attribute(targetAttribute)!.Type}`: a reference needs the same type at both ends.");

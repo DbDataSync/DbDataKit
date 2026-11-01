@@ -18,13 +18,16 @@ public enum RowAction { Insert, Update, Delete }
 /// </summary>
 public sealed record RowChange(RowAction Action, string Entity, IReadOnlyDictionary<string, object?> Key, long? ExpectedVersion, IReadOnlyDictionary<string, object?> Values)
 {
-    public static RowChange Insert(string entity, IReadOnlyDictionary<string, object?> values) => new(RowAction.Insert, entity, new Dictionary<string, object?>(), null, values);
-    public static RowChange Update(string entity, IReadOnlyDictionary<string, object?> key, long expectedVersion, IReadOnlyDictionary<string, object?> changes) => new(RowAction.Update, entity, key, expectedVersion, changes);
-    public static RowChange Delete(string entity, IReadOnlyDictionary<string, object?> key, long expectedVersion) => new(RowAction.Delete, entity, key, expectedVersion, new Dictionary<string, object?>());
+    /// <summary>For an entity with effective-dated history: when the change starts to hold. An insert starts the first version then (now when null); an update from a date closes the open version at it and starts the next; an update with no date corrects the open version in place; a delete ends the row then (now when null).</summary>
+    public DateTimeOffset? EffectiveFrom { get; init; }
+
+    public static RowChange Insert(string entity, IReadOnlyDictionary<string, object?> values, DateTimeOffset? effectiveFrom = null) => new(RowAction.Insert, entity, new Dictionary<string, object?>(), null, values) { EffectiveFrom = effectiveFrom };
+    public static RowChange Update(string entity, IReadOnlyDictionary<string, object?> key, long expectedVersion, IReadOnlyDictionary<string, object?> changes, DateTimeOffset? effectiveFrom = null) => new(RowAction.Update, entity, key, expectedVersion, changes) { EffectiveFrom = effectiveFrom };
+    public static RowChange Delete(string entity, IReadOnlyDictionary<string, object?> key, long expectedVersion, DateTimeOffset? effectiveFrom = null) => new(RowAction.Delete, entity, key, expectedVersion, new Dictionary<string, object?>()) { EffectiveFrom = effectiveFrom };
 }
 
-/// <summary>A row as stored: its attribute values and its version.</summary>
-public sealed record StoredRow(IReadOnlyDictionary<string, object?> Values, long Version);
+/// <summary>A row as stored: its attribute values and its version; for an entity with effective-dated history, the period this version of the row holds for (<see cref="ValidTo"/> null while it holds).</summary>
+public sealed record StoredRow(IReadOnlyDictionary<string, object?> Values, long Version, DateTimeOffset? ValidFrom = null, DateTimeOffset? ValidTo = null);
 
 /// <summary>
 /// The write path of a stored model (plan 19 Z04, plan 15 section 5). A batch of row changes is applied in one transaction: each value is checked against the attribute's rules (type, length, precision, required, pattern, range,
@@ -51,8 +54,8 @@ public sealed class ModelWriter
         foreach (var entity in model.Entities)
             foreach (var rule in entity.Rules ?? [])
             {
-                if (rule.Kind == RuleKind.NoOverlap)
-                    throw new StoreNotSupportedException($"`{entity.Name}` has a `no_overlap` rule, which is enforced with effective-dated history (plan 19 Z05); until then the model cannot be written, so the rule is never silently unchecked.");
+                if (rule.Kind == RuleKind.NoOverlap && entity.History != HistoryMode.EffectiveDated)
+                    throw new StoreNotSupportedException($"`{entity.Name}` has a `no_overlap` rule, which is about the periods its rows hold for: the entity needs `history: effective_dated`.");
                 if (rule.Kind == RuleKind.NoCycle && entity.Key.Count != 1)
                     throw new StoreNotSupportedException($"`{entity.Name}` has a `no_cycle` rule and a key of {entity.Key.Count} attributes; the rule follows one key.");
             }
@@ -60,15 +63,37 @@ public sealed class ModelWriter
 
     private string Table(string entity) => $"{_dialect.Quote(_model.Name)}.{_dialect.Quote(entity)}";
     private string Col(string name) => _dialect.Quote(name);
+    private static bool Dated(ModelEntity entity) => entity.History == HistoryMode.EffectiveDated;
+
+    /// <summary>The condition that keeps only the open versions of an entity with history (nothing for one without).</summary>
+    private string OpenOnly(ModelEntity entity, string? alias = null) => Dated(entity) ? $"{(alias is null ? "" : alias + ".")}{Col(ModelStorage.ValidToColumn)} IS NULL" : "1 = 1";
 
     /// <summary>The row with this key, or null.</summary>
-    public async Task<StoredRow?> GetAsync(string entityName, IReadOnlyDictionary<string, object?> key, CancellationToken cancellationToken = default)
+    public async Task<StoredRow?> GetAsync(string entityName, IReadOnlyDictionary<string, object?> key, CancellationToken cancellationToken = default) =>
+        (await ReadRowsAsync(null, RequireEntity(entityName), TypedKeyOrThrow(entityName, key), false, null, false, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
+
+    /// <summary>The version of a row that held at a moment (an entity with effective-dated history), or null when it held none then.</summary>
+    public async Task<StoredRow?> GetAsOfAsync(string entityName, IReadOnlyDictionary<string, object?> key, DateTimeOffset asOf, CancellationToken cancellationToken = default)
     {
         var entity = RequireEntity(entityName);
+        if (!Dated(entity)) throw new StoreNotSupportedException($"`{entityName}` keeps no history, so there is nothing to read as of a date.");
+        return (await ReadRowsAsync(null, entity, TypedKeyOrThrow(entityName, key), false, asOf, false, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
+    }
+
+    /// <summary>Every version of a row, oldest first (an entity with effective-dated history).</summary>
+    public async Task<IReadOnlyList<StoredRow>> HistoryAsync(string entityName, IReadOnlyDictionary<string, object?> key, CancellationToken cancellationToken = default)
+    {
+        var entity = RequireEntity(entityName);
+        if (!Dated(entity)) throw new StoreNotSupportedException($"`{entityName}` keeps no history.");
+        return await ReadRowsAsync(null, entity, TypedKeyOrThrow(entityName, key), false, null, true, cancellationToken).ConfigureAwait(false);
+    }
+
+    private Dictionary<string, object?> TypedKeyOrThrow(string entityName, IReadOnlyDictionary<string, object?> key)
+    {
         var violations = new List<RuleViolation>();
-        var typed = TypedKey(entity, key, violations);
+        var typed = TypedKey(RequireEntity(entityName), key, violations);
         if (violations.Count > 0) throw new WriteRefusedException(violations);
-        return await ReadRowAsync(null, entity, typed!, forUpdate: false, cancellationToken).ConfigureAwait(false);
+        return typed!;
     }
 
     public Task InsertAsync(string entity, IReadOnlyDictionary<string, object?> values, WriteActor actor, CancellationToken cancellationToken = default) =>
@@ -125,27 +150,37 @@ public sealed class ModelWriter
         }
         if (violations.Count > 0 && row.Count != entity.Attributes.Count) return (entity, null, null);
         var typedKey = entity.Key.ToDictionary(k => k, k => row.GetValueOrDefault(k));
+        var from = Dated(entity) ? (change.EffectiveFrom ?? _clock.GetUtcNow()).ToUniversalTime() : (DateTimeOffset?)null;
         if (typedKey.Values.All(v => v is not null))
         {
-            if (await ReadRowAsync(tx, entity, typedKey, false, ct).ConfigureAwait(false) is not null) violations.Add(new("key", entity.Name, null, typedKey, $"`{entity.Name}` already has a row {VersionConflictException.Format(typedKey)}."));
+            if (await ReadOpenAsync(tx, entity, typedKey, false, ct).ConfigureAwait(false) is not null) violations.Add(new("key", entity.Name, null, typedKey, $"`{entity.Name}` already has a row {VersionConflictException.Format(typedKey)}."));
+            else if (from is { } start && (await ReadRowsAsync(tx, entity, typedKey, false, null, true, ct).ConfigureAwait(false)).LastOrDefault()?.ValidTo is { } ended && start < ended)
+                violations.Add(new("effective", entity.Name, null, typedKey, $"`{entity.Name}` row {VersionConflictException.Format(typedKey)} ended on {ended:O}; a new one cannot start before that ({start:O})."));
             await CheckUniqueAndReferencesAsync(tx, entity, row, typedKey, null, violations, ct).ConfigureAwait(false);
         }
         if (violations.Count > 0) return (entity, null, null);
 
-        var columns = entity.Attributes.Select(a => a.Name).Append(ModelStorage.VersionColumn).ToList();
-        var values = entity.Attributes.Select(a => row[a.Name]).Append(1L).ToList();
-        await ExecuteAsync(tx, $"INSERT INTO {Table(entity.Name)} ({string.Join(", ", columns.Select(Col))}) VALUES ({string.Join(", ", columns.Select((_, i) => "@p" + i))})", values, ct).ConfigureAwait(false);
-        await AuditAsync(tx, actor, entity, typedKey, "insert", null, 1, null, row, ct).ConfigureAwait(false);
+        await InsertVersionAsync(tx, entity, row, 1, from, ct).ConfigureAwait(false);
+        await AuditAsync(tx, actor, entity, typedKey, "insert", null, 1, null, WithPeriod(entity, row, from), ct).ConfigureAwait(false);
         return (entity, null, row);
+    }
+
+    private async Task InsertVersionAsync(DbTransaction tx, ModelEntity entity, Dictionary<string, object?> row, long version, DateTimeOffset? validFrom, CancellationToken ct)
+    {
+        var columns = entity.Attributes.Select(a => a.Name).Append(ModelStorage.VersionColumn).ToList();
+        var values = entity.Attributes.Select(a => row[a.Name]).Append(version).ToList();
+        if (Dated(entity)) { columns.Add(ModelStorage.ValidFromColumn); values.Add(validFrom); }
+        await ExecuteAsync(tx, $"INSERT INTO {Table(entity.Name)} ({string.Join(", ", columns.Select(Col))}) VALUES ({string.Join(", ", columns.Select((_, i) => "@p" + i))})", values, ct).ConfigureAwait(false);
     }
 
     private async Task<(ModelEntity, Dictionary<string, object?>?, Dictionary<string, object?>?)> UpdateRowAsync(DbTransaction tx, ModelEntity entity, RowChange change, WriteActor actor, List<RuleViolation> violations, CancellationToken ct)
     {
         var typedKey = TypedKey(entity, change.Key, violations);
         if (typedKey is null) return (entity, null, null);
-        var current = await ReadRowAsync(tx, entity, typedKey, true, ct).ConfigureAwait(false) ?? throw new RowNotFoundException(entity.Name, typedKey);
+        var current = await ReadOpenAsync(tx, entity, typedKey, true, ct).ConfigureAwait(false) ?? throw new RowNotFoundException(entity.Name, typedKey);
         var expected = change.ExpectedVersion ?? throw new WriteRefusedException([new("version", entity.Name, null, typedKey, "An update names the version of the row it read.")]);
         if (current.Version != expected) throw new VersionConflictException(entity.Name, typedKey, expected, current.Version);
+        if (change.EffectiveFrom is not null && !Dated(entity)) throw new StoreNotSupportedException($"`{entity.Name}` keeps no history, so a change cannot start from a date.");
 
         var after = new Dictionary<string, object?>(current.Values);
         foreach (var (name, raw) in change.Values)
@@ -158,15 +193,37 @@ public sealed class ModelWriter
         var changed = change.Values.Keys.Where(k => !Equals(after[k], current.Values[k])).ToList();
         if (changed.Count == 0) return (entity, null, null);
         await CheckUniqueAndReferencesAsync(tx, entity, after, typedKey, changed, violations, ct).ConfigureAwait(false);
+
+        DateTimeOffset? start = null;
+        if (change.EffectiveFrom is { } requested)
+        {
+            start = requested.ToUniversalTime();
+            if (start <= current.ValidFrom) violations.Add(new("effective", entity.Name, null, typedKey, $"The version of `{entity.Name}` row {VersionConflictException.Format(typedKey)} that holds began on {current.ValidFrom:O}; a change cannot start at {start:O}, which is not after it."));
+        }
         if (violations.Count > 0) return (entity, null, null);
 
-        var sets = changed.Select((c, i) => $"{Col(c)} = @p{i}").Append($"{Col(ModelStorage.VersionColumn)} = {Col(ModelStorage.VersionColumn)} + 1").ToList();
-        var parameters = changed.Select(c => after[c]).ToList();
-        var where = Where(entity, typedKey, parameters);
-        parameters.Add(expected);
-        var affected = await ExecuteAsync(tx, $"UPDATE {Table(entity.Name)} SET {string.Join(", ", sets)} WHERE {where} AND {Col(ModelStorage.VersionColumn)} = @p{parameters.Count - 1}", parameters, ct).ConfigureAwait(false);
-        if (affected != 1) throw new VersionConflictException(entity.Name, typedKey, expected, current.Version + 1);
-        await AuditAsync(tx, actor, entity, typedKey, "update", expected, expected + 1, current.Values, after, ct).ConfigureAwait(false);
+        if (start is { } at)
+        {
+            // from a date: the open version stops at it and the next one begins, with the version one higher
+            var closing = new List<object?> { at };
+            var closeWhere = Where(entity, typedKey, closing);
+            closing.Add(current.ValidFrom);
+            closing.Add(expected);
+            var closed = await ExecuteAsync(tx, $"UPDATE {Table(entity.Name)} SET {Col(ModelStorage.ValidToColumn)} = @p0 WHERE {closeWhere} AND {Col(ModelStorage.ValidFromColumn)} = @p{closing.Count - 2} AND {Col(ModelStorage.VersionColumn)} = @p{closing.Count - 1} AND {OpenOnly(entity)}", closing, ct).ConfigureAwait(false);
+            if (closed != 1) throw new VersionConflictException(entity.Name, typedKey, expected, current.Version + 1);
+            await InsertVersionAsync(tx, entity, after, expected + 1, at, ct).ConfigureAwait(false);
+        }
+        else
+        {
+            var sets = changed.Select((c, i) => $"{Col(c)} = @p{i}").Append($"{Col(ModelStorage.VersionColumn)} = {Col(ModelStorage.VersionColumn)} + 1").ToList();
+            var parameters = changed.Select(c => after[c]).ToList();
+            var where = Where(entity, typedKey, parameters);
+            parameters.Add(expected);
+            var openVersion = Dated(entity) ? $" AND {Col(ModelStorage.ValidFromColumn)} = @p{Add(parameters, current.ValidFrom)} AND {OpenOnly(entity)}" : "";
+            var affected = await ExecuteAsync(tx, $"UPDATE {Table(entity.Name)} SET {string.Join(", ", sets)} WHERE {where} AND {Col(ModelStorage.VersionColumn)} = @p{parameters.Count - (Dated(entity) ? 2 : 1)}{openVersion}", parameters, ct).ConfigureAwait(false);
+            if (affected != 1) throw new VersionConflictException(entity.Name, typedKey, expected, current.Version + 1);
+        }
+        await AuditAsync(tx, actor, entity, typedKey, "update", expected, expected + 1, WithPeriod(entity, current.Values, current.ValidFrom), WithPeriod(entity, after, start ?? current.ValidFrom), ct).ConfigureAwait(false);
         return (entity, new Dictionary<string, object?>(current.Values), after);
     }
 
@@ -174,30 +231,50 @@ public sealed class ModelWriter
     {
         var typedKey = TypedKey(entity, change.Key, violations);
         if (typedKey is null) return (entity, null, null);
-        var current = await ReadRowAsync(tx, entity, typedKey, true, ct).ConfigureAwait(false) ?? throw new RowNotFoundException(entity.Name, typedKey);
+        var current = await ReadOpenAsync(tx, entity, typedKey, true, ct).ConfigureAwait(false) ?? throw new RowNotFoundException(entity.Name, typedKey);
         var expected = change.ExpectedVersion ?? throw new WriteRefusedException([new("version", entity.Name, null, typedKey, "A delete names the version of the row it read.")]);
         if (current.Version != expected) throw new VersionConflictException(entity.Name, typedKey, expected, current.Version);
+        if (change.EffectiveFrom is not null && !Dated(entity)) throw new StoreNotSupportedException($"`{entity.Name}` keeps no history, so a delete cannot start from a date.");
 
-        // nothing may point at the row: every attribute of this model that references this entity
+        // nothing may point at the row: every attribute of this model that references this entity (an open row of one with history)
         foreach (var other in _model.Entities)
             foreach (var attribute in other.Attributes.Where(a => a.References is { Model: null } r && r.Entity == entity.Name))
             {
                 var targetAttribute = attribute.References!.Attribute ?? entity.Key[0];
                 var value = current.Values[targetAttribute];
                 if (value is null) continue;
-                var count = Convert.ToInt64(await ScalarAsync(tx, $"SELECT COUNT(*) FROM {Table(other.Name)} WHERE {Col(attribute.Name)} = @p0", [value], ct).ConfigureAwait(false));
+                var count = Convert.ToInt64(await ScalarAsync(tx, $"SELECT COUNT(*) FROM {Table(other.Name)} WHERE {Col(attribute.Name)} = @p0 AND {OpenOnly(other)}", [value], ct).ConfigureAwait(false));
                 if (count > 0) violations.Add(new("referenced", entity.Name, attribute.Name, typedKey, $"{count} row(s) of `{other.Name}` point at this row through `{attribute.Name}`; change or delete them first."));
             }
+        DateTimeOffset? end = null;
+        if (Dated(entity))
+        {
+            end = (change.EffectiveFrom ?? _clock.GetUtcNow()).ToUniversalTime();
+            if (end <= current.ValidFrom) violations.Add(new("effective", entity.Name, null, typedKey, $"The version of `{entity.Name}` row {VersionConflictException.Format(typedKey)} that holds began on {current.ValidFrom:O}; the row cannot end at {end:O}, which is not after it."));
+        }
         if (violations.Count > 0) return (entity, null, null);
 
         var parameters = new List<object?>();
         var where = Where(entity, typedKey, parameters);
         parameters.Add(expected);
-        var affected = await ExecuteAsync(tx, $"DELETE FROM {Table(entity.Name)} WHERE {where} AND {Col(ModelStorage.VersionColumn)} = @p{parameters.Count - 1}", parameters, ct).ConfigureAwait(false);
+        int affected;
+        if (end is { } at)
+        {
+            // the row is not removed: its open version stops holding
+            parameters.Add(current.ValidFrom);
+            parameters.Add(at);
+            affected = await ExecuteAsync(tx, $"UPDATE {Table(entity.Name)} SET {Col(ModelStorage.ValidToColumn)} = @p{parameters.Count - 1}, {Col(ModelStorage.VersionColumn)} = {Col(ModelStorage.VersionColumn)} + 1 WHERE {where} AND {Col(ModelStorage.VersionColumn)} = @p{parameters.Count - 3} AND {Col(ModelStorage.ValidFromColumn)} = @p{parameters.Count - 2} AND {OpenOnly(entity)}", parameters, ct).ConfigureAwait(false);
+        }
+        else
+            affected = await ExecuteAsync(tx, $"DELETE FROM {Table(entity.Name)} WHERE {where} AND {Col(ModelStorage.VersionColumn)} = @p{parameters.Count - 1}", parameters, ct).ConfigureAwait(false);
         if (affected != 1) throw new VersionConflictException(entity.Name, typedKey, expected, current.Version + 1);
-        await AuditAsync(tx, actor, entity, typedKey, "delete", expected, null, current.Values, null, ct).ConfigureAwait(false);
+        await AuditAsync(tx, actor, entity, typedKey, "delete", expected, end is null ? null : expected + 1, WithPeriod(entity, current.Values, current.ValidFrom), null, ct).ConfigureAwait(false);
         return (entity, new Dictionary<string, object?>(current.Values), null);
     }
+
+    /// <summary>The row for the audit record: its values, and for an entity with history the moment this version began.</summary>
+    private static IReadOnlyDictionary<string, object?> WithPeriod(ModelEntity entity, IReadOnlyDictionary<string, object?> values, DateTimeOffset? validFrom) =>
+        Dated(entity) ? new Dictionary<string, object?>(values) { [ModelStorage.ValidFromColumn] = validFrom } : values;
 
     // ---- the rules of one value and of one row ----
 
@@ -230,14 +307,14 @@ public sealed class ModelWriter
             {
                 var parameters = new List<object?> { value };
                 var others = changed is null ? "" : " AND NOT (" + Where(entity, key, parameters) + ")";
-                if (Convert.ToInt64(await ScalarAsync(tx, $"SELECT COUNT(*) FROM {Table(entity.Name)} WHERE {Col(attribute.Name)} = @p0{others}", parameters, ct).ConfigureAwait(false)) > 0)
+                if (Convert.ToInt64(await ScalarAsync(tx, $"SELECT COUNT(*) FROM {Table(entity.Name)} WHERE {Col(attribute.Name)} = @p0{others} AND {OpenOnly(entity)}", parameters, ct).ConfigureAwait(false)) > 0)
                     violations.Add(new("unique", entity.Name, attribute.Name, key, $"`{entity.Name}.{attribute.Name}` is `{Display(value)}`, which another row has."));
             }
             if (attribute.References is { Model: null } reference)
             {
                 var target = RequireEntity(reference.Entity);
                 var targetAttribute = reference.Attribute ?? target.Key[0];
-                if (Convert.ToInt64(await ScalarAsync(tx, $"SELECT COUNT(*) FROM {Table(target.Name)} WHERE {Col(targetAttribute)} = @p0", [value], ct).ConfigureAwait(false)) == 0)
+                if (Convert.ToInt64(await ScalarAsync(tx, $"SELECT COUNT(*) FROM {Table(target.Name)} WHERE {Col(targetAttribute)} = @p0 AND {OpenOnly(target)}", [value], ct).ConfigureAwait(false)) == 0)
                     violations.Add(new("reference", entity.Name, attribute.Name, key, $"`{entity.Name}.{attribute.Name}` is `{Display(value)}`, and `{target.Name}` has no row with that `{targetAttribute}`."));
             }
         }
@@ -253,6 +330,7 @@ public sealed class ModelWriter
                 var rows = touched.Where(t => t.Entity == entity).ToList();
                 if (rule.Kind == RuleKind.SumEquals) await CheckSumAsync(tx, entity, rule, rows, violations, ct).ConfigureAwait(false);
                 else if (rule.Kind == RuleKind.NoCycle) await CheckCycleAsync(tx, entity, rule, rows.Select(r => r.After).Where(a => a is not null).Select(a => a!).ToList(), violations, ct).ConfigureAwait(false);
+                else if (rule.Kind == RuleKind.NoOverlap) await CheckOverlapAsync(tx, entity, rule, rows, violations, ct).ConfigureAwait(false);
             }
     }
 
@@ -268,7 +346,7 @@ public sealed class ModelWriter
         {
             var parameters = new List<object?>();
             var conditions = group.Select(kv => kv.Value is null ? $"{Col(kv.Key)} IS NULL" : $"{Col(kv.Key)} = @p{Add(parameters, kv.Value)}").ToList();
-            var where = conditions.Count == 0 ? "" : " WHERE " + string.Join(" AND ", conditions);
+            var where = " WHERE " + string.Join(" AND ", conditions.Append(OpenOnly(entity)));
             await using var command = Command(tx, $"SELECT COUNT(*), SUM({Col(rule.Attribute!)}) FROM {Table(entity.Name)}{where}", parameters);
             await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
             await reader.ReadAsync(ct).ConfigureAwait(false);
@@ -293,9 +371,35 @@ public sealed class ModelWriter
             for (var step = 0; next is not null && step < 100_000; step++)
             {
                 if (!seen.Add(next)) { if (Equals(next, start)) violations.Add(new("no_cycle", entity.Name, rule.Attribute, new Dictionary<string, object?> { [keyName] = start }, $"`{entity.Name}.{rule.Attribute}` would make `{Display(start)}` its own ancestor.")); break; }
-                next = await ScalarAsync(tx, $"SELECT {Col(rule.Attribute!)} FROM {Table(entity.Name)} WHERE {Col(keyName)} = @p0", [next], ct).ConfigureAwait(false);
+                next = await ScalarAsync(tx, $"SELECT {Col(rule.Attribute!)} FROM {Table(entity.Name)} WHERE {Col(keyName)} = @p0 AND {OpenOnly(entity)}", [next], ct).ConfigureAwait(false);
                 if (next is DBNull) next = null;
             }
+        }
+    }
+
+    /// <summary>Among the rows of a group, no two different keys hold for overlapping periods (the versions of one key never overlap: a new one closes the one before).</summary>
+    private async Task CheckOverlapAsync(DbTransaction tx, ModelEntity entity, ModelRule rule, List<(ModelEntity Entity, Dictionary<string, object?>? Before, Dictionary<string, object?>? After)> rows, List<RuleViolation> violations, CancellationToken ct)
+    {
+        var groups = new List<Dictionary<string, object?>>();
+        foreach (var image in rows.SelectMany(r => new[] { r.Before, r.After }).Where(i => i is not null))
+        {
+            var group = rule.GroupBy.ToDictionary(g => g, g => image![g]);
+            if (group.Values.Any(v => v is null) || groups.Any(g => g.All(kv => Equals(kv.Value, group[kv.Key])))) continue;
+            groups.Add(group);
+        }
+        var far = new DateTimeOffset(9999, 12, 31, 0, 0, 0, TimeSpan.Zero);
+        foreach (var group in groups)
+        {
+            var parameters = new List<object?>();
+            var inGroup = string.Join(" AND ", group.Select(kv => $"a.{Col(kv.Key)} = @p{Add(parameters, kv.Value)}"));
+            var sameGroup = string.Join(" AND ", rule.GroupBy.Select(g => $"a.{Col(g)} = b.{Col(g)}"));
+            var sameKey = string.Join(" AND ", entity.Key.Select(k => $"a.{Col(k)} = b.{Col(k)}"));
+            var farIndex = Add(parameters, far);
+            var count = Convert.ToInt64(await ScalarAsync(tx,
+                $"SELECT COUNT(*) FROM {Table(entity.Name)} a JOIN {Table(entity.Name)} b ON {sameGroup} AND NOT ({sameKey}) " +
+                $"AND a.{Col(ModelStorage.ValidFromColumn)} < COALESCE(b.{Col(ModelStorage.ValidToColumn)}, @p{farIndex}) AND b.{Col(ModelStorage.ValidFromColumn)} < COALESCE(a.{Col(ModelStorage.ValidToColumn)}, @p{farIndex}) WHERE {inGroup}", parameters, ct).ConfigureAwait(false));
+            if (count > 0)
+                violations.Add(new("no_overlap", entity.Name, null, group, $"Rows of `{entity.Name}` with {string.Join(", ", group.Select(kv => $"{kv.Key} = {Display(kv.Value)}"))} hold for overlapping periods ({count} overlapping pair(s)); the periods in a group must not overlap."));
         }
     }
 
@@ -317,20 +421,44 @@ public sealed class ModelWriter
 
     // ---- reading and the database ----
 
-    private async Task<StoredRow?> ReadRowAsync(DbTransaction? tx, ModelEntity entity, IReadOnlyDictionary<string, object?> typedKey, bool forUpdate, CancellationToken ct)
+    /// <summary>The open version of a row (the row, for an entity without history).</summary>
+    private async Task<StoredRow?> ReadOpenAsync(DbTransaction? tx, ModelEntity entity, IReadOnlyDictionary<string, object?> typedKey, bool forUpdate, CancellationToken ct) =>
+        (await ReadRowsAsync(tx, entity, typedKey, forUpdate, null, false, ct).ConfigureAwait(false)).FirstOrDefault();
+
+    /// <summary>The row, the version that held at a moment, or (with <paramref name="all"/>) every version, oldest first.</summary>
+    private async Task<List<StoredRow>> ReadRowsAsync(DbTransaction? tx, ModelEntity entity, IReadOnlyDictionary<string, object?> typedKey, bool forUpdate, DateTimeOffset? asOf, bool all, CancellationToken ct)
     {
         var parameters = new List<object?>();
         var where = Where(entity, typedKey, parameters);
+        if (Dated(entity) && !all)
+            where += asOf is { } moment
+                ? $" AND {Col(ModelStorage.ValidFromColumn)} <= @p{Add(parameters, moment.ToUniversalTime())} AND ({Col(ModelStorage.ValidToColumn)} IS NULL OR {Col(ModelStorage.ValidToColumn)} > @p{parameters.Count - 1})"
+                : $" AND {OpenOnly(entity)}";
         var columns = entity.Attributes.Select(a => a.Name).Append(ModelStorage.VersionColumn).ToList();
+        if (Dated(entity)) { columns.Add(ModelStorage.ValidFromColumn); columns.Add(ModelStorage.ValidToColumn); }
         var lock_ = forUpdate && _engine == "sqlserver" ? " WITH (UPDLOCK, ROWLOCK)" : "";
         var suffix = forUpdate && _engine == "postgres" ? " FOR UPDATE" : "";
-        await using var command = Command(tx, $"SELECT {string.Join(", ", columns.Select(Col))} FROM {Table(entity.Name)}{lock_} WHERE {where}{suffix}", parameters);
+        var order = Dated(entity) ? $" ORDER BY {Col(ModelStorage.ValidFromColumn)}" : "";
+        await using var command = Command(tx, $"SELECT {string.Join(", ", columns.Select(Col))} FROM {Table(entity.Name)}{lock_} WHERE {where}{order}{suffix}", parameters);
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
-        if (!await reader.ReadAsync(ct).ConfigureAwait(false)) return null;
-        var values = new Dictionary<string, object?>();
-        for (var i = 0; i < entity.Attributes.Count; i++) values[entity.Attributes[i].Name] = Normalise(entity.Attributes[i], reader.IsDBNull(i) ? null : reader.GetValue(i));
-        return new StoredRow(values, Convert.ToInt64(reader.GetValue(columns.Count - 1)));
+        var found = new List<StoredRow>();
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            var values = new Dictionary<string, object?>();
+            for (var i = 0; i < entity.Attributes.Count; i++) values[entity.Attributes[i].Name] = Normalise(entity.Attributes[i], reader.IsDBNull(i) ? null : reader.GetValue(i));
+            var version = Convert.ToInt64(reader.GetValue(entity.Attributes.Count));
+            DateTimeOffset? from = null, to = null;
+            if (Dated(entity))
+            {
+                from = Instant(reader.GetValue(entity.Attributes.Count + 1));
+                to = reader.IsDBNull(entity.Attributes.Count + 2) ? null : Instant(reader.GetValue(entity.Attributes.Count + 2));
+            }
+            found.Add(new StoredRow(values, version, from, to));
+        }
+        return found;
     }
+
+    private static DateTimeOffset Instant(object value) => value is DateTimeOffset o ? o.ToUniversalTime() : new DateTimeOffset(DateTime.SpecifyKind((DateTime)value, DateTimeKind.Utc));
 
     /// <summary>What the driver gives back, as the type that was written (so a read row compares equal to a coerced value).</summary>
     private static object? Normalise(ModelAttribute attribute, object? value)
