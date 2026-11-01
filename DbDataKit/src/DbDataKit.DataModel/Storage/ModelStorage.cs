@@ -26,6 +26,28 @@ public sealed class StorageException(string message) : Exception(message);
 /// </summary>
 public static class ModelStorage
 {
+    /// <summary>The column every entity table has beside its attributes: the version a write names, raised by one with each change (plan 15 section 5, optimistic concurrency).</summary>
+    public const string VersionColumn = "_version";
+
+    /// <summary>The table beside a model's entities that records every write: who, when, what changed (plan 15 section 5).</summary>
+    public const string AuditTable = "_audit";
+
+    /// <summary>The columns of the audit table, in order: name and canonical type. The write path (<c>DbDataKit.Store</c>) fills them.</summary>
+    public static IReadOnlyList<(string Name, CanonicalType Type, bool Nullable)> AuditColumns { get; } =
+    [
+        ("audit_id", CanonicalType.Of(CanonicalKind.Guid), false),
+        ("at", CanonicalType.Timestamp(null, tz: true), false),
+        ("actor_id", CanonicalType.String(200), false),
+        ("actor_name", CanonicalType.String(200), true),
+        ("entity", CanonicalType.String(128), false),
+        ("row_key", CanonicalType.String(2000), false),
+        ("action", CanonicalType.String(10), false),
+        ("version_before", CanonicalType.Of(CanonicalKind.Int64), true),
+        ("version_after", CanonicalType.Of(CanonicalKind.Int64), true),
+        ("before_json", CanonicalType.String(), true),
+        ("after_json", CanonicalType.String(), true),
+    ];
+
     private const int NameLimit = 63;          // PostgreSQL's; SQL Server allows more, and one name is stored the same on both
 
     public static StoragePlan Plan(DataModel model, string engine)
@@ -58,11 +80,22 @@ public static class ModelStorage
                 var nullable = !(attribute.Required || entity.Key.Contains(attribute.Name));
                 columns.Add(new NativeColumn(attribute.Name, declaration, null, nullable, ShapeOf(attribute, declaration, nullable)));
             }
+            columns.Add(new NativeColumn(VersionColumn, dialect.ColumnType(CanonicalType.Of(CanonicalKind.Int64)).Require(), null, false,
+                new ColumnShape(VersionColumn, dialect.ColumnType(CanonicalType.Of(CanonicalKind.Int64)).Require().Split('(')[0], null, null, null, false, null)));
             statements.Add(new($"{schema}.{entity.Name}", $"create table {schema}.{entity.Name}", ddl.CreateTable(schema, entity.Name, columns)));
             constraints.Add(new($"{schema}.{entity.Name}", $"primary key of {schema}.{entity.Name}", ddl.AddPrimaryKey(schema, entity.Name, Name("pk", entity.Name), entity.Key)));
             foreach (var unique in entity.Attributes.Where(a => a.Unique && !(entity.Key is [var only] && only == a.Name)))
                 constraints.Add(new($"{schema}.{entity.Name}", $"unique {unique.Name} of {schema}.{entity.Name}", ddl.AddUnique(schema, entity.Name, Name("uq", entity.Name, unique.Name), [unique.Name])));
         }
+
+        var auditColumns = AuditColumns.Select(c =>
+        {
+            var declaration = dialect.ColumnType(c.Type).Require();
+            return new NativeColumn(c.Name, declaration, null, c.Nullable, new ColumnShape(c.Name, declaration.Split('(')[0], c.Type.Kind == CanonicalKind.String ? c.Type.Length ?? -1 : null, null, null, c.Nullable, null));
+        }).ToList();
+        statements.Add(new($"{schema}.{AuditTable}", $"create table {schema}.{AuditTable}", ddl.CreateTable(schema, AuditTable, auditColumns)));
+        constraints.Add(new($"{schema}.{AuditTable}", $"primary key of {schema}.{AuditTable}", ddl.AddPrimaryKey(schema, AuditTable, "pk__audit", ["audit_id"])));
+        constraints.Add(new($"{schema}.{AuditTable}", $"index of {schema}.{AuditTable}", ddl.CreateIndex(schema, AuditTable, new IndexSpec("ix__audit_entity_at", false, ["entity", "at"], []))));
 
         foreach (var entity in model.Entities)
             foreach (var attribute in entity.Attributes.Where(a => a.References is not null))
@@ -81,7 +114,7 @@ public static class ModelStorage
                     ddl.AddForeignKey(schema, entity.Name, Name("fk", entity.Name, attribute.Name), [attribute.Name], schema, target.Name, [targetAttribute])));
             }
         statements.AddRange(constraints);
-        return new StoragePlan(engine, schema, statements, [.. model.Entities.Select(e => $"{schema}.{e.Name}")], notes);
+        return new StoragePlan(engine, schema, statements, [.. model.Entities.Select(e => $"{schema}.{e.Name}"), $"{schema}.{AuditTable}"], notes);
     }
 
     /// <summary>The tables of the plan that exist already (its schema's tables with the entities' names).</summary>
