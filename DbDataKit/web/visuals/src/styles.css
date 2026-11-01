@@ -1,3 +1,5 @@
+@import '@xyflow/react/dist/style.css';
+
 /* @dbdatakit/visuals. The root carries data-vz-theme="light" or "dark" (the component resolves "auto" from the system setting), so every colour is a variable here. */
 .vz {
   --vz-text: #1f2328;
@@ -46,3 +48,18 @@
 .vz-problems, .vz-error { border: 1px solid var(--vz-error-edge); color: var(--vz-error-ink); padding: 8px 12px; border-radius: 4px; }
 .vz-problems ul { margin: 6px 0 0; padding-left: 18px; }
 .vz-path { color: var(--vz-muted); }
+
+/* the lineage graph (plan 19 Y04) */
+.lineage-graph { border: 1px solid var(--border, #d0d7de); border-radius: 8px; overflow: hidden; }
+.lineage-card { background: var(--surface, #fff); color: var(--text, #1f2328); border: 1px solid var(--border, #d0d7de); border-radius: 6px; font-size: 12px; box-sizing: border-box; overflow: hidden; }
+.lineage-card-header { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 6px 8px; box-sizing: border-box; }
+.lineage-card-kind { text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; opacity: 0.7; }
+.lineage-card-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+.lineage-card-subtitle { flex-basis: 100%; opacity: 0.7; }
+.lineage-card-unknown { border: 1px solid currentColor; border-radius: 50%; width: 14px; height: 14px; line-height: 12px; text-align: center; font-size: 10px; }
+.lineage-card-toggle { margin-left: auto; font-size: 11px; background: none; border: 1px solid var(--border, #d0d7de); border-radius: 4px; color: inherit; cursor: pointer; }
+.lineage-card-column { display: flex; align-items: center; gap: 6px; padding: 0 8px; border-top: 1px solid var(--border, #d0d7de); box-sizing: border-box; }
+.lineage-link-binds path { stroke-dasharray: 4 3; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .lineage-card { background: #161b22; color: #e6edf3; border-color: #30363d; }
+}
