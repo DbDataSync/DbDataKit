@@ -8,6 +8,7 @@ import { HomePage } from './pages/HomePage'
 import { InstancesPage } from './pages/InstancesPage'
 import { MonitoringPage } from './pages/MonitoringPage'
 import { ServerModule } from './pages/ServerModule'
+import { LineagePage } from './pages/LineagePage'
 import { ViewsPage } from './pages/ViewsPage'
 
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
       <Route path="/connections" element={<ConnectionsPage />} />
       <Route path="/docs" element={<DocsDirectoryPage />} />
       <Route path="/docs/:module/*" element={<ModuleDocsPage />} />
+      <Route path="/lineage" element={<LineagePage />} />
       <Route path="/views" element={<ViewsPage />} />
       <Route path="/monitoring" element={<MonitoringPage />} />
       <Route path="/users" element={<UsersPage />} />

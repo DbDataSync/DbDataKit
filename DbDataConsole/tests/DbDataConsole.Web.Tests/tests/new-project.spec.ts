@@ -144,4 +144,17 @@ test('authoring: a project from a template, a model and its questions, tables im
   // The draft has the model and the two mapped models, for the usual commit and merge.
   await check(page.getByTestId('build-git-change').filter({ hasText: 'models/marts/fct_store_visits.sql' })).toHaveCount(1)
   await check(page.getByTestId('build-git-change').filter({ hasText: 'models/humanresources/employee.yml' })).toHaveCount(1)
+  // Lineage (plan 18, G10): the retail project's models and semantic model are on the Build server, so the console's Lineage page shows them. Choosing the customer dimension marks what feeds it and what it feeds.
+  await page.goto('/lineage')
+  await check(page.getByTestId('lineage-page')).toBeVisible()
+  await check(page.getByTestId('lineage-server').filter({ hasText: 'nodes' })).not.toHaveCount(0)
+  await page.getByTestId('lineage-search').fill('dim_customer')
+  await page.locator('[data-testid^="lineage-found-"]').filter({ hasText: 'marts.dim_customer' }).first().click()
+  await check(page.getByTestId('lineage-selected')).toContainText('marts.dim_customer')
+  await check(page.getByTestId('lineage-selected')).toContainText('upstream')
+  const card = (text: string) => page.locator('[data-testid^="lineage-card-"]').filter({ hasText: text })
+  await check(card('marts.dim_customer').first()).toHaveAttribute('data-state', 'selected')
+  await check(card('staging.customers').first()).toHaveAttribute('data-state', 'upstream')          // where the dimension is built from
+  await check(card('retail_sales').first()).toHaveAttribute('data-state', 'downstream')              // a member of the semantic model is bound to its columns
+  await check(card('marts.fct_sales_lines').first()).toHaveAttribute('data-state', 'dim')            // a fact that only shares a neighbour is neither
 })
