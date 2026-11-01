@@ -103,6 +103,13 @@ public static class ModelDefinitionLoader
             var info = ReadInfo(top);
             var refresh = ReadRefresh(top, kindType?.Value, loads);
             var keys = ReadKeys(top, isCopy);
+            if (keys.Any(k => k.UnknownMember) && top.Get("keys") is { } keysNode)
+            {
+                if (kindType?.Value is not (ModelKinds.View or ModelKinds.Full or ModelKinds.IncrementalByUniqueKey))
+                    Add(DiagnosticCatalog.InvalidValue, keysNode, "`unknown_member: true` adds a row to the model's output, which only a view, a full table or an incremental-by-unique-key table can hold: an incremental table by time range loads by period and would drop it.", "Use one of those kinds, or leave `unknown_member` out.");
+                else if (columns.Count == 0)
+                    Add(DiagnosticCatalog.MissingKey, keysNode, "`unknown_member: true` needs the model's `columns`: the added row has a value for each.", "Declare the columns.");
+            }
 
             var rewrites = ReadRewrites(top);
             var modelParameters = top.Get("parameters") is { } pn ? ParameterReferences.Read(pn, "`parameters`", (d, n, f) => Add(d, n, f)) : null;
