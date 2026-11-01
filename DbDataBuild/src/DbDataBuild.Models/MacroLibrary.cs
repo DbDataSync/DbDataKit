@@ -102,7 +102,9 @@ public sealed class MacroLibrary
                     var head = $"CREATE OR REPLACE MACRO {name}({string.Join(", ", args.Select(a => "\"" + a.Replace("\"", "\"\"") + "\""))}) AS ";
                     // the lowering binds the marker, whose arguments are cast to the part types as the full text casts them
                     var markerCall = SurrogateKey.MarkerName(parts.Select(p => p.Type).ToList()) + "(" + string.Join(", ", parts.Select(p => $"CAST({p.Expression} AS {p.Type switch { KeyPartType.Text => "VARCHAR", KeyPartType.Integer => "BIGINT", KeyPartType.Date => "DATE", _ => "TIMESTAMP" }})")) + ")";
-                    generated.Add(new MacroDefinition(name, false, head + SurrogateKey.Sql("duckdb", parts), file, key.Line, [], [], head + markerCall));
+                    // unknown_member: a NULL part gives the reserved key instead of NULL (COALESCE, which every engine writes the same way)
+                    var (open, close) = key.UnknownMember ? ("coalesce(", $", {SurrogateKey.UnknownKey})") : ("", "");
+                    generated.Add(new MacroDefinition(name, false, head + open + SurrogateKey.Sql("duckdb", parts) + close, file, key.Line, [], [], head + open + markerCall + close));
                 }
             }
         if (generated.Count == 0) return this;

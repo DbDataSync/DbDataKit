@@ -33,6 +33,9 @@ public static class SurrogateKey
 {
     public const char Separator = '\u001f';
 
+    /// <summary>The reserved key of the unknown member (plan 25 section 1a, K08): what a key with <c>unknown_member: true</c> gives when a part is NULL. Chosen here, not by the owner: zero is easy to read in a report and is a value a 64-bit hash reaches with the same chance as any other (one in 2^64).</summary>
+    public const long UnknownKey = 0;
+
     /// <summary>One part as text, or null when the value is NULL.</summary>
     public static string? PartText(object? value) => value switch
     {
