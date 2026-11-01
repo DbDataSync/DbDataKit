@@ -450,6 +450,25 @@ public sealed class ConfigReloadTests
     }
 
     [Fact]
+    public void A_disposed_provider_ignores_a_reload_a_late_timer_asks_for()
+    {
+        using var config = TempConfig.Create(("server.yaml", Server(9001)));
+        var (_, provider, monitor, _, loggers) = Open(config);
+        using var _l = loggers;
+        using var _m = monitor;
+
+        // the debounce timer can fire after the host is down and its folder deleted; that must neither read nor throw on the timer's thread
+        provider.Dispose();
+        config.Write("server.yaml", Server(9002));
+        provider.ReloadNow();
+        Assert.True(provider.TryGet("Proxy:Listen:Port", out var port));
+        Assert.Equal("9001", port);
+
+        Directory.Delete(config.Directory, true);
+        provider.ReloadNow();
+    }
+
+    [Fact]
     public void A_reload_that_only_adds_warnings_is_applied_and_a_new_data_source_needs_no_restart()
     {
         using var config = TempConfig.Create(("server.yaml", Server(9001)));

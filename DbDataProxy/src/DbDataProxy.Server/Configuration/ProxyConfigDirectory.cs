@@ -34,6 +34,7 @@ public sealed class ProxyConfigDirectoryProvider : ConfigurationProvider, IDispo
     private FileSystemWatcher? _watcher;
     private Timer? _debounce;
     private readonly object _reloading = new();
+    private volatile bool _disposed;
 
     public ProxyConfigDirectoryProvider(ProxyConfigDirectorySource source)
     {
@@ -71,6 +72,7 @@ public sealed class ProxyConfigDirectoryProvider : ConfigurationProvider, IDispo
         // One reload at a time: the watcher's timer and a caller can arrive together, and a read that started before a file was deleted must not be the one that finishes last and is kept
         lock (_reloading)
         {
+            if (_disposed) return;                      // the host is stopping: its directory may be gone, and a timer that fires now has nothing left to reload for
             try
             {
                 var (data, origins, warnings) = Read(_source.Directory);
@@ -81,6 +83,13 @@ public sealed class ProxyConfigDirectoryProvider : ConfigurationProvider, IDispo
             catch (InvalidDataException ex)
             {
                 _source.Guard?.Report(ex.Message);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // a file or the folder went away (or was locked) between listing it and reading it. This runs on a timer's thread, where an exception ends the process, and the configuration in force is still the last good one:
+                // keep it, say so, and let the change that follows (the deletion is one) reload again when things have settled
+                _source.Guard?.Report($"The configuration folder could not be read just now ({ex.GetType().Name}); the settings in force are unchanged.");
+                return;
             }
             OnReload();
         }
@@ -166,6 +175,7 @@ public sealed class ProxyConfigDirectoryProvider : ConfigurationProvider, IDispo
 
     public void Dispose()
     {
+        lock (_reloading) _disposed = true;           // waits for a reload in progress, and no later one does anything
         _watcher?.Dispose();
         _debounce?.Dispose();
     }
