@@ -7,6 +7,8 @@ import { CompilePanel } from './CompilePanel'
 import { DefinitionPanel } from './DefinitionPanel'
 import { GitPanel } from './GitPanel'
 import { ImportPanel } from './ImportPanel'
+import { NewConnectionPanel } from './NewConnectionPanel'
+import { NewFilePanel, OpenFileTools } from './FileTools'
 import { NewModelPanel } from './NewModelPanel'
 import { PreviewPanel, isModelQuery } from './PreviewPanel'
 import type { Diagnostic, ProjectFile, Workspace } from '../types'
@@ -48,7 +50,7 @@ export function EditTab() {
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([])
   const [refused, setRefused] = useState<string | null>(null)
   // the panel above the files: a new model, or an import from a connection
-  const [panel, setPanel] = useState<'model' | 'import' | null>(null)
+  const [panel, setPanel] = useState<'model' | 'import' | 'connection' | 'file' | null>(null)
   // a file with a schema can be edited as a form or as its YAML; both change the same text
   const [mode, setMode] = useState<'form' | 'yaml'>('form')
   const fileSchemas = useQuery({ queryKey: ['build', 'file-schemas'], queryFn: () => buildApi.fileSchemas(), staleTime: Infinity })
@@ -146,6 +148,8 @@ export function EditTab() {
         <div className="row" style={{ gap: 12, marginBottom: 14 }}>
           <button type="button" className={panel === 'model' ? 'btn btn-primary' : 'btn'} aria-pressed={panel === 'model'} onClick={() => setPanel(panel === 'model' ? null : 'model')} data-testid="build-edit-new-model">New model</button>
           <button type="button" className={panel === 'import' ? 'btn btn-primary' : 'btn'} aria-pressed={panel === 'import'} onClick={() => setPanel(panel === 'import' ? null : 'import')} data-testid="build-edit-import">Import from a connection</button>
+          <button type="button" className={panel === 'connection' ? 'btn btn-primary' : 'btn'} aria-pressed={panel === 'connection'} onClick={() => setPanel(panel === 'connection' ? null : 'connection')} data-testid="build-edit-new-connection">New connection</button>
+          <button type="button" className={panel === 'file' ? 'btn btn-primary' : 'btn'} aria-pressed={panel === 'file'} onClick={() => setPanel(panel === 'file' ? null : 'file')} data-testid="build-edit-new-file">New file</button>
         </div>
       )}
       {workspace !== null && canAuthor && panel === 'model' && (
@@ -155,6 +159,12 @@ export function EditTab() {
           onCancel={() => setPanel(null)}
           onCreated={async (query) => { setPanel(null); await wrote(); if (query) read.mutate(query) }}
         />
+      )}
+      {workspace !== null && canAuthor && panel === 'connection' && (
+        <NewConnectionPanel project={project} workspace={workspace} onCancel={() => setPanel(null)} onCreated={async (file) => { setPanel(null); await wrote(); read.mutate(file) }} />
+      )}
+      {workspace !== null && canAuthor && panel === 'file' && (
+        <NewFilePanel project={project} workspace={workspace} onCancel={() => setPanel(null)} onCreated={async (file) => { setPanel(null); await wrote(); read.mutate(file) }} />
       )}
       {workspace !== null && canAuthor && panel === 'import' && (
         <ImportPanel project={project} workspace={workspace} onWritten={() => void wrote()} onOpen={(file) => read.mutate(file)} onCancel={() => setPanel(null)} />
@@ -194,6 +204,7 @@ export function EditTab() {
                   <button type="button" className="btn btn-primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()} data-testid="build-edit-save">{save.isPending ? 'Saving…' : 'Save'}</button>
                   {!dirty && <span className="hint" data-testid="build-edit-saved">Saved</span>}
                 </div>
+                {canAuthor && workspace !== null && <OpenFileTools key={open} project={project} workspace={workspace} path={open} hash={hash} dirty={dirty} onMoved={(to) => { void wrote(); read.mutate(to) }} onDeleted={() => { setOpen(null); void wrote() }} />}
                 {refused && <div className="empty" data-testid="build-edit-refused">{refused}</div>}
                 {association && schemaSet && (
                   <div className="row" style={{ gap: 6, marginBottom: 8 }} role="tablist" aria-label="How to edit">

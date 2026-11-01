@@ -28,8 +28,8 @@ export const buildApi = {
   createProject: (id: string, template: ProjectTemplateInfo['name']) => request<BuildProject>('/api/v1/projects', { method: 'POST', body: JSON.stringify({ id, template }) }),
   /** The commands of a project and whether this person may run each: the console shows only the controls they may use. */
   commands: (id: string) => request<{ commands: CommandOffer[] }>(`${project(id)}/commands`).then((r) => r.commands),
-  /** The connections the project names (from its metadata), for choosing where a model lives and what to import from. */
-  connections: (id: string) => run<ProjectConnections>(id, 'project_show_metadata').then((a) => Object.keys(a.document?.data?.project?.config?.connections ?? {}).sort()),
+  /** The connections the project names (from its metadata), for choosing where a model lives and what to import from. In a workspace: the draft's, so a connection made there is offered. */
+  connections: (id: string, workspace?: string) => run<ProjectConnections>(id, 'project_show_metadata', {}, workspace).then((a) => Object.keys(a.document?.data?.project?.config?.connections ?? {}).sort()),
   /** Makes a model to start from, in the draft: its definition and a query that runs. */
   createModel: (id: string, workspace: string, model: string, kind: string, connections: string[]) =>
     run<{ model: string; kind: string; files: string[] }>(id, 'project_model_create', { model, kind, ...(connections.length > 0 ? { connection: connections } : {}) }, workspace),
@@ -97,6 +97,16 @@ export const buildApi = {
   readFile: (id: string, workspace: string, path: string) => run<FileContent>(id, 'project_file_read', { path }, workspace),
   /** Writes a file on the version it was read at; a different current version is refused. */
   writeFile: (id: string, workspace: string, path: string, content: string, hash: string) => run<{ path: string; hash: string }>(id, 'project_file_write', { path, content, expect_hash: hash }, workspace),
+  /** Makes a file that does not exist yet in the draft (the author role), empty or with the text given. */
+  createFile: (id: string, workspace: string, path: string, content = '') => run<{ path: string; hash: string }>(id, 'project_file_write', { path, content, create: true }, workspace),
+  /** Renames or moves a file of the draft, on the version it was read at; a destination that exists is refused. */
+  moveFile: (id: string, workspace: string, from: string, to: string, hash: string) => run<{ from: string; to: string }>(id, 'project_file_move', { from, to, expect_hash: hash }, workspace),
+  /** Deletes a file of the draft, on the version it was read at. */
+  deleteFile: (id: string, workspace: string, path: string, hash: string) => run<{ path: string }>(id, 'project_file_delete', { path, expect_hash: hash }, workspace),
+  /** Creates the tracking tables on the target (an administrator): what `connection init --apply` does. The connection is the project's default when none is named. */
+  initTracking: (id: string, connection?: string) => run<Record<string, unknown>>(id, 'connection_init', { ...(connection ? { connection } : {}), apply: true }),
+  /** Creates the tables the models read from the project's seeds and fills them (an administrator): what `connection seed --apply` does. */
+  seedTarget: (id: string, connection?: string) => run<Record<string, unknown>>(id, 'connection_seed', { ...(connection ? { connection } : {}), apply: true }),
   /** Compiles the workspace without writing rendered files: what the compiler finds in the draft. */
   checkDraft: (id: string, workspace: string) => run<CompileSummary>(id, 'project_compile', { check: true }, workspace),
   /** Compiles the workspace and writes the rendered files a deploy plans from (the author role). */

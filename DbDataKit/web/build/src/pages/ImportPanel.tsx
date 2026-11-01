@@ -114,7 +114,7 @@ export function ImportPanel({ project, workspace, onWritten, onOpen, onCancel }:
   const [failure, setFailure] = useState<string | null>(null)
   const [selected, setSelected] = useState<string[]>([])
   const [written, setWritten] = useState<string[] | null>(null)
-  const connections = useQuery({ queryKey: ['build', project, 'connections'], queryFn: () => buildApi.connections(project) })
+  const connections = useQuery({ queryKey: ['build', project, workspace, 'connections'], queryFn: () => buildApi.connections(project, workspace) })
 
   const take = (answer: CommandAnswer<ImportResult>) => {
     const problem = importFailure(answer)

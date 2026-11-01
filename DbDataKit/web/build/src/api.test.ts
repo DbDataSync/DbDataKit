@@ -67,6 +67,27 @@ describe('the calls the new-project, new-model and import screens make', () => {
     expect(calls.every((c) => c.url === '/api/v1/projects/shop/commands/project_import?workspace=ada-draft')).toBe(true)
   })
 
+  it('makes, renames and deletes a file of the draft on the version it was read at, and prepares the target', async () => {
+    const calls = serve({ exit: 0, document: { ok: true, data: {} } })
+    await buildApi.createFile('shop', 'ada-draft', 'connections/warehouse.yaml', 'schema: connection/1\n')
+    await buildApi.moveFile('shop', 'ada-draft', 'a.yml', 'b.yml', 'h1')
+    await buildApi.deleteFile('shop', 'ada-draft', 'b.yml', 'h2')
+    await buildApi.initTracking('shop')
+    await buildApi.seedTarget('shop', 'postgres')
+    expect(calls.map((c) => c.url)).toEqual([
+      '/api/v1/projects/shop/commands/project_file_write?workspace=ada-draft',
+      '/api/v1/projects/shop/commands/project_file_move?workspace=ada-draft',
+      '/api/v1/projects/shop/commands/project_file_delete?workspace=ada-draft',
+      '/api/v1/projects/shop/commands/connection_init',
+      '/api/v1/projects/shop/commands/connection_seed',
+    ])
+    expect(calls[0].body).toEqual({ path: 'connections/warehouse.yaml', content: 'schema: connection/1\n', create: true })
+    expect(calls[1].body).toEqual({ from: 'a.yml', to: 'b.yml', expect_hash: 'h1' })
+    expect(calls[2].body).toEqual({ path: 'b.yml', expect_hash: 'h2' })
+    expect(calls[3].body).toEqual({ apply: true })                                   // the project's default connection
+    expect(calls[4].body).toEqual({ connection: 'postgres', apply: true })
+  })
+
   it('reads the project’s connection names from its metadata, and its commands with who may run them', async () => {
     serve({ exit: 0, document: { ok: true, data: { project: { config: { connections: { sqlserver: { engine: 'sqlserver' }, origin: { engine: 'duckdb' } } } } } } })
     expect(await buildApi.connections('shop')).toEqual(['origin', 'sqlserver'])
