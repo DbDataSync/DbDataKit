@@ -15,6 +15,7 @@
     <DbDataKitReference Include="Config.Yaml" />   <!-- the strict reader connection files pass through; plan 13, A01 -->
     <DbDataKitReference Include="Config.Git" />   <!-- the config repository's git service (brings LibGit2Sharp); plan 13, U06 -->
     <DbDataKitReference Include="Connections.Abstractions" />   <!-- the connection definition and the policy composers apply; plan 13, A08 -->
+    <DbDataKitReference Include="Lineage" />   <!-- the suite's lineage graph; plan 18, G07 -->
     <DbDataKitReference Include="Connections" />   <!-- the composer pipeline (credentials last, round-trip proof) -->
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>

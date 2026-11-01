@@ -118,7 +118,7 @@ internal static partial class SyncConnectionFile
         e.Database is null && e.ConnectTimeoutSeconds is null && e.CommandTimeoutSeconds is null && e.SegmentOrder is null
         && e.Properties is null && e.Scripts is null && e.Hooks is null && e.TestQuery is null;
 
-    private static (string Engine, string? Dialect) EngineFor(string driverType)
+    internal static (string Engine, string? Dialect) EngineFor(string driverType)
     {
         foreach (var (driver, engine, dialect) in Engines)
             if (driver == driverType) return (engine, dialect);
