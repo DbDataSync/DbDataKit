@@ -50,3 +50,24 @@ jobs:
           duckdb: 'false'
       - run: dotnet build DbDataStore.slnf -c Release
       - run: dotnet test --project tests/DbDataStore.Tests -c Release --no-build --minimum-expected-tests 5
+
+  # The rows and storage over a real PostgreSQL (plan 19, Z09): the same suite with the test engine up, so the tests that skip without one run.
+  postgres:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-product
+        with:
+          product: DbDataStore
+          global-json: DbDataStore/global.json
+          duckdb: 'false'
+      - name: Start the test PostgreSQL
+        working-directory: .
+        run: |
+          testenv/testenv.sh up postgres
+          testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
+      - run: dotnet build DbDataStore.slnf -c Release
+      - run: dotnet test --project tests/DbDataStore.Tests -c Release --no-build --minimum-expected-tests 16
