@@ -60,6 +60,26 @@ public sealed class ModelStorageTests
         Assert.Contains(plan.Notes, n => n.Contains("crm_reference.region") && n.Contains("no foreign key"));
     }
 
+    [Theory]
+    [InlineData("sqlserver")]
+    [InlineData("postgres")]
+    public void An_entity_with_history_keeps_versions_so_its_key_alone_is_not_the_primary_key(string engine)
+    {
+        var dated = Model(Fixture.Replace("  territory:\n    key: [territory_code]", "  territory:\n    history: effective_dated\n    key: [territory_code]"));
+
+        var plan = ModelStorage.Plan(dated, engine);
+
+        var table = plan.Statements.Single(s => s.Description == "create table sales_territories.territory").Text;
+        Assert.Contains("_valid_from", table);
+        Assert.Contains("_valid_to", table);
+        Assert.Contains("PRIMARY KEY", plan.Statements.Single(s => s.Description == "primary key of sales_territories.territory").Text);
+        Assert.Contains("_valid_from", plan.Statements.Single(s => s.Description == "primary key of sales_territories.territory").Text);
+        Assert.Contains("WHERE", plan.Statements.Single(s => s.Description == "one open version of each key of sales_territories.territory").Text);
+        Assert.Contains(plan.Statements, s => s.Description == "unique name among the open versions of sales_territories.territory");
+        Assert.DoesNotContain(plan.Statements, s => s.Description.StartsWith("foreign key territory_code of sales_territories.territory_share"));   // the key repeats in a history table
+        Assert.Contains(plan.Notes, n => n.Contains("keeps its history in versions"));
+    }
+
     [Fact]
     public void An_engine_it_does_not_store_on_and_a_reference_between_two_types_are_refused_in_words()
     {
