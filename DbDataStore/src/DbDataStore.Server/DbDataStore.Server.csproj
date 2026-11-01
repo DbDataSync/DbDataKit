@@ -15,6 +15,11 @@
     <DbDataKitReference Include="Hosting.Certificates" />
     <DbDataKitReference Include="Security.Acl" />
     <DbDataKitReference Include="DataModel" />   <!-- model/1: the models the server holds -->
+    <DbDataKitReference Include="Store" />   <!-- validated, audited row writes -->
+    <DbDataKitReference Include="Connections" />   <!-- the connection a model's tables live on -->
+    <DbDataKitReference Include="Connections.SqlServer" />
+    <DbDataKitReference Include="Connections.Postgres" />
+    <DbDataKitReference Include="Secrets" />
     <DbDataKitReference Include="Web" />   <!-- pairing, key rotation, the version header and the token check -->
   </ItemGroup>
 </Project>

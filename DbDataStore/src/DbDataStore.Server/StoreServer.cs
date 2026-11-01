@@ -58,6 +58,7 @@ public static class StoreServer
         app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache()), refused => log($"A call was refused ({refused.Failure}): {refused.Detail}"));
         Map(app, instanceId);
         StoreModels.Map(app, settings.Directory);
+        StoreData.Map(app, settings.Directory, new StoreConnections(settings.Directory));
         return app;
     }
 
