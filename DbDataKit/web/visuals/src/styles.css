@@ -63,3 +63,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .lineage-card { background: #161b22; color: #e6edf3; border-color: #30363d; }
 }
+.lineage-state-selected { outline: 2px solid #0969da; }
+.lineage-state-upstream { border-left: 4px solid #8250df; }
+.lineage-state-downstream { border-left: 4px solid #1a7f37; }
+.lineage-state-dim { opacity: 0.3; }

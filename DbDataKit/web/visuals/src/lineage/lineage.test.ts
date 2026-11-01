@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { layoutLineage } from './layout'
 import { projectLineage } from './project'
+import { reach } from './reach'
 import type { LineageGraphDoc } from './types'
 
 const crm = 'sqlserver://sql01/crm.dbo.customers'
@@ -93,5 +94,27 @@ describe('layoutLineage', () => {
 
     expect(placed).toHaveLength(500)
     expect(new Set(placed.map((p) => `${p.x},${p.y}`)).size).toBe(500)
+  })
+})
+
+describe('reach', () => {
+  it('finds what feeds a card and what it feeds, each along its own direction, however far', () => {
+    const projection = projectLineage(graph)
+
+    expect(reach(projection, warehouse)).toEqual({ upstream: new Set([crm]), downstream: new Set([model, measure]) })
+    expect(reach(projection, crm).upstream.size).toBe(0)
+    expect(reach(projection, measure)).toEqual({ upstream: new Set([model, warehouse, crm]), downstream: new Set() })
+  })
+
+  it('does not count a card that only shares a source', () => {
+    const sibling = 'postgres://pg01/dwh.public.other'
+    const projection = projectLineage({
+      nodes: [...graph.nodes, { id: sibling, kind: 'dataset', name: 'public.other', unknown_upstream: false }],
+      edges: [...graph.edges, { from: crm, to: sibling, kind: 'replicates', granularity: 'table', confidence: 'declared' }],
+    })
+
+    expect(reach(projection, sibling).upstream).toEqual(new Set([crm]))
+    expect(reach(projection, warehouse).downstream.has(sibling)).toBe(false)
+    expect(reach(projection, warehouse).upstream.has(sibling)).toBe(false)
   })
 })
