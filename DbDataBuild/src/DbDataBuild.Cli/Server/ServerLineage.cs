@@ -69,7 +69,7 @@ internal static class ServerLineage
     /// The design lineage of the projects a server hosts (one named by <paramref name="only"/>, else all), joined into one graph, and what was left out and why. One broken project does not take the others' lineage with it.
     /// The command line and the management API (`GET /api/v1/lineage`, which a console joins with the other servers' graphs) both read it here.
     /// </summary>
-    public static async Task<(LineageGraph Graph, List<string> Problems)> MergedAsync(string directory, string? only, CancellationToken token)
+    public static async Task<(LineageGraph Graph, List<string> Problems)> MergedAsync(string directory, string? only, CancellationToken token, string? instanceId = null)
     {
         var problems = new List<string>();
         var projects = new ProjectsFile(directory);
@@ -80,7 +80,7 @@ internal static class ServerLineage
         {
             var root = projects.RootOf(project);
             if (!File.Exists(Path.Combine(root, "dbdatabuild.yml"))) { problems.Add($"Project '{project.Id}' is left out: it has no files at {root} (a remote project that was never cloned?)."); continue; }
-            try { var context = ProjectContext.Load(root); graphs.Add(BuildLineage.Design(context, BuildLineage.IdentityOf(context.Config, environment))); }
+            try { var context = ProjectContext.Load(root); graphs.Add(BuildLineage.Design(context, BuildLineage.IdentityOf(context.Config, environment), instanceId ?? "local")); }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // the type says what went wrong and not the message, which can quote a value

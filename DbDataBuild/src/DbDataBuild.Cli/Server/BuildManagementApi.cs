@@ -60,7 +60,7 @@ internal static class BuildManagementApi
             {
                 var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
                 if (!decision.Allowed) return Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
-                var (graph, problems) = await ServerLineage.MergedAsync(serverDirectory, null, context.RequestAborted);
+                var (graph, problems) = await ServerLineage.MergedAsync(serverDirectory, null, context.RequestAborted, BuildServer.InstanceId(Path.Combine(serverDirectory, "server.yaml")));
                 var document = DbDataKit.Lineage.LineageJson.Write(graph);
                 document["problems"] = new System.Text.Json.Nodes.JsonArray(problems.Select(p => (System.Text.Json.Nodes.JsonNode)System.Text.Json.Nodes.JsonValue.Create(p)!).ToArray());
                 return Results.Json(document);
