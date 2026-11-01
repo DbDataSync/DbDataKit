@@ -192,7 +192,7 @@ export const endToEndBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-cons
 if (!isWorker) {
   fs.rmSync(endToEndBuild.directory, { recursive: true, force: true })
   fs.mkdirSync(endToEndBuild.directory, { recursive: true })
-  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', endToEndBuild.directory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })
+  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', endToEndBuild.directory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'end-to-end-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 

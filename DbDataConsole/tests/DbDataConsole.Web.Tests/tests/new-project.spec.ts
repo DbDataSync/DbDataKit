@@ -67,16 +67,16 @@ test('authoring: a project from a template, a model and its questions, tables im
   await page.getByTestId('build-new-project-cancel').click()
   await check(page.getByTestId('build-project-retail')).toHaveCount(1)
 
-  // The project is a git repository on the server; its connection to the origin is added the way an administrator would, and committed.
-  const retail = path.join(authoringBuild.directory, 'projects', 'retail')
-  fs.writeFileSync(path.join(retail, 'connections', 'origin.yaml'), 'schema: connection/1\nname: origin\nengine: duckdb\naccess: readonly\n')
-  for (const args of [['add', '-A'], ['commit', '-qm', 'An origin connection']])
-    execFileSync('git', ['-c', 'user.name=console-e2e', '-c', 'user.email=e2e@example.invalid', ...args], { cwd: retail, stdio: 'ignore' })
-
   await page.getByTestId('build-project-retail').getByTestId('build-project-link').click()
   await page.getByTestId('build-tab-edit').click()
   await page.getByTestId('build-edit-workspace-name').fill('draft')
   await page.getByTestId('build-edit-workspace-make').click()
+  // The connection to the origin, a DuckDB file the tool only reads, made in the workspace: no address and no login in the file (the server holds the login, the file's path).
+  await page.getByTestId('build-edit-new-connection').click()
+  await page.getByTestId('build-new-connection-name').fill('origin')
+  await page.getByTestId('build-new-connection-engine').selectOption('duckdb')
+  await page.getByTestId('build-new-connection-create').click()
+  await check(page.getByTestId('build-edit-open')).toHaveText('connections/origin.yaml')
 
   // New model: a name, a kind; the model is made in the workspace and its query opens.
   await page.getByTestId('build-edit-new-model').click()

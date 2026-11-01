@@ -85,7 +85,7 @@ export function NewModelPanel({ project, workspace, onCreated, onCancel }: { pro
   const [kind, setKind] = useState('view')
   const [connection, setConnection] = useState<string[]>([])
   const [failure, setFailure] = useState<string | null>(null)
-  const connections = useQuery({ queryKey: ['build', project, 'connections'], queryFn: () => buildApi.connections(project) })
+  const connections = useQuery({ queryKey: ['build', project, workspace, 'connections'], queryFn: () => buildApi.connections(project, workspace) })
   const create = useMutation({
     mutationFn: () => buildApi.createModel(project, workspace, name.trim(), kind, connection),
     onSuccess: async (answer) => {

@@ -4,15 +4,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
-import { buildDll, endToEndBuild, scratchDirectory, warehouseConnection } from '../playwright.config'
+import { endToEndBuild, scratchDirectory, warehouseConnection } from '../playwright.config'
 import { signInNewAdmin } from './people'
 
 // Plan 13a, W10: from a template to an applied plan, all in the console, by two people. Ada makes a project from the starter template on a Build server that hosts none, starts a workspace, points the project at the
 // PostgreSQL (its settings, in the YAML editor), describes a model (a form), has the compiler write the rendered files a deploy plans from, commits and merges. Then, on the test PostgreSQL (DBDATA_E2E_PG; the
 // story stops after the merge when it is unset), Ada plans the deploy, and Grace, a second person signed in on her own, reviews it, tries it, approves and applies it, and the tracking tables name her as the approver.
 //
-// Two steps are not the console's yet and are done as the server's administrator would, on the server: the connection file for the PostgreSQL (the Edit tab cannot create a file; W07's story adds its origin the same
-// way) and the tracking tables and raw tables the models read (`connection init` and `connection seed`, which no screen offers). This file runs after first-run.spec.ts (files run in name order).
+// Nothing here is done outside the console (plan 13a, W13): the connection file is made in her workspace (New connection), and the tracking tables and the tables the models read are made from the Status tab (an administrator's step).
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 const check = expect.configure({ timeout: 60_000 })
 
@@ -30,10 +29,6 @@ function postgresSettings(): string {
     text = text.replace(from, to)
   }
   return text
-}
-
-function git(cwd: string, ...args: string[]) {
-  execFileSync('git', ['-c', 'user.name=console-e2e', '-c', 'user.email=e2e@example.invalid', ...args], { cwd, stdio: 'ignore' })
 }
 
 /** Who the tracking tables say applied each plan: the approver the server recorded (an apply logs a started row and a completed one; the completed ones are the applies). */
@@ -66,16 +61,20 @@ test('end to end: a template, an edit, a commit and a merge, then a plan approve
   await check(page).toHaveURL(/\/projects\/shop$/)
   await check(page.getByTestId('build-model-marts.orders')).toBeVisible()
 
-  // The server's administrator adds the connection to the PostgreSQL (a file with no login in it; the login is the server's environment) and commits it, as W07's story does for its origin.
   const checkout = path.join(endToEndBuild.directory, 'projects', 'shop')
-  fs.writeFileSync(path.join(checkout, 'connections', 'postgres.yaml'), 'schema: connection/1\nname: postgres\nengine: postgres\ntls:\n  encrypt: false\n  trust_server_certificate: true\n')
-  git(checkout, 'add', '-A')
-  git(checkout, 'commit', '-qm', 'A connection to the warehouse')
 
   // Edit, in a workspace of her own: the project's settings point at PostgreSQL (the YAML of the settings file, replaced), and a model gets a description through its form.
   await page.getByTestId('build-tab-edit').click()
   await page.getByTestId('build-edit-workspace-name').fill('warehouse')
   await page.getByTestId('build-edit-workspace-make').click()
+  // The connection to the warehouse, made in her workspace: a form over connection/1, with no address and no login in it (the server holds both).
+  await page.getByTestId('build-edit-new-connection').click()
+  await page.getByTestId('build-new-connection-name').fill('postgres')
+  await page.getByTestId('build-new-connection-engine').selectOption('postgres')
+  await page.getByTestId('build-new-connection-encrypt').uncheck()
+  await page.getByTestId('build-new-connection-trust').check()
+  await page.getByTestId('build-new-connection-create').click()
+  await check(page.getByTestId('build-edit-open')).toHaveText('connections/postgres.yaml')
   await page.getByTestId('build-edit-file-dbdatabuild.yml').click()
   await expect(page.getByTestId('build-edit-open')).toHaveText('dbdatabuild.yml')
   await page.getByTestId('build-edit-mode-yaml').click()
@@ -106,6 +105,7 @@ test('end to end: a template, an edit, a commit and a merge, then a plan approve
 
   // Commit and merge: the draft shows what it changes (the two files edited and the files rendered), is committed, and is merged into the project (an approver's act; administrators are approvers), which ends the workspace.
   await check(page.getByTestId('build-git-change').filter({ hasText: 'dbdatabuild.yml' })).not.toHaveCount(0)
+  await check(page.getByTestId('build-git-change').filter({ hasText: 'connections/postgres.yaml' })).toHaveCount(1)
   await check(page.getByTestId('build-git-change').filter({ hasText: 'models/staging/orders.yml' })).toHaveCount(1)
   await check(page.getByTestId('build-git-change').filter({ hasText: 'rendered/postgres/loads.yml' })).toHaveCount(1)
   await page.getByTestId('build-git-message').fill('Build the shop on the warehouse')
@@ -117,13 +117,16 @@ test('end to end: a template, an edit, a commit and a merge, then a plan approve
 
   if (!warehouseConnection) return   // no PostgreSQL to deploy to: the story ends at the merge
 
-  // The server's administrator makes the tracking tables and the raw tables the models read, in a database that has never been deployed to.
+  // A database that has never been deployed to, and the first steps on it, from the Status tab: the tracking tables, then the tables the models read.
   execFileSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), '../pgReset.cjs')], { stdio: 'inherit' })
-  const logins = { ...process.env, DBDATA_BUILD_POSTGRES_READ: warehouseConnection, DBDATA_BUILD_POSTGRES_WRITE: warehouseConnection }
-  for (const command of ['init', 'seed']) execFileSync('dotnet', ['exec', buildDll, 'connection', command, 'postgres', '--apply'], { cwd: checkout, env: logins, stdio: 'ignore' })
+  await page.getByTestId('build-tab-status').click()
+  await page.getByTestId('build-initialise-tracking').click()
+  await check(page.getByTestId('build-initialise-done').filter({ hasText: 'tracking tables' })).toBeVisible()
+  await page.getByTestId('build-initialise-seed').click()
+  await check(page.getByTestId('build-initialise-done').filter({ hasText: 'tables the models read' })).toBeVisible()
 
   // Plan: where the project stands (nothing deployed), and a plan written by Ada.
-  await page.getByTestId('build-tab-status').click()
+  await page.getByTestId('build-status-refresh').click()
   await check(page.getByTestId('build-status-structure')).toHaveText('pending')
   await expect(page.getByTestId('build-status-object-marts.orders').getByTestId('build-status-state')).toContainText('missing')
   await page.getByTestId('build-tab-plans').click()

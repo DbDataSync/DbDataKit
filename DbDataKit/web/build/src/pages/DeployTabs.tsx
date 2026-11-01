@@ -43,6 +43,66 @@ function ConnectionField({ value, onChange }: { value: string; onChange: (v: str
   )
 }
 
+export interface InitialiseViewProps {
+  connection: string
+  busy: 'init' | 'seed' | null
+  done: string[]
+  answer: CommandAnswer<unknown> | undefined
+  onInit: () => void
+  onSeed: () => void
+}
+
+/** The text a finished command leaves under its button: what it said, or that it did what it was asked. */
+export function initialiseNote(what: 'init' | 'seed', answer: CommandAnswer<unknown>): string {
+  const printed = (answer.text ?? '').split('\n').map((l) => l.trim()).filter((l) => l !== '')
+  const last = printed.length > 0 ? printed[printed.length - 1] : ''
+  return what === 'init' ? `The tracking tables are on the target.${last ? ` ${last}` : ''}` : `The tables the models read are on the target.${last ? ` ${last}` : ''}`
+}
+
+/** Getting a new target ready (an administrator): the tracking tables the tool keeps its record in, and the tables the models read, made from the project's seeds. Run once; both say what they did. */
+export function InitialiseView(p: InitialiseViewProps) {
+  return (
+    <div className="card" style={{ marginBottom: 14 }} data-testid="build-initialise">
+      <div className="card-body">
+        <strong>Prepare the target</strong> <span className="hint">{p.connection || 'the project’s default connection'}</span>
+        <div className="row" style={{ gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
+          <button type="button" className="btn" disabled={p.busy !== null} onClick={p.onInit} data-testid="build-initialise-tracking">{p.busy === 'init' ? 'Creating…' : 'Create the tracking tables'}</button>
+          <button type="button" className="btn" disabled={p.busy !== null} onClick={p.onSeed} data-testid="build-initialise-seed">{p.busy === 'seed' ? 'Creating…' : 'Create the tables the models read'}</button>
+        </div>
+        <div className="hint" style={{ marginTop: 6 }}>The first is needed before a plan is applied; the second makes the source tables of a template project from its seed data. Neither changes a table that already exists.</div>
+        {p.done.map((line, i) => <div key={i} className="hint" data-testid="build-initialise-done">{line}</div>)}
+        <Problems answer={p.answer} />
+      </div>
+    </div>
+  )
+}
+
+function InitialisePanel({ project, connection, onDone }: { project: string; connection: string; onDone: () => void }) {
+  const [busy, setBusy] = useState<'init' | 'seed' | null>(null)
+  const [done, setDone] = useState<string[]>([])
+  const [answer, setAnswer] = useState<CommandAnswer<unknown> | undefined>()
+  const [failure, setFailure] = useState<unknown>(null)
+  const go = async (what: 'init' | 'seed') => {
+    setBusy(what)
+    setFailure(null)
+    try {
+      const result = await (what === 'init' ? buildApi.initTracking(project, connection || undefined) : buildApi.seedTarget(project, connection || undefined))
+      setAnswer(result)
+      if (result.exit === 0) { setDone((now) => [...now, initialiseNote(what, result)]); onDone() }
+    } catch (error) {
+      setFailure(error)
+    } finally {
+      setBusy(null)
+    }
+  }
+  return (
+    <>
+      <InitialiseView connection={connection} busy={busy} done={done} answer={answer} onInit={() => void go('init')} onSeed={() => void go('seed')} />
+      <ErrorBanner error={failure} />
+    </>
+  )
+}
+
 /** Where a connection stands: every object the models declare and whether it exists, what a deploy would do, and the refresh plans. Reads the target and writes nothing. */
 export function StatusTab() {
   const { project } = useProject()
@@ -51,12 +111,15 @@ export function StatusTab() {
   const status = useQuery({ queryKey: ['build', project, 'status', asked], queryFn: () => buildApi.status(project, asked || undefined) })
   const answer = status.data
   const data = answer?.document?.data
+  const commands = useQuery({ queryKey: ['build', project, 'commands'], queryFn: () => buildApi.commands(project) })
+  const mayPrepare = commands.data?.find((c) => c.tool === 'connection_init')?.allowed === true
   return (
     <div data-testid="build-status">
       <form className="row" style={{ gap: 12, marginBottom: 14 }} onSubmit={(e) => { e.preventDefault(); setAsked(connection); void status.refetch() }}>
         <ConnectionField value={connection} onChange={setConnection} />
         <button type="submit" className="btn" disabled={status.isFetching} data-testid="build-status-refresh">{status.isFetching ? 'Reading…' : 'Read the status'}</button>
       </form>
+      {mayPrepare && <InitialisePanel project={project} connection={asked} onDone={() => void status.refetch()} />}
       <ErrorBanner error={status.error} />
       <Problems answer={answer} />
       {data && (
