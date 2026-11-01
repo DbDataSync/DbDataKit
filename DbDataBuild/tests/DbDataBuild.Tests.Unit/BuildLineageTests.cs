@@ -36,6 +36,29 @@ public class BuildLineageTests
         return LineageIdentity.Column(definition, LineageIdentity.Dataset(definition, schema, name), column);
     }
 
+    [Fact]
+    public void A_measure_of_a_semantic_model_is_bound_from_the_column_it_reads_and_its_provenance_runs_back_through_the_models()
+    {
+        var (ctx, _) = Load("retail");
+
+        var lineage = BuildLineage.Design(ctx, Identity(ctx), "build-1");
+
+        var measure = lineage.Nodes.Single(n => n.Kind == NodeKind.SemanticMember && n.PropertyMap["member"] == "sales.net_amount");
+        Assert.Equal("suite://build-1/semantic/retail_sales/sales.net_amount", measure.Id);
+        Assert.Equal("measure", measure.PropertyMap["member_kind"]);
+        var bound = Assert.Single(lineage.Upstream(measure.Id));
+        Assert.Equal((EdgeKind.Binds, Granularity.Column, Confidence.Declared, "sum"), (bound.Kind, bound.Granularity, bound.Confidence, bound.Detail));
+        Assert.Equal(Column(ctx, "sqlserver", "marts.fct_sales_lines", "net_amount"), bound.From);
+
+        // the path from the measure back: the column of the mart, the columns it is made of, and the tables they come from
+        var upstream = lineage.Provenance(measure.Id).Reached.Select(r => r.Node.Id).ToList();
+        Assert.Contains(upstream, id => id.Contains("/staging.", StringComparison.OrdinalIgnoreCase) && id.Contains('#'));       // a column of a staging table, where the data starts
+
+        // an attribute is bound the same way
+        var attribute = lineage.Nodes.Single(n => n.Kind == NodeKind.SemanticMember && n.PropertyMap["member"] == "customers.region");
+        Assert.Equal(Column(ctx, "sqlserver", "marts.dim_customer", "region"), Assert.Single(lineage.Upstream(attribute.Id)).From);
+    }
+
     [Theory, MemberData(nameof(Templates))]
     public void A_template_projects_lineage_matches_its_graph_with_columns(string template)
     {
@@ -48,7 +71,7 @@ public class BuildLineageTests
         // the column edges of `project show graph --columns` are the column edges of the lineage, with the transform
         var shownColumns = graph["column_edges"]!.AsArray().Where(e => (string?)e!["from_table"] != null && !copies.Contains((string)e["to_model"]!))      // a copy is table level: the graph's column edges into it are from the tool's own staging table
             .SelectMany(e => Connections((string)e!["to_model"]!).Select(connection => $"{Column(ctx, connection, (string)e["from_table"]!, (string)e["from_column"]!)} -> {Column(ctx, connection, (string)e["to_model"]!, (string)e["to_column"]!)} {(string)e["transform"]!}")).Order(StringComparer.Ordinal).ToList();
-        var lineageColumns = lineage.Edges.Where(e => e.Granularity == Granularity.Column).Select(e => $"{e.From} -> {e.To} {e.Detail}").Order(StringComparer.Ordinal).ToList();
+        var lineageColumns = lineage.Edges.Where(e => e.Granularity == Granularity.Column && e.Kind == EdgeKind.Derives).Select(e => $"{e.From} -> {e.To} {e.Detail}").Order(StringComparer.Ordinal).ToList();
         Assert.Equal(shownColumns.Distinct(), lineageColumns);
 
         // its model edges are the table edges (a macro is not a table, and a copy's origin is a `copies` edge)

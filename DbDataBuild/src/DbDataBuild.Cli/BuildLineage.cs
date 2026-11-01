@@ -29,7 +29,7 @@ internal static class BuildLineage
     };
 
     /// <summary>The design lineage of the project: what its definitions say can flow where. Offline; nothing is connected to.</summary>
-    public static LineageGraph Design(ProjectContext ctx, Func<string, ConnectionDefinition> connectionOf)
+    public static LineageGraph Design(ProjectContext ctx, Func<string, ConnectionDefinition> connectionOf, string instanceId = "local")
     {
         var nodes = new Dictionary<string, LineageNode>(StringComparer.Ordinal);
         var edges = new List<LineageEdge>();
@@ -140,6 +140,24 @@ internal static class BuildLineage
             var from = ColumnId(connection, e.FromTable, e.FromColumn);
             var to = ColumnId(connection, e.ToModel, e.ToColumn);
             if (from != to) edges.Add(new LineageEdge(from, to, EdgeKind.Derives, Granularity.Column, Confidence.Derived, e.Transform));
+        }
+        // the semantic models (plan 18, G11): each attribute and measure is a node, bound from the column of the model it reads
+        foreach (var file in ctx.Semantic.Models.Where(m => m.Compilation is not null))
+        {
+            var compiled = file.Compilation!;
+            foreach (var binding in compiled.Bindings)
+            {
+                // the binding names the generated table (`model` or `model@source`); the model is the table's
+                if (compiled.Tables.FirstOrDefault(t => t.Name == binding.Model && t.Source == binding.Source) is not { } table || !file.Connections.TryGetValue(binding.Source, out var connection)) continue;
+                if (!built.ContainsKey(table.Model) && !declared.ContainsKey(table.Model)) continue;
+                var member = LineageIdentity.SuiteObject(instanceId, "semantic", $"{file.Name}/{binding.Member}");
+                nodes[member] = new LineageNode(member, NodeKind.SemanticMember, $"{file.Name}: {binding.Member}", UnknownUpstream: false,
+                    new Dictionary<string, string> { ["catalog"] = file.Name, ["member"] = binding.Member, ["member_kind"] = binding.Kind });
+                var modelBuilt = built.TryGetValue(table.Model, out var owner) && !owner.Definition.IsCopy;
+                Dataset(connection, table.Model, modelBuilt ? owner!.Definition.Kind : declared.TryGetValue(table.Model, out var d) ? d.Kind : "unknown", UnknownUpstreamOf(table.Model));
+                Column(connection, table.Model, binding.Column, modelBuilt && analysed.Contains(table.Model + "\n" + binding.Column));
+                edges.Add(new LineageEdge(ColumnId(connection, table.Model, binding.Column), member, EdgeKind.Binds, Granularity.Column, Confidence.Declared, binding.Aggregate));
+            }
         }
         return new LineageGraph(nodes.Values, edges);
 
