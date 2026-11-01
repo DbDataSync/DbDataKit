@@ -24,6 +24,9 @@ public sealed class SurrogateKeyOnEnginesTests
         ["k", long.MinValue],
         ["a", "b", "c"],
         [new DateOnly(1999, 12, 31), 1L],
+        [7L, new DateTime(2024, 2, 29, 13, 45, 59)],
+        [7L, new DateTime(2024, 2, 29, 13, 45, 59, 987).AddTicks(6543)],                // the fraction is cut, not rounded: 59.9876543 is :59
+        [7L, new DateTime(1999, 12, 31, 23, 59, 59, 999)],                              // and :59.999 does not become the next minute
         ["with\ttab and \"quotes\" and 'apostrophes'", 3L],
     ];
 
@@ -32,10 +35,11 @@ public sealed class SurrogateKeyOnEnginesTests
         string s => (engine == Engines.SqlServer ? "N'" : "'") + s.Replace("'", "''") + "'",
         long l => l.ToString(CultureInfo.InvariantCulture),
         DateOnly d => engine == Engines.SqlServer ? $"CAST('{d:yyyy-MM-dd}' AS DATE)" : $"DATE '{d:yyyy-MM-dd}'",
+        DateTime t => engine == Engines.SqlServer ? $"CAST('{t:yyyy-MM-dd HH:mm:ss.fffffff}' AS DATETIME2(7))" : $"TIMESTAMP '{t:yyyy-MM-dd HH:mm:ss.ffffff}'",
         _ => throw new NotSupportedException(),
     };
 
-    private static KeyPartType TypeOf(object? part) => part switch { string => KeyPartType.Text, long => KeyPartType.Integer, _ => KeyPartType.Date };
+    private static KeyPartType TypeOf(object? part) => part switch { string => KeyPartType.Text, long => KeyPartType.Integer, DateTime => KeyPartType.Timestamp, _ => KeyPartType.Date };
 
     private static async Task<long?> ScalarAsync(Engines engines, string select)
     {

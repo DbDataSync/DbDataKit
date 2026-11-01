@@ -183,7 +183,7 @@ public static partial class TargetRules
     private static string ExpandKeyMarkers(string text, string target)
     {
         if (!text.Contains("ddb_key_", StringComparison.OrdinalIgnoreCase)) return text;
-        foreach (var name in System.Text.RegularExpressions.Regex.Matches(text, @"\bddb_key_[tid]+(?=\s*\()", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Select(m => m.Value.ToLowerInvariant()).Distinct().ToList())
+        foreach (var name in System.Text.RegularExpressions.Regex.Matches(text, @"\bddb_key_[tidm]+(?=\s*\()", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Select(m => m.Value.ToLowerInvariant()).Distinct().ToList())
             text = ExpandMarker(text, name, a => DbDataKit.Dialect.SurrogateKey.FromMarker(target, name, a) ?? throw new InvalidOperationException($"The key marker {name} was given {a.Length} arguments. This is a tool bug."));
         return text;
     }
