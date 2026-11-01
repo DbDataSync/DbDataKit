@@ -92,6 +92,21 @@ public sealed class BuildServerNewProjectTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_servers_lineage_is_the_graph_of_its_projects_for_anyone_who_may_view_and_a_console_can_read_it()
+    {
+        Assert.Equal(HttpStatusCode.Created, (await AsAda(HttpMethod.Post, "/api/v1/projects", """{"id":"shop","template":"retail"}""")).StatusCode);
+
+        var response = await AsVic(HttpMethod.Get, "/api/v1/lineage");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var document = await Json(response);
+        var graph = DbDataKit.Lineage.LineageJson.Read(document);
+        Assert.Contains(graph.Nodes, n => n.Name == "marts.dim_customer");
+        Assert.NotEmpty(graph.Edges);
+        Assert.Empty(document["problems"]!.AsArray());
+    }
+
+    [Fact]
     public async Task A_project_made_from_a_template_is_hosted_a_repository_with_the_author_as_its_first_committer_and_has_workspaces()
     {
         var made = await AsAda(HttpMethod.Post, "/api/v1/projects", """{"id":"shop","template":"retail"}""");

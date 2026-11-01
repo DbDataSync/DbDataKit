@@ -41,7 +41,7 @@ internal static class BuildManagementApi
     /// <param name="projects">The projects served, read again on every call so one added or removed is served or gone at once.</param>
     /// <param name="commands">All the commands there are; each project is offered the read-only ones.</param>
     /// <param name="surfaceFor">Which of them a project is offered and how their inputs are checked; the read-only rules unless a test or a later slice says otherwise.</param>
-    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null, PairingCodes? pairingCodes = null, string? clientName = null, ProjectCreator? creator = null)
+    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null, PairingCodes? pairingCodes = null, string? clientName = null, ProjectCreator? creator = null, string? serverDirectory = null)
     {
         surfaceFor ??= FullSurface;
         var specs = CommandSpecs.All.ToDictionary(s => s.Name);
@@ -54,6 +54,18 @@ internal static class BuildManagementApi
         if (creator is not null) MapNewProjects(app, creator);
 
         // The schemas of the project's files and which file each describes, for the console's forms (the viewer role may read them: they are the tool's own, not the project's)
+        // the lineage of every hosted project as one graph (plan 18, G09): a console joins it with the other servers' by identity
+        if (serverDirectory is not null)
+            app.MapGet("/api/v1/lineage", async (HttpContext context) =>
+            {
+                var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
+                if (!decision.Allowed) return Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
+                var (graph, problems) = await ServerLineage.MergedAsync(serverDirectory, null, context.RequestAborted);
+                var document = DbDataKit.Lineage.LineageJson.Write(graph);
+                document["problems"] = new System.Text.Json.Nodes.JsonArray(problems.Select(p => (System.Text.Json.Nodes.JsonNode)System.Text.Json.Nodes.JsonValue.Create(p)!).ToArray());
+                return Results.Json(document);
+            });
+
         app.MapGet("/api/v1/schemas", () => Results.Text(FileSchemas.Document().ToJsonString(), "application/json"));
 
         app.MapGet("/api/v1/projects/{project}/commands", (string project, HttpContext context) =>

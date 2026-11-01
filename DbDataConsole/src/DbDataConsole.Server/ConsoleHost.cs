@@ -81,6 +81,7 @@ public static class ConsoleHost
         builder.Services.AddSingleton<ConsoleInstances>();
         builder.Services.AddSingleton(_ => new PendingInstances(settings.PendingPath));
         builder.Services.AddSingleton<ConsoleRelay>();
+        builder.Services.AddSingleton<ConsoleLineage>();
         if (settings.Home is { } home)
         {
             // No users of its own: the first-run invitation would make one, so it is not made, and sign-in is the home's.
