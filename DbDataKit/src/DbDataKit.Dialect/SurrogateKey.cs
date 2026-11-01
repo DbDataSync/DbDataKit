@@ -13,6 +13,8 @@ public enum KeyPartType
     Integer,
     /// <summary>A date, written `yyyy-MM-dd`.</summary>
     Date,
+    /// <summary>A moment without a time zone, written `yyyy-MM-dd HH:mm:ss` and cut (not rounded) to the second: the same text on every engine whatever its fractional precision. The valid-from of a history key.</summary>
+    Timestamp,
 }
 
 /// <summary>One part of a business key: the SQL expression that produces its value, and its type.</summary>
@@ -37,8 +39,10 @@ public static class SurrogateKey
         null => null,
         string s => s.Trim(' '),
         DateOnly d => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        DateTime t => t.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+        DateTimeOffset o => o.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
         sbyte or byte or short or ushort or int or uint or long => Convert.ToString(value, CultureInfo.InvariantCulture),
-        _ => throw new ArgumentException($"A key part is text, a whole number or a date, not {value.GetType().Name}."),
+        _ => throw new ArgumentException($"A key part is text, a whole number, a date or a moment, not {value.GetType().Name}."),
     };
 
     /// <summary>The normalized business key, or null when any part is NULL.</summary>
@@ -58,10 +62,10 @@ public static class SurrogateKey
     public static long? Compute(params object?[] parts) => Normalize(parts) is { } n ? Hash(n) : null;
 
     /// <summary>
-    /// The name of the marker function a lowered query carries for a key call: `ddb_key_` and one letter per part (`t` text, `i` whole number, `d` date), `ddb_key_ti`. The lowerer keeps the call, with its arguments, so the
+    /// The name of the marker function a lowered query carries for a key call: `ddb_key_` and one letter per part (`t` text, `i` whole number, `d` date, `m` moment), `ddb_key_ti`. The lowerer keeps the call, with its arguments, so the
     /// text of each engine is written when the query is rendered for it (<see cref="FromMarker"/>) rather than found again in what DuckDB expanded.
     /// </summary>
-    public static string MarkerName(IReadOnlyList<KeyPartType> types) => "ddb_key_" + string.Concat(types.Select(t => t switch { KeyPartType.Text => 't', KeyPartType.Integer => 'i', _ => 'd' }));
+    public static string MarkerName(IReadOnlyList<KeyPartType> types) => "ddb_key_" + string.Concat(types.Select(t => t switch { KeyPartType.Text => 't', KeyPartType.Integer => 'i', KeyPartType.Date => 'd', _ => 'm' }));
 
     /// <summary>The part types a marker name stands for, or null when the name is not a marker.</summary>
     public static IReadOnlyList<KeyPartType>? TypesOfMarker(string name)
@@ -75,6 +79,7 @@ public static class SurrogateKey
                 case 't': types.Add(KeyPartType.Text); break;
                 case 'i': types.Add(KeyPartType.Integer); break;
                 case 'd': types.Add(KeyPartType.Date); break;
+                case 'm': types.Add(KeyPartType.Timestamp); break;
                 default: return null;
             }
         }
@@ -114,12 +119,16 @@ public static class SurrogateKey
         ("sqlserver" or "fabric", KeyPartType.Text) => $"LTRIM(RTRIM(CAST({p.Expression} AS NVARCHAR(4000))))",
         ("sqlserver" or "fabric", KeyPartType.Integer) => $"CAST(CAST({p.Expression} AS BIGINT) AS NVARCHAR(20))",
         ("sqlserver" or "fabric", KeyPartType.Date) => $"CONVERT(NVARCHAR(10), CAST({p.Expression} AS DATE), 23)",
+        // style 120 is `yyyy-mm-dd hh:mi:ss`; written from a DATETIME2(7) it cuts the fraction instead of rounding it
+        ("sqlserver" or "fabric", KeyPartType.Timestamp) => $"CONVERT(NVARCHAR(19), CAST({p.Expression} AS DATETIME2(7)), 120)",
         ("postgres", KeyPartType.Text) => $"btrim(CAST({p.Expression} AS text), ' ')",
         ("postgres", KeyPartType.Integer) => $"CAST(CAST({p.Expression} AS bigint) AS text)",
         ("postgres", KeyPartType.Date) => $"to_char(CAST({p.Expression} AS date), 'YYYY-MM-DD')",
+        ("postgres", KeyPartType.Timestamp) => $"to_char(CAST({p.Expression} AS timestamp), 'YYYY-MM-DD HH24:MI:SS')",
         ("duckdb", KeyPartType.Text) => $"trim(CAST({p.Expression} AS VARCHAR), ' ')",
         ("duckdb", KeyPartType.Integer) => $"CAST(CAST({p.Expression} AS BIGINT) AS VARCHAR)",
         ("duckdb", KeyPartType.Date) => $"strftime(CAST({p.Expression} AS DATE), '%Y-%m-%d')",
+        ("duckdb", KeyPartType.Timestamp) => $"strftime(CAST({p.Expression} AS TIMESTAMP), '%Y-%m-%d %H:%M:%S')",
         _ => throw new NotSupportedException(),
     };
 

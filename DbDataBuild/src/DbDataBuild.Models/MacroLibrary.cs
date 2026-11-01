@@ -101,7 +101,7 @@ public sealed class MacroLibrary
                     var parts = args.Select(a => new KeyPart("\"" + a.Replace("\"", "\"\"") + "\"", PartTypeOf(columns.GetValueOrDefault(a)))).ToList();
                     var head = $"CREATE OR REPLACE MACRO {name}({string.Join(", ", args.Select(a => "\"" + a.Replace("\"", "\"\"") + "\""))}) AS ";
                     // the lowering binds the marker, whose arguments are cast to the part types as the full text casts them
-                    var markerCall = SurrogateKey.MarkerName(parts.Select(p => p.Type).ToList()) + "(" + string.Join(", ", parts.Select(p => $"CAST({p.Expression} AS {p.Type switch { KeyPartType.Text => "VARCHAR", KeyPartType.Integer => "BIGINT", _ => "DATE" }})")) + ")";
+                    var markerCall = SurrogateKey.MarkerName(parts.Select(p => p.Type).ToList()) + "(" + string.Join(", ", parts.Select(p => $"CAST({p.Expression} AS {p.Type switch { KeyPartType.Text => "VARCHAR", KeyPartType.Integer => "BIGINT", KeyPartType.Date => "DATE", _ => "TIMESTAMP" }})")) + ")";
                     generated.Add(new MacroDefinition(name, false, head + SurrogateKey.Sql("duckdb", parts), file, key.Line, [], [], head + markerCall));
                 }
             }
@@ -137,6 +137,7 @@ public sealed class MacroLibrary
     {
         "BIGINT" or "INTEGER" or "INT" or "SMALLINT" or "INT8" or "INT4" or "INT2" => KeyPartType.Integer,
         "DATE" => KeyPartType.Date,
+        "TIMESTAMP" or "DATETIME" or "TIMESTAMP_S" or "TIMESTAMP_MS" or "TIMESTAMP_NS" => KeyPartType.Timestamp,       // without a time zone: a TIMESTAMPTZ is text, since the engines write the zone differently
         _ => KeyPartType.Text,
     };
 

@@ -41,6 +41,16 @@ public class SurrogateKeyTests
     }
 
     [Fact]
+    public void A_moment_is_written_to_the_second_and_cut_not_rounded()
+    {
+        Assert.Equal("7\u001f2024-02-29 13:45:59", SurrogateKey.Normalize([7L, new DateTime(2024, 2, 29, 13, 45, 59, 987)]));
+        Assert.Equal(SurrogateKey.Compute(7L, new DateTime(2024, 2, 29, 13, 45, 59)), OnDuckDb(("7", KeyPartType.Integer), ("TIMESTAMP '2024-02-29 13:45:59.987654'", KeyPartType.Timestamp)));
+        Assert.Equal(SurrogateKey.Compute(new DateTime(1999, 12, 31, 23, 59, 59)), OnDuckDb(("TIMESTAMP '1999-12-31 23:59:59.999999'", KeyPartType.Timestamp)));
+        Assert.Equal("ddb_key_tim", SurrogateKey.MarkerName([KeyPartType.Text, KeyPartType.Integer, KeyPartType.Timestamp]));
+        Assert.Equal([KeyPartType.Integer, KeyPartType.Timestamp], SurrogateKey.TypesOfMarker("ddb_key_im"));
+    }
+
+    [Fact]
     public void DuckDb_gives_both_signs()
     {
         // 200 keys: the reference value is positive for some and negative for others, and DuckDB agrees with every one

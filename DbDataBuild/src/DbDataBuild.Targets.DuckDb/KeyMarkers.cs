@@ -14,7 +14,7 @@ namespace DbDataBuild.Targets.DuckDb;
 /// </summary>
 public static unsafe class KeyMarkers
 {
-    private static readonly Regex Name = new(@"\bddb_key_([tid]+)\s*\(", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex Name = new(@"\bddb_key_([tidm]+)\s*\(", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     /// <summary>Registers every marker the statements call (none: nothing is registered).</summary>
     public static void Register(DuckDBConnection connection, IEnumerable<string> statements)
@@ -30,7 +30,7 @@ public static unsafe class KeyMarkers
         {
             NativeMethods.ScalarFunction.DuckDBScalarFunctionSetName(function, "ddb_key_" + codes);
             foreach (var code in codes)
-                using (var type = NativeMethods.LogicalType.DuckDBCreateLogicalType(code switch { 't' => DuckDBType.Varchar, 'i' => DuckDBType.BigInt, _ => DuckDBType.Date }))
+                using (var type = NativeMethods.LogicalType.DuckDBCreateLogicalType(code switch { 't' => DuckDBType.Varchar, 'i' => DuckDBType.BigInt, 'd' => DuckDBType.Date, _ => DuckDBType.Timestamp }))
                     NativeMethods.ScalarFunction.DuckDBScalarFunctionAddParameter(function, type);
             using (var returns = NativeMethods.LogicalType.DuckDBCreateLogicalType(DuckDBType.BigInt)) NativeMethods.ScalarFunction.DuckDBScalarFunctionSetReturnType(function, returns);
             NativeMethods.ScalarFunction.DuckDBScalarFunctionSetFunction(function, &Run);
