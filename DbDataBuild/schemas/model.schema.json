@@ -1146,7 +1146,7 @@
                 ]
               },
               "unknown_member": {
-                "description": "A call with a NULL argument returns the reserved unknown key instead of NULL.",
+                "description": "A call with a NULL argument returns the reserved unknown key (0) instead of NULL, and the model gets a row with that key (a view, a full table or an incremental-by-unique-key table).",
                 "oneOf": [
                   {
                     "type": "boolean"
