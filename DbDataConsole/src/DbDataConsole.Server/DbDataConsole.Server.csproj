@@ -10,6 +10,7 @@
     <DbDataKitReference Include="Config.Git" />
     <DbDataKitReference Include="Config.Yaml" />
     <DbDataKitReference Include="Connections.Abstractions" />   <!-- the connection/1 file the Connections view copies between servers; plan 13a, E05 -->
+    <DbDataKitReference Include="Lineage" />   <!-- the servers' lineage graphs, joined by identity; plan 18, G09 -->
     <DbDataKitReference Include="Identity" />   <!-- sign-in through the identity home, for a console that keeps no users of its own; plan 13a, U14 -->
     <DbDataKitReference Include="Hosting.Abstractions" />   <!-- the shared host: service and systemd modes, drain, /health and /version -->
     <DbDataKitReference Include="Hosting" />

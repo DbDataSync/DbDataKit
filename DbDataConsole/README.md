@@ -54,6 +54,8 @@ In the web app, `/instances` lists them and `/servers/<id>/...` opens a server's
 
 ## Connections across servers
 
+**Lineage** (plan 18, G09): `GET /api/lineage` joins the design graphs of the paired Build and Sync servers by identity (a table Sync writes and a Build model reads is one node), with what each server said or why it gave none; `?node=<id>&direction=downstream|upstream&depth=<n>` is the impact or provenance of one node across all of them, and `?refresh=true` asks the servers again instead of using what was kept for 30 seconds.
+
 The Connections page (`/connections`, in the rail) lists the connections of every Sync server and the data sources of every Proxy the console manages, each asked of its server through the relay (a server that does not answer, or whose list it refuses, is named above the list and the others still show).
 A Sync connection and a Proxy data source are the same `connection/1` file, so a connection on one server can be **copied to another**: *Copy to...* on a row, choose the server and the name it will have there (the same name when it is another server).
 

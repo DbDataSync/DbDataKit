@@ -19,22 +19,9 @@ internal static class ServerLineage
 
         async Task<LineageGraph> Source(CancellationToken token)
         {
-            var projects = new ProjectsFile(directory);
-            var chosen = projects.All().Where(p => only is null || p.Id == only).OrderBy(p => p.Id, StringComparer.Ordinal).ToList();
-            var environment = await EnvironmentAsync(directory, token);
-            var graphs = new List<LineageGraph>();
-            foreach (var project in chosen)
-            {
-                var root = projects.RootOf(project);
-                if (!File.Exists(Path.Combine(root, "dbdatabuild.yml"))) { problems.Add($"Project '{project.Id}' is left out: it has no files at {root} (a remote project that was never cloned?)."); continue; }
-                try { var context = ProjectContext.Load(root); graphs.Add(BuildLineage.Design(context, BuildLineage.IdentityOf(context.Config, environment))); }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    // one broken project does not take the others' lineage with it; the type says what went wrong and not the message, which can quote a value
-                    problems.Add($"Project '{project.Id}' is left out: its lineage could not be built ({ex.GetType().Name}). `dbdatabuild project compile --project {root}` shows what is wrong with it.");
-                }
-            }
-            return graphs.Count == 0 ? LineageGraph.Empty : LineageGraph.Merge(graphs);
+            var (graph, found) = await MergedAsync(directory, only, token);
+            problems.AddRange(found);
+            return graph;
         }
 
         var noun = LineageNoun.Create(Source);
@@ -76,6 +63,31 @@ internal static class ServerLineage
             else kept.Add(args[i]);
         }
         return ([.. kept], project);
+    }
+
+    /// <summary>
+    /// The design lineage of the projects a server hosts (one named by <paramref name="only"/>, else all), joined into one graph, and what was left out and why. One broken project does not take the others' lineage with it.
+    /// The command line and the management API (`GET /api/v1/lineage`, which a console joins with the other servers' graphs) both read it here.
+    /// </summary>
+    public static async Task<(LineageGraph Graph, List<string> Problems)> MergedAsync(string directory, string? only, CancellationToken token)
+    {
+        var problems = new List<string>();
+        var projects = new ProjectsFile(directory);
+        var chosen = projects.All().Where(p => only is null || p.Id == only).OrderBy(p => p.Id, StringComparer.Ordinal).ToList();
+        var environment = await EnvironmentAsync(directory, token);
+        var graphs = new List<LineageGraph>();
+        foreach (var project in chosen)
+        {
+            var root = projects.RootOf(project);
+            if (!File.Exists(Path.Combine(root, "dbdatabuild.yml"))) { problems.Add($"Project '{project.Id}' is left out: it has no files at {root} (a remote project that was never cloned?)."); continue; }
+            try { var context = ProjectContext.Load(root); graphs.Add(BuildLineage.Design(context, BuildLineage.IdentityOf(context.Config, environment))); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // the type says what went wrong and not the message, which can quote a value
+                problems.Add($"Project '{project.Id}' is left out: its lineage could not be built ({ex.GetType().Name}). `dbdatabuild project compile --project {root}` shows what is wrong with it.");
+            }
+        }
+        return (graphs.Count == 0 ? LineageGraph.Empty : LineageGraph.Merge(graphs), problems);
     }
 
     /// <summary>The logins the server stores (when it has a secret store; one is never made for this) over the process's environment.</summary>
