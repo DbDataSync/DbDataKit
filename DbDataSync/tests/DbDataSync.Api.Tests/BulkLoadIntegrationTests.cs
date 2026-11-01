@@ -301,7 +301,7 @@ public sealed class BulkLoadIntegrationTests : IClassFixture<TestApiFactory>, IA
         // Simulates "an operator's own reload of the identical segment scheme is already in flight" for
         // segment 2 alone — pre-seeded directly rather than raced over HTTP, so which segment collides
         // is deterministic rather than a timing gamble.
-        _workQueueStore.Enqueue(
+        var seededRunId = _workQueueStore.Enqueue(
             _replicationName, RunKind.BulkLoad, "map-3", segment2.Describe(), SegmentSerializer.Serialize(segment2));
 
         var primaryRunIds = await ReadRunIdsAsync(await _client.PostAsync(
@@ -324,6 +324,10 @@ public sealed class BulkLoadIntegrationTests : IClassFixture<TestApiFactory>, IA
         // cancelled, not left Pending/Queued forever.
         var segment1Runs = map3BulkLoadRuns.Where(r => r.GetProperty("segmentLabel").GetString() == "Id [1, 5)").ToList();
         Assert.All(segment1Runs, r => Assert.Equal("Cancelled", r.GetProperty("status").GetString()));
+
+        // The pre-seeded reload is real work a TaskRunner executes against the scratch database. Leaving it running makes the teardown's DROP DATABASE race a live session
+        // (CI: "Cannot drop database ... because it is currently in use" after every re-kick), so the test ends only when it has.
+        await PollUntilTerminalAsync(seededRunId);
     }
 
     private async Task SetUpSegmentedMappingAsync()
