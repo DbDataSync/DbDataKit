@@ -27,6 +27,9 @@ public sealed record ProjectModel(string Name, string Kind, IReadOnlyList<string
 
     /// <summary>The foreign keys it declares (built) or has (mapped): `foreign_keys:` of its definition.</summary>
     public IReadOnlyList<ForeignKeyDefinition> ForeignKeys { get; init; } = [];
+
+    /// <summary>The surrogate keys it owns (`keys:`, plan 25).</summary>
+    public IReadOnlyList<KeyDefinition> Keys { get; init; } = [];
 }
 
 public static class ProjectModels
@@ -37,7 +40,7 @@ public static class ProjectModels
             .OrderBy(m => m.Name, StringComparer.Ordinal).ToList();
 
     public static ProjectModel Of(BuiltModel model, IReadOnlyList<string> defaultConnections) =>
-        new(model.Definition.Name, model.Definition.Kind, model.Definition.Targets ?? defaultConnections, model.Definition.Info, model.DefinitionFile, model.QueryFile.Length == 0 || model.QueryFile == model.DefinitionFile ? null : model.QueryFile) { Columns = model.Definition.Columns, Grain = model.Definition.Grain, ForeignKeys = model.Definition.ForeignKeys };
+        new(model.Definition.Name, model.Definition.Kind, model.Definition.Targets ?? defaultConnections, model.Definition.Info, model.DefinitionFile, model.QueryFile.Length == 0 || model.QueryFile == model.DefinitionFile ? null : model.QueryFile) { Columns = model.Definition.Columns, Grain = model.Definition.Grain, ForeignKeys = model.Definition.ForeignKeys, Keys = model.Definition.Keys };
 
     public static ProjectModel Of(DeclaredModel model, IReadOnlyList<string> defaultConnections) =>
         new(model.Name, model.Kind, model.Connections ?? defaultConnections, model.Info, model.File, null) { Columns = model.Columns, Grain = model.Grain, ForeignKeys = model.ForeignKeys };
