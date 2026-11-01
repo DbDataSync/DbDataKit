@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\DbDataKit.Apps.Bundling\DbDataKit.Apps.Bundling.csproj" />
+  </ItemGroup>
+</Project>
