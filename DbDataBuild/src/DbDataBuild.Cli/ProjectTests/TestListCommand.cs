@@ -32,11 +32,12 @@ internal static class TestListCommand
                 if (Wanted(test.Tags)) rows.Add((test.Name, "model", test.Severity, test.Tags, file, test.Model, test.Cases.Count, test.Description));
             }
         // the data checks generated from the semantic models: listed here, run against a connection by `connection check` (they read data, which `tests run` never does)
-        if ((kind is null or "semantic") && (SemanticProject.Discover(root).Count > 0 || DeclaresForeignKeys(root)))
+        if ((kind is null or "semantic") && (SemanticProject.Discover(root).Count > 0 || DeclaresForeignKeys(root) || DeclaresKeys(root)))
         {
             var ctx = ProjectContext.Load(root);
             foreach (var check in ctx.Semantic.Models.SelectMany(m => SemanticChecks.Generate(m, ctx.Config).Checks)
-                         .Concat(ForeignKeyChecks.Generate(ProjectModels.Of(ctx.Project, ctx.Config.DefaultConnections), ctx.Config)))
+                         .Concat(ForeignKeyChecks.Generate(ProjectModels.Of(ctx.Project, ctx.Config.DefaultConnections), ctx.Config))
+                         .Concat(KeyChecks.Generate(ProjectModels.Of(ctx.Project, ctx.Config.DefaultConnections), ctx.Config)))
                 if (Wanted(["semantic"])) rows.Add((check.Name, "semantic", "error", ["semantic"], check.File, check.Models[0], 1, check.Description));
         }
         rows = rows.OrderBy(r => r.Name, StringComparer.Ordinal).ToList();
@@ -58,4 +59,8 @@ internal static class TestListCommand
     /// <summary>True when a model file of the project has a `foreign_keys:` list (a cheap look, so a project with none is not loaded whole to find out).</summary>
     private static bool DeclaresForeignKeys(string root) =>
         Directory.Exists(Path.Combine(root, "models")) && Directory.EnumerateFiles(Path.Combine(root, "models"), "*.yml", SearchOption.AllDirectories).Any(f => File.ReadAllText(f).Contains("foreign_keys:", StringComparison.Ordinal));
+
+    /// <summary>True when a model file of the project has a `keys:` block (a surrogate key to test).</summary>
+    private static bool DeclaresKeys(string root) =>
+        Directory.Exists(Path.Combine(root, "models")) && Directory.EnumerateFiles(Path.Combine(root, "models"), "*.yml", SearchOption.AllDirectories).Any(f => File.ReadAllLines(f).Any(l => l.StartsWith("keys:", StringComparison.Ordinal)));
 }
