@@ -5,7 +5,7 @@ using DbDataKit.DataModel;
 namespace DbDataStore.Server;
 
 /// <summary>An instance of a model: its name and, for a model that keeps each instance on a connection of its own, that connection (plan 26 section 6.2, Z12).</summary>
-public sealed record StoreInstance(string Name, string? Connection);
+public sealed record StoreInstance(string Name, string? Connection, string? Definition = null, DateTimeOffset? AppliedAt = null, string? ModelVersion = null);
 
 /// <summary>
 /// The instances a server holds, one small file each (<c>instances/&lt;model&gt;/&lt;instance&gt;.json</c> in the server's directory). The model decides how its instances are kept apart; this only remembers which exist.
@@ -22,14 +22,18 @@ public static class StoreInstances
     {
         var folder = Path.Combine(directory, Folder, model);
         if (!Directory.Exists(folder)) return [];
-        return [.. Directory.EnumerateFiles(folder, "*.json").Select(f => Path.GetFileNameWithoutExtension(f)).Where(StoreModels.IsValidName).Order(StringComparer.Ordinal).Select(n => Find(directory, model, n)!)];
+        return [.. Directory.EnumerateFiles(folder, "*.json").Select(f => Path.GetFileNameWithoutExtension(f)).Where(n => StoreModels.IsValidName(n) && n != Default).Order(StringComparer.Ordinal).Select(n => Find(directory, model, n)!)];
     }
 
     public static StoreInstance? Find(string directory, string model, string instance)
     {
         var file = FileOf(directory, model, instance);
         if (!StoreModels.IsValidName(instance) || !File.Exists(file)) return null;
-        try { return new StoreInstance(instance, JsonNode.Parse(File.ReadAllText(file))?["connection"]?.GetValue<string>()); }
+        try
+        {
+            var node = JsonNode.Parse(File.ReadAllText(file));
+            return new StoreInstance(instance, node?["connection"]?.GetValue<string>(), node?["definition"]?.GetValue<string>(), node?["applied_at"] is { } at ? DateTimeOffset.Parse(at.GetValue<string>()) : null, node?["model_version"]?.GetValue<string>());
+        }
         catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException) { return new StoreInstance(instance, null); }
     }
 
@@ -38,9 +42,17 @@ public static class StoreInstances
         var file = FileOf(directory, model, instance.Name);
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         var temporary = file + ".tmp";
-        File.WriteAllText(temporary, new JsonObject { ["connection"] = instance.Connection }.ToJsonString());
+        File.WriteAllText(temporary, new JsonObject { ["connection"] = instance.Connection, ["definition"] = instance.Definition, ["applied_at"] = instance.AppliedAt?.ToString("O"), ["model_version"] = instance.ModelVersion }.ToJsonString());
         File.Move(temporary, file, overwrite: true);
     }
+
+    /// <summary>Notes the structure an instance's tables were made or last migrated at (the model's definition hash) and the saved text of the model that went with it. The model's own copy gets a file of its own, <c>default</c>.</summary>
+    public static void Record(string directory, string model, string instance, string definition, string modelVersion, DateTimeOffset at) =>
+        Save(directory, model, (Find(directory, model, instance) ?? new StoreInstance(instance, null)) with { Definition = definition, AppliedAt = at, ModelVersion = modelVersion });
+
+    /// <summary>Where an instance stands against the model's current structure: <c>current</c>, <c>behind</c>, or <c>unknown</c> (made before the structure was recorded).</summary>
+    public static string StatusOf(StoreInstance? instance, string currentDefinition) =>
+        instance?.Definition is null ? "unknown" : instance.Definition == currentDefinition ? "current" : "behind";
 
     public static bool Delete(string directory, string model, string instance)
     {

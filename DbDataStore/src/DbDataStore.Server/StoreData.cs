@@ -60,10 +60,16 @@ public static class StoreData
     private static Dictionary<string, object?> ObjectOf(JsonNode? node) =>
         node is JsonObject o ? o.ToDictionary(p => p.Key, p => p.Value is null ? null : (object?)JsonSerializer.Deserialize<JsonElement>(p.Value.ToJsonString())) : [];
 
-    private static async Task<(DataModel? Model, IResult? Problem)> ModelAsync(string directory, string name)
+    /// <summary>
+    /// The model a request is about. A copy that has been made or migrated runs the version of the model it was made or migrated at, so a copy that is behind keeps working while the model moves on (plan 26, Z13);
+    /// <paramref name="current"/> asks for the model as it is saved now (to create a copy, or to migrate one).
+    /// </summary>
+    private static async Task<(DataModel? Model, IResult? Problem)> ModelAsync(string directory, string name, string? instance = null, bool current = false)
     {
         if (!StoreModels.IsValidName(name) || !File.Exists(StoreModels.FileOf(directory, name))) return (null, Results.NotFound(new { error = $"There is no model '{name}'." }));
-        var result = StoreModels.Check(name, await File.ReadAllTextAsync(StoreModels.FileOf(directory, name)));
+        var text = await File.ReadAllTextAsync(StoreModels.FileOf(directory, name));
+        if (!current && StoreInstances.Find(directory, name, instance is { Length: > 0 } ? instance : StoreInstances.Default)?.ModelVersion is { } pinned && StoreModels.TextOfVersion(directory, name, pinned) is { } kept) text = kept;
+        var result = StoreModels.Check(name, text);
         return result.Ok ? (result.Model, null) : (null, Results.Json(new { error = $"{name}.yaml is not a valid model." }, statusCode: StatusCodes.Status422UnprocessableEntity));
     }
 
@@ -85,6 +91,8 @@ public static class StoreData
     };
 
     private static bool Known(Exception ex) => ex is StoreConnectionException or WriteRefusedException or VersionConflictException or RowNotFoundException or StoreNotSupportedException or StorageException;
+
+    private static string InstanceName(HttpContext context) => context.Request.RouteValues["instance"] as string ?? StoreInstances.Default;
 
     /// <summary>Where an instance of the model in the request is kept, or the 404 that says why not. The model's own copy (no instance in the path, or <c>default</c>) is always there.</summary>
     private static (string Connection, string Schema, string? Instance, IResult? Problem) Where(string directory, DataModel model, HttpContext context)
@@ -110,6 +118,30 @@ public static class StoreData
             {
                 ["mode"] = model!.Instances.ToString().ToLowerInvariant(),
                 ["instances"] = new JsonArray(StoreInstances.List(directory, name).Select(i => (JsonNode)new JsonObject { ["name"] = i.Name, ["connection"] = i.Connection, ["schema"] = model.SchemaOf(i.Name, out _) }).ToArray()),
+            });
+        });
+
+        // where each copy of a model stands against the model's current structure
+        app.MapGet("/api/v1/models/{name}/migrations", async (string name, HttpContext context) =>
+        {
+            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
+            if (!decision.Allowed) return Denied(decision);
+            var (model, problem) = await ModelAsync(directory, name);
+            if (problem is not null) return problem;
+            string current;
+            try { current = ModelStorage.DefinitionHash(model!, connections.EngineOf(model!.Connection)); }
+            catch (Exception ex) when (Known(ex)) { return Fail(ex); }
+            var copies = new List<StoreInstance> { StoreInstances.Find(directory, name, StoreInstances.Default) ?? new StoreInstance(StoreInstances.Default, null) };
+            // a model that shares its tables has one set of them: its instances are as current as the model's own copy
+            copies.AddRange(StoreInstances.List(directory, name));
+            return Results.Json(new JsonObject
+            {
+                ["definition"] = current,
+                ["instances"] = new JsonArray(copies.Select(i =>
+                {
+                    var effective = model.Instances == InstanceMode.Column && i.Name != StoreInstances.Default ? copies[0] : i;
+                    return (JsonNode)new JsonObject { ["name"] = i.Name, ["definition"] = effective.Definition, ["applied_at"] = effective.AppliedAt?.ToString("O"), ["status"] = StoreInstances.StatusOf(effective, current) };
+                }).ToArray()),
             });
         });
 
@@ -153,7 +185,7 @@ public static class StoreData
         {
             var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
             if (!decision.Allowed) return Denied(decision);
-            var (model, problem) = await ModelAsync(directory, name);
+            var (model, problem) = await ModelAsync(directory, name, context.Request.RouteValues["instance"] as string);
             if (problem is not null) return problem;
             var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
             if (notThere is not null) return notThere;
@@ -176,7 +208,7 @@ public static class StoreData
         {
             var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin);
             if (!decision.Allowed) return Denied(decision);
-            var (model, problem) = await ModelAsync(directory, name);
+            var (model, problem) = await ModelAsync(directory, name, context.Request.RouteValues["instance"] as string, current: true);
             if (problem is not null) return problem;
             var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
             if (notThere is not null) return notThere;
@@ -187,7 +219,55 @@ public static class StoreData
                 var plan = ModelStorage.Plan(model!, connections.EngineOf(connectionName), schema);
                 await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
                 await ModelStorage.CreateAsync(connection, plan, context.RequestAborted);
+                StoreInstances.Record(directory, name, InstanceName(context), ModelStorage.DefinitionHash(model!, plan.Engine), StoreModels.CurrentVersion(directory, name), DateTimeOffset.UtcNow);
                 return Results.Json(new JsonObject { ["engine"] = plan.Engine, ["statements"] = Statements(plan) }, statusCode: StatusCodes.Status201Created);
+            }
+            catch (Exception ex) when (Known(ex)) { return Fail(ex); }
+        });
+
+        // the model as data for a form or a grid (and a typed client): entities, keys, attributes with their types and rules, the history each entity keeps; a copy that is behind shows the version it runs
+        app.MapGet(prefix + "/schema", async (string name, HttpContext context) =>
+        {
+            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
+            if (!decision.Allowed) return Denied(decision);
+            var (model, problem) = await ModelAsync(directory, name, context.Request.RouteValues["instance"] as string);
+            if (problem is not null) return problem;
+            var (_, _, _, notThere) = Where(directory, model!, context);
+            return notThere ?? Results.Json(StoreModels.Schema(model!));
+        });
+
+        // bring this copy's tables up to the model by adding only (plan 26, Z13): a dry run unless ?apply=true, and the instance is noted as current once it has been applied
+        app.MapPost(prefix + "/migrate", async (string name, HttpContext context) =>
+        {
+            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin);
+            if (!decision.Allowed) return Denied(decision);
+            var (model, problem) = await ModelAsync(directory, name, context.Request.RouteValues["instance"] as string, current: true);
+            if (problem is not null) return problem;
+            var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
+            if (notThere is not null) return notThere;
+            if (model!.Instances == InstanceMode.Column && instanceId != StoreInstances.Default)
+                return Results.Json(new { error = "This model's instances share their tables. Migrate them once, through the model's own path." }, statusCode: StatusCodes.Status422UnprocessableEntity);
+            var apply = string.Equals(context.Request.Query["apply"], "true", StringComparison.OrdinalIgnoreCase);
+            try
+            {
+                var engine = connections.EngineOf(connectionName);
+                await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
+                var plan = ModelStorage.PlanExpand(model, engine, schema, await ModelStorage.ReadLiveAsync(connection, schema, context.RequestAborted));
+                var applied = false;
+                if (apply && plan.Blocked.Count == 0)
+                {
+                    await ModelStorage.ApplyExpandAsync(connection, plan, context.RequestAborted);
+                    StoreInstances.Record(directory, name, InstanceName(context), ModelStorage.DefinitionHash(model, engine), StoreModels.CurrentVersion(directory, name), DateTimeOffset.UtcNow);
+                    applied = true;
+                }
+                return Results.Json(new JsonObject
+                {
+                    ["up_to_date"] = plan.UpToDate,
+                    ["applied"] = applied,
+                    ["statements"] = Statements(plan.Statements),
+                    ["blocked"] = new JsonArray(plan.Blocked.Select(b => (JsonNode)JsonValue.Create(b)!).ToArray()),
+                    ["notes"] = new JsonArray(plan.Notes.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
+                }, statusCode: plan.Blocked.Count > 0 && apply ? StatusCodes.Status422UnprocessableEntity : StatusCodes.Status200OK);
             }
             catch (Exception ex) when (Known(ex)) { return Fail(ex); }
         });
@@ -197,7 +277,7 @@ public static class StoreData
         {
             var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
             if (!decision.Allowed) return Denied(decision);
-            var (model, problem) = await ModelAsync(directory, name);
+            var (model, problem) = await ModelAsync(directory, name, context.Request.RouteValues["instance"] as string);
             if (problem is not null) return problem;
             var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
             if (notThere is not null) return notThere;
@@ -226,7 +306,7 @@ public static class StoreData
         {
             var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
             if (!decision.Allowed) return Denied(decision);
-            var (model, problem) = await ModelAsync(directory, name);
+            var (model, problem) = await ModelAsync(directory, name, context.Request.RouteValues["instance"] as string);
             if (problem is not null) return problem;
             var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
             if (notThere is not null) return notThere;
@@ -247,7 +327,7 @@ public static class StoreData
         {
             var decision = Writer(context);
             if (!decision.Allowed) return Denied(decision);
-            var (model, problem) = await ModelAsync(directory, name);
+            var (model, problem) = await ModelAsync(directory, name, context.Request.RouteValues["instance"] as string);
             if (problem is not null) return problem;
             var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
             if (notThere is not null) return notThere;
@@ -278,5 +358,7 @@ public static class StoreData
         });
     }
 
-    private static JsonArray Statements(StoragePlan plan) => new(plan.Statements.Select(s => (JsonNode)new JsonObject { ["object"] = s.Object, ["description"] = s.Description, ["text"] = s.Text }).ToArray());
+    private static JsonArray Statements(StoragePlan plan) => Statements(plan.Statements);
+
+    private static JsonArray Statements(IReadOnlyList<StorageStatement> statements) => new(statements.Select(s => (JsonNode)new JsonObject { ["object"] = s.Object, ["description"] = s.Description, ["text"] = s.Text }).ToArray());
 }
