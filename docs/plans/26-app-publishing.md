@@ -1,6 +1,6 @@
 # Plan 26: how apps are published, navigated and instanced
 
-Status: **proposed** (written 2026-11-02 at the owner's request; nothing here is built). **Owner direction (2026-11-02): support every address form and every isolation option listed here; subpath apps get storage; some Store models are shared and split by instance id, others are separate copies; some apps get their own domains.** Sections 2a and 6.2 carry that direction. **Owner direction (2026-11-02, later): a special kind of app, a *portal*, customises the host and the shared navigation that subpath apps are mounted into** (section 4a). It builds on plan 16 section 2 (an app is untrusted UI), plan 20 (the `apps` module of the serving layer, published definitions, groups), plan 21 (channels) and plan 22 section 1 (app authoring). Where this plan and those differ, this plan says so in section 9.
+Status: **proposed** (written 2026-11-02 at the owner's request; nothing here is built). **Owner direction (2026-11-02): support every address form and every isolation option listed here; subpath apps get storage; some Store models are shared and split by instance id, others are separate copies; some apps get their own domains.** Sections 2a and 6.2 carry that direction. **Owner direction (2026-11-02, later): a special kind of app, a *portal*, customises the host and the shared navigation that subpath apps are mounted into** (section 4a). **Owner direction (2026-11-02, later still): sandboxing is not required in every case. A portal may need access to and control of APIs on behalf of users, and administrators and code reviewers decide whether such an app has been properly audited. The one kind of sandboxing to keep for everything is a ban on outside requests: external scripts, JSONP, CORS and other requests to outside domains** (section 2b). It builds on plan 16 section 2 (an app is untrusted UI), plan 20 (the `apps` module of the serving layer, published definitions, groups), plan 21 (channels) and plan 22 section 1 (app authoring). Where this plan and those differ, this plan says so in section 9.
 
 Three questions are answered:
 
@@ -20,6 +20,8 @@ Three questions are answered:
 
 ## 2. The rule that decides the rest: where does the app's code run?
 
+This section is the safe default. Section 2b says when an administrator may approve something else, and what every app keeps regardless.
+
 An app is untrusted UI (plan 16): whatever its code does, the servers it calls check everything. What still needs protecting is the **user's session on the host**: an app's script must not be able to read the console's or another app's cookies and storage, or call the host's APIs as the user without the scoped token.
 
 The browser gives that protection per **origin**. So:
@@ -30,6 +32,37 @@ The browser gives that protection per **origin**. So:
   2. **An origin of its own** (a subdomain or custom domain per instance). The app can use its own cookies and storage, and `localStorage` works. This is for apps that need those, and it costs DNS and certificates.
 
 An app's manifest says which it needs (`origin: sandbox | own`; default `sandbox`). Declaring `own` on a host without a domain bound to the instance fails publication with a message naming the setting.
+
+## 2b. Trust, and the one restriction every app keeps: no outside requests
+
+Section 2 describes the safe default. It is not the only way an app may run. Some apps, and above all portals, legitimately hold APIs on behalf of the people using them; sandboxing such an app would defeat its purpose. Whether that is acceptable is an **administrative and review decision**, not something the host can derive. So there are two separate settings, and they are not the same thing.
+
+### Trust: who vouches for the code
+
+| Level | What the app can do | Who decides |
+| --- | --- | --- |
+| **Sandboxed** (default) | runs in an opaque origin with no credentials; it reaches the servers only through the shell's token broker, with a scoped token (section 2) | nobody: it is the default |
+| **Trusted** | runs on the host's origin (or the instance's own), with direct access to the APIs and the person's session as far as its approval says; can control APIs on the user's behalf | an administrator, after review; recorded below |
+
+* **The manifest asks; an administrator grants.** `trust: sandbox | trusted` in the manifest is a request. An instance runs as `trusted` only when an administrator has approved *that exact version*. Without it, publication of a trusted app is refused with a message that names the missing approval.
+* **An approval is a record, not a flag**: who approved, when, which version (the bundle's hash and the manifest's), what it was approved for (the data operations and APIs it may use, the outside origins it may reach, section 2b below), and a note (a link to the review). It lives in the group's state next to the published definition.
+* **A new version needs a new approval.** The default is that a change of any byte of the bundle ends the approval; an administrator may choose to let the same reviewer's approval carry to later versions of a named app whose reviewed source is in the suite's own repository and whose bundle reproduces from it (the bundler is deterministic), so a trusted app can still be updated without a review per release.
+* **Everything a trusted app does is audited**: its calls to the suite's APIs carry the approval's id as well as the person, so the servers' audit records say "Ada, through the sales portal v7, approved by Grace on 2026-11-03". A trusted app's own token is no wider than the person's: it acts as them and never above them.
+* **Who can approve** is a role: the administrator, or an approver role for apps if an organisation wants a split between those who run the host and those who review code. An author cannot approve their own app.
+* **The servers do not change.** Trusted or sandboxed, an app is a client: the servers check every call. Trust changes what the *browser* lets the app do, and what the audit says; never what the servers permit.
+
+The manifest of AP03 gains `trust` and `egress` keys with AP14 and AP15 (both are requests; the approval is not in the manifest).
+
+### Egress: no outside requests, for every app
+
+Independent of trust, **an app may not make requests to outside domains unless an administrator allowed that domain**. This is the sandboxing the owner wants kept in all cases.
+
+* **What it stops**: external scripts and stylesheets (`script-src`, `style-src`), JSONP (it is a script load), fetch, XHR, WebSocket and EventSource to other origins, which includes CORS requests (`connect-src`), images, fonts, media, frames and objects from other origins (`img-src`, `font-src`, `media-src`, `frame-src`, `object-src 'none'`), form posts to other origins (`form-action`), and a changed `<base>` (`base-uri 'self'`).
+* **How**: the host serves every app document with a `Content-Security-Policy` built from the instance's effective policy, starting from `default-src 'self'`, and the same policy covers a portal and its slots. The browser enforces it.
+* **Exceptions are allow-lists, per instance, per directive**, from two sources: the manifest *requests* them (`egress: {connect: ["https://api.contoso.com"], img: ["https://cdn.contoso.com"]}`) and the administrator *approves* them (the same record as a trust approval, or on its own for a sandboxed app). A request nobody approved is not in the policy. The host's own origins and, for a sandboxed app, the token broker are always allowed; the suite's APIs are reached through them.
+* **At build time**, the bundler's output is scanned for URLs to other origins (an `http(s)://` literal in script, style or HTML, an `import` from a URL, a `<script src>`), and `app validate` reports each one that the manifest does not request, so a surprise is found before a review. This check is advice for the author; the policy in the browser is what enforces.
+* **What it does not do**: a content security policy is enforced by the browser for that document. It stops accidents, hidden dependencies and the ordinary routes for sending data out, and it is the right control for policy and compliance. It is **not** a barrier against hostile code that runs on the same origin with credentials: such code can still leak through channels a policy does not govern (navigating the window, a link the person clicks, timing). For a trusted app the control is the review and the audit above; the egress policy backs them up. For a sandboxed app, the opaque origin and the broker do the work, and the egress policy adds the ban on outside requests.
+* **A report of the policy in force**: each instance's page in the console shows its effective policy and what was requested but not approved.
 
 ## 2a. App storage on every address, including a subpath
 
@@ -84,7 +117,12 @@ Not recommended: letting each app include a nav component. It cannot be enforced
 
 The shell page of section 4 is a fixed page of the suite's. Organisations will want it to be theirs: their name and colours, their header and footer, their menu, a home page of their own, apps arranged the way they think of them, a sign-in page that says who they are. That is a **portal**: *a special kind of app whose job is to be the host that other apps are mounted into.* (An external portal such as SharePoint or Teams is something else, section 5: the suite's apps go into it. A portal in this section is the suite's own, and it can sit inside an external one.)
 
-**A portal is declared, not coded.** Every other app is untrusted UI that runs sandboxed. A portal is the opposite end: it is the page that holds the person's session, hands out tokens and frames the apps, so it runs on the host's origin and must be as trustworthy as the host. So a portal is **data the host's own shell renders**: it contains no JavaScript that runs on the host's origin. Where a portal wants something the declarative parts cannot say (a live widget in the header, a status banner), it names a **slot** and the content is an ordinary sandboxed app mounted into that slot, with the same token broker and the same restrictions as any app.
+**A portal is declared by default, and may be trusted code.** A portal is the page that holds the person's session, hands out tokens and frames the apps, so what it is allowed to do matters more than for any other app. There are two kinds, and the manifest says which:
+
+* **Declared** (default): the portal is *data the host's own shell renders* and contains no script of its own. It needs no approval beyond the usual publish, and it is what most organisations want: a look, a menu and a home page. Where it wants something the declarative parts cannot say (a live widget in the header, a status banner), it names a **slot** and the content is an ordinary app mounted there, sandboxed or trusted like any app.
+* **Trusted**: a portal with code of its own, for the cases where a portal must hold or control APIs on behalf of users (a portal that creates records for people, signs them in to other systems, or brokers calls between apps). It is a trusted app (section 2b): an administrator has approved that exact version after review, and every call it makes is audited with the approval. It still keeps the egress policy.
+
+The shell never runs the code of a portal that is not approved; it falls back to the default portal and says why.
 
 What a portal declares (`kind: portal` in the manifest, plus a `portal:` section):
 
@@ -107,7 +145,7 @@ How it fits with the rest of the plan:
 * **Branding applies to the controls, not only the frame**: because the theme is the variables the shared controls read, `@dbdatakit/store-ui` and the other shared components take the portal's look with no change by the app's author.
 * **Portals are edited like apps** (plan 22 section 1: workspace, preview, merge, publish), by people with the author role; a portal's preview is read-only like any other (plan 21). Publishing a portal that mounts an instance the author may not see is refused.
 
-Not in a portal: code on the host's origin; per-person layout customisation (a person's preferences are app storage, section 2a); mounting apps from other hosts (a link, not a mount).
+Not in a portal: code on the host's origin unless the portal is trusted and approved; per-person layout customisation (a person's preferences are app storage, section 2a); mounting apps from other hosts (a link, not a mount).
 
 ## 5. External portals
 
@@ -181,7 +219,7 @@ Plan 21's channel is part of a published version's key. Every instance belongs t
 | AP08 | Subdomain and custom-domain bindings: the routing table, SNI certificates, name verification, redirect URIs registered with the identity home | AP05 | L | one host serves two names with two certificates; removing a binding removes its redirect URI; an unverified name is refused |
 | AP09 | App storage: `storage.user` and `storage.instance` in the group's state with the manifest's limits, the storage API, and the shell bridge for sandboxed apps | AP05 | M | a sandboxed app stores and reads a preference per person and a setting per instance; one person cannot read another's; two instances do not share; a value over the limit is refused |
 | AP10 | The portal kind: `kind: portal` in the manifest and the `portal:` section (identity, theme, layout, navigation, home, mounts, slots, addresses) validated with positions; a portal contains no script | AP03 | M | tests: a complete portal passes; each bad part is refused with its reason; a portal that names a script, a mount that does not exist or a slot with no app is refused |
-| AP11 | The shell renders a portal: theme tokens become the controls' variables, header, footer, menu and layout from the declaration; the default portal is the suite's own | AP06, AP10 | L | Playwright: two portals on two addresses give the same app two looks, and a person sees only the menu entries they may open |
+| AP14 | The egress policy: the manifest's `egress` requests, the per-instance approved allow-lists, a `Content-Security-Policy` built from them (`default-src 'self'` and the directives of section 2b), the bundle scan for URLs to other origins in `app validate`, and the policy shown on the instance's page | AP03, AP05 | M | tests: a page that loads an outside script, calls an outside API with fetch, XHR or WebSocket, loads a JSONP script, or posts a form to another origin is blocked by the browser (Playwright); the same call to an approved origin works; an unapproved request is not in the policy; `app validate` reports an outside URL in a bundle |\n| AP15 | Trust levels, approvals and audit: `trust: sandbox \| trusted` as a request, the approval record (who, when, the version's hash, what it was approved for, a note), a new version ends an approval (with the reproducible-source exception), the approver role, the approval's id on every API call a trusted app makes and in the servers' audit | AP04, AP05 | L | tests: a trusted app does not publish without an approval for that exact version; a changed bundle ends it; an author cannot approve their own app; the Store's audit row of a write made through a trusted app names the person, the app version and the approver |\n| AP16 | Trusted portals: a portal with code of its own runs on the host's origin only with an approval; without one the shell falls back to the default portal and says why | AP11, AP15 | M | a trusted portal calls an API for the user and every call is audited with its approval; the same portal unapproved is not run |\n| AP11 | The shell renders a portal: theme tokens become the controls' variables, header, footer, menu and layout from the declaration; the default portal is the suite's own | AP06, AP10 | L | Playwright: two portals on two addresses give the same app two looks, and a person sees only the menu entries they may open |
 | AP12 | Portal home and catalog: declarative landing views and a catalog of the apps the person may open | AP11 | M | the home lists exactly the instances the caller may open |
 | AP13 | Slots: a sandboxed app mounted in a portal's header, footer, aside or home, with the same token broker | AP05, AP11 | M | an app in the header reads its own data and cannot reach the portal's page or session |
 | Z12 | Store model instances, separate copies: `storage.instances: schema \| connection`; `(definition, instance, connection, schema)`, per-instance tables, history, audit and roles; the instance in the API path | Z09, AP04 | L | two instances of one model on one database hold different rows, a row in one is invisible in the other, a reference across them is refused; tests on both engines |
@@ -201,11 +239,13 @@ Plan 21's channel is part of a published version's key. Every instance belongs t
 
 **Decisions** (one way, hard to change later):
 
-1. **Code apps are isolated by a sandboxed document under the host's shell page**, not by a separate origin per app. Because the sandbox has no browser storage, **the host provides app storage** (section 2a).
+1. **The default for a code app is a sandboxed document under the host's shell page**, not a separate origin per app; because the sandbox has no browser storage, **the host provides app storage** (section 2a). **Sandboxing is a default, not a rule:** an administrator may approve an app as *trusted* (section 2b).
 2. **The shell page owns navigation** (navigation sets); apps do not draw menus.
 3. **A Store model's isolation is declared by the model** (`storage.instances`): not at all, `column`, `schema` or `connection`. The server enforces it; the client never does.
-4. **A portal is declared data, not code.** It is the shell, so it runs on the host's origin, and code there would break decision 1. Anything dynamic in a portal is a sandboxed app in a slot.
+4. **A portal is declared data by default, and may be trusted code** with an administrator's approval of that exact version (section 4a).
+5. **Trust is an administrative, reviewed and audited decision**: the manifest asks, an administrator approves a version, a new version needs a new approval, and every call a trusted app makes carries the approval in the audit. The servers' rules do not change with trust.
+6. **No outside requests for any app, trusted or not**, unless an administrator allowed that domain (a content security policy built from per-instance allow-lists). This is advice to the browser, not a barrier against hostile same-origin code; for trusted apps the review and the audit are the control.
 
-**Supported options** (the design carries all of them; each is chosen per app, per instance or per model; a portal can be published more than once, like an app): subpath, subdomain and custom domain addresses for an instance; `origin: sandbox | own`; `chrome: shell | none`; app storage (user, instance, quota); the three instance modes of a Store model, including both a shared-and-split model and separate copies; portal launch links, the catalog feed and an allow-listed embed; navigation set membership.
+**Supported options** (the design carries all of them; each is chosen per app, per instance or per model; a portal can be published more than once, like an app): `trust: sandbox | trusted`; the egress allow-lists; subpath, subdomain and custom domain addresses for an instance; `origin: sandbox | own`; `chrome: shell | none`; app storage (user, instance, quota); the three instance modes of a Store model, including both a shared-and-split model and separate copies; portal launch links, the catalog feed and an allow-listed embed; navigation set membership.
 
 **Not planned:** several tenants inside one app instance (use an instance per tenant); mounting an app as a web component inside a portal's own page.
