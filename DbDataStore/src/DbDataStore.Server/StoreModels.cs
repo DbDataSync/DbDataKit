@@ -64,6 +64,7 @@ public static partial class StoreModels
         ["name"] = model.Name,
         ["title"] = model.Title,
         ["approval"] = model.Approval.ToString().ToLowerInvariant(),
+        ["instances"] = model.Instances.ToString().ToLowerInvariant(),
         ["entities"] = new JsonArray(model.Entities.Select(e => (JsonNode)new JsonObject
         {
             ["name"] = e.Name,

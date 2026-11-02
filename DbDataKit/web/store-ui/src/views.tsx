@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { editable, formatCell, inputKind, keyOf, titleOf, toInput } from './fields'
-import { StoreError, type AttributeSchema, type EntitySchema, type RowValues, type StoredRow, type Violation } from './types'
+import { StoreError, type InstanceList, type AttributeSchema, type EntitySchema, type RowValues, type StoredRow, type Violation } from './types'
 
 /** The presentational parts of the controls: props in, markup out, no client and no state, so a host can wire them to anything and a test can render them. */
 
@@ -158,5 +158,19 @@ export function HistoryView({ entity, versions }: { entity: EntitySchema; versio
         ))}
       </tbody>
     </table>
+  )
+}
+
+/** Which instance of a model is shown. Nothing for a model that keeps one copy; otherwise the model's own copy and each instance. */
+export function InstancePickerView({ list, value, onChange }: { list: InstanceList; value: string | null; onChange?: (instance: string | null) => void }) {
+  if (list.mode === 'none') return null
+  return (
+    <div className="sui-instance">
+      <label htmlFor="sui-instance">Instance</label>
+      <select id="sui-instance" value={value ?? ''} onChange={(e) => onChange?.(e.target.value === '' ? null : e.target.value)}>
+        <option value="">default</option>
+        {list.instances.map((i) => <option key={i.name} value={i.name}>{i.name}</option>)}
+      </select>
+    </div>
   )
 }
