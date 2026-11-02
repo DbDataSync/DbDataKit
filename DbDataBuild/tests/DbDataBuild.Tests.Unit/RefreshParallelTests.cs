@@ -118,8 +118,10 @@ public class RefreshParallelTests
         private TaskCompletionSource Event(string key) { lock (gate) { if (!events.TryGetValue(key, out var tcs)) events[key] = tcs = new(TaskCreationOptions.RunContinuationsAsynchronously); return tcs; } }
         public void Enter(string name) { lock (gate) { MostRunning = Math.Max(MostRunning, ++Running); Order.Add("start " + name); } Event("entered " + name).TrySetResult(); }
         public void Leave(string name) { lock (gate) { Running--; Order.Add("end " + name); } Event("left " + name).TrySetResult(); }
+        /// <summary>The run has taken a load's result into account (a failure under stop has halted it): `settled=a`.</summary>
+        public void Settle(string name) => Event("settled " + name).TrySetResult();
 
-        /// <summary>Waits until every named load has entered or left, as a statement's hold says (`entered=b,c`, `left=a`): the order the test needs, not a pause that a busy machine can stretch or shrink. A hold nothing ends fails the test instead of hanging it.</summary>
+        /// <summary>Waits until every named load has entered, left or been settled by the run, as a statement's hold says (`entered=b,c`, `left=a`, `settled=a`): the order the test needs, not a pause that a busy machine can stretch or shrink. A hold nothing ends fails the test instead of hanging it.</summary>
         public async Task WaitAsync(string hold, CancellationToken ct)
         {
             var (kind, names) = (hold[..hold.IndexOf('=')], hold[(hold.IndexOf('=') + 1)..].Split(','));
@@ -179,7 +181,7 @@ public class RefreshParallelTests
             var step = new PlanStep(unit.LoadStepId, StepType.Load, s.Model, "load", $"work:{s.Model}:{s.Hold ?? s.Ms.ToString(System.Globalization.CultureInfo.InvariantCulture)}:{(s.Fails ? "fail" : "ok")}", RiskClass.Safe, [], null, []);
             return Task.FromResult(new PreparedLoad([step], "[]"));
         };
-        var options = new ApplyOptions(false, false, new HashSet<string>(), null, false, "test", Lane: "refresh", Refresh: true, RecordShapes: false, Execution: new RefreshExecution(units, prepare, Downstream), Parallel: parallel);
+        var options = new ApplyOptions(false, false, new HashSet<string>(), null, false, "test", Lane: "refresh", Refresh: true, RecordShapes: false, Execution: new RefreshExecution(units, prepare, Downstream) { Settled = fleet.Settle }, Parallel: parallel);
         var gate = MutationGate.ForTesting(new FakeConnection(fleet), "apply", StatementKind.Tracking | StatementKind.Data | StatementKind.Ddl, log);
         var plan = new Plan("p1", "sqlserver", null, false, "t", [], [], [], []);
         Func<CancellationToken, Task<RefreshWorker>> open = _ =>
@@ -245,8 +247,9 @@ public class RefreshParallelTests
     [Fact]
     public async Task Under_stop_the_loads_in_flight_finish_and_nothing_else_starts()
     {
-        // a fails under stop once b and c are running beside it; b and c finish after that; d to g never start. The order is held by the loads waiting for each other, not by how long each takes
-        var specs = new[] { new Spec("a", Fails: true, OnFailure: OnFailureModes.Stop, Hold: "entered=b,c"), new Spec("b", Hold: "left=a"), new Spec("c", Hold: "left=a"), new Spec("d", 5), new Spec("e", 5), new Spec("f", 5), new Spec("g", 5) };
+        // a fails under stop once b and c are running beside it; b and c finish after the run has taken a's failure into account; d to g never start. The order is held by the loads waiting for each other, not by how long each takes.
+        // (`left=a` was not enough: a load leaves before the run has its result, so b could end first, free a place, and let d start before the stop was known: the failure seen in CI on 2026-11-02)
+        var specs = new[] { new Spec("a", Fails: true, OnFailure: OnFailureModes.Stop, Hold: "entered=b,c"), new Spec("b", Hold: "settled=a"), new Spec("c", Hold: "settled=a"), new Spec("d", 5), new Spec("e", 5), new Spec("f", 5), new Spec("g", 5) };
         var (result, fleet, _) = await RunAsync(specs, 3);
         var byModel = result.Refresh!.Loads.ToDictionary(l => l.Unit.Model);
         Assert.Equal(RefreshSummary.Stopped, result.Refresh.Outcome);
