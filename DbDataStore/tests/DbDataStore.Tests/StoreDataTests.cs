@@ -4,15 +4,16 @@ using System.Text.Json.Nodes;
 using DbDataKit.Web.Trust;
 using DbDataStore.Server;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Data.SqlClient;
 using Npgsql;
 
 namespace DbDataStore.Tests;
 
 /// <summary>
-/// A model's tables and rows through the management API on a real PostgreSQL (plan 19, Z09; <c>testenv/testenv.sh up postgres</c>, then <c>eval "$(testenv/testenv.sh env dbdatakit)"</c>): the storage is planned and created,
+/// A model's tables and rows through the management API on a real PostgreSQL and a real SQL Server (plan 19, Z09; <c>testenv/testenv.sh up postgres mssql</c>, then <c>eval "$(testenv/testenv.sh env dbdatakit)"</c>; a class skips without its engine): the storage is planned and created,
 /// a row is written and read back, a stale version and a broken rule are refused with their own statuses, and each role does only its part.
 /// </summary>
-public sealed class StoreDataTests : IAsyncLifetime
+public abstract class StoreDataTests(string engine) : IAsyncLifetime
 {
     private const string Model = """
         schemaVersion: 1
@@ -34,20 +35,61 @@ public sealed class StoreDataTests : IAsyncLifetime
     private readonly List<string> extraDatabases = [];
     private WebApplication? app;
     private StoreSettings settings = null!;
-    private string? server = Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES");
+    private readonly string? server = Environment.GetEnvironmentVariable(engine == "sqlserver" ? "DBDATA_TEST_SQLSERVER" : "DBDATA_TEST_POSTGRES");
+
+    private bool SqlServer => engine == "sqlserver";
+
+    /// <summary>The server's connection string pointed at another database.</summary>
+    private string ConnectionTo(string name) => SqlServer ? new SqlConnectionStringBuilder(server) { InitialCatalog = name }.ConnectionString : new NpgsqlConnectionStringBuilder(server) { Database = name }.ConnectionString;
+
+    private async Task RunAsync(string database, string sql)
+    {
+        if (SqlServer)
+        {
+            await using var connection = new SqlConnection(ConnectionTo(database));
+            await connection.OpenAsync();
+            await using var command = new SqlCommand(sql, connection);
+            await command.ExecuteNonQueryAsync();
+        }
+        else
+        {
+            await using var connection = new NpgsqlConnection(ConnectionTo(database));
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand(sql, connection);
+            await command.ExecuteNonQueryAsync();
+        }
+    }
+
+    private async Task<long> CountAsync(string database, string table)
+    {
+        if (SqlServer)
+        {
+            await using var connection = new SqlConnection(ConnectionTo(database));
+            await connection.OpenAsync();
+            await using var command = new SqlCommand($"SELECT count(*) FROM {table}", connection);
+            return Convert.ToInt64(await command.ExecuteScalarAsync());
+        }
+        await using var pg = new NpgsqlConnection(ConnectionTo(database));
+        await pg.OpenAsync();
+        await using var count = new NpgsqlCommand($"SELECT count(*) FROM {table}", pg);
+        return Convert.ToInt64(await count.ExecuteScalarAsync());
+    }
+
+    private async Task CreateDatabaseAsync(string name) => await RunAsync(SqlServer ? "master" : "postgres", $"CREATE DATABASE {name}");
+
+    private async Task DropDatabaseAsync(string name) =>
+        await RunAsync(SqlServer ? "master" : "postgres", SqlServer ? $"IF DB_ID('{name}') IS NOT NULL BEGIN ALTER DATABASE {name} SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE {name}; END" : $"DROP DATABASE IF EXISTS {name} WITH (FORCE)");
+
+    private string ConnectionFile(string name, string variableName) =>
+        $"schema: connection/1\nname: {name}\nengine: {engine}\nconnection_string_secret: 'env:{variableName}'\n" + "tls:\n  encrypt: false\n";
 
     public async ValueTask InitializeAsync()
     {
         if (server is null) return;
-        await using (var admin = new NpgsqlConnection(server))
-        {
-            await admin.OpenAsync();
-            await using var create = new NpgsqlCommand($"CREATE DATABASE {database}", admin);
-            await create.ExecuteNonQueryAsync();
-        }
-        Environment.SetEnvironmentVariable(variable, new NpgsqlConnectionStringBuilder(server) { Database = database }.ConnectionString);
+        await CreateDatabaseAsync(database);
+        Environment.SetEnvironmentVariable(variable, ConnectionTo(database));
         Directory.CreateDirectory(Path.Combine(directory, StoreConnections.Folder));
-        File.WriteAllText(StoreConnections.FileOf(directory, "mdm"), $"schema: connection/1\nname: mdm\nengine: postgres\nconnection_string_secret: 'env:{variable}'\ntls:\n  encrypt: false\n");
+        File.WriteAllText(StoreConnections.FileOf(directory, "mdm"), ConnectionFile("mdm", variable));
         settings = new StoreSettings(directory, new Uri("https://127.0.0.1:0"));
         app = StoreServer.Build(settings, StoreServer.Certificate(directory), _ => { });
         await app.StartAsync();
@@ -60,22 +102,16 @@ public sealed class StoreDataTests : IAsyncLifetime
         if (server is not null)
         {
             NpgsqlConnection.ClearAllPools();
-            await using var admin = new NpgsqlConnection(server);
-            await admin.OpenAsync();
-            await using var drop = new NpgsqlCommand($"DROP DATABASE IF EXISTS {database} WITH (FORCE)", admin);
-            await drop.ExecuteNonQueryAsync();
-            foreach (var extra in extraDatabases)
-            {
-                await using var dropExtra = new NpgsqlCommand($"DROP DATABASE IF EXISTS {extra} WITH (FORCE)", admin);
-                await dropExtra.ExecuteNonQueryAsync();
-            }
+            SqlConnection.ClearAllPools();
+            foreach (var name in extraDatabases.Prepend(database)) await DropDatabaseAsync(name);
         }
         try { Directory.Delete(directory, true); } catch (IOException) { }
     }
 
     private async Task<Func<HttpMethod, string, string?, ServerRole, Task<HttpResponseMessage>>> Client()
     {
-        Assert.SkipWhen(server is null, "set DBDATA_TEST_POSTGRES to run on PostgreSQL");
+        if (server is null && string.Equals(Environment.GetEnvironmentVariable(SqlServer ? "DBDATA_REQUIRE_SQLSERVER" : "DBDATA_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase)) Assert.Fail($"{engine} is required but its DBDATA_TEST_* variable is not set");
+        Assert.SkipWhen(server is null, $"set DBDATA_TEST_{(SqlServer ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
         var url = new Uri(app!.Urls.First());
         var code = new PairingFiles(settings.ServerYaml).Codes().Create(ServerRoles.Close(ServerRole.Admin | ServerRole.Author));
         var paired = await PairingClient.PairAsync(url, code.Code, console, ClientKind.Console, "test console");
@@ -101,7 +137,7 @@ public sealed class StoreDataTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Created, (await send(HttpMethod.Put, "/api/v1/models/territories", Model, ServerRole.Author)).StatusCode);
 
         var plan = await Json(await send(HttpMethod.Get, "/api/v1/models/territories/storage", null, ServerRole.Viewer));
-        Assert.Equal("postgres", (string)plan["engine"]!);
+        Assert.Equal(engine, (string)plan["engine"]!);
         Assert.NotEmpty(plan["statements"]!.AsArray());
         Assert.Empty(plan["existing"]!.AsArray());
 
@@ -199,17 +235,12 @@ public sealed class StoreDataTests : IAsyncLifetime
         var send = await Client();
         var second = "dds_" + Guid.NewGuid().ToString("N")[..12];
         extraDatabases.Add(second);
-        await using (var admin = new NpgsqlConnection(server))
-        {
-            await admin.OpenAsync();
-            await using var create = new NpgsqlCommand($"CREATE DATABASE {second}", admin);
-            await create.ExecuteNonQueryAsync();
-        }
+        await CreateDatabaseAsync(second);
         var other = variable + "_2";
-        Environment.SetEnvironmentVariable(other, new NpgsqlConnectionStringBuilder(server) { Database = second }.ConnectionString);
+        Environment.SetEnvironmentVariable(other, ConnectionTo(second));
         try
         {
-            File.WriteAllText(StoreConnections.FileOf(directory, "region-eu"), $"schema: connection/1\nname: region-eu\nengine: postgres\nconnection_string_secret: 'env:{other}'\ntls:\n  encrypt: false\n");
+            File.WriteAllText(StoreConnections.FileOf(directory, "region-eu"), ConnectionFile("region-eu", other));
             await send(HttpMethod.Put, "/api/v1/models/territories", Model.Replace("storage: {connection: mdm}", "storage: {connection: mdm, instances: connection}"), ServerRole.Author);
 
             // a connection must be named, and must exist
@@ -224,10 +255,7 @@ public sealed class StoreDataTests : IAsyncLifetime
 
             Assert.Equal("Own copy", (string)(await Json(await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/row?key.code=NA", null, ServerRole.Viewer)))["values"]!["name"]!);
             Assert.Equal("EU copy", (string)(await Json(await send(HttpMethod.Get, "/api/v1/models/territories/instances/eu/entities/territory/row?key.code=NA", null, ServerRole.Viewer)))["values"]!["name"]!);
-            await using var check = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(server) { Database = second }.ConnectionString);
-            await check.OpenAsync();
-            await using var count = new NpgsqlCommand("SELECT count(*) FROM territories.territory", check);
-            Assert.Equal(1L, await count.ExecuteScalarAsync());
+            Assert.Equal(1L, await CountAsync(second, "territories.territory"));
         }
         finally { Environment.SetEnvironmentVariable(other, null); }
     }
@@ -248,3 +276,9 @@ public sealed class StoreDataTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Get, "/api/v1/models/territories/instances/default/entities/territory/rows", null, ServerRole.Viewer)).StatusCode);
     }
 }
+
+/// <summary>On PostgreSQL (<c>DBDATA_TEST_POSTGRES</c>).</summary>
+public sealed class StoreDataOnPostgresTests() : StoreDataTests("postgres");
+
+/// <summary>On SQL Server (<c>DBDATA_TEST_SQLSERVER</c>).</summary>
+public sealed class StoreDataOnSqlServerTests() : StoreDataTests("sqlserver");
