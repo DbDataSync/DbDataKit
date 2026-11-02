@@ -27,7 +27,7 @@ public sealed record AuthStatus(
 [ApiController]
 [Route("api/auth")]
 public sealed class AuthController(
-    AuthOptions options, PasskeyOptions passkeys, UserStore users, SessionStore sessions, CurrentUser currentUser, IEnumerable<ISignOutHandler> signOutHandlers)
+    AuthOptions options, PasskeyOptions passkeys, UserStore users, SessionStore sessions, CurrentUser currentUser, IEnumerable<ISignOutHandler> signOutHandlers, IEnumerable<SignInMethod> otherMethods)
     : ControllerBase
 {
     /// <summary>
@@ -43,6 +43,8 @@ public sealed class AuthController(
             methods.Add("windows");
         if (passkeys.Enabled)
             methods.Add("passkeys");
+        // ways in a host adds of its own (a console that signs people in through an identity home says "identity-home")
+        methods.AddRange(otherMethods.Select(m => m.Name));
 
         return Ok(new AuthStatus(
             // A real signed-in user has an id; a network-trust fallback grant (phase 164's

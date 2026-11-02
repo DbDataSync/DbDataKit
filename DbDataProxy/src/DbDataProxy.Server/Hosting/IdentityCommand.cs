@@ -15,7 +15,7 @@ namespace DbDataProxy.Server.Hosting;
 public static class IdentityCommand
 {
     public static Noun Noun() => new("identity", "The identity home this proxy serves: register consoles and apps, invite people, give them roles",
-        IdentityVerbs.Admin(new IdentityAdminLocation("[--repo <data directory>]", Open, parsed => ProxyIdentityModule.PublicUrlOf(OptionsOf(parsed)).AbsoluteUri)));
+        [.. IdentityVerbs.Admin(new IdentityAdminLocation("[--repo <data directory>]", Open, parsed => ProxyIdentityModule.PublicUrlOf(OptionsOf(parsed)).AbsoluteUri))]);
 
     private static ProxyOptions OptionsOf(CliArgs parsed)
     {

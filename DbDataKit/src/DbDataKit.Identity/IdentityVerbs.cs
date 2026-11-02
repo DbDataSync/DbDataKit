@@ -17,7 +17,7 @@ public sealed record IdentityAdminLocation(string Usage, Func<CliArgs, StateData
 /// </summary>
 public static class IdentityVerbs
 {
-    public static IReadOnlyList<Verb> Admin(IdentityAdminLocation where) =>
+    public static Verb[] Admin(IdentityAdminLocation where) =>
     [
         new Verb("client-add", "Register a console or an app that signs people in through the home; the secret of a confidential client is shown once", EffectClass.RepoFilesOnly,
             $"--name <name> --redirect <uri>[,<uri>] [--logout-redirect <uri>[,<uri>]] [--public] {where.Usage}",

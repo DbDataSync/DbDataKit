@@ -87,7 +87,8 @@ def cs_files(folder):
 
 
 def shared_nouns(root):
-    """'Class.Method' -> (noun, verbs) for every shared factory in DbDataKit/src that makes a noun (the pairing verbs add to `server`)."""
+    """'Class.Method' -> (noun, verbs) for every shared factory in DbDataKit/src that makes a noun, or makes verbs (noun None) that a product lists under a noun of its own
+    (the pairing verbs under `server`, the identity home's under `identity`)."""
     index = {}
     for path in cs_files(os.path.join(root, "DbDataKit", "src")):
         text = read(path)
@@ -97,10 +98,10 @@ def shared_nouns(root):
                 if not head:
                     continue
                 noun = re.search(NOUN_DEF, chunk)
-                if noun is None and cls.group(1) != "PairingVerbs":
+                if noun is None and "Verb[]" not in head.group(0):   # a factory of something else
                     continue
                 verbs = [m.group("verb") or m.group("verb2") for m in VERB_ONLY.finditer(chunk)]
-                index[f"{cls.group(1)}.{head.group(1)}"] = (noun.group("noun") if noun else "server", verbs)
+                index[f"{cls.group(1)}.{head.group(1)}"] = (noun.group("noun") if noun else None, verbs)
     return index
 
 
@@ -119,8 +120,11 @@ def commands_of(root, product):
                 if current:
                     found.add((current, match.group("verb") or match.group("verb2")))
             elif (key := f"{match.group('cls')}.{match.group('method')}") in shared:
-                current, verbs = shared[key]
-                found.update((current, v) for v in verbs)
+                noun, verbs = shared[key]
+                if noun is not None:   # a shared noun; shared verbs alone join the noun they are listed under
+                    current = noun
+                if current:
+                    found.update((current, v) for v in verbs)
         for legacy in LEGACY.findall(text):
             found.update((w,) for w in re.findall(r'"([a-z][a-z-]*)"', legacy))
     for line in read(os.path.join(folder, "docs", "commands.md")).splitlines():

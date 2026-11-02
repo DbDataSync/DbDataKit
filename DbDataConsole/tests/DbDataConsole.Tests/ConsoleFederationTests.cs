@@ -219,6 +219,10 @@ public sealed class ConsoleFederationTests : IAsyncLifetime
         Assert.False(File.Exists(Path.Combine(root, "a", "FIRST-RUN.txt")));
         Assert.False(appA.Services.GetRequiredService<UserStore>().Any());
         Assert.Equal(HttpStatusCode.Unauthorized, (await consoleA.GetAsync("/api/users")).StatusCode);
+
+        // the sign-in screen is told the home is a way in (plan 20 O06), beside the local ways
+        var status = System.Text.Json.Nodes.JsonNode.Parse(await consoleA.GetStringAsync("/api/auth/status"))!;
+        Assert.Contains("identity-home", status["methods"]!.AsArray().Select(m => (string?)m));
     }
 
     [Fact]

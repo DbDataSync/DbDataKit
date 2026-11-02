@@ -89,7 +89,9 @@ public static class ConsoleHost
             builder.Services.AddSingleton(new OpenIdClient(
                 new OpenIdClientOptions(home.Authority.AbsoluteUri, home.ClientId, home.ClientSecret, new Uri(settings.Public, ConsoleFederation.CallbackPath).AbsoluteUri, new Uri(settings.Public, "/").AbsoluteUri),
                 // a home that does not answer must not hold a request for the default 100 seconds
-                new HttpClient { Timeout = TimeSpan.FromSeconds(10) }));
+                new HttpClient(HomeTrust.Handler(home.TrustedCertificate)) { Timeout = TimeSpan.FromSeconds(10) }));
+            // the sign-in screen offers the home (plan 20 O06)
+            builder.Services.AddSingleton(SignInMethod.IdentityHome);
             builder.Services.AddSingleton(sp =>
             {
                 // the home's tokens are kept protected by the framework's key ring, which is kept with the rest of what the console owns
