@@ -142,6 +142,35 @@ Connect provider**. **The spec needs design conversations with the owner**; the 
 6. **Several consoles.** Plan 13 allows several consoles per server; an app needs one identity provider. Which console it is, and what a
    second console means for an app's users. **Decided**: one identity home per install (section 2b).
 
+### Sign-in decisions (owner, 2026-11-02)
+
+Recorded in a walk through the open sign-in questions; slices follow from them. Where this differs from the topics above, this wins.
+
+1. **An app's token is the identity home's.** Each app instance is an OpenID Connect client of the home (plan 26 already registers its
+   addresses there). The home issues the instance an access token whose **audience is the instance**, not the home, with **scopes from
+   the approved manifest**: the models it names and the operations on each (read, write, change request). The serving layer's modules
+   check the audience and the scopes. The token is never wider than the person: what it allows is the person's roles narrowed by the
+   manifest. Sandboxed apps get it from the shell's token broker; apps with their own origin sign in for it with the standard flow.
+   (Today every access token's audience is the home itself; this changes that.)
+2. **One list of people: the identity home.** Proxy's own users with passwords and its password-checked Windows accounts are **retired**
+   (a clean break: a configuration that still lists them is refused with a message naming the file). Pass-through database credentials
+   stay, the database being the authority. Clients that cannot open a browser sign in with home credentials:
+   - **Personal access tokens:** a revocable secret per person, issued by the home, used as the password wherever a client can send only
+     a user name and password; **service accounts** in the home for unattended work (scheduled refreshes, report servers).
+   - **Windows** (Negotiate) where the serving layer is on a domain-joined Windows host or has a keytab (13a U13), resolved to the home
+     account by UPN (13a U16).
+3. **Excel, per path:**
+   - **WebDAV** (documents): Office forms-based sign-in (MS-OFBA), so Excel opens the home's own sign-in page in a small window and
+     keeps the session; Windows; user name and personal access token as the fallback (Office for Mac's MS-OFBA support is not verified).
+   - **XMLA and MDX** (PivotTables): served over **HTTPS** (Excel's Analysis Services provider pointed at an `https://` address), with
+     Windows or user name and personal access token. Native TCP is not built. This settles the transport note in 13c D14.
+   - **Power Query** (feeds, saved queries, OData): Windows, user name and personal access token, and, for installs that use Entra,
+     **Entra's own tokens accepted directly** on these endpoints (Power Query's "organizational account" works only with Entra), the
+     person linked to their home account by UPN (13a U16, U18) and given the home's roles. This is the one place a token the home did not
+     issue is accepted.
+   - **Not verified:** the sign-in methods above are what Office offers as far as known here, not yet seen. The Excel VM recordings (plan
+     14 R7, plan 15 WebDAV) record each one.
+
 ## 2a. Shared visuals and reports
 
 ### Visuals are a shared feature
