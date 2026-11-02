@@ -188,8 +188,25 @@ public class McpServerTests : IDisposable
     /// <summary>A writer the test can read while the server writes to it.</summary>
     private sealed class SyncWriter : StringWriter
     {
-        public override void WriteLine(string? value) { lock (this) base.WriteLine(value); }
+        public override void WriteLine(string? value) { lock (this) { base.WriteLine(value); Monitor.PulseAll(this); } }
         public override string ToString() { lock (this) return base.ToString(); }
+
+        /// <summary>Waits until a line containing the text has been written, woken by the write itself. The limit is only for a server that is stuck: a loaded machine (a cold start on a busy CI runner took longer than the ten seconds this used to poll for) is not stuck.</summary>
+        public string WaitForLine(string contains, TimeSpan limit)
+        {
+            var until = DateTime.UtcNow + limit;
+            lock (this)
+            {
+                while (true)
+                {
+                    var line = base.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(l => l.Contains(contains));
+                    if (line != null) return line;
+                    var left = until - DateTime.UtcNow;
+                    if (left <= TimeSpan.Zero) throw new TimeoutException($"The server never wrote a line with `{contains}`.");
+                    Monitor.Wait(this, left);
+                }
+            }
+        }
     }
 
     private sealed class ApplyHost : DbDataBuild.Tui.Model.ICommandHost
@@ -205,16 +222,7 @@ public class McpServerTests : IDisposable
         public DbDataBuild.Tui.Model.CommandResult Run(IReadOnlyList<string> args, DbDataBuild.Tui.Model.RunHooks? hooks = null) { lock (Ran) Ran.Add([.. args]); return new(0, "{\"ok\":true}", ""); }
     }
 
-    private static string WaitForLine(SyncWriter output, string contains)
-    {
-        for (var i = 0; i < 400; i++)
-        {
-            var line = output.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(l => l.Contains(contains));
-            if (line != null) return line;
-            Thread.Sleep(25);
-        }
-        throw new TimeoutException($"The server never wrote a line with `{contains}`.");
-    }
+    private static string WaitForLine(SyncWriter output, string contains) => output.WaitForLine(contains, TimeSpan.FromSeconds(60));
 
     /// <summary>Runs a session: initialize (with or without elicitation), then a call of apply; `answer` gets the question the server asks and returns what the person answered (null: nothing asked is expected).</summary>
     private (List<JsonNode> Replies, ApplyHost Host) ApplySession(bool clientAsks, Func<JsonNode, JsonObject>? answer, bool dryRun = false)
