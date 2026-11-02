@@ -72,6 +72,20 @@ public sealed class ModelWriter
     public async Task<StoredRow?> GetAsync(string entityName, IReadOnlyDictionary<string, object?> key, CancellationToken cancellationToken = default) =>
         (await ReadRowsAsync(null, RequireEntity(entityName), TypedKeyOrThrow(entityName, key), false, null, false, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
 
+    /// <summary>One page of an entity's rows (the open versions, for an entity with history), in key order. <paramref name="limit"/> is at most 1000.</summary>
+    public async Task<IReadOnlyList<StoredRow>> ListAsync(string entityName, int limit = 100, int offset = 0, CancellationToken cancellationToken = default)
+    {
+        var entity = RequireEntity(entityName);
+        if (limit is < 1 or > 1000) throw new StoreNotSupportedException("A page holds 1 to 1000 rows.");
+        if (offset < 0) throw new StoreNotSupportedException("The offset cannot be negative.");
+        var columns = entity.Attributes.Select(a => a.Name).Append(ModelStorage.VersionColumn).ToList();
+        if (Dated(entity)) { columns.Add(ModelStorage.ValidFromColumn); columns.Add(ModelStorage.ValidToColumn); }
+        var order = string.Join(", ", entity.Key.Select(Col));
+        var paging = _engine == "sqlserver" ? $"OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY" : $"LIMIT {limit} OFFSET {offset}";
+        await using var command = Command(null, $"SELECT {string.Join(", ", columns.Select(Col))} FROM {Table(entity.Name)} WHERE {OpenOnly(entity)} ORDER BY {order} {paging}", []);
+        return await ReadAllAsync(command, entity, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>The version of a row that held at a moment (an entity with effective-dated history), or null when it held none then.</summary>
     public async Task<StoredRow?> GetAsOfAsync(string entityName, IReadOnlyDictionary<string, object?> key, DateTimeOffset asOf, CancellationToken cancellationToken = default)
     {
@@ -440,6 +454,11 @@ public sealed class ModelWriter
         var suffix = forUpdate && _engine == "postgres" ? " FOR UPDATE" : "";
         var order = Dated(entity) ? $" ORDER BY {Col(ModelStorage.ValidFromColumn)}" : "";
         await using var command = Command(tx, $"SELECT {string.Join(", ", columns.Select(Col))} FROM {Table(entity.Name)}{lock_} WHERE {where}{order}{suffix}", parameters);
+        return await ReadAllAsync(command, entity, ct).ConfigureAwait(false);
+    }
+
+    private static async Task<List<StoredRow>> ReadAllAsync(DbCommand command, ModelEntity entity, CancellationToken ct)
+    {
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
         var found = new List<StoredRow>();
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
