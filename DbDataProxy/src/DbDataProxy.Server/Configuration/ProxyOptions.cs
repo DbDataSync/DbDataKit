@@ -65,6 +65,9 @@ public sealed class ProxyOptions
     /// <summary>The identity home (plan 20, O06): who people are and what they may do, for every console and app of the install, on a listener of its own. Off unless asked for.</summary>
     public IdentityOptions Identity { get; set; } = new();
 
+    /// <summary>The apps host (plan 26, AP05): published apps served by subpath on a listener of its own. Off unless <c>Modules</c> lists <c>apps</c>.</summary>
+    public AppsOptions Apps { get; set; } = new();
+
     public ListenOptions Listen { get; set; } = new();
     public TlsOptions Tls { get; set; } = new();
 
@@ -184,6 +187,17 @@ public sealed class ManagementOptions
 /// listener of its own (browsers reach it, so HTTP/1.1 as well as HTTP/2). Its people, roles, clients and signing keys are in the state database, so every instance of a group that shares it is the same home;
 /// the signing keys are protected with the secret <c>dbdata:proxy:identity:signing-keys</c>, made on the first start and copied to every other instance of the group.
 /// </summary>
+/// <summary>The <c>apps</c> module (plan 26, AP05): where it listens. Its pages are https only.</summary>
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class AppsOptions
+{
+    /// <summary>Where it listens: every address by default, as the identity home, since end users open apps here.</summary>
+    public string Address { get; set; } = "0.0.0.0";
+
+    [ConfigKey(Min = 1, Max = 65535)]
+    public int Port { get; set; } = 8818;
+}
+
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class IdentityOptions
 {

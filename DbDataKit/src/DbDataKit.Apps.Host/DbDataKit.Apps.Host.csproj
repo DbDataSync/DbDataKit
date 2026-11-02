@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Apps</RootNamespace>
+    <Description>The apps host's answer to a request for an app instance (plan 26, AP05): the instance's files by subpath, with the base path, the content type and the Content-Security-Policy of the egress ban. No web framework: a module maps it onto its server.</Description>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Apps.Instances\DbDataKit.Apps.Instances.csproj" />
+  </ItemGroup>
+</Project>

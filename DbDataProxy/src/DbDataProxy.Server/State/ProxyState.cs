@@ -14,7 +14,7 @@ public static class ProxyState
     public const string FileName = "state.db";
 
     /// <summary>The proxy's tables, in the order they were added.</summary>
-    public static StateSchema Schema { get; } = new([NotificationSchema.Feed, SavedQuerySchema.Tables, .. DbDataKit.Identity.HomeSchema.Templates]);
+    public static StateSchema Schema { get; } = new([NotificationSchema.Feed, SavedQuerySchema.Tables, DbDataKit.State.DefinitionSchema.Tables, .. DbDataKit.Identity.HomeSchema.Templates]);
 
     public static string PathIn(string dataDirectory) => Path.Combine(dataDirectory, FileName);
 

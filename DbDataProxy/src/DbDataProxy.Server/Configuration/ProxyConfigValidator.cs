@@ -25,6 +25,7 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
         ValidateManagement(o, cx);
         ValidateModules(o, cx);
         ValidateIdentity(o, cx);
+        ValidateApps(o, cx);
         ValidateCompression(o.Compression, "Compression", cx);
         ValidateDataSources(o, cx);
         ValidateUsers(o, cx);
@@ -99,8 +100,23 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
             cx.Error("Modules", $"`{name}` is not a module of this server.", $"Use {string.Join(", ", ProxyModules.Known)}.");
         if (o.Modules.Count != o.Modules.Distinct(StringComparer.OrdinalIgnoreCase).Count())
             cx.Error("Modules", "A module is listed twice.", "List each module once.");
-        if (!ProxyModules.Has(o, ProxyModules.FlightSql) && !ProxyModules.Has(o, ProxyModules.Identity))
+        if (!ProxyModules.Known.Any(m => ProxyModules.Has(o, m)))
             cx.Error("Modules", "No module is enabled, so the server would serve nothing.", $"List at least one of {string.Join(", ", ProxyModules.Known)}.");
+    }
+
+    private static void ValidateApps(ProxyOptions o, IConfigValidationContext cx)
+    {
+        if (!ProxyModules.Has(o, ProxyModules.Apps)) return;
+        if (!IPAddress.TryParse(o.Apps.Address, out _))
+            cx.Error("Apps.Address", $"`Address` is `{o.Apps.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
+        if (o.Tls.Mode == TlsMode.None)
+            cx.Error("Modules", "The apps host is https only (a sandboxed app and its sign-in need a secure origin), and `Tls.Mode` is None.", "Use SelfSigned, File or Store, or leave `apps` out of `Modules`.");
+        if (o.Apps.Port == o.Listen.Port && o.Listen.Port != 0 && ProxyModules.Has(o, ProxyModules.FlightSql))
+            cx.Error("Apps.Port", "The apps host has its own port; it is the Flight port here.", $"Choose another port than {o.Listen.Port}.");
+        if (o.Management.Enabled && o.Apps.Port == o.Management.Port)
+            cx.Error("Apps.Port", "The apps host has its own port; it is the management API's here.", $"Choose another port than {o.Management.Port}.");
+        if (ProxyModules.Has(o, ProxyModules.Identity) && o.Apps.Port == o.Identity.Port)
+            cx.Error("Apps.Port", "The apps host has its own port; it is the identity home's here.", $"Choose another port than {o.Identity.Port}.");
     }
 
     private static void ValidateIdentity(ProxyOptions o, IConfigValidationContext cx)
