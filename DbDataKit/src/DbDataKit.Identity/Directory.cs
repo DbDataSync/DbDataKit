@@ -67,6 +67,60 @@ public sealed class HomeDirectory(StateDatabase database)
         return (IReadOnlyList<GroupRecord>)list;
     });
 
+    /// <summary>The members of a group, by user id.</summary>
+    public IReadOnlyList<string> MembersOf(string groupId) => database.Retry(() =>
+    {
+        using var connection = database.OpenConnection();
+        using var cmd = database.Command(connection, "SELECT UserId FROM GroupMembers WHERE GroupId = $g ORDER BY UserId;");
+        cmd.Bind(database, "g", groupId);
+        using var reader = cmd.ExecuteReader();
+        var list = new List<string>();
+        while (reader.Read()) list.Add(reader.GetString(0));
+        return (IReadOnlyList<string>)list;
+    });
+
+    /// <summary>Removes a group, its memberships and what was assigned to it (its members lose those roles at once). False when there is no such group.</summary>
+    public bool RemoveGroup(string groupId) => database.Retry(() =>
+    {
+        using var connection = database.OpenConnection();
+        using var transaction = connection.BeginTransaction();
+        foreach (var sql in new[] { "DELETE FROM GroupMembers WHERE GroupId = $g;", "DELETE FROM RoleAssignments WHERE SubjectKind = 'group' AND SubjectId = $g;" })
+        {
+            using var cmd = database.Command(connection, transaction, sql);
+            cmd.Bind(database, "g", groupId);
+            cmd.ExecuteNonQuery();
+        }
+        using var group = database.Command(connection, transaction, "DELETE FROM Groups WHERE Id = $g;");
+        group.Bind(database, "g", groupId);
+        var removed = group.ExecuteNonQuery() == 1;
+        transaction.Commit();
+        return removed;
+    });
+
+    /// <summary>Every role assignment, to a user or a group, on a server, a project or an app.</summary>
+    public IReadOnlyList<RoleAssignment> Assignments() => database.Retry(() =>
+    {
+        using var connection = database.OpenConnection();
+        using var cmd = database.Command(connection, "SELECT Id, SubjectKind, SubjectId, Scope, Target, Project, Roles FROM RoleAssignments ORDER BY Scope, Target, Project, SubjectKind, SubjectId;");
+        using var reader = cmd.ExecuteReader();
+        var list = new List<RoleAssignment>();
+        while (reader.Read())
+        {
+            ServerRoles.TryParse(reader.GetString(6).Split(',', StringSplitOptions.RemoveEmptyEntries), out var roles);
+            list.Add(new RoleAssignment(reader.GetString(0), new AssignmentSubject(reader.GetString(1), reader.GetString(2)), reader.GetString(3), reader.GetString(4), reader.GetString(5) is { Length: > 0 } p ? p : null, roles));
+        }
+        return (IReadOnlyList<RoleAssignment>)list;
+    });
+
+    /// <summary>Removes an assignment by its id; the person (or the group's members) lose the roles at once. False when there is no such assignment.</summary>
+    public bool RemoveAssignment(string id) => database.Retry(() =>
+    {
+        using var connection = database.OpenConnection();
+        using var cmd = database.Command(connection, "DELETE FROM RoleAssignments WHERE Id = $id;");
+        cmd.Bind(database, "id", id);
+        return cmd.ExecuteNonQuery() == 1;
+    });
+
     /// <summary>Gives a user or a group roles on a server (or, with <paramref name="project"/>, on one Build project of it). Assigning again replaces what was assigned there.</summary>
     public void Assign(AssignmentSubject subject, string server, ServerRole roles, string? project = null) => Write(subject, project is null ? "server" : "project", server, project, roles);
 
@@ -118,13 +172,13 @@ public sealed class HomeDirectory(StateDatabase database)
         });
     }
 
-    /// <summary>Removes a mapping by its id; the people it gave roles lose them at once.</summary>
-    public void RemoveExternalMapping(string id) => database.Retry(() =>
+    /// <summary>Removes a mapping by its id; the people it gave roles lose them at once. False when there is no such mapping.</summary>
+    public bool RemoveExternalMapping(string id) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
         using var cmd = database.Command(connection, "DELETE FROM GroupMappings WHERE Id = $id;");
         cmd.Bind(database, "id", id);
-        cmd.ExecuteNonQuery();
+        return cmd.ExecuteNonQuery() == 1;
     });
 
     public IReadOnlyList<ExternalGroupMapping> ExternalMappings() => database.Retry(() =>
@@ -290,6 +344,15 @@ public readonly record struct AssignmentSubject(string Kind, string Id)
     public static AssignmentSubject User(string id) => new("user", id);
     public static AssignmentSubject Group(string id) => new("group", id);
 }
+
+/// <summary>One role assignment: to a user or a group, on a server, a Build project of it (<paramref name="Project"/>) or an app.</summary>
+/// <param name="Id">The assignment's id (to remove it).</param>
+/// <param name="Subject">The user or group that holds the roles.</param>
+/// <param name="Scope">server, project or app.</param>
+/// <param name="Target">The server's instance id, or the app.</param>
+/// <param name="Project">The Build project when <paramref name="Scope"/> is project; otherwise null.</param>
+/// <param name="Roles">The roles assigned there.</param>
+public sealed record RoleAssignment(string Id, AssignmentSubject Subject, string Scope, string Target, string? Project, ServerRole Roles);
 
 /// <summary>One mapping of an external group to roles on a server, a Build project (<paramref name="Project"/>) or an app.</summary>
 /// <param name="Id">The mapping's id (to remove it).</param>

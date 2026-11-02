@@ -212,7 +212,8 @@ The proxy can serve the install's **identity home** (plan 20, O06): who people a
   refuses, or whose token does not check out, signs nobody in and the page says why.
 * **Signing in with Windows** (O06b): `identity: { windows: { enabled: true } }` adds **Sign in with Windows** (Negotiate). On a Windows host the account's SID is the credential, its user principal name the
   account key, and its group SIDs and `DOMAIN\group` names what `identity map-group --source windows` matches. On Linux it needs the home's keytab (`KRB5_KTNAME`); the Kerberos name is then the credential.
-* **Not yet:** administration through the management API and the console's screens (13a U21). An Entra sign-in is remembered by the proxy that started it, so a group behind a balancer needs the tenant's
+* **From a console** (13a U21): with `management:` on too, a paired console's Proxy screens have an **Identity home** item: people, role assignments, group mappings, groups, consoles and apps, service accounts and tokens, through the management API's `/api/v1/identity/...` (the admin role; a proxy with `identity` off answers 404).
+* **Not yet:** an Entra sign-in is remembered by the proxy that started it, so a group behind a balancer needs the tenant's
   callback to reach the same proxy (sticky sessions) until the home's state holds it (O02).
 
 ### Validation, schema version and the config commands

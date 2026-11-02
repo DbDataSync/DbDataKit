@@ -3,6 +3,8 @@ import { ActivityPage } from './pages/ActivityPage'
 import { ConfigCommitPage, ConfigHistoryPage } from './pages/ConfigPage'
 import { DataSourceEditPage, DataSourcesPage } from './pages/DataSourcesPage'
 import { IdentitiesPage } from './pages/IdentitiesPage'
+import { IdentityAdminPage } from './identity/IdentityAdminPage'
+import { ProxyShell } from './ProxyShell'
 import { OverviewPage } from './pages/OverviewPage'
 import { TlsPage } from './pages/TlsPage'
 
@@ -12,7 +14,7 @@ function EditRoute() {
   return <DataSourceEditPage key={name} name={name} isNew={isNew} />
 }
 
-/** The Proxy screens as a module of a host (plan 13, P08/P09): overview, data sources, users and sign-in, certificate, activity and the history of the configuration. */
+/** The Proxy screens as a module of a host (plan 13, P08/P09): overview, data sources, users and sign-in, the identity home it serves, certificate, activity and the history of the configuration. */
 export function ProxyModule() {
   return (
     <Routes>
@@ -20,6 +22,7 @@ export function ProxyModule() {
       <Route path="/data-sources" element={<DataSourcesPage />} />
       <Route path="/data-sources/:name" element={<EditRoute />} />
       <Route path="/identities" element={<IdentitiesPage />} />
+      <Route path="/identity-home" element={<IdentityAdminPage Frame={ProxyShell} />} />
       <Route path="/tls" element={<TlsPage />} />
       <Route path="/activity" element={<ActivityPage />} />
       <Route path="/config" element={<ConfigHistoryPage />} />
