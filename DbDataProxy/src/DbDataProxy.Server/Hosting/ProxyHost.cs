@@ -193,6 +193,7 @@ public static class ProxyHost
         if (ProxyModules.Has(options, ProxyModules.FlightSql)) services.AddHostedService<FlightSqlModuleService>();
         // the identity home (plan 20, O06): a listener and a web application of its own, only when asked for
         if (ProxyModules.Has(options, ProxyModules.Identity)) services.AddHostedService<ProxyIdentityModule>();
+        if (ProxyModules.Has(options, ProxyModules.Apps)) services.AddHostedService<ProxyAppsModule>();
 
         // The shared providers: one registry, one composer, one failure model per engine. With Proxy:LogDriverErrors the providers keep the
         // (redacted) driver text of failed connections on the failure, for the local log only.
