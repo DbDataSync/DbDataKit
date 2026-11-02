@@ -167,7 +167,7 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         Assert.Equal(2, (await MembersAsync("customers.region")).Count);
 
         // 6. the Proxy's audit says who: the person, and the Build server that acted for them
-        var audit = File.ReadAllLines(Path.Combine(proxyDirectory, "management-audit.log")).Select(l => JsonNode.Parse(l)!).ToList();
+        var audit = ProxyAudit.Read(proxyDirectory);
         Assert.Contains(audit, a => (string?)a["command"] == "semantic-model publish" && (string?)a["target"] == "retail_sales" && (string?)a["outcome"] == "created" && (string?)a["userId"] == personId);
         Assert.Contains(audit, a => (string?)a["command"] == "semantic-model publish" && (string?)a["target"] == "retail_sales" && (string?)a["outcome"] == "changed" && (string?)a["userId"] == personId);
     }
