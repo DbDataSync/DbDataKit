@@ -95,7 +95,7 @@ public sealed class ShippedFilesTests
     }
 
     private static ProxyConfigLoad LoadDirectory(string directory) =>
-        ProxyConfig.Load(new ConfigurationBuilder().Add(new ProxyConfigDirectorySource(directory)).Build());
+        ConfigTestSupport.LoadDirectory(directory);
 
     [Fact]
     public void Shipped_example_directory_validates_file_by_file()

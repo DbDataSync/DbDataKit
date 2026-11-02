@@ -26,6 +26,13 @@ internal static class ConfigTestSupport
         return LoadFile(file.Path, options);
     }
 
+    /// <summary>Loads a configuration directory and lets go of it: the directory's provider watches the folder, and on Linux each watcher left open is one of the 128 inotify instances a user has.</summary>
+    public static ProxyConfigLoad LoadDirectory(string directory)
+    {
+        using var root = (ConfigurationRoot)new ConfigurationBuilder().Add(new ProxyConfigDirectorySource(directory)).Build();
+        return ProxyConfig.Load(root);
+    }
+
     public static string Format(ProxyConfigLoad load) => ProxyConfig.Format(load.Diagnostics);
 }
 

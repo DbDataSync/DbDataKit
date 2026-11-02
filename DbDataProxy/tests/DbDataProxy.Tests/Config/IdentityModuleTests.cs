@@ -101,7 +101,7 @@ public sealed class IdentityModuleTests : IAsyncLifetime
         static IReadOnlyList<DbDataKit.Config.Yaml.ConfigDiagnostic> Load(string yaml)
         {
             using var file = TempConfig.Create(("server.yaml", yaml));
-            return ProxyConfig.Load(new ConfigurationBuilder().Add(new ProxyConfigDirectorySource(file.Directory)).Build()).Diagnostics;
+            return ConfigTestSupport.LoadDirectory(file.Directory).Diagnostics;
         }
 
         Assert.Contains(Load("tls: { mode: none }\nlisten: { address: 127.0.0.1 }\nidentity: { enabled: true }\n"), d => d.KeyPath == "Identity.Enabled");

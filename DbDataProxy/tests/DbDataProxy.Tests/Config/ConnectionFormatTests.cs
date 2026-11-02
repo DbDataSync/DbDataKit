@@ -9,7 +9,7 @@ namespace DbDataProxy.Tests.Config;
 public sealed class ConnectionFormatTests
 {
     private static ProxyConfigLoad Load(TempConfig config) =>
-        ProxyConfig.Load(new ConfigurationBuilder().Add(new ProxyConfigDirectorySource(config.Directory)).Build());
+        ConfigTestSupport.LoadDirectory(config.Directory);
 
     private static ProxyConfigLoad LoadOne(string name, string yaml)
     {
