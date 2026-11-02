@@ -172,6 +172,21 @@ public sealed class IdentityModuleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_command_line_reads_the_settings_without_keeping_a_watch_on_the_folder()
+    {
+        // every `dbdataproxy identity` verb reads the settings; a watcher left behind each time is an inotify instance on Linux, and a user has 128 of them
+        if (!OperatingSystem.IsLinux()) return;
+        static int Watches() => new DirectoryInfo("/proc/self/fd").GetFileSystemInfos().Count(f => f.LinkTarget?.Contains("inotify", StringComparison.Ordinal) == true);
+        var before = Watches();
+        for (var i = 0; i < 20; i++)
+        {
+            var context = new DbDataKit.Cli.CliContext(new StringWriter(), new StringWriter(), TextReader.Null);
+            Assert.Equal(0, await DbDataProxy.Server.Hosting.Cli.Router().RunAsync(["identity", "client-list", "--repo", dataDirectory], context));
+        }
+        Assert.True(Watches() <= before, $"{Watches() - before} inotify instances were left behind by 20 commands.");
+    }
+
+    [Fact]
     public async Task The_signing_keys_survive_a_restart_and_an_instance_with_another_key_refuses_to_start_naming_the_secret()
     {
         await StartAsync();
