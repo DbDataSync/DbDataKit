@@ -197,6 +197,10 @@ Recorded in a walk through the open sign-in questions; slices follow from them. 
     layer (any person, from anywhere) is the later step if people off the domain need embedded reports. The report server's *data*
     stays plan 17's: a home service account, so every viewer sees the same rows.
 
+**Slices:** item 1 is 13a U19 (with plan 26 AP05 using it); items 2, 6 and 9 are 13a U20 and, for Proxy, P13; item 3 is plan 20 O15
+(WebDAV), O16 (XMLA) and O17 (Power Query with Entra); item 4 is 13a X06; item 5 is 13a U21; item 7 is plan 26 AP18; item 8 is 13a
+U22; item 10 is plan 26 AP17.
+
 ## 2a. Shared visuals and reports
 
 ### Visuals are a shared feature
