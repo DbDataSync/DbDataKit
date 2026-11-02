@@ -138,5 +138,6 @@ public sealed class StoreModelsTests : IAsyncLifetime
         Assert.Equal(10, (int)code["length"]!);
         Assert.True((bool)code["required"]!);
         Assert.Equal("none", (string)entity["history"]!);
+        Assert.Equal("none", (string)schema["instances"]!);
     }
 }

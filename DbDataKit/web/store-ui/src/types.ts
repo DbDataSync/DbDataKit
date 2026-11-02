@@ -32,10 +32,25 @@ export interface EntitySchema {
   rules: { kind: string; attribute: string | null; group_by: string[] }[]
 }
 
+/** How a model keeps its instances apart (plan 26 section 6.2): not at all, in a schema each, on a connection each, or in shared tables split by an instance id. */
+export type InstanceMode = 'none' | 'schema' | 'connection' | 'column'
+
+export interface InstanceInfo {
+  name: string
+  connection: string | null
+  schema: string | null
+}
+
+export interface InstanceList {
+  mode: InstanceMode
+  instances: InstanceInfo[]
+}
+
 export interface ModelSchema {
   name: string
   title: string | null
   approval: string
+  instances: InstanceMode
   entities: EntitySchema[]
 }
 

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
-import { useLoad, useStoreClient } from './context'
+import { useEffect, useState, type ReactNode } from 'react'
+import { StoreClientProvider, useLoad, useStoreClient } from './context'
 import { draftChange, keyOf, toInput } from './fields'
-import { ErrorNote, FormView, GridView, HistoryView } from './views'
+import { ErrorNote, FormView, GridView, HistoryView, InstancePickerView } from './views'
 import { StoreError, type EntitySchema, type ModelSchema, type RowValues, type StoredRow, type Violation } from './types'
 
 /** The controls: each reads and writes through the nearest StoreClientProvider, and nothing else of the host. */
@@ -111,9 +111,27 @@ export function RowHistory({ model, entity: entityName, rowKey }: { model: strin
   return <HistoryView entity={e} versions={versions.data} />
 }
 
+/** Everything below reads and writes one instance of the models (null: the model's own copy). Takes the client from the provider above and scopes it. */
+export function InstanceScope({ instance, children }: { instance: string | null; children: ReactNode }) {
+  const client = useStoreClient()
+  return <StoreClientProvider client={client.withInstance(instance)}>{children}</StoreClientProvider>
+}
+
+/** A picker of the instances of a model; nothing is drawn for a model that keeps one copy. */
+export function InstancePicker({ model, value, onChange }: { model: string; value: string | null; onChange: (instance: string | null) => void }) {
+  const client = useStoreClient()
+  const list = useLoad(() => client.instances(model), [client, model])
+  if (list.error) return <ErrorNote error={list.error} />
+  if (!list.data) return null
+  return <InstancePickerView list={list.data} value={value} onChange={onChange} />
+}
+
 export interface EntityEditorProps {
   model: string
   entity: string
+  /** The instance shown (null: the model's own copy). With `onInstance`, the editor offers a picker; without it, the host chooses. */
+  instance?: string | null
+  onInstance?: (instance: string | null) => void
   /** Whether this person may change rows; the server decides in the end. */
   canWrite?: boolean
   pageSize?: number
@@ -121,7 +139,19 @@ export interface EntityEditorProps {
 }
 
 /** The grid and the form together: pick a row to edit it or its history, or start a new one. The one control most hosts want. */
-export function EntityEditor({ model, entity: entityName, canWrite = true, pageSize, columns }: EntityEditorProps) {
+export function EntityEditor({ model, entity: entityName, instance = null, onInstance, canWrite = true, pageSize, columns }: EntityEditorProps) {
+  const picker = onInstance ? <InstancePicker model={model} value={instance} onChange={onInstance} /> : null
+  return (
+    <>
+      {picker}
+      <InstanceScope instance={instance}>
+        <EditorBody key={instance ?? 'default'} model={model} entity={entityName} canWrite={canWrite} pageSize={pageSize} columns={columns} />
+      </InstanceScope>
+    </>
+  )
+}
+
+function EditorBody({ model, entity: entityName, canWrite, pageSize, columns }: Pick<EntityEditorProps, 'model' | 'entity' | 'pageSize' | 'columns'> & { canWrite: boolean }) {
   const schema = useSchema(model)
   const entity = entityOf(schema.data, entityName)
   const [selected, setSelected] = useState<StoredRow | null>(null)

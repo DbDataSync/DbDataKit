@@ -15,4 +15,4 @@ export const territory: EntitySchema = {
   ],
 }
 
-export const schema: ModelSchema = { name: 'territories', title: null, approval: 'none', entities: [territory] }
+export const schema: ModelSchema = { name: 'territories', title: null, approval: 'none', instances: 'none', entities: [territory] }

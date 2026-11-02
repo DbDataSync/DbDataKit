@@ -16,4 +16,6 @@ const client = createStoreClient((path, init) => fetch(`${storeBase}${path}`, { 
 <StoreClientProvider client={client}><EntityEditor model="territories" entity="territory" /></StoreClientProvider>
 ```
 
+**Instances (plan 26 section 6.2).** A model that keeps instances apart (`schema`, `connection` or `column`) is shown one instance at a time: `client.withInstance('acme')` is the same client reading and writing that instance (`null` or `'default'` is the model's own copy), `client.instances(model)` lists them, `InstanceScope` scopes everything below it, and `<EntityEditor instance={...} onInstance={...} />` draws an `InstancePicker` (nothing for a model with one copy). The server does the isolation; the control only picks which instance's path to call.
+
 `npm test -w @dbdatakit/store-ui` runs the tests (field parsing and the change a form makes, the client against a fake fetcher, the views rendered to markup). The containers that hold state (`EntityGrid`, `RowForm`, `EntityEditor`) need a browser to test and are covered by the console's Playwright suite when it gets a Store server (not yet).

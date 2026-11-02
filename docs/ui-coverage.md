@@ -34,7 +34,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Connections of a project | Yes | – | – | – | `NewConnectionPanel.tsx`, `DefinitionPanel.tsx` |
 | | Publish to a Proxy | – | – | – | Yes | `PublishTab.tsx` |
 | **Store** | Models | – | – | – | List them and their entities | `ModelsPage.tsx` |
-| | Rows of an entity | Yes | Yes | Yes | Page through rows, history of a row (an entity that keeps one) | `EntityPage.tsx` |
+| | Rows of an entity | Yes | Yes | Yes | Page through rows, history of a row (an entity that keeps one), pick an instance of a model that has them | `EntityPage.tsx` |
 | | Model definition, storage (create tables), change requests | – | – | – | **No UI** (API only: Z08, Z09; change requests are Z07) | |
 | **Apps** | – | – | – | – | **No UI.** The Store's controls (`@dbdatakit/store-ui`) are written to be mounted by an app too. Only the bundling library (AP01, AP02); the host is O11. | |
 

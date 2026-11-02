@@ -52,3 +52,30 @@ describe('the client', () => {
     await expect(client.schema('m')).rejects.toThrow('500')
   })
 })
+
+describe('an instance of a model', () => {
+  it('reads and writes under the instance, and asks for the list of instances without one', async () => {
+    const { calls, client } = recording(() => json({ rows: [], limit: 25, offset: 0, mode: 'schema', instances: [] }))
+    const acme = client.withInstance('acme')
+
+    await acme.rows('m', 'e')
+    await acme.row('m', 'e', { code: 'NA' })
+    await acme.history('m', 'e', { code: 'NA' }).catch(() => undefined)
+    await acme.apply('m', [])
+    await acme.instances('m')
+    await acme.schema('m')
+    await client.withInstance('default').rows('m', 'e')
+    await client.withInstance(null).rows('m', 'e')
+
+    expect(calls.map((c) => c.path)).toEqual([
+      '/relay/store/api/v1/models/m/instances/acme/entities/e/rows?limit=25&offset=0',
+      '/relay/store/api/v1/models/m/instances/acme/entities/e/row?key.code=NA',
+      '/relay/store/api/v1/models/m/instances/acme/entities/e/row?key.code=NA&history=true',
+      '/relay/store/api/v1/models/m/instances/acme/changes',
+      '/relay/store/api/v1/models/m/instances',
+      '/relay/store/api/v1/models/m/schema',
+      '/relay/store/api/v1/models/m/entities/e/rows?limit=25&offset=0',
+      '/relay/store/api/v1/models/m/entities/e/rows?limit=25&offset=0',
+    ])
+  })
+})

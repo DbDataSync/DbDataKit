@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { StoreError } from './types'
-import { FormView, GridView, HistoryView, ViolationList } from './views'
+import { FormView, GridView, HistoryView, InstancePickerView, ViolationList } from './views'
 import { territory } from './testing'
 
 const rows = [
@@ -84,4 +84,13 @@ it('history lists each version with the period it held', () => {
   const html = renderToStaticMarkup(<HistoryView entity={territory} versions={[{ ...rows[0]!, valid_from: '2026-01-01T00:00:00Z', valid_to: null }]} />)
   expect(html).toContain('2026-01-01')
   expect(html).toContain('current')
+})
+
+it('the instance picker offers the default and each instance, and nothing for a model with one copy', () => {
+  const list = { mode: 'schema' as const, instances: [{ name: 'acme', connection: null, schema: 'm__acme' }, { name: 'globex', connection: null, schema: 'm__globex' }] }
+  const html = renderToStaticMarkup(<InstancePickerView list={list} value="acme" />)
+  expect(html).toContain('>default<')
+  expect(html).toMatch(/<option value="acme" selected="">acme</)
+  expect(html).toContain('>globex<')
+  expect(renderToStaticMarkup(<InstancePickerView list={{ mode: 'none', instances: [] }} value={null} />)).toBe('')
 })
