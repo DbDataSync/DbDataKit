@@ -25,8 +25,8 @@ break and how the old form fails.
 | Term | Means | Was |
 | --- | --- | --- |
 | **DbDataKit Studio**, "Studio" | the web host: sign-in, users, invitations, the servers it manages and their screens, every module's docs | "the console", `DbDataConsole` |
-| `dbdatakit-studio` | Studio's executable and command line (`server run`, `user`, `instance`, `identity`, `service`, `health`) | `dbdatakit` |
-| `DbDataKit.Studio.*` | Studio's projects and packages | `DbDataConsole.*` |
+| `dbdatakit-studio` | the command: Studio's executable and command line (`server run`, `user`, `instance`, `identity`, `service`, `health`), its release tags, container image, installers and systemd unit | `dbdatakit` |
+| `DbDataKit.Studio` | the identity in code: its folder `DbDataKit.Studio/`, projects and packages `DbDataKit.Studio.*`, namespaces, and the Windows service name | `DbDataConsole`, `DbDataConsole.*`, service `DbDataKitConsole` |
 | **`dbdatakit`** | the new administrative tool (a dotnet tool, section 6) | new |
 | **server** | a DbDataSync, DbDataProxy, DbDataBuild or DbDataStore server that Studio manages | unchanged |
 | **trust list** | the certificate fingerprints a client accepts for a server (section 5) | "pin" |
@@ -35,6 +35,17 @@ break and how the old form fails.
 
 Studio is not a branded product like Sync or Proxy; it is the umbrella the products are managed from. That is why it is "DbDataKit
 Studio" and not "DbDataStudio".
+
+**Two spellings, and only two.** Every product here already follows one rule, and Studio follows it too: a dotted or capitalised
+**identity** for anything in the source tree, and a lower-case **command** for anything you type or that is named after the program.
+
+| | Identity (the source tree, the service) | Command (typed, released) |
+| --- | --- | --- |
+| Sync | `DbDataSync/`, `DbDataSync.*`, service `DbDataSync` | `dbdatasync` |
+| Studio | `DbDataKit.Studio/`, `DbDataKit.Studio.*`, service `DbDataKit.Studio` | `dbdatakit-studio` |
+| the admin tool | `DbDataKit/src/DbDataKit.Tool`, package `DbDataKit.Tool` | `dbdatakit` |
+
+The hyphen in `dbdatakit-studio` is only there because the command `dbdatakit` is taken by the admin tool.
 
 ## 3. What exists today (read from the code, 2026-11-02)
 
@@ -67,8 +78,8 @@ Nothing is migrated. Each old form fails with a message that names the file or v
 
 | What | Old | New | How the old form fails |
 | --- | --- | --- | --- |
-| Executable, service, release | `dbdatakit`, service `DbDataKitConsole`, tags `dbdatakit/v…`, image and installers `dbdatakit`, stable URLs `…/dbdatakit/dist/…` | `dbdatakit-studio`, service `DbDataKitStudio`, tags `dbdatakit-studio/v…`, and so on | The docs checker (`scripts/check_docs_commands.py`) rejects every old command form in docs, scripts and workflows. An installed old service is untouched; uninstall it first (release note). |
-| Folders and projects | `DbDataConsole/`, `DbDataConsole.Server`, `DbDataKit/web/console`, `@dbdatakit/console` | `DbDataKitStudio/`, `DbDataKit.Studio.Server`, `DbDataKit/web/studio`, `@dbdatakit/studio` | Does not build against the old names. |
+| Executable, service, release | `dbdatakit`, service `DbDataKitConsole`, tags `dbdatakit/v…`, image and installers `dbdatakit`, stable URLs `…/dbdatakit/dist/…` | `dbdatakit-studio`, service `DbDataKit.Studio`, tags `dbdatakit-studio/v…`, and so on | The docs checker (`scripts/check_docs_commands.py`) rejects every old command form in docs, scripts and workflows. An installed old service is untouched; uninstall it first (release note). |
+| Folders and projects | `DbDataConsole/`, `DbDataConsole.Server`, `DbDataKit/web/console`, `@dbdatakit/console` | `DbDataKit.Studio/`, `DbDataKit.Studio.Server`, `DbDataKit/web/studio`, `@dbdatakit/studio` | Does not build against the old names. |
 | Data directory and environment | `DBDATAKIT_CONSOLE_*`, default directory `…/DbDataKit/console` | `DBDATAKIT_STUDIO_*`, default `…/DbDataKit/studio` | Studio starts with an **empty** directory (no users, no certificate, a new first-run invitation). It refuses to start when an old-named variable is set, and names it. |
 | Wire values | `ClientKind.Console` (the lower-case word is inside the pairing proof), proof labels `dbdata-pair-v1-*`, management API version 1 | `ClientKind.Studio`, labels `v2`, management API version 2 with the supported floor raised to 2 for this step (the usual rule also accepts the version before) | A version-1 server is reported as "Upgrade this server". A `server.yaml` listing a client of kind `console` is refused, naming the file. |
 | Signing key | secret `kit/console/signing-key` | `kit/studio/signing-key`, a new key | The old key is not read. With the wire change every server is paired again anyway. |
@@ -336,8 +347,7 @@ I00 can start now. I01 and I03 can run in parallel; I02 waits for I01 so the two
 
 ## 10. Decisions for the owner
 
-1. The folder name `DbDataKitStudio/` (section 4); the alternative is to keep Studio's code under `DbDataKit/` with the libraries.
-2. Studio's CLI calls a managed server an `instance`; the new tool says `server`. Align them (rename Studio's noun), or leave it?
-3. Package id `DbDataKit.Tool` or plain `DbDataKit` for the dotnet tool.
-4. Include `local` approval in the first version (it is what makes "entirely in the terminal" work when Studio has no Windows sign-in).
-5. Whether the rollover removes the old trust entry by default once verified (proposed) or only when asked (`--keep-old` the other way).
+1. Studio's CLI calls a managed server an `instance`; the new tool says `server`. Align them (rename Studio's noun), or leave it?
+2. Package id `DbDataKit.Tool` or plain `DbDataKit` for the dotnet tool.
+3. Include `local` approval in the first version (it is what makes "entirely in the terminal" work when Studio has no Windows sign-in).
+4. Whether the rollover removes the old trust entry by default once verified (proposed) or only when asked (`--keep-old` the other way).
