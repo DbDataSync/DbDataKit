@@ -89,6 +89,21 @@ public sealed class ModelWriterTests
     }
 
     [Theory, MemberData(nameof(Engines.Both), MemberType = typeof(Engines))]
+    public async Task A_page_of_rows_comes_in_key_order_and_a_page_size_out_of_range_is_refused(string engine)
+    {
+        var (engines, writer) = await OpenAsync(engine);
+        await using var _ = engines;
+        foreach (var code in new[] { "CC-03", "AA-01", "BB-02" })
+            await writer.InsertAsync("territory", Row(("territory_code", code), ("name", "n" + code)), Ada);
+
+        var page = await writer.ListAsync("territory", limit: 2, offset: 1);
+
+        Assert.Equal(["BB-02", "CC-03"], page.Select(r => (string)r.Values["territory_code"]!));
+        Assert.Empty(await writer.ListAsync("territory", offset: 3));
+        await Assert.ThrowsAsync<StoreNotSupportedException>(() => writer.ListAsync("territory", limit: 0));
+    }
+
+    [Theory, MemberData(nameof(Engines.Both), MemberType = typeof(Engines))]
     public async Task Every_rule_a_row_breaks_is_named_in_one_refusal_and_nothing_is_written(string engine)
     {
         var (engines, writer) = await OpenAsync(engine);

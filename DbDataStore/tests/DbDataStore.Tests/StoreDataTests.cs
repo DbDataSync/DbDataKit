@@ -122,6 +122,14 @@ public sealed class StoreDataTests : IAsyncLifetime
         var stale = await send(HttpMethod.Post, "/api/v1/models/territories/changes", update(1), ServerRole.Author);
         Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
         Assert.Equal(2, (long)(await Json(stale))["current_version"]!);
+        // a page of rows in key order
+        foreach (var (code, quota) in new[] { ("AA", "1"), ("BB", "2"), ("CC", "3") })
+            Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert(code, code, quota), ServerRole.Author)).StatusCode);
+        var page = await Json(await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/rows?limit=2&offset=1", null, ServerRole.Viewer));
+        Assert.Equal(["BB", "CC"], page["rows"]!.AsArray().Select(r => (string)r!["values"]!["code"]!).ToArray());
+        Assert.Equal(HttpStatusCode.BadRequest, (await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/rows?limit=x", null, ServerRole.Viewer)).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/rows?limit=5000", null, ServerRole.Viewer)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Get, "/api/v1/models/territories/entities/nope/rows", null, ServerRole.Viewer)).StatusCode);
     }
 
     [Fact]

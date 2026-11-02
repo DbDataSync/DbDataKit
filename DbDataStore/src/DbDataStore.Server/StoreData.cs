@@ -152,6 +152,25 @@ public static class StoreData
             catch (Exception ex) when (Known(ex)) { return Fail(ex); }
         });
 
+        // a page of rows in key order: ?limit=100&offset=0 (limit at most 1000); an entity with history lists its open versions
+        app.MapGet("/api/v1/models/{name}/entities/{entity}/rows", async (string name, string entity, HttpContext context) =>
+        {
+            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
+            if (!decision.Allowed) return Denied(decision);
+            var (model, problem) = await ModelAsync(directory, name);
+            if (problem is not null) return problem;
+            if (model!.Entity(entity) is null) return Results.NotFound(new { error = $"The model '{name}' has no entity '{entity}'." });
+            if (!int.TryParse(context.Request.Query["limit"].ToString() is { Length: > 0 } l ? l : "100", out var limit) || !int.TryParse(context.Request.Query["offset"].ToString() is { Length: > 0 } o ? o : "0", out var offset))
+                return Results.BadRequest(new { error = "limit and offset are whole numbers." });
+            try
+            {
+                await using var connection = await connections.OpenAsync(model.Connection, context.RequestAborted);
+                var rows = await new ModelWriter(model, connection, connections.EngineOf(model.Connection)).ListAsync(entity, limit, offset, context.RequestAborted);
+                return Results.Json(new JsonObject { ["rows"] = new JsonArray(rows.Select(r => (JsonNode)Row(r)).ToArray()), ["limit"] = limit, ["offset"] = offset });
+            }
+            catch (Exception ex) when (Known(ex)) { return Fail(ex); }
+        });
+
         // { "changes": [ { "action": "insert|update|delete", "entity": "...", "key": {...}, "expected_version": 3, "values": {...}, "effective_from": "..." } ] }
         app.MapPost("/api/v1/models/{name}/changes", async (string name, HttpContext context) =>
         {
