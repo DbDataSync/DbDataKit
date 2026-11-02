@@ -105,8 +105,7 @@ public static class DataModelLoader
         private InstanceMode Instances(YamlMapping map)
         {
             if (map.Get("storage") is not YamlMapping storage || storage.Get("instances") is not YamlScalar at) return InstanceMode.None;
-            if (at.Value == "column") { Add(SharedCodes.UnsupportedFeature, at, "`instances: column` (shared tables split by instance id) is planned and not available yet (plan 26, Z12b).", "Use `schema` or `connection`, or leave `instances` out."); return InstanceMode.None; }
-            return Choice(at, "storage.instances", new Dictionary<string, InstanceMode> { ["schema"] = InstanceMode.Schema, ["connection"] = InstanceMode.Connection });
+            return Choice(at, "storage.instances", new Dictionary<string, InstanceMode> { ["schema"] = InstanceMode.Schema, ["connection"] = InstanceMode.Connection, ["column"] = InstanceMode.Column });
         }
 
         private ApprovalLevel Approval(YamlMapping map)

@@ -275,7 +275,37 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
         await send(HttpMethod.Post, "/api/v1/models/territories/storage/create", null, ServerRole.Admin);
         Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Get, "/api/v1/models/territories/instances/default/entities/territory/rows", null, ServerRole.Viewer)).StatusCode);
     }
+
+    [Fact]
+    public async Task Instances_in_shared_tables_are_split_by_an_instance_id_the_server_stamps()
+    {
+        var send = await Client();
+        await send(HttpMethod.Put, "/api/v1/models/territories", Model.Replace("storage: {connection: mdm}", "storage: {connection: mdm, instances: column}"), ServerRole.Author);
+        foreach (var instance in new[] { "acme", "globex" })
+            Assert.Equal(HttpStatusCode.Created, (await send(HttpMethod.Put, $"/api/v1/models/territories/instances/{instance}", null, ServerRole.Admin)).StatusCode);
+
+        // the tables are shared: made once, through the model's own path
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await send(HttpMethod.Post, "/api/v1/models/territories/instances/acme/storage/create", null, ServerRole.Admin)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await send(HttpMethod.Post, "/api/v1/models/territories/storage/create", null, ServerRole.Admin)).StatusCode);
+
+        await send(HttpMethod.Post, "/api/v1/models/territories/instances/acme/changes", Insert("NA", "Acme North", "1"), ServerRole.Author);
+        await send(HttpMethod.Post, "/api/v1/models/territories/instances/globex/changes", Insert("NA", "Globex North", "2"), ServerRole.Author);
+        await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert("NA", "Default North", "3"), ServerRole.Author);
+
+        foreach (var (path, expected) in new[] { ("instances/acme/", "Acme North"), ("instances/globex/", "Globex North"), ("", "Default North") })
+            Assert.Equal(expected, (string)(await Json(await send(HttpMethod.Get, $"/api/v1/models/territories/{path}entities/territory/row?key.code=NA", null, ServerRole.Viewer)))["values"]!["name"]!);
+        var page = await Json(await send(HttpMethod.Get, "/api/v1/models/territories/instances/acme/entities/territory/rows", null, ServerRole.Viewer));
+        Assert.Single(page["rows"]!.AsArray());
+        Assert.Equal(3L, await CountAsync(database, "territories.territory"));
+
+        // a body cannot name the instance, and an unregistered one is not there
+        var forged = """{"changes":[{"action":"insert","entity":"territory","values":{"code":"ZZ","name":"Z","_instance":"globex"}}]}""";
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await send(HttpMethod.Post, "/api/v1/models/territories/instances/acme/changes", forged, ServerRole.Author)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Get, "/api/v1/models/territories/instances/initech/entities/territory/rows", null, ServerRole.Viewer)).StatusCode);
+        Assert.Equal("column", (string)(await Json(await send(HttpMethod.Get, "/api/v1/models/territories/instances", null, ServerRole.Viewer)))["mode"]!);
+    }
 }
+
 
 /// <summary>On PostgreSQL (<c>DBDATA_TEST_POSTGRES</c>).</summary>
 public sealed class StoreDataOnPostgresTests() : StoreDataTests("postgres");

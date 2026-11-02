@@ -87,10 +87,10 @@ public static class StoreData
     private static bool Known(Exception ex) => ex is StoreConnectionException or WriteRefusedException or VersionConflictException or RowNotFoundException or StoreNotSupportedException or StorageException;
 
     /// <summary>Where an instance of the model in the request is kept, or the 404 that says why not. The model's own copy (no instance in the path, or <c>default</c>) is always there.</summary>
-    private static (string Connection, string Schema, IResult? Problem) Where(string directory, DataModel model, HttpContext context)
+    private static (string Connection, string Schema, string? Instance, IResult? Problem) Where(string directory, DataModel model, HttpContext context)
     {
-        var (connection, schema, problem) = StoreInstances.Resolve(directory, model, context.Request.RouteValues["instance"] as string);
-        return problem is null ? (connection!, schema!, null) : ("", "", Results.NotFound(new { error = problem }));
+        var (connection, schema, instance, problem) = StoreInstances.Resolve(directory, model, context.Request.RouteValues["instance"] as string);
+        return problem is null ? (connection!, schema!, instance, null) : ("", "", null, Results.NotFound(new { error = problem }));
     }
 
     public static void Map(IEndpointRouteBuilder app, string directory, StoreConnections connections)
@@ -155,7 +155,7 @@ public static class StoreData
             if (!decision.Allowed) return Denied(decision);
             var (model, problem) = await ModelAsync(directory, name);
             if (problem is not null) return problem;
-            var (connectionName, schema, notThere) = Where(directory, model!, context);
+            var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
             if (notThere is not null) return notThere;
             try
             {
@@ -178,8 +178,10 @@ public static class StoreData
             if (!decision.Allowed) return Denied(decision);
             var (model, problem) = await ModelAsync(directory, name);
             if (problem is not null) return problem;
-            var (connectionName, schema, notThere) = Where(directory, model!, context);
+            var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
             if (notThere is not null) return notThere;
+            if (model!.Instances == InstanceMode.Column && instanceId != StoreInstances.Default)
+                return Results.Json(new { error = "This model's instances share their tables. Create the storage once, through the model's own path." }, statusCode: StatusCodes.Status422UnprocessableEntity);
             try
             {
                 var plan = ModelStorage.Plan(model!, connections.EngineOf(connectionName), schema);
@@ -197,14 +199,14 @@ public static class StoreData
             if (!decision.Allowed) return Denied(decision);
             var (model, problem) = await ModelAsync(directory, name);
             if (problem is not null) return problem;
-            var (connectionName, schema, notThere) = Where(directory, model!, context);
+            var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
             if (notThere is not null) return notThere;
             if (model!.Entity(entity) is null) return Results.NotFound(new { error = $"The model '{name}' has no entity '{entity}'." });
             var key = context.Request.Query.Where(q => q.Key.StartsWith("key.", StringComparison.Ordinal)).ToDictionary(q => q.Key[4..], q => (object?)q.Value.ToString());
             try
             {
                 await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
-                var writer = new ModelWriter(model, connection, connections.EngineOf(connectionName), schema: schema);
+                var writer = new ModelWriter(model, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId);
                 if (context.Request.Query["history"] == "true")
                     return Results.Json(new JsonObject { ["versions"] = new JsonArray((await writer.HistoryAsync(entity, key, context.RequestAborted)).Select(r => (JsonNode)Row(r)).ToArray()) });
                 StoredRow? row;
@@ -226,7 +228,7 @@ public static class StoreData
             if (!decision.Allowed) return Denied(decision);
             var (model, problem) = await ModelAsync(directory, name);
             if (problem is not null) return problem;
-            var (connectionName, schema, notThere) = Where(directory, model!, context);
+            var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
             if (notThere is not null) return notThere;
             if (model!.Entity(entity) is null) return Results.NotFound(new { error = $"The model '{name}' has no entity '{entity}'." });
             if (!int.TryParse(context.Request.Query["limit"].ToString() is { Length: > 0 } l ? l : "100", out var limit) || !int.TryParse(context.Request.Query["offset"].ToString() is { Length: > 0 } o ? o : "0", out var offset))
@@ -234,7 +236,7 @@ public static class StoreData
             try
             {
                 await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
-                var rows = await new ModelWriter(model, connection, connections.EngineOf(connectionName), schema: schema).ListAsync(entity, limit, offset, context.RequestAborted);
+                var rows = await new ModelWriter(model, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId).ListAsync(entity, limit, offset, context.RequestAborted);
                 return Results.Json(new JsonObject { ["rows"] = new JsonArray(rows.Select(r => (JsonNode)Row(r)).ToArray()), ["limit"] = limit, ["offset"] = offset });
             }
             catch (Exception ex) when (Known(ex)) { return Fail(ex); }
@@ -247,7 +249,7 @@ public static class StoreData
             if (!decision.Allowed) return Denied(decision);
             var (model, problem) = await ModelAsync(directory, name);
             if (problem is not null) return problem;
-            var (connectionName, schema, notThere) = Where(directory, model!, context);
+            var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
             if (notThere is not null) return notThere;
             JsonNode? body;
             try { body = await JsonNode.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted); }
@@ -269,7 +271,7 @@ public static class StoreData
             try
             {
                 await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
-                await new ModelWriter(model!, connection, connections.EngineOf(connectionName), schema: schema).ApplyAsync(changes, new WriteActor(token.SubjectId, token.SubjectName), context.RequestAborted);
+                await new ModelWriter(model!, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId).ApplyAsync(changes, new WriteActor(token.SubjectId, token.SubjectName), context.RequestAborted);
                 return Results.Json(new { applied = changes.Count });
             }
             catch (Exception ex) when (Known(ex)) { return Fail(ex); }
