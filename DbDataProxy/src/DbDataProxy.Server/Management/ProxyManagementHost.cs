@@ -97,7 +97,10 @@ public static class ProxyManagementHost
             new ProxySecrets(SecretsRuntime.OpenStore(options), audit), files.Codes(),
             new ProxySemanticModels(new Serving.PublishedSemanticModels(dataDirectory), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),
                 () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, configDirectory, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit),
-            pairedClients: clients.All);
+            pairedClients: clients.All,
+            identityAdmin: options.Identity.Enabled
+                ? new DbDataKit.Identity.IdentityAdminApi(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), ProxyIdentityModule.PublicUrlOf(options).AbsoluteUri, new DbDataKit.Identity.AccessTokenPolicy(options.Identity.AccessTokenMaxDays))
+                : null);
         var validator = new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache());
         var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management");
 
@@ -115,7 +118,7 @@ public static class ProxyManagementHost
             using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
             var body = context.Request.Method is "POST" or "PUT" ? await reader.ReadToEndAsync(context.RequestAborted) : null;
             var result = await management.HandleAsync(context.Request.Method, context.Request.Path.Value! + context.Request.QueryString, body, caller, context.RequestAborted);
-            return Results.Json(result.Body, statusCode: result.Status);
+            return result.Status == StatusCodes.Status204NoContent ? Results.NoContent() : Results.Json(result.Body, statusCode: result.Status);
         });
 
         if (options.Management.LocalChannel)

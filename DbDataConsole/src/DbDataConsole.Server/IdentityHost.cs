@@ -7,6 +7,7 @@ using DbDataKit.Identity;
 using DbDataKit.State;
 using DbDataKit.Web.Auth;
 using DbDataKit.Web.Auth.Controllers;
+using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
@@ -84,11 +85,20 @@ public static class IdentityHost
 {
     public static readonly AuthProduct Auth = new("DbDataIdentity", "dbdatakit identity run (it writes FIRST-RUN.txt again while there is no user)");
 
-    /// <param name="webRoot">The console's built web app, whose invitation and Users screens the home's own administrators use; the folder <c>wwwroot</c> beside the program when null. Without it the home serves its endpoints and the sign-in page.</param>
-    public static WebApplication Build(IdentityHostSettings settings, X509Certificate2 certificate, Action<string> log, string? webRoot = null, Action<IServiceCollection>? configure = null)
+    /// <summary>The server's instance id: made and written to <c>server.yaml</c> in the home's directory the first time, read from it after. A console pairs with it like any server (plan 13a U21).</summary>
+    public static string InstanceId(string directory) => ServerIdentity.InstanceId(Path.Combine(directory, "server.yaml"), "identity", "dbdatakit identity pair");
+
+    /// <summary>
+    /// The home, and the management API a console administers it through (plan 13a U21): pairing, key rotation, the version header and the token check that every server has, with the identity home's admin API
+    /// (<see cref="IdentityAdminApi"/>) under <c>/api/v1/identity/</c>. It serves no web app of its own: its people, groups, roles, clients and tokens are administered from a paired console's screens, or at the command line.
+    /// </summary>
+    public static WebApplication Build(IdentityHostSettings settings, X509Certificate2 certificate, Action<string> log, Action<IServiceCollection>? configure = null)
     {
         if (settings.Listen.Scheme != Uri.UriSchemeHttps) throw new ArgumentException("The identity home listens on HTTPS only.", nameof(settings));
-        webRoot ??= Path.Combine(AppContext.BaseDirectory, "wwwroot");
+        var serverYaml = Path.Combine(settings.Directory, "server.yaml");
+        var instanceId = InstanceId(settings.Directory);
+        var pairing = new PairingFiles(serverYaml);
+        var paired = pairing.Clients();
 
         var builder = WebApplication.CreateSlimBuilder();
         builder.Logging.ClearProviders();
@@ -103,44 +113,47 @@ public static class IdentityHost
 
         builder.Services.AddDataProtection().SetApplicationName("dbdatakit-identity").PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(settings.Directory, "dataprotection")));
         builder.Services.AddSingleton(_ => IdentityHostState.Open(settings.Directory, settings.State));
-        var hasWebApp = Directory.Exists(webRoot);
         builder.AddIdentityHome(new IdentityHomeOptions(settings.Public, settings.Directory,
             sp => sp.GetRequiredService<StateDatabase>(),
             sp => new DataProtectionSigningKeyProtector(sp.GetRequiredService<IDataProtectionProvider>().CreateProtector("dbdatakit-identity.signing-key")),
-            Auth,
-            // the console's web app, when it is installed beside the home, has the invitation screen; without it the home serves its own
-            InvitePage: !hasWebApp));
+            Auth));
         configure?.Invoke(builder.Services);
 
         var app = builder.Build();
+        app.UseManagementApiVersion();
         app.UseDbDataPipeline();
         app.MapDbDataEndpoints();
-
-        if (hasWebApp)
-        {
-            var files = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(webRoot);
-            app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = files });
-            app.UseStaticFiles(new StaticFileOptions { FileProvider = files });
-        }
+        // pairing proves itself with its code and key rotation with the old key: neither has a session at the home, whose sign-in closes everything unmarked
+        var trust = app.MapGroup("").AllowAnonymous();
+        trust.MapPairing(new PairingService(instanceId, PairingProof.CertificateFingerprint(certificate), paired, pairing.Codes()));
+        trust.AnnounceToConsole(IdentityHostSettings.Product, instanceId, settings.Listen.Port, paired, pairing.Codes());
+        trust.MapKeyRotation(new KeyRotationService(instanceId, paired, new MemoryReplayCache()));
+        // the console's signed token on every management call; the home's own /api/auth, /api/invites and /api/access-tokens are a person's session, outside this prefix
+        app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, paired, new MemoryReplayCache()), refused => log($"warn: a management call was refused ({refused.Failure}): {refused.Detail}"), ManagementPrefix);
         app.MapIdentityHome(log);
 
-        RequestDelegate webApp = async context =>
+        var admin = new IdentityAdminApi(app.Services.GetRequiredService<StateDatabase>(), settings.Public.AbsoluteUri);
+        app.MapMethods(IdentityAdminApi.Prefix + "/{**rest}", ["GET", "POST", "DELETE"], async (HttpContext context, string? rest) =>
         {
-            var path = context.Request.Path.Value ?? "";
-            if (path.StartsWith("/api", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/identity", StringComparison.OrdinalIgnoreCase)) { context.Response.StatusCode = StatusCodes.Status404NotFound; return; }
-            var index = Path.Combine(webRoot, "index.html");
-            if (File.Exists(index))
+            var token = context.ManagementToken();
+            System.Text.Json.Nodes.JsonNode? body = null;
+            if (context.Request.ContentLength is > 0 || context.Request.Headers.TransferEncoding.Count > 0)
             {
-                context.Response.ContentType = "text/html; charset=utf-8";
-                await context.Response.SendFileAsync(index);
-                return;
+                try { body = await System.Text.Json.Nodes.JsonNode.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted); }
+                catch (System.Text.Json.JsonException) { return Results.Json(new { error = "The body is not JSON." }, statusCode: StatusCodes.Status400BadRequest); }
             }
-            context.Response.ContentType = "text/plain; charset=utf-8";
-            await context.Response.WriteAsync("The dbdatakit identity home is running. Its endpoints are under /.well-known/openid-configuration and /identity/; its administration screens are not installed here (no wwwroot).");
-        };
-        app.MapFallback(webApp).AllowAnonymous();
+            var result = admin.Handle(context.Request.Method, (rest ?? "") + context.Request.QueryString, body, ManagementAuthorization.Authorize(token, ServerRole.Admin).Allowed, token.SubjectId);
+            return result.Status == StatusCodes.Status204NoContent ? Results.NoContent() : Results.Json(result.Body, statusCode: result.Status);
+        }).AllowAnonymous();   // the token check above is this API's authentication; the home's session policy is for people at the home
+
+        app.MapFallback(() => Results.Text(
+            "The dbdatakit identity home is running. Its endpoints are under /.well-known/openid-configuration and /identity/; pair a console with it (dbdatakit identity pair) to administer it.", "text/plain; charset=utf-8"))
+            .AllowAnonymous();
         return app;
     }
+
+    /// <summary>Where the management calls a paired console makes live: the token check covers this prefix only.</summary>
+    public const string ManagementPrefix = "/api/v1/";
 
     private static IPAddress AddressOf(Uri listen) =>
         listen.Host == "localhost" ? IPAddress.Loopback

@@ -314,4 +314,26 @@ public sealed class IdentityModuleTests : IAsyncLifetime
         Assert.Equal("Ada Lovelace", ada.DisplayName);
         Assert.True(new HomeDirectory(state).RolesOn(ada.Id, "build-1").Roles.HasFlag(ServerRole.Operator));
     }
+
+    [Fact]
+    public async Task The_management_api_administers_the_home_this_proxy_serves_and_says_so_when_it_serves_none()
+    {
+        // the same admin API as identity run's (13a U21), under the management API's prefix; the local channel's caller holds every role
+        var database = new StateDatabase(Path.Combine(dataDirectory, "admin-test.db"), HomeSchema.Schema);
+        Directory.CreateDirectory(dataDirectory);
+        var configuration = new ConfigurationBuilder().Build();
+        var served = new DbDataProxy.Server.Management.ProxyManagement(configuration, dataDirectory, "proxy-1", "test", identityAdmin: new IdentityAdminApi(database, "https://identity.example.invalid/"));
+        var caller = DbDataProxy.Server.Management.ManagementCaller.Local("operator");
+
+        var made = await served.HandleAsync("POST", IdentityAdminApi.Prefix + "/service-accounts", "{\"name\":\"nightly\"}", caller);
+        Assert.Equal(200, made.Status);
+        var listed = await served.HandleAsync("GET", IdentityAdminApi.Prefix + "/service-accounts", null, caller);
+        Assert.Equal("nightly", (string?)listed.Body["service_accounts"]![0]!["name"]);
+        Assert.Equal(204, (await served.HandleAsync("DELETE", IdentityAdminApi.Prefix + "/service-accounts/nightly", null, caller)).Status);
+
+        var none = new DbDataProxy.Server.Management.ProxyManagement(configuration, dataDirectory, "proxy-1", "test");
+        var refused = await none.HandleAsync("GET", IdentityAdminApi.Prefix + "/people", null, caller);
+        Assert.Equal(404, refused.Status);
+        Assert.Contains("identity.enabled", (string?)refused.Body["error"]);
+    }
 }

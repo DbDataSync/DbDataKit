@@ -39,6 +39,29 @@ public sealed class OidcClients(StateDatabase database)
 
     public OidcClient? Find(string clientId) => Read(clientId)?.Client;
 
+    /// <summary>Removes a client: it can sign nobody in from then on, and the refresh tokens it holds are revoked. False when there is no such client.</summary>
+    public bool Remove(string clientId) => database.Retry(() =>
+    {
+        using var connection = database.OpenConnection();
+        using var transaction = connection.BeginTransaction();
+        using (var revoke = database.Command(connection, transaction, "UPDATE RefreshTokens SET RevokedAtUtc = $at WHERE ClientId = $id AND RevokedAtUtc IS NULL;"))
+        {
+            revoke.Bind(database, "at", DateTimeOffset.UtcNow.ToString("O"));
+            revoke.Bind(database, "id", clientId);
+            revoke.ExecuteNonQuery();
+        }
+        using (var logout = database.Command(connection, transaction, "DELETE FROM OidcClientLogout WHERE ClientId = $id;"))
+        {
+            logout.Bind(database, "id", clientId);
+            logout.ExecuteNonQuery();
+        }
+        using var cmd = database.Command(connection, transaction, "DELETE FROM OidcClients WHERE ClientId = $id;");
+        cmd.Bind(database, "id", clientId);
+        var removed = cmd.ExecuteNonQuery() == 1;
+        transaction.Commit();
+        return removed;
+    });
+
     /// <summary>Every registered client, oldest first (the secret is never kept, only its hash).</summary>
     public IReadOnlyList<OidcClient> List()
     {

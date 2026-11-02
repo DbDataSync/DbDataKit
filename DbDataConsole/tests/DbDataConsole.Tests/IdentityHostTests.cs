@@ -53,7 +53,7 @@ public sealed class IdentityHostTests : IAsyncLifetime
     private async Task<WebApplication> StartHome(string directory)
     {
         var settings = new IdentityHostSettings(directory, new Uri($"https://localhost:{homePort}"));
-        var app = IdentityHost.Build(settings, ConsoleHost.Certificate(directory), _ => { }, webRoot: Path.Combine(directory, "none"));
+        var app = IdentityHost.Build(settings, ConsoleHost.Certificate(directory), _ => { });
         await app.StartAsync();
         return app;
     }
@@ -254,7 +254,7 @@ public sealed class IdentityHostTests : IAsyncLifetime
         var fresh = Path.Combine(root, "fresh");
         Directory.CreateDirectory(fresh);
         var port = FreePort();
-        await using var other = IdentityHost.Build(new IdentityHostSettings(fresh, new Uri($"https://localhost:{port}")), ConsoleHost.Certificate(fresh), _ => { }, webRoot: Path.Combine(fresh, "none"));
+        await using var other = IdentityHost.Build(new IdentityHostSettings(fresh, new Uri($"https://localhost:{port}")), ConsoleHost.Certificate(fresh), _ => { });
         await other.StartAsync();
         Assert.Contains("/invite#", await File.ReadAllTextAsync(Path.Combine(fresh, "FIRST-RUN.txt")));
         Assert.False(File.Exists(Path.Combine(homeDirectory, "FIRST-RUN.txt")));

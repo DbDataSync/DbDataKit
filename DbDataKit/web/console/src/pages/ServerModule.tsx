@@ -9,6 +9,7 @@ import { ConsoleShell } from '../ConsoleShell'
 const SyncModule = lazy(() => import('@dbdatakit/sync').then((m) => ({ default: m.SyncModule })))
 const BuildModule = lazy(() => import('@dbdatakit/build').then((m) => ({ default: m.BuildModule })))
 const ProxyModule = lazy(() => import('@dbdatakit/proxy').then((m) => ({ default: m.ProxyModule })))
+const IdentityHomeModule = lazy(() => import('@dbdatakit/proxy').then((m) => ({ default: m.IdentityHomeModule })))
 const StoreModule = lazy(() => import('@dbdatakit/store').then((m) => ({ default: m.StoreModule })))
 
 /** What a person sees while a module loads or when there is none for this server. */
@@ -32,7 +33,7 @@ export function ServerModule() {
   if (instances.isLoading) return null
   if (!found) return <Notice testId="module-no-server">That server is not paired with this console.</Notice>
   if (!found.reachable) return <Notice testId="module-unreachable">{`${found.name} is not answering: ${found.problem ?? 'no answer'}.`}</Notice>
-  const Module = found.product === 'dbdatasync' ? SyncModule : found.product === 'dbdatabuild' ? BuildModule : found.product === 'dbdataproxy' ? ProxyModule : found.product === 'dbdatastore' ? StoreModule : null
+  const Module = found.product === 'dbdatasync' ? SyncModule : found.product === 'dbdatabuild' ? BuildModule : found.product === 'dbdataproxy' ? ProxyModule : found.product === 'dbdatastore' ? StoreModule : found.product === 'dbdatakit-identity' ? IdentityHomeModule : null
   if (Module === null) return <Notice testId="module-none">{`The console has no screens for ${found.product ?? 'this kind of server'} yet.`}</Notice>
 
   return (

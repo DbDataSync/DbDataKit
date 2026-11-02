@@ -26,7 +26,7 @@ public sealed record ManagementResult(int Status, JsonNode Body)
 /// </list>
 /// A secret is never part of an answer: the settings are shown the way <c>config show</c> shows them, and the sentinel test puts a value in every place a secret can be and looks for it in every answer.
 /// </summary>
-public sealed partial class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null, ProxyActivity? activity = null, ProxyCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, ProxySecrets? secrets = null, PairingCodes? pairingCodes = null, ProxySemanticModels? semanticModels = null, Func<IReadOnlyList<PairedClient>>? pairedClients = null)
+public sealed partial class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null, ProxyActivity? activity = null, ProxyCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, ProxySecrets? secrets = null, PairingCodes? pairingCodes = null, ProxySemanticModels? semanticModels = null, Func<IReadOnlyList<PairedClient>>? pairedClients = null, DbDataKit.Identity.IdentityAdminApi? identityAdmin = null)
 {
     public const string Prefix = "/api/v1";
 
@@ -63,6 +63,17 @@ public sealed partial class ProxyManagement(IConfigurationRoot configuration, st
         if (method == "GET" && route.StartsWith(Prefix + "/config/history/", StringComparison.Ordinal))
             return caller.Holds(ServerRole.Admin) ? Commit(route[(Prefix + "/config/history/").Length..]) : Denied(ServerRole.Admin);
 
+        if (route == DbDataKit.Identity.IdentityAdminApi.Prefix || route.StartsWith(DbDataKit.Identity.IdentityAdminApi.Prefix + "/", StringComparison.Ordinal))
+        {
+            // the identity home this proxy serves (13a U21): only when its identity module is on
+            if (identityAdmin is null) return ManagementResult.Problem(404, "This proxy serves no identity home (identity.enabled is off).");
+            JsonNode? json;
+            try { json = string.IsNullOrWhiteSpace(body) ? null : JsonNode.Parse(body); }
+            catch (JsonException) { return ManagementResult.Problem(400, "The body is not JSON."); }
+            var rest = path[DbDataKit.Identity.IdentityAdminApi.Prefix.Length..];
+            var answer = identityAdmin.Handle(method, rest, json, caller.Holds(ServerRole.Admin), caller.Token?.SubjectId ?? "local:" + caller.Author.Name);
+            return new ManagementResult(answer.Status, answer.Body);
+        }
         if (route == Prefix + "/data-sources" || route.StartsWith(Prefix + "/data-sources/", StringComparison.Ordinal))
         {
             if (dataSources is null) return ManagementResult.Problem(404, "There is no such call.");
