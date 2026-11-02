@@ -27,7 +27,7 @@ break and how the old form fails.
 | **DbDataKit Studio**, "Studio" | the web host: sign-in, users, invitations, the servers it manages and their screens, every module's docs | "the console", `DbDataConsole` |
 | `dbdatakit-studio` | the command: Studio's executable and command line (`server run`, `user`, `instance`, `identity`, `service`, `health`), its release tags, container image, installers and systemd unit | `dbdatakit` |
 | `DbDataKit.Studio` | the identity in code: its folder `DbDataKit.Studio/`, projects and packages `DbDataKit.Studio.*`, namespaces, and the Windows service name | `DbDataConsole`, `DbDataConsole.*`, service `DbDataKitConsole` |
-| **`dbdatakit`** | the new administrative tool (a dotnet tool, section 6) | new |
+| **`dbdatakit`** | the new administrative tool (a dotnet tool, section 6); `local` approval is in its first version | new |
 | **server** | a DbDataSync, DbDataProxy, DbDataBuild or DbDataStore server that Studio manages | unchanged |
 | **trust list** | the certificate fingerprints a client accepts for a server (section 5) | "pin" |
 | **identity home** | the OpenID Connect provider people can sign in through | unchanged |
@@ -43,7 +43,7 @@ Studio" and not "DbDataStudio".
 | --- | --- | --- |
 | Sync | `DbDataSync/`, `DbDataSync.*`, service `DbDataSync` | `dbdatasync` |
 | Studio | `DbDataKit.Studio/`, `DbDataKit.Studio.*`, service `DbDataKit.Studio` | `dbdatakit-studio` |
-| the admin tool | `DbDataKit/src/DbDataKit.Tool`, package `DbDataKit.Tool` | `dbdatakit` |
+| the admin tool | its project and package (name open, decision 2) | `dbdatakit` |
 
 The hyphen in `dbdatakit-studio` is only there because the command `dbdatakit` is taken by the admin tool.
 
@@ -111,7 +111,7 @@ for the Studio it talks to (section 6).
 2. Studio **adds** the fingerprint to the list.
 3. The server **activates** the staged certificate (swapping it in, or restarting if it must).
 4. Studio connects and checks which entry the server presented. Only if it is the new one is the rollover **verified**.
-5. Studio **removes** the old entry.
+5. Studio **removes** the old entry (decided: this is the default; `--keep-old` leaves it).
 
 If activation fails and the server falls back to the old certificate, the old entry is still listed, so nothing is lost; the command says
 what happened and leaves both entries. A list with two entries for more than a set time (a week) is shown as a warning, because a retired
@@ -127,8 +127,9 @@ already does this for the identity home. It can be added later as another kind o
 
 ### 6.1 Packaging
 
-- Project `DbDataKit/src/DbDataKit.Tool`, `PackAsTool`, `ToolCommandName` `dbdatakit`, package id `DbDataKit.Tool`
-  (`dotnet tool install -g DbDataKit.Tool`), the same pattern as `DbDataKit.Update.Tools`. One build for Windows and Linux.
+- A project under `DbDataKit/src/`, `PackAsTool`, `ToolCommandName` `dbdatakit`, installed with `dotnet tool install -g <package id>`, the same
+  pattern as `DbDataKit.Update.Tools`. The project and package name is open (decision 2): `DbDataKit.Cli` is preferred, but that name is the
+  shared command framework today. One build for Windows and Linux.
 - Built on `DbDataKit.Cli` (nouns and verbs, `--format json`, a data schema per verb). The docs checker reads its nouns from the source.
 - Exit codes: 0 success, 1 failure, 2 usage, 3 not signed in.
 - Windows-only verbs (`cert issue`, `cert discover`, `cert templates`) check the operating system and say plainly what to run where.
@@ -347,7 +348,12 @@ I00 can start now. I01 and I03 can run in parallel; I02 waits for I01 so the two
 
 ## 10. Decisions for the owner
 
-1. Studio's CLI calls a managed server an `instance`; the new tool says `server`. Align them (rename Studio's noun), or leave it?
-2. Package id `DbDataKit.Tool` or plain `DbDataKit` for the dotnet tool.
-3. Include `local` approval in the first version (it is what makes "entirely in the terminal" work when Studio has no Windows sign-in).
-4. Whether the rollover removes the old trust entry by default once verified (proposed) or only when asked (`--keep-old` the other way).
+Decided: the folder is `DbDataKit.Studio/`; `local` approval is in the first version; the rollover removes the old trust entry by default.
+
+1. **`instance` or `server`** for a managed product, in Studio's command line and in the tool's. Today Studio says `instance` (`instance add`,
+   `instance list`, `/api/instances`, `instances.yaml`, `InstanceId`) while its own help text calls them "servers", because the shared
+   `server` noun (`server run`, on every product, including Studio) already means "this program's own server". Recommendation: the tool
+   says `instance` too, so the two command lines match; prose keeps saying "server".
+2. **Name of the tool's project and package.** `DbDataKit.Cli` is preferred, but it is the shared command framework (namespace
+   `DbDataKit.Cli` in 54 files across all six products, six projects reference it). Either that framework is renamed first (for example to
+   `DbDataKit.Commands`, a mechanical slice before I07), or the tool takes another name.
