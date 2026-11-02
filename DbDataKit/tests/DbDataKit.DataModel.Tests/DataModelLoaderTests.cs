@@ -167,6 +167,16 @@ public class DataModelLoaderTests
     }
 
     [Fact]
+    public void Agent_writes_are_requests_unless_the_model_says_direct()
+    {
+        Assert.Equal(AgentWrites.Request, Load(Plan).Model!.Agents);
+        Assert.Equal(AgentWrites.Direct, Load(Plan.Replace("changes: steward", "changes: steward, agents: direct")).Model!.Agents);
+        var bad = Single(Load(Plan.Replace("changes: steward", "changes: steward, agents: sometimes")));
+        Assert.Equal(SharedCodes.InvalidValue, bad.Code);
+        Assert.Contains("request, direct", bad.Fix);
+    }
+
+    [Fact]
     public void Names_are_plain_and_never_repeated()
     {
         Assert.Equal(DataModelLoader.BadName, Single(Load(Plan.Replace("sales_territories", "sales territories"))).Code);
