@@ -16,13 +16,17 @@ namespace DbDataKit.Identity;
 /// <param name="Protector">Protects the private half of the signing keys at rest. Every instance that shares the state must be given the same one.</param>
 /// <param name="Auth">The product name of the home's own sign-in: its configuration section, cookie and scheme.</param>
 /// <param name="InvitePage">Serve the home's own invitation page at <c>/invite</c> (the address the first-run invitation names). A host that serves the console's web app beside the home passes false and its <c>/invite</c> screen is used.</param>
+/// <param name="Entra">Sign people in through a Microsoft Entra ID tenant too (plan 20 O06b); null: not offered.</param>
+/// <param name="Windows">Sign people in with their Windows account too (Negotiate); null: not offered.</param>
 public sealed record IdentityHomeOptions(
     Uri PublicUrl,
     string FirstRunDirectory,
     Func<IServiceProvider, StateDatabase> State,
     Func<IServiceProvider, ISigningKeyProtector> Protector,
     AuthProduct Auth,
-    bool InvitePage = true)
+    bool InvitePage = true,
+    EntraUpstream? Entra = null,
+    WindowsUpstream? Windows = null)
 {
     /// <summary>The issuer written into every token: the public address without a path.</summary>
     public string Issuer => PublicUrl.GetLeftPart(UriPartial.Authority);
@@ -53,10 +57,12 @@ public static class IdentityHome
         services.AddControllers()
             .AddApplicationPart(typeof(AuthController).Assembly)
             .AddJsonOptions(json => json.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
-        services.AddSessionAuth(options.Auth,
+        var authentication = services.AddSessionAuth(options.Auth,
             options.State,
             sp => PasskeyOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>(), options.Auth, options.Issuer, [], []),
             _ => options.FirstRunDirectory);
+        if (options.Windows is not null) authentication.AddNegotiate();
+        UpstreamSignIn.Register(services, options);
         services.AddSingleton(sp => new HomeDirectory(options.State(sp)));
         services.AddSingleton(sp => new OidcClients(options.State(sp)));
         services.AddSingleton(sp => new SigningKeys(options.State(sp), options.Protector(sp)));
@@ -97,7 +103,8 @@ public static class IdentityHome
             },
             // the console's sign-out sends the browser here from another site, with no cookie: the hint names the person
             EndSessionOf: (_, userId) => { sessions.DeleteAllFor(userId); return Task.CompletedTask; }));
-        open.MapGet(SignInPath, () => Results.Content(IdentityHomePages.SignIn, "text/html; charset=utf-8"));
+        open.MapGet(SignInPath, () => Results.Content(IdentityHomePages.SignIn(options), "text/html; charset=utf-8"));
+        UpstreamSignIn.Map(app, open, options);
         if (options.InvitePage) open.MapGet(InvitePath, () => Results.Content(IdentityHomePages.Invite, "text/html; charset=utf-8"));
         return app;
     }

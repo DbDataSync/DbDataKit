@@ -196,7 +196,15 @@ The proxy can serve the install's **identity home** (plan 20, O06): who people a
 * **State and keys:** its people, roles, clients and signing keys are in the proxy's state database (`state:`), so proxies that share one are the same home. The signing keys are protected with the key in the
   secret `dbdata:proxy:identity:signing-keys`, made on the first start; copy it into the store of every other proxy of the group (`dbdataproxy secret set dbdata:proxy:identity:signing-keys --stdin`). A proxy
   whose key cannot read the signing keys in the state refuses to start and names the secret. A backup of the home is the state database and that secret.
-* **Not yet:** signing in through Entra ID or Windows at the home (the redirect to the upstream provider and its callback), and administration through the management API and the console's screens (13a U21).
+* **Signing in through Entra ID** (O06b): register an app for the home in the tenant, with the redirect URI `<publicUrl>/identity/upstream/entra/callback`, a client secret, and the `groups` claim in its id token;
+  then `identity: { entra: { authority: https://login.microsoftonline.com/<tenant id>/v2.0, clientId: <app id>, clientSecret: secret:dbdata:proxy:identity:entra } }` (the secret set with
+  `dbdataproxy secret set dbdata:proxy:identity:entra --stdin`). The sign-in page offers **Sign in with Microsoft Entra ID**; the person is the home's user found by their Entra id (or, with `trustEmail: true` for a
+  tenant whose addresses its administrators set, by their address), and the groups their token carries get what `identity map-group --source entra` maps them to, again at every sign-in. A sign-in the tenant
+  refuses, or whose token does not check out, signs nobody in and the page says why.
+* **Signing in with Windows** (O06b): `identity: { windows: { enabled: true } }` adds **Sign in with Windows** (Negotiate). On a Windows host the account's SID is the credential, its user principal name the
+  account key, and its group SIDs and `DOMAIN\group` names what `identity map-group --source windows` matches. On Linux it needs the home's keytab (`KRB5_KTNAME`); the Kerberos name is then the credential.
+* **Not yet:** administration through the management API and the console's screens (13a U21). An Entra sign-in is remembered by the proxy that started it, so a group behind a balancer needs the tenant's
+  callback to reach the same proxy (sticky sessions) until the home's state holds it (O02).
 
 ### Validation, schema version and the config commands
 
