@@ -242,6 +242,8 @@ Plan 21's channel is part of a published version's key. Every instance belongs t
 
 ## 10. Decisions, and what is only an option
 
+**Accepted by the owner, 2026-11-02:** decisions 1 to 6 as written below. The apps host is built as the `apps` module of the serving layer (plan 20, O11) on this order: O01 (modules), O02 (shared state), O03 (published definitions), AP04 (instances), AP05 (the module, the shell and the token broker).
+
 **Decisions** (one way, hard to change later):
 
 1. **The default for a code app is a sandboxed document under the host's shell page**, not a separate origin per app; because the sandbox has no browser storage, **the host provides app storage** (section 2a). **Sandboxing is a default, not a rule:** an administrator may approve an app as *trusted* (section 2b).
