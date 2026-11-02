@@ -56,7 +56,11 @@ public sealed record PreparedLoad(IReadOnlyList<PlanStep> Steps, string InputsJs
 public delegate Task<PreparedLoad> PrepareLoad(RefreshUnit unit, ReadSession read, CancellationToken ct);
 
 /// <summary>The loads of a refresh in dependency order, how to make each ready, and the models downstream of a model (from the dependency graph in `loads.yml`; a file compiled before the graph was carried reads the project, only when something fails or is skipped).</summary>
-public sealed record RefreshExecution(IReadOnlyList<RefreshUnit> Units, PrepareLoad Prepare, Func<string, IReadOnlySet<string>> DownstreamOf);
+public sealed record RefreshExecution(IReadOnlyList<RefreshUnit> Units, PrepareLoad Prepare, Func<string, IReadOnlySet<string>> DownstreamOf)
+{
+    /// <summary>Called on the coordinator with a load's model once its result has been taken into account (a failure under `stop` has halted the run by then). A test seam: a load that must not end before the run knows another one's result waits for this, not for a pause.</summary>
+    public Action<string>? Settled { get; init; }
+}
 
 /// <summary>A load of a refresh and how it ended. <see cref="Note"/> is set on a load that ran although something upstream of it was skipped because it was busy.</summary>
 public sealed record LoadOutcome(RefreshUnit Unit, string Status, long? Rows, long? DurationMs, string? Detail, string? Note)
@@ -201,6 +205,7 @@ internal static class RefreshEngine
             }
             else if (result.Status == LoadStatus.SkippedBusy) skippedModels.Add((i, unit.Model, "busy"));
             else if (result.Status == LoadStatus.SkippedNoValue) skippedModels.Add((i, unit.Model, "no value"));
+            exec.Settled?.Invoke(unit.Model);
             return Task.CompletedTask;
         }
 
