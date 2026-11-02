@@ -1,6 +1,8 @@
 using System.Net;
 using DbDataKit.Apps;
 using DbDataKit.Identity;
+using DbDataKit.Secrets;
+using DbDataKit.Web.Trust;
 using DbDataKit.State;
 using DbDataProxy.Server.Configuration;
 using DbDataProxy.Server.Secrets;
@@ -17,7 +19,29 @@ namespace DbDataProxy.Server.Hosting;
 /// </summary>
 public sealed class ProxyAppsModule(IOptionsMonitor<ProxyOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, ILoggerFactory loggers) : IHostedService, IAsyncDisposable
 {
+    /// <summary>The secret that holds the seed of the key the apps host signs its app tokens with: made on the first start, and copied to every other instance of a group.</summary>
+    public const string SigningKeySecret = "dbdata:proxy:apps:signing-key";
+
+    /// <summary>The issuer name in the tokens; a server that accepts them pairs this issuer's public key.</summary>
+    public const string TokenIssuer = "dbdataproxy-apps";
+
     private WebApplication? _app;
+
+    private static async Task<ConsoleSigningKey> SigningKeyAsync(ProxyOptions current, CancellationToken cancellationToken)
+    {
+        var store = SecretsRuntime.OpenStore(current);
+        using var held = await store.TryResolveAsync(SecretRef.Parse("secret:" + SigningKeySecret), cancellationToken);
+        if (held is not null)
+        {
+            try { return ConsoleSigningKey.FromSeed(Convert.FromBase64String(held.RevealString())); }
+            catch (Exception ex) when (ex is FormatException or ArgumentException)
+            { throw new SecretConfigurationException(SigningKeySecret, $"The secret {SigningKeySecret} is not a key seed: {ex.Message} Remove it to have one made."); }
+        }
+        var key = ConsoleSigningKey.Generate();
+        using var value = SecretValue.From(Convert.ToBase64String(key.ExportSeed()));
+        await store.SetAsync(SecretName.Parse(SigningKeySecret), value, cancellationToken);
+        return key;
+    }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -54,7 +78,7 @@ public sealed class ProxyAppsModule(IOptionsMonitor<ProxyOptions> options, State
             new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) });
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
-        app.MapApps(instances, new AppSite(instances), client, new AppSessions());
+        app.MapApps(instances, new AppSite(instances), client, new AppSessions(), new AppTokenBroker(new ConsoleTokenIssuer(TokenIssuer, await SigningKeyAsync(current, cancellationToken))));
         app.MapFallback(() => Results.Text("The apps host of this DbDataProxy. An app is at /apps/<instance>/.", "text/plain"));
         await app.StartAsync(cancellationToken);
         _app = app;
