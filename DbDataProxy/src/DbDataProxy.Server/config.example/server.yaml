@@ -42,7 +42,10 @@ compression: { mode: arrow, codec: zstd, level: 3, allowClientOverride: true }
 # publicUrl is the address people reach it at (the token issuer; it must not change once people have signed in). The first administrator redeems identity/FIRST-RUN.txt in the data directory.
 # Administer it with:  dbdataproxy identity invite | user-list | client-add | client-list | assign | map-group
 # modules: [flightsql, identity, apps]   # what this instance serves; flightsql is the default
-# apps: { address: 0.0.0.0, port: 8818 } # the apps host (module "apps"): published apps at https://<host>:8818/apps/<instance>/; https only
+# apps:                                 # the apps host (module "apps"): published apps at https://<host>:8818/apps/<instance>/; https only
+#   address: 0.0.0.0
+#   port: 8818
+#   home: { clientId: <id from identity client-add> }   # signs people in through the identity home (this instance's, or home.authority); redirect URI <public url>/apps/-/callback
 # identity: { enabled: true, address: 0.0.0.0, port: 8817, publicUrl: https://identity.example.com }
 # People may also sign in at the home through an Entra ID tenant (an app registered there with the redirect URI <publicUrl>/identity/upstream/entra/callback and the groups claim), and with Windows (Negotiate):
 #   entra: { authority: https://login.microsoftonline.com/<tenant id>/v2.0, clientId: <app id>, clientSecret: secret:dbdata:proxy:identity:entra }

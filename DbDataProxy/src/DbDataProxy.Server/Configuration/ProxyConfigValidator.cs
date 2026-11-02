@@ -109,6 +109,18 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
         if (!ProxyModules.Has(o, ProxyModules.Apps)) return;
         if (!IPAddress.TryParse(o.Apps.Address, out _))
             cx.Error("Apps.Address", $"`Address` is `{o.Apps.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
+        if (string.IsNullOrWhiteSpace(o.Apps.Home.ClientId))
+            cx.Error("Apps.Home.ClientId", "The apps host signs people in through an identity home and needs the id of the client registered there for it.", "Register one (`identity client-add` with the redirect URI <public url>/apps/-/callback) and set `Home.ClientId`.");
+        if (string.IsNullOrWhiteSpace(o.Apps.Home.Authority))
+        {
+            if (!ProxyModules.Has(o, ProxyModules.Identity))
+                cx.Error("Apps.Home.Authority", "The apps host has no identity home to sign people in through: this instance serves none.", "Set `Home.Authority` to the home's address, or list `identity` in `Modules`.");
+        }
+        else if (!Uri.TryCreate(o.Apps.Home.Authority, UriKind.Absolute, out var home) || home.Scheme != Uri.UriSchemeHttps)
+            cx.Error("Apps.Home.Authority", $"`Authority` is `{o.Apps.Home.Authority}`, which is not an https address.", "Use the home's address, such as https://identity.example.com.");
+        if (!string.IsNullOrWhiteSpace(o.Apps.PublicUrl)
+            && (!Uri.TryCreate(o.Apps.PublicUrl, UriKind.Absolute, out var pub) || pub.Scheme != Uri.UriSchemeHttps || pub.AbsolutePath != "/" || pub.Query.Length > 0 || pub.Fragment.Length > 0))
+            cx.Error("Apps.PublicUrl", $"`PublicUrl` is `{o.Apps.PublicUrl}`, which is not an https address without a path.", "Use the address people reach the apps host at, such as https://apps.example.com.");
         if (o.Tls.Mode == TlsMode.None)
             cx.Error("Modules", "The apps host is https only (a sandboxed app and its sign-in need a secure origin), and `Tls.Mode` is None.", "Use SelfSigned, File or Store, or leave `apps` out of `Modules`.");
         if (o.Apps.Port == o.Listen.Port && o.Listen.Port != 0 && ProxyModules.Has(o, ProxyModules.FlightSql))

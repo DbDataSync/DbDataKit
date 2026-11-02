@@ -8,13 +8,16 @@ namespace DbDataKit.Apps;
 public sealed record AppResponse(int Status, string ContentType, IReadOnlyDictionary<string, string> Headers, byte[] Body);
 
 /// <summary>
-/// Serves an app instance's files by subpath (plan 26, AP05a): <c>/apps/&lt;instance&gt;/</c> is the entry document, a path with a file extension is that file of the stored package, and any other path is a route of the app
+/// Serves an app instance's files by subpath (plan 26, AP05a): <c>/apps/&lt;instance&gt;/_app/</c> is the entry document, a path with a file extension is that file of the stored package, and any other path is a route of the app
 /// and gets the entry document too (the app's own router reads it). Every answer carries the Content-Security-Policy built from what the administrator approved of the manifest's egress requests (<see cref="EgressPolicy"/>),
 /// and an app whose origin is <c>sandbox</c> gets the <c>sandbox</c> directive, which makes its document an opaque origin that cannot read the host's cookies or storage.
 /// </summary>
 public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>? approvedEgress = null, string channel = DefinitionStore.Production)
 {
     public const string BasePath = "/apps/";
+
+    /// <summary>The folder under an instance that holds its bundle; the instance's own address is the shell page that frames it.</summary>
+    public const string BundleFolder = "_app/";
 
     private static readonly Dictionary<string, string> Types = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -24,7 +27,7 @@ public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>?
         [".map"] = "application/json; charset=utf-8", [".yaml"] = "text/yaml; charset=utf-8", [".wasm"] = "application/wasm",
     };
 
-    /// <summary>The answer for <paramref name="subpath"/> (what follows <c>/apps/&lt;instance&gt;/</c>, without a query string).</summary>
+    /// <summary>The answer for <paramref name="subpath"/> (what follows <c>/apps/&lt;instance&gt;/_app/</c>, without a query string).</summary>
     public AppResponse Get(string instanceName, string subpath)
     {
         var instance = instances.Resolve(instanceName, channel);
@@ -43,7 +46,7 @@ public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>?
 
         var contentType = Types.GetValueOrDefault(Path.GetExtension(name), "application/octet-stream");
         var document = contentType.StartsWith("text/html", StringComparison.Ordinal);
-        if (document) bytes = WithBase(bytes, BasePath + Uri.EscapeDataString(instanceName) + "/");
+        if (document) bytes = WithBase(bytes, BasePath + Uri.EscapeDataString(instanceName) + "/" + BundleFolder);
 
         var egress = EgressPolicy.Effective(instance.Manifest.Egress ?? AppEgress.None, approvedEgress?.Invoke(instanceName) ?? AppEgress.None);
         var headers = new Dictionary<string, string>

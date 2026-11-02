@@ -54,7 +54,7 @@ public sealed class AppSiteTests : IDisposable
             var response = site.Get("acme", path);
             Assert.Equal(200, response.Status);
             Assert.StartsWith("text/html", response.ContentType);
-            Assert.Contains("<head><base href=\"/apps/acme/\">", Encoding.UTF8.GetString(response.Body));
+            Assert.Contains("<head><base href=\"/apps/acme/_app/\">", Encoding.UTF8.GetString(response.Body));
         }
     }
 
@@ -116,6 +116,6 @@ public sealed class AppSiteTests : IDisposable
     public void A_document_with_its_own_base_is_left_alone()
     {
         var html = Bytes("<html><head><base href=\"/x/\"></head></html>");
-        Assert.Same(html, AppSite.WithBase(html, "/apps/acme/"));
+        Assert.Same(html, AppSite.WithBase(html, "/apps/acme/_app/"));
     }
 }

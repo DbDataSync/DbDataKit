@@ -5,6 +5,8 @@
     <IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\DbDataKit.Identity\DbDataKit.Identity.csproj" />
     <ProjectReference Include="..\DbDataKit.Apps.Instances\DbDataKit.Apps.Instances.csproj" />
   </ItemGroup>
 </Project>
