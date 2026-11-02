@@ -52,7 +52,8 @@ public sealed class ProxyIdentityModule(
         if (certificate.Current is null)
             certificate.Set(CertificateProvider.Load(current, ProxyHost.ResolveDataDirectory(current), loggers.CreateLogger("Tls"), secrets: secrets));
 
-        var builder = WebApplication.CreateSlimBuilder();
+        // Its settings are the Proxy's (passed in here), so it reads no settings files of its own and watches none: a file watcher is an inotify instance on Linux, of which a user has 128.
+        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
         builder.Logging.AddProvider(new ForwardingLoggerProvider(loggers));
         builder.WebHost.ConfigureKestrel(kestrel =>
