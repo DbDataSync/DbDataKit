@@ -173,6 +173,15 @@ Recorded in a walk through the open sign-in questions; slices follow from them. 
 4. **Product servers keep no sign-in of their own.** Sync's remaining direct sign-in (Windows groups, network trust, its own users,
    sessions and invitations) is removed (13c D20): a person reaches a back-end server only through a console's token, whose subject is
    the home's user.
+5. **The home is administered through the management API of whatever hosts it** (the serving layer by default, `dbdatakit identity
+   run` when it runs on its own; 13c D30). The console pairs with that host like any server and shows the screens through its relay;
+   the copies of the console's Users and Invitations screens that `identity run` serves today are dropped once the console's screens
+   exist; the command line stays the way in when no console answers. The API covers people, groups, role assignments, app clients,
+   external group mappings, personal access tokens and service accounts.
+6. **Personal access tokens:** each person creates, lists and revokes their own, each with an expiry; administrators create service
+   accounts and can list and revoke anyone's tokens.
+7. **No consent prompt.** Publishing an app instance, with plan 26's approvals, is the consent; people are not asked. Each app's about
+   page shows the models and operations its manifest uses, who published it and who approved it.
 
 ## 2a. Shared visuals and reports
 
