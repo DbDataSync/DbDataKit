@@ -38,9 +38,11 @@
     <Project Path="src/DbDataKit.Hosting/DbDataKit.Hosting.csproj" />
     <Project Path="src/DbDataKit.Metadata.Abstractions/DbDataKit.Metadata.Abstractions.csproj" />
     <Project Path="src/DbDataKit.Serving.Abstractions/DbDataKit.Serving.Abstractions.csproj" />
+    <Project Path="src/DbDataKit.Serving.Semantic/DbDataKit.Serving.Semantic.csproj" />
     <Project Path="src/DbDataKit.Serving.Conformance/DbDataKit.Serving.Conformance.csproj" />
     <Project Path="src/DbDataKit.Serving.FlightSql/DbDataKit.Serving.FlightSql.csproj" />
     <Project Path="src/DbDataKit.Semantic/DbDataKit.Semantic.csproj" />
+    <Project Path="src/DbDataKit.Semantic.Cli/DbDataKit.Semantic.Cli.csproj" />
     <Project Path="src/DbDataKit.Semantic.Abstractions/DbDataKit.Semantic.Abstractions.csproj" />
     <Project Path="src/DbDataKit.Semantic.Connections/DbDataKit.Semantic.Connections.csproj" />
     <Project Path="src/DbDataKit.Semantic.Extraction/DbDataKit.Semantic.Extraction.csproj" />
@@ -54,6 +56,8 @@
     <Project Path="src/DbDataKit.Scheduling/DbDataKit.Scheduling.csproj" />
     <Project Path="src/DbDataKit.Scripting/DbDataKit.Scripting.csproj" />
     <Project Path="src/DbDataKit.State/DbDataKit.State.csproj" />
+    <Project Path="src/DbDataKit.State.Engines/DbDataKit.State.Engines.csproj" />
+    <Project Path="src/DbDataKit.Identity/DbDataKit.Identity.csproj" />
     <Project Path="src/DbDataKit.Secrets.Abstractions/DbDataKit.Secrets.Abstractions.csproj" />
     <Project Path="src/DbDataKit.Secrets.Cli/DbDataKit.Secrets.Cli.csproj" />
     <Project Path="src/DbDataKit.Secrets.Store/DbDataKit.Secrets.Store.csproj" />
@@ -117,12 +121,16 @@
     <Project Path="tests/DbDataKit.Serving.Abstractions.Tests/DbDataKit.Serving.Abstractions.Tests.csproj" />
     <Project Path="tests/DbDataKit.Serving.FlightSql.Tests/DbDataKit.Serving.FlightSql.Tests.csproj" />
     <Project Path="tests/DbDataKit.Semantic.Tests/DbDataKit.Semantic.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Semantic.Cli.Tests/DbDataKit.Semantic.Cli.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Serving.Semantic.Tests/DbDataKit.Serving.Semantic.Tests.csproj" />
     <Project Path="tests/DbDataKit.Metadata.Tests/DbDataKit.Metadata.Tests.csproj" />
     <Project Path="tests/DbDataKit.Lineage.Tests/DbDataKit.Lineage.Tests.csproj" />
     <Project Path="tests/DbDataKit.Lineage.Cli.Tests/DbDataKit.Lineage.Cli.Tests.csproj" />
     <Project Path="tests/DbDataKit.Monitoring.Tests/DbDataKit.Monitoring.Tests.csproj" />
     <Project Path="tests/DbDataKit.Odbc.Metadata.Tests/DbDataKit.Odbc.Metadata.Tests.csproj" />
     <Project Path="tests/DbDataKit.State.Tests/DbDataKit.State.Tests.csproj" />
+    <Project Path="tests/DbDataKit.State.Engines.Tests/DbDataKit.State.Engines.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Identity.Tests/DbDataKit.Identity.Tests.csproj" />
     <Project Path="tests/DbDataKit.Schema.Tests/DbDataKit.Schema.Tests.csproj" />
     <Project Path="tests/DbDataKit.Scheduling.Tests/DbDataKit.Scheduling.Tests.csproj" />
     <Project Path="tests/DbDataKit.Scripting.Tests/DbDataKit.Scripting.Tests.csproj" />
