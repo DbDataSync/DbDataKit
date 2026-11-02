@@ -1,0 +1,94 @@
+# Everything on one machine, for trying the suite out: the console, a Proxy, a Sync server, a Build server and a Store server, and a PostgreSQL with demo data.
+# Every server announces itself to the console and waits to be confirmed. See docs/quickstart.md. Run from the repository root:
+#   docker compose -f dist/compose/quickstart.yml up -d --build --wait
+# Not for production: the demo database has a published password and a published port.
+name: dbdatakit-quickstart
+x-announce: &announce
+  DBDATAKIT_CONSOLE_ANNOUNCE_URL: http://console:8481
+services:
+  console:
+    build:
+      context: ../..
+      dockerfile: DbDataConsole/Dockerfile
+    environment: *announce
+    ports:
+      - "8480:8480"
+    volumes:
+      - console-data:/data
+  proxy:
+    build:
+      context: ../..
+      dockerfile: DbDataProxy/Dockerfile
+    hostname: proxy
+    environment:
+      <<: *announce
+      DBPROXY_Proxy__Management__Enabled: "true"
+      DBPROXY_Proxy__Management__Address: 0.0.0.0
+      DBPROXY_Proxy__Management__Port: "8816"
+      DBDATAKIT_ADVERTISE_URL: https://proxy:8816
+      DBDATAKIT_INSTANCE_NAME: dbdataproxy
+    ports:
+      - "8815:8815"
+    volumes:
+      - proxy-data:/data
+    depends_on:
+      - console
+  sync:
+    build:
+      context: ../..
+      dockerfile: DbDataSync/Dockerfile
+    hostname: sync
+    environment: *announce
+    volumes:
+      - sync-data:/var/lib/dbdatasync
+    depends_on:
+      - console
+  build:
+    build:
+      context: ../..
+      dockerfile: DbDataBuild/Dockerfile
+    hostname: build
+    environment: *announce
+    volumes:
+      - build-data:/data
+    depends_on:
+      - console
+  store:
+    build:
+      context: ../..
+      dockerfile: DbDataStore/Dockerfile
+    hostname: store
+    environment:
+      <<: *announce
+      # the login of the connection file below; a real setup keeps this in a secret
+      MDM_CONNECTION: Host=demo-db;Port=5432;Username=demo;Password=demo;Database=mdm
+    volumes:
+      - store-data:/data
+      - ./quickstart/store-connection.yaml:/data/connections/mdm.yaml:ro
+    depends_on:
+      - console
+      - demo-db
+  # Demo data to point the servers at: host demo-db, port 5432, user demo, password demo, databases demo, demo_target and mdm. From the machine: localhost:15434.
+  demo-db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo
+    ports:
+      - "15434:5432"
+    volumes:
+      - demo-data:/var/lib/postgresql/data
+      - ./quickstart/demo.sql:/docker-entrypoint-initdb.d/demo.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo -d demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+volumes:
+  console-data:
+  proxy-data:
+  sync-data:
+  build-data:
+  store-data:
+  demo-data:

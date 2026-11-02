@@ -1,0 +1,6 @@
+schema: connection/1
+name: mdm
+engine: postgres
+connection_string_secret: 'env:MDM_CONNECTION'
+tls:
+  encrypt: false
