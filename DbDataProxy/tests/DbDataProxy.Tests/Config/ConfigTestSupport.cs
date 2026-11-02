@@ -33,6 +33,14 @@ internal static class ConfigTestSupport
         return ProxyConfig.Load(root);
     }
 
+    /// <summary>The management audit of the proxy in <paramref name="dataDirectory"/>, oldest first, each entry as the JSON it is kept as (plan 20 O02: in the state, no longer a file).</summary>
+    public static List<System.Text.Json.Nodes.JsonNode> AuditEntries(string dataDirectory)
+    {
+        var log = new DbDataProxy.Server.State.StateAuditLog(DbDataProxy.Server.State.ProxyState.Open(dataDirectory));
+        var json = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+        return [.. log.Read(int.MaxValue).Select(e => System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(e, json))!)];
+    }
+
     public static string Format(ProxyConfigLoad load) => ProxyConfig.Format(load.Diagnostics);
 }
 

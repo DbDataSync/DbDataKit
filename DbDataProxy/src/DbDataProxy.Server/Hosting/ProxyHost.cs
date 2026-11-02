@@ -246,7 +246,11 @@ public static class ProxyHost
         builder.Services.AddSingleton(sp => new DbDataKit.State.NotificationStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
         builder.Services.AddSingleton(sp => new DbDataProxy.Server.State.SavedQueryStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
         builder.Services.AddSingleton<ProxyEvents>();
+        builder.Services.AddSingleton<DbDataProxy.Server.State.GroupSessionKey>();
         builder.Services.AddHostedService<DbDataProxy.Server.State.ProxyStateStartup>();
+        // this instance's row in the state; a second instance on a SQLite state is refused (plan 20 O02)
+        builder.Services.AddSingleton<DbDataProxy.Server.State.ServingInstanceLease>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<DbDataProxy.Server.State.ServingInstanceLease>());
         builder.Services.AddSingleton<IReadinessProbe>(new CertificateReadinessProbe(() => holder.Current, CertificateProvider.RenewBeforeDays));
         builder.Services.AddHostedService(sp => new CertificateRotationService(
             holder, options, dataDirectory, sp.GetRequiredService<ILogger<CertificateRotationService>>()));

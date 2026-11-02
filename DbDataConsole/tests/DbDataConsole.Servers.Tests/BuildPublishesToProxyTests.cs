@@ -107,7 +107,7 @@ public sealed class BuildPublishesToProxyTests : IAsyncLifetime
         AsPerson(HttpMethod.Post, $"/relay/{buildId}/api/v1/projects/starter/proxies/edge/publish", new { connection, data_source = dataSource });
 
     private List<JsonNode> Audit() =>
-        [.. File.ReadAllLines(Path.Combine(proxyDirectory, "management-audit.log")).Select(l => JsonNode.Parse(l)!)];
+        ProxyAudit.Read(proxyDirectory);
 
     private static bool Entry(JsonNode a, string command, string target, string outcome, string userId, string clientId) =>
         (string?)a["command"] == command && (string?)a["target"] == target && (string?)a["outcome"] == outcome && (string?)a["userId"] == userId && (string?)a["consoleId"] == clientId;

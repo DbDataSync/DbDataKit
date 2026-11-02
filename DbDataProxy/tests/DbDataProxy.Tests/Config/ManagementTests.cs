@@ -365,10 +365,10 @@ public sealed partial class ManagementTests : IAsyncLifetime
         Assert.All(history.Take(2), c => Assert.Equal("Ada", c.AuthorName));
         Assert.All(history.Take(2), c => Assert.Equal($"ada@{console.Id}.console.invalid", c.AuthorEmail));
 
-        var audit = File.ReadAllLines(Path.Combine(dataDirectory, "management-audit.log")).Select(l => JsonNode.Parse(l)!).ToList();
+        var audit = ConfigTestSupport.AuditEntries(dataDirectory);
         Assert.Equal(["created", "removed"], audit.Select(a => (string)a["outcome"]!).ToList());
         Assert.All(audit, a => { Assert.Equal("scratch", (string)a["target"]!); Assert.Equal("ada", (string)a["userId"]!); });
-        Assert.DoesNotContain("duckdb", string.Join("\n", File.ReadAllLines(Path.Combine(dataDirectory, "management-audit.log"))));
+        Assert.DoesNotContain("duckdb", string.Join("\n", ConfigTestSupport.AuditEntries(dataDirectory).Select(e => e.ToJsonString())));
     }
 
     [Fact]

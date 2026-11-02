@@ -132,7 +132,7 @@ public sealed partial class ManagementTests
         await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/data-sources/semantic", ServerRole.Publisher, Put(Plain("semantic"), null));
         await CallAsAsync(build1, publisher, HttpMethod.Delete, "/api/v1/data-sources/by-hand", ServerRole.Publisher);   // refused: there is none by that name
 
-        var audit = File.ReadAllLines(Path.Combine(dataDirectory, "management-audit.log")).Select(l => JsonNode.Parse(l)!).ToList();
+        var audit = ConfigTestSupport.AuditEntries(dataDirectory);
         Assert.Contains(audit, a => (string)a["target"]! == "semantic" && (string)a["outcome"]! == "created" && (string)a["userId"]! == "ada" && (string)a["consoleId"]! == "build-1");
 
         // an administrator changes a client's source without owning it
@@ -169,7 +169,7 @@ public sealed partial class ManagementTests
         var again = await CallAsync(admin, HttpMethod.Post, "/api/v1/data-sources/by-hand/adopt", ServerRole.Admin, AdoptBody("build-1"));
         Assert.False((bool)JsonNode.Parse(await again.Content.ReadAsStringAsync())!["adopted"]!);   // adopting what is already the client's changes nothing
 
-        var audit = File.ReadAllLines(Path.Combine(dataDirectory, "management-audit.log")).Select(l => JsonNode.Parse(l)!).ToList();
+        var audit = ConfigTestSupport.AuditEntries(dataDirectory);
         Assert.Contains(audit, a => (string)a["command"]! == "data-source adopt" && (string)a["target"]! == "by-hand" && (string)a["outcome"]! == "adopted by build-1" && (string)a["userId"]! == "ada");
     }
 
@@ -198,7 +198,7 @@ public sealed partial class ManagementTests
         Assert.True(lesser.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized, lesser.StatusCode.ToString());
         Assert.Equal(before, File.ReadAllText(ConnectionFile("by-hand")));
 
-        var audit = File.ReadAllLines(Path.Combine(dataDirectory, "management-audit.log")).Select(l => JsonNode.Parse(l)!).ToList();
+        var audit = ConfigTestSupport.AuditEntries(dataDirectory);
         Assert.Contains(audit, a => (string)a["command"]! == "data-source adopt" && (string)a["outcome"]! == "refused" && (string)a["consoleId"]! == "build-1" && (string)a["userId"]! == "ada");
     }
 
@@ -274,7 +274,7 @@ public sealed partial class ManagementTests
         Assert.Equal(HttpStatusCode.MethodNotAllowed, (await CallAsAsync(build1, first, HttpMethod.Get, "/api/v1/secrets/warehouse", ServerRole.Publisher)).StatusCode);
 
         // the value is in the encrypted store and nowhere that is written in clear
-        var audit = File.ReadAllText(Path.Combine(dataDirectory, "management-audit.log"));
+        var audit = string.Join("\n", ConfigTestSupport.AuditEntries(dataDirectory).Select(e => e.ToJsonString()));
         Assert.Contains("secret write", audit);
         Assert.DoesNotContain(password, audit);
         foreach (var file in Directory.EnumerateFiles(dataDirectory, "*", SearchOption.AllDirectories).Where(f => !f.Contains(Path.DirectorySeparatorChar + "secrets" + Path.DirectorySeparatorChar)))

@@ -100,8 +100,25 @@ public class ValidatorTests
     }
 }
 
-public class SessionStoreTests
+public sealed class SessionStoreTests : IDisposable
 {
+    private readonly string _directory = Path.Combine(Path.GetTempPath(), "dbproxy-sessions-" + Guid.NewGuid().ToString("N")[..8]);
+
+    public void Dispose()
+    {
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        DbDataProxy.Tests.Config.TestFolder.Delete(_directory);
+    }
+
+    /// <summary>A store over a state database of its own, as an instance has (plan 20 O02: the sessions are in the state).</summary>
+    private SessionStore Store(ProxyOptions options, TimeProvider clock)
+    {
+        options.DataDirectory = _directory;
+        var monitor = new StaticMonitor(options);
+        var state = DbDataProxy.Server.State.ProxyState.Open(_directory);
+        return new SessionStore(monitor, clock, state, new DbDataProxy.Server.State.GroupSessionKey(state, monitor));
+    }
+
     private sealed class StaticMonitor(ProxyOptions value) : IOptionsMonitor<ProxyOptions>
     {
         public ProxyOptions CurrentValue => value;
@@ -114,7 +131,7 @@ public class SessionStoreTests
     [Fact]
     public void Issued_token_resolves_to_principal_and_unknown_token_does_not()
     {
-        var store = new SessionStore(new StaticMonitor(new ProxyOptions()), TimeProvider.System);
+        var store = Store(new ProxyOptions(), TimeProvider.System);
         string token = store.Issue(Alice());
         Assert.Equal("alice", store.TryGet(token)!.Name);
         Assert.Null(store.TryGet("bogus"));
@@ -124,7 +141,7 @@ public class SessionStoreTests
     public void Idle_sessions_expire_but_activity_extends_them()
     {
         var clock = new FakeTimeProvider();
-        var store = new SessionStore(new StaticMonitor(new ProxyOptions { Auth = { SessionIdleMinutes = 10 } }), clock);
+        var store = Store(new ProxyOptions { Auth = { SessionIdleMinutes = 10 } }, clock);
         string token = store.Issue(Alice());
 
         clock.Advance(TimeSpan.FromMinutes(9));
@@ -139,7 +156,7 @@ public class SessionStoreTests
     public void Sessions_have_an_absolute_lifetime()
     {
         var clock = new FakeTimeProvider();
-        var store = new SessionStore(new StaticMonitor(new ProxyOptions { Auth = { SessionIdleMinutes = 600, SessionMaxHours = 1 } }), clock);
+        var store = Store(new ProxyOptions { Auth = { SessionIdleMinutes = 600, SessionMaxHours = 1 } }, clock);
         string token = store.Issue(Alice());
         clock.Advance(TimeSpan.FromMinutes(59));
         Assert.NotNull(store.TryGet(token));
@@ -150,7 +167,7 @@ public class SessionStoreTests
     [Fact]
     public void Revoked_tokens_stop_working()
     {
-        var store = new SessionStore(new StaticMonitor(new ProxyOptions()), TimeProvider.System);
+        var store = Store(new ProxyOptions(), TimeProvider.System);
         string token = store.Issue(Alice());
         store.Revoke(token);
         Assert.Null(store.TryGet(token));
