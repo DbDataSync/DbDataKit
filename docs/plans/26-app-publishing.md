@@ -1,6 +1,6 @@
 # Plan 26: how apps are published, navigated and instanced
 
-Status: **proposed** (written 2026-11-02 at the owner's request; nothing here is built). **Owner direction (2026-11-02): support every address form and every isolation option listed here; subpath apps get storage; some Store models are shared and split by instance id, others are separate copies; some apps get their own domains.** Sections 2a and 6.2 carry that direction. It builds on plan 16 section 2 (an app is untrusted UI), plan 20 (the `apps` module of the serving layer, published definitions, groups), plan 21 (channels) and plan 22 section 1 (app authoring). Where this plan and those differ, this plan says so in section 9.
+Status: **proposed** (written 2026-11-02 at the owner's request; nothing here is built). **Owner direction (2026-11-02): support every address form and every isolation option listed here; subpath apps get storage; some Store models are shared and split by instance id, others are separate copies; some apps get their own domains.** Sections 2a and 6.2 carry that direction. **Owner direction (2026-11-02, later): a special kind of app, a *portal*, customises the host and the shared navigation that subpath apps are mounted into** (section 4a). It builds on plan 16 section 2 (an app is untrusted UI), plan 20 (the `apps` module of the serving layer, published definitions, groups), plan 21 (channels) and plan 22 section 1 (app authoring). Where this plan and those differ, this plan says so in section 9.
 
 Three questions are answered:
 
@@ -80,9 +80,38 @@ Recommendation: **the host's shell page owns navigation; apps do not draw it.**
 
 Not recommended: letting each app include a nav component. It cannot be enforced (the app is untrusted), versions drift, and a menu that differs per app is the problem sets exist to remove.
 
-## 5. Portals
+## 4a. Portals: the app that is the shell
 
-The organisation's portal is a place people start from; the suite does not replace it. Three supported forms, all optional:
+The shell page of section 4 is a fixed page of the suite's. Organisations will want it to be theirs: their name and colours, their header and footer, their menu, a home page of their own, apps arranged the way they think of them, a sign-in page that says who they are. That is a **portal**: *a special kind of app whose job is to be the host that other apps are mounted into.* (An external portal such as SharePoint or Teams is something else, section 5: the suite's apps go into it. A portal in this section is the suite's own, and it can sit inside an external one.)
+
+**A portal is declared, not coded.** Every other app is untrusted UI that runs sandboxed. A portal is the opposite end: it is the page that holds the person's session, hands out tokens and frames the apps, so it runs on the host's origin and must be as trustworthy as the host. So a portal is **data the host's own shell renders**: it contains no JavaScript that runs on the host's origin. Where a portal wants something the declarative parts cannot say (a live widget in the header, a status banner), it names a **slot** and the content is an ordinary sandboxed app mounted into that slot, with the same token broker and the same restrictions as any app.
+
+What a portal declares (`kind: portal` in the manifest, plus a `portal:` section):
+
+| Part | What it says |
+| --- | --- |
+| **Identity** | name, logo, favicon, the title of the page, the text of the sign-in page and the footer, a support link |
+| **Theme** | design tokens (colours, fonts, spacing, radius) for light and dark; they become the CSS variables the suite's controls already read (`--sui-*`, the console's own), so every app that uses the shared controls follows the portal without knowing it |
+| **Layout** | where the menu is (top, side), whether there is a footer, how wide the content is, what the header shows (search, the person's menu, a switcher for portals or instances) |
+| **Navigation** | the menu, as a tree of entries: an app instance, a link, a group, a divider, each with a label, an icon and the role that shows it. A portal *owns* a navigation set (section 4); a standalone set is the same thing without the rest |
+| **Home** | the landing page: declarative views (text, a catalog of the apps the person may open, links, a dashboard from the semantic layer) |
+| **Mounts** | which instances this portal mounts and where: a path under the portal's own address (`/sales/`, `/hr/`), or the instance's own address with the portal's frame around it |
+| **Slots** | `header`, `footer`, `home`, `aside`: places a sandboxed app may fill |
+| **Addresses** | the portal's own: a subpath, a subdomain or a custom domain, like any instance. The domain decides which portal a request gets |
+
+How it fits with the rest of the plan:
+
+* **The host has a default portal** (the suite's own shell, always there, so nothing is mounted into nothing). A portal is an *instance* like any other, versioned, promoted through channels, and published more than once (one per customer, one per department): section 6 applies. An app instance can be mounted in several portals; its address and its roles do not change with the portal around it.
+* **Which portal frames a request** is decided by the address (a domain or a path prefix the portal is bound to) and then by the instance's setting; an instance with `chrome: none` is served without any portal.
+* **A portal changes how the apps look and are reached, never what they may do.** Roles, tokens, the manifest's data operations and the servers' own rules are untouched; a portal cannot grant an app anything. A person sees in a portal's menu only what they may open.
+* **Branding applies to the controls, not only the frame**: because the theme is the variables the shared controls read, `@dbdatakit/store-ui` and the other shared components take the portal's look with no change by the app's author.
+* **Portals are edited like apps** (plan 22 section 1: workspace, preview, merge, publish), by people with the author role; a portal's preview is read-only like any other (plan 21). Publishing a portal that mounts an instance the author may not see is refused.
+
+Not in a portal: code on the host's origin; per-person layout customisation (a person's preferences are app storage, section 2a); mounting apps from other hosts (a link, not a mount).
+
+## 5. External portals
+
+The organisation's portal is a place people start from; the suite does not replace it. Three supported forms, all optional (section 4a is the suite's own portal; this section is about the organisation's, which the suite's apps go into):
 
 1. **Link or tile.** Each instance has a stable launch URL (`<primary address>/?launch`) that signs the person in (silently, with the same OpenID provider) and opens the app. `GET /apps/catalog` returns the instances the caller may open, as JSON (name, title, description, icon URL, launch URL, channel), for a portal that builds tiles from a feed.
 2. **Embed.** `?embed` serves the app without the header; the instance setting `embed.allowed_origins` becomes the response's `frame-ancestors`, and nothing else may frame it. The default is that no origin may.
@@ -151,6 +180,10 @@ Plan 21's channel is part of a published version's key. Every instance belongs t
 | AP07 | Portal: launch URL, `GET /apps/catalog`, `embed.allowed_origins` as `frame-ancestors` | AP05 | S | a page on an allowed origin frames an instance; one on another origin is refused by the browser |
 | AP08 | Subdomain and custom-domain bindings: the routing table, SNI certificates, name verification, redirect URIs registered with the identity home | AP05 | L | one host serves two names with two certificates; removing a binding removes its redirect URI; an unverified name is refused |
 | AP09 | App storage: `storage.user` and `storage.instance` in the group's state with the manifest's limits, the storage API, and the shell bridge for sandboxed apps | AP05 | M | a sandboxed app stores and reads a preference per person and a setting per instance; one person cannot read another's; two instances do not share; a value over the limit is refused |
+| AP10 | The portal kind: `kind: portal` in the manifest and the `portal:` section (identity, theme, layout, navigation, home, mounts, slots, addresses) validated with positions; a portal contains no script | AP03 | M | tests: a complete portal passes; each bad part is refused with its reason; a portal that names a script, a mount that does not exist or a slot with no app is refused |
+| AP11 | The shell renders a portal: theme tokens become the controls' variables, header, footer, menu and layout from the declaration; the default portal is the suite's own | AP06, AP10 | L | Playwright: two portals on two addresses give the same app two looks, and a person sees only the menu entries they may open |
+| AP12 | Portal home and catalog: declarative landing views and a catalog of the apps the person may open | AP11 | M | the home lists exactly the instances the caller may open |
+| AP13 | Slots: a sandboxed app mounted in a portal's header, footer, aside or home, with the same token broker | AP05, AP11 | M | an app in the header reads its own data and cannot reach the portal's page or session |
 | Z12 | Store model instances, separate copies: `storage.instances: schema \| connection`; `(definition, instance, connection, schema)`, per-instance tables, history, audit and roles; the instance in the API path | Z09, AP04 | L | two instances of one model on one database hold different rows, a row in one is invisible in the other, a reference across them is refused; tests on both engines |
 | Z12b | Store model instances, shared and split: `storage.instances: column`; `_instance` in every table and key, stamped and filtered by the writer, `scope: shared` entities | Z12 | L | two instances with colliding business keys; no read, write or rule (unique, reference, sum, overlap, cycle) sees the other's rows; a body naming another instance is refused; the instance must be in the caller's token; tests on both engines |
 | Z13 | Per-instance migration: apply a new definition version to one instance, a report of all instances, expand-then-contract respected | Z12, plan 21 | M | an instance on N keeps working while another is at N+1; the report names both |
@@ -171,7 +204,8 @@ Plan 21's channel is part of a published version's key. Every instance belongs t
 1. **Code apps are isolated by a sandboxed document under the host's shell page**, not by a separate origin per app. Because the sandbox has no browser storage, **the host provides app storage** (section 2a).
 2. **The shell page owns navigation** (navigation sets); apps do not draw menus.
 3. **A Store model's isolation is declared by the model** (`storage.instances`): not at all, `column`, `schema` or `connection`. The server enforces it; the client never does.
+4. **A portal is declared data, not code.** It is the shell, so it runs on the host's origin, and code there would break decision 1. Anything dynamic in a portal is a sandboxed app in a slot.
 
-**Supported options** (the design carries all of them; each is chosen per app, per instance or per model): subpath, subdomain and custom domain addresses for an instance; `origin: sandbox | own`; `chrome: shell | none`; app storage (user, instance, quota); the three instance modes of a Store model, including both a shared-and-split model and separate copies; portal launch links, the catalog feed and an allow-listed embed; navigation set membership.
+**Supported options** (the design carries all of them; each is chosen per app, per instance or per model; a portal can be published more than once, like an app): subpath, subdomain and custom domain addresses for an instance; `origin: sandbox | own`; `chrome: shell | none`; app storage (user, instance, quota); the three instance modes of a Store model, including both a shared-and-split model and separate copies; portal launch links, the catalog feed and an allow-listed embed; navigation set membership.
 
 **Not planned:** several tenants inside one app instance (use an instance per tenant); mounting an app as a web component inside a portal's own page.
