@@ -76,7 +76,7 @@ public sealed class ProxyIdentityModule(
             ? new EntraUpstream(authority, e.ClientId!, secrets.ResolveSecret(SecretsRuntime.EntraSecretKey, e.ClientSecret), e.TrustEmail)
             : null;
         var windows = current.Identity.Windows.Enabled ? new WindowsUpstream() : null;
-        builder.AddIdentityHome(new IdentityHomeOptions(publicUrl, directory, _ => state, _ => protector, Auth, Entra: entra, Windows: windows));
+        builder.AddIdentityHome(new IdentityHomeOptions(publicUrl, directory, _ => state, _ => protector, Auth, Entra: entra, Windows: windows, Tokens: new AccessTokenPolicy(current.Identity.AccessTokenMaxDays)));
 
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy")).AllowAnonymous();

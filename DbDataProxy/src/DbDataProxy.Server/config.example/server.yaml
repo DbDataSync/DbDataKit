@@ -46,6 +46,8 @@ compression: { mode: arrow, codec: zstd, level: 3, allowClientOverride: true }
 # People may also sign in at the home through an Entra ID tenant (an app registered there with the redirect URI <publicUrl>/identity/upstream/entra/callback and the groups claim), and with Windows (Negotiate):
 #   entra: { authority: https://login.microsoftonline.com/<tenant id>/v2.0, clientId: <app id>, clientSecret: secret:dbdata:proxy:identity:entra }
 #   windows: { enabled: true }
+# A person's personal access tokens last at most accessTokenMaxDays (1 to 365; 365 unless lowered here):
+#   accessTokenMaxDays: 90
 
 # Semantic models served as sources named semantic:<model> (the catalog's name); a client sends a JSON request or semantic SQL as a statement with x-datasource: semantic:<model>.
 # Each catalog source is mapped to the data source that holds its tables; clients need access to those data sources. Catalogs are read at start.

@@ -9,7 +9,8 @@ namespace DbDataKit.Identity;
 /// <param name="Usage">How the place is named on the command line, appended to every usage (for example <c>[--repo &lt;identity directory&gt;]</c>).</param>
 /// <param name="Open">Opens the home's state database from the parsed arguments (the <c>repo</c> option among them).</param>
 /// <param name="PublicUrl">The home's public address, which an invitation link starts with, when <c>--url</c> does not give it.</param>
-public sealed record IdentityAdminLocation(string Usage, Func<CliArgs, StateDatabase> Open, Func<CliArgs, string> PublicUrl);
+/// <param name="Tokens">The home's token lifetimes (its install's maximum); null: the defaults.</param>
+public sealed record IdentityAdminLocation(string Usage, Func<CliArgs, StateDatabase> Open, Func<CliArgs, string> PublicUrl, Func<CliArgs, AccessTokenPolicy>? Tokens = null);
 
 /// <summary>
 /// The verbs of the <c>identity</c> noun that administer a home at the command line (plan 13a U15, 13c D30: commands only for now), the same in every host of the home: <c>dbdatakit identity</c> for a home that
@@ -43,7 +44,143 @@ public static class IdentityVerbs
             $"--source entra|windows --group <group> (--server <id> [--project <name>] | --app <id>) --roles <viewer,operator,author,approver,admin|none> {where.Usage}",
             (args, context) => MapGroupAsync(args, context, where),
             DataSchemas.Object([("source", DataSchemas.String), ("group", DataSchemas.String), ("target", DataSchemas.String), ("roles", DataSchemas.ListOf(DataSchemas.String))], "source", "group", "target", "roles")),
+        new Verb("service-account-add", "Make a service account for unattended work (a home user that signs in only with its tokens; give it roles with assign)", EffectClass.RepoFilesOnly,
+            $"--name <name> [--description <text>] {where.Usage}",
+            (args, context) => ServiceAccountAddAsync(args, context, where),
+            DataSchemas.Object([("id", DataSchemas.String), ("name", DataSchemas.String)], "id", "name")),
+        new Verb("service-account-list", "The service accounts, with the id that assign takes", EffectClass.OfflineOnly, where.Usage,
+            (args, context) => ServiceAccountListAsync(args, context, where),
+            DataSchemas.Object([("accounts", DataSchemas.ListOf(DataSchemas.Object([("id", DataSchemas.String), ("name", DataSchemas.String), ("description", DataSchemas.String), ("tokens", DataSchemas.Integer)], "id", "name", "tokens")))], "accounts")),
+        new Verb("service-account-remove", "Remove a service account: its tokens are revoked and its user disabled (kept, so the audit still names it)", EffectClass.RepoFilesOnly,
+            $"--name <name> {where.Usage}",
+            (args, context) => ServiceAccountRemoveAsync(args, context, where),
+            DataSchemas.Object([("name", DataSchemas.String)], "name")),
+        new Verb("token-create", "Make a token for a service account; the token is shown once (a person makes their own at the identity home)", EffectClass.RepoFilesOnly,
+            $"--account <service account> --name <name> [--days <n> | --no-expiry] {where.Usage}",
+            (args, context) => TokenCreateAsync(args, context, where),
+            DataSchemas.Object([("id", DataSchemas.String), ("token", DataSchemas.String), ("user_name", DataSchemas.String), ("expires", DataSchemas.String)], "id", "token", "user_name")),
+        new Verb("token-list", "Personal access tokens and service accounts' tokens, anyone's or one user's (never the secrets)", EffectClass.OfflineOnly, $"[--user <id>] {where.Usage}",
+            (args, context) => TokenListAsync(args, context, where),
+            DataSchemas.Object([("tokens", DataSchemas.ListOf(DataSchemas.Object(
+                [("id", DataSchemas.String), ("user", DataSchemas.String), ("name", DataSchemas.String), ("created", DataSchemas.String), ("expires", DataSchemas.String), ("revoked", DataSchemas.String), ("last_used", DataSchemas.String), ("active", DataSchemas.Boolean)],
+                "id", "user", "name", "created", "active")))], "tokens")),
+        new Verb("token-revoke", "Revoke anyone's token (it is refused from then on)", EffectClass.RepoFilesOnly, $"--id <token id> {where.Usage}",
+            (args, context) => TokenRevokeAsync(args, context, where),
+            DataSchemas.Object([("id", DataSchemas.String)], "id")),
     ];
+
+    /// <summary>Who made something at the command line: the operator of the machine, not a person of the home.</summary>
+    private const string CommandLine = "command-line";
+
+    private static AccessTokens Tokens(CliArgs parsed, IdentityAdminLocation where)
+    {
+        var database = where.Open(parsed);
+        return new AccessTokens(database, new UserStore(database), where.Tokens?.Invoke(parsed));
+    }
+
+    private static async Task<int> ServiceAccountAddAsync(string[] args, CliContext context, IdentityAdminLocation where)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), Options("name", "description"));
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("name") is not { Length: > 0 } name)
+        {
+            await context.Error.WriteLineAsync($"Usage: identity service-account-add --name <name> [--description <text>] {where.Usage}");
+            return CliExit.Usage;
+        }
+        try
+        {
+            var account = Tokens(parsed, where).CreateServiceAccount(name, parsed.Get("description"), CommandLine);
+            await context.Out.WriteLineAsync($"Made the service account {account.Name} (id {account.UserId}). Give it roles with: identity assign --user {account.UserId} ...; make its token with: identity token-create --account {account.Name} --name <name>");
+            context.Data["id"] = account.UserId;
+            context.Data["name"] = account.Name;
+            return CliExit.Ok;
+        }
+        catch (AccessTokenException ex) { await context.Error.WriteLineAsync(ex.Message); return CliExit.Failure; }
+    }
+
+    private static async Task<int> ServiceAccountListAsync(string[] args, CliContext context, IdentityAdminLocation where)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), Options());
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync($"Usage: identity service-account-list {where.Usage}"); return CliExit.Usage; }
+        var tokens = Tokens(parsed, where);
+        var all = tokens.ServiceAccounts();
+        var now = DateTimeOffset.UtcNow;
+        if (all.Count == 0) await context.Out.WriteLineAsync("No service account yet. Make one: identity service-account-add --name <name>");
+        var rows = all.Select(a => (Account: a, Active: tokens.List(a.UserId).Count(t => t.IsActiveAt(now)))).ToList();
+        foreach (var (a, active) in rows) await context.Out.WriteLineAsync($"{a.Name}  {active} active token(s)  {a.Description}  id {a.UserId}");
+        context.Data["accounts"] = rows.Select(r => new Dictionary<string, object?> { ["id"] = r.Account.UserId, ["name"] = r.Account.Name, ["description"] = r.Account.Description, ["tokens"] = r.Active }).ToList();
+        return CliExit.Ok;
+    }
+
+    private static async Task<int> ServiceAccountRemoveAsync(string[] args, CliContext context, IdentityAdminLocation where)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), Options("name"));
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("name") is not { Length: > 0 } name)
+        {
+            await context.Error.WriteLineAsync($"Usage: identity service-account-remove --name <name> {where.Usage}");
+            return CliExit.Usage;
+        }
+        if (!Tokens(parsed, where).RemoveServiceAccount(name)) { await context.Error.WriteLineAsync($"There is no service account '{name}'. 'identity service-account-list' shows them."); return CliExit.Failure; }
+        await context.Out.WriteLineAsync($"Removed the service account {name}; its tokens are revoked.");
+        context.Data["name"] = name;
+        return CliExit.Ok;
+    }
+
+    private static async Task<int> TokenCreateAsync(string[] args, CliContext context, IdentityAdminLocation where)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string> { "no-expiry" }, Options("account", "name", "days"));
+        var usage = $"Usage: identity token-create --account <service account> --name <name> [--days <n> | --no-expiry] {where.Usage}";
+        int? days = parsed.Get("days") is { } text ? int.TryParse(text, out var n) && n > 0 ? n : -1 : null;
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("account") is not { Length: > 0 } accountName || parsed.Get("name") is not { Length: > 0 } name || days == -1 || days is not null && parsed.Has("no-expiry"))
+        {
+            await context.Error.WriteLineAsync(usage);
+            return CliExit.Usage;
+        }
+        var tokens = Tokens(parsed, where);
+        if (tokens.FindServiceAccount(accountName) is not { } account)
+        {
+            await context.Error.WriteLineAsync($"There is no service account '{accountName}'. A person makes their own tokens at the identity home; 'identity service-account-list' shows the service accounts.");
+            return CliExit.Failure;
+        }
+        try
+        {
+            var made = tokens.Create(account.UserId, name, CommandLine, days is { } d ? TimeSpan.FromDays(d) : null, noExpiry: parsed.Has("no-expiry"));
+            await context.Out.WriteLineAsync($"A token for {account.Name} ({(made.Record.ExpiresAtUtc is { } e ? $"until {e:u}" : "no expiry")}), shown once; the user name is {account.Name}:");
+            await context.Out.WriteLineAsync($"    {made.Secret}");
+            context.Data["id"] = made.Record.Id;
+            context.Data["token"] = made.Secret;
+            context.Data["user_name"] = account.Name;
+            if (made.Record.ExpiresAtUtc is { } until) context.Data["expires"] = until.UtcDateTime.ToString("O");
+            return CliExit.Ok;
+        }
+        catch (AccessTokenException ex) { await context.Error.WriteLineAsync(ex.Message); return CliExit.Failure; }
+    }
+
+    private static async Task<int> TokenListAsync(string[] args, CliContext context, IdentityAdminLocation where)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), Options("user"));
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync($"Usage: identity token-list [--user <id>] {where.Usage}"); return CliExit.Usage; }
+        var all = Tokens(parsed, where).List(parsed.Get("user"));
+        var now = DateTimeOffset.UtcNow;
+        if (all.Count == 0) await context.Out.WriteLineAsync("No token.");
+        foreach (var t in all)
+            await context.Out.WriteLineAsync($"{t.Id}  {t.Name}  user {t.UserId}  {(t.RevokedAtUtc is not null ? "revoked" : t.IsActiveAt(now) ? t.ExpiresAtUtc is { } e ? $"until {e:u}" : "no expiry" : "expired")}");
+        context.Data["tokens"] = all.Select(t => new Dictionary<string, object?>
+        {
+            ["id"] = t.Id, ["user"] = t.UserId, ["name"] = t.Name, ["created"] = t.CreatedAtUtc.UtcDateTime.ToString("O"), ["expires"] = t.ExpiresAtUtc?.UtcDateTime.ToString("O"),
+            ["revoked"] = t.RevokedAtUtc?.UtcDateTime.ToString("O"), ["last_used"] = t.LastUsedAtUtc?.UtcDateTime.ToString("O"), ["active"] = t.IsActiveAt(now),
+        }).ToList();
+        return CliExit.Ok;
+    }
+
+    private static async Task<int> TokenRevokeAsync(string[] args, CliContext context, IdentityAdminLocation where)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), Options("id"));
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("id") is not { Length: > 0 } id) { await context.Error.WriteLineAsync($"Usage: identity token-revoke --id <token id> {where.Usage}"); return CliExit.Usage; }
+        if (!Tokens(parsed, where).Revoke(id)) { await context.Error.WriteLineAsync($"There is no token '{id}' that is not already revoked. 'identity token-list' shows them."); return CliExit.Failure; }
+        await context.Out.WriteLineAsync($"Revoked the token {id}.");
+        context.Data["id"] = id;
+        return CliExit.Ok;
+    }
 
     private static HashSet<string> Options(params string[] names) => [.. names, "repo"];
 

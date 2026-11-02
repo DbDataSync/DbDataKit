@@ -28,7 +28,8 @@ public sealed class SessionAuthenticationHandler(
     SessionStore sessions,
     UserStore users,
     AuthOptions authOptions,
-    ConsoleTokenValidator? tokens = null)
+    ConsoleTokenValidator? tokens = null,
+    IPasswordCredentials? passwords = null)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -36,6 +37,10 @@ public sealed class SessionAuthenticationHandler(
         // A console's call carries a signed token naming the person (plan 13, U08), and no cookie: the server that is managed from a console has no users of its own, and the roles are the token's.
         if (tokens is not null && Request.Headers[ManagementAuthentication.TokenHeader].FirstOrDefault() is { Length: > 0 } token)
             return Task.FromResult(FromToken(tokens.Validate(token)));
+
+        // a client that can send only a user name and password (a personal access token at the identity home, plan 13a U20); no Basic challenge is ever sent, so a browser never offers it on its own
+        if (passwords is not null && Request.Headers.Authorization.FirstOrDefault() is { } authorization && authorization.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase))
+            return Task.FromResult(FromPassword(authorization["Basic ".Length..].Trim()));
 
         var sessionId = Request.Cookies[authOptions.CookieName];
         if (string.IsNullOrEmpty(sessionId))
@@ -99,6 +104,20 @@ public sealed class SessionAuthenticationHandler(
             new(ClaimTypes.Role, role.Value.ToString()),
         };
         return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(new ClaimsIdentity(claims, Scheme.Name)), Scheme.Name));
+    }
+
+    private AuthenticateResult FromPassword(string encoded)
+    {
+        string text;
+        try { text = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(encoded)); }
+        catch (FormatException) { return AuthenticateResult.Fail("The credentials are not valid."); }
+        var colon = text.IndexOf(':');
+        if (colon <= 0) return AuthenticateResult.Fail("The credentials are not valid.");
+        var user = passwords!.Verify(text[..colon], text[(colon + 1)..]);
+        if (user is null) return AuthenticateResult.Fail("The credentials are not valid.");
+        var ticket = Ticket(user);
+        ((ClaimsIdentity)ticket.Principal.Identity!).AddClaim(new Claim(PasswordCredentials.MethodClaim, PasswordCredentials.Method));
+        return AuthenticateResult.Success(ticket);
     }
 
     private AuthenticationTicket Ticket(UserRecord user)

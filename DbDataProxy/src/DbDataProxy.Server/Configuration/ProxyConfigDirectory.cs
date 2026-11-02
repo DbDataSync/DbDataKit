@@ -36,10 +36,16 @@ public sealed class ProxyConfigDirectoryProvider : ConfigurationProvider, IDispo
     private readonly object _reloading = new();
     private volatile bool _disposed;
 
-    public ProxyConfigDirectoryProvider(ProxyConfigDirectorySource source)
+    public ProxyConfigDirectoryProvider(ProxyConfigDirectorySource source) => _source = source;
+
+    /// <summary>
+    /// Watches the directory, once its first read has succeeded: a provider whose first read throws (a file that does not parse) is never returned by the builder, so nothing could dispose a watcher it had already
+    /// started, and on Linux each one is an inotify instance, of which a user has 128.
+    /// </summary>
+    private void Watch()
     {
-        _source = source;
-        if (System.IO.Directory.Exists(source.Directory))
+        var source = _source;
+        if (_watcher is null && System.IO.Directory.Exists(source.Directory))
         {
             _watcher = new FileSystemWatcher(source.Directory) { IncludeSubdirectories = true, NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName | NotifyFilters.DirectoryName };
             _debounce = new Timer(_ => ReloadNow(), null, Timeout.Infinite, Timeout.Infinite);
@@ -64,6 +70,7 @@ public sealed class ProxyConfigDirectoryProvider : ConfigurationProvider, IDispo
         Data = data;
         Origins = origins;
         Warnings = warnings;
+        if (!_disposed) Watch();
     }
 
     /// <summary>Reads the directory again now and tells the options monitor; the file watcher calls this after a change settles.</summary>

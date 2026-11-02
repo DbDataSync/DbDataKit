@@ -130,10 +130,37 @@ public static class HomeSchema
         CREATE INDEX IX_ExternalMemberships_Group ON ExternalMemberships(Source, ExternalKey);
         """;
 
-    /// <summary>Users, credentials, sessions and invites, then the home's own tables.</summary>
+    /// <summary>Personal access tokens and service accounts (plan 13a U20). Appended after <see cref="ExternalGroups"/>.</summary>
+    public const string AccessTokens =
+        """
+        -- A token is ddk_<Id>_<secret>: the Id finds the row, only a hash of the secret is kept. ExpiresAtUtc is null only for a service account's token that never expires. Revoked tokens stay, listed as revoked.
+        CREATE TABLE AccessTokens (
+            Id            {{key}} PRIMARY KEY,
+            UserId        {{key}} NOT NULL REFERENCES Users(Id),
+            Name          {{text}} NOT NULL,
+            SecretHash    {{key}} NOT NULL,
+            CreatedAtUtc  {{text}} NOT NULL,
+            CreatedBy     {{key}} NOT NULL,
+            ExpiresAtUtc  {{text}} NULL,
+            RevokedAtUtc  {{text}} NULL,
+            LastUsedAtUtc {{text}} NULL
+        );
+        CREATE INDEX IX_AccessTokens_User ON AccessTokens(UserId);
+
+        -- An account for unattended work: a Users row with no credential, signing in only with its tokens. Name is the user name its tokens go with.
+        CREATE TABLE ServiceAccounts (
+            UserId       {{key}} PRIMARY KEY REFERENCES Users(Id),
+            Name         {{key}} NOT NULL,
+            Description  {{text}} NULL,
+            CreatedBy    {{key}} NOT NULL,
+            CreatedAtUtc {{text}} NOT NULL
+        );
+        CREATE UNIQUE INDEX UX_ServiceAccounts_Name ON ServiceAccounts(Name);
+        """;
+
     /// <summary>The home's scripts in the order they were added, for a host whose state database has tables of its own before them (the serving layer appends these to its schema, plan 20 O06).
     /// Append to this list, never edit an entry that has shipped.</summary>
-    public static IReadOnlyList<string> Templates { get; } = [IdentitySchema.Accounts, IdentitySchema.Invites, Directory, Provider, Sessions, IdentitySchema.AccountKeys, ExternalGroups];
+    public static IReadOnlyList<string> Templates { get; } = [IdentitySchema.Accounts, IdentitySchema.Invites, Directory, Provider, Sessions, IdentitySchema.AccountKeys, ExternalGroups, AccessTokens];
 
     public static StateSchema Schema { get; } = new(Templates);
 }

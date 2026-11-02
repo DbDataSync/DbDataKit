@@ -18,6 +18,7 @@ namespace DbDataKit.Identity;
 /// <param name="InvitePage">Serve the home's own invitation page at <c>/invite</c> (the address the first-run invitation names). A host that serves the console's web app beside the home passes false and its <c>/invite</c> screen is used.</param>
 /// <param name="Entra">Sign people in through a Microsoft Entra ID tenant too (plan 20 O06b); null: not offered.</param>
 /// <param name="Windows">Sign people in with their Windows account too (Negotiate); null: not offered.</param>
+/// <param name="Tokens">How long personal access tokens may last here (plan 13a U20); null: 90 days by default, at most a year.</param>
 public sealed record IdentityHomeOptions(
     Uri PublicUrl,
     string FirstRunDirectory,
@@ -26,7 +27,8 @@ public sealed record IdentityHomeOptions(
     AuthProduct Auth,
     bool InvitePage = true,
     EntraUpstream? Entra = null,
-    WindowsUpstream? Windows = null)
+    WindowsUpstream? Windows = null,
+    AccessTokenPolicy? Tokens = null)
 {
     /// <summary>The issuer written into every token: the public address without a path.</summary>
     public string Issuer => PublicUrl.GetLeftPart(UriPartial.Authority);
@@ -63,6 +65,9 @@ public static class IdentityHome
             _ => options.FirstRunDirectory);
         if (options.Windows is not null) authentication.AddNegotiate();
         UpstreamSignIn.Register(services, options);
+        services.AddSingleton(sp => new AccessTokens(options.State(sp), sp.GetRequiredService<UserStore>(), options.Tokens, sp.GetService<TimeProvider>()));
+        // a user name and a personal access token, for clients that can send nothing else (the session handler tries it on Authorization: Basic)
+        services.AddSingleton<IPasswordCredentials>(sp => sp.GetRequiredService<AccessTokens>());
         services.AddSingleton(sp => new HomeDirectory(options.State(sp)));
         services.AddSingleton(sp => new OidcClients(options.State(sp)));
         services.AddSingleton(sp => new SigningKeys(options.State(sp), options.Protector(sp)));
@@ -105,6 +110,7 @@ public static class IdentityHome
             EndSessionOf: (_, userId) => { sessions.DeleteAllFor(userId); return Task.CompletedTask; }));
         open.MapGet(SignInPath, () => Results.Content(IdentityHomePages.SignIn(options), "text/html; charset=utf-8"));
         UpstreamSignIn.Map(app, open, options);
+        AccessTokenEndpoints.Map(app);
         if (options.InvitePage) open.MapGet(InvitePath, () => Results.Content(IdentityHomePages.Invite, "text/html; charset=utf-8"));
         return app;
     }
@@ -114,6 +120,6 @@ public static class IdentityHome
     {
         var value = path.Value ?? "";
         return value.StartsWith("/identity/", StringComparison.Ordinal) || value == "/.well-known/openid-configuration" || value == InvitePath
-            || value.StartsWith("/api/auth/", StringComparison.Ordinal) || value.StartsWith("/api/invites", StringComparison.Ordinal) || value.StartsWith("/api/users", StringComparison.Ordinal);
+            || value.StartsWith("/api/auth/", StringComparison.Ordinal) || value.StartsWith("/api/invites", StringComparison.Ordinal) || value.StartsWith("/api/users", StringComparison.Ordinal) || value.StartsWith(AccessTokenEndpoints.Path, StringComparison.Ordinal);
     }
 }

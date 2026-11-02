@@ -101,7 +101,7 @@ public sealed class IdentityModuleTests : IAsyncLifetime
         static IReadOnlyList<DbDataKit.Config.Yaml.ConfigDiagnostic> Load(string yaml)
         {
             using var file = TempConfig.Create(("server.yaml", yaml));
-            return ProxyConfig.Load(new ConfigurationBuilder().Add(new ProxyConfigDirectorySource(file.Directory)).Build()).Diagnostics;
+            return ConfigTestSupport.LoadDirectory(file.Directory).Diagnostics;
         }
 
         Assert.Contains(Load("tls: { mode: none }\nlisten: { address: 127.0.0.1 }\nidentity: { enabled: true }\n"), d => d.KeyPath == "Identity.Enabled");
@@ -111,6 +111,10 @@ public sealed class IdentityModuleTests : IAsyncLifetime
         Assert.Contains(Load("identity: { enabled: true, publicUrl: 'https://identity.example/home' }\n"), d => d.KeyPath == "Identity.PublicUrl");
         Assert.Contains(Load("identity: { enabled: true, address: 'everywhere' }\n"), d => d.KeyPath == "Identity.Address");
         Assert.DoesNotContain(Load("identity: { enabled: true, publicUrl: 'https://identity.example' }\n"), d => d.KeyPath?.StartsWith("Identity", StringComparison.Ordinal) == true);
+
+        // personal access tokens (U20): an install may lower the maximum, never past a year
+        Assert.Contains(Load("identity: { enabled: true, accessTokenMaxDays: 400 }\n"), d => d.KeyPath == "Identity.AccessTokenMaxDays");
+        Assert.DoesNotContain(Load("identity: { enabled: true, accessTokenMaxDays: 30 }\n"), d => d.KeyPath == "Identity.AccessTokenMaxDays");
 
         // Entra (O06b): the tenant over https, with the app's id and secret; no half a section
         Assert.Contains(Load("identity: { enabled: true, entra: { authority: 'http://login.example/t/v2.0', clientId: a, clientSecret: 'secret:x:y' } }\n"), d => d.KeyPath == "Identity.Entra.Authority");

@@ -256,12 +256,12 @@ public sealed partial class ManagementTests : IAsyncLifetime
     public void The_options_refuse_a_management_api_without_tls_or_on_the_flight_port()
     {
         using var file = TempConfig.Create(("server.yaml", "tls: { mode: none }\nlisten: { address: 127.0.0.1 }\nmanagement: { enabled: true }\n"));
-        var load = ProxyConfig.Load(new ConfigurationBuilder().Add(new ProxyConfigDirectorySource(file.Directory)).Build());
+        var load = ConfigTestSupport.LoadDirectory(file.Directory);
         Assert.False(load.Ok);
         Assert.Contains(load.Diagnostics, d => d.KeyPath == "Management.Enabled");
 
         using var same = TempConfig.Create(("server.yaml", "listen: { address: 127.0.0.1, port: 8816 }\nmanagement: { enabled: true, port: 8816 }\n"));
-        var clash = ProxyConfig.Load(new ConfigurationBuilder().Add(new ProxyConfigDirectorySource(same.Directory)).Build());
+        var clash = ConfigTestSupport.LoadDirectory(same.Directory);
         Assert.Contains(clash.Diagnostics, d => d.KeyPath == "Management.Port");
     }
 
