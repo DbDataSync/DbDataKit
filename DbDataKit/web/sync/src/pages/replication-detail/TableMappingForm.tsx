@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Outlet, useOutletContext } from 'react-router-dom'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { Field } from '@dbdatakit/shell'
@@ -29,6 +29,7 @@ import { PrimaryKeyCard } from './PrimaryKeyCard'
 import { SourceFilterCard } from './SourceFilterCard'
 import { MappingPipelineCard, type PipelineOverrides } from './MappingPipelineCard'
 import { ReconcileConfigCard } from './ReconcileConfigCard'
+import { nextMappings, suggestColumnMappings } from './suggestMappings'
 
 /** A new mapping inherits both endpoints — null connection and database — and states only its table. */
 const emptySpec: TableSpec = { connectionName: null, database: null, schema: '', table: '' }
@@ -212,14 +213,15 @@ export function TableMappingForm({ replicationName, existing, base, onSaved, onR
     targetExists === true ? resolvedTarget.table : undefined)
   const targetColumns = targetExists === false ? sourceColumns : catalogTargetColumns
 
+  // The suggestion follows the tables until the mappings are edited (see nextMappings): a source picked
+  // and then replaced must not leave the first one's columns in the mapping.
+  const lastSuggested = useRef<ColumnMapping[] | null>(null)
   useEffect(() => {
-    if (!targetColumns || !sourceColumns || columnMappings.length > 0) return
-    const sourceNames = new Set(sourceColumns.map((c) => c.name))
-    const suggested = targetColumns
-      .filter((tc) => sourceNames.has(tc.name))
-      .map((tc) => ({ sourceColumn: tc.name, targetColumn: tc.name, transform: null }))
-    if (suggested.length > 0) setColumnMappings(suggested)
-    // Only auto-suggest once, when both column lists first become available and nothing is mapped.
+    if (!targetColumns || !sourceColumns) return
+    const suggested = suggestColumnMappings(sourceColumns, targetColumns)
+    const next = nextMappings(columnMappings, lastSuggested.current, suggested)
+    if (next) { lastSuggested.current = next; setColumnMappings(next) }
+    // Only when the column lists change; the mappings are read as they stand then.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceColumns, targetColumns])
 
