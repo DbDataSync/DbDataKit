@@ -131,5 +131,9 @@ public static class HomeSchema
         """;
 
     /// <summary>Users, credentials, sessions and invites, then the home's own tables.</summary>
-    public static StateSchema Schema { get; } = new([IdentitySchema.Accounts, IdentitySchema.Invites, Directory, Provider, Sessions, IdentitySchema.AccountKeys, ExternalGroups]);
+    /// <summary>The home's scripts in the order they were added, for a host whose state database has tables of its own before them (the serving layer appends these to its schema, plan 20 O06).
+    /// Append to this list, never edit an entry that has shipped.</summary>
+    public static IReadOnlyList<string> Templates { get; } = [IdentitySchema.Accounts, IdentitySchema.Invites, Directory, Provider, Sessions, IdentitySchema.AccountKeys, ExternalGroups];
+
+    public static StateSchema Schema { get; } = new(Templates);
 }

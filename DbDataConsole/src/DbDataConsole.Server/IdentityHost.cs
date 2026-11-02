@@ -84,9 +84,6 @@ public static class IdentityHost
 {
     public static readonly AuthProduct Auth = new("DbDataIdentity", "dbdatakit identity run (it writes FIRST-RUN.txt again while there is no user)");
 
-    /// <summary>The page a person who is not signed in at the home is sent to by <c>/identity/authorize</c>.</summary>
-    public const string SignInPath = "/identity/sign-in";
-
     /// <param name="webRoot">The console's built web app, whose invitation and Users screens the home's own administrators use; the folder <c>wwwroot</c> beside the program when null. Without it the home serves its endpoints and the sign-in page.</param>
     public static WebApplication Build(IdentityHostSettings settings, X509Certificate2 certificate, Action<string> log, string? webRoot = null, Action<IServiceCollection>? configure = null)
     {
@@ -104,64 +101,28 @@ public static class IdentityHost
         });
         builder.WebHost.ConfigureKestrel(o => o.Listen(AddressOf(settings.Listen), settings.Listen.Port, listen => listen.UseHttps(certificate)));
 
-        var relyingParty = $"{Auth.Section}:Passkeys:RelyingPartyId";
-        if (string.IsNullOrWhiteSpace(builder.Configuration[relyingParty]))
-            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { [relyingParty] = settings.Public.Host });
-
         builder.Services.AddDataProtection().SetApplicationName("dbdatakit-identity").PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(settings.Directory, "dataprotection")));
-        builder.Services.AddControllers()
-            .AddApplicationPart(typeof(AuthController).Assembly)
-            .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
         builder.Services.AddSingleton(_ => IdentityHostState.Open(settings.Directory, settings.State));
-        builder.Services.AddSessionAuth(Auth,
+        var hasWebApp = Directory.Exists(webRoot);
+        builder.AddIdentityHome(new IdentityHomeOptions(settings.Public, settings.Directory,
             sp => sp.GetRequiredService<StateDatabase>(),
-            sp => PasskeyOptions.FromConfiguration(sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(), Auth, settings.Public.GetLeftPart(UriPartial.Authority), [], []),
-            _ => settings.Directory);
-        builder.Services.AddSingleton(sp => new HomeDirectory(sp.GetRequiredService<StateDatabase>()));
-        builder.Services.AddSingleton(sp => new OidcClients(sp.GetRequiredService<StateDatabase>()));
-        builder.Services.AddSingleton(sp => new SigningKeys(sp.GetRequiredService<StateDatabase>(),
-            new DataProtectionSigningKeyProtector(sp.GetRequiredService<IDataProtectionProvider>().CreateProtector("dbdatakit-identity.signing-key"))));
-        builder.Services.AddSingleton(sp => new OpenIdProvider(sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<UserStore>(), sp.GetRequiredService<HomeDirectory>(),
-            sp.GetRequiredService<OidcClients>(), sp.GetRequiredService<SigningKeys>(), settings.Issuer, sp.GetService<TimeProvider>()));
+            sp => new DataProtectionSigningKeyProtector(sp.GetRequiredService<IDataProtectionProvider>().CreateProtector("dbdatakit-identity.signing-key")),
+            Auth,
+            // the console's web app, when it is installed beside the home, has the invitation screen; without it the home serves its own
+            InvitePage: !hasWebApp));
         configure?.Invoke(builder.Services);
 
         var app = builder.Build();
-        if (app.Services.GetRequiredService<PasskeyOptions>().Problem() is { } problem)
-            log($"Passkeys are misconfigured and will not work: {problem}");
-        // a home that has no signing key yet makes its first one now, so the first request is not the one that pays for it
-        app.Services.GetRequiredService<SigningKeys>().Current();
-
         app.UseDbDataPipeline();
         app.MapDbDataEndpoints();
 
-        if (Directory.Exists(webRoot))
+        if (hasWebApp)
         {
             var files = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(webRoot);
             app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = files });
             app.UseStaticFiles(new StaticFileOptions { FileProvider = files });
         }
-        app.UseAuthentication();
-        app.UseAuthorization();
-        app.MapControllers();
-
-        // The provider's endpoints are public by nature (a console and a browser reach them with no session); the sign-in page too. Everything else stays closed by the fallback policy.
-        var open = app.MapGroup("");
-        open.AllowAnonymous();
-        var options = app.Services.GetRequiredService<AuthOptions>();
-        var sessions = app.Services.GetRequiredService<SessionStore>();
-        var provider = app.Services.GetRequiredService<OpenIdProvider>();
-        open.MapOpenIdProvider(provider, app.Services.GetRequiredService<SigningKeys>(), new OpenIdHostOptions(
-            c => c.User.FindFirst(Auth.UserIdClaim)?.Value,
-            SignInPath,
-            EndSession: c =>
-            {
-                if (c.Request.Cookies[options.CookieName] is { Length: > 0 } id) sessions.Delete(id);
-                c.Response.Cookies.Delete(options.CookieName);
-                return Task.CompletedTask;
-            },
-            // the console's sign-out sends the browser here from another site, with no cookie: the hint names the person
-            EndSessionOf: (_, userId) => { sessions.DeleteAllFor(userId); return Task.CompletedTask; }));
-        open.MapGet(SignInPath, () => Results.Content(SignInPage, "text/html; charset=utf-8"));
+        app.MapIdentityHome(log);
 
         RequestDelegate webApp = async context =>
         {
@@ -180,42 +141,6 @@ public static class IdentityHost
         app.MapFallback(webApp).AllowAnonymous();
         return app;
     }
-
-    /// <summary>
-    /// A person who is not signed in at the home arrives here from <c>/identity/authorize</c> with <c>returnUrl</c>. If they already have a session they go straight back (this navigation is from the home's own site, so the
-    /// session cookie, which is SameSite Strict, comes with it); otherwise they sign in with a passkey. Only an address under <c>/identity/</c> of the home is returned to.
-    /// </summary>
-    public const string SignInPage = """
-        <!doctype html>
-        <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in</title>
-        <style>body{font:16px system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#f5f5f4;color:#1c1917}
-        main{background:#fff;padding:2rem;border-radius:.5rem;box-shadow:0 1px 4px #0003;max-width:22rem;width:calc(100% - 2rem)}
-        button{font:inherit;padding:.6rem 1rem;width:100%;cursor:pointer}p#message{color:#b91c1c;min-height:1.2em}</style></head>
-        <body><main data-testid="identity-sign-in"><h1>Sign in</h1><p>Use your passkey to sign in to the identity home.</p>
-        <button id="passkey" data-testid="identity-sign-in-passkey" type="button">Sign in with a passkey</button><p id="message" role="alert"></p></main>
-        <script>
-        const requested = new URLSearchParams(location.search).get('returnUrl') || '';
-        const target = requested.startsWith('/identity/') && !requested.startsWith('//') && !requested.includes('\\') ? requested : '/';
-        const message = text => { document.getElementById('message').textContent = text; };
-        const toBuffer = b64 => { const p = b64.replace(/-/g, '+').replace(/_/g, '/'); const bin = atob(p.padEnd(Math.ceil(p.length / 4) * 4, '=')); return Uint8Array.from(bin, c => c.charCodeAt(0)).buffer; };
-        const toB64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-        async function signedIn() { const r = await fetch('/api/auth/status'); return r.ok && (await r.json()).userId; }
-        async function go() {
-          const begin = await fetch('/api/auth/passkey/begin', { method: 'POST' });
-          if (!begin.ok) { message((await begin.json()).error || 'Passkeys are not available here.'); return; }
-          const o = await begin.json();
-          const c = await navigator.credentials.get({ publicKey: { ...o, challenge: toBuffer(o.challenge), allowCredentials: (o.allowCredentials ?? []).map(a => ({ ...a, id: toBuffer(a.id) })) } });
-          const r = c.response;
-          const done = await fetch('/api/auth/passkey/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-            id: c.id, rawId: toB64(c.rawId), type: c.type, extensions: c.getClientExtensionResults(),
-            response: { authenticatorData: toB64(r.authenticatorData), clientDataJson: toB64(r.clientDataJSON), signature: toB64(r.signature), userHandle: r.userHandle ? toB64(r.userHandle) : null } }) });
-          if (!done.ok) { message((await done.json()).error || 'That did not sign you in.'); return; }
-          location.replace(target);
-        }
-        document.getElementById('passkey').addEventListener('click', () => go().catch(e => message(e.message || String(e))));
-        signedIn().then(yes => { if (yes) location.replace(target); }).catch(() => { });
-        </script></body></html>
-        """;
 
     private static IPAddress AddressOf(Uri listen) =>
         listen.Host == "localhost" ? IPAddress.Loopback
