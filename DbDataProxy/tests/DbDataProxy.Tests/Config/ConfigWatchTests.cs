@@ -9,6 +9,14 @@ namespace DbDataProxy.Tests.Config;
 [Collection(ProcessStateCollection.Name)]
 public sealed class ConfigWatchTests
 {
+    /// <summary>The inotify instances this process holds. Hosts that earlier tests disposed can still be giving theirs up (a finalizer closes the handle), so it settles them first: a count taken in the middle of that drifts by one.</summary>
+    private static int SettledWatches()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        return Watches();
+    }
+
     private static int Watches() => new DirectoryInfo("/proc/self/fd").GetFileSystemInfos().Count(f => f.LinkTarget?.Contains("inotify", StringComparison.Ordinal) == true);
 
     [Fact]
@@ -17,16 +25,17 @@ public sealed class ConfigWatchTests
         if (!OperatingSystem.IsLinux()) return;
         using var broken = TempConfig.Create(("server.yaml", "listen: [not, a, mapping\n"));
         using var good = TempConfig.Create(("server.yaml", "listen: { address: 127.0.0.1 }\n"));
-        var before = Watches();
+        var before = SettledWatches();
         for (var i = 0; i < 20; i++)
         {
             Assert.Throws<InvalidDataException>(() => new ConfigurationBuilder().Add(new ProxyConfigDirectorySource(broken.Directory)).Build());
             Assert.True(ConfigTestSupport.LoadDirectory(good.Directory).Ok);
         }
-        Assert.True(Watches() <= before, $"{Watches() - before} inotify instances were left behind by 40 loads.");
+        var after = SettledWatches();
+        Assert.True(after <= before, $"{after - before} inotify instances were left behind by 40 loads.");
 
         // and a configuration that is in use does watch
         using var root = (ConfigurationRoot)new ConfigurationBuilder().Add(new ProxyConfigDirectorySource(good.Directory)).Build();
-        Assert.Equal(before + 1, Watches());
+        Assert.Equal(after + 1, Watches());
     }
 }
