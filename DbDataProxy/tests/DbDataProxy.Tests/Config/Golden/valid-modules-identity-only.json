@@ -1,0 +1,1 @@
+{ "Proxy": { "Modules": ["identity"], "Tls": { "Mode": "SelfSigned" } } }

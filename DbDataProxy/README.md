@@ -176,6 +176,10 @@ The two are kept apart by the connection they arrive on, not by number: a manage
 * **The overview and the history** (`GET /api/v1/overview`, viewer: version, instance, uptime, counts of data sources, users, sessions, running queries, clients locked out, failures in the last hour; `GET /api/v1/config/history[?limit=]` and `GET /api/v1/config/history/{sha}`, admin: the commits of the configuration folder, the first being "Configuration as found", and what each changed, both sides of each file with password hashes, signing keys and certificate passwords masked).
 * **The local channel** (`management.localChannel: true`) answers the command line on this machine over a named pipe (Windows; SYSTEM and Administrators) or a Unix socket (the service's account), as an administrator, with messages `{"method":"GET","path":"/api/v1/config"}`.
 
+### Modules
+
+A proxy serves **modules** (plan 20, O01), listed in `server.yaml` as `modules: [flightsql, identity]`. `flightsql` (Arrow Flight SQL, the default) and `identity` (the home below, which `identity: {enabled: true}` also turns on) exist so far; a name that is not a module is refused, naming `Modules` and the known ones. An instance without `flightsql` opens no Flight port. Later modules (`store`, `apps`, ...) are listed the same way.
+
 ### The identity home
 
 The proxy can serve the install's **identity home** (plan 20, O06): who people are and what they may do, for every console and app, so people sign in without reaching the private console. It is the shared

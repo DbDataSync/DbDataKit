@@ -112,7 +112,7 @@ public static class ProxyHost
         app.UseDbDataPipeline();
         ProxyManagementHost.Map(app, options, ResolveDataDirectory(options), app.Services.GetRequiredService<TlsCertificateHolder>(), configRoot);
         app.MapDbDataEndpoints();
-        app.MapFlightEndpoint();
+        if (ProxyModules.Has(options, ProxyModules.FlightSql)) app.MapFlightEndpoint();
         app.MapGet("/", () => "DbDataProxy Arrow Flight SQL endpoint. Connect with a Flight SQL client.");
         return app;
     }
@@ -190,9 +190,9 @@ public static class ProxyHost
                 ServerVersion = typeof(ProxyHost).Assembly.GetName().Version?.ToString(3) ?? "1.0.0",
             }, sp.GetRequiredService<TimeProvider>());
         });
-        services.AddHostedService<FlightSqlModuleService>();
+        if (ProxyModules.Has(options, ProxyModules.FlightSql)) services.AddHostedService<FlightSqlModuleService>();
         // the identity home (plan 20, O06): a listener and a web application of its own, only when asked for
-        if (options.Identity.Enabled) services.AddHostedService<ProxyIdentityModule>();
+        if (ProxyModules.Has(options, ProxyModules.Identity)) services.AddHostedService<ProxyIdentityModule>();
 
         // The shared providers: one registry, one composer, one failure model per engine. With Proxy:LogDriverErrors the providers keep the
         // (redacted) driver text of failed connections on the failure, for the local log only.
@@ -257,16 +257,15 @@ public static class ProxyHost
             kestrel.Limits.MinResponseDataRate = null;
             kestrel.Limits.Http2.KeepAlivePingDelay = TimeSpan.FromSeconds(30);
 
+            // the certificate is loaded here, not by the Flight listener: the management and identity listeners need it when the instance serves no Flight SQL
+            if (options.Tls.Mode != TlsMode.None && holder.Current is null)
+                holder.Set(CertificateProvider.Load(options, dataDirectory,
+                    kestrel.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger("Tls"), secrets: kestrel.ApplicationServices.GetRequiredService<SecretsRuntime>()));
             var address = IPAddress.Parse(options.Listen.Address);
-            kestrel.Listen(address, options.Listen.Port, listen =>
+            if (ProxyModules.Has(options, ProxyModules.FlightSql)) kestrel.Listen(address, options.Listen.Port, listen =>
             {
                 listen.Protocols = HttpProtocols.Http2;
                 if (options.Tls.Mode == TlsMode.None) return;
-
-                var services = kestrel.ApplicationServices;
-                if (holder.Current is null)
-                    holder.Set(CertificateProvider.Load(options, dataDirectory,
-                        services.GetRequiredService<ILoggerFactory>().CreateLogger("Tls"), secrets: services.GetRequiredService<SecretsRuntime>()));
                 listen.UseHttps(https =>
                 {
                     // Looked up per handshake so a rotated certificate is served without a restart.

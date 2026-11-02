@@ -23,6 +23,7 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
     {
         ValidateListenAndTls(o, cx);
         ValidateManagement(o, cx);
+        ValidateModules(o, cx);
         ValidateIdentity(o, cx);
         ValidateCompression(o.Compression, "Compression", cx);
         ValidateDataSources(o, cx);
@@ -92,9 +93,19 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
             cx.Error("Management.Port", "The management API has its own port; it is the Flight port here.", $"Choose another port than {o.Listen.Port}.");
     }
 
+    private static void ValidateModules(ProxyOptions o, IConfigValidationContext cx)
+    {
+        foreach (var name in o.Modules.Where(m => !ProxyModules.Known.Contains(m, StringComparer.OrdinalIgnoreCase)))
+            cx.Error("Modules", $"`{name}` is not a module of this server.", $"Use {string.Join(", ", ProxyModules.Known)}.");
+        if (o.Modules.Count != o.Modules.Distinct(StringComparer.OrdinalIgnoreCase).Count())
+            cx.Error("Modules", "A module is listed twice.", "List each module once.");
+        if (!ProxyModules.Has(o, ProxyModules.FlightSql) && !ProxyModules.Has(o, ProxyModules.Identity))
+            cx.Error("Modules", "No module is enabled, so the server would serve nothing.", $"List at least one of {string.Join(", ", ProxyModules.Known)}.");
+    }
+
     private static void ValidateIdentity(ProxyOptions o, IConfigValidationContext cx)
     {
-        if (!o.Identity.Enabled) return;
+        if (!ProxyModules.Has(o, ProxyModules.Identity)) return;
         if (!IPAddress.TryParse(o.Identity.Address, out _))
             cx.Error("Identity.Address", $"`Address` is `{o.Identity.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
         if (o.Tls.Mode == TlsMode.None)

@@ -56,6 +56,12 @@ public sealed class ProxyOptions
     /// <summary>The management API a console uses (plan 13, P03): off unless asked for.</summary>
     public ManagementOptions Management { get; set; } = new();
 
+    /// <summary>
+    /// The modules this instance serves (plan 20, O01): <c>flightsql</c> (Arrow Flight SQL, the default) and <c>identity</c>; an unknown name is refused naming this file. <c>Identity.Enabled</c> also turns the identity module on.
+    /// An instance with no <c>flightsql</c> opens no Flight port.
+    /// </summary>
+    public List<string> Modules { get; set; } = [ProxyModules.FlightSql];
+
     /// <summary>The identity home (plan 20, O06): who people are and what they may do, for every console and app of the install, on a listener of its own. Off unless asked for.</summary>
     public IdentityOptions Identity { get; set; } = new();
 

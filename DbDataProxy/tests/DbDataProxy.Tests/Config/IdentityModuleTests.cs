@@ -131,6 +131,28 @@ public sealed class IdentityModuleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_instance_that_lists_only_the_identity_module_opens_no_flight_port()
+    {
+        File.WriteAllText(Path.Combine(ProxyConfigFile.DirectoryIn(dataDirectory), "server.yaml"), "schemaVersion: 2\ntls: { mode: selfSigned }\nmodules: [identity]\n");
+        await StartAsync();
+
+        using var home = Trusting(new Uri(IdentityUrl));
+        Assert.Equal(HttpStatusCode.OK, (await home.GetAsync("/.well-known/openid-configuration")).StatusCode);
+        using var flight = new TcpClient();
+        await Assert.ThrowsAsync<SocketException>(async () => await flight.ConnectAsync(IPAddress.Loopback, flightPort));
+    }
+
+    [Fact]
+    public void A_module_that_does_not_exist_is_refused_naming_the_setting_and_the_known_ones()
+    {
+        using var file = TempConfig.Create(("server.yaml", "modules: [flightsql, ftp]\n"));
+        var diagnostics = ProxyConfig.Load(new ConfigurationBuilder().Add(new ProxyConfigDirectorySource(file.Directory)).Build()).Diagnostics;
+        var refused = Assert.Single(diagnostics, d => d.KeyPath == "Modules");
+        Assert.Contains("`ftp`", refused.Message);
+        Assert.Contains("flightsql, identity", refused.Fix);
+    }
+
+    [Fact]
     public async Task A_console_signs_a_person_in_through_the_serving_layer_with_the_homes_id_and_roles()
     {
         await StartAsync();
