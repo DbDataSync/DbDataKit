@@ -122,8 +122,8 @@ DbDataKit.Config.Testing     fixture/fuzz helpers, golden migration helper, sche
 - **Comment preservation** across migrations is the hardest part of the editor; budget time, and fall back to
   a clear "reformatted" notice with the `.bak` kept.
 - **Performance** is irrelevant at these sizes; correctness and error quality dominate.
-- Decision needed: do migrations live in the shared repo or the product? Recommendation: engine shared,
-  migrations in the product that owns the file kind; shared kinds (connection) migrate in the shared repo.
+- ~~Decision needed: do migrations live in the shared repo or the product?~~ **No longer applies** (2026-11-02): plan 13's clean break
+  (section 3, owner decision) writes no migration for any file kind; a file in an old format is refused with a message naming the file.
 
 ## 7. Acceptance
 
