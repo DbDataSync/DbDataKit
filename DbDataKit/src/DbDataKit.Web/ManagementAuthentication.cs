@@ -42,6 +42,9 @@ public static class ManagementAuthentication
             await next();
         });
 
+    /// <summary>The caller's validated token, or null when the request is not under the protected prefix or not authenticated.</summary>
+    public static ValidatedToken? ManagementTokenOrNull(this HttpContext context) => context.Items.TryGetValue(ItemKey, out var token) ? token as ValidatedToken : null;
+
     /// <summary>The caller's validated token. Only for a request under the protected prefix, where the middleware has run; throws otherwise, because an endpoint outside it has no caller to ask about.</summary>
     public static ValidatedToken ManagementToken(this HttpContext context) =>
         context.Items.TryGetValue(ItemKey, out var token) && token is ValidatedToken validated

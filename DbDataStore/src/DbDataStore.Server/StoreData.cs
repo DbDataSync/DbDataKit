@@ -101,6 +101,33 @@ public static class StoreData
         return problem is null ? (connection!, schema!, instance, null) : ("", "", null, Results.NotFound(new { error = problem }));
     }
 
+    private static readonly System.Text.RegularExpressions.Regex DataPath = new(
+        @"^/api/v1/models/(?<model>[^/]+)(/instances/[^/]+)?/(entities/(?<entity>[^/]+)/rows?|changes)$", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// A token with a scope (an app's, plan 26 section 3) reaches the row reads and the changes endpoint and nothing else: not models, instances, storage, migration or change requests. A read must be in the scope;
+    /// the changes endpoint checks each change's entity itself (<see cref="OutsideScope"/>), since the entities are in the body.
+    /// </summary>
+    public static IApplicationBuilder UseScopedTokens(this IApplicationBuilder app) => app.Use(async (context, next) =>
+    {
+        if (context.ManagementTokenOrNull() is not { Scope: not null } token) { await next(); return; }
+        var match = DataPath.Match(context.Request.Path.Value ?? "");
+        var allowed = match.Success && (match.Groups["entity"].Success
+            ? HttpMethods.IsGet(context.Request.Method) && TokenScope.Allows(token, Uri.UnescapeDataString(match.Groups["model"].Value), Uri.UnescapeDataString(match.Groups["entity"].Value), write: false)
+            : HttpMethods.IsPost(context.Request.Method));
+        if (!allowed)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new { error = "This token is for an app and its scope does not include this." });
+            return;
+        }
+        await next();
+    });
+
+    /// <summary>The first change whose entity the token's scope does not allow writing, or null.</summary>
+    private static string? OutsideScope(ValidatedToken token, string model, IEnumerable<RowChange> changes) =>
+        changes.Select(c => c.Entity).FirstOrDefault(entity => !TokenScope.Allows(token, model, entity, write: true));
+
     public static void Map(IEndpointRouteBuilder app, string directory, StoreConnections connections)
     {
         // the model's own copy, and each instance of it: the same routes under two prefixes
@@ -339,6 +366,7 @@ public static class StoreData
             var (changes, bad) = ParseChanges(list);
             if (bad is not null) return bad;
             var token = context.ManagementToken();
+            if (OutsideScope(token, name, changes!) is { } outside) return Results.Json(new { error = $"This token's scope does not include writing '{outside}'." }, statusCode: StatusCodes.Status403Forbidden);
             if (StoreChangeRequests.Needs(model!, token))
             {
                 var request = StoreChangeRequests.Propose(directory, name, InstanceName(context), token, (string?)body["description"], (JsonArray)JsonNode.Parse(list.ToJsonString())!, DateTimeOffset.UtcNow);

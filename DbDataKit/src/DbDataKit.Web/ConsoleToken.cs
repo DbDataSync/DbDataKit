@@ -30,12 +30,28 @@ public interface IPairedClients
 /// <param name="Roles">The user's roles on this server.</param>
 /// <param name="Projects">For Build: the user's roles in each project.</param>
 /// <param name="IsConsole">True when the subject is the console itself (polling), not a user.</param>
+/// <param name="App">The app instance the token is for, when an app host (not a console) asks for it on a person's behalf (plan 26 section 3).</param>
+/// <param name="Scope">What the app may touch, as <see cref="TokenScope"/> entries; a server that serves data refuses a scoped token everywhere else. Null is no scope, as a console's token.</param>
 public sealed record ConsoleTokenRequest(string Audience, string SubjectId, string? SubjectName, ServerRole Roles,
-    IReadOnlyDictionary<string, ServerRole>? Projects = null, bool IsConsole = false);
+    IReadOnlyDictionary<string, ServerRole>? Projects = null, bool IsConsole = false, string? App = null, IReadOnlyList<string>? Scope = null);
 
 /// <summary>A token that passed every check: who is calling, from which client, with what roles (already within the console's ceiling).</summary>
 public sealed record ValidatedToken(PairedClient Client, string SubjectId, string? SubjectName, bool IsConsole, ServerRole Roles,
-    IReadOnlyDictionary<string, ServerRole> Projects, string TokenId, DateTimeOffset IssuedAt, DateTimeOffset ExpiresAt);
+    IReadOnlyDictionary<string, ServerRole> Projects, string TokenId, DateTimeOffset IssuedAt, DateTimeOffset ExpiresAt, string? App = null, IReadOnlyList<string>? Scope = null);
+
+/// <summary>
+/// What a scoped token (an app's, plan 26 section 3) may reach on a server that keeps data: <c>model/entity:read</c> or <c>model/entity:write</c>, write including read. A token with no scope (a console's) is not limited by this;
+/// one with a scope, even an empty one, may do nothing the scope does not name.
+/// </summary>
+public static class TokenScope
+{
+    public static string Entry(string model, string entity, bool write) => $"{model}/{entity}:{(write ? "write" : "read")}";
+
+    public static bool Allows(ValidatedToken token, string model, string entity, bool write) =>
+        token.Scope is null
+        || token.Scope.Contains(Entry(model, entity, write: true), StringComparer.Ordinal)
+        || (!write && token.Scope.Contains(Entry(model, entity, write: false), StringComparer.Ordinal));
+}
 
 public enum TokenFailure
 {

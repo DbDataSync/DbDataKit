@@ -200,6 +200,9 @@ public sealed class AppsOptions
     /// <summary>The https address people reach the apps host at, without a path. Empty: <c>https://&lt;the first TLS host name, or localhost&gt;:&lt;Port&gt;</c>. The home's redirect URI for it is this plus <c>/apps/-/callback</c>.</summary>
     public string? PublicUrl { get; set; }
 
+    /// <summary>The ids of the Store servers this host issues app tokens for (it must also be paired with each as a server client, with the roles an app may be given there). An app asks for one by id; any other is refused.</summary>
+    public List<string> Stores { get; set; } = [];
+
     /// <summary>The identity home people sign in through. A client registered at the home (<c>identity client-add</c>) with the redirect URI above; a public client needs no secret.</summary>
     public AppsHomeOptions Home { get; set; } = new();
 }

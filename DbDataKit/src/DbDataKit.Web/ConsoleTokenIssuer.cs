@@ -37,6 +37,8 @@ public sealed class ConsoleTokenIssuer(string consoleId, ConsoleSigningKey key, 
             ["iat"] = now,
             ["exp"] = now + lifetimeSeconds,
         };
+        if (request.App is not null) claims["app"] = request.App;
+        if (request.Scope is not null) claims["scope"] = request.Scope;
         var header = new Dictionary<string, object?> { ["alg"] = "EdDSA", ["typ"] = "dbdata-console", ["kid"] = key.Fingerprint };
         var signingInput = Base64Url.Encode(JsonSerializer.SerializeToUtf8Bytes(header)) + "." + Base64Url.Encode(JsonSerializer.SerializeToUtf8Bytes(claims));
         return signingInput + "." + Base64Url.Encode(key.Sign(Encoding.ASCII.GetBytes(signingInput)));

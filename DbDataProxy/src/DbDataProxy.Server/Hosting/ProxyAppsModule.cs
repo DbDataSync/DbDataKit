@@ -78,7 +78,7 @@ public sealed class ProxyAppsModule(IOptionsMonitor<ProxyOptions> options, State
             new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) });
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
-        app.MapApps(instances, new AppSite(instances), client, new AppSessions(), new AppTokenBroker(new ConsoleTokenIssuer(TokenIssuer, await SigningKeyAsync(current, cancellationToken))));
+        app.MapApps(instances, new AppSite(instances), client, new AppSessions(), stores: current.Apps.Stores, broker: new AppTokenBroker(new ConsoleTokenIssuer(TokenIssuer, await SigningKeyAsync(current, cancellationToken))));
         app.MapFallback(() => Results.Text("The apps host of this DbDataProxy. An app is at /apps/<instance>/.", "text/plain"));
         await app.StartAsync(cancellationToken);
         _app = app;

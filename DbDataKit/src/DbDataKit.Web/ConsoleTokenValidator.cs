@@ -86,8 +86,16 @@ public sealed class ConsoleTokenValidator(string instanceId, IPairedClients clie
             if (!replay.TryAdd(console.Id, jti, expires.AddSeconds(SkewSeconds)))
                 return TokenResult.Refused(TokenFailure.Replayed, $"token {jti} was already used");
 
+            // a scope is a list of strings; one that is not is refused rather than read as no scope, which would widen the token
+            List<string>? scope = null;
+            if (root.TryGetProperty("scope", out var scopeElement))
+            {
+                if (scopeElement.ValueKind != JsonValueKind.Array || scopeElement.EnumerateArray().Any(s => s.ValueKind != JsonValueKind.String)) return TokenResult.Refused(TokenFailure.MissingClaim, "scope");
+                scope = [.. scopeElement.EnumerateArray().Select(s => s.GetString()!)];
+            }
+
             var isConsole = Str(root, "kind") == "console";
-            return TokenResult.Success(new ValidatedToken(console, subject, Str(root, "name"), isConsole, ServerRoles.Close(roles), projects, jti, issuedAt, expires));
+            return TokenResult.Success(new ValidatedToken(console, subject, Str(root, "name"), isConsole, ServerRoles.Close(roles), projects, jti, issuedAt, expires, Str(root, "app"), scope));
         }
     }
 

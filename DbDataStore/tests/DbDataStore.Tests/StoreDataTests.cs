@@ -34,6 +34,7 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
     private readonly ConsoleIdentity console = new("console-1", ConsoleSigningKey.Generate());
     private readonly List<string> extraDatabases = [];
     private string subject = "ada";
+    private IReadOnlyList<string>? scope;
     private WebApplication? app;
     private StoreSettings settings = null!;
     private readonly string? server = Environment.GetEnvironmentVariable(engine == "sqlserver" ? "DBDATA_TEST_SQLSERVER" : "DBDATA_TEST_POSTGRES");
@@ -120,7 +121,7 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
         return (method, path, body, role) =>
         {
             var request = new HttpRequestMessage(method, path);
-            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, console.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, subject, subject, role)));
+            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, console.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, subject, subject, role, App: scope is null ? null : "acme", Scope: scope)));
             if (body is not null) request.Content = new StringContent(body, Encoding.UTF8, "application/json");
             return http.SendAsync(request);
         };
@@ -216,6 +217,41 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
         await send(HttpMethod.Post, "/api/v1/models/robots/storage/create", null, ServerRole.Admin);
         subject = "agent:helper";
         Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/robots/changes", Insert("AS", "Asia", "3"), ServerRole.Author)).StatusCode);
+    }
+
+    [Fact]
+    public async Task An_apps_token_reaches_only_the_entities_its_scope_names_and_nothing_else()
+    {
+        var send = await Client();
+        await send(HttpMethod.Put, "/api/v1/models/territories", Model, ServerRole.Author);
+        await send(HttpMethod.Post, "/api/v1/models/territories/storage/create", null, ServerRole.Admin);
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert("NA", "North", "1"), ServerRole.Author)).StatusCode);
+        const string Row = "/api/v1/models/territories/entities/territory/row?key.code=NA";
+
+        // read scope: the row is read; a write is refused even though the person is an author; the admin routes are not reachable
+        scope = ["territories/territory:read"];
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Get, Row, null, ServerRole.Author)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/rows", null, ServerRole.Author)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert("EU", "Europe", "2"), ServerRole.Author)).StatusCode);
+        foreach (var path in new[] { "/api/v1/models", "/api/v1/models/territories", "/api/v1/models/territories/storage", "/api/v1/models/territories/requests", "/api/v1/models/territories/schema" })
+            Assert.Equal(HttpStatusCode.Forbidden, (await send(HttpMethod.Get, path, null, ServerRole.Admin)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await send(HttpMethod.Post, "/api/v1/models/territories/storage/create", null, ServerRole.Admin)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await send(HttpMethod.Put, "/api/v1/models/territories", Model, ServerRole.Admin)).StatusCode);
+
+        // an entity the scope does not name, and another model's, are refused
+        scope = ["territories/other:read", "elsewhere/territory:write"];
+        Assert.Equal(HttpStatusCode.Forbidden, (await send(HttpMethod.Get, Row, null, ServerRole.Author)).StatusCode);
+
+        // write scope: the write goes through, as the person, and the person's own roles still decide (a viewer cannot write)
+        scope = ["territories/territory:write"];
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert("EU", "Europe", "2"), ServerRole.Author)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert("AS", "Asia", "3"), ServerRole.Viewer)).StatusCode);
+        scope = [];
+        Assert.Equal(HttpStatusCode.Forbidden, (await send(HttpMethod.Get, Row, null, ServerRole.Author)).StatusCode);   // an empty scope reaches nothing
+
+        // without a scope (a console) the same calls work
+        scope = null;
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Get, "/api/v1/models/territories/storage", null, ServerRole.Viewer)).StatusCode);
     }
 
     [Fact]

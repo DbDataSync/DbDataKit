@@ -49,7 +49,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
     private static HttpClient Trusting(string url) =>
         new(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false, ServerCertificateCustomValidationCallback = (_, _, _, _) => true }) { BaseAddress = new Uri(url) };
 
-    private const string Manifest = "schemaVersion: 1\nname: notes\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\n";
+    private const string Manifest = "schemaVersion: 1\nname: notes\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\nmodels:\n  - model: territories\n    entities: {territory: [read, write]}\n";
 
     /// <summary>The state is made before the host is (as an operator's commands would): a person with a role on one app, an app published, and the client the apps host signs in with, registered at the home.</summary>
     private (string ClientId, string Ada, string Bob, StateDatabase Database) Prepare()
@@ -74,7 +74,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
         var identityPort = FreePort();
         app = ProxyHost.Build([
             $"--Proxy:DataDirectory={dataDirectory}", "--Proxy:Modules:0=apps", "--Proxy:Modules:1=identity",
-            "--Proxy:Apps:Address=127.0.0.1", $"--Proxy:Apps:Port={appsPort}", $"--Proxy:Apps:Home:ClientId={clientId}",
+            "--Proxy:Apps:Address=127.0.0.1", $"--Proxy:Apps:Port={appsPort}", $"--Proxy:Apps:Home:ClientId={clientId}", "--Proxy:Apps:Stores:0=store-1",
             "--Proxy:Identity:Address=127.0.0.1", $"--Proxy:Identity:Port={identityPort}", $"--Proxy:Identity:PublicUrl=https://localhost:{identityPort}",
         ]);
         await app.StartAsync();
@@ -179,6 +179,33 @@ public sealed class AppsModuleTests : IAsyncLifetime
 
         var bobSession = await SignInAsync(apps, home, database, bob, "/apps/acme/");
         Assert.Equal(HttpStatusCode.Forbidden, (await PostTokenAsync(apps, "acme", bobSession)).StatusCode);   // no role on the app, no token
+    }
+
+    [Fact]
+    public async Task A_token_for_a_store_server_carries_the_app_and_the_scope_of_the_manifest_and_only_for_a_configured_server()
+    {
+        appsPort = FreePort();
+        var (clientId, ada, _, database) = Prepare();
+        var (apps, home) = await StartAsync(clientId);
+        var session = await SignInAsync(apps, home, database, ada, "/apps/acme/");
+
+        async Task<HttpResponseMessage> Ask(string server)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, "/apps/acme/_token") { Content = new StringContent($"{{\"server\":\"{server}\"}}", Encoding.UTF8, "application/json") };
+            request.Headers.Add("Cookie", $"{AppsEndpoints.SessionCookie}={session}");
+            request.Headers.Add("X-DbData-Shell", "1");
+            return await apps.SendAsync(request);
+        }
+
+        var response = await Ask("store-1");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var token = (string)JsonNode.Parse(await response.Content.ReadAsStringAsync())!["token"]!;
+        var part = token.Split('.')[1].Replace('-', '+').Replace('_', '/');
+        var claims = JsonNode.Parse(Convert.FromBase64String(part.PadRight(part.Length + 3 & ~3, '=')))!;
+        Assert.Equal(("store-1", "acme", "dbdataproxy-apps"), ((string)claims["aud"]!, (string)claims["app"]!, (string)claims["iss"]!));
+        Assert.Equal(["territories/territory:write"], claims["scope"]!.AsArray().Select(r => (string)r!));
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await Ask("some-other-server")).StatusCode);   // not one the host is configured for
     }
 
     [Fact]
