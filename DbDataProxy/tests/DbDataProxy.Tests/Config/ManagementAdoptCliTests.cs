@@ -53,7 +53,7 @@ public sealed partial class ManagementTests
         Assert.Equal("build-1", (string)document["data"]!["client"]!);
         Assert.Equal(0, (await RunCliAsync("datasource", "adopt", "second", "build-1")).Exit);
 
-        var audit = File.ReadAllLines(Path.Combine(dataDirectory, "management-audit.log")).Select(l => JsonNode.Parse(l)!).ToList();
+        var audit = ConfigTestSupport.AuditEntries(dataDirectory);
         Assert.Contains(audit, a => (string)a["command"]! == "data-source adopt" && (string)a["target"]! == "by-hand" && (string)a["outcome"]! == "adopted by build-1"
             && (string)a["userId"]! == Environment.UserName && (string)a["consoleId"]! == "local");
     }

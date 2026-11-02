@@ -86,7 +86,8 @@ public static class ProxyManagementHost
         // the data sources need the management object's validation, and it needs them to route to: made in two steps
         ProxyDataSources? dataSources = null;
         var management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version);
-        var audit = new FileAuditLog(Path.Combine(dataDirectory, "management-audit.log"));   // one for every kind of change: appends go through its lock
+        // one for every kind of change, in the state every instance of a group shares (plan 20 O02); the file it used to be is read in once
+        var audit = new DbDataProxy.Server.State.StateAuditLog(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>());
         dataSources = new ProxyDataSources(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit, git, findClient: clients.Find);
         var identities = new ProxyIdentities(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, audit, git);
         var activity = new ProxyActivity(app.Services.GetRequiredService<SessionStore>(), app.Services.GetRequiredService<ActiveQueries>(), app.Services.GetRequiredService<QueryLimits>(),
@@ -101,6 +102,8 @@ public static class ProxyManagementHost
             identityAdmin: options.Identity.Enabled
                 ? new DbDataKit.Identity.IdentityAdminApi(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), ProxyIdentityModule.PublicUrlOf(options).AbsoluteUri, new DbDataKit.Identity.AccessTokenPolicy(options.Identity.AccessTokenMaxDays))
                 : null);
+        if (audit.ImportFile(dataDirectory) is > 0 and var imported)
+            app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management").LogInformation("Read {Count} entries of {File} into the state's audit; the file is now {File}.imported.", imported, DbDataProxy.Server.State.StateAuditLog.LegacyFileName, DbDataProxy.Server.State.StateAuditLog.LegacyFileName);
         var validator = new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache());
         var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management");
 

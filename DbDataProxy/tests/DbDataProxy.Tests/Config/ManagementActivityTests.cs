@@ -165,7 +165,7 @@ public sealed partial class ManagementTests
         Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(server, HttpMethod.Get, "/api/v1/limits", ServerRole.Viewer)).StatusCode);
 
         // the audit says what was done, to what, and by whom
-        var audit = File.ReadAllLines(Path.Combine(dataDirectory, "management-audit.log")).Select(l => JsonNode.Parse(l)!).ToList();
+        var audit = ConfigTestSupport.AuditEntries(dataDirectory);
         Assert.Contains(audit, a => (string)a["command"]! == "throttle clear" && (string)a["outcome"]! == "cleared" && (string)a["userId"]! == "ada");
     }
 }
