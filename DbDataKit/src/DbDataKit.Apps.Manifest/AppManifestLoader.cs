@@ -12,7 +12,7 @@ public sealed class AppManifestLoadResult(AppManifest? manifest, IReadOnlyList<C
 }
 
 /// <summary>Strict reader and validator of <c>app/1</c> manifests. A problem is a diagnostic with the file, line and column; nothing here throws on a damaged file.</summary>
-public static class AppManifestLoader
+public static partial class AppManifestLoader
 {
     public const string BadName = "DBD-APP-001";
     public const string BadVersion = "DBD-APP-002";
@@ -22,6 +22,7 @@ public static class AppManifestLoader
     public const string MissingFile = "DBD-APP-006";
     public const string AbsoluteAsset = "DBD-APP-007";
     public const string BadEgress = "DBD-APP-008";
+    public const string BadPortal = "DBD-APP-009";
 
     public const int Version = 1;
 
@@ -45,9 +46,9 @@ public static class AppManifestLoader
         return new(diags.HasErrors() ? null : manifest, diags);
     }
 
-    private sealed class Reader(string file, List<ConfigDiagnostic> diags) : YamlFieldReader(file, diags)
+    private sealed partial class Reader(string file, List<ConfigDiagnostic> diags) : YamlFieldReader(file, diags)
     {
-        private static readonly string[] RootKeys = ["schemaVersion", "name", "title", "description", "version", "entry", "views", "origin", "chrome", "models", "semantic", "roles", "trust", "egress"];
+        private static readonly string[] RootKeys = ["schemaVersion", "name", "title", "description", "version", "entry", "views", "origin", "chrome", "models", "semantic", "roles", "trust", "egress", "kind", "portal"];
         private static readonly Regex SemVer = new(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex Identifier = new("^[A-Za-z][A-Za-z0-9_]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -67,7 +68,9 @@ public static class AppManifestLoader
                 if (viewsNode is not YamlSequence list) Add(SharedCodes.InvalidValue, viewsNode, "`views` must be a list of file paths.");
                 else foreach (var item in list.Items) if (item is YamlScalar s && SafePath(s) is { } p) views.Add(p); else if (item is not YamlScalar) Add(SharedCodes.InvalidValue, item, "A view is a file path.");
             }
-            if (entry is null && views.Count == 0 && map.Get("entry") is null)
+            var kind = map.Get("kind") is YamlScalar k ? Choice(k, "kind", new Dictionary<string, AppKind> { ["app"] = AppKind.App, ["portal"] = AppKind.Portal }) : AppKind.App;
+            if (kind == AppKind.Portal) { /* a portal is declared data: its pages are the `portal:` section's */ }
+            else if (entry is null && views.Count == 0 && map.Get("entry") is null)
                 Add(NothingToServe, map, "The app has nothing to serve: give it an `entry` (code) or `views` (declarative specs).", "Add `entry: src/main.ts` or `views: [views/home.yaml]`.");
 
             var origin = map.Get("origin") is YamlScalar o ? Choice(o, "origin", new Dictionary<string, AppOrigin> { ["sandbox"] = AppOrigin.Sandbox, ["own"] = AppOrigin.Own }) : AppOrigin.Sandbox;
@@ -79,8 +82,9 @@ public static class AppManifestLoader
             var egress = Egress(map);
             var title = map.Get("title") is YamlScalar t ? t.Value : null;
             var description = map.Get("description") is YamlScalar d ? d.Value : null;
+            var portal = kind == AppKind.Portal ? Portal(map, entry, views, trust) : NoPortal(map);
             if (name is null || version is null) return null;
-            return new AppManifest(name, title, description, version.Value, entry, views, origin, chrome, models, semantic, roles, trust, egress);
+            return new AppManifest(name, title, description, version.Value, entry, views, origin, chrome, models, semantic, roles, trust, egress, kind, portal);
         }
 
         private bool CheckVersion(YamlMapping map)

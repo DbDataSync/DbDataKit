@@ -6,6 +6,9 @@ public enum AppOrigin { Sandbox, Own }
 /// <summary>Whether the host draws its header and navigation around the app.</summary>
 public enum AppChrome { Shell, None }
 
+/// <summary>What an app is (plan 26 section 4a): an app, or a portal, the host other apps are mounted into.</summary>
+public enum AppKind { App, Portal }
+
 /// <summary>What the manifest asks for (plan 26 section 2b): sandboxed (the default), or trusted, which an administrator must approve for the exact version before it runs.</summary>
 public enum AppTrust { Sandbox, Trusted }
 
@@ -58,7 +61,9 @@ public sealed record AppManifest(
     IReadOnlyList<string> SemanticModels,
     IReadOnlyList<string> Roles,
     AppTrust Trust = AppTrust.Sandbox,
-    AppEgress? Egress = null)
+    AppEgress? Egress = null,
+    AppKind Kind = AppKind.App,
+    PortalSpec? Portal = null)
 {
     public const string FormatId = "app/1";
 }
