@@ -1,4 +1,4 @@
-# 13b. Items waiting on the owner's review
+# 13b. Items that waited on the owner's review (closed)
 
 Status: **closed** (2026-11-02). Every item below was decided by the owner on 2026-10-28 (N02a needed no decision) and has since been built; the outcome of each is in the table and the slice's row in [13a](13a-suite-slices.md) is the record. The sections below are kept as the review that was written on 2026-10-27, unchanged: their "Recommendation" and "Questions for you" lines are what was asked then, not what was decided. When this file was written, these were the slices of 13a and one design review that Claude had not started because each needed a decision that is the owner's.
 
