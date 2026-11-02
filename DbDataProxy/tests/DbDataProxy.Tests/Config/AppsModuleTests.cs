@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json.Nodes;
 using DbDataKit.Apps;
 using DbDataKit.Identity;
 using DbDataKit.State;
@@ -137,6 +138,47 @@ public sealed class AppsModuleTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NotFound, (await GetAsync(apps, "/apps/globex/", session)).StatusCode);
         Assert.Equal(HttpStatusCode.Redirect, (await GetAsync(apps, "/apps/acme", session)).StatusCode);   // the slash form, so relative links resolve
         Assert.Equal(HttpStatusCode.Redirect, (await GetAsync(apps, "/apps/acme/", "not-a-session")).StatusCode);
+    }
+
+    private static async Task<HttpResponseMessage> PostTokenAsync(HttpClient http, string instance, string? session, bool header = true)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/apps/{instance}/_token");
+        if (session is not null) request.Headers.Add("Cookie", $"{AppsEndpoints.SessionCookie}={session}");
+        if (header) request.Headers.Add("X-DbData-Shell", "1");
+        return await http.SendAsync(request);
+    }
+
+    [Fact]
+    public async Task The_shell_brokers_a_short_token_for_this_person_and_this_instance_only()
+    {
+        appsPort = FreePort();
+        var (clientId, ada, bob, database) = Prepare();
+        var (apps, home) = await StartAsync(clientId);
+        var session = await SignInAsync(apps, home, database, ada, "/apps/acme/");
+
+        var shell = await (await GetAsync(apps, "/apps/acme/", session)).Content.ReadAsStringAsync();
+        Assert.Contains($"src=\"{AppShell.ScriptPath}\"", shell);
+        Assert.Contains("data-instance=\"acme\"", shell);
+        var script = await apps.GetAsync(AppShell.ScriptPath);
+        Assert.Equal(HttpStatusCode.OK, script.StatusCode);
+        Assert.Contains("event.source !== frame.contentWindow", await script.Content.ReadAsStringAsync());   // only the app's own frame is answered
+
+        var response = await PostTokenAsync(apps, "acme", session);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+        Assert.Equal(300, (int)body["expiresIn"]!);
+        Assert.Equal("app:acme", (string)body["audience"]!);
+        var claims = JsonNode.Parse(Convert.FromBase64String(((string)body["token"]!).Split('.')[1].Replace('-', '+').Replace('_', '/').PadRight(((string)body["token"]!).Split('.')[1].Length + 3 & ~3, '=')))!;
+        Assert.Equal(("app:acme", ada), ((string)claims["aud"]!, (string)claims["sub"]!));
+        Assert.Contains("viewer", claims["roles"]!.AsArray().Select(r => (string)r!));
+        Assert.DoesNotContain("admin", claims["roles"]!.AsArray().Select(r => (string)r!));
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await PostTokenAsync(apps, "acme", session, header: false)).StatusCode);   // not from the shell page
+        Assert.Equal(HttpStatusCode.Unauthorized, (await PostTokenAsync(apps, "acme", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await PostTokenAsync(apps, "globex", session)).StatusCode);
+
+        var bobSession = await SignInAsync(apps, home, database, bob, "/apps/acme/");
+        Assert.Equal(HttpStatusCode.Forbidden, (await PostTokenAsync(apps, "acme", bobSession)).StatusCode);   // no role on the app, no token
     }
 
     [Fact]
