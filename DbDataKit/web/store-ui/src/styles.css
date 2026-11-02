@@ -1,0 +1,49 @@
+/* @dbdatakit/store-ui. Every colour is a variable: a host (the console, an app) sets --sui-* on a parent to match its own look; the defaults follow the system's light or dark setting. */
+.sui-editor, .sui-grid, .sui-form, .sui-history, .sui-loading, .sui-error, .sui-violations {
+  --sui-text: #1f2328;
+  --sui-muted: #59636e;
+  --sui-edge: #d8dee4;
+  --sui-head: #f3f4f6;
+  --sui-select: #ddf4ff;
+  --sui-accent: #0969da;
+  --sui-danger: #a8402f;
+  --sui-danger-bg: #fdf0ed;
+  --sui-field: #ffffff;
+  color: var(--sui-text);
+  font: 13px system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  .sui-editor, .sui-grid, .sui-form, .sui-history, .sui-loading, .sui-error, .sui-violations {
+    --sui-text: #e6edf3; --sui-muted: #9da7b3; --sui-edge: #30363d; --sui-head: #1f262e; --sui-select: #16324a; --sui-accent: #58a6ff; --sui-danger: #ff9b85; --sui-danger-bg: #3a1f1a; --sui-field: #0d1117;
+  }
+}
+.sui-editor { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.sui-main { flex: 1 1 420px; min-width: 0; }
+.sui-side { flex: 0 1 360px; min-width: 260px; }
+.sui-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.sui-toolbar h2 { margin: 0; font-size: 16px; }
+.sui-grid { overflow-x: auto; }
+.sui-grid table, .sui-history { border-collapse: collapse; width: 100%; }
+.sui-grid th, .sui-grid td, .sui-history th, .sui-history td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--sui-edge); white-space: nowrap; }
+.sui-grid th, .sui-history th { background: var(--sui-head); font-weight: 600; }
+.sui-grid tbody tr { cursor: pointer; }
+.sui-grid tbody tr:hover { background: var(--sui-head); }
+.sui-grid tr.sui-selected { background: var(--sui-select); }
+.sui-num { text-align: right !important; font-variant-numeric: tabular-nums; }
+.sui-empty { color: var(--sui-muted); text-align: center !important; padding: 18px !important; }
+.sui-pager { display: flex; gap: 10px; align-items: center; justify-content: flex-end; padding-top: 8px; color: var(--sui-muted); }
+.sui-form h3 { margin: 0 0 10px; font-size: 14px; }
+.sui-field { display: grid; gap: 3px; margin-bottom: 10px; }
+.sui-field label { font-weight: 600; }
+.sui-field input, .sui-field select, .sui-field textarea { font: inherit; padding: 5px 8px; border: 1px solid var(--sui-edge); border-radius: 4px; background: var(--sui-field); color: inherit; }
+.sui-field input[type='checkbox'] { justify-self: start; }
+.sui-field input:focus-visible, .sui-field select:focus-visible, .sui-field textarea:focus-visible { outline: 2px solid var(--sui-accent); outline-offset: 1px; }
+.sui-invalid input, .sui-invalid select, .sui-invalid textarea { border-color: var(--sui-danger); }
+.sui-hint { color: var(--sui-muted); font-size: 12px; }
+.sui-problem { color: var(--sui-danger); font-size: 12px; }
+.sui-error, .sui-violations { color: var(--sui-danger); background: var(--sui-danger-bg); border: 1px solid var(--sui-danger); border-radius: 4px; padding: 8px 10px; margin: 8px 0; }
+.sui-violations { list-style: none; }
+.sui-rule { font-family: ui-monospace, monospace; font-size: 12px; opacity: 0.8; }
+.sui-actions { display: flex; gap: 8px; }
+.sui-actions .sui-danger { margin-left: auto; color: var(--sui-danger); }
+.sui-loading { color: var(--sui-muted); padding: 12px; }

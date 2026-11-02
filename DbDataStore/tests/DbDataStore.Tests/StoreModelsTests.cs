@@ -120,4 +120,23 @@ public sealed class StoreModelsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NoContent, (await send(HttpMethod.Delete, "/api/v1/models/territories", null, ServerRole.Admin)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Get, "/api/v1/models/territories", null, ServerRole.Viewer)).StatusCode);
     }
+
+    [Fact]
+    public async Task The_schema_is_the_model_as_data_for_a_form_a_grid_or_a_typed_client()
+    {
+        var send = await Client();
+        Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Get, "/api/v1/models/territories/schema", null, ServerRole.Viewer)).StatusCode);
+        await send(HttpMethod.Put, "/api/v1/models/territories", Territories, ServerRole.Author);
+
+        var schema = await Json(await send(HttpMethod.Get, "/api/v1/models/territories/schema", null, ServerRole.Viewer));
+
+        var entity = schema["entities"]![0]!;
+        Assert.Equal("territory", (string)entity["name"]!);
+        Assert.Equal(["code"], entity["key"]!.AsArray().Select(k => (string)k!).ToArray());
+        var code = entity["attributes"]![0]!;
+        Assert.Equal("string", (string)code["kind"]!);
+        Assert.Equal(10, (int)code["length"]!);
+        Assert.True((bool)code["required"]!);
+        Assert.Equal("none", (string)entity["history"]!);
+    }
 }
