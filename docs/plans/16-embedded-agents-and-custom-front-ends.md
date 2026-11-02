@@ -182,6 +182,12 @@ Recorded in a walk through the open sign-in questions; slices follow from them. 
    accounts and can list and revoke anyone's tokens.
 7. **No consent prompt.** Publishing an app instance, with plan 26's approvals, is the consent; people are not asked. Each app's about
    page shows the models and operations its manifest uses, who published it and who approved it.
+8. **Sessions:** a sign-in lasts **12 hours from sign-in** by default and does not extend while in use (as built); an **idle timeout**
+   is added, off by default. An administrator sets both per install in `server.yaml`, within bounds (a session of 1 to 24 hours). The
+   internal timings stay fixed in code: the home's access token (10 minutes), the role re-check inside a session (5 minutes, 10 more
+   when the home cannot be asked), the console's token to a server (about 5 minutes).
+9. **Personal access tokens expire:** 90 days by default, at most a year, the maximum lowered per install by an administrator. A
+   service account's token may last longer or not expire, and is always listed and revocable.
 
 ## 2a. Shared visuals and reports
 
