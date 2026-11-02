@@ -36,7 +36,7 @@ export function createStoreClient(fetcher: Fetcher, base = '/api/v1', instance: 
     return response.ok ? ((await response.json()) as T) : fail(response)
   }
   return {
-    schema: (model) => json<ModelSchema>(`/models/${enc(model)}/schema`),
+    schema: (model) => json<ModelSchema>(`${under(model)}/schema`),
     instances: (model) => json<InstanceList>(`/models/${enc(model)}/instances`),
     withInstance: (next) => createStoreClient(fetcher, base, next),
     rows: (model, entity, page = {}) => json<RowPage>(`${under(model)}/entities/${enc(entity)}/rows?limit=${page.limit ?? 25}&offset=${page.offset ?? 0}`),

@@ -304,6 +304,57 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Get, "/api/v1/models/territories/instances/initech/entities/territory/rows", null, ServerRole.Viewer)).StatusCode);
         Assert.Equal("column", (string)(await Json(await send(HttpMethod.Get, "/api/v1/models/territories/instances", null, ServerRole.Viewer)))["mode"]!);
     }
+
+    [Fact]
+    public async Task An_instance_behind_the_model_keeps_working_and_one_that_is_migrated_gets_the_new_structure()
+    {
+        var send = await Client();
+        var v1 = Model.Replace("storage: {connection: mdm}", "storage: {connection: mdm, instances: schema}");
+        var v2 = v1.Replace("quota: {type: \"DECIMAL(10,2)\", min: 0}", "quota: {type: \"DECIMAL(10,2)\", min: 0}\n      region: {type: VARCHAR(20), required: true}");
+        await send(HttpMethod.Put, "/api/v1/models/territories", v1, ServerRole.Author);
+        foreach (var instance in new[] { "acme", "globex" })
+        {
+            await send(HttpMethod.Put, $"/api/v1/models/territories/instances/{instance}", null, ServerRole.Admin);
+            Assert.Equal(HttpStatusCode.Created, (await send(HttpMethod.Post, $"/api/v1/models/territories/instances/{instance}/storage/create", null, ServerRole.Admin)).StatusCode);
+        }
+        string[] Status(JsonNode report) => report["instances"]!.AsArray().Select(i => $"{(string)i!["name"]!}:{(string)i["status"]!}").ToArray();
+        var report = await Json(await send(HttpMethod.Get, "/api/v1/models/territories/migrations", null, ServerRole.Viewer));
+        Assert.Equal(["default:unknown", "acme:current", "globex:current"], Status(report));
+
+        // the model moves on: a required column the instances do not have yet
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Put, "/api/v1/models/territories", v2, ServerRole.Author)).StatusCode);
+        Assert.Equal(["default:unknown", "acme:behind", "globex:behind"], Status(await Json(await send(HttpMethod.Get, "/api/v1/models/territories/migrations", null, ServerRole.Viewer))));
+
+        // both still work as they were: the version they run has no region, and says so
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/territories/instances/globex/changes", Insert("NA", "Globex North", "1"), ServerRole.Author)).StatusCode);
+        string[] Attributes(JsonNode schema) => schema["entities"]![0]!["attributes"]!.AsArray().Select(a => (string)a!["name"]!).ToArray();
+        Assert.DoesNotContain("region", Attributes(await Json(await send(HttpMethod.Get, "/api/v1/models/territories/instances/globex/schema", null, ServerRole.Viewer))));
+        Assert.Contains("region", Attributes(await Json(await send(HttpMethod.Get, "/api/v1/models/territories/schema", null, ServerRole.Viewer))));
+
+        // a dry run says what it would add, and changes nothing; only an administrator migrates
+        Assert.Equal(HttpStatusCode.Forbidden, (await send(HttpMethod.Post, "/api/v1/models/territories/instances/acme/migrate?apply=true", null, ServerRole.Author)).StatusCode);
+        var dry = await Json(await send(HttpMethod.Post, "/api/v1/models/territories/instances/acme/migrate", null, ServerRole.Admin));
+        Assert.False((bool)dry["up_to_date"]!);
+        Assert.False((bool)dry["applied"]!);
+        Assert.Contains(dry["statements"]!.AsArray(), st => (string)st!["description"]! == "add column territory.region");
+        Assert.Equal("behind", Status(await Json(await send(HttpMethod.Get, "/api/v1/models/territories/migrations", null, ServerRole.Viewer)))[1].Split(':')[1]);
+
+        var applied = await Json(await send(HttpMethod.Post, "/api/v1/models/territories/instances/acme/migrate?apply=true", null, ServerRole.Admin));
+        Assert.True((bool)applied["applied"]!);
+        Assert.Equal(["default:unknown", "acme:current", "globex:behind"], Status(await Json(await send(HttpMethod.Get, "/api/v1/models/territories/migrations", null, ServerRole.Viewer))));
+
+        // acme now runs the new version: region is required there; globex, still behind, does not know it
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await send(HttpMethod.Post, "/api/v1/models/territories/instances/acme/changes", Insert("NA", "Acme North", "1"), ServerRole.Author)).StatusCode);
+        var withRegion = """{"changes":[{"action":"insert","entity":"territory","values":{"code":"NA","name":"Acme North","region":"EMEA"}}]}""";
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/territories/instances/acme/changes", withRegion, ServerRole.Author)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/territories/instances/globex/changes", Insert("EU", "Globex Europe", "2"), ServerRole.Author)).StatusCode);
+        Assert.Equal(2, (await Json(await send(HttpMethod.Get, "/api/v1/models/territories/instances/globex/entities/territory/rows", null, ServerRole.Viewer)))["rows"]!.AsArray().Count);
+        Assert.True((bool)(await Json(await send(HttpMethod.Post, "/api/v1/models/territories/instances/acme/migrate", null, ServerRole.Admin)))["up_to_date"]!);
+
+        // and globex migrates later on its own
+        Assert.True((bool)(await Json(await send(HttpMethod.Post, "/api/v1/models/territories/instances/globex/migrate?apply=true", null, ServerRole.Admin)))["applied"]!);
+        Assert.Equal(["default:unknown", "acme:current", "globex:current"], Status(await Json(await send(HttpMethod.Get, "/api/v1/models/territories/migrations", null, ServerRole.Viewer))));
+    }
 }
 
 

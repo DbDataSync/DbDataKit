@@ -25,6 +25,33 @@ public static partial class StoreModels
 
     public static string FileOf(string directory, string name) => Path.Combine(directory, Folder, name + ".yaml");
 
+    /// <summary>The version of a model's text: its SHA-256. Every text that is saved is kept under it, so an instance that has not been migrated yet keeps running the version it was made or last migrated at (plan 26, Z13).</summary>
+    public static string VersionOf(string text) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+
+    private static string VersionFileOf(string directory, string name, string version) => Path.Combine(directory, Folder, "versions", name, version + ".yaml");
+
+    /// <summary>Keeps a text under its version if it is not kept yet, and returns the version.</summary>
+    public static string Snapshot(string directory, string name, string text)
+    {
+        var version = VersionOf(text);
+        var file = VersionFileOf(directory, name, version);
+        if (!File.Exists(file))
+        {
+            System.IO.Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            var temporary = file + ".tmp";
+            File.WriteAllText(temporary, text, new System.Text.UTF8Encoding(false));
+            File.Move(temporary, file, true);
+        }
+        return version;
+    }
+
+    /// <summary>The version of the model as it is saved now (kept, if it was saved before versions were).</summary>
+    public static string CurrentVersion(string directory, string name) => Snapshot(directory, name, File.ReadAllText(FileOf(directory, name)));
+
+    /// <summary>A kept text, or null when there is none under that version.</summary>
+    public static string? TextOfVersion(string directory, string name, string version) =>
+        Regex.IsMatch(version, "^[0-9a-f]{64}$") && File.Exists(VersionFileOf(directory, name, version)) ? File.ReadAllText(VersionFileOf(directory, name, version)) : null;
+
     public static IEnumerable<string> Names(string directory)
     {
         var folder = Path.Combine(directory, Folder);
@@ -59,7 +86,7 @@ public static partial class StoreModels
     private static IResult Denied(AuthorizationDecision decision) =>
         Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
 
-    private static JsonObject Schema(DataModel model) => new()
+    internal static JsonObject Schema(DataModel model) => new()
     {
         ["name"] = model.Name,
         ["title"] = model.Title,
@@ -124,16 +151,6 @@ public static partial class StoreModels
             return Results.Json(new JsonObject { ["name"] = name, ["text"] = text, ["diagnostics"] = Diagnostics(Check(name, text).Diagnostics) });
         });
 
-        // the model as data for a form or a grid (and a typed client): entities, keys, attributes with their types and rules, the history each entity keeps
-        app.MapGet("/api/v1/models/{name}/schema", (string name, HttpContext context) =>
-        {
-            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
-            if (!decision.Allowed) return Denied(decision);
-            if (!IsValidName(name) || !File.Exists(FileOf(directory, name))) return Results.NotFound(new { error = $"There is no model '{name}'." });
-            var result = Check(name, File.ReadAllText(FileOf(directory, name)));
-            return result.Model is { } model && result.Ok ? Results.Json(Schema(model)) : Results.Json(new { error = $"{name}.yaml is not a valid model." }, statusCode: StatusCodes.Status422UnprocessableEntity);
-        });
-
         // a dry run: the diagnostics of a text as it would be saved under this name, nothing written
         app.MapPost("/api/v1/models/{name}/validate", async (string name, HttpContext context) =>
         {
@@ -162,6 +179,7 @@ public static partial class StoreModels
             var temporary = path + ".tmp";
             await File.WriteAllTextAsync(temporary, text.ReplaceLineEndings("\n"), new System.Text.UTF8Encoding(false), context.RequestAborted);
             File.Move(temporary, path, true);
+            Snapshot(directory, name, text.ReplaceLineEndings("\n"));
             return Results.Json(new JsonObject { ["name"] = name, ["created"] = !existed, ["diagnostics"] = Diagnostics(result.Diagnostics) }, statusCode: existed ? StatusCodes.Status200OK : StatusCodes.Status201Created);
         });
 

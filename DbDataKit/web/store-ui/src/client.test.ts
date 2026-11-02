@@ -73,7 +73,7 @@ describe('an instance of a model', () => {
       '/relay/store/api/v1/models/m/instances/acme/entities/e/row?key.code=NA&history=true',
       '/relay/store/api/v1/models/m/instances/acme/changes',
       '/relay/store/api/v1/models/m/instances',
-      '/relay/store/api/v1/models/m/schema',
+      '/relay/store/api/v1/models/m/instances/acme/schema',
       '/relay/store/api/v1/models/m/entities/e/rows?limit=25&offset=0',
       '/relay/store/api/v1/models/m/entities/e/rows?limit=25&offset=0',
     ])
