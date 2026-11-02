@@ -43,7 +43,7 @@ Studio" and not "DbDataStudio".
 | --- | --- | --- |
 | Sync | `DbDataSync/`, `DbDataSync.*`, service `DbDataSync` | `dbdatasync` |
 | Studio | `DbDataKit.Studio/`, `DbDataKit.Studio.*`, service `DbDataKit.Studio` | `dbdatakit-studio` |
-| the admin tool | its project and package (name open, decision 2) | `dbdatakit` |
+| the admin tool | `DbDataKit/src/DbDataKit.Admin.Cli`, package `DbDataKit.Admin.Cli` | `dbdatakit` |
 
 The hyphen in `dbdatakit-studio` is only there because the command `dbdatakit` is taken by the admin tool.
 
@@ -127,9 +127,9 @@ already does this for the identity home. It can be added later as another kind o
 
 ### 6.1 Packaging
 
-- A project under `DbDataKit/src/`, `PackAsTool`, `ToolCommandName` `dbdatakit`, installed with `dotnet tool install -g <package id>`, the same
-  pattern as `DbDataKit.Update.Tools`. The project and package name is open (decision 2): `DbDataKit.Cli` is preferred, but that name is the
-  shared command framework today. One build for Windows and Linux.
+- Project `DbDataKit/src/DbDataKit.Admin.Cli`, `PackAsTool`, `ToolCommandName` `dbdatakit`, package id `DbDataKit.Admin.Cli`
+  (`dotnet tool install -g DbDataKit.Admin.Cli`), the same pattern as `DbDataKit.Update.Tools`. The existing `DbDataKit.Cli` (the shared
+  command framework) is left alone. One build for Windows and Linux.
 - Built on `DbDataKit.Cli` (nouns and verbs, `--format json`, a data schema per verb). The docs checker reads its nouns from the source.
 - Exit codes: 0 success, 1 failure, 2 usage, 3 not signed in.
 - Windows-only verbs (`cert issue`, `cert discover`, `cert templates`) check the operating system and say plainly what to run where.
@@ -348,12 +348,11 @@ I00 can start now. I01 and I03 can run in parallel; I02 waits for I01 so the two
 
 ## 10. Decisions for the owner
 
-Decided: the folder is `DbDataKit.Studio/`; `local` approval is in the first version; the rollover removes the old trust entry by default.
+Decided: the folder is `DbDataKit.Studio/`; the tool's project and package are `DbDataKit.Admin.Cli` (the shared `DbDataKit.Cli` stays as it is);
+`local` approval is in the first version; the rollover removes the old trust entry by default.
 
 1. **`instance` or `server`** for a managed product, in Studio's command line and in the tool's. Today Studio says `instance` (`instance add`,
    `instance list`, `/api/instances`, `instances.yaml`, `InstanceId`) while its own help text calls them "servers", because the shared
    `server` noun (`server run`, on every product, including Studio) already means "this program's own server". Recommendation: the tool
-   says `instance` too, so the two command lines match; prose keeps saying "server".
-2. **Name of the tool's project and package.** `DbDataKit.Cli` is preferred, but it is the shared command framework (namespace
-   `DbDataKit.Cli` in 54 files across all six products, six projects reference it). Either that framework is renamed first (for example to
-   `DbDataKit.Commands`, a mechanical slice before I07), or the tool takes another name.
+   says `instance` too, so the two command lines match; prose keeps saying "server". Until this is decided the plan's tool verbs
+   (`server list`, `server status`, `--server`) are placeholders.
