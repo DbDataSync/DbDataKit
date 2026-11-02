@@ -191,6 +191,11 @@ The proxy can serve the install's **identity home** (plan 20, O06): who people a
 * **Administration, at the command line** (the server may be running or not; `--repo` names the data directory): `dbdataproxy identity invite --email <address> [--role admin|viewer]`, `identity user-list`,
   `identity client-add --name <name> --redirect <uri>` (a console or an app that signs people in through the home; the secret is shown once), `identity client-list`,
   `identity assign --user <id> (--server <id> [--project <name>] | --app <id>) --roles <roles|none>` and `identity map-group --source entra|windows --group <group> ... --roles <roles|none>`.
+* **Personal access tokens and service accounts** (13a U20): a person makes, lists and revokes their own tokens at the home, signed in (`/api/access-tokens`), and uses the token as the password, with their
+  address as the user name, wherever a client can send only a user name and password. A token lasts 90 days unless asked otherwise, at most `identity.accessTokenMaxDays` (365 unless lowered); it is shown
+  once and kept only as a hash. For unattended work, `identity service-account-add --name <name>`, then `identity assign --user <its id> ...` and `identity token-create --account <name> --name <name>
+  [--days <n> | --no-expiry]` (the account's name is the user name). `identity token-list [--user <id>]` and `identity token-revoke --id <id>` see and revoke anyone's; `identity service-account-list` and
+  `identity service-account-remove --name <name>` (its tokens are revoked).
 * **A console signs in through it** with `dbdatakit server run --identity-home <publicUrl> --identity-client <client id> --identity-secret-env <variable>` (the client registered with `identity client-add`,
   its redirect `https://<console>/api/identity/callback`).
 * **State and keys:** its people, roles, clients and signing keys are in the proxy's state database (`state:`), so proxies that share one are the same home. The signing keys are protected with the key in the

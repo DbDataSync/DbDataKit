@@ -112,6 +112,10 @@ public sealed class IdentityModuleTests : IAsyncLifetime
         Assert.Contains(Load("identity: { enabled: true, address: 'everywhere' }\n"), d => d.KeyPath == "Identity.Address");
         Assert.DoesNotContain(Load("identity: { enabled: true, publicUrl: 'https://identity.example' }\n"), d => d.KeyPath?.StartsWith("Identity", StringComparison.Ordinal) == true);
 
+        // personal access tokens (U20): an install may lower the maximum, never past a year
+        Assert.Contains(Load("identity: { enabled: true, accessTokenMaxDays: 400 }\n"), d => d.KeyPath == "Identity.AccessTokenMaxDays");
+        Assert.DoesNotContain(Load("identity: { enabled: true, accessTokenMaxDays: 30 }\n"), d => d.KeyPath == "Identity.AccessTokenMaxDays");
+
         // Entra (O06b): the tenant over https, with the app's id and secret; no half a section
         Assert.Contains(Load("identity: { enabled: true, entra: { authority: 'http://login.example/t/v2.0', clientId: a, clientSecret: 'secret:x:y' } }\n"), d => d.KeyPath == "Identity.Entra.Authority");
         Assert.Contains(Load("identity: { enabled: true, entra: { authority: 'https://login.microsoftonline.com/t/v2.0', clientSecret: 'secret:x:y' } }\n"), d => d.KeyPath == "Identity.Entra.ClientId");

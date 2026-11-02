@@ -195,6 +195,10 @@ public sealed class IdentityOptions
     /// </summary>
     public string? PublicUrl { get; set; }
 
+    /// <summary>The longest a person's personal access token may last here, in days (plan 13a U20): at most 365, and a token lasts 90 days, or this when it is lower, unless the person asks for less.</summary>
+    [ConfigKey(Min = 1, Max = 365)]
+    public int AccessTokenMaxDays { get; set; } = 365;
+
     /// <summary>Sign people in at the home through a Microsoft Entra ID tenant too (plan 20 O06b). Off while <see cref="IdentityEntraOptions.Authority"/> is empty.</summary>
     public IdentityEntraOptions Entra { get; set; } = new();
 
