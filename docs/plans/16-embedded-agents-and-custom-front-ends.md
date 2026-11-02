@@ -170,6 +170,9 @@ Recorded in a walk through the open sign-in questions; slices follow from them. 
      issue is accepted.
    - **Not verified:** the sign-in methods above are what Office offers as far as known here, not yet seen. The Excel VM recordings (plan
      14 R7, plan 15 WebDAV) record each one.
+4. **Product servers keep no sign-in of their own.** Sync's remaining direct sign-in (Windows groups, network trust, its own users,
+   sessions and invitations) is removed (13c D20): a person reaches a back-end server only through a console's token, whose subject is
+   the home's user.
 
 ## 2a. Shared visuals and reports
 
