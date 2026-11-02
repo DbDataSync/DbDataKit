@@ -2,7 +2,7 @@
 
 A matrix of service, object and action: what a person can do from the console's screens today, and what is only an API or a command line. Keep it current in the same change that adds, removes or widens a screen (`scripts/check_ui_coverage.py` fails when a page file is missing from the **Screens** column, or a file named there is gone).
 
-Read as of 2026-11-02, from the routes and API clients of `DbDataKit/web/*`, not by clicking through every screen. A cell is **Yes**, **Partial** (say what is missing under Notes), or **–** (no screen). **Other actions** are the verbs that are not create, edit or delete.
+Read as of 2026-11-02 (updated after Z07, O01, O03 and AP04), from the routes and API clients of `DbDataKit/web/*`, not by clicking through every screen. A cell is **Yes**, **Partial** (say what is missing under Notes), or **–** (no screen). **Other actions** are the verbs that are not create, edit or delete.
 
 All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<server>/...`; the products have no web app of their own. Roles gate each action (Viewer, Operator, Author, Approver, Admin); the table says what exists, not who may.
 
@@ -26,6 +26,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Sessions, queries, lockouts | – | – | – | End a session, cancel a query, lift a lockout | `ActivityPage.tsx` |
 | | Configuration history | – | – | – | View and diff commits | `ConfigPage.tsx` |
 | | Overview | – | – | – | Read-only | `OverviewPage.tsx` |
+| | Serving modules (`flightsql`, `identity`; `apps` and `rest` planned) | – | – | – | **No UI**: the `Modules` setting in `server.yaml` (O01) | |
 | **Build** | Projects | Yes (from a template, or import) | – | – | – | `ProjectsPage.tsx`, `NewProjectPanel.tsx`, `ImportPanel.tsx` |
 | | Model and project files | Yes | Yes (editor) | Yes | Move or rename | `EditTab.tsx`, `NewModelPanel.tsx`, `FileTools.tsx` |
 | | Draft (workspace) | – | – | – | Check, compile, sample, diff, commit, push or merge | `CompilePanel.tsx`, `GitPanel.tsx`, `PreviewPanel.tsx`, `ProjectPage.tsx` |
@@ -35,8 +36,9 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Publish to a Proxy | – | – | – | Yes | `PublishTab.tsx` |
 | **Store** | Models | – | – | – | List them and their entities | `ModelsPage.tsx` |
 | | Rows of an entity | Yes | Yes | Yes | Page through rows, history of a row (an entity that keeps one), pick an instance of a model that has them | `EntityPage.tsx` |
-| | Model definition, storage (create tables), change requests | – | – | – | **No UI** (API only: Z08, Z09; change requests are Z07) | |
-| **Apps** | – | – | – | – | **No UI.** The Store's controls (`@dbdatakit/store-ui`) are written to be mounted by an app too. Only the bundling library (AP01, AP02); the host is O11. | |
+| | Model definition, storage (create tables) | – | – | – | **No UI** (API only: Z08, Z09) | |
+| | Change requests (an agent's write, or a model that asks for approval) | – (made by `POST changes`, answered 202) | – | – | List and read by state, approve, reject: **API only** (Z07; the console's review screen is not built) | |
+| **Apps** | App packages and instances | – | – | – | **No UI, no host yet.** Libraries only: the manifest and bundling (AP01-AP03), the published-definition store with channels and rollback (O03), and instances that resolve to a package and an audience (AP04, PR open). Serving, the shell page and the sandbox are AP05; the Store's controls (`@dbdatakit/store-ui`) are written to be mounted by an app. | |
 
 ## Notes and gaps
 

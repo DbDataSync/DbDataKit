@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\DbDataKit.Apps.Instances\DbDataKit.Apps.Instances.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Web\DbDataKit.Web.csproj" />
+  </ItemGroup>
+</Project>
