@@ -36,4 +36,34 @@ public static class AppChecks
         }
         return found;
     }
+
+    /// <summary>An address of another host in a built file: where, and which origin.</summary>
+    public sealed record OutsideUrl(string File, int Line, string Origin);
+
+    // namespaces and documentation links that bundles carry in strings and that nothing fetches
+    private static readonly HashSet<string> NotFetched = new(StringComparer.OrdinalIgnoreCase) { "www.w3.org", "w3.org", "react.dev", "reactjs.org", "developer.mozilla.org", "json-schema.org", "schemas.microsoft.com", "purl.org" };
+    private static readonly Regex Origin = new(@"\b(?<origin>(?:https?|wss?)://[A-Za-z0-9.-]+(?::\d{1,5})?)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// The addresses of other hosts in the built HTML, CSS and script that the manifest did not ask for (plan 26 section 2b). Advice for the author, so a dependency that phones home is found before a review; the content security policy
+    /// is what enforces. Namespace and documentation links that nothing fetches are left out.
+    /// </summary>
+    public static IReadOnlyList<OutsideUrl> OutsideUrls(string outputDirectory, AppEgress asked)
+    {
+        var found = new List<OutsideUrl>();
+        foreach (var file in Directory.EnumerateFiles(outputDirectory, "*", SearchOption.AllDirectories).Where(f => f.EndsWith(".html", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".css", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".js", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".mjs", StringComparison.OrdinalIgnoreCase)).Order(StringComparer.Ordinal))
+        {
+            var relative = Path.GetRelativePath(outputDirectory, file).Replace('\\', '/');
+            var text = File.ReadAllText(file);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (Match match in Origin.Matches(text))
+            {
+                var origin = match.Groups["origin"].Value.ToLowerInvariant();
+                var host = origin[(origin.IndexOf("://", StringComparison.Ordinal) + 3)..].Split(':')[0];
+                if (NotFetched.Contains(host) || !seen.Add(origin) || asked.All.Any(a => EgressPolicy.Covers(a, origin))) continue;
+                found.Add(new OutsideUrl(relative, text.AsSpan(0, match.Index).Count('\n') + 1, origin));
+            }
+        }
+        return found;
+    }
 }

@@ -1,19 +1,18 @@
-# 13b. Items waiting on the owner's review
+# 13b. Items that waited on the owner's review (closed)
 
-Status: **open** (written 2026-10-27). These are the slices of [13a](13a-suite-slices.md) and one design review that Claude has not started because each needs a decision that is the owner's. Each section stands alone: what the slice is, why anyone
-would want it, what is actually in the way, the options, a recommendation, what is verified and what is not, and what waits on it. "Verified" means read in the code or run; "inferred" means reasoned and worth a second look.
+Status: **closed** (2026-11-02). Every item below was decided by the owner on 2026-10-28 (N02a needed no decision) and has since been built; the outcome of each is in the table and the slice's row in [13a](13a-suite-slices.md) is the record. The sections below are kept as the review that was written on 2026-10-27, unchanged: their "Recommendation" and "Questions for you" lines are what was asked then, not what was decided. When this file was written, these were the slices of 13a and one design review that Claude had not started because each needed a decision that is the owner's.
 
-| # | Item | One line | Waits on it |
+| # | Item | One line | Outcome |
 | --- | --- | --- | --- |
-| 1 | A14 | Sync's SQL Server bulk staging onto the shared writer | A16 |
-| 2 | A15 | Sync's PostgreSQL COPY staging onto the shared writer | A16 |
-| 3 | A16 | Sync's merge and delete-insert writers onto the shared strategies | B08 |
-| 4 | A19 | Build's Flight SQL client and login onto the shared client | nothing |
-| 5 | A20 | Three shared packages with no (or only a test) consumer: adopt or delete | nothing |
-| 6 | B06 | Build's write gate onto the shared write gate | B07, B08 |
-| 7 | B07 | Build's statement log onto the shared log | nothing |
-| 8 | B08 | Build's cross-engine copy code onto the shared transfer code | nothing |
-| 9 | N02a | not waiting on anyone: reviewed by Claude, see plan 20 section 10.7 | |
+| 1 | A14 | Sync's SQL Server bulk staging onto the shared writer | done (PR #202), with the conversion layer as A14a |
+| 2 | A15 | Sync's PostgreSQL COPY staging onto the shared writer | done (PR #202, with A14) |
+| 3 | A16 | Sync's merge and delete-insert writers onto the shared strategies | done (#219), integration suite unchanged on every engine |
+| 4 | A19 | Build's Flight SQL client and login onto the shared client | done (option 1: the shared client extended; marked done 2026-10-30) |
+| 5 | A20 | Three shared packages with no (or only a test) consumer: adopt or delete | done 2026-10-28: each has a consumer, nothing deleted |
+| 6 | B06 | Build's write gate onto the shared write gate | decided 2026-10-28 (option 1: move Build onto the shared gate); done, with Build's front kept |
+| 7 | B07 | Build's statement log onto the shared log | decided 2026-10-28 (adopt, with a release note); done |
+| 8 | B08 | Build's cross-engine copy code onto the shared transfer code | decided 2026-10-28 (after B06 and A16); done |
+| 9 | N02a | never waited on the owner: reviewed by Claude, see plan 20 section 10.7 | done |
 
 Dependencies between them: A14 and A15 come before A16; A16 and B06 come before B08; B06 comes before B07. A19 and A20 are independent. Decisions on A14 and A15 are the same kind of decision, so read them together; B06 is the one that sets the
 terms for B07 and B08.

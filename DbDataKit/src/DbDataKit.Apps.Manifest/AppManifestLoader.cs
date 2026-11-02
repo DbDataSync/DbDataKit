@@ -21,6 +21,7 @@ public static class AppManifestLoader
     public const string BadUse = "DBD-APP-005";
     public const string MissingFile = "DBD-APP-006";
     public const string AbsoluteAsset = "DBD-APP-007";
+    public const string BadEgress = "DBD-APP-008";
 
     public const int Version = 1;
 
@@ -46,7 +47,7 @@ public static class AppManifestLoader
 
     private sealed class Reader(string file, List<ConfigDiagnostic> diags) : YamlFieldReader(file, diags)
     {
-        private static readonly string[] RootKeys = ["schemaVersion", "name", "title", "description", "version", "entry", "views", "origin", "chrome", "models", "semantic", "roles"];
+        private static readonly string[] RootKeys = ["schemaVersion", "name", "title", "description", "version", "entry", "views", "origin", "chrome", "models", "semantic", "roles", "trust", "egress"];
         private static readonly Regex SemVer = new(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex Identifier = new("^[A-Za-z][A-Za-z0-9_]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -74,10 +75,12 @@ public static class AppManifestLoader
             var models = Models(map);
             var semantic = Names(map, "semantic");
             var roles = Names(map, "roles");
+            var trust = map.Get("trust") is YamlScalar tr ? Choice(tr, "trust", new Dictionary<string, AppTrust> { ["sandbox"] = AppTrust.Sandbox, ["trusted"] = AppTrust.Trusted }) : AppTrust.Sandbox;
+            var egress = Egress(map);
             var title = map.Get("title") is YamlScalar t ? t.Value : null;
             var description = map.Get("description") is YamlScalar d ? d.Value : null;
             if (name is null || version is null) return null;
-            return new AppManifest(name, title, description, version.Value, entry, views, origin, chrome, models, semantic, roles);
+            return new AppManifest(name, title, description, version.Value, entry, views, origin, chrome, models, semantic, roles, trust, egress);
         }
 
         private bool CheckVersion(YamlMapping map)
@@ -132,6 +135,33 @@ public static class AppManifestLoader
                 found.Add(s.Value);
             }
             return found;
+        }
+
+        private static readonly Regex OriginRule = new(@"^(?<scheme>https|wss)://(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:\d{1,5})?$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        /// <summary>The outside origins the app asks for. Only an origin: encrypted (https, or wss for a connection), a host, a port; no path, no query, and never a bare wildcard.</summary>
+        private AppEgress Egress(YamlMapping map)
+        {
+            if (map.Get("egress") is not { } node) return AppEgress.None;
+            if (node is not YamlMapping egress) { Add(SharedCodes.InvalidValue, node, "`egress` is a mapping from what the origins are for to a list of origins: `connect: [https://api.contoso.com]`."); return AppEgress.None; }
+            string[] keys = ["connect", "script", "style", "img", "font", "media", "frame", "form"];
+            CheckKeys(egress, keys, "`egress`");
+            List<string> One(string key)
+            {
+                var found = new List<string>();
+                if (egress.Get(key) is not { } list) return found;
+                if (list is not YamlSequence items) { Add(SharedCodes.InvalidValue, list, $"`egress.{key}` must be a list of origins."); return found; }
+                foreach (var item in items.Items)
+                {
+                    if (item is not YamlScalar origin) { Add(BadEgress, item, $"An entry of `egress.{key}` is an origin."); continue; }
+                    var m = OriginRule.Match(origin.Value);
+                    if (!m.Success) { Add(BadEgress, origin, $"`{origin.Value}` is not an origin the browser can be told about: use https://host[:port] (wss:// for a connection), with no path, and `*.` only in front of a host name.", "Name the host the app needs, not a path on it."); continue; }
+                    if (m.Groups["scheme"].Value == "wss" && key != "connect") { Add(BadEgress, origin, $"wss:// is only for `egress.connect`."); continue; }
+                    if (!found.Contains(origin.Value)) found.Add(origin.Value);
+                }
+                return found;
+            }
+            return new AppEgress(One("connect"), One("script"), One("style"), One("img"), One("font"), One("media"), One("frame"), One("form"));
         }
 
         private List<AppModelUse> Models(YamlMapping map)
