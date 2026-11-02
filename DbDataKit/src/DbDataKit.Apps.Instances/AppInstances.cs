@@ -16,7 +16,7 @@ public sealed record AppInstance(string Name, string App, int? Pin = null, strin
 }
 
 /// <summary>An instance with the version of the app it runs and that version's manifest, as the host serves it.</summary>
-public sealed record ResolvedInstance(AppInstance Instance, int InstanceVersion, DefinitionVersion AppVersion, AppManifest Manifest);
+public sealed record ResolvedInstance(AppInstance Instance, int InstanceVersion, DefinitionVersion AppVersion, AppManifest Manifest, AppPackage Package);
 
 /// <summary>A publication the store refuses; the message says what to change.</summary>
 public sealed class AppInstanceException(string message) : Exception(message);
@@ -40,13 +40,16 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
     private const int MaximumSettings = 50;
     private const int MaximumSettingLength = 2000;
 
-    /// <summary>Publishes an app's manifest as its next version. The manifest is read strictly first; what it does not pass is refused with its diagnostics.</summary>
-    public DefinitionVersion PublishApp(string manifestYaml, string by, string channel = DefinitionStore.Production, string? note = null)
+    /// <summary>Publishes an app's manifest (with no files: a manifest alone) as its next version.</summary>
+    public DefinitionVersion PublishApp(string manifestYaml, string by, string channel = DefinitionStore.Production, string? note = null) =>
+        PublishApp(new AppPackage(manifestYaml), by, channel, note);
+
+    /// <summary>Publishes an app's manifest and files as its next version. The manifest is read strictly first; what it does not pass is refused with its diagnostics.</summary>
+    public DefinitionVersion PublishApp(AppPackage package, string by, string channel = DefinitionStore.Production, string? note = null)
     {
-        var load = AppManifestLoader.Load(manifestYaml);
+        var load = AppManifestLoader.Load(package.ManifestYaml);
         if (!load.Ok) throw new AppInstanceException("The manifest is not valid: " + string.Join(" ", load.Diagnostics.Select(d => d.Message)));
-        var manifest = load.Manifest!;
-        return definitions.Publish(AppKind, manifest.Name, manifestYaml, by, note: note, channel: channel);
+        return definitions.Publish(AppKind, load.Manifest!.Name, package.Serialize(), by, note: note, channel: channel);
     }
 
     /// <summary>Publishes an instance (a new version of it when it exists). The app must exist, a pin must be a version of it, and a binding must name a model the app uses.</summary>
@@ -56,7 +59,7 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
         if (AppManifestLoader.Reserved.Contains(instance.Name)) throw new AppInstanceException($"'{instance.Name}' is reserved for the host; choose another name.");
         var app = instance.Pin is { } pin ? definitions.Get(AppKind, instance.App, pin) : definitions.Current(AppKind, instance.App, channel);
         if (app is null) throw new AppInstanceException(instance.Pin is { } p ? $"The app '{instance.App}' has no version {p}." : $"The app '{instance.App}' has not been published to {channel}.");
-        var manifest = AppManifestLoader.Load(app.Content).Manifest!;
+        var manifest = AppManifestLoader.Load(AppPackage.Parse(app.Content).ManifestYaml).Manifest!;
 
         var models = manifest.Models.Select(m => m.Model).ToHashSet(StringComparer.Ordinal);
         foreach (var (model, modelInstance) in instance.Bindings)
@@ -85,7 +88,9 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
         if (definitions.Current(InstanceKind, name, channel) is not { } stored) return null;
         var instance = Read(name, stored.Content);
         var app = instance.Pin is { } pin ? definitions.Get(AppKind, instance.App, pin) : definitions.Current(AppKind, instance.App, channel);
-        return app is null ? null : new ResolvedInstance(instance, stored.Version, app, AppManifestLoader.Load(app.Content).Manifest!);
+        if (app is null) return null;
+        var package = AppPackage.Parse(app.Content);
+        return new ResolvedInstance(instance, stored.Version, app, AppManifestLoader.Load(package.ManifestYaml).Manifest!, package);
     }
 
     private static string Write(AppInstance instance)

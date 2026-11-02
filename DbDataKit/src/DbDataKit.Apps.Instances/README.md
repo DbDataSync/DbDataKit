@@ -12,4 +12,4 @@ store.Save(new AppInstance("globex", "sales-planning"), "ada"); // runs whatever
 var running = store.Resolve("acme");                           // the instance, the app version it runs, its manifest
 ```
 
-`Pin` is the app version an instance runs, or none for the channel's current: promoting version 2 touches only the unpinned instances. A binding must name a model the app's manifest uses. Tokens are scoped to one instance: `AppInstanceAudience.Of(name)` is the audience a token for it names, and a validator built for another instance refuses it.
+An app version is an `AppPackage`: the manifest and the files the host serves. `Pin` is the app version an instance runs, or none for the channel's current: promoting version 2 touches only the unpinned instances. A binding must name a model the app's manifest uses. Tokens are scoped to one instance: `AppInstanceAudience.Of(name)` is the audience a token for it names, and a validator built for another instance refuses it.

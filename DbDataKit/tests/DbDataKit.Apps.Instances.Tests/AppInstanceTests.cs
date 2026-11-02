@@ -95,6 +95,29 @@ public sealed class AppInstanceTests : IDisposable
     }
 
     [Fact]
+    public void The_files_are_published_with_the_manifest_and_a_changed_file_is_a_new_version()
+    {
+        var files = new Dictionary<string, byte[]> { ["index.html"] = "<h1>one</h1>"u8.ToArray(), ["assets/app.js"] = "1"u8.ToArray() };
+        var first = store.PublishApp(new AppPackage(Manifest("1.0.0"), files), "ada");
+        files["assets/app.js"] = "2"u8.ToArray();
+        var second = store.PublishApp(new AppPackage(Manifest("1.0.0"), files), "ada");
+        store.Save(new AppInstance("acme", "sales-planning"), "ada");
+
+        Assert.Equal((1, 2), (first.Version, second.Version));
+        var served = store.Resolve("acme")!.Package;
+        Assert.Equal("2", System.Text.Encoding.UTF8.GetString(served.Files["assets/app.js"]));
+        Assert.Equal(["assets/app.js", "index.html"], served.Files.Keys.Order());
+    }
+
+    [Fact]
+    public void A_package_refuses_a_path_that_leaves_it_and_a_size_over_the_limit()
+    {
+        foreach (var path in new[] { "../x", "/x", "a//b", "a\\b", "c:x", "" })
+            Assert.Throws<AppPackageException>(() => new AppPackage("x", new Dictionary<string, byte[]> { [path] = [1] }));
+        Assert.Throws<AppPackageException>(() => new AppPackage("x", new Dictionary<string, byte[]> { ["big"] = new byte[AppPackage.MaximumBytes + 1] }));
+    }
+
+    [Fact]
     public void A_manifest_that_does_not_read_is_not_published()
     {
         var refused = Assert.Throws<AppInstanceException>(() => store.PublishApp("name: x\nnonsense: true\n", "ada"));
