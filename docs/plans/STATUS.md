@@ -32,7 +32,7 @@ engines), `scripts/` (repository checks). `DbDataKit.slnx` lists every project; 
   strategies, the console, the script and library loader of plan 14.
 - **DbDataBuild:** shared quoting, command specs and effect classes (C01), the login variable rule (B02), the failure classifier (B03), the
   project file commands (W01). Not yet: the shared connection types and ODBC catalog reader, the server, scheduling.
-- **DbDataProxy:** the shared connections, metadata readers and failure model (plan 10), secrets in the encrypted store (V06), the identity home as its `identity` module (plan 20 O06). Not yet:
+- **DbDataProxy:** the shared connections, metadata readers and failure model (plan 10), secrets in the encrypted store (V06), the identity home as its `identity` module (plan 20 O06), with sign-in there through Entra ID and Windows (O06b). Not yet:
   the management API, the console.
 
 ## Tests and checks

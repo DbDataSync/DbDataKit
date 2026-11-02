@@ -117,6 +117,19 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
         if (!string.IsNullOrWhiteSpace(o.Identity.PublicUrl)
             && (!Uri.TryCreate(o.Identity.PublicUrl, UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps || url.AbsolutePath != "/" || url.Query.Length > 0 || url.Fragment.Length > 0))
             cx.Error("Identity.PublicUrl", $"`PublicUrl` is `{o.Identity.PublicUrl}`, which is not an https address without a path.", "Use the address people reach the home at, such as https://identity.example.com.");
+        var entra = o.Identity.Entra;
+        if (!string.IsNullOrWhiteSpace(entra.Authority))
+        {
+            // https, except a stand-in tenant on this machine
+            if (!Uri.TryCreate(entra.Authority, UriKind.Absolute, out var authority) || !(authority.Scheme == Uri.UriSchemeHttps || authority.Scheme == Uri.UriSchemeHttp && authority.IsLoopback) || authority.Query.Length > 0)
+                cx.Error("Identity.Entra.Authority", $"`Authority` is `{entra.Authority}`, which is not an https address.", "Use the tenant's issuer: https://login.microsoftonline.com/<tenant id>/v2.0.");
+            if (string.IsNullOrWhiteSpace(entra.ClientId))
+                cx.Error("Identity.Entra.ClientId", "Entra sign-in needs the id of the app registered in the tenant for the home.", "Set `ClientId`.");
+            if (string.IsNullOrWhiteSpace(entra.ClientSecret))
+                cx.Error("Identity.Entra.ClientSecret", "Entra sign-in needs the client secret of the app registered in the tenant for the home.", "Set `ClientSecret` to a secret reference, such as secret:dbdata:proxy:identity:entra.");
+        }
+        else if (!string.IsNullOrWhiteSpace(entra.ClientId) || !string.IsNullOrWhiteSpace(entra.ClientSecret))
+            cx.Error("Identity.Entra.Authority", "Entra sign-in is set up without the tenant.", "Set `Authority` to the tenant's issuer, https://login.microsoftonline.com/<tenant id>/v2.0, or remove the `Entra` section.");
     }
 
     private static void ValidateListenAndTls(ProxyOptions o, IConfigValidationContext cx)

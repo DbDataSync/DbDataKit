@@ -200,6 +200,40 @@ public sealed class IdentityOptions
     /// people have signed in. Empty: <c>https://&lt;the first TLS host name, or localhost&gt;:&lt;Port&gt;</c>.
     /// </summary>
     public string? PublicUrl { get; set; }
+
+    /// <summary>Sign people in at the home through a Microsoft Entra ID tenant too (plan 20 O06b). Off while <see cref="IdentityEntraOptions.Authority"/> is empty.</summary>
+    public IdentityEntraOptions Entra { get; set; } = new();
+
+    /// <summary>Sign people in at the home with their Windows account too (Negotiate; on Linux, Kerberos with a keytab). Off unless asked for.</summary>
+    public IdentityWindowsOptions Windows { get; set; } = new();
+}
+
+/// <summary>
+/// The home as a client of an Entra tenant: an app registered there for it, with the redirect URI <c>&lt;PublicUrl&gt;/identity/upstream/entra/callback</c> and the <c>groups</c> claim in its id token. The groups map to roles with
+/// <c>dbdataproxy identity map-group --source entra</c>.
+/// </summary>
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class IdentityEntraOptions
+{
+    /// <summary>The tenant's issuer: <c>https://login.microsoftonline.com/&lt;tenant id&gt;/v2.0</c>. Empty: Entra is not offered.</summary>
+    public string? Authority { get; set; }
+
+    /// <summary>The id of the app registered in the tenant for the home.</summary>
+    public string? ClientId { get; set; }
+
+    /// <summary>That app's client secret, as a secret reference (<c>secret:dbdata:proxy:identity:entra</c>).</summary>
+    [Secret]
+    public string? ClientSecret { get; set; }
+
+    /// <summary>Whether the tenant's <c>email</c> claim says whose an address is, so a person's first Entra sign-in joins the account that holds their address. Only for a tenant whose addresses its administrators set.</summary>
+    public bool TrustEmail { get; set; }
+}
+
+/// <summary>The home's Windows sign-in: the account's SID is the credential, its user principal name the account key, its groups what <c>dbdataproxy identity map-group --source windows</c> mappings match.</summary>
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class IdentityWindowsOptions
+{
+    public bool Enabled { get; set; }
 }
 
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
