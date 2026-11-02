@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """DbDataKit.slnx lists every project in the repository (plan 13, slice F09), and every product's .slnf filter names only projects
-that are in it. Run from anywhere: python3 scripts/check_solution.py [root]
+that are in it. DbDataKit/DbDataKit.Shared.slnx, the solution the shared libraries' CI job builds and tests, lists every project under
+DbDataKit/: a project left out of it is never tested by CI. Run from anywhere: python3 scripts/check_solution.py [root]
 """
 import json
 import os
@@ -35,6 +36,12 @@ def check(root):
                 for path in solution["projects"]:
                     if path not in listed:
                         problems.append(f"{rel}: {path} is not in DbDataKit.slnx")
+    shared = os.path.join(root, "DbDataKit", "DbDataKit.Shared.slnx")
+    if os.path.exists(shared):
+        kit = os.path.join(root, "DbDataKit")
+        in_shared = re.findall(r'<Project\s+Path="([^"]+)"', open(shared, encoding="utf-8").read())
+        for path in sorted(set(projects(kit)) - set(in_shared)):
+            problems.append(f"DbDataKit/DbDataKit.Shared.slnx: {path} is not listed, so the shared libraries' CI job never builds or tests it")
     return problems
 
 

@@ -1,5 +1,9 @@
+using System.Buffers.Text;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataKit.Identity;
 using DbDataKit.Secrets;
@@ -8,6 +12,8 @@ using DbDataKit.Web.Trust;
 using DbDataProxy.Server.Configuration;
 using DbDataProxy.Server.Hosting;
 using DbDataProxy.Server.Secrets;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 
 namespace DbDataProxy.Tests.Config;
@@ -50,7 +56,7 @@ public sealed class IdentityModuleTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    private async Task StartAsync()
+    private async Task StartAsync(params string[] more)
     {
         // a free port is looked up and released before the server binds it, so another process can take it in between: that is answered by looking up others
         for (var attempt = 1; ; attempt++)
@@ -59,7 +65,7 @@ public sealed class IdentityModuleTests : IAsyncLifetime
             app = ProxyHost.Build([
                 $"--Proxy:DataDirectory={dataDirectory}", "--Proxy:Listen:Address=127.0.0.1", $"--Proxy:Listen:Port={flightPort}",
                 "--Proxy:Management:Enabled=true", "--Proxy:Management:Address=127.0.0.1", $"--Proxy:Management:Port={managementPort}",
-                "--Proxy:Identity:Enabled=true", "--Proxy:Identity:Address=127.0.0.1", $"--Proxy:Identity:Port={identityPort}",
+                "--Proxy:Identity:Enabled=true", "--Proxy:Identity:Address=127.0.0.1", $"--Proxy:Identity:Port={identityPort}", .. more,
             ]);
             try
             {
@@ -105,6 +111,14 @@ public sealed class IdentityModuleTests : IAsyncLifetime
         Assert.Contains(Load("identity: { enabled: true, publicUrl: 'https://identity.example/home' }\n"), d => d.KeyPath == "Identity.PublicUrl");
         Assert.Contains(Load("identity: { enabled: true, address: 'everywhere' }\n"), d => d.KeyPath == "Identity.Address");
         Assert.DoesNotContain(Load("identity: { enabled: true, publicUrl: 'https://identity.example' }\n"), d => d.KeyPath?.StartsWith("Identity", StringComparison.Ordinal) == true);
+
+        // Entra (O06b): the tenant over https, with the app's id and secret; no half a section
+        Assert.Contains(Load("identity: { enabled: true, entra: { authority: 'http://login.example/t/v2.0', clientId: a, clientSecret: 'secret:x:y' } }\n"), d => d.KeyPath == "Identity.Entra.Authority");
+        Assert.Contains(Load("identity: { enabled: true, entra: { authority: 'https://login.microsoftonline.com/t/v2.0', clientSecret: 'secret:x:y' } }\n"), d => d.KeyPath == "Identity.Entra.ClientId");
+        Assert.Contains(Load("identity: { enabled: true, entra: { authority: 'https://login.microsoftonline.com/t/v2.0', clientId: a } }\n"), d => d.KeyPath == "Identity.Entra.ClientSecret");
+        Assert.Contains(Load("identity: { enabled: true, entra: { clientId: a } }\n"), d => d.KeyPath == "Identity.Entra.Authority");
+        Assert.DoesNotContain(Load("identity: { enabled: true, windows: { enabled: true }, entra: { authority: 'https://login.microsoftonline.com/t/v2.0', clientId: a, clientSecret: 'secret:x:y' } }\n"),
+            d => d.KeyPath?.StartsWith("Identity", StringComparison.Ordinal) == true);
     }
 
     [Fact]
@@ -226,9 +240,74 @@ public sealed class IdentityModuleTests : IAsyncLifetime
         var store = SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = dataDirectory });
         using (var other = SecretValue.From(KeySigningKeyProtector.NewKey()))
             await store.SetAsync(SecretName.Parse(ProxyIdentityModule.SigningKeySecret), other);
-        var failed = await Assert.ThrowsAnyAsync<SecretConfigurationException>(StartAsync);
+        var failed = await Assert.ThrowsAnyAsync<SecretConfigurationException>(() => StartAsync());
         Assert.Contains(ProxyIdentityModule.SigningKeySecret, failed.Message);
         Assert.Contains("same key", failed.Message);
         if (app is not null) { await app.DisposeAsync(); app = null; }
+    }
+
+    [Fact]
+    public async Task A_person_signs_in_at_the_serving_layer_through_entra_with_the_mapped_roles_and_a_refused_sign_in_signs_nobody_in()
+    {
+        // a stand-in tenant: discovery, keys, and a token endpoint that signs an RS256 id token with a groups claim for the home's app
+        using var tenantKey = RSA.Create(2048);
+        var tenantPort = FreePort();
+        var authority = $"http://127.0.0.1:{tenantPort}/t/v2.0";
+        var nonce = "";
+        var tenantBuilder = WebApplication.CreateSlimBuilder();
+        tenantBuilder.WebHost.UseUrls($"http://127.0.0.1:{tenantPort}");
+        await using var tenant = tenantBuilder.Build();
+        tenant.MapGet("/t/v2.0/.well-known/openid-configuration", () => Results.Json(new { issuer = authority, authorization_endpoint = authority + "/authorize", token_endpoint = authority + "/token", jwks_uri = authority + "/keys" }));
+        tenant.MapGet("/t/v2.0/keys", () =>
+        {
+            var p = tenantKey.ExportParameters(false);
+            return Results.Json(new { keys = new[] { new { kty = "RSA", kid = "k1", n = Base64Url.EncodeToString(p.Modulus!), e = Base64Url.EncodeToString(p.Exponent!) } } });
+        });
+        tenant.MapPost("/t/v2.0/token", async (HttpRequest request) =>
+        {
+            var form = await request.ReadFormAsync();
+            if (form["client_secret"] != "tenant-secret") return Results.Json(new { error = "invalid_client" }, statusCode: 401);
+            static string B(object o) => Base64Url.EncodeToString(JsonSerializer.SerializeToUtf8Bytes(o));
+            var input = B(new { alg = "RS256", kid = "k1" }) + "." + B(new Dictionary<string, object>
+            {
+                ["iss"] = authority, ["aud"] = "home-app", ["exp"] = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds(), ["sub"] = "oid-ada", ["name"] = "Ada Lovelace", ["nonce"] = nonce, ["groups"] = new[] { "g-operators" },
+            });
+            return Results.Json(new { id_token = input + "." + Base64Url.EncodeToString(tenantKey.SignData(Encoding.ASCII.GetBytes(input), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)) });
+        });
+        await tenant.StartAsync();
+
+        await StartAsync($"--Proxy:Identity:Entra:Authority={authority}", "--Proxy:Identity:Entra:ClientId=home-app", "--Proxy:Identity:Entra:ClientSecret=tenant-secret", "--Proxy:Identity:Windows:Enabled=true");
+        var state = app!.Services.GetRequiredService<StateDatabase>();
+        new HomeDirectory(state).MapExternalGroup(ExternalSources.Entra, "g-operators", "build-1", ServerRole.Operator);
+        using var browser = Trusting(new Uri(IdentityUrl));
+
+        // the home's sign-in page offers both upstreams
+        var page = await browser.GetStringAsync(IdentityHome.SignInPath);
+        Assert.Contains("identity-sign-in-entra", page);
+        Assert.Contains("identity-sign-in-windows", page);
+
+        async Task<HttpResponseMessage> ThroughTenant(string back)
+        {
+            var start = await browser.GetAsync(UpstreamSignIn.EntraPath);
+            Assert.Equal(HttpStatusCode.Redirect, start.StatusCode);
+            Assert.StartsWith(authority + "/authorize?", start.Headers.Location!.AbsoluteUri);
+            var query = System.Web.HttpUtility.ParseQueryString(start.Headers.Location.Query);
+            Assert.Equal(IdentityUrl + UpstreamSignIn.EntraCallbackPath, query["redirect_uri"]);
+            nonce = query["nonce"]!;
+            return await browser.GetAsync($"{UpstreamSignIn.EntraCallbackPath}?state={Uri.EscapeDataString(query["state"]!)}&{back}");
+        }
+        static bool SetsSession(HttpResponseMessage r) => r.Headers.TryGetValues("Set-Cookie", out var c) && c.Any(v => v.StartsWith(ProxyIdentityModule.Auth.SessionCookie + "=", StringComparison.Ordinal));
+
+        var refused = await ThroughTenant("error=access_denied");
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.False(SetsSession(refused));
+        Assert.Empty(new UserStore(state).List());
+
+        var signedIn = await ThroughTenant("code=from-tenant");
+        Assert.Equal(HttpStatusCode.Redirect, signedIn.StatusCode);
+        Assert.True(SetsSession(signedIn));
+        var ada = Assert.Single(new UserStore(state).List());
+        Assert.Equal("Ada Lovelace", ada.DisplayName);
+        Assert.True(new HomeDirectory(state).RolesOn(ada.Id, "build-1").Roles.HasFlag(ServerRole.Operator));
     }
 }

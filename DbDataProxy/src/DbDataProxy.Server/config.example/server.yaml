@@ -43,6 +43,9 @@ compression: { mode: arrow, codec: zstd, level: 3, allowClientOverride: true }
 # Administer it with:  dbdataproxy identity invite | user-list | client-add | client-list | assign | map-group
 # modules: [flightsql, identity]     # what this instance serves; flightsql is the default
 # identity: { enabled: true, address: 0.0.0.0, port: 8817, publicUrl: https://identity.example.com }
+# People may also sign in at the home through an Entra ID tenant (an app registered there with the redirect URI <publicUrl>/identity/upstream/entra/callback and the groups claim), and with Windows (Negotiate):
+#   entra: { authority: https://login.microsoftonline.com/<tenant id>/v2.0, clientId: <app id>, clientSecret: secret:dbdata:proxy:identity:entra }
+#   windows: { enabled: true }
 
 # Semantic models served as sources named semantic:<model> (the catalog's name); a client sends a JSON request or semantic SQL as a statement with x-datasource: semantic:<model>.
 # Each catalog source is mapped to the data source that holds its tables; clients need access to those data sources. Catalogs are read at start.
