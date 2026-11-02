@@ -30,6 +30,7 @@ public sealed class CliGrammarTests
               cert        The server's TLS certificate
               secret      The encrypted secret store, secret references and protected values
               identity    The identity home this proxy serves: register consoles and apps, invite people, give them roles
+              apps        The apps host this proxy serves: the stores it forwards app data to
               config      The server's own configuration
               query       A client for smoke-testing a running proxy
               semantic    A served semantic model: what it offers, a query on it, what a query would run, the values of an attribute
@@ -116,7 +117,7 @@ public sealed class CliGrammarTests
     [Fact]
     public async Task The_checked_in_mcp_tool_list_is_current()
     {
-        var server = new DbDataKit.Cli.McpServer(Cli.Router(), new DbDataKit.Cli.McpOptions(new HashSet<string>(["secret", "query", "server pair", "server unpair", "datasource adopt", "identity"])), Cli.Program, "0");
+        var server = new DbDataKit.Cli.McpServer(Cli.Router(), new DbDataKit.Cli.McpOptions(new HashSet<string>(["secret", "query", "server pair", "server unpair", "datasource adopt", "identity", "apps"])), Cli.Program, "0");
         var reply = (await server.HandleAsync(System.Text.Json.Nodes.JsonNode.Parse("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}""")!)).Single();
         string actual = reply["result"]!.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }).Replace("\r\n", "\n") + "\n";
         if (Environment.GetEnvironmentVariable("UPDATE_GOLDEN") == "1") File.WriteAllText(McpToolsPath(), actual);

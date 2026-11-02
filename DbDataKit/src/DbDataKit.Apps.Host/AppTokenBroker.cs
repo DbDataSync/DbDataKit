@@ -17,19 +17,14 @@ public sealed class AppTokenBroker(ConsoleTokenIssuer issuer)
     public static IReadOnlyList<string> ScopeOf(AppManifest manifest) =>
         [.. manifest.Models.SelectMany(m => m.Entities.Where(e => e.Value != DataOperations.None).Select(e => TokenScope.Entry(m.Model, e.Key, write: e.Value.HasFlag(DataOperations.Write))))];
 
-    /// <summary>
-    /// A token for the instance's own audience (<c>app:&lt;instance&gt;</c>), or, when <paramref name="server"/> is a Store server the host is paired with, for that server: then it carries the app and the scope the manifest
-    /// grants, so the server reaches only those entities, with the roles the person holds on the app (the server's pairing ceiling lowers them further).
-    /// </summary>
-    public AppToken Issue(AppSession session, string instance, AppManifest? manifest = null, string? server = null)
+    /// <summary>A token for the instance's own audience (<c>app:&lt;instance&gt;</c>): the apps host's data gateway (<see cref="AppDataGateway"/>) is what accepts it, and makes the token the Store sees.</summary>
+    public AppToken Issue(AppSession session, string instance)
     {
         var roles = ServerRole.None;
         foreach (var name in session.RolesOn(instance))
             if (Enum.TryParse<ServerRole>(name, ignoreCase: true, out var role) && role != ServerRole.None) roles |= role;
-        var audience = server ?? AppInstanceAudience.Of(instance);
-        var request = server is null
-            ? new ConsoleTokenRequest(audience, session.Identity.UserId, session.Identity.Name, roles)
-            : new ConsoleTokenRequest(audience, session.Identity.UserId, session.Identity.Name, roles, App: instance, Scope: manifest is null ? [] : ScopeOf(manifest));
+        var audience = AppInstanceAudience.Of(instance);
+        var request = new ConsoleTokenRequest(audience, session.Identity.UserId, session.Identity.Name, roles, App: instance);
         return new AppToken(issuer.Issue(request, LifetimeSeconds), LifetimeSeconds, audience);
     }
 }

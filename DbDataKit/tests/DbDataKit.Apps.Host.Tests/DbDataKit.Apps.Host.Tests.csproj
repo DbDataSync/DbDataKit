@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\DbDataKit.Apps.Host\DbDataKit.Apps.Host.csproj" />
   </ItemGroup>

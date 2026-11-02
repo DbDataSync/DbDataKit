@@ -74,7 +74,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
         var identityPort = FreePort();
         app = ProxyHost.Build([
             $"--Proxy:DataDirectory={dataDirectory}", "--Proxy:Modules:0=apps", "--Proxy:Modules:1=identity",
-            "--Proxy:Apps:Address=127.0.0.1", $"--Proxy:Apps:Port={appsPort}", $"--Proxy:Apps:Home:ClientId={clientId}", "--Proxy:Apps:Stores:0=store-1",
+            "--Proxy:Apps:Address=127.0.0.1", $"--Proxy:Apps:Port={appsPort}", $"--Proxy:Apps:Home:ClientId={clientId}", 
             "--Proxy:Identity:Address=127.0.0.1", $"--Proxy:Identity:Port={identityPort}", $"--Proxy:Identity:PublicUrl=https://localhost:{identityPort}",
         ]);
         await app.StartAsync();
@@ -182,30 +182,24 @@ public sealed class AppsModuleTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_token_for_a_store_server_carries_the_app_and_the_scope_of_the_manifest_and_only_for_a_configured_server()
+    public async Task The_data_route_wants_an_apps_token_and_a_paired_store()
     {
         appsPort = FreePort();
         var (clientId, ada, _, database) = Prepare();
         var (apps, home) = await StartAsync(clientId);
         var session = await SignInAsync(apps, home, database, ada, "/apps/acme/");
 
-        async Task<HttpResponseMessage> Ask(string server)
-        {
-            var request = new HttpRequestMessage(HttpMethod.Post, "/apps/acme/_token") { Content = new StringContent($"{{\"server\":\"{server}\"}}", Encoding.UTF8, "application/json") };
-            request.Headers.Add("Cookie", $"{AppsEndpoints.SessionCookie}={session}");
-            request.Headers.Add("X-DbData-Shell", "1");
-            return await apps.SendAsync(request);
-        }
+        // no token (a session cookie is no credential here), and the preflight of a browser call from the sandboxed frame
+        Assert.Equal(HttpStatusCode.Unauthorized, (await GetAsync(apps, "/apps/acme/_data/store-1/api/v1/models/territories/entities/territory/rows", session)).StatusCode);
+        var preflight = await apps.SendAsync(new HttpRequestMessage(HttpMethod.Options, "/apps/acme/_data/store-1/api/v1/models/territories/changes"));
+        Assert.Equal(HttpStatusCode.NoContent, preflight.StatusCode);
+        Assert.Equal("*", string.Join(' ', preflight.Headers.GetValues("Access-Control-Allow-Origin")));
 
-        var response = await Ask("store-1");
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var token = (string)JsonNode.Parse(await response.Content.ReadAsStringAsync())!["token"]!;
-        var part = token.Split('.')[1].Replace('-', '+').Replace('_', '/');
-        var claims = JsonNode.Parse(Convert.FromBase64String(part.PadRight(part.Length + 3 & ~3, '=')))!;
-        Assert.Equal(("store-1", "acme", "dbdataproxy-apps"), ((string)claims["aud"]!, (string)claims["app"]!, (string)claims["iss"]!));
-        Assert.Equal(["territories/territory:write"], claims["scope"]!.AsArray().Select(r => (string)r!));
-
-        Assert.Equal(HttpStatusCode.Forbidden, (await Ask("some-other-server")).StatusCode);   // not one the host is configured for
+        // a token the broker made, for a store nobody paired
+        var token = (string)JsonNode.Parse(await (await PostTokenAsync(apps, "acme", session)).Content.ReadAsStringAsync())!["token"]!;
+        var request = new HttpRequestMessage(HttpMethod.Get, "/apps/acme/_data/store-1/api/v1/models/territories/entities/territory/rows");
+        request.Headers.Add("Authorization", "Bearer " + token);
+        Assert.Equal(HttpStatusCode.NotFound, (await apps.SendAsync(request)).StatusCode);
     }
 
     [Fact]
