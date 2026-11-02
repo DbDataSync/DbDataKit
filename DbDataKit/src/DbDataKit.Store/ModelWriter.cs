@@ -43,11 +43,18 @@ public sealed class ModelWriter
     private readonly string _engine;
     private readonly TimeProvider _clock;
     private readonly string _schema;
+    private readonly string? _instance;
 
     // schema: where the tables are; the model's name when null. An instance of a model that keeps its instances in schemas names its own.
-    public ModelWriter(DbDataKit.DataModel.DataModel model, DbConnection connection, string engine, TimeProvider? clock = null, string? schema = null)
+    public ModelWriter(DbDataKit.DataModel.DataModel model, DbConnection connection, string engine, TimeProvider? clock = null, string? schema = null, string? instance = null)
     {
         _schema = schema ?? model.Name;
+        if (model.Instances == InstanceMode.Column)
+        {
+            _instance = instance ?? "default";
+            // the id is written into statements as a literal, so it is only ever this shape
+            if (!InstanceName.IsMatch(_instance)) throw new StoreNotSupportedException($"'{_instance}' is not an instance name: lower-case letters, digits, '-' and '_', starting with a letter or digit, at most {ModelStorage.InstanceLength}.");
+        }
         _model = model;
         _connection = connection;
         _engine = engine;
@@ -64,12 +71,17 @@ public sealed class ModelWriter
             }
     }
 
+    private static readonly Regex InstanceName = new("^[a-z0-9][a-z0-9_-]{0,63}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>For a model that keeps its instances in shared tables: the condition that keeps only this instance's rows (empty for any other model). The id was checked against <see cref="InstanceName"/>, so it is safe as a literal.</summary>
+    private string Mine(string? alias = null) => _instance is null ? "" : $" AND {(alias is null ? "" : alias + ".")}{Col(ModelStorage.InstanceColumn)} = '{_instance}'";
+
     private string Table(string entity) => $"{_dialect.Quote(_schema)}.{_dialect.Quote(entity)}";
     private string Col(string name) => _dialect.Quote(name);
     private static bool Dated(ModelEntity entity) => entity.History == HistoryMode.EffectiveDated;
 
     /// <summary>The condition that keeps only the open versions of an entity with history (nothing for one without).</summary>
-    private string OpenOnly(ModelEntity entity, string? alias = null) => Dated(entity) ? $"{(alias is null ? "" : alias + ".")}{Col(ModelStorage.ValidToColumn)} IS NULL" : "1 = 1";
+    private string OpenOnly(ModelEntity entity, string? alias = null) => (Dated(entity) ? $"{(alias is null ? "" : alias + ".")}{Col(ModelStorage.ValidToColumn)} IS NULL" : "1 = 1") + Mine(alias);
 
     /// <summary>The row with this key, or null.</summary>
     public async Task<StoredRow?> GetAsync(string entityName, IReadOnlyDictionary<string, object?> key, CancellationToken cancellationToken = default) =>
@@ -187,6 +199,7 @@ public sealed class ModelWriter
         var columns = entity.Attributes.Select(a => a.Name).Append(ModelStorage.VersionColumn).ToList();
         var values = entity.Attributes.Select(a => row[a.Name]).Append(version).ToList();
         if (Dated(entity)) { columns.Add(ModelStorage.ValidFromColumn); values.Add(validFrom); }
+        if (_instance is not null) { columns.Add(ModelStorage.InstanceColumn); values.Add(_instance); }
         await ExecuteAsync(tx, $"INSERT INTO {Table(entity.Name)} ({string.Join(", ", columns.Select(Col))}) VALUES ({string.Join(", ", columns.Select((_, i) => "@p" + i))})", values, ct).ConfigureAwait(false);
     }
 
@@ -414,7 +427,7 @@ public sealed class ModelWriter
             var farIndex = Add(parameters, far);
             var count = Convert.ToInt64(await ScalarAsync(tx,
                 $"SELECT COUNT(*) FROM {Table(entity.Name)} a JOIN {Table(entity.Name)} b ON {sameGroup} AND NOT ({sameKey}) " +
-                $"AND a.{Col(ModelStorage.ValidFromColumn)} < COALESCE(b.{Col(ModelStorage.ValidToColumn)}, @p{farIndex}) AND b.{Col(ModelStorage.ValidFromColumn)} < COALESCE(a.{Col(ModelStorage.ValidToColumn)}, @p{farIndex}) WHERE {inGroup}", parameters, ct).ConfigureAwait(false));
+                $"AND a.{Col(ModelStorage.ValidFromColumn)} < COALESCE(b.{Col(ModelStorage.ValidToColumn)}, @p{farIndex}) AND b.{Col(ModelStorage.ValidFromColumn)} < COALESCE(a.{Col(ModelStorage.ValidToColumn)}, @p{farIndex}) WHERE {inGroup}{Mine("a")}{Mine("b")}", parameters, ct).ConfigureAwait(false));
             if (count > 0)
                 violations.Add(new("no_overlap", entity.Name, null, group, $"Rows of `{entity.Name}` with {string.Join(", ", group.Select(kv => $"{kv.Key} = {Display(kv.Value)}"))} hold for overlapping periods ({count} overlapping pair(s)); the periods in a group must not overlap."));
         }
@@ -431,7 +444,9 @@ public sealed class ModelWriter
             beforeRow is null ? null : JsonSerializer.Serialize(beforeRow.ToDictionary(k => k.Key, k => Json(k.Value))),
             afterRow is null ? null : JsonSerializer.Serialize(afterRow.ToDictionary(k => k.Key, k => Json(k.Value))),
         ];
-        await ExecuteAsync(tx, $"INSERT INTO {Table(ModelStorage.AuditTable)} ({string.Join(", ", ModelStorage.AuditColumns.Select(c => Col(c.Name)))}) VALUES ({string.Join(", ", values.Select((_, i) => "@p" + i))})", values, ct).ConfigureAwait(false);
+        var auditNames = ModelStorage.AuditColumns.Select(c => c.Name);
+        if (_instance is not null) { auditNames = auditNames.Prepend(ModelStorage.InstanceColumn); values = [_instance, .. values]; }
+        await ExecuteAsync(tx, $"INSERT INTO {Table(ModelStorage.AuditTable)} ({string.Join(", ", auditNames.Select(Col))}) VALUES ({string.Join(", ", values.Select((_, i) => "@p" + i))})", values, ct).ConfigureAwait(false);
     }
 
     private static object? Json(object? value) => value switch { DateOnly d => d.ToString("yyyy-MM-dd"), TimeOnly t => t.ToString("HH:mm:ss"), DateTimeOffset o => o.ToString("O"), DateTime t => t.ToString("O"), byte[] b => Convert.ToBase64String(b), _ => value };
@@ -522,7 +537,7 @@ public sealed class ModelWriter
         entity.Key.ToDictionary(k => k, k => values.TryGetValue(k, out var v) ? Values.Unwrap(v) : null);
 
     private string Where(ModelEntity entity, IReadOnlyDictionary<string, object?> typedKey, List<object?> parameters) =>
-        string.Join(" AND ", entity.Key.Select(k => $"{Col(k)} = @p{Add(parameters, typedKey[k])}"));
+        string.Join(" AND ", entity.Key.Select(k => $"{Col(k)} = @p{Add(parameters, typedKey[k])}")) + Mine();
 
     private static int Add(List<object?> parameters, object? value) { parameters.Add(value); return parameters.Count - 1; }
 

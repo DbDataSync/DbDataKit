@@ -47,8 +47,8 @@ public sealed record ModelEntity(
     public ModelAttribute? Attribute(string name) => Attributes.FirstOrDefault(a => a.Name == name);
 }
 
-/// <summary>How a model's instances are kept apart (plan 26 section 6.2): not at all (one copy), each in a schema of its own on the model's connection, or each on a connection of its own. Sharing the tables and splitting rows by instance id is planned (Z12b).</summary>
-public enum InstanceMode { None, Schema, Connection }
+/// <summary>How a model's instances are kept apart (plan 26 section 6.2): not at all (one copy), each in a schema of its own on the model's connection, or each on a connection of its own. <c>Column</c> shares one set of tables and splits the rows by an instance id column, stamped and filtered by the writer (Z12b).</summary>
+public enum InstanceMode { None, Schema, Connection, Column }
 
 /// <summary>A model: entities with attributes, keys, references and rules, stored on the named connection.</summary>
 public sealed record DataModel(string Name, string? Title, string Connection, ApprovalLevel Approval, IReadOnlyList<ModelEntity> Entities, InstanceMode Instances = InstanceMode.None)
