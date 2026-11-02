@@ -71,7 +71,12 @@ public sealed class ProxyIdentityModule(
         });
         var directory = DirectoryOf(current);
         Directory.CreateDirectory(directory);
-        builder.AddIdentityHome(new IdentityHomeOptions(publicUrl, directory, _ => state, _ => protector, Auth));
+        // the upstreams people may sign in through besides a passkey (O06b)
+        var entra = current.Identity.Entra is { Authority: { Length: > 0 } authority } e
+            ? new EntraUpstream(authority, e.ClientId!, secrets.ResolveSecret(SecretsRuntime.EntraSecretKey, e.ClientSecret), e.TrustEmail)
+            : null;
+        var windows = current.Identity.Windows.Enabled ? new WindowsUpstream() : null;
+        builder.AddIdentityHome(new IdentityHomeOptions(publicUrl, directory, _ => state, _ => protector, Auth, Entra: entra, Windows: windows));
 
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy")).AllowAnonymous();
@@ -79,7 +84,8 @@ public sealed class ProxyIdentityModule(
         app.MapFallback(() => Results.Text("The identity home of this DbDataProxy. Its endpoints are under /.well-known/openid-configuration and /identity/.", "text/plain")).AllowAnonymous();
         await app.StartAsync(cancellationToken);
         _app = app;
-        _log.LogInformation("Identity home on {Address}:{Port}; its issuer is {Issuer}.", current.Identity.Address, current.Identity.Port, publicUrl.GetLeftPart(UriPartial.Authority));
+        _log.LogInformation("Identity home on {Address}:{Port}; its issuer is {Issuer}; sign-in with a passkey{Entra}{Windows}.", current.Identity.Address, current.Identity.Port, publicUrl.GetLeftPart(UriPartial.Authority),
+            entra is null ? "" : ", through Entra ID", windows is null ? "" : ", with Windows");
     }
 
     /// <summary>

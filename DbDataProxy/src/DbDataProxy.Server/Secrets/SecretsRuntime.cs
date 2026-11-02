@@ -69,7 +69,7 @@ public sealed class SecretsRuntime
         return new EncryptedFileSecretStore(SecretKeys.StoreDirectory(dataDirectory), keys);
     }
 
-    /// <summary>Every secret reference the options hold, for <c>secret check</c>: whole connection strings, credential keys inside them, the TLS password and the JWT signing key.</summary>
+    /// <summary>Every secret reference the options hold, for <c>secret check</c>: whole connection strings, credential keys inside them, the TLS password, the JWT signing key and the identity home's Entra client secret.</summary>
     public static IReadOnlyList<SecretRef> ConfiguredReferences(ProxyOptions options)
     {
         var references = new List<SecretRef>();
@@ -81,8 +81,12 @@ public sealed class SecretsRuntime
         }
         Add(options.Tls.CertificatePassword);
         Add(options.Auth.Jwt.SigningKey);
+        Add(options.Identity.Entra.ClientSecret);
         return references;
     }
+
+    /// <summary>The configuration key of the identity home's Entra client secret, as messages name it.</summary>
+    public const string EntraSecretKey = "Proxy:Identity:Entra:ClientSecret";
 
     private bool Require => _options.CurrentValue.RequireReferencedSecrets;
 
@@ -201,6 +205,7 @@ public sealed class SecretsRuntime
         }
         Check(() => ResolveSecret("Proxy:Tls:CertificatePassword", options.Tls.CertificatePassword));
         Check(() => ResolveSecret("Proxy:Auth:Jwt:SigningKey", options.Auth.Jwt.SigningKey));
+        Check(() => ResolveSecret(EntraSecretKey, options.Identity.Entra.ClientSecret));
 
         if (plain.Count > 0)
             throw new PlainSecretNotAllowedException("Proxy", "Literal secrets are not allowed (Proxy:RequireReferencedSecrets is true): " + string.Join(" ", plain));

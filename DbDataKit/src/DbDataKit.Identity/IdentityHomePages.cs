@@ -1,3 +1,5 @@
+using System.Net;
+
 namespace DbDataKit.Identity;
 
 /// <summary>
@@ -10,7 +12,8 @@ public static class IdentityHomePages
         <style>body{font:16px system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#f5f5f4;color:#1c1917}
         main{background:#fff;padding:2rem;border-radius:.5rem;box-shadow:0 1px 4px #0003;max-width:22rem;width:calc(100% - 2rem)}
         label{display:block;margin:.6rem 0 .2rem}input{font:inherit;width:100%;box-sizing:border-box;padding:.4rem}
-        button{font:inherit;padding:.6rem 1rem;width:100%;cursor:pointer;margin-top:1rem}p.message{color:#b91c1c;min-height:1.2em}
+        button,a.upstream{font:inherit;padding:.6rem 1rem;width:100%;cursor:pointer;margin-top:1rem;display:block;box-sizing:border-box;text-align:center}
+        a.upstream{border:1px solid #a8a29e;border-radius:.25rem;color:inherit;text-decoration:none}a.upstream[hidden]{display:none}p.message{color:#b91c1c;min-height:1.2em}
         @media (prefers-color-scheme:dark){body{background:#1c1917;color:#f5f5f4}main{background:#292524}input{background:#1c1917;color:inherit;border:1px solid #57534e}}</style>
         """;
 
@@ -22,25 +25,40 @@ public static class IdentityHomePages
         """;
 
     /// <summary>
-    /// A person who is not signed in arrives here from <c>/identity/authorize</c> with <c>returnUrl</c>. With a session already they go straight back; otherwise they sign in with a passkey. Only an address
-    /// under <c>/identity/</c> of the home is returned to; with none, the page says who is signed in.
+    /// A person who is not signed in arrives here from <c>/identity/authorize</c> with <c>returnUrl</c>. With a session already they go straight back; otherwise they sign in with a passkey, or through each upstream the home
+    /// is configured with (plan 20 O06b), which comes back here signed in. Only an address under <c>/identity/</c> of the home is returned to; with none, the page says who is signed in.
     /// </summary>
-    public const string SignIn = """
+    /// <param name="options">The home: which upstreams it offers.</param>
+    /// <param name="message">Why the last attempt signed nobody in, shown to the person; null for none.</param>
+    public static string SignIn(IdentityHomeOptions options, string? message = null)
+    {
+        var upstreams = new List<(string Id, string Path, string Label)>();
+        if (options.Entra is { } entra) upstreams.Add(("entra", UpstreamSignIn.EntraPath, entra.Label));
+        if (options.Windows is { } windows) upstreams.Add(("windows", UpstreamSignIn.WindowsPath, windows.Label));
+        var links = string.Concat(upstreams.Select(u =>
+            $"<a class=\"upstream\" data-testid=\"identity-sign-in-{u.Id}\" data-path=\"{u.Path}\" href=\"{u.Path}\">{WebUtility.HtmlEncode(u.Label)}</a>"));
+        return SignInHead + links + $"<p id=\"done\" data-testid=\"identity-signed-in\" hidden></p><p id=\"message\" class=\"message\" data-testid=\"identity-sign-in-message\" role=\"alert\">{WebUtility.HtmlEncode(message ?? "")}</p></main>" + SignInScript;
+    }
+
+    private const string SignInHead = """
         <!doctype html>
         <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in</title>
         """ + Style + """
         </head>
-        <body><main data-testid="identity-sign-in"><h1>Sign in</h1><p id="intro">Use your passkey to sign in to the identity home.</p>
+        <body><main data-testid="identity-sign-in"><h1>Sign in</h1><p id="intro">Sign in to the identity home.</p>
         <button id="passkey" data-testid="identity-sign-in-passkey" type="button">Sign in with a passkey</button>
-        <p id="done" data-testid="identity-signed-in" hidden></p><p id="message" class="message" role="alert"></p></main>
+        """;
+
+    private const string SignInScript = """
         <script>
         """ + Base64 + """
         const requested = new URLSearchParams(location.search).get('returnUrl') || '';
         const target = requested.startsWith('/identity/') && !requested.startsWith('//') && !requested.includes('\\') ? requested : null;
+        for (const a of document.querySelectorAll('a.upstream')) a.href = a.dataset.path + (target ? '?returnUrl=' + encodeURIComponent(target) : '');
         async function whoIsSignedIn() { const r = await fetch('/api/auth/status'); if (!r.ok) return null; const s = await r.json(); return s.userId ? s : null; }
         function signedIn(status) {
           if (target) { location.replace(target); return; }
-          document.getElementById('passkey').hidden = true; document.getElementById('intro').hidden = true;
+          for (const e of document.querySelectorAll('#passkey, #intro, a.upstream')) e.hidden = true;
           const done = document.getElementById('done'); done.hidden = false; done.textContent = `Signed in as ${status.displayName}.`;
         }
         async function go() {
