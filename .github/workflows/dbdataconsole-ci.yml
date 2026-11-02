@@ -195,3 +195,5 @@ jobs:
         run: dist/compose/check.sh dist/compose/proxy.yml dbdataproxy
       - name: Sync server and console
         run: dist/compose/check.sh dist/compose/sync.yml dbdatasync
+      - name: The whole suite (docs/quickstart.md)
+        run: dist/compose/check.sh dist/compose/quickstart.yml dbdataproxy dbdatasync dbdatabuild dbdatastore
