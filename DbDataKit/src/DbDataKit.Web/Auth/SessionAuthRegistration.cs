@@ -29,6 +29,7 @@ public static class SessionAuthRegistration
         services.AddSingleton(sp => new UserStore(state(sp)));
         services.AddSingleton(sp => new SessionStore(state(sp)));
         services.AddSingleton(sp => new InviteStore(state(sp)));
+        services.AddSingleton(sp => new OneTimeValues(state(sp), sp.GetService<TimeProvider>()));
         services.AddSingleton(sp => new BootstrapInviteLocation(firstRunDirectory(sp)));
         services.AddHostedService<BootstrapInvite>();
 

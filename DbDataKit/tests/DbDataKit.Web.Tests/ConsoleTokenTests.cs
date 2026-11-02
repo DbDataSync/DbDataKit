@@ -199,6 +199,32 @@ public class ConsoleTokenTests
     }
 
     [Fact]
+    public void A_token_one_instance_of_a_group_accepted_is_refused_by_another_that_shares_its_state()
+    {
+        // plan 20 O02b: the ids used are in the state the instances share, not in each one's memory
+        var directory = Directory.CreateTempSubdirectory("replay-");
+        try
+        {
+            var state = new DbDataKit.State.StateDatabase(Path.Combine(directory.FullName, "state.db"), new DbDataKit.State.StateSchema([DbDataKit.State.OneTimeSchema.Values]));
+            var consoles = new Consoles(new PairedClient(ConsoleId, "Operations", _key.PublicKey, ServerRole.Admin));
+            ConsoleTokenValidator Instance() => new(Server, consoles, new StateReplayCache(new DbDataKit.State.OneTimeValues(state, _clock), "management:" + Server), _clock);
+            var (a, b) = (Instance(), Instance());
+            var issuer = new ConsoleTokenIssuer(ConsoleId, _key, _clock);
+
+            var token = issuer.Issue(Request());
+            Assert.True(a.Validate(token).Ok);
+            Assert.Equal(TokenFailure.Replayed, b.Validate(token).Failure);
+            Assert.Equal(TokenFailure.Replayed, a.Validate(token).Failure);
+            Assert.True(b.Validate(issuer.Issue(Request())).Ok);   // a new token is a new id
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void A_refused_token_does_not_use_up_its_id()
     {
         var (issuer, _, replay) = Make();

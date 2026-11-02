@@ -214,8 +214,10 @@ The proxy can serve the install's **identity home** (plan 20, O06): who people a
 * **Signing in with Windows** (O06b): `identity: { windows: { enabled: true } }` adds **Sign in with Windows** (Negotiate). On a Windows host the account's SID is the credential, its user principal name the
   account key, and its group SIDs and `DOMAIN\group` names what `identity map-group --source windows` matches. On Linux it needs the home's keytab (`KRB5_KTNAME`); the Kerberos name is then the credential.
 * **From a console** (13a U21): with `management:` on too, a paired console's Proxy screens have an **Identity home** item: people, role assignments, group mappings, groups, consoles and apps, service accounts and tokens, through the management API's `/api/v1/identity/...` (the admin role; a proxy with `identity` off answers 404).
-* **Not yet:** an Entra sign-in is remembered by the proxy that started it, so a group behind a balancer needs the tenant's
-  callback to reach the same proxy (sticky sessions) until the home's state holds it (O02).
+* **In a group** (O02b): any proxy of the group serves the home, whichever one a browser or console reaches. What a sign-in holds between two requests (a passkey ceremony's challenge, an Entra sign-in's
+  verifier and nonce) is in the state and used once, as are the ids of the management tokens a console sent, so a balancer needs no sticky sessions. Give every proxy the same `identity.publicUrl`, both keys
+  (`dbdata:proxy:identity:signing-keys` and `dbdata:proxy:state:session-key`) and, for the console to see one server, the same `server.yaml` instance id and paired consoles. **Windows sign-in with NTLM**
+  takes several requests on one connection: a balancer must keep a connection on one proxy (any layer-4 balancer does), or use Kerberos, which takes one.
 
 ### Validation, schema version and the config commands
 

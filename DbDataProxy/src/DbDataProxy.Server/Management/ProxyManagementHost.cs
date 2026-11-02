@@ -104,7 +104,9 @@ public static class ProxyManagementHost
                 : null);
         if (audit.ImportFile(dataDirectory) is > 0 and var imported)
             app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management").LogInformation("Read {Count} entries of {File} into the state's audit; the file is now {File}.imported.", imported, DbDataProxy.Server.State.StateAuditLog.LegacyFileName, DbDataProxy.Server.State.StateAuditLog.LegacyFileName);
-        var validator = new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache());
+        // a token one instance of a group accepted is refused by every other (plan 20 O02b): the used ids are in the state they share
+        var used = new DbDataKit.State.OneTimeValues(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>());
+        var validator = new ConsoleTokenValidator(instanceId, clients, new StateReplayCache(used, "management:" + instanceId));
         var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management");
 
         app.UseManagementApiVersion();
@@ -113,7 +115,7 @@ public static class ProxyManagementHost
             () => holder.Current is { } certificate ? PairingProof.CertificateFingerprint(certificate) : throw new InvalidOperationException("This server has no certificate to pair against."),
             clients, files.Codes()));
         app.AnnounceToConsole("dbdataproxy", instanceId, options.Management.Port, clients, files.Codes());
-        app.MapKeyRotation(new KeyRotationService(instanceId, clients, new MemoryReplayCache()));
+        app.MapKeyRotation(new KeyRotationService(instanceId, clients, new StateReplayCache(used, "key-rotation:" + instanceId)));
 
         app.MapMethods($"{ProxyManagement.Prefix}/{{**rest}}", ["GET", "POST", "PUT", "DELETE"], async (HttpContext context) =>
         {

@@ -160,7 +160,9 @@ public static class HomeSchema
 
     /// <summary>The home's scripts in the order they were added, for a host whose state database has tables of its own before them (the serving layer appends these to its schema, plan 20 O06).
     /// Append to this list, never edit an entry that has shipped.</summary>
-    public static IReadOnlyList<string> Templates { get; } = [IdentitySchema.Accounts, IdentitySchema.Invites, Directory, Provider, Sessions, IdentitySchema.AccountKeys, ExternalGroups, AccessTokens];
+    public static IReadOnlyList<string> Templates { get; } = [IdentitySchema.Accounts, IdentitySchema.Invites, Directory, Provider, Sessions, IdentitySchema.AccountKeys, ExternalGroups, AccessTokens,
+        // what a sign-in holds between two requests, and the management tokens used, so every instance of a group can finish and refuse what another started or accepted (plan 20 O02b)
+        OneTimeSchema.Values];
 
     public static StateSchema Schema { get; } = new(Templates);
 }

@@ -127,9 +127,11 @@ public static class IdentityHost
         var trust = app.MapGroup("").AllowAnonymous();
         trust.MapPairing(new PairingService(instanceId, PairingProof.CertificateFingerprint(certificate), paired, pairing.Codes()));
         trust.AnnounceToConsole(IdentityHostSettings.Product, instanceId, settings.Listen.Port, paired, pairing.Codes());
-        trust.MapKeyRotation(new KeyRotationService(instanceId, paired, new MemoryReplayCache()));
+        // the used token ids are in the home's state, so instances of a home on one server engine refuse each other's (plan 20 O02b)
+        var used = app.Services.GetRequiredService<OneTimeValues>();
+        trust.MapKeyRotation(new KeyRotationService(instanceId, paired, new StateReplayCache(used, "key-rotation:" + instanceId)));
         // the console's signed token on every management call; the home's own /api/auth, /api/invites and /api/access-tokens are a person's session, outside this prefix
-        app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, paired, new MemoryReplayCache()), refused => log($"warn: a management call was refused ({refused.Failure}): {refused.Detail}"), ManagementPrefix);
+        app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, paired, new StateReplayCache(used, "management:" + instanceId)), refused => log($"warn: a management call was refused ({refused.Failure}): {refused.Detail}"), ManagementPrefix);
         app.MapIdentityHome(log);
 
         var admin = new IdentityAdminApi(app.Services.GetRequiredService<StateDatabase>(), settings.Public.AbsoluteUri);
