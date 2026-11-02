@@ -25,7 +25,7 @@ break and how the old form fails.
 | Term | Means | Was |
 | --- | --- | --- |
 | **DbDataKit Studio**, "Studio" | the web host: sign-in, users, invitations, the servers it manages and their screens, every module's docs | "the console", `DbDataConsole` |
-| `dbdatakit-studio` | the command: Studio's executable and command line (`server run`, `user`, `instance`, `identity`, `service`, `health`), its release tags, container image, installers and systemd unit | `dbdatakit` |
+| `dbdatakit-studio` | the command: Studio's executable and command line (`studio run`, `user`, `server`, `trust`, `identity`, `service`, `health`), its release tags, container image, installers and systemd unit | `dbdatakit` |
 | `DbDataKit.Studio` | the identity in code: its folder `DbDataKit.Studio/`, projects and packages `DbDataKit.Studio.*`, namespaces, and the Windows service name | `DbDataConsole`, `DbDataConsole.*`, service `DbDataKitConsole` |
 | **`dbdatakit`** | the new administrative tool (a dotnet tool, section 6); `local` approval is in its first version | new |
 | **server** | a DbDataSync, DbDataProxy, DbDataBuild or DbDataStore server that Studio manages | unchanged |
@@ -49,8 +49,8 @@ The hyphen in `dbdatakit-studio` is only there because the command `dbdatakit` i
 
 ## 3. What exists today (read from the code, 2026-11-02)
 
-- **Pairing and relay.** A server makes a single-use pairing code (`server pair`). Studio pairs with it (`instance add`), remembers the
-  server in `instances.yaml`, signs a short-lived token per call naming the person and their roles, and relays the browser's calls through
+- **Pairing and relay.** A server makes a single-use pairing code (`server pair`). Studio pairs with it (`instance add` today, `server add` after I02), remembers the
+  server in `instances.yaml` (`servers.yaml` after I02), signs a short-lived token per call naming the person and their roles, and relays the browser's calls through
   `/relay/<server>/api/...`. Servers check the token and decide what the role may do. A paired client has a *kind*: `Console`, `Server` or
   `Cli`.
 - **The pin.** The pin is the SHA-256 of the server certificate's whole DER encoding, one string per server (`PairingProof.CertificateFingerprint`;
@@ -83,16 +83,17 @@ Nothing is migrated. Each old form fails with a message that names the file or v
 | Data directory and environment | `DBDATAKIT_CONSOLE_*`, default directory `…/DbDataKit/console` | `DBDATAKIT_STUDIO_*`, default `…/DbDataKit/studio` | Studio starts with an **empty** directory (no users, no certificate, a new first-run invitation). It refuses to start when an old-named variable is set, and names it. |
 | Wire values | `ClientKind.Console` (the lower-case word is inside the pairing proof), proof labels `dbdata-pair-v1-*`, management API version 1 | `ClientKind.Studio`, labels `v2`, management API version 2 with the supported floor raised to 2 for this step (the usual rule also accepts the version before) | A version-1 server is reported as "Upgrade this server". A `server.yaml` listing a client of kind `console` is refused, naming the file. |
 | Signing key | secret `kit/console/signing-key` | `kit/studio/signing-key`, a new key | The old key is not read. With the wire change every server is paired again anyway. |
-| Trust | `fingerprint:` in `instances.yaml`; `Fingerprint` in Build's paired Proxy record | `trust:` (a list) | A file or record with `fingerprint:` is refused, naming the file: "pair again". |
+| Trust | `fingerprint:` in `instances.yaml`; `Fingerprint` in Build's paired Proxy record | `trust:` (a list), in `servers.yaml` | A file or record with `fingerprint:` is refused, naming the file: "pair again". |
+| Studio's grammar | `instance add/list/remove/pending/confirm/reject/rotate-key`, `/api/instances`, `instances.yaml`; Studio's own process is `server run` | `server add/list/remove/pending/confirm/reject/rotate-key`, `/api/servers`, `servers.yaml`; Studio's own process is `studio run` (decision 1) | The docs checker rejects the old forms. `servers.yaml` is a new file in the new data directory; the old one is never read. |
 | Reserved app path | `console` | `studio` | An app manifest naming `console` is no longer rejected for that reason; `studio` is. |
-| Docs checker | `PRODUCTS` maps `dbdatakit` to `DbDataConsole`; `RETIRED` knows nothing of it | `dbdatakit-studio` maps to Studio, `dbdatakit` to the new tool; `RETIRED` lists `dbdatakit server|instance|user|identity|service` → `dbdatakit-studio …` | Any doc that still types the old commands fails the check. |
+| Docs checker | `PRODUCTS` maps `dbdatakit` to `DbDataConsole`; `RETIRED` knows nothing of it | `dbdatakit-studio` maps to Studio, `dbdatakit` to the new tool; `RETIRED` lists `dbdatakit server/instance/user/identity/service` → `dbdatakit-studio …`, and `dbdatakit-studio instance` → `server`, `dbdatakit-studio server run` → `studio run` | Any doc that still types the old commands fails the check. |
 
 Unchanged: `IConsole` and the other terminal types; `DBDATAKIT_*` variables that are not about the console (`DBDATAKIT_ADVERTISE_URL`,
 `DBDATAKIT_INSTANCE_NAME`, `DBDATAKIT_IDENTITY_*`); `X-DbData-Token`; the library and app "pins" (`Apps.Instances`, scripting lock files),
 which are unrelated.
 
 What a person does after upgrading: install Studio, sign in with the new first-run invitation, run `server pair` on each server, and
-`dbdatakit-studio instance add` for each (or let the servers announce themselves). That is the whole procedure; it goes in the release
+`dbdatakit-studio server add` for each (or let the servers announce themselves). That is the whole procedure; it goes in the release
 notes.
 
 ## 5. Trust lists (replacing the pin)
@@ -117,8 +118,8 @@ If activation fails and the server falls back to the old certificate, the old en
 what happened and leaves both entries. A list with two entries for more than a set time (a week) is shown as a warning, because a retired
 certificate whose key leaks would still be accepted.
 
-**Visible.** `instance list` and the web app show each server's entries, which one was seen last, and when each was added. New verbs:
-`instance trust list|add|remove|verify`, and the matching calls under `api/instances/{id}/trust`.
+**Visible.** `server list` and the web app show each server's entries, which one was seen last, and when each was added. New verbs:
+`trust list|add|remove|verify --server <name>` (the same noun in Studio and in `dbdatakit`), and the matching calls under `api/servers/{id}/trust`.
 
 **Not in this plan.** Trusting a CA (any certificate it issued) would remove rollovers entirely for AD CS certificates. `HomeTrust`
 already does this for the identity home. It can be added later as another kind of list entry.
@@ -195,7 +196,7 @@ The tool caches the session per Studio, protected (DPAPI on Windows through `DbD
 
 | Target | Address (default) | Used for |
 | --- | --- | --- |
-| **Studio** | `https://…:8480` | sign-in (`/api/auth/cli/*`, `/api/auth/windows`), the approval page (in a browser), `/api/instances` and its trust calls, and `/relay/<server>/…` |
+| **Studio** | `https://…:8480` | sign-in (`/api/auth/cli/*`, `/api/auth/windows`), the approval page (in a browser), `/api/servers` and its trust calls, and `/relay/<server>/…` |
 | **Servers** (Sync, Proxy, Build, Store) | only through Studio's relay | certificate status, stage, activate (Admin role) |
 | **Identity home** | only in the browser, during sign-in | |
 | **AD CS** (Windows workstation only) | the CA over RPC/DCOM; a domain controller over LDAP and Kerberos | issuing and discovery |
@@ -209,7 +210,7 @@ No server needs to be reachable from the workstation; only Studio and, for issui
 | `login`, `logout`, `whoami` | section 6.3 |
 | `studio show` | what the config resolved to, from which files |
 | `server list`, `server status [--server]` | the servers Studio manages and how they answer |
-| `trust list|add|remove|verify --server` | a server's trust list (section 5) |
+| `trust list/add/remove/verify --server` | a server's trust list (section 5) |
 | `cert status --server` | the certificate the server presents, its days left, whether a staged one waits |
 | `cert discover`, `cert templates` | Windows: the CAs and templates in Active Directory |
 | `cert issue --server --dns … [--ca] [--template]` | Windows: request, stage, trust, activate, verify, clean up (section 7) |
@@ -349,10 +350,15 @@ I00 can start now. I01 and I03 can run in parallel; I02 waits for I01 so the two
 ## 10. Decisions for the owner
 
 Decided: the folder is `DbDataKit.Studio/`; the tool's project and package are `DbDataKit.Admin.Cli` (the shared `DbDataKit.Cli` stays as it is);
-`local` approval is in the first version; the rollover removes the old trust entry by default.
+`local` approval is in the first version; the rollover removes the old trust entry by default; a managed product is a **`server`** in both
+command lines (Studio's `instance` noun is renamed).
 
-1. **`instance` or `server`** for a managed product, in Studio's command line and in the tool's. Today Studio says `instance` (`instance add`,
-   `instance list`, `/api/instances`, `instances.yaml`, `InstanceId`) while its own help text calls them "servers", because the shared
-   `server` noun (`server run`, on every product, including Studio) already means "this program's own server". Recommendation: the tool
-   says `instance` too, so the two command lines match; prose keeps saying "server". Until this is decided the plan's tool verbs
-   (`server list`, `server status`, `--server`) are placeholders.
+1. **What Studio calls its own process.** The shared grammar is strictly `<noun> <verb>`, and every product's own process is `server run`
+   (service units, the container entry point and docs all use it). With `server` now meaning "a server Studio manages", Studio cannot also
+   use it for itself. Proposed: **`studio run`**, which parallels the existing `identity run`, with no change to the shared framework.
+   Alternatives: `host run`, or letting the framework accept a lone verb (`dbdatakit-studio run`), which changes every product's grammar.
+   The plan uses `studio run` until you say otherwise. It touches Studio's Dockerfile entry point, its Windows service and systemd unit,
+   the docs and the checker, all of which I02 already rewrites.
+2. **How far the rename goes.** Proposed: the command noun, the API path (`/api/servers`) and the registry file (`servers.yaml`), all
+   user-visible. The internal names (`RegisteredInstance`, `InstanceId`, the pairing JSON field `instanceId`, `DBDATAKIT_INSTANCE_NAME`)
+   mean "this running copy" and stay. Say if you want those renamed too; the pairing field would be part of the version-2 wire break.
