@@ -208,4 +208,46 @@ public class DataModelLoaderTests
         Assert.Equal(EntityRole.Calendar, model.Entity("day")!.Role);
         Assert.Equal(RuleKind.NoCycle, model.Entity("region")!.Rules![0].Kind);
     }
+
+    private const string Small = "schemaVersion: 1\nname: sales\nstorage: {connection: mdm, instances: INSTANCES}\nentities:\n  e:\n    key: [id]\n    attributes:\n      id: {type: INT}\n";
+
+    [Theory]
+    [InlineData("schema", InstanceMode.Schema)]
+    [InlineData("connection", InstanceMode.Connection)]
+    public void A_model_says_how_its_instances_are_kept_apart(string text, InstanceMode expected)
+    {
+        var result = DataModelLoader.Load(Small.Replace("INSTANCES", text));
+
+        Assert.True(result.Ok, string.Join("; ", result.Diagnostics));
+        Assert.Equal(expected, result.Model!.Instances);
+    }
+
+    [Fact]
+    public void A_model_with_no_instances_setting_keeps_one_copy()
+    {
+        Assert.Equal(InstanceMode.None, DataModelLoader.Load(Small.Replace(", instances: INSTANCES", "")).Model!.Instances);
+    }
+
+    [Theory]
+    [InlineData("column", "not available yet")]
+    [InlineData("tenant", "is not a value of `storage.instances`")]
+    public void An_unknown_or_not_yet_built_instance_mode_is_refused_with_the_reason(string text, string expected)
+    {
+        var result = DataModelLoader.Load(Small.Replace("INSTANCES", text));
+
+        Assert.False(result.Ok);
+        Assert.Contains(expected, result.Diagnostics.First().Message);
+    }
+
+    [Fact]
+    public void The_schema_of_an_instance_follows_the_mode_and_a_name_that_is_too_long_is_refused()
+    {
+        var model = DataModelLoader.Load(Small.Replace("INSTANCES", "schema")).Model!;
+
+        Assert.Equal("sales__acme", model.SchemaOf("acme", out _));
+        Assert.Equal("sales", model.SchemaOf("default", out _));
+        Assert.Null(model.SchemaOf(new string('a', 60), out var problem));
+        Assert.Contains("limit is 63", problem);
+        Assert.Equal("sales", (model with { Instances = InstanceMode.Connection }).SchemaOf("acme", out _));
+    }
 }

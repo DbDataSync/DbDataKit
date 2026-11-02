@@ -54,7 +54,8 @@ public static class ModelStorage
 
     private const int NameLimit = 63;          // PostgreSQL's; SQL Server allows more, and one name is stored the same on both
 
-    public static StoragePlan Plan(DataModel model, string engine)
+    /// <summary>The statements that store a model on an engine. <paramref name="schema"/> is where the tables go: the model's name when null; an instance of a model that keeps its instances in schemas passes <see cref="DataModel.SchemaOf"/>.</summary>
+    public static StoragePlan Plan(DataModel model, string engine, string? schema = null)
     {
         TableDdl ddl = engine switch
         {
@@ -63,7 +64,7 @@ public static class ModelStorage
             _ => throw new StorageException($"Models are stored on SQL Server (`sqlserver`) and PostgreSQL (`postgres`); `{engine}` is not one of them yet."),
         };
         var dialect = DialectCatalog.For(new EngineId(engine));
-        var schema = model.Name;
+        schema ??= model.Name;
         var statements = new List<StorageStatement>();
         var notes = new List<string>();
         var declarations = new Dictionary<(string Entity, string Attribute), string>();

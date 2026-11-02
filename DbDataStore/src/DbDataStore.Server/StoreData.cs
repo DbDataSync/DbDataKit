@@ -86,21 +86,84 @@ public static class StoreData
 
     private static bool Known(Exception ex) => ex is StoreConnectionException or WriteRefusedException or VersionConflictException or RowNotFoundException or StoreNotSupportedException or StorageException;
 
+    /// <summary>Where an instance of the model in the request is kept, or the 404 that says why not. The model's own copy (no instance in the path, or <c>default</c>) is always there.</summary>
+    private static (string Connection, string Schema, IResult? Problem) Where(string directory, DataModel model, HttpContext context)
+    {
+        var (connection, schema, problem) = StoreInstances.Resolve(directory, model, context.Request.RouteValues["instance"] as string);
+        return problem is null ? (connection!, schema!, null) : ("", "", Results.NotFound(new { error = problem }));
+    }
+
     public static void Map(IEndpointRouteBuilder app, string directory, StoreConnections connections)
     {
-        app.MapGet("/api/v1/models/{name}/storage", async (string name, HttpContext context) =>
+        // the model's own copy, and each instance of it: the same routes under two prefixes
+        MapUnder(app, directory, connections, "/api/v1/models/{name}");
+        MapUnder(app, directory, connections, "/api/v1/models/{name}/instances/{instance}");
+
+        // which instances a model has: a viewer lists them, an administrator registers and forgets them (forgetting never touches the data)
+        app.MapGet("/api/v1/models/{name}/instances", async (string name, HttpContext context) =>
         {
             var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
             if (!decision.Allowed) return Denied(decision);
             var (model, problem) = await ModelAsync(directory, name);
             if (problem is not null) return problem;
+            return Results.Json(new JsonObject
+            {
+                ["mode"] = model!.Instances.ToString().ToLowerInvariant(),
+                ["instances"] = new JsonArray(StoreInstances.List(directory, name).Select(i => (JsonNode)new JsonObject { ["name"] = i.Name, ["connection"] = i.Connection, ["schema"] = model.SchemaOf(i.Name, out _) }).ToArray()),
+            });
+        });
+
+        // { "connection": "name" } for a model that keeps each instance on a connection of its own
+        app.MapPut("/api/v1/models/{name}/instances/{instance}", async (string name, string instance, HttpContext context) =>
+        {
+            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin);
+            if (!decision.Allowed) return Denied(decision);
+            var (model, problem) = await ModelAsync(directory, name);
+            if (problem is not null) return problem;
+            if (!StoreModels.IsValidName(instance) || instance == StoreInstances.Default) return Results.BadRequest(new { error = $"'{instance}' is not an instance name: lower-case letters, digits, '-' and '_', starting with a letter or digit, at most 64, and not 'default'." });
+            if (model!.Instances == InstanceMode.None) return Results.Json(new { error = $"The model '{name}' keeps one copy only. Set `storage.instances` to `schema` or `connection` in the model to keep more." }, statusCode: StatusCodes.Status422UnprocessableEntity);
+            if (model.SchemaOf(instance, out var tooLong) is null) return Results.Json(new { error = tooLong }, statusCode: StatusCodes.Status422UnprocessableEntity);
+            string? connection = null;
+            if (model.Instances == InstanceMode.Connection)
+            {
+                JsonNode? body;
+                try { body = await JsonNode.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted); }
+                catch (JsonException) { return Results.BadRequest(new { error = "The body is not JSON." }); }
+                connection = (string?)body?["connection"];
+                if (connection is null || !StoreModels.IsValidName(connection) || !File.Exists(StoreConnections.FileOf(directory, connection)))
+                    return Results.Json(new { error = "This model keeps each instance on its own connection: the body needs {\"connection\": \"name\"} naming a file of connections/." }, statusCode: StatusCodes.Status422UnprocessableEntity);
+            }
+            var existed = StoreInstances.Find(directory, name, instance) is not null;
+            StoreInstances.Save(directory, name, new StoreInstance(instance, connection));
+            return Results.Json(new JsonObject { ["name"] = instance, ["connection"] = connection ?? model.Connection, ["schema"] = model.SchemaOf(instance, out _) }, statusCode: existed ? StatusCodes.Status200OK : StatusCodes.Status201Created);
+        });
+
+        app.MapDelete("/api/v1/models/{name}/instances/{instance}", (string name, string instance, HttpContext context) =>
+        {
+            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin);
+            if (!decision.Allowed) return Denied(decision);
+            if (!StoreModels.IsValidName(name) || !StoreModels.IsValidName(instance)) return Results.NotFound(new { error = "There is no such instance." });
+            return StoreInstances.Delete(directory, name, instance) ? Results.NoContent() : Results.NotFound(new { error = $"The model '{name}' has no instance '{instance}'." });
+        });
+    }
+
+    private static void MapUnder(IEndpointRouteBuilder app, string directory, StoreConnections connections, string prefix)
+    {
+        app.MapGet(prefix + "/storage", async (string name, HttpContext context) =>
+        {
+            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
+            if (!decision.Allowed) return Denied(decision);
+            var (model, problem) = await ModelAsync(directory, name);
+            if (problem is not null) return problem;
+            var (connectionName, schema, notThere) = Where(directory, model!, context);
+            if (notThere is not null) return notThere;
             try
             {
-                var plan = ModelStorage.Plan(model!, connections.EngineOf(model!.Connection));
+                var plan = ModelStorage.Plan(model!, connections.EngineOf(connectionName), schema);
                 var existing = new JsonArray();
                 try
                 {
-                    await using var connection = await connections.OpenAsync(model.Connection, context.RequestAborted);
+                    await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
                     foreach (var table in await ModelStorage.ExistingAsync(connection, plan, context.RequestAborted)) existing.Add(table);
                 }
                 catch (StoreConnectionException ex) { return Results.Json(new JsonObject { ["engine"] = plan.Engine, ["statements"] = Statements(plan), ["existing"] = null, ["connection_problem"] = ex.Message }); }
@@ -109,16 +172,18 @@ public static class StoreData
             catch (Exception ex) when (Known(ex)) { return Fail(ex); }
         });
 
-        app.MapPost("/api/v1/models/{name}/storage/create", async (string name, HttpContext context) =>
+        app.MapPost(prefix + "/storage/create", async (string name, HttpContext context) =>
         {
             var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin);
             if (!decision.Allowed) return Denied(decision);
             var (model, problem) = await ModelAsync(directory, name);
             if (problem is not null) return problem;
+            var (connectionName, schema, notThere) = Where(directory, model!, context);
+            if (notThere is not null) return notThere;
             try
             {
-                var plan = ModelStorage.Plan(model!, connections.EngineOf(model!.Connection));
-                await using var connection = await connections.OpenAsync(model.Connection, context.RequestAborted);
+                var plan = ModelStorage.Plan(model!, connections.EngineOf(connectionName), schema);
+                await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
                 await ModelStorage.CreateAsync(connection, plan, context.RequestAborted);
                 return Results.Json(new JsonObject { ["engine"] = plan.Engine, ["statements"] = Statements(plan) }, statusCode: StatusCodes.Status201Created);
             }
@@ -126,18 +191,20 @@ public static class StoreData
         });
 
         // one row by its key: ?key.<attribute>=<value>; with ?as_of=<time> the version that held then, with ?history=true every version
-        app.MapGet("/api/v1/models/{name}/entities/{entity}/row", async (string name, string entity, HttpContext context) =>
+        app.MapGet(prefix + "/entities/{entity}/row", async (string name, string entity, HttpContext context) =>
         {
             var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
             if (!decision.Allowed) return Denied(decision);
             var (model, problem) = await ModelAsync(directory, name);
             if (problem is not null) return problem;
+            var (connectionName, schema, notThere) = Where(directory, model!, context);
+            if (notThere is not null) return notThere;
             if (model!.Entity(entity) is null) return Results.NotFound(new { error = $"The model '{name}' has no entity '{entity}'." });
             var key = context.Request.Query.Where(q => q.Key.StartsWith("key.", StringComparison.Ordinal)).ToDictionary(q => q.Key[4..], q => (object?)q.Value.ToString());
             try
             {
-                await using var connection = await connections.OpenAsync(model.Connection, context.RequestAborted);
-                var writer = new ModelWriter(model, connection, connections.EngineOf(model.Connection));
+                await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
+                var writer = new ModelWriter(model, connection, connections.EngineOf(connectionName), schema: schema);
                 if (context.Request.Query["history"] == "true")
                     return Results.Json(new JsonObject { ["versions"] = new JsonArray((await writer.HistoryAsync(entity, key, context.RequestAborted)).Select(r => (JsonNode)Row(r)).ToArray()) });
                 StoredRow? row;
@@ -153,31 +220,35 @@ public static class StoreData
         });
 
         // a page of rows in key order: ?limit=100&offset=0 (limit at most 1000); an entity with history lists its open versions
-        app.MapGet("/api/v1/models/{name}/entities/{entity}/rows", async (string name, string entity, HttpContext context) =>
+        app.MapGet(prefix + "/entities/{entity}/rows", async (string name, string entity, HttpContext context) =>
         {
             var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
             if (!decision.Allowed) return Denied(decision);
             var (model, problem) = await ModelAsync(directory, name);
             if (problem is not null) return problem;
+            var (connectionName, schema, notThere) = Where(directory, model!, context);
+            if (notThere is not null) return notThere;
             if (model!.Entity(entity) is null) return Results.NotFound(new { error = $"The model '{name}' has no entity '{entity}'." });
             if (!int.TryParse(context.Request.Query["limit"].ToString() is { Length: > 0 } l ? l : "100", out var limit) || !int.TryParse(context.Request.Query["offset"].ToString() is { Length: > 0 } o ? o : "0", out var offset))
                 return Results.BadRequest(new { error = "limit and offset are whole numbers." });
             try
             {
-                await using var connection = await connections.OpenAsync(model.Connection, context.RequestAborted);
-                var rows = await new ModelWriter(model, connection, connections.EngineOf(model.Connection)).ListAsync(entity, limit, offset, context.RequestAborted);
+                await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
+                var rows = await new ModelWriter(model, connection, connections.EngineOf(connectionName), schema: schema).ListAsync(entity, limit, offset, context.RequestAborted);
                 return Results.Json(new JsonObject { ["rows"] = new JsonArray(rows.Select(r => (JsonNode)Row(r)).ToArray()), ["limit"] = limit, ["offset"] = offset });
             }
             catch (Exception ex) when (Known(ex)) { return Fail(ex); }
         });
 
         // { "changes": [ { "action": "insert|update|delete", "entity": "...", "key": {...}, "expected_version": 3, "values": {...}, "effective_from": "..." } ] }
-        app.MapPost("/api/v1/models/{name}/changes", async (string name, HttpContext context) =>
+        app.MapPost(prefix + "/changes", async (string name, HttpContext context) =>
         {
             var decision = Writer(context);
             if (!decision.Allowed) return Denied(decision);
             var (model, problem) = await ModelAsync(directory, name);
             if (problem is not null) return problem;
+            var (connectionName, schema, notThere) = Where(directory, model!, context);
+            if (notThere is not null) return notThere;
             JsonNode? body;
             try { body = await JsonNode.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted); }
             catch (JsonException) { return Results.BadRequest(new { error = "The body is not JSON." }); }
@@ -197,8 +268,8 @@ public static class StoreData
             var token = context.ManagementToken();
             try
             {
-                await using var connection = await connections.OpenAsync(model!.Connection, context.RequestAborted);
-                await new ModelWriter(model, connection, connections.EngineOf(model.Connection)).ApplyAsync(changes, new WriteActor(token.SubjectId, token.SubjectName), context.RequestAborted);
+                await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
+                await new ModelWriter(model!, connection, connections.EngineOf(connectionName), schema: schema).ApplyAsync(changes, new WriteActor(token.SubjectId, token.SubjectName), context.RequestAborted);
                 return Results.Json(new { applied = changes.Count });
             }
             catch (Exception ex) when (Known(ex)) { return Fail(ex); }

@@ -42,9 +42,12 @@ public sealed class ModelWriter
     private readonly ISqlDialect _dialect;
     private readonly string _engine;
     private readonly TimeProvider _clock;
+    private readonly string _schema;
 
-    public ModelWriter(DbDataKit.DataModel.DataModel model, DbConnection connection, string engine, TimeProvider? clock = null)
+    // schema: where the tables are; the model's name when null. An instance of a model that keeps its instances in schemas names its own.
+    public ModelWriter(DbDataKit.DataModel.DataModel model, DbConnection connection, string engine, TimeProvider? clock = null, string? schema = null)
     {
+        _schema = schema ?? model.Name;
         _model = model;
         _connection = connection;
         _engine = engine;
@@ -61,7 +64,7 @@ public sealed class ModelWriter
             }
     }
 
-    private string Table(string entity) => $"{_dialect.Quote(_model.Name)}.{_dialect.Quote(entity)}";
+    private string Table(string entity) => $"{_dialect.Quote(_schema)}.{_dialect.Quote(entity)}";
     private string Col(string name) => _dialect.Quote(name);
     private static bool Dated(ModelEntity entity) => entity.History == HistoryMode.EffectiveDated;
 
