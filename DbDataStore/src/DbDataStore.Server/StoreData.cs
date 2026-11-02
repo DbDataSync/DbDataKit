@@ -322,7 +322,8 @@ public static class StoreData
             catch (Exception ex) when (Known(ex)) { return Fail(ex); }
         });
 
-        // { "changes": [ { "action": "insert|update|delete", "entity": "...", "key": {...}, "expected_version": 3, "values": {...}, "effective_from": "..." } ] }
+        // { "changes": [ { "action": "insert|update|delete", "entity": "...", "key": {...}, "expected_version": 3, "values": {...}, "effective_from": "..." } ], "description": "..." }
+        // Written at once, or kept as a change request (202) when the model asks for approval of this caller's writes (Z07).
         app.MapPost(prefix + "/changes", async (string name, HttpContext context) =>
         {
             var decision = Writer(context);
@@ -335,27 +336,102 @@ public static class StoreData
             try { body = await JsonNode.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted); }
             catch (JsonException) { return Results.BadRequest(new { error = "The body is not JSON." }); }
             if (body?["changes"] is not JsonArray list || list.Count == 0) return Results.BadRequest(new { error = "The body needs a non-empty \"changes\" array." });
-            var changes = new List<RowChange>();
-            foreach (var item in list)
-            {
-                if (item is not JsonObject c || (string?)c["entity"] is not { } entity || !Enum.TryParse<RowAction>((string?)c["action"], true, out var action))
-                    return Results.BadRequest(new { error = "Each change needs an \"entity\" and an \"action\" of insert, update or delete." });
-                DateTimeOffset? from = c["effective_from"] is { } f && DateTimeOffset.TryParse((string?)f, out var parsed) ? parsed : null;
-                var values = ObjectOf(c["values"]);
-                var key = ObjectOf(c["key"]);
-                long? version = c["expected_version"] is { } v ? (long)v : null;
-                if (action != RowAction.Insert && version is null) return Results.BadRequest(new { error = "An update or delete needs \"expected_version\"." });
-                changes.Add(new RowChange(action, entity, action == RowAction.Insert ? new Dictionary<string, object?>() : key, version, values) { EffectiveFrom = from });
-            }
+            var (changes, bad) = ParseChanges(list);
+            if (bad is not null) return bad;
             var token = context.ManagementToken();
+            if (StoreChangeRequests.Needs(model!, token))
+            {
+                var request = StoreChangeRequests.Propose(directory, name, InstanceName(context), token, (string?)body["description"], (JsonArray)JsonNode.Parse(list.ToJsonString())!, DateTimeOffset.UtcNow);
+                return Results.Json(request.ToJson(withChanges: false), statusCode: StatusCodes.Status202Accepted);
+            }
             try
             {
                 await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
-                await new ModelWriter(model!, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId).ApplyAsync(changes, new WriteActor(token.SubjectId, token.SubjectName), context.RequestAborted);
-                return Results.Json(new { applied = changes.Count });
+                await new ModelWriter(model!, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId).ApplyAsync(changes!, new WriteActor(token.SubjectId, token.SubjectName), context.RequestAborted);
+                return Results.Json(new { applied = changes!.Count });
             }
             catch (Exception ex) when (Known(ex)) { return Fail(ex); }
         });
+
+        // the change requests of the model's copy: a viewer lists and reads them, whoever approves for the model decides (an agent never does)
+        app.MapGet(prefix + "/requests", async (string name, HttpContext context) =>
+        {
+            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
+            if (!decision.Allowed) return Denied(decision);
+            var (model, problem) = await ModelAsync(directory, name, context.Request.RouteValues["instance"] as string);
+            if (problem is not null) return problem;
+            var state = context.Request.Query["state"].ToString();
+            if (state.Length > 0 && state is not (ChangeRequest.Pending or ChangeRequest.Approved or ChangeRequest.Rejected)) return Results.BadRequest(new { error = "state is pending, approved or rejected." });
+            return Results.Json(new JsonObject { ["requests"] = new JsonArray(StoreChangeRequests.List(directory, name, InstanceName(context), state.Length > 0 ? state : null).Select(r => (JsonNode)r.ToJson(withChanges: false)).ToArray()) });
+        });
+
+        app.MapGet(prefix + "/requests/{id}", (string name, string id, HttpContext context) =>
+        {
+            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
+            if (!decision.Allowed) return Denied(decision);
+            return StoreModels.IsValidName(name) && StoreChangeRequests.Find(directory, name, InstanceName(context), id) is { } request
+                ? Results.Json(request.ToJson()) : Results.NotFound(new { error = "There is no such change request." });
+        });
+
+        app.MapPost(prefix + "/requests/{id}/approve", (string name, string id, HttpContext context) => DecideAsync(directory, connections, name, id, context, approve: true));
+        app.MapPost(prefix + "/requests/{id}/reject", (string name, string id, HttpContext context) => DecideAsync(directory, connections, name, id, context, approve: false));
+    }
+
+    private static (List<RowChange>? Changes, IResult? Problem) ParseChanges(JsonArray list)
+    {
+        var changes = new List<RowChange>();
+        foreach (var item in list)
+        {
+            if (item is not JsonObject c || (string?)c["entity"] is not { } entity || !Enum.TryParse<RowAction>((string?)c["action"], true, out var action))
+                return (null, Results.BadRequest(new { error = "Each change needs an \"entity\" and an \"action\" of insert, update or delete." }));
+            DateTimeOffset? from = c["effective_from"] is { } f && DateTimeOffset.TryParse((string?)f, out var parsed) ? parsed : null;
+            var values = ObjectOf(c["values"]);
+            var key = ObjectOf(c["key"]);
+            long? version = c["expected_version"] is { } v ? (long)v : null;
+            if (action != RowAction.Insert && version is null) return (null, Results.BadRequest(new { error = "An update or delete needs \"expected_version\"." }));
+            changes.Add(new RowChange(action, entity, action == RowAction.Insert ? new Dictionary<string, object?>() : key, version, values) { EffectiveFrom = from });
+        }
+        return (changes, null);
+    }
+
+    /// <summary>
+    /// Approving applies the proposed changes as they were, in one transaction, through the same writer (every rule, version check and audit row), with the approver as the audit's actor and the proposer named beside them;
+    /// a request the rules or a newer version refuse stays pending and says why. Rejecting only records the decision. A decided request is not decided again.
+    /// </summary>
+    private static async Task<IResult> DecideAsync(string directory, StoreConnections connections, string name, string id, HttpContext context, bool approve)
+    {
+        var (model, problem) = await ModelAsync(directory, name, context.Request.RouteValues["instance"] as string);
+        if (problem is not null) return problem;
+        var needed = StoreChangeRequests.Approver(model!);
+        var decision = ManagementAuthorization.Authorize(context.ManagementToken(), needed);
+        if (!decision.Allowed && needed == ServerRole.Author) decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin);
+        if (!decision.Allowed) return Denied(decision);
+        var token = context.ManagementToken();
+        if (StoreChangeRequests.IsAgent(token)) return Results.Json(new { error = "An agent cannot decide a change request." }, statusCode: StatusCodes.Status403Forbidden);
+        var instance = InstanceName(context);
+        if (StoreChangeRequests.Find(directory, name, instance, id) is not { } request) return Results.NotFound(new { error = "There is no such change request." });
+        if (request.State != ChangeRequest.Pending) return Results.Json(new { error = $"This change request was already {request.State}." }, statusCode: StatusCodes.Status409Conflict);
+        JsonNode? body = null;
+        if (context.Request.ContentLength is > 0)
+        {
+            try { body = await JsonNode.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted); }
+            catch (JsonException) { return Results.BadRequest(new { error = "The body is not JSON." }); }
+        }
+        var note = (string?)body?["note"];
+        if (!approve) return Results.Json(StoreChangeRequests.Decide(directory, request, ChangeRequest.Rejected, token, note, DateTimeOffset.UtcNow).ToJson(withChanges: false));
+
+        var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
+        if (notThere is not null) return notThere;
+        var (changes, bad) = ParseChanges(request.Changes);
+        if (bad is not null) return bad;
+        try
+        {
+            await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
+            var actor = new WriteActor(token.SubjectId, $"{token.SubjectName ?? token.SubjectId}, approving {request.ProposedByName ?? request.ProposedBy}'s change request {request.Id}");
+            await new ModelWriter(model!, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId).ApplyAsync(changes!, actor, context.RequestAborted);
+        }
+        catch (Exception ex) when (Known(ex)) { return Fail(ex); }
+        return Results.Json(StoreChangeRequests.Decide(directory, request, ChangeRequest.Approved, token, note, DateTimeOffset.UtcNow).ToJson(withChanges: false));
     }
 
     private static JsonArray Statements(StoragePlan plan) => Statements(plan.Statements);

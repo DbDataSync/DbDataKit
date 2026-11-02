@@ -72,7 +72,7 @@ public static class DataModelLoader
 
             CheckReferences(entities);
             if (name is null || connection is null) return null;
-            return new DataModel(name, title, connection, approval, entities, instances);
+            return new DataModel(name, title, connection, approval, entities, instances, AgentWritesOf(map));
         }
 
         private bool Version(YamlMapping map)
@@ -112,9 +112,14 @@ public static class DataModelLoader
         {
             if (map.Get("approval") is not { } node) return ApprovalLevel.None;
             if (node is not YamlMapping approval) { Add(SharedCodes.InvalidValue, node, "`approval` must be a mapping: `approval: {changes: steward}`."); return ApprovalLevel.None; }
-            CheckKeys(approval, ["changes"], "`approval`");
+            CheckKeys(approval, ["changes", "agents"], "`approval`");
             return approval.Get("changes") is YamlScalar level ? Choice(level, "approval.changes", new Dictionary<string, ApprovalLevel> { ["none"] = ApprovalLevel.None, ["steward"] = ApprovalLevel.Steward, ["owner"] = ApprovalLevel.Owner }) : ApprovalLevel.None;
         }
+
+        private AgentWrites AgentWritesOf(YamlMapping map) =>
+            map.Get("approval") is YamlMapping approval && approval.Get("agents") is YamlScalar at
+                ? Choice(at, "approval.agents", new Dictionary<string, AgentWrites> { ["request"] = AgentWrites.Request, ["direct"] = AgentWrites.Direct })
+                : AgentWrites.Request;
 
         private T Choice<T>(YamlScalar at, string what, Dictionary<string, T> options) where T : struct
         {

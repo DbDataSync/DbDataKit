@@ -5,6 +5,9 @@ namespace DbDataKit.DataModel;
 /// <summary>Who must approve a row change (plan 15, section 3).</summary>
 public enum ApprovalLevel { None, Steward, Owner }
 
+/// <summary>What an agent's write to a model becomes (plan 15, Z07): a change request a person approves, or, for a model agents manage themselves, a write like any other.</summary>
+public enum AgentWrites { Request, Direct }
+
 /// <summary>How an entity keeps its past: not at all, who changed what and when, or versioned rows with valid-from and valid-to.</summary>
 public enum HistoryMode { None, Audit, EffectiveDated }
 
@@ -51,7 +54,7 @@ public sealed record ModelEntity(
 public enum InstanceMode { None, Schema, Connection, Column }
 
 /// <summary>A model: entities with attributes, keys, references and rules, stored on the named connection.</summary>
-public sealed record DataModel(string Name, string? Title, string Connection, ApprovalLevel Approval, IReadOnlyList<ModelEntity> Entities, InstanceMode Instances = InstanceMode.None)
+public sealed record DataModel(string Name, string? Title, string Connection, ApprovalLevel Approval, IReadOnlyList<ModelEntity> Entities, InstanceMode Instances = InstanceMode.None, AgentWrites Agents = AgentWrites.Request)
 {
     public const string FormatId = "model/1";
 

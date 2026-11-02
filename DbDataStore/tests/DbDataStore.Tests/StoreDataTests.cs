@@ -33,6 +33,7 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
     private readonly string variable = "DDS_TEST_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
     private readonly ConsoleIdentity console = new("console-1", ConsoleSigningKey.Generate());
     private readonly List<string> extraDatabases = [];
+    private string subject = "ada";
     private WebApplication? app;
     private StoreSettings settings = null!;
     private readonly string? server = Environment.GetEnvironmentVariable(engine == "sqlserver" ? "DBDATA_TEST_SQLSERVER" : "DBDATA_TEST_POSTGRES");
@@ -119,7 +120,7 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
         return (method, path, body, role) =>
         {
             var request = new HttpRequestMessage(method, path);
-            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, console.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, "ada", "Ada", role)));
+            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, console.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, subject, subject, role)));
             if (body is not null) request.Content = new StringContent(body, Encoding.UTF8, "application/json");
             return http.SendAsync(request);
         };
@@ -172,6 +173,49 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
         Assert.Equal(HttpStatusCode.BadRequest, (await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/rows?limit=x", null, ServerRole.Viewer)).StatusCode);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, (await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/rows?limit=5000", null, ServerRole.Viewer)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Get, "/api/v1/models/territories/entities/nope/rows", null, ServerRole.Viewer)).StatusCode);
+    }
+
+    [Fact]
+    public async Task An_agents_write_waits_as_a_change_request_a_person_approves_unless_the_model_lets_agents_write()
+    {
+        var send = await Client();
+        await send(HttpMethod.Put, "/api/v1/models/territories", Model, ServerRole.Author);
+        await send(HttpMethod.Post, "/api/v1/models/territories/storage/create", null, ServerRole.Admin);
+
+        // an agent proposes: nothing is written, the request waits
+        subject = "agent:helper";
+        var proposed = await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert("NA", "North", "1").Replace("{\"changes\"", "{\"description\":\"add North\",\"changes\""), ServerRole.Author);
+        Assert.Equal(HttpStatusCode.Accepted, proposed.StatusCode);
+        var id = (string)(await Json(proposed))["id"]!;
+        Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/row?key.code=NA", null, ServerRole.Viewer)).StatusCode);
+        var pending = await Json(await send(HttpMethod.Get, "/api/v1/models/territories/requests?state=pending", null, ServerRole.Viewer));
+        Assert.Equal([id], pending["requests"]!.AsArray().Select(r => (string)r!["id"]!).ToArray());
+
+        // an agent cannot approve its own request
+        Assert.Equal(HttpStatusCode.Forbidden, (await send(HttpMethod.Post, $"/api/v1/models/territories/requests/{id}/approve", null, ServerRole.Author)).StatusCode);
+
+        // a person approves: the rows are written once, by the writer, and the request is decided
+        subject = "ada";
+        Assert.Equal(HttpStatusCode.Forbidden, (await send(HttpMethod.Post, $"/api/v1/models/territories/requests/{id}/approve", null, ServerRole.Viewer)).StatusCode);
+        var approved = await send(HttpMethod.Post, $"/api/v1/models/territories/requests/{id}/approve", "{\"note\":\"ok\"}", ServerRole.Author);
+        Assert.Equal(HttpStatusCode.OK, approved.StatusCode);
+        Assert.Equal("approved", (string)(await Json(approved))["state"]!);
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/row?key.code=NA", null, ServerRole.Viewer)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await send(HttpMethod.Post, $"/api/v1/models/territories/requests/{id}/approve", null, ServerRole.Author)).StatusCode);
+
+        // a rejected request writes nothing
+        subject = "agent:helper";
+        var second = (string)(await Json(await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert("EU", "Europe", "2"), ServerRole.Author)))["id"]!;
+        subject = "ada";
+        Assert.Equal("rejected", (string)(await Json(await send(HttpMethod.Post, $"/api/v1/models/territories/requests/{second}/reject", null, ServerRole.Author)))["state"]!);
+        Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/row?key.code=EU", null, ServerRole.Viewer)).StatusCode);
+
+        // a model agents manage themselves takes their writes directly
+        subject = "ada";
+        await send(HttpMethod.Put, "/api/v1/models/robots", Model.Replace("name: territories", "name: robots").Replace("storage: {connection: mdm}", "storage: {connection: mdm}\napproval: {agents: direct}"), ServerRole.Author);
+        await send(HttpMethod.Post, "/api/v1/models/robots/storage/create", null, ServerRole.Admin);
+        subject = "agent:helper";
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/robots/changes", Insert("AS", "Asia", "3"), ServerRole.Author)).StatusCode);
     }
 
     [Fact]
