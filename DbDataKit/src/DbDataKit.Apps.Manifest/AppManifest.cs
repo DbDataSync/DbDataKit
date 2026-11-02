@@ -6,6 +6,38 @@ public enum AppOrigin { Sandbox, Own }
 /// <summary>Whether the host draws its header and navigation around the app.</summary>
 public enum AppChrome { Shell, None }
 
+/// <summary>What the manifest asks for (plan 26 section 2b): sandboxed (the default), or trusted, which an administrator must approve for the exact version before it runs.</summary>
+public enum AppTrust { Sandbox, Trusted }
+
+/// <summary>The outside origins an app asks to reach, by what it uses them for. Everything else is refused by the browser. Each entry is an origin (<c>https://api.contoso.com</c>, or <c>wss://</c> for a connection, with an optional <c>*.</c> in front of the host); the manifest only asks, an administrator approves.</summary>
+public sealed record AppEgress(
+    IReadOnlyList<string> Connect,
+    IReadOnlyList<string> Script,
+    IReadOnlyList<string> Style,
+    IReadOnlyList<string> Img,
+    IReadOnlyList<string> Font,
+    IReadOnlyList<string> Media,
+    IReadOnlyList<string> Frame,
+    IReadOnlyList<string> Form)
+{
+    public static readonly AppEgress None = new([], [], [], [], [], [], [], []);
+
+    /// <summary>The directives and their lists, in the order the policy writes them.</summary>
+    public IEnumerable<(string Key, string Directive, IReadOnlyList<string> Origins)> Directives()
+    {
+        yield return ("connect", "connect-src", Connect);
+        yield return ("script", "script-src", Script);
+        yield return ("style", "style-src", Style);
+        yield return ("img", "img-src", Img);
+        yield return ("font", "font-src", Font);
+        yield return ("media", "media-src", Media);
+        yield return ("frame", "frame-src", Frame);
+        yield return ("form", "form-action", Form);
+    }
+
+    public IEnumerable<string> All => Directives().SelectMany(d => d.Origins).Distinct(StringComparer.Ordinal);
+}
+
 [Flags]
 public enum DataOperations { None = 0, Read = 1, Write = 2 }
 
@@ -24,7 +56,9 @@ public sealed record AppManifest(
     AppChrome Chrome,
     IReadOnlyList<AppModelUse> Models,
     IReadOnlyList<string> SemanticModels,
-    IReadOnlyList<string> Roles)
+    IReadOnlyList<string> Roles,
+    AppTrust Trust = AppTrust.Sandbox,
+    AppEgress? Egress = null)
 {
     public const string FormatId = "app/1";
 }

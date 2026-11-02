@@ -16,8 +16,16 @@ models:                     # the Store models and entities it uses, and what it
     entities: {territory: [read, write]}
 semantic: [sales]           # the semantic models it queries
 roles: [viewer, editor]     # the roles the app defines
+trust: sandbox              # sandbox (default) or trusted: a request; an administrator approves the exact version (plan 26 section 2b)
+egress:                     # outside origins the app asks to reach; everything else is refused by the browser. Origins only (https, or wss for connect), `*.` allowed before a host
+  connect: [https://api.contoso.com]
+  img: [https://cdn.contoso.com]   # also script, style, font, media, frame, form
 ```
 
 The app's scoped token is the intersection of what the manifest declares and what the signed-in person may do; the servers still check every call (plan 16: the app is untrusted UI).
 
 `AppChecks.Files` reports the entry and view files the manifest names that are missing; `AppChecks.AbsolutePaths` reports built HTML and CSS that point at a path from the server's root, which breaks under a subpath.
+
+## The ban on outside requests
+
+`EgressPolicy.Build(effective, sandboxed, frameAncestors)` makes the `Content-Security-Policy` the host sends with every document of an app: `default-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `frame-src 'none'`, and the origins in force added to the directive they were asked for (`connect-src` covers fetch, XHR, WebSocket and CORS; `script-src` covers external scripts and JSONP). `EgressPolicy.Effective(requested, approved)` keeps what was both asked for and approved, `Unapproved` lists the rest, and `Covers` is the match (the same origin, or a host under an approved `*.host`). `AppChecks.OutsideUrls(bundleFolder, egress)` lists the addresses of other hosts in a built bundle that the manifest did not ask for: advice for the author, since the browser enforces the policy. A content security policy stops accidents and the ordinary routes for sending data out; it is not a barrier against hostile code on the host's origin (plan 26 section 2b).
