@@ -23,6 +23,7 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
     {
         ValidateListenAndTls(o, cx);
         ValidateManagement(o, cx);
+        ValidateIdentity(o, cx);
         ValidateCompression(o.Compression, "Compression", cx);
         ValidateDataSources(o, cx);
         ValidateUsers(o, cx);
@@ -89,6 +90,22 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
             cx.Error("Management.Enabled", "The management API is https only, and `Tls.Mode` is None.", "Use SelfSigned, File or Store, or leave the management API off.");
         if (o.Management.Port == o.Listen.Port && o.Listen.Port != 0)
             cx.Error("Management.Port", "The management API has its own port; it is the Flight port here.", $"Choose another port than {o.Listen.Port}.");
+    }
+
+    private static void ValidateIdentity(ProxyOptions o, IConfigValidationContext cx)
+    {
+        if (!o.Identity.Enabled) return;
+        if (!IPAddress.TryParse(o.Identity.Address, out _))
+            cx.Error("Identity.Address", $"`Address` is `{o.Identity.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
+        if (o.Tls.Mode == TlsMode.None)
+            cx.Error("Identity.Enabled", "The identity home is https only (a passkey needs a secure origin), and `Tls.Mode` is None.", "Use SelfSigned, File or Store, or leave the identity home off.");
+        if (o.Identity.Port == o.Listen.Port && o.Listen.Port != 0)
+            cx.Error("Identity.Port", "The identity home has its own port; it is the Flight port here.", $"Choose another port than {o.Listen.Port}.");
+        if (o.Management.Enabled && o.Identity.Port == o.Management.Port)
+            cx.Error("Identity.Port", "The identity home has its own port; it is the management API's here.", $"Choose another port than {o.Management.Port}.");
+        if (!string.IsNullOrWhiteSpace(o.Identity.PublicUrl)
+            && (!Uri.TryCreate(o.Identity.PublicUrl, UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps || url.AbsolutePath != "/" || url.Query.Length > 0 || url.Fragment.Length > 0))
+            cx.Error("Identity.PublicUrl", $"`PublicUrl` is `{o.Identity.PublicUrl}`, which is not an https address without a path.", "Use the address people reach the home at, such as https://identity.example.com.");
     }
 
     private static void ValidateListenAndTls(ProxyOptions o, IConfigValidationContext cx)
