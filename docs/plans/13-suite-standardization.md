@@ -447,7 +447,9 @@ Each product server keeps its own definitions (it must run without the console a
    signs people in through it and holds no users. Product servers have no user accounts: they accept a paired console's token for their
    management API, which names the user (the home's stable user id) and their roles, so each server still enforces roles and records who
    did what (W12). Proxy's client identities (its Flight users,
-   Windows accounts, JWT mappings) stay Proxy's data-plane auth. One PBKDF2 hasher (plan 10 C3).
+   Windows accounts, JWT mappings) stay Proxy's data-plane auth. **Superseded (owner, 2026-11-02, plan 16 "Sign-in decisions" item 2):**
+   the identity home is the only list of people; Proxy's own users and password-checked Windows accounts are retired, data clients sign
+   in with home tokens, personal access tokens or Windows, and pass-through database credentials stay. One PBKDF2 hasher (plan 10 C3).
 4. **One config layout**, git-tracked with auto-commit and the history UI (Sync's `GitCommitService` becomes `DbDataKit.Config.Git`), the
    same in every product's data directory:
 

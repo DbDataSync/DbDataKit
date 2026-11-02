@@ -126,7 +126,8 @@ its routes, the roles it needs, and for a code app its content security policy.
 ### Who signs in to an app
 
 **Decided direction (owner):** Windows authentication, OpenID Connect, and Microsoft Entra ID, with **the console acting as an OpenID
-Connect provider**. **The spec needs design conversations with the owner**; the topics to settle:
+Connect provider**. **Settled (owner, 2026-11-02):** the topics below were the design conversation; what was decided is in "Sign-in
+decisions" below (and 13a U13 to U18, 13c D24 to D31). Kept as the record of what was asked:
 
 1. ~~Who the users are~~: **decided (owner)**: app users are **console users who administer nothing**: they sign in like any console
    user, hold app roles only, and never see the console's administration. Open with it: whether identity stays inside the console or
@@ -141,6 +142,64 @@ Connect provider**. **The spec needs design conversations with the owner**; the 
    the manifest's scope narrows them.
 6. **Several consoles.** Plan 13 allows several consoles per server; an app needs one identity provider. Which console it is, and what a
    second console means for an app's users. **Decided**: one identity home per install (section 2b).
+
+### Sign-in decisions (owner, 2026-11-02)
+
+Recorded in a walk through the open sign-in questions; slices follow from them. Where this differs from the topics above, this wins.
+
+1. **An app's token is the identity home's.** Each app instance is an OpenID Connect client of the home (plan 26 already registers its
+   addresses there). The home issues the instance an access token whose **audience is the instance**, not the home, with **scopes from
+   the approved manifest**: the models it names and the operations on each (read, write, change request). The serving layer's modules
+   check the audience and the scopes. The token is never wider than the person: what it allows is the person's roles narrowed by the
+   manifest. Sandboxed apps get it from the shell's token broker; apps with their own origin sign in for it with the standard flow.
+   (Today every access token's audience is the home itself; this changes that.)
+2. **One list of people: the identity home.** Proxy's own users with passwords and its password-checked Windows accounts are **retired**
+   (a clean break: a configuration that still lists them is refused with a message naming the file). Pass-through database credentials
+   stay, the database being the authority. Clients that cannot open a browser sign in with home credentials:
+   - **Personal access tokens:** a revocable secret per person, issued by the home, used as the password wherever a client can send only
+     a user name and password; **service accounts** in the home for unattended work (scheduled refreshes, report servers).
+   - **Windows** (Negotiate) where the serving layer is on a domain-joined Windows host or has a keytab (13a U13), resolved to the home
+     account by UPN (13a U16).
+3. **Excel, per path:**
+   - **WebDAV** (documents): Office forms-based sign-in (MS-OFBA), so Excel opens the home's own sign-in page in a small window and
+     keeps the session; Windows; user name and personal access token as the fallback (Office for Mac's MS-OFBA support is not verified).
+   - **XMLA and MDX** (PivotTables): served over **HTTPS** (Excel's Analysis Services provider pointed at an `https://` address), with
+     Windows or user name and personal access token. Native TCP is not built. This settles the transport note in 13c D14.
+   - **Power Query** (feeds, saved queries, OData): Windows, user name and personal access token, and, for installs that use Entra,
+     **Entra's own tokens accepted directly** on these endpoints (Power Query's "organizational account" works only with Entra), the
+     person linked to their home account by UPN (13a U16, U18) and given the home's roles. This is the one place a token the home did not
+     issue is accepted.
+   - **Not verified:** the sign-in methods above are what Office offers as far as known here, not yet seen. The Excel VM recordings (plan
+     14 R7, plan 15 WebDAV) record each one.
+4. **Product servers keep no sign-in of their own.** Sync's remaining direct sign-in (Windows groups, network trust, its own users,
+   sessions and invitations) is removed (13c D20): a person reaches a back-end server only through a console's token, whose subject is
+   the home's user.
+5. **The home is administered through the management API of whatever hosts it** (the serving layer by default, `dbdatakit identity
+   run` when it runs on its own; 13c D30). The console pairs with that host like any server and shows the screens through its relay;
+   the copies of the console's Users and Invitations screens that `identity run` serves today are dropped once the console's screens
+   exist; the command line stays the way in when no console answers. The API covers people, groups, role assignments, app clients,
+   external group mappings, personal access tokens and service accounts.
+6. **Personal access tokens:** each person creates, lists and revokes their own, each with an expiry; administrators create service
+   accounts and can list and revoke anyone's tokens.
+7. **No consent prompt.** Publishing an app instance, with plan 26's approvals, is the consent; people are not asked. Each app's about
+   page shows the models and operations its manifest uses, who published it and who approved it.
+8. **Sessions:** a sign-in lasts **12 hours from sign-in** by default and does not extend while in use (as built); an **idle timeout**
+   is added, off by default. An administrator sets both per install in `server.yaml`, within bounds (a session of 1 to 24 hours). The
+   internal timings stay fixed in code: the home's access token (10 minutes), the role re-check inside a session (5 minutes, 10 more
+   when the home cannot be asked), the console's token to a server (about 5 minutes).
+9. **Personal access tokens expire:** 90 days by default, at most a year, the maximum lowered per install by an administrator. A
+   service account's token may last longer or not expire, and is always listed and revocable.
+10. **Report servers embedded in apps: Windows end to end, now** (section 2a). An app embeds an SSRS or Power BI Report Server report by
+    its URL and the browser signs in to the report server directly with the person's Windows identity; this works where the browser,
+    the report server and the person are on one domain. The report server's origin is an approved frame exception of the instance (plan
+    26 section 2b's allow-lists gain a `frame` directive). Off the domain the embedded report cannot sign in: the app shows a link that
+    opens the report on the report server instead of a password prompt in the frame. Kerberos constrained delegation through the serving
+    layer (any person, from anywhere) is the later step if people off the domain need embedded reports. The report server's *data*
+    stays plan 17's: a home service account, so every viewer sees the same rows.
+
+**Slices:** item 1 is 13a U19 (with plan 26 AP05 using it); items 2, 6 and 9 are 13a U20 and, for Proxy, P13; item 3 is plan 20 O15
+(WebDAV), O16 (XMLA) and O17 (Power Query with Entra); item 4 is 13a X06; item 5 is 13a U21; item 7 is plan 26 AP18; item 8 is 13a
+U22; item 10 is plan 26 AP17.
 
 ## 2a. Shared visuals and reports
 
@@ -278,7 +337,7 @@ change; T04 (in progress) only takes the subject and roles from the home; new sl
 | --- | --- | --- |
 | 1 | Agent actions | **decided** (to be refined later): every action is generated by the agent and approved by the user as it happens, then run under the user's identity |
 | 2 | Apps | **decided direction**: a standalone feature (an app host of its own), with DbDataStore data views and editing, Vega-Lite dashboards, reports and agent assistants |
-| 3 | Sign-in | **decided direction**: Windows, OpenID Connect, Entra ID; the console as an OpenID Connect provider; **spec to be designed with the owner** (section 2) |
+| 3 | Sign-in | **decided** (owner, 2026-11-02): the identity home (13a U13 to U18) and "Sign-in decisions" in section 2: app tokens per instance from the home, one list of people with personal access tokens and service accounts, Excel per path, no sign-in in product servers, the admin API, no consent prompt, session lengths, report servers embedded with Windows sign-in |
 | 4 | Provider abstraction | **decided** (for now): `Microsoft.Extensions.AI`'s `IChatClient`, proven against OpenAI, Foundry, Anthropic and a local model (Ollama) first |
 | 5 | Code apps | **decided**: at the same time as declarative apps, or before them |
 | 6 | The app host's name | **decided** (for now): DbDataApps |

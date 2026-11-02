@@ -15,7 +15,7 @@ Each slice is only done when its test column passes.
 | 7 | Shared cert command | Add an extension point so a product can register extra verbs. Sync's file/store/enroll verbs become registrations on it. | Sync keeps all its current `config cert ...` verbs (a compatibility test lists them) | CLI snapshot tests of help output and exit codes |
 | 8 | Service command | Likely none. | Sync's Windows service install/uninstall/status move onto the shared provisioner, and Sync gains start, stop, restart and doctor. The Sync MSI can then call `dbdatasync service start` instead of PowerShell. | Characterization tests of today's install behaviour, then an e2e service install on Windows CI (MSI harness exists) |
 | 9 | Systemd and Docker generation | None. | Sync's `SystemdService` moves onto `Hosting.Systemd` | Unit-file snapshot test |
-| 10 | PlainHttpGuard in Sync | None. | Sync refuses plain HTTP on a non-loopback bind unless explicitly allowed | A guard test; needs a decision on how it interacts with running behind a TLS proxy |
+| 10 | PlainHttpGuard in Sync | None. | Sync refuses plain HTTP on a non-loopback bind unless explicitly allowed | A guard test. **Resolved:** a plain-HTTP request is served when it comes through a TLS-terminating proxy listed in `DbDataSync:App:TrustedProxies` (`X-Forwarded-Proto: https`, believed only from those addresses); loopback and `/api/health` are always served; `AllowInsecureHttp` turns the check off (`DbDataSync/src/DbDataSync.Api/PlainHttpProtection.cs`) |
 
 ## Decisions
 
