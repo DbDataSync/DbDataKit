@@ -1,6 +1,6 @@
 # Plan 26: how apps are published, navigated and instanced
 
-Status: **proposed, with a recommendation for every question** (written 2026-11-02 at the owner's request; nothing here is built). It builds on plan 16 section 2 (an app is untrusted UI), plan 20 (the `apps` module of the serving layer, published definitions, groups), plan 21 (channels) and plan 22 section 1 (app authoring). Where this plan and those differ, this plan says so in section 9.
+Status: **proposed** (written 2026-11-02 at the owner's request; nothing here is built). **Owner direction (2026-11-02): support every address form and every isolation option listed here; subpath apps get storage; some Store models are shared and split by instance id, others are separate copies; some apps get their own domains.** Sections 2a and 6.2 carry that direction. It builds on plan 16 section 2 (an app is untrusted UI), plan 20 (the `apps` module of the serving layer, published definitions, groups), plan 21 (channels) and plan 22 section 1 (app authoring). Where this plan and those differ, this plan says so in section 9.
 
 Three questions are answered:
 
@@ -30,6 +30,23 @@ The browser gives that protection per **origin**. So:
   2. **An origin of its own** (a subdomain or custom domain per instance). The app can use its own cookies and storage, and `localStorage` works. This is for apps that need those, and it costs DNS and certificates.
 
 An app's manifest says which it needs (`origin: sandbox | own`; default `sandbox`). Declaring `own` on a host without a domain bound to the instance fails publication with a message naming the setting.
+
+## 2a. App storage on every address, including a subpath
+
+A sandboxed document has an opaque origin: **no `localStorage`, no cookies, no IndexedDB**. A subpath app would therefore have nowhere to keep anything. So the host provides storage, and every app gets it whatever its address; an app with `origin: own` may use the browser's storage as well.
+
+| Tier | What it holds | Scope | How an app reaches it |
+| --- | --- | --- | --- |
+| **App storage, per user** | preferences, saved filters, drafts, UI state | one person in one instance | `storage.user` |
+| **App storage, per instance** | shared settings, small lookup data, counters | everyone in one instance | `storage.instance` |
+| **Store models** | structured, validated, audited business data (section 6.2) | per the model's isolation | the Store client (`@dbdatakit/store-ui` and the typed client) |
+| **Documents** | files and versioned documents | per the documents module (plan 20) | not planned here |
+
+* **App storage** is a key-value store of JSON values in the group's shared state (`DbDataKit.State`, so every instance of a group sees it). Limits are part of the manifest and enforced by the host: a value up to 256 KB, a key up to 128 characters, an instance up to a size the administrator sets (default 50 MB), and `storage.user` cannot be read by another person. Writes are last-writer-wins with an optional version check (`if_version`) for an app that needs one.
+* **A sandboxed app reaches it through the shell** (the same `postMessage` bridge that carries the token): `storage.get(scope, key)`, `set`, `delete`, `list(prefix)`. The shell calls the host's storage API with the app's scoped token. An app with its own origin can call the same API directly.
+* **Isolation is by instance.** Two instances of one app have separate app storage, always. (The next section's "shared" option is for Store models, where it is a deliberate choice.)
+* App storage is **not** the place for business data. The manifest declares `storage: {user: true, instance: true, quota_mb: 10}`; an app that declares nothing gets none.
+* Previews (plan 21) get a throwaway copy that is dropped with the preview.
 
 ## 3. Addresses
 
@@ -86,28 +103,38 @@ An instance is a row: `(name, app, version pin or "latest in channel", settings,
 * **Tokens** are scoped to one instance; a token for instance A is refused by instance B.
 * **Versions** move per instance: promoting version 7 to `acme` does not touch `globex`. A release (plan 21) can list several instances.
 
-### 6.2 Instances of a Store model, and the isolation choices
+### 6.2 Instances of a Store model: shared and split, or separate copies
 
-An app that writes data usually needs the data isolated too. A Store **model definition** (`model/1`) can be published as several **model instances**. Three levels, chosen per instance, one mechanism:
+A model definition says, once, how its instances are kept apart. **Both ways are supported, per model**, because the right answer depends on the data (owner direction, 2026-11-02):
 
-| Level | What differs | Use it for | Cost |
+```yaml
+storage:
+  connection: mdm
+  instances: column     # column | schema | connection;  omit for a model that has one copy only
+```
+
+| `instances:` | What it means | Use it for | Cost |
 | --- | --- | --- | --- |
-| **Shared data** | nothing: two app instances bind the same model instance | the same data seen through two skins (staff and public) | none |
-| **Own schema** (default for a new instance) | the tables live in a schema of their own, `<model>__<instance>`, on the model's connection; own history and audit rows; own approvals | many tenants, a customer each; each can be backed up, reset or dropped alone | N schemas to migrate |
-| **Own database** | the instance names a different `connection` | a tenant whose data must be in its own database, server or region | N connections, N credentials |
+| *(omitted)* | one copy; the model has a single `default` instance | most models today | none |
+| **`column`** (shared, split by instance id) | one set of tables for all instances; every table carries an instance id, which is part of the key | reference data that many tenants hold in small amounts; cross-instance reporting is wanted; thousands of instances | isolation is only as good as the server's filtering (see below) |
+| **`schema`** (separate copy) | each instance has its own tables in a schema of its own, `<model>__<instance>`, on the model's connection | tenants that must be backed up, reset or dropped alone | N schemas to migrate |
+| **`connection`** (separate copy, own database) | each instance names its own connection | data that must be physically separate (another database, server or region) | N connections, N credentials |
 
-How it works:
+How each works:
 
-* A model instance is `(model definition version, instance name, connection, schema)`. The management API gets an instance in the path (`/api/v1/models/{m}/instances/{i}/...`, with the existing paths meaning the model's `default` instance, so nothing breaks).
-* **Structure changes are per instance.** The definition has versions; each instance records which one it is at. A new version is applied instance by instance through the plans and approvals that exist, with plan 21's expand-then-contract rule (an instance still on version N must keep working while others move to N+1). A migration report lists every instance and where it stands.
-* **Nothing crosses instances.** Reads, writes, references (`references:` stays inside the instance), change requests, history and audit are per instance. A rule cannot span instances.
+* **A model instance** is `(definition version, instance id, connection, schema)`. The management API takes an instance in the path (`/api/v1/models/{m}/instances/{i}/...`); the existing paths mean the model's `default` instance, so nothing breaks.
+* **`column` mode is enforced by the server, never the client.** The writer stamps `_instance` on every inserted row and adds `AND _instance = @instance` to every read, update, delete and rule check (unique, reference, sum, overlap, cycle); the instance comes from the request's path and must be one the caller's token is scoped to; a body that names another instance, or an `_instance` value, is refused. The key of every entity is `(_instance, <declared key>)`, so two instances may hold the same business key; `references:` resolve inside the instance; audit and history rows carry the instance. A test seeds two instances with colliding keys and proves no read, write or rule ever sees the other's rows. `no_overlap`, `no_cycle` and `sum_equals` are evaluated within one instance.
+* **A model can offer a `shared` slice**: an entity marked `scope: shared` in `column` mode (for example a list of countries) is held once and readable by every instance, writable only through the `default` instance. Everything else is per instance.
+* **`schema` and `connection` modes** need no change to the rules: the writer already works against one set of tables; the instance only decides which.
+* **Structure changes are per instance for `schema` and `connection`, and once for `column`.** The definition has versions; each separate instance records which one it is at. A new version is applied instance by instance through the plans and approvals that exist, with plan 21's expand-then-contract rule (an instance still on version N keeps working while others move to N+1). A migration report lists every instance and where it stands. In `column` mode there is one set of tables, so one migration moves every instance together.
+* **Changing the mode of a model that holds data** is a migration, planned, previewed and approved like any other (add the instance id, backfill `default`; or split into schemas), never a silent change.
 * **Roles are per instance**, as for apps.
-* **Semantic models and lineage** see an instance as a distinct source: its tables are different objects. A semantic model bound to a model definition is bound to an instance; "the same report for every tenant" is one semantic definition published once per instance (or parameterised by the instance, which is a semantic-layer decision outside this plan).
-* **Creating one is a plan.** Creating an instance is a dry-run-then-apply action (create schema, create tables, seed rows), approved like any structural change, and deleting one is an administrator action that names what is dropped.
+* **Semantic models and lineage** see a `schema` or `connection` instance as a distinct source (its tables are different objects) and a `column` instance as a filter on one source. Whether the semantic layer parameterises by instance is a semantic-layer decision outside this plan.
+* **Creating a `schema` or `connection` instance is a plan** (create schema, create tables, seed), dry-run then applied and approved; creating a `column` instance only registers it. Deleting one is an administrator action that names what is dropped or deleted.
 
 ### 6.3 Binding an app instance to data
 
-The manifest names the models it uses (plan 16). The instance supplies the **model instance** for each, by name, when it is published. An app that needs a different model instance per signed-in user's organisation (true multi-tenancy inside one app instance) is a different feature, not planned: use one app instance per tenant, which this section makes cheap.
+The manifest names the models it uses (plan 16). The instance supplies the **model instance** for each, by name, when it is published. Two app instances may name the same model instance (shared data) or different ones (separate data); in `column` mode both can also name the same model with different instance ids. An app that needs a different model instance per signed-in user's organisation (true multi-tenancy inside one app instance) is a different feature, not planned: use one app instance per tenant, which this section makes cheap.
 
 ## 7. Channels and instances together
 
@@ -123,7 +150,9 @@ Plan 21's channel is part of a published version's key. Every instance belongs t
 | AP06 | Navigation sets and the shell header; the URL follows the app's route | AP05 | M | a person sees only the instances they may open; the back button and a pasted link work |
 | AP07 | Portal: launch URL, `GET /apps/catalog`, `embed.allowed_origins` as `frame-ancestors` | AP05 | S | a page on an allowed origin frames an instance; one on another origin is refused by the browser |
 | AP08 | Subdomain and custom-domain bindings: the routing table, SNI certificates, name verification, redirect URIs registered with the identity home | AP05 | L | one host serves two names with two certificates; removing a binding removes its redirect URI; an unverified name is refused |
-| Z12 | Store model instances: `(definition, instance, connection, schema)`, per-instance tables, history, audit and roles; the instance in the API path | Z09, AP04 | L | two instances of one model on one database hold different rows, a row in one is invisible in the other, a reference across them is refused; tests on both engines |
+| AP09 | App storage: `storage.user` and `storage.instance` in the group's state with the manifest's limits, the storage API, and the shell bridge for sandboxed apps | AP05 | M | a sandboxed app stores and reads a preference per person and a setting per instance; one person cannot read another's; two instances do not share; a value over the limit is refused |
+| Z12 | Store model instances, separate copies: `storage.instances: schema \| connection`; `(definition, instance, connection, schema)`, per-instance tables, history, audit and roles; the instance in the API path | Z09, AP04 | L | two instances of one model on one database hold different rows, a row in one is invisible in the other, a reference across them is refused; tests on both engines |
+| Z12b | Store model instances, shared and split: `storage.instances: column`; `_instance` in every table and key, stamped and filtered by the writer, `scope: shared` entities | Z12 | L | two instances with colliding business keys; no read, write or rule (unique, reference, sum, overlap, cycle) sees the other's rows; a body naming another instance is refused; the instance must be in the caller's token; tests on both engines |
 | Z13 | Per-instance migration: apply a new definition version to one instance, a report of all instances, expand-then-contract respected | Z12, plan 21 | M | an instance on N keeps working while another is at N+1; the report names both |
 | Z14 | The Store controls (`@dbdatakit/store-ui`) take an instance; the console's Store module picks one | Z12 | S | the console edits rows of either instance; the app's controls use the instance its binding names |
 
@@ -135,10 +164,14 @@ Plan 21's channel is part of a published version's key. Every instance belongs t
 * **Plan 21** gets instances as a second axis beside channels (section 7).
 * **Plan 15 / 19 (Store)** gets model instances (Z12 to Z14). `ModelStorage` already names tables `<model>.<entity>`; the instance's schema changes the first part only, so the writer and the controls need an instance argument, not a rewrite.
 
-## 10. Decisions this plan makes, to confirm or change
+## 10. Decisions, and what is only an option
 
-1. **Subpath is always on; code apps default to a CSP-sandboxed document under a shell page**, not to a subdomain each. (Cheapest to run; own origin is opt-in.)
-2. **The shell page owns navigation**, through navigation sets; apps do not draw menus.
-3. **Instances are cheap and first-class**; multi-tenancy inside one app instance is out of scope.
-4. **A Store model instance defaults to its own schema**; its own database is the same mechanism with another connection.
-5. **Portals are supported by link, catalog feed and embed with an allow-list**; no web-component mounting.
+**Decisions** (one way, hard to change later):
+
+1. **Code apps are isolated by a sandboxed document under the host's shell page**, not by a separate origin per app. Because the sandbox has no browser storage, **the host provides app storage** (section 2a).
+2. **The shell page owns navigation** (navigation sets); apps do not draw menus.
+3. **A Store model's isolation is declared by the model** (`storage.instances`): not at all, `column`, `schema` or `connection`. The server enforces it; the client never does.
+
+**Supported options** (the design carries all of them; each is chosen per app, per instance or per model): subpath, subdomain and custom domain addresses for an instance; `origin: sandbox | own`; `chrome: shell | none`; app storage (user, instance, quota); the three instance modes of a Store model, including both a shared-and-split model and separate copies; portal launch links, the catalog feed and an allow-listed embed; navigation set membership.
+
+**Not planned:** several tenants inside one app instance (use an instance per tenant); mounting an app as a web component inside a portal's own page.
