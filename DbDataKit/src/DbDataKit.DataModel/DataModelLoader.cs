@@ -57,6 +57,7 @@ public static class DataModelLoader
             var title = map.Get("title") is YamlScalar t ? t.Value : null;
             var connection = Connection(map);
             var approval = Approval(map);
+            var instances = Instances(map);
 
             var entities = new List<ModelEntity>();
             if (map.Get("entities") is not YamlMapping entityMap || entityMap.Entries.Count == 0)
@@ -71,7 +72,7 @@ public static class DataModelLoader
 
             CheckReferences(entities);
             if (name is null || connection is null) return null;
-            return new DataModel(name, title, connection, approval, entities);
+            return new DataModel(name, title, connection, approval, entities, instances);
         }
 
         private bool Version(YamlMapping map)
@@ -97,8 +98,15 @@ public static class DataModelLoader
         private string? Connection(YamlMapping map)
         {
             if (map.Get("storage") is not YamlMapping storage) { Add(SharedCodes.MissingKey, (YamlNode?)map.Get("storage") ?? map, "`storage` is required and names the connection: `storage: {connection: name}`."); return null; }
-            CheckKeys(storage, ["connection"], "`storage`");
+            CheckKeys(storage, ["connection", "instances"], "`storage`");
             return Scalar(storage, "connection", required: true, storage)?.Value;
+        }
+
+        private InstanceMode Instances(YamlMapping map)
+        {
+            if (map.Get("storage") is not YamlMapping storage || storage.Get("instances") is not YamlScalar at) return InstanceMode.None;
+            if (at.Value == "column") { Add(SharedCodes.UnsupportedFeature, at, "`instances: column` (shared tables split by instance id) is planned and not available yet (plan 26, Z12b).", "Use `schema` or `connection`, or leave `instances` out."); return InstanceMode.None; }
+            return Choice(at, "storage.instances", new Dictionary<string, InstanceMode> { ["schema"] = InstanceMode.Schema, ["connection"] = InstanceMode.Connection });
         }
 
         private ApprovalLevel Approval(YamlMapping map)

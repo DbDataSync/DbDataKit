@@ -47,10 +47,26 @@ public sealed record ModelEntity(
     public ModelAttribute? Attribute(string name) => Attributes.FirstOrDefault(a => a.Name == name);
 }
 
+/// <summary>How a model's instances are kept apart (plan 26 section 6.2): not at all (one copy), each in a schema of its own on the model's connection, or each on a connection of its own. Sharing the tables and splitting rows by instance id is planned (Z12b).</summary>
+public enum InstanceMode { None, Schema, Connection }
+
 /// <summary>A model: entities with attributes, keys, references and rules, stored on the named connection.</summary>
-public sealed record DataModel(string Name, string? Title, string Connection, ApprovalLevel Approval, IReadOnlyList<ModelEntity> Entities)
+public sealed record DataModel(string Name, string? Title, string Connection, ApprovalLevel Approval, IReadOnlyList<ModelEntity> Entities, InstanceMode Instances = InstanceMode.None)
 {
     public const string FormatId = "model/1";
 
     public ModelEntity? Entity(string name) => Entities.FirstOrDefault(e => e.Name == name);
+
+    /// <summary>The longest schema name both engines take (PostgreSQL's).</summary>
+    private const int SchemaLimit = 63;
+
+    /// <summary>The schema an instance's tables are in: the model's name, or for a model that keeps its instances in schemas, the name and the instance (<c>territories__acme</c>). Null with a reason when the instance cannot be named.</summary>
+    public string? SchemaOf(string? instance, out string? problem)
+    {
+        problem = null;
+        if (instance is null or "default" || Instances != InstanceMode.Schema) return Name;
+        var schema = $"{Name}__{instance}";
+        if (schema.Length > SchemaLimit) { problem = $"The schema name `{schema}` is {schema.Length} characters; the limit is {SchemaLimit}. Use a shorter instance name."; return null; }
+        return schema;
+    }
 }
