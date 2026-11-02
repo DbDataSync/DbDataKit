@@ -29,6 +29,12 @@ public static class ModelStorage
     /// <summary>The column every entity table has beside its attributes: the version a write names, raised by one with each change (plan 15 section 5, optimistic concurrency).</summary>
     public const string VersionColumn = "_version";
 
+    /// <summary>The column of every table of a model that keeps its instances in shared tables (<see cref="InstanceMode.Column"/>): the instance a row belongs to, the first part of every key (plan 26 section 6.2).</summary>
+    public const string InstanceColumn = "_instance";
+
+    /// <summary>The longest instance id; the column holds exactly that.</summary>
+    public const int InstanceLength = 64;
+
     /// <summary>The table beside a model's entities that records every write: who, when, what changed (plan 15 section 5).</summary>
     public const string AuditTable = "_audit";
 
@@ -65,6 +71,8 @@ public static class ModelStorage
         };
         var dialect = DialectCatalog.For(new EngineId(engine));
         schema ??= model.Name;
+        var shared = model.Instances == InstanceMode.Column;
+        string[] Keyed(IEnumerable<string> names) => shared ? [InstanceColumn, .. names] : [.. names];
         var statements = new List<StorageStatement>();
         var notes = new List<string>();
         var declarations = new Dictionary<(string Entity, string Attribute), string>();
@@ -85,6 +93,7 @@ public static class ModelStorage
                 var nullable = !(attribute.Required || entity.Key.Contains(attribute.Name));
                 columns.Add(new NativeColumn(attribute.Name, declaration, null, nullable, ShapeOf(attribute, declaration, nullable)));
             }
+            if (shared) columns.Add(InstanceNative(dialect));
             columns.Add(new NativeColumn(VersionColumn, dialect.ColumnType(CanonicalType.Of(CanonicalKind.Int64)).Require(), null, false,
                 new ColumnShape(VersionColumn, dialect.ColumnType(CanonicalType.Of(CanonicalKind.Int64)).Require().Split('(')[0], null, null, null, false, null)));
             var dated = entity.History == HistoryMode.EffectiveDated;
@@ -99,27 +108,28 @@ public static class ModelStorage
             if (dated)
             {
                 // each version is a row, so the key alone is not the primary key: the key and when the version starts are; one version of a key is open at a time, and a unique value is unique among the open ones
-                constraints.Add(new($"{schema}.{entity.Name}", $"primary key of {schema}.{entity.Name}", ddl.AddPrimaryKey(schema, entity.Name, Name("pk", entity.Name), [.. entity.Key, ValidFromColumn])));
-                constraints.Add(new($"{schema}.{entity.Name}", $"one open version of each key of {schema}.{entity.Name}", ddl.CreateUniqueIndexWhere(schema, entity.Name, Name("ux", entity.Name, "open"), entity.Key, $"{dialect.Quote(ValidToColumn)} IS NULL")));
+                constraints.Add(new($"{schema}.{entity.Name}", $"primary key of {schema}.{entity.Name}", ddl.AddPrimaryKey(schema, entity.Name, Name("pk", entity.Name), Keyed([.. entity.Key, ValidFromColumn]))));
+                constraints.Add(new($"{schema}.{entity.Name}", $"one open version of each key of {schema}.{entity.Name}", ddl.CreateUniqueIndexWhere(schema, entity.Name, Name("ux", entity.Name, "open"), Keyed(entity.Key), $"{dialect.Quote(ValidToColumn)} IS NULL")));
                 foreach (var unique in entity.Attributes.Where(a => a.Unique && !(entity.Key is [var only] && only == a.Name)))
-                    constraints.Add(new($"{schema}.{entity.Name}", $"unique {unique.Name} among the open versions of {schema}.{entity.Name}", ddl.CreateUniqueIndexWhere(schema, entity.Name, Name("ux", entity.Name, unique.Name), [unique.Name], $"{dialect.Quote(ValidToColumn)} IS NULL")));
+                    constraints.Add(new($"{schema}.{entity.Name}", $"unique {unique.Name} among the open versions of {schema}.{entity.Name}", ddl.CreateUniqueIndexWhere(schema, entity.Name, Name("ux", entity.Name, unique.Name), Keyed([unique.Name]), $"{dialect.Quote(ValidToColumn)} IS NULL")));
             }
             else
             {
-                constraints.Add(new($"{schema}.{entity.Name}", $"primary key of {schema}.{entity.Name}", ddl.AddPrimaryKey(schema, entity.Name, Name("pk", entity.Name), entity.Key)));
+                constraints.Add(new($"{schema}.{entity.Name}", $"primary key of {schema}.{entity.Name}", ddl.AddPrimaryKey(schema, entity.Name, Name("pk", entity.Name), Keyed(entity.Key))));
                 foreach (var unique in entity.Attributes.Where(a => a.Unique && !(entity.Key is [var only] && only == a.Name)))
-                    constraints.Add(new($"{schema}.{entity.Name}", $"unique {unique.Name} of {schema}.{entity.Name}", ddl.AddUnique(schema, entity.Name, Name("uq", entity.Name, unique.Name), [unique.Name])));
+                    constraints.Add(new($"{schema}.{entity.Name}", $"unique {unique.Name} of {schema}.{entity.Name}", ddl.AddUnique(schema, entity.Name, Name("uq", entity.Name, unique.Name), Keyed([unique.Name]))));
             }
         }
 
-        var auditColumns = AuditColumns.Select(c =>
+        IReadOnlyList<(string Name, CanonicalType Type, bool Nullable)> audit = shared ? [(InstanceColumn, CanonicalType.String(InstanceLength), false), .. AuditColumns] : AuditColumns;
+        var auditColumns = audit.Select(c =>
         {
             var declaration = dialect.ColumnType(c.Type).Require();
             return new NativeColumn(c.Name, declaration, null, c.Nullable, new ColumnShape(c.Name, declaration.Split('(')[0], c.Type.Kind == CanonicalKind.String ? c.Type.Length ?? -1 : null, null, null, c.Nullable, null));
         }).ToList();
         statements.Add(new($"{schema}.{AuditTable}", $"create table {schema}.{AuditTable}", ddl.CreateTable(schema, AuditTable, auditColumns)));
         constraints.Add(new($"{schema}.{AuditTable}", $"primary key of {schema}.{AuditTable}", ddl.AddPrimaryKey(schema, AuditTable, "pk__audit", ["audit_id"])));
-        constraints.Add(new($"{schema}.{AuditTable}", $"index of {schema}.{AuditTable}", ddl.CreateIndex(schema, AuditTable, new IndexSpec("ix__audit_entity_at", false, ["entity", "at"], []))));
+        constraints.Add(new($"{schema}.{AuditTable}", $"index of {schema}.{AuditTable}", ddl.CreateIndex(schema, AuditTable, new IndexSpec("ix__audit_entity_at", false, Keyed(["entity", "at"]), []))));
 
         foreach (var entity in model.Entities)
             foreach (var attribute in entity.Attributes.Where(a => a.References is not null))
@@ -128,6 +138,11 @@ public static class ModelStorage
                 if (reference.Model is not null)
                 {
                     notes.Add($"`{entity.Name}.{attribute.Name}` points at `{reference.Model}.{reference.Entity}`, an entity of another model: it is checked on a write, with no foreign key between the two.");
+                    continue;
+                }
+                if (shared)
+                {
+                    notes.Add($"`{entity.Name}.{attribute.Name}` points at `{reference.Entity}`: the tables are shared by the instances, so it is checked on a write within the instance, with no foreign key.");
                     continue;
                 }
                 var target = model.Entity(reference.Entity)!;
@@ -144,6 +159,12 @@ public static class ModelStorage
             }
         statements.AddRange(constraints);
         return new StoragePlan(engine, schema, statements, [.. model.Entities.Select(e => $"{schema}.{e.Name}"), $"{schema}.{AuditTable}"], notes);
+    }
+
+    private static NativeColumn InstanceNative(ISqlDialect dialect)
+    {
+        var declaration = dialect.ColumnType(CanonicalType.String(InstanceLength)).Require();
+        return new NativeColumn(InstanceColumn, declaration, null, false, new ColumnShape(InstanceColumn, declaration.Split('(')[0], InstanceLength, null, null, false, null));
     }
 
     /// <summary>The tables of the plan that exist already (its schema's tables with the entities' names).</summary>

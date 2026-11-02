@@ -214,6 +214,7 @@ public class DataModelLoaderTests
     [Theory]
     [InlineData("schema", InstanceMode.Schema)]
     [InlineData("connection", InstanceMode.Connection)]
+    [InlineData("column", InstanceMode.Column)]
     public void A_model_says_how_its_instances_are_kept_apart(string text, InstanceMode expected)
     {
         var result = DataModelLoader.Load(Small.Replace("INSTANCES", text));
@@ -229,9 +230,9 @@ public class DataModelLoaderTests
     }
 
     [Theory]
-    [InlineData("column", "not available yet")]
     [InlineData("tenant", "is not a value of `storage.instances`")]
-    public void An_unknown_or_not_yet_built_instance_mode_is_refused_with_the_reason(string text, string expected)
+    [InlineData("Column", "is not a value of `storage.instances`")]
+    public void An_unknown_instance_mode_is_refused_with_the_reason(string text, string expected)
     {
         var result = DataModelLoader.Load(Small.Replace("INSTANCES", text));
 
@@ -249,5 +250,6 @@ public class DataModelLoaderTests
         Assert.Null(model.SchemaOf(new string('a', 60), out var problem));
         Assert.Contains("limit is 63", problem);
         Assert.Equal("sales", (model with { Instances = InstanceMode.Connection }).SchemaOf("acme", out _));
+        Assert.Equal("sales", (model with { Instances = InstanceMode.Column }).SchemaOf("acme", out _));
     }
 }

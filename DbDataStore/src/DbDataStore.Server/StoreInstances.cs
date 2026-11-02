@@ -50,16 +50,20 @@ public static class StoreInstances
         return true;
     }
 
-    /// <summary>Where an instance of a model is kept: the connection and the schema, or why it cannot be reached.</summary>
-    public static (string? Connection, string? Schema, string? Problem) Resolve(string directory, DataModel model, string? instance)
+    /// <summary>Where an instance of a model is kept: the connection and the schema, and for a model that shares its tables the instance id the writer stamps and filters by; or why it cannot be reached.</summary>
+    public static (string? Connection, string? Schema, string? Instance, string? Problem) Resolve(string directory, DataModel model, string? instance)
     {
-        if (instance is null || instance == Default) return (model.Connection, model.Name, null);
-        if (model.Instances == InstanceMode.None) return (null, null, $"The model '{model.Name}' keeps one copy only; it has no instances. Set `storage.instances` in the model to keep more.");
-        if (Find(directory, model.Name, instance) is not { } found) return (null, null, $"The model '{model.Name}' has no instance '{instance}'.");
+        var own = instance is null || instance == Default;
+        if (own) return (model.Connection, model.Name, model.Instances == InstanceMode.Column ? Default : null, null);
+        if (model.Instances == InstanceMode.None) return (null, null, null, $"The model '{model.Name}' keeps one copy only; it has no instances. Set `storage.instances` in the model to keep more.");
+        if (Find(directory, model.Name, instance!) is not { } found) return (null, null, null, $"The model '{model.Name}' has no instance '{instance}'.");
         var schema = model.SchemaOf(instance, out var problem);
-        if (schema is null) return (null, null, problem);
-        return model.Instances == InstanceMode.Connection
-            ? found.Connection is { } connection ? (connection, schema, null) : (null, null, $"The instance '{instance}' names no connection.")
-            : (model.Connection, schema, null);
+        if (schema is null) return (null, null, null, problem);
+        return model.Instances switch
+        {
+            InstanceMode.Connection => found.Connection is { } connection ? (connection, schema, null, null) : (null, null, null, $"The instance '{instance}' names no connection."),
+            InstanceMode.Column => (model.Connection, model.Name, instance, null),
+            _ => (model.Connection, schema, null, null),
+        };
     }
 }

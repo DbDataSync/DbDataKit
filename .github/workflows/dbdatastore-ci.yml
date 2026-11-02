@@ -71,4 +71,4 @@ jobs:
           testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
           echo "DBDATA_REQUIRE_POSTGRES=true" >> "$GITHUB_ENV"
       - run: dotnet build DbDataStore.slnf -c Release
-      - run: dotnet test --project tests/DbDataStore.Tests -c Release --no-build --minimum-expected-tests 25
+      - run: dotnet test --project tests/DbDataStore.Tests -c Release --no-build --minimum-expected-tests 27
