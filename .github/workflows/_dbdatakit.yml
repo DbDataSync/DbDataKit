@@ -76,6 +76,15 @@ jobs:
         shell: pwsh
         run: ./scripts/fetch-duckdb.ps1
 
+      # The app bundler's tests (AP01) build with the pinned Bun (bun.pin); Linux only, and they fail rather than skip without it.
+      - name: Fetch the pinned Bun
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: |
+          scripts/fetch-bun.sh
+          echo "$GITHUB_WORKSPACE/.bun/linux-x64" >> "$GITHUB_PATH"
+          echo "DBDATA_REQUIRE_BUN=true" >> "$GITHUB_ENV"
+
       - name: Restore
         run: dotnet restore DbDataKit.Shared.slnx
       - name: Build
