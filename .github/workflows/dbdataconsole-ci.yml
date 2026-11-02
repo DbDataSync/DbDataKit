@@ -119,6 +119,12 @@ jobs:
       - name: Test the shared visuals
         working-directory: DbDataKit/web
         run: npm test -w @dbdatakit/visuals
+      # The Store's reusable controls (plan 19, Z06): field parsing, the client against a fake server, the views as markup. Plain Node.
+      - name: Test the Store controls
+        working-directory: DbDataKit/web
+        run: |
+          npm run typecheck -w @dbdatakit/store-ui
+          npm test -w @dbdatakit/store-ui
       - run: dotnet build DbDataConsole.slnf -c Debug
       # A real Build server for the console to pair with (the pairing, the version and the health the console shows are its own).
       - name: Build a Build server
