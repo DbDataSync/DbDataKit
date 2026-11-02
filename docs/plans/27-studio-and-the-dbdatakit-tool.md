@@ -1,6 +1,6 @@
 # Plan 27: DbDataKit Studio, trust lists, and the `dbdatakit` tool
 
-Status: **proposed** (2026-11-02). Replaces the draft `27-draft-admin-cli-adcs-push.md`, which was written against an old checkout and is deleted by
+Status: **proposed, decisions made** (2026-11-02). Replaces the draft `27-draft-admin-cli-adcs-push.md`, which was written against an old checkout and is deleted by
 the change that adds this file. The slices are in [13a](13a-suite-slices.md), lane I.
 
 ## 1. What this plan does
@@ -84,7 +84,7 @@ Nothing is migrated. Each old form fails with a message that names the file or v
 | Wire values | `ClientKind.Console` (the lower-case word is inside the pairing proof), proof labels `dbdata-pair-v1-*`, management API version 1 | `ClientKind.Studio`, labels `v2`, management API version 2 with the supported floor raised to 2 for this step (the usual rule also accepts the version before) | A version-1 server is reported as "Upgrade this server". A `server.yaml` listing a client of kind `console` is refused, naming the file. |
 | Signing key | secret `kit/console/signing-key` | `kit/studio/signing-key`, a new key | The old key is not read. With the wire change every server is paired again anyway. |
 | Trust | `fingerprint:` in `instances.yaml`; `Fingerprint` in Build's paired Proxy record | `trust:` (a list), in `servers.yaml` | A file or record with `fingerprint:` is refused, naming the file: "pair again". |
-| Studio's grammar | `instance add/list/remove/pending/confirm/reject/rotate-key`, `/api/instances`, `instances.yaml`; Studio's own process is `server run` | `server add/list/remove/pending/confirm/reject/rotate-key`, `/api/servers`, `servers.yaml`; Studio's own process is `studio run` (decision 1) | The docs checker rejects the old forms. `servers.yaml` is a new file in the new data directory; the old one is never read. |
+| Studio's grammar | `instance add/list/remove/pending/confirm/reject/rotate-key`, `/api/instances`, `instances.yaml`; Studio's own process is `server run` | `server add/list/remove/pending/confirm/reject/rotate-key`, `/api/servers`, `servers.yaml`; Studio's own process is `studio run` (decided) | The docs checker rejects the old forms. `servers.yaml` is a new file in the new data directory; the old one is never read. |
 | Reserved app path | `console` | `studio` | An app manifest naming `console` is no longer rejected for that reason; `studio` is. |
 | Docs checker | `PRODUCTS` maps `dbdatakit` to `DbDataConsole`; `RETIRED` knows nothing of it | `dbdatakit-studio` maps to Studio, `dbdatakit` to the new tool; `RETIRED` lists `dbdatakit server/instance/user/identity/service` → `dbdatakit-studio …`, and `dbdatakit-studio instance` → `server`, `dbdatakit-studio server run` → `studio run` | Any doc that still types the old commands fails the check. |
 
@@ -347,18 +347,18 @@ I00 can start now. I01 and I03 can run in parallel; I02 waits for I01 so the two
 - **The CA team.** I14 needs Kerberos-authenticated CES on the new CA and Enroll permission for the Linux machines' computer accounts. A client
   for the legacy CA is not worth building: its CES returns 503 and the server may be retired.
 
-## 10. Decisions for the owner
+## 10. Decisions
 
-Decided: the folder is `DbDataKit.Studio/`; the tool's project and package are `DbDataKit.Admin.Cli` (the shared `DbDataKit.Cli` stays as it is);
-`local` approval is in the first version; the rollover removes the old trust entry by default; a managed product is a **`server`** in both
-command lines (Studio's `instance` noun is renamed).
+All made (2026-11-02):
 
-1. **What Studio calls its own process.** The shared grammar is strictly `<noun> <verb>`, and every product's own process is `server run`
-   (service units, the container entry point and docs all use it). With `server` now meaning "a server Studio manages", Studio cannot also
-   use it for itself. Proposed: **`studio run`**, which parallels the existing `identity run`, with no change to the shared framework.
-   Alternatives: `host run`, or letting the framework accept a lone verb (`dbdatakit-studio run`), which changes every product's grammar.
-   The plan uses `studio run` until you say otherwise. It touches Studio's Dockerfile entry point, its Windows service and systemd unit,
-   the docs and the checker, all of which I02 already rewrites.
-2. **How far the rename goes.** Proposed: the command noun, the API path (`/api/servers`) and the registry file (`servers.yaml`), all
-   user-visible. The internal names (`RegisteredInstance`, `InstanceId`, the pairing JSON field `instanceId`, `DBDATAKIT_INSTANCE_NAME`)
-   mean "this running copy" and stay. Say if you want those renamed too; the pairing field would be part of the version-2 wire break.
+- The folder is `DbDataKit.Studio/`; the identity spelling is `DbDataKit.Studio`, the command is `dbdatakit-studio`.
+- The tool's project and package are `DbDataKit.Admin.Cli`; the shared `DbDataKit.Cli` stays as it is.
+- A managed product is a **`server`** in both command lines; Studio's `instance` noun is renamed.
+- Studio's own process is **`studio run`** (it parallels `identity run`; the shared framework is unchanged).
+- The rename covers what a person sees (the command noun, `/api/servers`, `servers.yaml`). Internal names (`RegisteredInstance`, `InstanceId`,
+  the pairing field `instanceId`, `DBDATAKIT_INSTANCE_NAME`) stay.
+- `local` approval is in the first version.
+- A rollover removes the old trust entry by default (`--keep-old` leaves it).
+- No migration anywhere.
+
+Nothing waits on a decision. I00 (the manual smoke test of the AD CS enroller, from a Windows workstation) and I01 (the trust list) can start now.
