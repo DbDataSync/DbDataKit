@@ -18,7 +18,7 @@ public static class AppsEndpoints
     public const string CallbackPath = "/apps/-/callback";
     public const string SessionCookie = "dbdata_apps";
 
-    public static IEndpointRouteBuilder MapApps(this IEndpointRouteBuilder app, AppInstanceStore instances, AppSite site, OpenIdClient client, AppSessions sessions, AppTokenBroker broker)
+    public static IEndpointRouteBuilder MapApps(this IEndpointRouteBuilder app, AppInstanceStore instances, AppSite site, OpenIdClient client, AppSessions sessions, AppTokenBroker broker, IReadOnlyCollection<string>? stores = null)
     {
         app.MapGet("/apps/{instance}/_app/{**path}", async (HttpContext context, string instance, string? path) => await Write(context, site.Get(instance, path ?? "")));
 
@@ -28,10 +28,18 @@ public static class AppsEndpoints
         app.MapPost("/apps/{instance}/_token", async (HttpContext context, string instance) =>
         {
             if (context.Request.Headers["X-DbData-Shell"] != "1") { await Text(context, 400, "Not a request from the shell page."); return; }
-            if (instances.Resolve(instance) is null) { await Text(context, 404, "No such app."); return; }
+            if (instances.Resolve(instance) is not { } resolved) { await Text(context, 404, "No such app."); return; }
             if (sessions.Find(context.Request.Cookies[SessionCookie]) is not { } session) { await Text(context, 401, "Sign in first."); return; }
             if (session.RolesOn(instance).Count == 0) { await Text(context, 403, "The identity home gives you no role on this app."); return; }
-            var token = broker.Issue(session, instance);
+            // optionally { "server": "<a store server id>" }: only a server the host is configured for
+            string? server = null;
+            if (context.Request.ContentLength is > 0)
+            {
+                try { server = (await context.Request.ReadFromJsonAsync<TokenAsk>(context.RequestAborted))?.Server; }
+                catch (System.Text.Json.JsonException) { await Text(context, 400, "The body is not JSON."); return; }
+                if (server is not null && stores?.Contains(server, StringComparer.Ordinal) != true) { await Text(context, 403, "This host issues no tokens for that server."); return; }
+            }
+            var token = broker.Issue(session, instance, resolved.Manifest, server);
             context.Response.Headers.CacheControl = "no-store";
             await context.Response.WriteAsJsonAsync(new { token = token.Token, expiresIn = token.ExpiresInSeconds, audience = token.Audience });
         });
@@ -78,6 +86,8 @@ public static class AppsEndpoints
         });
         return app;
     }
+
+    private sealed record TokenAsk(string? Server);
 
     private static string TitleOf(ResolvedInstance resolved) => resolved.Instance.Title ?? resolved.Manifest.Title ?? resolved.Instance.Name;
 
