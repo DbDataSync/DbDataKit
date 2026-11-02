@@ -59,6 +59,40 @@ public static partial class StoreModels
     private static IResult Denied(AuthorizationDecision decision) =>
         Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
 
+    private static JsonObject Schema(DataModel model) => new()
+    {
+        ["name"] = model.Name,
+        ["title"] = model.Title,
+        ["approval"] = model.Approval.ToString().ToLowerInvariant(),
+        ["entities"] = new JsonArray(model.Entities.Select(e => (JsonNode)new JsonObject
+        {
+            ["name"] = e.Name,
+            ["title"] = e.Title,
+            ["key"] = new JsonArray(e.Key.Select(k => (JsonNode)JsonValue.Create(k)!).ToArray()),
+            ["history"] = e.History.ToString().ToLowerInvariant(),
+            ["role"] = e.Role.ToString().ToLowerInvariant(),
+            ["attributes"] = new JsonArray(e.Attributes.Select(a => (JsonNode)new JsonObject
+            {
+                ["name"] = a.Name,
+                ["title"] = a.Title,
+                ["type"] = a.Type,
+                ["kind"] = a.Canonical.Kind.ToString().ToLowerInvariant(),
+                ["length"] = a.Canonical.Length,
+                ["precision"] = a.Canonical.Precision,
+                ["scale"] = a.Canonical.Scale,
+                ["required"] = a.Required,
+                ["unique"] = a.Unique,
+                ["default"] = a.Default,
+                ["pattern"] = a.Pattern,
+                ["min"] = a.Min,
+                ["max"] = a.Max,
+                ["allowed"] = a.Allowed is null ? null : new JsonArray(a.Allowed.Select(v => (JsonNode)JsonValue.Create(v)!).ToArray()),
+                ["references"] = a.References is null ? null : new JsonObject { ["model"] = a.References.Model, ["entity"] = a.References.Entity, ["attribute"] = a.References.Attribute },
+            }).ToArray()),
+            ["rules"] = new JsonArray((e.Rules ?? []).Select(r => (JsonNode)new JsonObject { ["kind"] = r.Kind.ToString(), ["attribute"] = r.Attribute, ["group_by"] = new JsonArray(r.GroupBy.Select(g => (JsonNode)JsonValue.Create(g)!).ToArray()) }).ToArray()),
+        }).ToArray()),
+    };
+
     public static void Map(IEndpointRouteBuilder app, string directory)
     {
         app.MapGet("/api/v1/models", (HttpContext context) =>
@@ -87,6 +121,16 @@ public static partial class StoreModels
             if (!IsValidName(name) || !File.Exists(FileOf(directory, name))) return Results.NotFound(new { error = $"There is no model '{name}'." });
             var text = File.ReadAllText(FileOf(directory, name));
             return Results.Json(new JsonObject { ["name"] = name, ["text"] = text, ["diagnostics"] = Diagnostics(Check(name, text).Diagnostics) });
+        });
+
+        // the model as data for a form or a grid (and a typed client): entities, keys, attributes with their types and rules, the history each entity keeps
+        app.MapGet("/api/v1/models/{name}/schema", (string name, HttpContext context) =>
+        {
+            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
+            if (!decision.Allowed) return Denied(decision);
+            if (!IsValidName(name) || !File.Exists(FileOf(directory, name))) return Results.NotFound(new { error = $"There is no model '{name}'." });
+            var result = Check(name, File.ReadAllText(FileOf(directory, name)));
+            return result.Model is { } model && result.Ok ? Results.Json(Schema(model)) : Results.Json(new { error = $"{name}.yaml is not a valid model." }, statusCode: StatusCodes.Status422UnprocessableEntity);
         });
 
         // a dry run: the diagnostics of a text as it would be saved under this name, nothing written

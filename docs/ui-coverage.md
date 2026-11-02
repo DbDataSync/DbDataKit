@@ -33,8 +33,10 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Tracking tables and seeds | – | – | – | Initialise and seed (admin) | `DeployTabs.tsx` |
 | | Connections of a project | Yes | – | – | – | `NewConnectionPanel.tsx`, `DefinitionPanel.tsx` |
 | | Publish to a Proxy | – | – | – | Yes | `PublishTab.tsx` |
-| **Store** | Models, storage, rows | – | – | – | **No UI.** The management API exists (Z08–Z10); the model editor (Z07) and grid editor (Z06) are not built. | |
-| **Apps** | – | – | – | – | **No UI.** Only the bundling library (AP01, AP02); the host is O11. | |
+| **Store** | Models | – | – | – | List them and their entities | `ModelsPage.tsx` |
+| | Rows of an entity | Yes | Yes | Yes | Page through rows, history of a row (an entity that keeps one) | `EntityPage.tsx` |
+| | Model definition, storage (create tables), change requests | – | – | – | **No UI** (API only: Z08, Z09; change requests are Z07) | |
+| **Apps** | – | – | – | – | **No UI.** The Store's controls (`@dbdatakit/store-ui`) are written to be mounted by an app too. Only the bundling library (AP01, AP02); the host is O11. | |
 
 ## Notes and gaps
 
@@ -45,4 +47,4 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 
 ## Keeping it current
 
-Run `python3 -I scripts/check_ui_coverage.py`. It reads `DbDataKit/web/{console,sync,proxy,build,admin}/src/pages`, and fails for any page or tab file (`*Page.tsx`, `*Tab.tsx`, `*Panel.tsx`, `*Pages.tsx`) that this file does not name, and for any `.tsx` file named here that does not exist. It cannot tell whether a cell is right: when a screen gains an action, change the cell too.
+Run `python3 -I scripts/check_ui_coverage.py`. It reads `DbDataKit/web/{console,sync,proxy,build,admin,store}/src/pages`, and fails for any page or tab file (`*Page.tsx`, `*Tab.tsx`, `*Panel.tsx`, `*Pages.tsx`) that this file does not name, and for any `.tsx` file named here that does not exist. It cannot tell whether a cell is right: when a screen gains an action, change the cell too.

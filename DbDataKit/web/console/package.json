@@ -14,6 +14,8 @@
     "@dbdatakit/admin": "*",
     "@dbdatakit/build": "*",
     "@dbdatakit/proxy": "*",
+    "@dbdatakit/store": "*",
+    "@dbdatakit/store-ui": "*",
     "@dbdatakit/shell": "*",
     "@dbdatakit/sync": "*",
     "@dbdatakit/visuals": "*",
