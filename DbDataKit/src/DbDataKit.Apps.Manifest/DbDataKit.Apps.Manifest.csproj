@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Apps</RootNamespace>
+    <Description>The app/1 manifest of an app (plan 26): strict reading and validation with positions, and the checks of a source folder and a built bundle against it.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
+  </ItemGroup>
+</Project>
