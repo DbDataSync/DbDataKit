@@ -176,6 +176,28 @@ The two are kept apart by the connection they arrive on, not by number: a manage
 * **The overview and the history** (`GET /api/v1/overview`, viewer: version, instance, uptime, counts of data sources, users, sessions, running queries, clients locked out, failures in the last hour; `GET /api/v1/config/history[?limit=]` and `GET /api/v1/config/history/{sha}`, admin: the commits of the configuration folder, the first being "Configuration as found", and what each changed, both sides of each file with password hashes, signing keys and certificate passwords masked).
 * **The local channel** (`management.localChannel: true`) answers the command line on this machine over a named pipe (Windows; SYSTEM and Administrators) or a Unix socket (the service's account), as an administrator, with messages `{"method":"GET","path":"/api/v1/config"}`.
 
+### The identity home
+
+The proxy can serve the install's **identity home** (plan 20, O06): who people are and what they may do, for every console and app, so people sign in without reaching the private console. It is the shared
+`DbDataKit.Identity` home, the same one `dbdatakit identity run` serves on its own. Turn it on with `identity: { enabled: true }` in `server.yaml`:
+
+* **Its own listener:** https on `identity.port` (8817, every address unless `identity.address` says otherwise), HTTP/1.1 and HTTP/2 for browsers, with the proxy's certificate; never the Flight or management port (the
+  home's paths are a 404 there). TLS is required (a passkey needs a secure origin).
+* **Its address:** `identity.publicUrl` is the https address every console, app and browser reaches it at (a balancer's name for a group of proxies), without a path. It is the token issuer and the origin
+  passkeys are bound to, so it must not change once people have signed in. Unset, it is `https://<the first tls.hostnames entry, or localhost>:<port>`.
+* **What it serves:** OpenID Connect discovery (`/.well-known/openid-configuration`), the provider (`/identity/authorize`, `token`, `userinfo`, `jwks`, `end-session`; authorization code with PKCE), the passkey
+  sign-in page (`/identity/sign-in`) and the invitation page (`/invite#<code>`).
+* **The first administrator:** while the home has nobody, a first-run invitation is written to `identity/FIRST-RUN.txt` in the data directory; open its link on the home's address and make a passkey.
+* **Administration, at the command line** (the server may be running or not; `--repo` names the data directory): `dbdataproxy identity invite --email <address> [--role admin|viewer]`, `identity user-list`,
+  `identity client-add --name <name> --redirect <uri>` (a console or an app that signs people in through the home; the secret is shown once), `identity client-list`,
+  `identity assign --user <id> (--server <id> [--project <name>] | --app <id>) --roles <roles|none>` and `identity map-group --source entra|windows --group <group> ... --roles <roles|none>`.
+* **A console signs in through it** with `dbdatakit server run --identity-home <publicUrl> --identity-client <client id> --identity-secret-env <variable>` (the client registered with `identity client-add`,
+  its redirect `https://<console>/api/identity/callback`).
+* **State and keys:** its people, roles, clients and signing keys are in the proxy's state database (`state:`), so proxies that share one are the same home. The signing keys are protected with the key in the
+  secret `dbdata:proxy:identity:signing-keys`, made on the first start; copy it into the store of every other proxy of the group (`dbdataproxy secret set dbdata:proxy:identity:signing-keys --stdin`). A proxy
+  whose key cannot read the signing keys in the state refuses to start and names the secret. A backup of the home is the state database and that secret.
+* **Not yet:** signing in through Entra ID or Windows at the home (the redirect to the upstream provider and its callback), and administration through the management API and the console's screens (13a U21).
+
 ### Validation, schema version and the config commands
 
 The configuration is the files above, with the same environment and command line overrides as before. It is read through the shared `DbDataKit.Config` strict binder, so a typo is no longer ignored:

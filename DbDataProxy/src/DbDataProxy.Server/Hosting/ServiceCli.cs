@@ -352,6 +352,8 @@ public static class ProxyConfiguration
             .Add(new ProxyConfigDirectorySource(ProxyConfigFile.DirectoryIn(dataDirectory ?? ProxyConfigFile.ResolveDataDirectory())))
             .AddEnvironmentVariables("DBPROXY_")
             .Build();
-        return configuration.GetSection(ProxyOptions.SectionName).Get<ProxyOptions>() ?? new ProxyOptions();
+        // read once and let go: the directory provider watches the folder (an inotify instance on Linux, 128 per user), and a command that read its settings has no use for later changes
+        using (configuration as IDisposable)
+            return configuration.GetSection(ProxyOptions.SectionName).Get<ProxyOptions>() ?? new ProxyOptions();
     }
 }

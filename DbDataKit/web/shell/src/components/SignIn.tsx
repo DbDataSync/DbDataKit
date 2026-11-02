@@ -64,6 +64,17 @@ export function SignInScreen({ product }: { product: string }) {
             </button>
           )}
 
+          {status?.methods.includes('identity-home') && (
+            // A full navigation, not a fetch: the identity home's sign-in is its own site, and the console's callback brings the person back here.
+            <a
+              className="btn btn-primary"
+              href={`/api/identity/sign-in?returnUrl=${encodeURIComponent(window.location.pathname + window.location.search)}`}
+              data-testid="sign-in-identity-home"
+            >
+              Sign in with the identity home
+            </a>
+          )}
+
           {status && status.methods.length === 0 && (
             <span className="hint">
               No sign-in method is configured on this deployment. Ask an administrator to configure

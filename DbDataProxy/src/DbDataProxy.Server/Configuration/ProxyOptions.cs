@@ -56,6 +56,9 @@ public sealed class ProxyOptions
     /// <summary>The management API a console uses (plan 13, P03): off unless asked for.</summary>
     public ManagementOptions Management { get; set; } = new();
 
+    /// <summary>The identity home (plan 20, O06): who people are and what they may do, for every console and app of the install, on a listener of its own. Off unless asked for.</summary>
+    public IdentityOptions Identity { get; set; } = new();
+
     public ListenOptions Listen { get; set; } = new();
     public TlsOptions Tls { get; set; } = new();
 
@@ -168,6 +171,29 @@ public sealed class ManagementOptions
 
     /// <summary>Unix only: the folder that holds the local channel's socket. Empty: the platform's runtime folder for this account.</summary>
     public string? LocalChannelDirectory { get; set; }
+}
+
+/// <summary>
+/// The identity home as a module of the serving layer (plan 20, section 6 and O06): the OpenID Connect provider every console and app signs people in through, the passkey sign-in and invitations, on an HTTPS
+/// listener of its own (browsers reach it, so HTTP/1.1 as well as HTTP/2). Its people, roles, clients and signing keys are in the state database, so every instance of a group that shares it is the same home;
+/// the signing keys are protected with the secret <c>dbdata:proxy:identity:signing-keys</c>, made on the first start and copied to every other instance of the group.
+/// </summary>
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class IdentityOptions
+{
+    public bool Enabled { get; set; }
+
+    /// <summary>Where it listens: every address by default, as the Flight listener, since end users sign in here.</summary>
+    public string Address { get; set; } = "0.0.0.0";
+
+    [ConfigKey(Min = 1, Max = 65535)]
+    public int Port { get; set; } = 8817;
+
+    /// <summary>
+    /// The https address every console, app and browser reaches the home at (a balancer's name for a group), without a path. It is the token issuer and the origin passkeys are bound to, so it must not change once
+    /// people have signed in. Empty: <c>https://&lt;the first TLS host name, or localhost&gt;:&lt;Port&gt;</c>.
+    /// </summary>
+    public string? PublicUrl { get; set; }
 }
 
 [ConfigSchema(Naming = KeyNaming.Verbatim)]

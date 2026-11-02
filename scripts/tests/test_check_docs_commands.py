@@ -122,6 +122,25 @@ class CommandsThatExist(unittest.TestCase):
                          check.commands_of(root, "dbdatakit"))
         self.assertIn(("project", "show", "graph"), check.commands_of(root, "dbdatabuild"))
 
+    def test_shared_verbs_join_the_noun_a_product_lists_them_under(self):
+        root = self.tree({
+            "DbDataKit/src/DbDataKit.Identity/IdentityVerbs.cs": """
+public static class IdentityVerbs {
+    public static Verb[] Admin(IdentityAdminLocation where) =>
+    [
+        new Verb("invite", "Print an invitation", EffectClass.RepoFilesOnly, "", null),
+        new Verb("assign", "Give roles", EffectClass.RepoFilesOnly, "", null),
+    ];
+}
+""",
+            "DbDataProxy/src/DbDataProxy.Server/Hosting/IdentityCommand.cs": """
+public static class IdentityCommand {
+    public static Noun Noun() => new("identity", "The identity home this proxy serves", [.. IdentityVerbs.Admin(new IdentityAdminLocation("", Open, Url))]);
+}
+""",
+        })
+        self.assertEqual({("identity", "invite"), ("identity", "assign")}, check.commands_of(root, "dbdataproxy"))
+
     def test_a_command_that_exists_passes(self):
         text = "```\ndbdatakit server run --listen https://x\ndbdatakit instance add https://b --code c\n```\nOr `dbdatakit user invite`, `dbdatakit instance` and `dbdatakit.exe server pair`.\n"
         self.assertEqual([], self.problems(text))
