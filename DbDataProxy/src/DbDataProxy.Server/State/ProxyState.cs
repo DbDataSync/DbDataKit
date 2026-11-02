@@ -19,7 +19,7 @@ public static class ProxyState
 
     /// <summary>The proxy's tables, in the order they were added.</summary>
     public static StateSchema Schema { get; } = new([
-        NotificationSchema.Feed, SavedQuerySchema.Tables,
+        NotificationSchema.Feed, SavedQuerySchema.Tables, DbDataKit.State.DefinitionSchema.Tables,
         .. DbDataKit.Identity.HomeSchema.Templates.Take(HomeTemplatesBeforeGroup),
         ProxyGroupSchema.Tables,                                                     // plan 20 O02: sessions, audit, the group's key check, the running instances
         .. DbDataKit.Identity.HomeSchema.Templates.Skip(HomeTemplatesBeforeGroup),

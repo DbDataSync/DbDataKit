@@ -6,6 +6,7 @@
     <Project Path="src/DbDataKit.Apps.Bundling/DbDataKit.Apps.Bundling.csproj" />
     <Project Path="src/DbDataKit.Apps.Manifest/DbDataKit.Apps.Manifest.csproj" />
     <Project Path="src/DbDataKit.Apps.Instances/DbDataKit.Apps.Instances.csproj" />
+    <Project Path="src/DbDataKit.Apps.Host/DbDataKit.Apps.Host.csproj" />
     <Project Path="src/DbDataKit.Config.Git/DbDataKit.Config.Git.csproj" />
     <Project Path="src/DbDataKit.Config.Hosting/DbDataKit.Config.Hosting.csproj" />
     <Project Path="src/DbDataKit.Config.Testing/DbDataKit.Config.Testing.csproj" />
@@ -85,6 +86,7 @@
     <Project Path="tests/DbDataKit.Apps.Bundling.Tests/DbDataKit.Apps.Bundling.Tests.csproj" />
     <Project Path="tests/DbDataKit.Apps.Manifest.Tests/DbDataKit.Apps.Manifest.Tests.csproj" />
     <Project Path="tests/DbDataKit.Apps.Instances.Tests/DbDataKit.Apps.Instances.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Apps.Host.Tests/DbDataKit.Apps.Host.Tests.csproj" />
     <Project Path="tests/DbDataKit.Tools.XmlaForwarder.Tests/DbDataKit.Tools.XmlaForwarder.Tests.csproj" />
     <Project Path="tests/DbDataKit.Config.Git.Tests/DbDataKit.Config.Git.Tests.csproj" />
     <Project Path="tests/DbDataKit.Config.Hosting.Tests/DbDataKit.Config.Hosting.Tests.csproj" />

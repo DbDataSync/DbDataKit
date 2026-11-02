@@ -179,7 +179,7 @@ The two are kept apart by the connection they arrive on, not by number: a manage
 
 ### Modules
 
-A proxy serves **modules** (plan 20, O01), listed in `server.yaml` as `modules: [flightsql, identity]`. `flightsql` (Arrow Flight SQL, the default) and `identity` (the home below, which `identity: {enabled: true}` also turns on) exist so far; a name that is not a module is refused, naming `Modules` and the known ones. An instance without `flightsql` opens no Flight port. Later modules (`store`, `apps`, ...) are listed the same way.
+A proxy serves **modules** (plan 20, O01), listed in `server.yaml` as `modules: [flightsql, identity]`. `flightsql` (Arrow Flight SQL, the default) and `identity` (the home below, which `identity: {enabled: true}` also turns on) exist so far; a name that is not a module is refused, naming `Modules` and the known ones. An instance without `flightsql` opens no Flight port. `apps` (plan 26, AP05) serves the app instances published in the Proxy's state at `https://<host>:<Apps.Port>/apps/<instance>/` (default port 8818, its own listener, https only): the entry document with a base path, the bundle's files, and on every answer the `Content-Security-Policy` of the instance's approved egress, with the `sandbox` directive for a sandboxed app. It does not sign anyone in yet (the bundle is public to whoever reaches the port; data needs a token). Later modules (`store`, `rest`, ...) are listed the same way.
 
 ### The identity home
 
