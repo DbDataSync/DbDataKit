@@ -196,6 +196,24 @@ public sealed class AppsOptions
 
     [ConfigKey(Min = 1, Max = 65535)]
     public int Port { get; set; } = 8818;
+
+    /// <summary>The https address people reach the apps host at, without a path. Empty: <c>https://&lt;the first TLS host name, or localhost&gt;:&lt;Port&gt;</c>. The home's redirect URI for it is this plus <c>/apps/-/callback</c>.</summary>
+    public string? PublicUrl { get; set; }
+
+    /// <summary>The identity home people sign in through. A client registered at the home (<c>identity client-add</c>) with the redirect URI above; a public client needs no secret.</summary>
+    public AppsHomeOptions Home { get; set; } = new();
+}
+
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class AppsHomeOptions
+{
+    /// <summary>The home's address. Empty: this instance's own identity module, when it serves one.</summary>
+    public string? Authority { get; set; }
+
+    public string? ClientId { get; set; }
+
+    /// <summary>A secret reference, for a confidential client; empty for a public one (PKCE).</summary>
+    public string? ClientSecret { get; set; }
 }
 
 [ConfigSchema(Naming = KeyNaming.Verbatim)]

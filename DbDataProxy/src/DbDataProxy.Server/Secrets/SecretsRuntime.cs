@@ -88,6 +88,9 @@ public sealed class SecretsRuntime
     /// <summary>The configuration key of the identity home's Entra client secret, as messages name it.</summary>
     public const string EntraSecretKey = "Proxy:Identity:Entra:ClientSecret";
 
+    /// <summary>The configuration key of the apps host's client secret at the identity home.</summary>
+    public const string AppsHomeSecretKey = "Proxy:Apps:Home:ClientSecret";
+
     private bool Require => _options.CurrentValue.RequireReferencedSecrets;
 
     /// <summary>
@@ -206,6 +209,7 @@ public sealed class SecretsRuntime
         Check(() => ResolveSecret("Proxy:Tls:CertificatePassword", options.Tls.CertificatePassword));
         Check(() => ResolveSecret("Proxy:Auth:Jwt:SigningKey", options.Auth.Jwt.SigningKey));
         Check(() => ResolveSecret(EntraSecretKey, options.Identity.Entra.ClientSecret));
+        Check(() => ResolveSecret(AppsHomeSecretKey, options.Apps.Home.ClientSecret));
 
         if (plain.Count > 0)
             throw new PlainSecretNotAllowedException("Proxy", "Literal secrets are not allowed (Proxy:RequireReferencedSecrets is true): " + string.Join(" ", plain));
