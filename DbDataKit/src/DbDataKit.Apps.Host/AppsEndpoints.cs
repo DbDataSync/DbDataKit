@@ -101,29 +101,48 @@ public static class AppsEndpoints
 
         app.MapGet("/apps/{instance}/{**path}", async (HttpContext context, string instance, string? path) =>
         {
-            if (!string.IsNullOrEmpty(path)) { await Text(context, 404, "No such page."); return; }
-            if (!context.Request.Path.Value!.EndsWith('/')) { context.Response.Redirect($"/apps/{Uri.EscapeDataString(instance)}/"); return; }
             var resolved = instances.Resolve(instance);
+            // a portal has pages under it (its mounts); an app has none
+            var portal = resolved?.Manifest.Kind == AppKind.Portal ? resolved : null;
+            var mount = portal is null || string.IsNullOrEmpty(path) ? null : PortalChrome.MountAt(portal.Manifest.Portal!, path);
+            if (!string.IsNullOrEmpty(path) && mount is null) { await Text(context, 404, "No such page."); return; }
+            if (!context.Request.Path.Value!.EndsWith('/')) { context.Response.Redirect(context.Request.Path.Value + "/" + context.Request.QueryString); return; }
             if (resolved is null) { await Text(context, 404, "No such app."); return; }
             if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session)
             {
-                context.Response.Redirect((await client.BeginAsync(LaunchUrl(instance), context.RequestAborted)).AbsoluteUri);
+                var back = portal is null ? LaunchUrl(instance) : context.Request.Path.Value!;
+                context.Response.Redirect((await client.BeginAsync(back, context.RequestAborted)).AbsoluteUri);
                 return;
             }
-            if (session.RolesOn(instance).Count == 0)
+
+            // a portal's home is for anyone signed in; what it offers is filtered by their roles. An app, or a mount, needs a role on the app.
+            var shown = mount is null ? resolved : instances.Resolve(mount.App);
+            if (shown is null) { await Text(context, 404, "No such app."); return; }
+            if (portal is null || mount is not null)
             {
-                await Text(context, 403, "You are signed in, but the identity home gives you no role on this app.");
-                return;
+                if (session.RolesOn(shown.Instance.Name).Count == 0) { await Text(context, 403, "You are signed in, but the identity home gives you no role on this app."); return; }
             }
+
             // ?embed serves the app without the header, for a page that frames it; only the origins the instance names may do that
             var embed = context.Request.Query.ContainsKey("embed");
-            var origins = AppInstanceStore.EmbedOrigins(resolved.Instance.Settings.GetValueOrDefault(AppInstanceStore.EmbedSetting), out _) ?? [];
-            await Write(context, AppShell.Page(instance, TitleOf(resolved), resolved.Manifest.Chrome == AppChrome.None || embed ? null : HeaderOf(instances, session, instance), origins));
+            var origins = AppInstanceStore.EmbedOrigins(shown.Instance.Settings.GetValueOrDefault(AppInstanceStore.EmbedSetting), out _) ?? [];
+
+            // the portal that frames this page: the one being visited, or the one the instance's `portal` setting names
+            var framing = portal ?? (shown.Instance.Settings.GetValueOrDefault(PortalChrome.PortalSetting) is { } named && instances.Resolve(named) is { Manifest.Kind: AppKind.Portal } named2 ? named2 : null);
+            AppShell.Header? header = shown.Manifest.Chrome == AppChrome.None || embed ? null
+                : framing is not null ? new AppShell.Header(PersonOf(session), [], PortalChrome.Look(instances, framing, session, mount?.App))
+                : HeaderOf(instances, session, instance);
+            if (portal is not null && mount is null)
+                await Write(context, AppShell.PortalHome(TitleOf(resolved), header ?? new AppShell.Header(PersonOf(session), [], PortalChrome.Look(instances, portal, session, null)), "Choose an app from the menu.", origins));
+            else
+                await Write(context, AppShell.Page(shown.Instance.Name, TitleOf(shown), header, origins));
         });
         return app;
     }
 
     /// <summary>The person and the menus of the sets the instance belongs to, each listing only what this person may open (their roles at the home decide), so a menu never advertises a link that ends in a refusal.</summary>
+    private static string PersonOf(AppSession session) => session.Identity.Name ?? session.Identity.Email ?? session.Identity.UserId;
+
     /// <summary>The stable address that signs a person in and opens the instance.</summary>
     public static string LaunchUrl(string instance) => $"/apps/{Uri.EscapeDataString(instance)}/?launch";
 
@@ -142,7 +161,7 @@ public static class AppsEndpoints
             }
             menus.Add(new AppShell.Menu(set.Title, links));
         }
-        return new AppShell.Header(session.Identity.Name ?? session.Identity.Email ?? session.Identity.UserId, menus);
+        return new AppShell.Header(PersonOf(session), menus);
     }
 
     private static string TitleOf(ResolvedInstance resolved) => resolved.Instance.Title ?? resolved.Manifest.Title ?? resolved.Instance.Name;
