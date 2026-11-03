@@ -2,6 +2,7 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <Using Include="Xunit" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <ProjectReference Include="..\..\src\DbDataKit.Apps.Host\DbDataKit.Apps.Host.csproj" />
   </ItemGroup>
 </Project>

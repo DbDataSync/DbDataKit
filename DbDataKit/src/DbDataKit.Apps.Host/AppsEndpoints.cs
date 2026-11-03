@@ -30,7 +30,7 @@ public static class AppsEndpoints
         {
             if (context.Request.Headers["X-DbData-Shell"] != "1") { await Text(context, 400, "Not a request from the shell page."); return; }
             if (instances.Resolve(instance) is null) { await Text(context, 404, "No such app."); return; }
-            if (sessions.Find(context.Request.Cookies[SessionCookie]) is not { } session) { await Text(context, 401, "Sign in first."); return; }
+            if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session) { await Text(context, 401, "Sign in first."); return; }
             if (session.RolesOn(instance).Count == 0) { await Text(context, 403, "The identity home gives you no role on this app."); return; }
             var token = broker.Issue(session, instance);
             context.Response.Headers.CacheControl = "no-store";
@@ -44,7 +44,7 @@ public static class AppsEndpoints
             {
                 if (context.Request.Headers["X-DbData-Shell"] != "1") { await Text(context, 400, "Not a request from the shell page."); return; }
                 if (instances.Resolve(instance) is not { } resolved) { await Text(context, 404, "No such app."); return; }
-                if (sessions.Find(context.Request.Cookies[SessionCookie]) is not { } session) { await Text(context, 401, "Sign in first."); return; }
+                if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session) { await Text(context, 401, "Sign in first."); return; }
                 if (session.RolesOn(instance).Count == 0) { await Text(context, 403, "The identity home gives you no role on this app."); return; }
                 await AppStorageEndpoint.HandleAsync(context, storage, resolved, session);
             });
@@ -68,7 +68,7 @@ public static class AppsEndpoints
         // The instances the signed-in person may open, for a portal that builds its tiles from a feed (plan 26 section 5). The session cookie decides who is asking; there is no list for the anonymous.
         app.MapGet(CatalogPath, async (HttpContext context) =>
         {
-            if (sessions.Find(context.Request.Cookies[SessionCookie]) is not { } session) { await Text(context, 401, "Sign in first."); return; }
+            if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session) { await Text(context, 401, "Sign in first."); return; }
             var entries = instances.List().Where(i => session.RolesOn(i.Name).Count > 0)
                 .Select(i => instances.Resolve(i.Name)).OfType<ResolvedInstance>()
                 .Select(r => new { name = r.Instance.Name, title = TitleOf(r), description = r.Manifest.Description, app = r.Instance.App, version = r.AppVersion.Version, channel = DbDataKit.State.DefinitionStore.Production, launch = LaunchUrl(r.Instance.Name) });
@@ -82,7 +82,7 @@ public static class AppsEndpoints
             try
             {
                 var result = await client.CompleteAsync(q["state"], q["code"], q["error"], context.RequestAborted);
-                var session = sessions.Create(result.Identity);
+                var session = sessions.Create(result.Identity, result.Grant.RefreshToken);
                 context.Response.Cookies.Append(SessionCookie, session.Id, new CookieOptions
                 {
                     HttpOnly = true, Secure = true, Path = "/apps/", Expires = session.ExpiresAtUtc,
@@ -105,7 +105,7 @@ public static class AppsEndpoints
             if (!context.Request.Path.Value!.EndsWith('/')) { context.Response.Redirect($"/apps/{Uri.EscapeDataString(instance)}/"); return; }
             var resolved = instances.Resolve(instance);
             if (resolved is null) { await Text(context, 404, "No such app."); return; }
-            if (sessions.Find(context.Request.Cookies[SessionCookie]) is not { } session)
+            if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session)
             {
                 context.Response.Redirect((await client.BeginAsync(LaunchUrl(instance), context.RequestAborted)).AbsoluteUri);
                 return;
