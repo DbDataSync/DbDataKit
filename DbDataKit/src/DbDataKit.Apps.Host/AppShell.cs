@@ -44,6 +44,14 @@ public static class AppShell
               if (valid(m.path) && m.path !== route) { route = m.path; history.pushState(null, "", "#" + encodeURI(m.path)); }
               return;
             }
+            if (m.type === "storage" && typeof m.id === "string") {
+              fetch("/apps/" + encodeURIComponent(instance) + "/_storage", { method: "POST", credentials: "same-origin", headers: { "X-DbData-Shell": "1", "Content-Type": "application/json" },
+                body: JSON.stringify({ op: m.op, scope: m.scope, key: m.key, value: m.value, ifVersion: m.ifVersion, prefix: m.prefix }) })
+                .then(function (r) { return r.json().then(function (b) { return r.ok ? b : Promise.reject(new Error(b.message || ("The host refused the call (" + r.status + ")."))); }); })
+                .then(function (b) { var reply = { dbdata: "app/1", id: m.id, type: "storage.result", result: b }; frame.contentWindow.postMessage(reply, "*"); })
+                .catch(function (e) { frame.contentWindow.postMessage({ dbdata: "app/1", id: m.id, type: "error", message: String(e.message || e) }, "*"); });
+              return;
+            }
             if (m.type !== "token.request" || typeof m.id !== "string") return;
             function reply(body) { body.dbdata = "app/1"; body.id = m.id; frame.contentWindow.postMessage(body, "*"); }
             fetch("/apps/" + encodeURIComponent(instance) + "/_token", { method: "POST", credentials: "same-origin", headers: { "X-DbData-Shell": "1" } })

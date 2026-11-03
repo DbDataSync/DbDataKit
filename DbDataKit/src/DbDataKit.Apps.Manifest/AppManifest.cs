@@ -47,6 +47,14 @@ public enum DataOperations { None = 0, Read = 1, Write = 2 }
 /// <summary>The entities of one Store model an app uses, and what it may do with each. The app's scoped token is the intersection of this and what the signed-in person may do.</summary>
 public sealed record AppModelUse(string Model, IReadOnlyDictionary<string, DataOperations> Entities);
 
+/// <summary>The app storage an app asks for (plan 26 section 2a): per person and per instance, within <see cref="QuotaMb"/> for the instance. An app that declares none gets none.</summary>
+public sealed record AppStorageUse(bool User, bool Instance, int QuotaMb)
+{
+    public const int DefaultQuotaMb = 10;
+    public const int MaximumQuotaMb = 1024;
+    public static readonly AppStorageUse None = new(false, false, DefaultQuotaMb);
+}
+
 /// <summary>An app's manifest (<c>app/1</c>). <see cref="Entry"/> is the code app's entry point; <see cref="Views"/> are declarative view specs; an app has at least one of them.</summary>
 public sealed record AppManifest(
     string Name,
@@ -63,7 +71,10 @@ public sealed record AppManifest(
     AppTrust Trust = AppTrust.Sandbox,
     AppEgress? Egress = null,
     AppKind Kind = AppKind.App,
-    PortalSpec? Portal = null)
+    PortalSpec? Portal = null,
+    AppStorageUse? Storage = null)
 {
+    public AppStorageUse StorageUse => Storage ?? AppStorageUse.None;
+
     public const string FormatId = "app/1";
 }

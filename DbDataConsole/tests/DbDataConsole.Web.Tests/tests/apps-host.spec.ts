@@ -69,12 +69,12 @@ async function addAuthenticator(context: BrowserContext, page: Page) {
 
 const manifest = [
   'schemaVersion: 1', 'name: territory-notes', 'title: Territory notes', 'version: 1.0.0', 'entry: index.html', 'roles: [author]',
-  'models:', '  - model: territories', '    entities: {territory: [read, write]}', '',
+  'storage: {user: true, instance: true, quota_mb: 5}', 'models:', '  - model: territories', '    entities: {territory: [read, write]}', '',
 ].join('\n')
 
 // The app: a page and a script (the policy allows no inline script). It asks the shell for a token, writes a row and reads the rows back through the host, and tries to reach what a sandbox must not.
 const index = '<!doctype html><html><head><meta charset="utf-8"><title>Territory notes</title></head><body><h1>Territory notes</h1>' +
-  '<button id="go">go</button><pre id="route">none</pre><pre id="rows">loading</pre><pre id="parent-cookie">untested</pre><pre id="own-cookie">untested</pre><pre id="elsewhere">untested</pre><script src="app.js"></script></body></html>\n'
+  '<button id="go">go</button><pre id="route">none</pre><pre id="storage">loading</pre><pre id="rows">loading</pre><pre id="parent-cookie">untested</pre><pre id="own-cookie">untested</pre><pre id="elsewhere">untested</pre><script src="app.js"></script></body></html>\n'
 const script = `
 const out = (id, text) => { document.getElementById(id).textContent = text }
 const waiting = new Map()
@@ -94,6 +94,22 @@ document.getElementById('go').onclick = () => {
   window.parent.postMessage({ dbdata: 'app/1', type: 'route', path: '/territories/NA' }, '*')
   out('route', '/territories/NA')
 }
+// app storage goes through the shell too: a sandboxed document has no localStorage
+const store = (body) => new Promise((resolve, reject) => {
+  const id = String(Math.random())
+  waiting.set(id, (m) => (m.type === 'storage.result' ? resolve(m.result) : reject(new Error(m.message))))
+  window.parent.postMessage({ dbdata: 'app/1', type: 'storage', id, ...body }, '*')
+})
+async function storage() {
+  try { localStorage.setItem('k', 'v'); out('storage', 'localStorage works') } catch (e) { /* expected: opaque origin */ }
+  await store({ op: 'set', scope: 'user', key: 'theme', value: 'dark' })
+  await store({ op: 'set', scope: 'instance', key: 'motd', value: { text: 'hi' } })
+  const theme = await store({ op: 'get', scope: 'user', key: 'theme' })
+  const motd = await store({ op: 'get', scope: 'instance', key: 'motd' })
+  const big = await store({ op: 'set', scope: 'user', key: 'big', value: 'x'.repeat(300 * 1024) }).then(() => 'stored', (e) => 'refused')
+  out('storage', 'theme ' + theme.value + '; motd ' + motd.value.text + '; big ' + big)
+}
+storage().catch((e) => out('storage', 'failed: ' + e.message))
 const data = '/apps/acme/_data/__STORE__/api/v1/models/territories'
 async function main() {
   const t = await token()
@@ -214,6 +230,9 @@ test('a person signs in and the sandboxed app reads and writes the Store through
   await expect(app.locator('#parent-cookie')).toHaveText(/^blocked /)
   await expect(app.locator('#own-cookie')).toHaveText(/^blocked /)
   await expect(app.locator('#elsewhere')).toHaveText('blocked')
+
+  // storage through the shell: a user value and an instance value read back, and a value over the limit is refused
+  await expect(app.locator('#storage')).toHaveText('theme dark; motd hi; big refused')
 
   // the shell's header is the host's: the person, and the menu with only the instances she may open
   await expect(page.locator('header .who')).toHaveText('Ada Lovelace')
