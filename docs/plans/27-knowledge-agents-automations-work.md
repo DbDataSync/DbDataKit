@@ -1,6 +1,7 @@
-# Plan 27: knowledge, agents, automations and work management
+# Plan 27: knowledge, agents, functions, automations and work management
 
-Status: **proposed, high level** (2026-11-03). Four new areas the owner asked for. This page decides their shape and how they fit together
+Status: **proposed, high level** (2026-11-03; DbDataFunctions added the same day at the owner's suggestion). Four new areas the owner
+asked for, plus a name that unifies the suite's custom code. This page decides their shape and how they fit together
 and with plans 16, 20, 22, 25 and 26. It lists the questions only the owner can answer (section 8). Not sliced yet: each area gets a
 detailed plan of its own (section 9) once the questions are answered.
 
@@ -8,7 +9,8 @@ detailed plan of its own (section 9) once the questions are answered.
 | --- | --- |
 | **DbDataKnowledge** | what agents know: on the back end, to build new objects that fit what exists; on the front end, to answer questions and write queries |
 | **DbDataAgents** | an agent definition: its purpose, the context and knowledge it reads, the tools it may call, the model it uses and how it is tested, for business users on the front end or developers on the back end |
-| **DbDataAutomations** | custom logic: scheduled ETL processes, custom tools for agents, and custom functions for apps |
+| **DbDataFunctions** | the suite's custom code under one name: Sync's scripts today, and functions that are agents' tools and apps' custom logic (section 4.1) |
+| **DbDataAutomations** | scheduled and triggered ETL workflows, whose custom steps are functions (section 4.2) |
 | **DbDataBacklog** (working name; section 5) | backlog, sprint and work management, tied to the suite's own objects |
 
 ## 1. What already exists, and what this plan adds
@@ -17,10 +19,10 @@ The four areas are mostly new *definitions* on machinery the suite has or has pl
 
 | Needed | Exists or planned | Gap this plan fills |
 | --- | --- | --- |
-| A tool for every feature | the command surface (`DbDataKit.Cli`: command specs, effect classes, JSON schemas, generated MCP tools; plan 13 W4a); "no feature without a command spec" (plan 16 section 1) | tools that are not commands: automations' functions (section 4) |
+| A tool for every feature | the command surface (`DbDataKit.Cli`: command specs, effect classes, JSON schemas, generated MCP tools; plan 13 W4a); "no feature without a command spec" (plan 16 section 1) | tools that are not commands: callable functions (section 4.1) |
 | An agent runtime | plan 16 section 1: `DbDataKit.Agents` on `Microsoft.Extensions.AI`, approvals, acting as the user, transcripts (**not built**); testing with a scripted fake and recordings (plan 25 section 2) | the **agent definition** as a versioned, published object (section 3) |
 | What agents know | catalog and glossary on the lineage graph (plan 22 section 3); semantic models (plan 14); Build metadata and `project agent-kit`; DbDataStore models (plan 15) | curated knowledge, verified queries, retrieval, and access rules on what an agent may read (section 2) |
-| Custom code | `DbDataKit.Scripting` (Roslyn `.csx` with `#r "nuget:"`, built, used by Sync's scripts, libraries and drivers) | code that is not tied to a replication: workflows and functions (section 4) |
+| Custom code | `DbDataKit.Scripting` (Roslyn `.csx` with `#r "nuget:"`, built, used by Sync's scripts, libraries and drivers) | one definition of custom code for every product (DbDataFunctions), and workflows (section 4) |
 | Schedules, runs, alerts | `DbDataKit.Scheduling`, `DbDataKit.Monitoring` (plan 13 W10), the delivery service (plan 22 section 5) | none: automations use them as Build and Sync do |
 | Authoring and publishing | shared authoring (plan 22 section 1: workspaces, editor, commit, merge, publish); the serving layer runs from published definitions (plan 20) | agents and automations as new kinds of authored project (section 6) |
 | Managed business data with history, approval and forms | DbDataStore (plan 15), apps and portals (plans 16, 26) | the work-management model and its app (section 5) |
@@ -105,35 +107,74 @@ Plan 16 decided "every action approved as it happens, to be refined later". Agen
 2. **Quality** is measured with an evaluation set: questions with known good answers, drawn from verified queries (section 2.1). It is
    run against a real model by hand or on a schedule, never as a pull request gate. A published version records its last score.
 
-## 4. DbDataAutomations
+## 4. DbDataFunctions and DbDataAutomations
 
-**Goal.** One way to write custom logic, used three ways: as a scheduled ETL process, as a tool an agent can call, and as a function an
-app can call.
+**Goal.** One way to write custom logic, used everywhere the suite runs custom code: Sync's scripts, scheduled ETL processes, tools an
+agent can call, and functions an app can call.
 
-### 4.1 Two kinds of definition
+**Two names, two jobs** (owner's suggestion, 2026-11-03: a name that unifies the scripting the suite already has):
 
-| Kind | What it is | Runs where |
+- **DbDataFunctions** is the **code**: every piece of custom logic, in whichever product it runs. The engine underneath is the built
+  `DbDataKit.Scripting` (resolver, lock files, loader, compiler).
+- **DbDataAutomations** is the **orchestration**: workflows with triggers, steps, retries and monitoring. A workflow's custom steps are
+  functions.
+
+### 4.1 What a function is
+
+Sync already has the shape. A Sync script is a manifest (`scripts/<name>.yaml`: name, a `kind` naming the extension point it implements,
+a language of C# or SQL, declared parameters) beside its code (`<name>.csx` or `<name>.sql`) and its lock file. A function generalizes
+that manifest:
+
+| Part | Sync script today | A function |
 | --- | --- | --- |
-| **Function** | one typed operation: an input schema, an output schema, an effect class, a body (a `.csx` script, a SQL statement, or a call to commands) | the serving layer, in a child process (plan 20 principle 5), as the caller |
-| **Workflow** | steps in order or in parallel: run a command (a Sync replication, a Build refresh plan), a function, SQL, a transfer (`DbDataKit.Transfer`), a check (plan 23), an agent step (section 4.4); with triggers, retries and timeouts | the back end, on an automations server, each run in a child process |
+| Code | `.csx` or `.sql` | the same, plus a call to commands; Python is owner question 3 |
+| Packages | `#r "nuget:"` with a lock file (13a S12) | the same, through the same allow-list |
+| Parameters | declared, supplied by a binding | an input schema, as a command spec has |
+| Result | whatever the slot's interface returns | an output schema |
+| Where it plugs in | `kind`: one of Sync's slots | `kind`: an **extension point** (a Sync slot; later Build hooks and others) or a **callable** function (a tool and an endpoint) |
+| Effect | implied by the slot | an effect class (reads, writes), as commands have |
 
-- **A function is a tool by construction.** It has a spec like a command, so the command surface turns it into an MCP tool, a tool an
-  agent definition can allow, and an endpoint apps call through the serving layer, under the same access rules. One definition, three
-  callers.
+- **A callable function is a tool by construction.** It has a spec like a command, so the command surface turns it into an MCP tool, a
+  tool an agent definition can allow, and an endpoint apps call through the serving layer, under the same access rules. One definition,
+  several callers.
+- **An extension-point function** is called by the product that owns the point, with that point's interface, as Sync's scripts are now.
+- **Shared libraries** of helper code (`#load`) and package sets belong to DbDataFunctions too, so Sync, automations and callable
+  functions resolve and pin packages one way.
+- **Callable functions run in the serving layer**, in a child process (plan 20 principle 5), as the caller. Extension-point functions run
+  in the product that calls them, as today.
+
+**What it changes for Sync** (a clean break is allowed, never a silent one): Sync's scripts become functions of an extension-point kind.
+The manifest gains the input and output schemas, and an old manifest is refused with a message naming the file. Sync's `script` noun
+becomes the shared `function` noun. Drivers stay Sync's, compiled by the same engine. Whether Build's SQL hooks join is for the detailed
+plan.
+
+**Name: owner question 9.** Candidates: **DbDataFunctions** (proposed), DbDataScripts, DbDataCode, DbDataExtensions.
+
+- *Functions* says "typed inputs and outputs", which is what makes one a tool or an endpoint, and it reads well for SQL bodies too.
+- *Scripts* undersells the typed, callable side, and suggests C# only.
+- The clash to manage: "function" also means a SQL function or a DuckDB macro (Build's key functions, plan 25). The docs always say
+  "a DbDataFunctions function" or "a SQL function", and the command noun is `function`.
+
+### 4.2 Workflows (DbDataAutomations)
+
+A **workflow** is steps in order or in parallel: run a command (a Sync replication, a Build refresh plan), a function, SQL, a transfer
+(`DbDataKit.Transfer`), a check (plan 23), an agent step (section 4.5). It has triggers, retries and timeouts. It runs on the back end,
+each run in a child process.
+
 - **Triggers:** a schedule (`DbDataKit.Scheduling`), the end of another run (a Sync replication, a Build plan), a DbDataStore change, a
   signed webhook, or by hand.
 - **Runs are monitored like everything else** (`DbDataKit.Monitoring`): history, outcomes, overdue and failed runs, alerts through the
   delivery service, and run lineage (plan 18) from each step's declared inputs and outputs.
 
-### 4.2 Not a third ETL engine
+### 4.3 Not a third ETL engine
 
 Sync replicates and Build models. A workflow **orchestrates** them and covers what neither does (call an API, move a file, a custom
-transform, a step that needs a person). A step that Sync or Build can do is a command step that calls them, not a script. The detailed
-plan names what Sync's own scripts and Build's hooks keep, so there is one obvious place for each job.
+transform, a step that needs a person). A step that Sync or Build can do is a command step that calls them, not a function. The detailed
+plan names what Sync's extension points and Build's hooks keep, so there is one obvious place for each job.
 
-### 4.3 Trust and isolation
+### 4.4 Trust and isolation
 
-`DbDataKit.Scripting`'s syntax guard is not a security boundary, so automation code is **trusted code**:
+`DbDataKit.Scripting`'s syntax guard is not a security boundary, so every function is **trusted code**:
 
 - written by people with the Author role, in a workspace, reviewed and merged;
 - a published version is approved by an administrator, recorded with an audit, as plan 26 does for trusted apps;
@@ -145,15 +186,15 @@ The connections a function or workflow uses are named in its definition and boun
 called by a person runs **as that person**, so access rules apply to its reads. A scheduled workflow runs as a **service account** of the
 identity home (plan 16, "Sign-in decisions" item 2).
 
-### 4.4 Agents inside workflows
+### 4.5 Agents inside workflows
 
 A workflow step can ask an agent to do something (triage a failed load, summarize a change, draft a mapping). No user is there to approve
 each action, so an unattended agent step **may only read and propose**: what it would change becomes a draft or a work item (section 5)
 for a person to approve. **Owner question 6.**
 
-### 4.5 Language
+### 4.6 Language
 
-C# `.csx` on `DbDataKit.Scripting` first (built, runtime only, no SDK), plus SQL and command steps. Python is the obvious second
+C# `.csx` on `DbDataKit.Scripting` first (built, runtime only, no SDK), plus SQL and command bodies. Python is the obvious second
 language for data work. **Owner question 3.**
 
 ## 5. DbDataBacklog: work management
@@ -197,14 +238,15 @@ question 7.**
 | --- | --- | --- | --- |
 | Knowledge | curated technical knowledge in git; index builds | `knowledge` module: search, show, access-filtered | screens for collections, drafts and approvals |
 | Agents | agent projects in workspaces; evaluation runs | front-end agents in the `mcp` module; chat in apps | the console's chat; providers, models, limits, transcripts |
-| Automations | functions and workflows in workspaces; **workflow runs** on an automations server | **function calls** from apps and agents, in child processes | runs, schedules, bindings, approvals of trusted versions |
+| Functions | functions in workspaces | **calls** from apps and agents, in child processes; extension-point functions stay in the product that calls them | bindings, approvals of trusted versions |
+| Automations | workflows in workspaces; **workflow runs** on an automations server | (nothing of its own) | runs, schedules |
 | Work | (nothing of its own) | the work app on the `store` and `apps` modules | the app's administration like any app |
 
-**Back-end servers.** Agents and automations each need somewhere to author, build, test and publish, and workflows need a scheduler that
+**Back-end servers.** Agents, functions and automations each need somewhere to author, build, test and publish, and workflows need a scheduler that
 is always running. Two ways:
 
-- **A.** One back-end server per product (an agents server, an automations server), the shape of every other product.
-- **B.** One back-end server for authored code: apps (plan 22's DbDataApps back end), agents and automations are all projects authored in
+- **A.** One back-end server per product (agents, functions, automations), the shape of every other product.
+- **B.** One back-end server for authored code: apps (plan 22's DbDataApps back end), agents, functions and automations are all projects authored in
   workspaces, built, tested and published to the serving layer, and the scheduler runs workflows. Each keeps its own name, nouns and
   screens.
 
@@ -217,7 +259,7 @@ question 1.**
 | --- | --- | --- |
 | 0 | What plan 16's agents need: the suite-wide command spec test, `DbDataKit.Agents` with the scripted fake, the provider proof against the four providers | 13a W4a work; plan 25 section 2 |
 | 1 | `agent/1` and one front-end agent: questions over a semantic model in the console's chat, with knowledge generated from the catalog and semantic descriptions, and full-text search | wave 0; plan 22 section 3's catalog search |
-| 2 | Functions: a `.csx` or SQL function as a tool of an agent and an endpoint for an app, in a child process in the serving layer | wave 1; the serving contract (plan 20 section 10) |
+| 2 | DbDataFunctions: the function manifest; Sync's scripts move onto it; a `.csx` or SQL function as a tool of an agent and an endpoint for an app, in a child process in the serving layer | wave 1; the serving contract (plan 20 section 10) |
 | 3 | Curated knowledge in DbDataStore (glossary, metrics, verified queries), drafts from agents, evaluation sets; embedding search if chosen | DbDataStore drafts (plan 21); access rules (plan 22 section 2) |
 | 4 | Workflows: triggers, steps, retries, monitoring, lineage; back-end agents in workspaces | shared authoring (plan 22 section 1) |
 | 5 | The work tool: models, app, workflows, assistant | DbDataStore relationships and documents; the app framework's declarative views |
@@ -228,14 +270,15 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 
 | # | Question | Proposed |
 | --- | --- | --- |
-| 1 | Which of the four are servers? | Knowledge and the work tool are not (a library, Store models, a module, an app). Agents and automations share one back-end server with apps (section 6, B) |
+| 1 | Which of these are servers? | Knowledge and the work tool are not (a library, Store models, a module, an app). Agents, functions and automations share one back-end server with apps (section 6, B) |
 | 2 | The work tool's name | DbDataWork |
-| 3 | Automation languages | C# `.csx`, SQL and command steps first; Python later, as a second script host |
+| 3 | Function languages | C# `.csx`, SQL and command steps first; Python later, as a second script host |
 | 4 | Embedding search | optional per install; full-text always |
 | 5 | Agent approvals | reads run without asking; writes, definition changes and outward steps ask; a definition may only tighten |
 | 6 | Unattended agents in workflows | read and propose only; changes become drafts or work items |
 | 7 | The work tool's scope | its own items first; links to GitHub pull requests and workspaces; import from Jira or Azure Boards later; no two-way sync |
 | 8 | First audience | front-end agents first (wave 1), since the semantic layer and catalog are closest to ready |
+| 9 | The name for the suite's custom code | DbDataFunctions, with DbDataAutomations for workflows; the command noun `function` replaces Sync's `script` (section 4.1) |
 
 ## 9. Detailed plans to follow
 
@@ -246,7 +289,7 @@ one branch `suite/<id>-<short-name>`, a "Done when" test, as in 13a):
 | --- | --- | --- |
 | 28 | DbDataKnowledge | to choose when sliced (13a and plans 19 to 26 already use A B C D E F G H J K L M N O P Q R S T U V W X Y Z and AP; D and Q are decision and step numbers, the rest slices) |
 | 29 | DbDataAgents | |
-| 30 | DbDataAutomations | |
+| 30 | DbDataFunctions and DbDataAutomations | |
 | 31 | The work tool | |
 
 ## 10. What this changes in other plans (once approved)
@@ -255,7 +298,8 @@ one branch `suite/<id>-<short-name>`, a "Done when" test, as in 13a):
 | --- | --- |
 | 16 section 1 | the agent runtime loads published `agent/1` definitions; approvals are refined per section 3.3 |
 | 20 section 4 | new modules: `knowledge` (reads), and function calls under `mcp` and `apps` (or a `functions` module) |
-| 22 section 1 | shared authoring gains two project kinds, agents and automations, and the apps back end hosts them (if question 1 is B) |
+| 13 W2, 13a S-series | Sync's scripts become DbDataFunctions functions of an extension-point kind; `script` becomes `function` (a clean break, refused with a message) |
+| 22 section 1 | shared authoring gains three project kinds, agents, functions and automations, and the apps back end hosts them (if question 1 is B) |
 | 22 section 3 | catalog search becomes part of knowledge search |
 | 25 section 2 | adds evaluation sets beside the behaviour tests |
 | 26 | the work tool is the first app the suite ships |
