@@ -193,5 +193,5 @@ public static partial class StoreModels
         });
     }
 
-    private static string NameProblem(string name) => $"'{name}' is not a model name: lower-case letters, digits, '-' and '_', starting with a letter or digit, at most 64.";
+    public static string NameProblem(string name) => $"'{name}' is not a model name: lower-case letters, digits, '-' and '_', starting with a letter or digit, at most 64.";
 }

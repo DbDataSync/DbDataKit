@@ -255,6 +255,39 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_command_line_saves_a_model_and_creates_its_tables_so_a_new_server_needs_no_console_for_its_first_one()
+    {
+        var send = await Client();
+        async Task<(int Exit, string Out, string Error)> Run(params string[] args)
+        {
+            var output = new StringWriter();
+            var error = new StringWriter();
+            var exit = await StoreCli.Router().RunAsync([.. args, "--repo", directory], new DbDataKit.Cli.CliContext(output, error, TextReader.Null));
+            return (exit, output.ToString(), error.ToString());
+        }
+
+        var good = Path.Combine(directory, "cli_territories.yaml");
+        File.WriteAllText(good, Model.Replace("name: territories", "name: cli_territories"));
+        var bad = Path.Combine(directory, "broken.yaml");
+        File.WriteAllText(bad, "schemaVersion: 1\nname: broken\nentities: nope\n");
+
+        Assert.NotEqual(0, (await Run("model", "put", "--file", bad)).Exit);                      // checked first: nothing saved
+        Assert.False(File.Exists(StoreModels.FileOf(directory, "broken")));
+        Assert.Equal(1, (await Run("storage", "create", "--model", "cli_territories")).Exit);       // no such model yet
+
+        var saved = await Run("model", "put", "--file", good);
+        Assert.True(saved.Exit == 0, saved.Error);
+        Assert.Contains("Saved the model cli_territories", saved.Out);
+        var created = await Run("storage", "create", "--model", "cli_territories");
+        Assert.Equal(0, created.Exit);
+        Assert.Contains("Created the tables", created.Out);
+
+        // the tables are there: a write and a read through the API
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/cli_territories/changes", Insert("NA", "North", "1"), ServerRole.Author)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Get, "/api/v1/models/cli_territories/entities/territory/row?key.code=NA", null, ServerRole.Viewer)).StatusCode);
+    }
+
+    [Fact]
     public async Task A_model_whose_connection_has_no_file_says_so_instead_of_failing()
     {
         var send = await Client();

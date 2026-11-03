@@ -33,6 +33,8 @@ public static class StoreCli
     [
         ServerNoun.Create((args, context) => RunServerAsync(args, context, environment))
             .With([.. PairingVerbs.Create(args => new PairingFiles(Path.Combine(DirectoryOf(args, environment), "server.yaml")))]),
+        StoreAdminCommand.Model(),
+        StoreAdminCommand.Storage(),
         StoreService.Noun(StoreServiceEnvironment.Real()),
         HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl),
     ], StoreServer.Version);
