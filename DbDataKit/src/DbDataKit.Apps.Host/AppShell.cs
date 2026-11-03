@@ -45,8 +45,8 @@ public static class AppShell
             <title>{{WebUtility.HtmlEncode(title)}}</title>
             <style>html,body{height:100%;margin:0}iframe{border:0;width:100%;height:100%;display:block}</style>
             </head><body>
-            <script src="{{ScriptPath}}"></script>
             <iframe id="app-frame" data-instance="{{WebUtility.HtmlEncode(instance)}}" title="{{WebUtility.HtmlEncode(title)}}" sandbox="allow-scripts allow-forms allow-popups" src="{{WebUtility.HtmlEncode(bundle)}}"></iframe>
+            <script src="{{ScriptPath}}"></script>
             </body></html>
             """;
         return new AppResponse(200, "text/html; charset=utf-8", new Dictionary<string, string>
