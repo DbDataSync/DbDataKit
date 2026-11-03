@@ -40,7 +40,7 @@ public sealed record RotationResult(RotationFailure Failure, string? Detail = nu
 /// being accepted on the next call; tokens signed by the new one are accepted at once. Asking again for the key the server already has, signed by that key, changes nothing and succeeds, so a console that
 /// could not tell whether its request arrived can send it again.
 /// </summary>
-public sealed class KeyRotationService(string instanceId, PairedClientsFile clients, IReplayCache replay, TimeProvider? clock = null)
+public sealed class KeyRotationService(string instanceId, IPairedClientStore clients, IReplayCache replay, TimeProvider? clock = null)
 {
     public const int SkewSeconds = 60;
 

@@ -27,9 +27,11 @@ public static class IdentityCommand
     }
 
     /// <summary>The state database the server uses, opened the same way (the password of a server engine resolved from its reference).</summary>
-    internal static StateDatabase Open(CliArgs parsed)
+    internal static StateDatabase Open(CliArgs parsed) => OpenState(OptionsOf(parsed));
+
+    /// <summary>The state database of the server these options describe, opened as the server opens it.</summary>
+    internal static StateDatabase OpenState(ProxyOptions options)
     {
-        var options = OptionsOf(parsed);
         var resolver = new SecretResolverChain(SecretsRuntime.CreateProviders(options, SecretsRuntime.OpenStore(options)));
         return ProxyState.Open(ProxyHost.ResolveDataDirectory(options), new StateSettings(options.State.Engine, options.State.ConnectionString),
             text => ConnectionStringReferences.ResolveAsync(text, resolver, ConnectionStringReferences.QuoteDouble).AsTask().GetAwaiter().GetResult());

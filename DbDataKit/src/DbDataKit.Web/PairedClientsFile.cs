@@ -8,7 +8,7 @@ namespace DbDataKit.Web.Trust;
 /// every <see cref="Find"/>, so a pairing or an <c>unpair</c> made by the command line in another process takes effect on the server's next call. A damaged entry is never trusted: it is skipped and named
 /// in <see cref="Problems"/>. Writes go through the surgical YAML editor, so the rest of the file, comments and all, is untouched.
 /// </summary>
-public sealed class PairedClientsFile(string path, TimeProvider? clock = null) : IPairedClients
+public sealed class PairedClientsFile(string path, TimeProvider? clock = null) : IPairedClientStore
 {
     public const string Key = "pairedClients";
 

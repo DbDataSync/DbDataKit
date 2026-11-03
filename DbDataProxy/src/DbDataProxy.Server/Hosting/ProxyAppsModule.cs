@@ -17,7 +17,7 @@ namespace DbDataProxy.Server.Hosting;
 /// Like the identity home it is a web application of its own inside the process, so its pipeline never touches the Flight or management listeners. It serves an instance's bundle with the egress policy of its manifest
 /// (<see cref="AppSite"/>); what an app does with data goes through the store and identity modules with a token, not through this listener. A person is signed in through the identity home (<see cref="OpenIdClient"/>) and needs a role on <c>app:&lt;instance&gt;</c> to see the shell page; the token broker is the next slice (AP05c).
 /// </summary>
-public sealed class ProxyAppsModule(IOptionsMonitor<ProxyOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, ILoggerFactory loggers) : IHostedService, IAsyncDisposable
+public sealed class ProxyAppsModule(IOptionsMonitor<ProxyOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, ILoggerFactory loggers, GroupCertificate? group = null) : IHostedService, IAsyncDisposable
 {
     /// <summary>The secret that holds the seed of the key the apps host signs its app tokens with: made on the first start, and copied to every other instance of a group.</summary>
     public const string SigningKeySecret = "dbdata:proxy:apps:signing-key";
@@ -48,7 +48,7 @@ public sealed class ProxyAppsModule(IOptionsMonitor<ProxyOptions> options, State
         var current = options.CurrentValue;
         // the Flight listener loads the certificate when Kestrel starts, which is after the hosted services: this module may be first
         if (certificate.Current is null)
-            certificate.Set(CertificateProvider.Load(current, ProxyHost.ResolveDataDirectory(current), loggers.CreateLogger("Tls"), secrets: secrets));
+            certificate.Set(CertificateProvider.Load(current, ProxyHost.ResolveDataDirectory(current), loggers.CreateLogger("Tls"), secrets: secrets, group: group));
 
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();

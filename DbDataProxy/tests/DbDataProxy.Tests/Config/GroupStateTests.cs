@@ -151,8 +151,8 @@ public sealed class GroupStateTests : IAsyncLifetime
             Assert.Contains(new StateAuditLog(b.Services.GetRequiredService<StateDatabase>()).Read(), e => e.Command == "data-source.write" && e.UserId == "grace");
 
             // a third instance with a key of its own (none copied) is refused, naming the secret, and keeps no key it made
-            var c = Instance(Path.Combine(_root, "c"), state);
-            var refused = await Assert.ThrowsAnyAsync<SecretConfigurationException>(() => c.StartAsync());
+            // (as it is built, since a group's certificate needs the key, or as it starts)
+            var refused = await Assert.ThrowsAnyAsync<SecretConfigurationException>(async () => await Instance(Path.Combine(_root, "c"), state).StartAsync());
             Assert.Contains(GroupSessionKey.Secret, refused.Message);
             using (var left = await SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = Path.Combine(_root, "c") }).TryResolveAsync(SecretRef.Parse("secret:" + GroupSessionKey.Secret)))
                 Assert.Null(left);
@@ -269,16 +269,15 @@ public sealed class GroupStateTests : IAsyncLifetime
             var (dirA, dirB) = (Path.Combine(_root, "a"), Path.Combine(_root, "b"));
             var (a, managementA, identityA) = await ServingInstance(dirA, state, entra);
             var console = new ConsoleIdentity("console-1", ConsoleSigningKey.Generate());
-            var pairing = new PairingFiles(ProxyConfigFile.PathIn(dirA), Path.Combine(dirA, "pairing-codes.json"));
+            // the group's pairing codes are in its state (plan 20 O04)
+            var pairing = new PairingFiles(ProxyConfigFile.PathIn(dirA), Path.Combine(dirA, "pairing-codes.json"), a.Services.GetRequiredService<StateDatabase>());
             var paired = await PairingClient.PairAsync(new Uri($"https://127.0.0.1:{managementA}"), pairing.Codes().Create(ServerRole.Viewer | ServerRole.Operator | ServerRole.Admin).Code, console);
             var storeA = SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = dirA });
             var storeB = SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = dirB });
             foreach (var secret in new[] { GroupSessionKey.Secret, ProxyIdentityModule.SigningKeySecret })
                 using (var key = await storeA.TryResolveAsync(SecretRef.Parse("secret:" + secret)))
                     await storeB.SetAsync(SecretName.Parse(secret), key!);
-            // the same instance id and paired console: the group is one server to the console
-            Directory.CreateDirectory(ProxyConfigFile.DirectoryIn(dirB));
-            File.Copy(ProxyConfigFile.PathIn(dirA), ProxyConfigFile.PathIn(dirB));
+            // the same instance id and paired console are the group's, in its state (plan 20 O04): nothing to copy
             var (_, managementB, identityB) = await ServingInstance(dirB, state, entra);
             using var atA = Browser(identityA);
             using var atB = Browser(identityB);
@@ -397,7 +396,7 @@ public sealed class GroupStateTests : IAsyncLifetime
             var (b, _, _) = await ServingInstance(dirs[1], poll);
             var console = new ConsoleIdentity("console-1", ConsoleSigningKey.Generate());
             var paired = await PairingClient.PairAsync(new Uri($"https://127.0.0.1:{managementA}"),
-                new PairingFiles(ProxyConfigFile.PathIn(dirs[0]), Path.Combine(dirs[0], "pairing-codes.json")).Codes().Create(ServerRole.Viewer | ServerRole.Operator | ServerRole.Admin).Code, console);
+                new PairingFiles(ProxyConfigFile.PathIn(dirs[0]), Path.Combine(dirs[0], "pairing-codes.json"), a.Services.GetRequiredService<StateDatabase>()).Codes().Create(ServerRole.Viewer | ServerRole.Operator | ServerRole.Admin).Code, console);
             async Task<HttpResponseMessage> Call(HttpMethod method, string path, string? body = null)
             {
                 using var http = new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint));
@@ -449,6 +448,69 @@ public sealed class GroupStateTests : IAsyncLifetime
             var groupStore = new PublishedSemanticModels(new DefinitionStore(c.Services.GetRequiredService<StateDatabase>()), new DbDataKit.Serving.Semantic.SemanticModels());
             groupStore.Delete("sales_catalog", "ada");
             await Eventually(() => modelsB.Find("sales_catalog") is null && c.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>().Find("sales_catalog") is null, "a removed model is served by none");
+        }
+        finally
+        {
+            foreach (var app in _apps)
+            {
+                try { await app.StopAsync(); } catch (Exception ex) when (ex is OperationCanceledException or InvalidOperationException) { }
+            }
+            drop();
+        }
+    }
+
+    [Theory]
+    [InlineData("mssql", "DBKIT_TEST_MSSQL")]
+    [InlineData("postgres", "DBKIT_TEST_POSTGRES")]
+    public async Task A_console_pairs_once_through_any_instance_of_a_group_and_every_instance_is_that_server_with_one_certificate(string engine, string variable)
+    {
+        // plan 20 O04: the group's instance id, paired clients, pairing codes and self-signed certificate are in its state
+        var (state, drop) = ScratchState(engine, variable);
+        try
+        {
+            // the state in server.yaml, as an operator sets a group up, so the command line finds it too
+            var connection = state[1]["--Proxy:State:ConnectionString=".Length..];
+            var dirs = new[] { "a", "b" }.Select(d => Path.Combine(_root, d)).ToArray();
+            foreach (var dir in dirs)
+            {
+                Directory.CreateDirectory(ProxyConfigFile.DirectoryIn(dir));
+                File.WriteAllText(ProxyConfigFile.PathIn(dir), $"schemaVersion: 2\ntls: {{ mode: selfSigned }}\nstate: {{ engine: {engine}, connectionString: '{connection}' }}\n");
+            }
+            var (a, managementA, _) = await ServingInstance(dirs[0], []);
+            var storeA = SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = dirs[0] });
+            foreach (var secret in new[] { GroupSessionKey.Secret, ProxyIdentityModule.SigningKeySecret })
+                using (var key = await storeA.TryResolveAsync(SecretRef.Parse("secret:" + secret)))
+                    await SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = dirs[1] }).SetAsync(SecretName.Parse(secret), key!);
+            var (b, managementB, _) = await ServingInstance(dirs[1], []);
+
+            // one certificate for the group, though each instance would have made its own
+            var thumbprint = a.Services.GetRequiredService<DbDataProxy.Server.Tls.TlsCertificateHolder>().Current!.Thumbprint;
+            Assert.Equal(thumbprint, b.Services.GetRequiredService<DbDataProxy.Server.Tls.TlsCertificateHolder>().Current!.Thumbprint);
+
+            // the operator makes a code on the command line of the first instance's machine; the console redeems it through the second
+            var output = new StringWriter();
+            Assert.Equal(0, await DbDataProxy.Server.Hosting.Cli.RunAsync(["server", "pair", "--max-role", "viewer,operator,admin", "--repo", dirs[0]], new DbDataKit.Cli.CliContext(output, new StringWriter(), TextReader.Null)));
+            var code = System.Text.RegularExpressions.Regex.Match(output.ToString(), @"Pairing code: (\S+)").Groups[1].Value;
+            Assert.False(File.Exists(Path.Combine(dirs[0], "pairing-codes.json")));   // the code waits in the state, not in one instance's folder
+            var console = new ConsoleIdentity("console-1", ConsoleSigningKey.Generate());
+            var paired = await PairingClient.PairAsync(new Uri($"https://127.0.0.1:{managementB}"), code, console);
+
+            // every instance is that one server: the same id, the pinned certificate, and the console's token accepted
+            foreach (var port in new[] { managementA, managementB })
+            {
+                using var http = new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint));
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"https://127.0.0.1:{port}/api/v1/about");
+                request.Headers.Add(ManagementAuthentication.TokenHeader, console.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, "ada", "Ada", ServerRole.Viewer)));
+                var about = await http.SendAsync(request);
+                Assert.True(about.IsSuccessStatusCode, $"{port}: {about.StatusCode}");
+                Assert.Equal(paired.InstanceId, (string)JsonNode.Parse(await about.Content.ReadAsStringAsync())!["instance_id"]!);
+            }
+            var clients = new StringWriter();
+            Assert.Equal(0, await DbDataProxy.Server.Hosting.Cli.RunAsync(["server", "clients", "--repo", dirs[1]], new DbDataKit.Cli.CliContext(clients, new StringWriter(), TextReader.Null)));
+            Assert.Contains("console-1", clients.ToString());
+
+            // the code is spent at every instance
+            await Assert.ThrowsAsync<PairingFailedException>(() => PairingClient.PairAsync(new Uri($"https://127.0.0.1:{managementA}"), code, new ConsoleIdentity("console-2", ConsoleSigningKey.Generate())));
         }
         finally
         {

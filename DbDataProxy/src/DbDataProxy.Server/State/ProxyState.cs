@@ -17,15 +17,23 @@ public static class ProxyState
     /// knows its scripts by position.</summary>
     public const int HomeTemplatesBeforeGroup = 8;
 
+    /// <summary>How many of the home's scripts there were when the group's trust (<see cref="DbDataKit.Web.Trust.GroupTrustSchema"/>, plan 20 O04) was appended after them.</summary>
+    public const int HomeTemplatesBeforeTrust = 9;
+
     /// <summary>The proxy's tables, in the order they were added.</summary>
     public static StateSchema Schema { get; } = new([
         NotificationSchema.Feed, SavedQuerySchema.Tables, DbDataKit.State.DefinitionSchema.Tables, DbDataKit.State.AppStorageSchema.Tables,
         .. DbDataKit.Identity.HomeSchema.Templates.Take(HomeTemplatesBeforeGroup),
         ProxyGroupSchema.Tables,                                                     // plan 20 O02: sessions, audit, the group's key check, the running instances
-        .. DbDataKit.Identity.HomeSchema.Templates.Skip(HomeTemplatesBeforeGroup),
+        .. DbDataKit.Identity.HomeSchema.Templates.Take(HomeTemplatesBeforeTrust).Skip(HomeTemplatesBeforeGroup),
+        DbDataKit.Web.Trust.GroupTrustSchema.Tables,                                 // plan 20 O04: the group's instance id, paired clients, pairing codes and certificate
+        .. DbDataKit.Identity.HomeSchema.Templates.Skip(HomeTemplatesBeforeTrust),
     ]);
 
     public static string PathIn(string dataDirectory) => Path.Combine(dataDirectory, FileName);
+
+    /// <summary>Whether the state is a group's (SQL Server or PostgreSQL), whose instances share their identity and pairings; a SQLite state is one instance's.</summary>
+    public static bool IsGroup(StateDatabase state) => !string.Equals(state.Dialect.Engine, DbDataKit.State.StateEngineIds.Sqlite, StringComparison.OrdinalIgnoreCase);
 
     public static StateDatabase Open(string dataDirectory, StateSettings? settings = null, Func<string, string>? resolveConnectionString = null)
     {

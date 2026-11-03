@@ -259,8 +259,10 @@ public static class ProxyHost
         builder.Services.AddSingleton<DbDataProxy.Server.State.ServingInstanceLease>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<DbDataProxy.Server.State.ServingInstanceLease>());
         builder.Services.AddSingleton<IReadinessProbe>(new CertificateReadinessProbe(() => holder.Current, CertificateProvider.RenewBeforeDays));
+        // a group of self-signed instances presents one certificate, kept in its state (plan 20 O04)
+        builder.Services.AddSingleton<GroupCertificate>();
         builder.Services.AddHostedService(sp => new CertificateRotationService(
-            holder, options, dataDirectory, sp.GetRequiredService<ILogger<CertificateRotationService>>()));
+            holder, options, dataDirectory, sp.GetRequiredService<ILogger<CertificateRotationService>>(), group: sp.GetRequiredService<GroupCertificate>()));
 
         builder.WebHost.ConfigureKestrel(kestrel =>
         {
@@ -272,7 +274,8 @@ public static class ProxyHost
             // the certificate is loaded here, not by the Flight listener: the management and identity listeners need it when the instance serves no Flight SQL
             if (options.Tls.Mode != TlsMode.None && holder.Current is null)
                 holder.Set(CertificateProvider.Load(options, dataDirectory,
-                    kestrel.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger("Tls"), secrets: kestrel.ApplicationServices.GetRequiredService<SecretsRuntime>()));
+                    kestrel.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger("Tls"), secrets: kestrel.ApplicationServices.GetRequiredService<SecretsRuntime>(),
+                    group: kestrel.ApplicationServices.GetRequiredService<GroupCertificate>()));
             var address = IPAddress.Parse(options.Listen.Address);
             if (ProxyModules.Has(options, ProxyModules.FlightSql)) kestrel.Listen(address, options.Listen.Port, listen =>
             {

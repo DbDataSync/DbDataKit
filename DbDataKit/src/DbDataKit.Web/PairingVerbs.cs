@@ -5,10 +5,17 @@ namespace DbDataKit.Web.Trust;
 /// <summary>Where a server keeps what pairing needs; the product says, the verbs do the rest.</summary>
 /// <param name="ServerYaml">The server's <c>server.yaml</c>.</param>
 /// <param name="CodesFile">Where the pairing codes wait; <c>pairing-codes.json</c> beside <paramref name="ServerYaml"/> unless a server keeps its settings in a folder under version control and its codes elsewhere.</param>
-public sealed record PairingFiles(string ServerYaml, string? CodesFile = null)
+/// <param name="Group">The group's state, for a server whose instances share one (plan 20 O04): its paired clients and pairing codes are kept there, so a pairing made through any instance holds for all of them; null keeps
+/// them in the files.</param>
+public sealed record PairingFiles(string ServerYaml, string? CodesFile = null, DbDataKit.State.StateDatabase? Group = null)
 {
-    public PairedClientsFile Clients() => new(ServerYaml);
-    public PairingCodes Codes() => new(CodesFile ?? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(ServerYaml))!, "pairing-codes.json"));
+    public IPairedClientStore Clients() => Group is { } state ? new StatePairedClients(state, new PairedClientsFile(ServerYaml)) : new PairedClientsFile(ServerYaml);
+
+    public IPairingCodeStore Codes() => Group is { } state ? new StatePairingCodes(state) : new PairingCodes(CodesFile ?? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(ServerYaml))!, "pairing-codes.json"));
+
+    /// <summary>The server's instance id: its <c>server.yaml</c>'s, or the group's (<see cref="GroupIdentity.InstanceId"/>).</summary>
+    public string InstanceId(string prefix, string pairingCommand) =>
+        Group is { } state ? GroupIdentity.InstanceId(state, ServerYaml, prefix, pairingCommand) : ServerIdentity.InstanceId(ServerYaml, prefix, pairingCommand);
 }
 
 /// <summary>

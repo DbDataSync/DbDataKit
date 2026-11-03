@@ -20,7 +20,7 @@ public static class CertificateProvider
     public const string PasswordFileSuffix = ".pwd";
     public const int RenewBeforeDays = 30;
 
-    public static X509Certificate2? Load(ProxyOptions options, string dataDirectory, ILogger logger, TimeProvider? time = null, string? serviceName = null, SecretsRuntime? secrets = null)
+    public static X509Certificate2? Load(ProxyOptions options, string dataDirectory, ILogger logger, TimeProvider? time = null, string? serviceName = null, SecretsRuntime? secrets = null, GroupCertificate? group = null)
     {
         var tls = options.Tls;
         // The password may be a secret reference; resolve it for this load only (the options snapshot is not changed).
@@ -45,7 +45,10 @@ public static class CertificateProvider
                 return LoadFromStore(tls);
 
             default:
-                return LoadOrCreateSelfSigned(tls, dataDirectory, logger, time, serviceName ?? ProxyHost.ServiceName);
+                // an instance of a group serves the group's certificate, so a console paired through any of them trusts all of them (plan 20 O04)
+                return group is { Enabled: true }
+                    ? group.Choose(() => LoadOrCreateSelfSigned(tls, dataDirectory, logger, time, serviceName ?? ProxyHost.ServiceName), certificate => NeedsRotation(certificate, time))
+                    : LoadOrCreateSelfSigned(tls, dataDirectory, logger, time, serviceName ?? ProxyHost.ServiceName);
         }
     }
 

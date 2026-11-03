@@ -20,7 +20,8 @@ public sealed class CertificateRotationService(
     ProxyOptions options,
     string dataDirectory,
     ILogger<CertificateRotationService> log,
-    TimeProvider? time = null) : BackgroundService
+    TimeProvider? time = null,
+    GroupCertificate? group = null) : BackgroundService
 {
     public static readonly TimeSpan Interval = TimeSpan.FromHours(6);
 
@@ -44,7 +45,8 @@ public sealed class CertificateRotationService(
             // A store certificate is replaced by whoever renews it; pick the new one up (same subject, later expiry).
             // A self-signed one is rotated by us once it is inside its renewal window.
             if (options.Tls.Mode == TlsMode.SelfSigned && !CertificateProvider.NeedsRotation(current, time)) return false;
-            var next = CertificateProvider.Load(options, dataDirectory, log, time);
+            // in a group the first instance to renew keeps the new certificate in the state, and the others take it at their next check
+            var next = CertificateProvider.Load(options, dataDirectory, log, time, group: group);
             if (next is null || next.Thumbprint == current.Thumbprint) return false;
             holder.Set(next);
             log.LogInformation("Rotated the TLS certificate: {Old} -> {New}, valid until {NotAfter:u}. Clients must trust the new certificate.",

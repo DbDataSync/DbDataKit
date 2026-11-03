@@ -18,7 +18,7 @@ public sealed record PairingCode(string Code, DateTimeOffset ExpiresAt);
 /// codes wait in a small file next to <c>server.yaml</c> because the command that makes them and the server that redeems them are different processes. Only a hash of a code is stored; a code expires,
 /// works once, and five wrong codes in a row cancel every code still waiting (a code is 100 bits, so this is for the day someone tries).
 /// </summary>
-public sealed class PairingCodes(string path, TimeProvider? clock = null)
+public sealed class PairingCodes(string path, TimeProvider? clock = null) : IPairingCodeStore
 {
     public static readonly TimeSpan DefaultLifetime = TimeSpan.FromMinutes(10);
     public const int MaxFailures = 5;
@@ -42,13 +42,25 @@ public sealed class PairingCodes(string path, TimeProvider? clock = null)
 
     public PairingCode Create(ServerRole ceiling, string? label = null, TimeSpan? lifetime = null)
     {
-        var chars = new char[20];
-        for (var i = 0; i < chars.Length; i++) chars[i] = Alphabet[RandomNumberGenerator.GetInt32(Alphabet.Length)];
-        var raw = new string(chars);
+        var raw = NewRaw();
         var expires = _clock.GetUtcNow() + (lifetime ?? DefaultLifetime);
         Update(doc => doc.Codes.Add(new Entry { Hash = Hash(raw), Expires = expires, Ceiling = (int)ceiling, Label = label }));
-        return new PairingCode(string.Join('-', Enumerable.Range(0, 4).Select(i => raw.Substring(i * 5, 5))), expires);
+        return Display(raw, expires);
     }
+
+    /// <summary>A new code: 20 letters and digits of the code alphabet.</summary>
+    internal static string NewRaw()
+    {
+        var chars = new char[20];
+        for (var i = 0; i < chars.Length; i++) chars[i] = Alphabet[RandomNumberGenerator.GetInt32(Alphabet.Length)];
+        return new string(chars);
+    }
+
+    /// <summary>The hash a store keeps of a code (never the code).</summary>
+    internal static string HashOf(string raw) => Hash(raw);
+
+    /// <summary>A code as a person reads it: four groups of five.</summary>
+    internal static PairingCode Display(string raw, DateTimeOffset expires) => new(string.Join('-', Enumerable.Range(0, 4).Select(i => raw.Substring(i * 5, 5))), expires);
 
     /// <summary>Spends the code: the grant it carries, or null when it is wrong, expired or used. A wrong code counts against <see cref="MaxFailures"/>.</summary>
     public PairingGrant? Redeem(string? code)
