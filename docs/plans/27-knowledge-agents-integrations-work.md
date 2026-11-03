@@ -199,6 +199,8 @@ connection bound for that channel (a sandbox endpoint) or are refused; they are 
 
 ### 4.6 Elevated actions: permissions held by the action, not the user
 
+**Confirmed by the owner (2026-11-03)** as written here; who approves the grants is still owner question 11.
+
 **The need (owner, 2026-11-03).** Some workflows should let a person make one specific change to DbDataStore data that they have no
 permission to make directly. **The permission to read and write the data is assigned to the action. The person is given permission to
 run the action.** The action checks each request and then applies it or rejects it. Examples:
