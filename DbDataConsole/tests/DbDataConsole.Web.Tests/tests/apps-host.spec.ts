@@ -74,13 +74,15 @@ const manifest = [
 
 // The app: a page and a script (the policy allows no inline script). It asks the shell for a token, writes a row and reads the rows back through the host, and tries to reach what a sandbox must not.
 const index = '<!doctype html><html><head><meta charset="utf-8"><title>Territory notes</title></head><body><h1>Territory notes</h1>' +
-  '<pre id="rows">loading</pre><pre id="parent-cookie">untested</pre><pre id="own-cookie">untested</pre><pre id="elsewhere">untested</pre><script src="app.js"></script></body></html>\n'
+  '<button id="go">go</button><pre id="route">none</pre><pre id="rows">loading</pre><pre id="parent-cookie">untested</pre><pre id="own-cookie">untested</pre><pre id="elsewhere">untested</pre><script src="app.js"></script></body></html>\n'
 const script = `
 const out = (id, text) => { document.getElementById(id).textContent = text }
 const waiting = new Map()
 window.addEventListener('message', (event) => {
   const m = event.data
-  if (event.source !== window.parent || !m || m.dbdata !== 'app/1' || !waiting.has(m.id)) return
+  if (event.source !== window.parent || !m || m.dbdata !== 'app/1') return
+  if (m.type === 'navigate') { out('route', m.path); return }
+  if (!waiting.has(m.id)) return
   waiting.get(m.id)(m); waiting.delete(m.id)
 })
 const token = () => new Promise((resolve, reject) => {
@@ -88,6 +90,10 @@ const token = () => new Promise((resolve, reject) => {
   waiting.set(id, (m) => (m.type === 'token' ? resolve(m.token) : reject(new Error(m.message))))
   window.parent.postMessage({ dbdata: 'app/1', type: 'token.request', id }, '*')
 })
+document.getElementById('go').onclick = () => {
+  window.parent.postMessage({ dbdata: 'app/1', type: 'route', path: '/territories/NA' }, '*')
+  out('route', '/territories/NA')
+}
 const data = '/apps/acme/_data/__STORE__/api/v1/models/territories'
 async function main() {
   const t = await token()
@@ -152,6 +158,9 @@ test.beforeAll(async () => {
   fs.writeFileSync(path.join(appDirectory, 'app.js'), script.replace('__STORE__', paired.id))
   run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', appDirectory])
   run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', 'acme', '--app', 'territory-notes', '--bind', 'territories=default'])
+  // two more instances and a menu of three: Ada is given a role on beta but not on hidden
+  for (const name of ['beta', 'hidden']) run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', name, '--app', 'territory-notes', '--bind', 'territories=default'])
+  run(proxyDll, proxyDirectory, ['apps', 'nav-save', '--name', 'main', '--title', 'Main', '--item', 'acme=Acme,beta=Beta,hidden=Hidden'])
   const proxy = start([proxyDll, 'server', 'run', `--Proxy:DataDirectory=${proxyDirectory}`])
   await waitFor(`${homeUrl}/health/live`, proxy.output)
   await waitFor(`${appsUrl}/health/live`, proxy.output)
@@ -184,6 +193,7 @@ test('a person signs in and the sandboxed app reads and writes the Store through
 
   const ada = run(proxyDll, proxyDirectory, ['identity', 'user-list']).users.find((u: any) => u.name === 'Ada Lovelace')
   run(proxyDll, proxyDirectory, ['identity', 'assign', '--user', ada.id, '--app', 'acme', '--roles', 'author'])
+  run(proxyDll, proxyDirectory, ['identity', 'assign', '--user', ada.id, '--app', 'beta', '--roles', 'author'])
 
   // a new sign-in at the apps host (the host reads her roles when she arrives); the home already knows her
   await context.clearCookies({ domain: 'localhost' })
@@ -204,6 +214,25 @@ test('a person signs in and the sandboxed app reads and writes the Store through
   await expect(app.locator('#parent-cookie')).toHaveText(/^blocked /)
   await expect(app.locator('#own-cookie')).toHaveText(/^blocked /)
   await expect(app.locator('#elsewhere')).toHaveText('blocked')
+
+  // the shell's header is the host's: the person, and the menu with only the instances she may open
+  await expect(page.locator('header .who')).toHaveText('Ada Lovelace')
+  await expect(page.locator('header nav a')).toHaveText(['Acme', 'Beta'])
+  await expect(page.locator('header nav a[aria-current=page]')).toHaveText('Acme')
+
+  // the app reports a route and the address follows; the menu leads to another instance and the back button returns to the route
+  await app.locator('#go').click()
+  await expect(page).toHaveURL(`${appsUrl}/apps/acme/#/territories/NA`)
+  await page.locator('header nav a', { hasText: 'Beta' }).click()
+  await expect(page).toHaveURL(`${appsUrl}/apps/beta/`)
+  await page.goBack()
+  await expect(page).toHaveURL(`${appsUrl}/apps/acme/#/territories/NA`)
+  await expect(page.frameLocator('#app-frame').locator('#route')).toHaveText('/territories/NA')
+
+  // a pasted link opens the app at that route
+  await page.goto(`${appsUrl}/apps/beta/`)
+  await page.goto(`${appsUrl}/apps/acme/#/territories/NA`)
+  await expect(page.frameLocator('#app-frame').locator('#route')).toHaveText('/territories/NA')
 
   // the row is in the Store's tables
   const client = new pg.Client({ connectionString: toPg(warehouse!) })
