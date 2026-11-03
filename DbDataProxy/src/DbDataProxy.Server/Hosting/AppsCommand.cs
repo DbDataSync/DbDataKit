@@ -23,6 +23,11 @@ public static class AppsCommand
             DataSchemas.Object([("name", DataSchemas.String), ("app", DataSchemas.String), ("version", DataSchemas.Integer)], "name", "app", "version")),
         new Verb("instance-list", "The instances the host serves, with the app and version each runs", EffectClass.OfflineOnly, Where, InstanceListAsync,
             DataSchemas.Object([("instances", DataSchemas.ListOf(DataSchemas.Object([("name", DataSchemas.String), ("app", DataSchemas.String), ("pin", DataSchemas.Integer), ("title", DataSchemas.String)], "name", "app")))], "instances")),
+        new Verb("nav-save", "Make or change a navigation set: a titled, ordered menu the shell shows in each member instance (a person sees only the members they may open)", EffectClass.RepoFilesOnly,
+            $"--name <set> --title <text> --item <instance[=label]>[,<instance[=label]>...] {Where}", NavSaveAsync,
+            DataSchemas.Object([("name", DataSchemas.String), ("version", DataSchemas.Integer)], "name", "version")),
+        new Verb("nav-list", "The navigation sets and their members", EffectClass.OfflineOnly, Where, NavListAsync,
+            DataSchemas.Object([("sets", DataSchemas.ListOf(DataSchemas.Object([("name", DataSchemas.String), ("title", DataSchemas.String), ("instances", DataSchemas.ListOf(DataSchemas.String))], "name", "title", "instances")))], "sets")),
         new Verb("store-pair", "Pair the apps host with a Store server, using the code its administrator made", EffectClass.RepoFilesOnly, $"--url <https://store:port> --code <pairing code> [--name <label>] {Where}", PairAsync,
             DataSchemas.Object([("id", DataSchemas.String), ("url", DataSchemas.String), ("fingerprint", DataSchemas.String)], "id", "url", "fingerprint")),
         new Verb("store-list", "The Store servers the apps host is paired with; the id is what an app's data calls name", EffectClass.OfflineOnly, Where, ListAsync,
@@ -125,6 +130,44 @@ public static class AppsCommand
         foreach (var i in all) await context.Out.WriteLineAsync($"{i.Name}  {i.App}  {(i.Pin is { } p ? "pinned to " + p : "current")}{(i.Title is null ? "" : "  " + i.Title)}");
         if (all.Count == 0) await context.Out.WriteLineAsync("No instance is published. Publish an app with: apps publish --dir <folder>, then apps instance-save --name <instance> --app <app>");
         context.Data["instances"] = all.Select(i => new Dictionary<string, object?> { ["name"] = i.Name, ["app"] = i.App, ["pin"] = i.Pin, ["title"] = i.Title }).ToList();
+        return CliExit.Ok;
+    }
+
+    private static async Task<int> NavSaveAsync(string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "name", "title", "item", "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("name") is not { Length: > 0 } name || parsed.Get("title") is not { Length: > 0 } title || parsed.Get("item") is not { Length: > 0 } items)
+        {
+            await context.Error.WriteLineAsync($"Usage: apps nav-save --name <set> --title <text> --item <instance[=label]>[,...] {Where}");
+            return CliExit.Usage;
+        }
+        var entries = items.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(part =>
+        {
+            var at = part.IndexOf('=');
+            return at < 0 ? new NavigationEntry(part) : new NavigationEntry(part[..at], part[(at + 1)..]);
+        }).ToList();
+        try
+        {
+            var saved = new AppInstanceStore(new DefinitionStore(IdentityCommand.Open(parsed))).SaveNavigation(new NavigationSet(name, title, entries), Environment.UserName);
+            await context.Out.WriteLineAsync($"Saved navigation set {name} (version {saved.Version}) with {entries.Count} instance(s).");
+            context.Data["name"] = name;
+            context.Data["version"] = saved.Version;
+            return CliExit.Ok;
+        }
+        catch (AppInstanceException ex)
+        {
+            await context.Error.WriteLineAsync(ex.Message);
+            return CliExit.Failure;
+        }
+    }
+
+    private static async Task<int> NavListAsync(string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
+        var sets = new AppInstanceStore(new DefinitionStore(IdentityCommand.Open(parsed))).NavigationSets();
+        foreach (var set in sets) await context.Out.WriteLineAsync($"{set.Name}  {set.Title}  {string.Join(", ", set.Entries.Select(e => e.Instance))}");
+        if (sets.Count == 0) await context.Out.WriteLineAsync("No navigation set is published. Make one with: apps nav-save --name <set> --title <text> --item <instance>,<instance>");
+        context.Data["sets"] = sets.Select(s => new Dictionary<string, object?> { ["name"] = s.Name, ["title"] = s.Title, ["instances"] = s.Entries.Select(e => e.Instance).ToList() }).ToList();
         return CliExit.Ok;
     }
 

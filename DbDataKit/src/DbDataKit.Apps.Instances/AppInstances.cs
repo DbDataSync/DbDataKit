@@ -15,6 +15,12 @@ public sealed record AppInstance(string Name, string App, int? Pin = null, strin
     public IReadOnlyDictionary<string, string> Bindings { get; init; } = Bindings ?? new Dictionary<string, string>();
 }
 
+/// <summary>One member of a navigation set: an instance, with the label and icon the menu shows (the instance's title and none when absent).</summary>
+public sealed record NavigationEntry(string Instance, string? Label = null, string? Icon = null);
+
+/// <summary>A named, ordered menu of instances (plan 26 section 4): published like any definition, shown by the shell in every member instance.</summary>
+public sealed record NavigationSet(string Name, string Title, IReadOnlyList<NavigationEntry> Entries);
+
 /// <summary>An instance with the version of the app it runs and that version's manifest, as the host serves it.</summary>
 public sealed record ResolvedInstance(AppInstance Instance, int InstanceVersion, DefinitionVersion AppVersion, AppManifest Manifest, AppPackage Package);
 
@@ -37,6 +43,8 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
 {
     public const string AppKind = "app";
     public const string InstanceKind = "app-instance";
+    public const string NavigationKind = "app-nav";
+    public const int MaximumNavigationEntries = 50;
     private const int MaximumSettings = 50;
     private const int MaximumSettingLength = 2000;
 
@@ -91,6 +99,35 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
         if (app is null) return null;
         var package = AppPackage.Parse(app.Content);
         return new ResolvedInstance(instance, stored.Version, app, AppManifestLoader.Load(package.ManifestYaml).Manifest!, package);
+    }
+
+    public DefinitionVersion SaveNavigation(NavigationSet set, string by, string channel = DefinitionStore.Production, string? note = null)
+    {
+        if (!AppManifestLoader.NameRule.IsMatch(set.Name)) throw new AppInstanceException($"A navigation set's name is lower-case letters, digits, '-' and '_', starting with a letter or digit; '{set.Name}' is not.");
+        if (string.IsNullOrWhiteSpace(set.Title)) throw new AppInstanceException("A navigation set needs a title.");
+        if (set.Entries.Count == 0) throw new AppInstanceException("A navigation set lists at least one instance.");
+        if (set.Entries.Count > MaximumNavigationEntries) throw new AppInstanceException($"A navigation set has at most {MaximumNavigationEntries} entries.");
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entry in set.Entries)
+        {
+            if (!seen.Add(entry.Instance)) throw new AppInstanceException($"'{entry.Instance}' is listed twice in the set '{set.Name}'.");
+            if (definitions.Current(InstanceKind, entry.Instance, channel) is null) throw new AppInstanceException($"'{entry.Instance}' is not an instance published to {channel}; save it before listing it in a set.");
+        }
+        var node = new JsonObject
+        {
+            ["title"] = set.Title,
+            ["entries"] = new JsonArray(set.Entries.Select(e => (JsonNode)new JsonObject { ["instance"] = e.Instance, ["label"] = e.Label, ["icon"] = e.Icon }).ToArray()),
+        };
+        return definitions.Publish(NavigationKind, set.Name, node.ToJsonString(), by, [.. set.Entries.Select(e => $"{InstanceKind}:{e.Instance}")], note, channel);
+    }
+
+    public IReadOnlyList<NavigationSet> NavigationSets(string channel = DefinitionStore.Production) =>
+        [.. definitions.CurrentOfKind(NavigationKind, channel).Select(v => ReadNavigation(v.Name, v.Content))];
+
+    private static NavigationSet ReadNavigation(string name, string content)
+    {
+        var node = JsonNode.Parse(content)!;
+        return new NavigationSet(name, (string)node["title"]!, [.. node["entries"]!.AsArray().Select(e => new NavigationEntry((string)e!["instance"]!, (string?)e["label"], (string?)e["icon"]))]);
     }
 
     private static string Write(AppInstance instance)

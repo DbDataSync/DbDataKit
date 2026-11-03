@@ -89,9 +89,28 @@ public static class AppsEndpoints
                 await Text(context, 403, "You are signed in, but the identity home gives you no role on this app.");
                 return;
             }
-            await Write(context, AppShell.Page(instance, TitleOf(resolved)));
+            await Write(context, AppShell.Page(instance, TitleOf(resolved), resolved.Manifest.Chrome == AppChrome.None ? null : HeaderOf(instances, session, instance)));
         });
         return app;
+    }
+
+    /// <summary>The person and the menus of the sets the instance belongs to, each listing only what this person may open (their roles at the home decide), so a menu never advertises a link that ends in a refusal.</summary>
+    public static AppShell.Header HeaderOf(AppInstanceStore instances, AppSession session, string instance)
+    {
+        var menus = new List<AppShell.Menu>();
+        foreach (var set in instances.NavigationSets().Where(s => s.Entries.Any(e => e.Instance == instance)))
+        {
+            var links = new List<AppShell.MenuLink>();
+            foreach (var entry in set.Entries)
+            {
+                var current = entry.Instance == instance;
+                if (!current && session.RolesOn(entry.Instance).Count == 0) continue;
+                if (instances.Resolve(entry.Instance) is not { } member) continue;
+                links.Add(new AppShell.MenuLink(entry.Instance, entry.Label ?? TitleOf(member), entry.Icon, current));
+            }
+            menus.Add(new AppShell.Menu(set.Title, links));
+        }
+        return new AppShell.Header(session.Identity.Name ?? session.Identity.Email ?? session.Identity.UserId, menus);
     }
 
     private static string TitleOf(ResolvedInstance resolved) => resolved.Instance.Title ?? resolved.Manifest.Title ?? resolved.Instance.Name;
