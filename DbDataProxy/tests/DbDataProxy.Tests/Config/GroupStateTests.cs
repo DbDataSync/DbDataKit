@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using DbDataKit.Identity;
 using DbDataKit.Secrets;
 using DbDataKit.State;
@@ -12,6 +13,7 @@ using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Configuration;
 using DbDataProxy.Server.Hosting;
 using DbDataProxy.Server.Secrets;
+using DbDataProxy.Server.Serving;
 using DbDataProxy.Server.State;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -353,6 +355,135 @@ public sealed class GroupStateTests : IAsyncLifetime
             }
             drop();
         }
+    }
+
+    [Theory]
+    [InlineData("mssql", "DBKIT_TEST_MSSQL")]
+    [InlineData("postgres", "DBKIT_TEST_POSTGRES")]
+    public async Task A_model_published_through_one_instance_is_served_by_every_one_and_by_one_started_after_the_publisher_stopped(string engine, string variable)
+    {
+        // plan 20 O03: the published definitions are the group's; each instance follows them and keeps the last version it could load
+        var (state, drop) = ScratchState(engine, variable);
+        try
+        {
+            string[] poll = [.. state, "--Proxy:State:DefinitionPollSeconds=1"];
+            var catalog = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "semantic", "catalog.yaml"));
+            // the data source the model reads, set up on every instance as an operator would (each instance's configuration is its own)
+            var data = Path.Combine(_root, "sales.duckdb");
+            using (var duck = new DuckDB.NET.Data.DuckDBConnection("Data Source=" + data))
+            {
+                duck.Open();
+                foreach (var table in DbDataKit.Semantic.CatalogLoader.LoadText(catalog).Doc.Sources.Where(s => DbDataKit.Serving.Semantic.SemanticModel.BaseSource(s.Key) == "sqlserver_sales")
+                    .SelectMany(s => s.Value.Joins.Values.Select(j => j.Table).Append(s.Value.Fact.Table)).Distinct())
+                {
+                    using var create = duck.CreateCommand();
+                    create.CommandText = $"CREATE TABLE IF NOT EXISTS {table} (x INTEGER)";
+                    create.ExecuteNonQuery();
+                }
+            }
+            var dirs = new[] { "a", "b", "c" }.Select(d => Path.Combine(_root, d)).ToArray();
+            foreach (var dir in dirs)
+            {
+                Directory.CreateDirectory(Path.Combine(ProxyConfigFile.DirectoryIn(dir), "connections"));
+                File.WriteAllText(Path.Combine(ProxyConfigFile.DirectoryIn(dir), "connections", "sales-ro.yaml"), Conn.Yaml("sales-ro", "duckdb", "Data Source=" + data));
+            }
+
+            var (a, managementA, _) = await ServingInstance(dirs[0], poll);
+            var storeA = SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = dirs[0] });
+            foreach (var other in dirs[1..])
+                foreach (var secret in new[] { GroupSessionKey.Secret, ProxyIdentityModule.SigningKeySecret })
+                    using (var key = await storeA.TryResolveAsync(SecretRef.Parse("secret:" + secret)))
+                        await SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = other }).SetAsync(SecretName.Parse(secret), key!);
+            var (b, _, _) = await ServingInstance(dirs[1], poll);
+            var console = new ConsoleIdentity("console-1", ConsoleSigningKey.Generate());
+            var paired = await PairingClient.PairAsync(new Uri($"https://127.0.0.1:{managementA}"),
+                new PairingFiles(ProxyConfigFile.PathIn(dirs[0]), Path.Combine(dirs[0], "pairing-codes.json")).Codes().Create(ServerRole.Viewer | ServerRole.Operator | ServerRole.Admin).Code, console);
+            async Task<HttpResponseMessage> Call(HttpMethod method, string path, string? body = null)
+            {
+                using var http = new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint));
+                using var request = new HttpRequestMessage(method, $"https://127.0.0.1:{managementA}{path}");
+                request.Headers.Add(ManagementAuthentication.TokenHeader, console.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, "ada", "Ada", ServerRole.Admin)));
+                if (body is not null) request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+                return await http.SendAsync(request);
+            }
+            static string Publish(string catalog, int? expected) =>
+                JsonSerializer.Serialize(new { catalog, sources = new Dictionary<string, string> { ["sqlserver_sales"] = "sales-ro" }, expected_version = expected });
+            static async Task Eventually(Func<bool> served, string what)
+            {
+                for (var i = 0; i < 100 && !served(); i++) await Task.Delay(100);
+                Assert.True(served(), what);
+            }
+            var modelsA = a.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>();
+            var modelsB = b.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>();
+
+            // published through A: A serves it at once, B when it next looks
+            var first = await Call(HttpMethod.Put, "/api/v1/semantic-models/sales_catalog", Publish(catalog, null));
+            Assert.True(first.IsSuccessStatusCode, await first.Content.ReadAsStringAsync());
+            Assert.NotNull(modelsA.Find("sales_catalog"));
+            await Eventually(() => modelsB.Find("sales_catalog") is not null, "the second instance serves the model published through the first");
+            var v1 = modelsB.Find("sales_catalog")!;
+
+            // a version neither can load (written by a publisher that skipped the checks): the version each served stays, and the listing says why
+            var definitions = new DefinitionStore(a.Services.GetRequiredService<StateDatabase>());
+            definitions.Publish(PublishedSemanticModels.DefinitionKind, "sales_catalog", JsonSerializer.Serialize(new { catalog = "name: sales_catalog\nnot: a catalog", sources = new { }, ssas = new { } }), "someone");
+            var published = b.Services.GetRequiredService<PublishedSemanticModels>();
+            await Eventually(() => published.Failed("sales_catalog") is { Version: 2 }, "the second instance tried version 2");
+            Assert.Same(v1, modelsB.Find("sales_catalog"));
+            Assert.Equal(1, published.Served("sales_catalog"));
+            await Eventually(() => a.Services.GetRequiredService<PublishedSemanticModels>().Failed("sales_catalog") is not null, "the first instance tried version 2");
+            var listed = JsonNode.Parse(await (await Call(HttpMethod.Get, "/api/v1/semantic-models")).Content.ReadAsStringAsync())!["models"]!.AsArray().Single()!;
+            Assert.Equal((2, 1, 2), ((int)listed["current_version"]!, (int)listed["served_version"]!, (int)listed["failed_version"]!));
+
+            // a good version after it reaches both
+            var third = await Call(HttpMethod.Put, "/api/v1/semantic-models/sales_catalog", Publish(catalog.Replace("Governed sales", "Sales"), 2));
+            Assert.True(third.IsSuccessStatusCode, await third.Content.ReadAsStringAsync());
+            await Eventually(() => published.Served("sales_catalog") == 3 && published.Failed("sales_catalog") is null, "the second instance serves version 3");
+
+            // the publisher (and the instance it published through) stopped: an instance started now serves what the group serves
+            await a.StopAsync();
+            var (c, _, _) = await ServingInstance(dirs[2], poll);
+            Assert.Equal(3, c.Services.GetRequiredService<PublishedSemanticModels>().Served("sales_catalog"));
+            Assert.NotNull(c.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>().Find("semantic:sales_catalog"));
+
+            // and a removal reaches the instances still running
+            var groupStore = new PublishedSemanticModels(new DefinitionStore(c.Services.GetRequiredService<StateDatabase>()), new DbDataKit.Serving.Semantic.SemanticModels());
+            groupStore.Delete("sales_catalog", "ada");
+            await Eventually(() => modelsB.Find("sales_catalog") is null && c.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>().Find("sales_catalog") is null, "a removed model is served by none");
+        }
+        finally
+        {
+            foreach (var app in _apps)
+            {
+                try { await app.StopAsync(); } catch (Exception ex) when (ex is OperationCanceledException or InvalidOperationException) { }
+            }
+            drop();
+        }
+    }
+
+    [Fact]
+    public async Task The_models_an_instance_published_before_are_read_into_the_groups_state_once()
+    {
+        // what plan 19 J13 kept in semantic-models/ of the data directory: two versions, the first one current
+        var dir = Path.Combine(_root, "legacy-models");
+        var folder = Path.Combine(dir, PublishedSemanticModels.LegacyFolder, "sales_catalog");
+        Directory.CreateDirectory(folder);
+        var catalog = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "semantic", "catalog.yaml"));
+        File.WriteAllText(Path.Combine(folder, "v0001.yaml"), catalog);
+        File.WriteAllText(Path.Combine(folder, "v0002.yaml"), catalog.Replace("Governed sales", "Sales"));
+        foreach (var n in new[] { 1, 2 })
+            File.WriteAllText(Path.Combine(folder, $"v{n:D4}.json"), JsonSerializer.Serialize(new PublishedVersion(n, "build-1", "Ada", DateTimeOffset.UtcNow, new() { ["sqlserver_sales"] = "sales-ro" }, []), new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        File.WriteAllText(Path.Combine(folder, "current"), "1");
+
+        var app = Instance(dir);
+        await app.StartAsync();
+        var published = app.Services.GetRequiredService<PublishedSemanticModels>();
+        Assert.Equal(1, published.Current("sales_catalog"));
+        Assert.Equal(1, published.Served("sales_catalog"));
+        Assert.Equal(["build-1", "build-1"], published.Versions("sales_catalog").Select(v => v.ManagedBy));
+        Assert.Equal("sales-ro", app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>().Find("sales_catalog")!.ServingSource("sqlserver_sales"));
+        Assert.False(Directory.Exists(Path.Combine(dir, PublishedSemanticModels.LegacyFolder)));
+        Assert.True(Directory.Exists(Path.Combine(dir, PublishedSemanticModels.LegacyFolder + ".imported")));
+        Assert.Equal(0, published.ImportFolder(dir));   // once
     }
 
     [Fact]

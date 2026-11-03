@@ -89,6 +89,36 @@ public sealed partial class DefinitionStore(StateDatabase database, TimeProvider
         });
     }
 
+    /// <summary>
+    /// Stops the channel serving the definition (a model removed, an app taken down). Its versions are kept, as the record of what was served; a later publish under the name starts serving again with the next version
+    /// number. False when the channel served nothing under the name.
+    /// </summary>
+    public bool Retire(string kind, string name, string by, string channel = Production)
+    {
+        Check(kind, name, channel);
+        var now = _clock.GetUtcNow().ToString("O");
+        return database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var transaction = connection.BeginTransaction();
+            if (Serving(connection, transaction, kind, name, channel) is not { } serving) return false;
+            using var delete = database.Command(connection, transaction, "DELETE FROM DefinitionServing WHERE Kind = $kind AND Name = $name AND Channel = $channel;");
+            delete.Bind(database, "kind", kind).Bind(database, "name", name).Bind(database, "channel", channel).ExecuteNonQuery();
+            Log(connection, transaction, "retire", kind, name, channel, serving.Version, by, now);
+            transaction.Commit();
+            return true;
+        });
+    }
+
+    /// <summary>The id of the last event (0 when there is none): where an instance starts following <see cref="Changes"/> after it has read what is served.</summary>
+    public long LatestEventId() =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var command = database.Command(connection, "SELECT MAX(Id) FROM DefinitionEvents;");
+            return command.ExecuteScalar() is { } id and not DBNull ? Convert.ToInt64(id, System.Globalization.CultureInfo.InvariantCulture) : 0L;
+        });
+
     /// <summary>The version the channel serves now, or null when the definition has never been published to it.</summary>
     public DefinitionVersion? Current(string kind, string name, string channel = Production) =>
         database.Retry(() =>
@@ -187,10 +217,14 @@ public sealed partial class DefinitionStore(StateDatabase database, TimeProvider
     private static void Check(string kind, string name, string channel)
     {
         if (!Word().IsMatch(kind)) throw new ArgumentException("A definition's kind is lowercase letters, digits, dashes and underscores.", nameof(kind));
-        if (!Word().IsMatch(name)) throw new ArgumentException("A definition's name is lowercase letters, digits, dashes and underscores.", nameof(name));
+        if (!NameWord().IsMatch(name)) throw new ArgumentException("A definition's name is lowercase letters, digits, dots, dashes and underscores.", nameof(name));
         if (!Word().IsMatch(channel)) throw new ArgumentException("A channel's name is lowercase letters, digits, dashes and underscores.", nameof(channel));
     }
 
     [GeneratedRegex("^[a-z0-9][a-z0-9_-]{0,63}$")]
     private static partial Regex Word();
+
+    // a name may carry dots too, as a semantic model's does
+    [GeneratedRegex("^[a-z0-9][a-z0-9_.-]{0,63}$")]
+    private static partial Regex NameWord();
 }

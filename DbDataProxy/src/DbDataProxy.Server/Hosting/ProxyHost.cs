@@ -174,9 +174,16 @@ public static class ProxyHost
             var directory = ResolveDataDirectory(current);
             var configured = SemanticModelsLoader.Reload(loaded, current, directory, new HashSet<string>(), _ => { });
             sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>().OnChange((changed, _) =>
-                configured = SemanticModelsLoader.Reload(loaded, changed, ResolveDataDirectory(changed), configured, problem => log.LogWarning("{Problem}", problem)));
+                configured = SemanticModelsLoader.Reload(loaded, changed, ResolveDataDirectory(changed), configured, problem => log.LogWarning("{Problem}", problem), sp.GetRequiredService<PublishedSemanticModels>()));
             return loaded;
         });
+        // the definitions published to the group, in its state (plan 20 O03): each instance follows them, so a publish through any of them, or by a publisher since stopped, is served by all
+        services.AddSingleton(sp => new DbDataKit.State.DefinitionStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
+        services.AddSingleton(sp => new PublishedSemanticModels(sp.GetRequiredService<DbDataKit.State.DefinitionStore>(), sp.GetRequiredService<SemanticModels>(),
+            problem => sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Semantic").LogWarning("{Problem}", problem)));
+        services.AddSingleton(sp => new DbDataKit.State.DefinitionFollower(sp.GetRequiredService<DbDataKit.State.DefinitionStore>(), [sp.GetRequiredService<PublishedSemanticModels>()],
+            (kind, name, version, ex) => sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Definitions").LogWarning("The published {Kind} '{Name}' version {Version} is not served here: {Message}", kind, name, version, ex.Message)));
+        services.AddHostedService<DbDataProxy.Server.State.DefinitionFollowerService>();
         services.AddSingleton<IServingServices>(sp => sp.GetRequiredService<ProxyServing>().WithSemantic(sp.GetRequiredService<SemanticModels>()));
         services.AddSingleton(sp =>
         {

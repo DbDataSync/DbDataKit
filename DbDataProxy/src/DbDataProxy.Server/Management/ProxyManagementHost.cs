@@ -96,7 +96,7 @@ public static class ProxyManagementHost
         var certificate = new ProxyCertificate(holder, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, dataDirectory, app.Services.GetRequiredService<RecentFailures>(), audit);
         management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version, dataSources, identities, activity, certificate, git,
             new ProxySecrets(SecretsRuntime.OpenStore(options), audit), files.Codes(),
-            new ProxySemanticModels(new Serving.PublishedSemanticModels(dataDirectory), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),
+            new ProxySemanticModels(app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),
                 () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, configDirectory, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit),
             pairedClients: clients.All,
             identityAdmin: options.Identity.Enabled

@@ -62,8 +62,8 @@ public sealed partial class ManagementTests
         Assert.NotSame(served, models.Find("sales_catalog"));
         Assert.Contains("Governed sales", (string)(await BodyAsync(await CallAsAsync(build1, publisher, HttpMethod.Get, "/api/v1/semantic-models/sales_catalog", ServerRole.Publisher)))["catalog"]!);
 
-        // it survives a restart: the published models are read from the data directory when the server starts
-        Assert.Equal(1, new DbDataProxy.Server.Serving.PublishedSemanticModels(dataDirectory).Current("sales_catalog"));
+        // it is the group's: kept in the state, which every instance (and this one after a restart) serves from
+        Assert.Equal(1, app.Services.GetRequiredService<DbDataProxy.Server.Serving.PublishedSemanticModels>().Current("sales_catalog"));
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed partial class ManagementTests
             Assert.Equal(HttpStatusCode.BadRequest, await Try(Publish(CatalogText, "sales-ro", 1, new { ssas_finance = "secret:x" })));
         Assert.Equal(HttpStatusCode.BadRequest, await Try(Publish(CatalogText, "sales-ro", 1, new { ssas_finance = "Data Source=x;Password=literal" })));
 
-        Assert.Equal(1, new DbDataProxy.Server.Serving.PublishedSemanticModels(dataDirectory).Current("sales_catalog"));
+        Assert.Equal(1, app.Services.GetRequiredService<DbDataProxy.Server.Serving.PublishedSemanticModels>().Current("sales_catalog"));
         Assert.Equal("sales-ro", models.Find("sales_catalog")!.ServingSource("sqlserver_sales"));
     }
 
