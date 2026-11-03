@@ -189,7 +189,7 @@ test.beforeAll(async () => {
   run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', 'acme', '--app', 'territory-notes', '--bind', 'territories=default', '--setting', `embed.allowed_origins=${portalOrigin}`])
   // two portals over the same instances; `hidden` is mounted in the first and Ada has no role on it
   for (const [name, text] of [
-    ['portal-alpha', portalYaml('portal-alpha', 'Alpha Co', '#ff0000', 'side', true, '  mounts: [{app: acme, path: /sales/}, {app: beta, path: /beta/}, {app: hidden, path: /hidden/}]\n  navigation: [{app: acme, label: Sales}, {app: beta, label: Beta}, {app: hidden, label: Hidden}]')],
+    ['portal-alpha', portalYaml('portal-alpha', 'Alpha Co', '#ff0000', 'side', true, '  mounts: [{app: acme, path: /sales/}, {app: beta, path: /beta/}, {app: hidden, path: /hidden/}]\n  navigation: [{app: acme, label: Sales}, {app: beta, label: Beta}, {app: hidden, label: Hidden}]\n  slots: {aside: beta}')],
     ['portal-omega', portalYaml('portal-omega', 'Omega Ltd', '#0000ff', 'top', false, '  mounts: [{app: acme, path: /work/}]\n  navigation: [{app: acme, label: Work}]')],
   ]) {
     const directory = path.join(os.tmpdir(), `dbdata-e2e-${name}`)
@@ -310,6 +310,9 @@ test('a person signs in and the sandboxed app reads and writes the Store through
   // the home lists the mounted instances Ada may open: not `hidden`
   await expect(page.locator('ul.tiles li a')).toHaveText(['Territory notes', 'Territory notes'])
   await expect(page.locator('ul.tiles li a').first()).toHaveAttribute('href', '/apps/alpha/sales/')
+  // an app in the aside slot is a sandboxed frame of its own, themed like the page
+  await expect(page.locator('iframe.slot-aside')).toHaveAttribute('sandbox', 'allow-scripts allow-forms allow-popups')
+  await expect(page.frameLocator('iframe.slot-aside').locator('#theme')).toHaveText('#ff0000')
   await page.locator('nav.portal a', { hasText: 'Sales' }).click()
   await expect(page).toHaveURL(`${appsUrl}/apps/alpha/sales/`)
   await expect(page.locator('nav.portal a[aria-current=page]')).toHaveText('Sales')
