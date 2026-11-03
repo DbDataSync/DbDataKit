@@ -18,7 +18,7 @@ public static class AppsEndpoints
     public const string CallbackPath = "/apps/-/callback";
     public const string SessionCookie = "dbdata_apps";
 
-    public static IEndpointRouteBuilder MapApps(this IEndpointRouteBuilder app, AppInstanceStore instances, AppSite site, OpenIdClient client, AppSessions sessions, AppTokenBroker broker, AppDataGateway? data = null)
+    public static IEndpointRouteBuilder MapApps(this IEndpointRouteBuilder app, AppInstanceStore instances, AppSite site, OpenIdClient client, AppSessions sessions, AppTokenBroker broker, AppDataGateway? data = null, AppStorage? storage = null)
     {
         app.MapGet("/apps/{instance}/_app/{**path}", async (HttpContext context, string instance, string? path) => await Write(context, site.Get(instance, path ?? "")));
 
@@ -35,6 +35,19 @@ public static class AppsEndpoints
             context.Response.Headers.CacheControl = "no-store";
             await context.Response.WriteAsJsonAsync(new { token = token.Token, expiresIn = token.ExpiresInSeconds, audience = token.Audience });
         });
+
+        if (storage is not null)
+        {
+            // The shell page relays a sandboxed app's storage calls (it has no browser storage of its own); same guard as the token request.
+            app.MapPost("/apps/{instance}/_storage", async (HttpContext context, string instance) =>
+            {
+                if (context.Request.Headers["X-DbData-Shell"] != "1") { await Text(context, 400, "Not a request from the shell page."); return; }
+                if (instances.Resolve(instance) is not { } resolved) { await Text(context, 404, "No such app."); return; }
+                if (sessions.Find(context.Request.Cookies[SessionCookie]) is not { } session) { await Text(context, 401, "Sign in first."); return; }
+                if (session.RolesOn(instance).Count == 0) { await Text(context, 403, "The identity home gives you no role on this app."); return; }
+                await AppStorageEndpoint.HandleAsync(context, storage, resolved, session);
+            });
+        }
 
         if (data is not null)
         {

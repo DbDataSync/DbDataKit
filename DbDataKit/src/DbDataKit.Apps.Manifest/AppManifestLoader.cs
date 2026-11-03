@@ -48,7 +48,7 @@ public static partial class AppManifestLoader
 
     private sealed partial class Reader(string file, List<ConfigDiagnostic> diags) : YamlFieldReader(file, diags)
     {
-        private static readonly string[] RootKeys = ["schemaVersion", "name", "title", "description", "version", "entry", "views", "origin", "chrome", "models", "semantic", "roles", "trust", "egress", "kind", "portal"];
+        private static readonly string[] RootKeys = ["schemaVersion", "name", "title", "description", "version", "entry", "views", "origin", "chrome", "models", "semantic", "roles", "trust", "egress", "kind", "portal", "storage"];
         private static readonly Regex SemVer = new(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex Identifier = new("^[A-Za-z][A-Za-z0-9_]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -84,7 +84,28 @@ public static partial class AppManifestLoader
             var description = map.Get("description") is YamlScalar d ? d.Value : null;
             var portal = kind == AppKind.Portal ? Portal(map, entry, views, trust) : NoPortal(map);
             if (name is null || version is null) return null;
-            return new AppManifest(name, title, description, version.Value, entry, views, origin, chrome, models, semantic, roles, trust, egress, kind, portal);
+            return new AppManifest(name, title, description, version.Value, entry, views, origin, chrome, models, semantic, roles, trust, egress, kind, portal, StorageOf(map));
+        }
+
+        private AppStorageUse? StorageOf(YamlMapping map)
+        {
+            if (map.Get("storage") is not { } node) return null;
+            if (node is not YamlMapping storage) { Add(SharedCodes.InvalidValue, node, "`storage` is a mapping: `{user: true, instance: true, quota_mb: 10}`."); return null; }
+            CheckKeys(storage, ["user", "instance", "quota_mb"], "`storage`");
+            bool Flag(string key)
+            {
+                if (storage.Get(key) is not { } n) return false;
+                if (n is YamlScalar { Value: "true" or "false" } s) return s.Value == "true";
+                Add(SharedCodes.InvalidValue, n, $"`storage.{key}` is `true` or `false`.");
+                return false;
+            }
+            var quota = AppStorageUse.DefaultQuotaMb;
+            if (storage.Get("quota_mb") is { } q)
+            {
+                if (q is YamlScalar s && int.TryParse(s.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var mb) && mb >= 1 && mb <= AppStorageUse.MaximumQuotaMb) quota = mb;
+                else Add(SharedCodes.InvalidValue, q, $"`storage.quota_mb` is a whole number from 1 to {AppStorageUse.MaximumQuotaMb}.");
+            }
+            return new AppStorageUse(Flag("user"), Flag("instance"), quota);
         }
 
         private bool CheckVersion(YamlMapping map)
