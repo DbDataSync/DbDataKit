@@ -522,6 +522,104 @@ public sealed class GroupStateTests : IAsyncLifetime
         }
     }
 
+    [Theory]
+    [InlineData("mssql", "DBKIT_TEST_MSSQL")]
+    [InlineData("postgres", "DBKIT_TEST_POSTGRES")]
+    public async Task A_semantic_package_a_build_server_deploys_once_through_one_instance_is_served_by_every_instance(string engine, string variable)
+    {
+        // plan 20 O04: the login, the data source and the model a publishing client sends through one instance are the group's
+        var (state, drop) = ScratchState(engine, variable);
+        try
+        {
+            string[] poll = [.. state, "--Proxy:State:DefinitionPollSeconds=1"];
+            var database = state[1]["--Proxy:State:ConnectionString=".Length..];
+            var catalog = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "semantic", "catalog.yaml"));
+            // the database behind the model: the tables its SQL source names, in the scratch database (the publish checks each can be read)
+            using (System.Data.Common.DbConnection db = engine == "mssql" ? new SqlConnection(database) : new Npgsql.NpgsqlConnection(database))
+            {
+                db.Open();
+                foreach (var table in DbDataKit.Semantic.CatalogLoader.LoadText(catalog).Doc.Sources.Where(s => DbDataKit.Serving.Semantic.SemanticModel.BaseSource(s.Key) == "sqlserver_sales")
+                    .SelectMany(s => s.Value.Joins.Values.Select(j => j.Table).Append(s.Value.Fact.Table)).Distinct())
+                {
+                    using var create = db.CreateCommand();
+                    create.CommandText = $"CREATE TABLE {table} (x INTEGER)";
+                    create.ExecuteNonQuery();
+                }
+            }
+
+            var dirs = new[] { "a", "b", "c" }.Select(d => Path.Combine(_root, d)).ToArray();
+            var (a, managementA, _) = await ServingInstance(dirs[0], poll);
+            var storeA = SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = dirs[0] });
+            foreach (var other in dirs[1..])
+                foreach (var secret in new[] { GroupSessionKey.Secret, ProxyIdentityModule.SigningKeySecret })
+                    using (var key = await storeA.TryResolveAsync(SecretRef.Parse("secret:" + secret)))
+                        await SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = other }).SetAsync(SecretName.Parse(secret), key!);
+            var (b, _, _) = await ServingInstance(dirs[1], poll);
+
+            // the Build server pairs with the group as a publishing client, through the first instance, and deploys as it does: the login, the data source, the model
+            var build = new ConsoleIdentity("build-1", ConsoleSigningKey.Generate());
+            var groupState = a.Services.GetRequiredService<StateDatabase>();
+            var paired = await PairingClient.PairAsync(new Uri($"https://127.0.0.1:{managementA}"),
+                new PairingFiles(ProxyConfigFile.PathIn(dirs[0]), Group: groupState).Codes().Create(ServerRoles.Close(ServerRole.Publisher)).Code, build, ClientKind.Server, build.Id);
+            async Task<HttpResponseMessage> Call(HttpMethod method, string path, object? body = null)
+            {
+                using var http = new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint));
+                using var request = new HttpRequestMessage(method, $"https://127.0.0.1:{managementA}{path}");
+                request.Headers.Add(ManagementAuthentication.TokenHeader, build.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, "ada", "Ada", ServerRole.Publisher)));
+                if (body is not null) request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+                var response = await http.SendAsync(request);
+                Assert.True(response.IsSuccessStatusCode, $"{method} {path}: {response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+                return response;
+            }
+            // the test engine's TLS certificate is a throwaway one, so a PostgreSQL source asks for encryption without verifying it, as its administrator would write it (PostgresEnv)
+            var login = JsonNode.Parse(await (await Call(HttpMethod.Put, "/api/v1/secrets/sales-login", new { value = engine == "postgres" ? database + ";SSL Mode=Require" : database })).Content.ReadAsStringAsync())!;
+            var reference = (string)login["reference"]!;
+            var source = $"schema: connection/1\nname: sales-ro\nengine: {(engine == "mssql" ? "sqlserver" : "postgres")}\naccess: readonly\nconnection_string_secret: '{reference}'\n";
+            var written = JsonNode.Parse(await (await Call(HttpMethod.Put, "/api/v1/data-sources/sales-ro", new { text = source, expected_version = (string?)null })).Content.ReadAsStringAsync())!;
+            Assert.True((bool)written["group"]!);
+            await Call(HttpMethod.Put, "/api/v1/semantic-models/sales_catalog", new { catalog, sources = new Dictionary<string, string> { ["sqlserver_sales"] = "sales-ro" }, expected_version = (int?)null });
+
+            // none of it is one instance's: no login in an instance's store, no file in an instance's configuration
+            using (var kept = await storeA.TryResolveAsync(SecretRef.Parse(reference))) Assert.Null(kept);
+            Assert.False(File.Exists(Path.Combine(ProxyConfigFile.DirectoryIn(dirs[0]), "connections", "sales-ro.yaml")));
+
+            // every instance serves it: the model, and the data source it reads with the login the client sent once
+            async Task Serves(WebApplication instance, string which)
+            {
+                for (var i = 0; i < 100 && (instance.Services.GetRequiredService<PublishedSemanticModels>().Served("sales_catalog") is null
+                    || !instance.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue.DataSources.ContainsKey("sales-ro")); i++) await Task.Delay(100);
+                Assert.Equal(1, instance.Services.GetRequiredService<PublishedSemanticModels>().Served("sales_catalog"));
+                var resolved = instance.Services.GetRequiredService<DbDataProxy.Server.Data.DataSourceCatalog>().Resolve(new DbDataProxy.Server.Auth.ProxyPrincipal("management", "management", ["*"]), "sales-ro");
+                await using var result = await resolved.Executor.ExecuteQueryAsync(new DbDataProxy.Data.QueryRequest("SELECT 1 FROM fact_sales WHERE 1 = 0", 1, 15), CancellationToken.None);
+                await foreach (var _ in result.ReadBatchesAsync(CancellationToken.None)) break;
+                Assert.Equal("sales-ro", instance.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>().Find("sales_catalog")!.ServingSource("sqlserver_sales"));
+                _ = which;
+            }
+            await Serves(a, "the instance it went through");
+            await Serves(b, "the other instance");
+
+            // with the instance it went through stopped, one started now serves it all, the publisher not running either
+            await a.StopAsync();
+            var (c, _, _) = await ServingInstance(dirs[2], poll);
+            await Serves(c, "an instance started after");
+
+            // the client takes the data source away: no instance serves it any more
+            var retire = new PublishedDataSources(new DefinitionStore(c.Services.GetRequiredService<StateDatabase>()), c.Services.GetRequiredService<StateDatabase>(), Path.Combine(_root, "unused"), () => { });
+            retire.Retire("sales-ro", "ada");
+            for (var i = 0; i < 100 && b.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue.DataSources.ContainsKey("sales-ro"); i++) await Task.Delay(100);
+            Assert.False(b.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue.DataSources.ContainsKey("sales-ro"));
+            Assert.False(File.Exists(Path.Combine(PublishedDataSources.FolderIn(dirs[1]), "sales-ro.yaml")));
+        }
+        finally
+        {
+            foreach (var app in _apps)
+            {
+                try { await app.StopAsync(); } catch (Exception ex) when (ex is OperationCanceledException or InvalidOperationException) { }
+            }
+            drop();
+        }
+    }
+
     [Fact]
     public async Task The_models_an_instance_published_before_are_read_into_the_groups_state_once()
     {

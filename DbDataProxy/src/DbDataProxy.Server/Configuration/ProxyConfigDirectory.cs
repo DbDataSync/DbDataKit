@@ -14,6 +14,8 @@ namespace DbDataProxy.Server.Configuration;
 ///   proxy/users.yaml       the local client users: a <c>users:</c> list
 ///   connections/*.yaml     one data source per file, named by the file (<c>erp.yaml</c> is the data source <c>erp</c>)
 /// </code>
+/// Beside it, <c>group/connections/*.yaml</c> in the data directory holds the data sources published to this instance's group (plan 20 O04b), as the instance last read them from the group's state; one of the same name in
+/// <c>connections/</c> wins.
 /// Every file is read with the strict YAML reader, so a syntax error names the file and line. Keys are camelCase in the files and matched to the options
 /// case-insensitively, so the environment variables and command line that override them are unchanged. The directory is watched: a change is read again
 /// and a file that no longer parses keeps the last good data (the failure is passed to <see cref="ProxyConfigLoadGuard"/> for the options monitor to log).
@@ -138,8 +140,13 @@ public sealed class ProxyConfigDirectoryProvider : ConfigurationProvider, IDispo
         Add(Path.Combine(directory, "proxy", "users.yaml"), $"{section}:Users", map => map.Get("users"));
 
         var connections = Path.Combine(directory, "connections");
-        if (System.IO.Directory.Exists(connections))
-            foreach (var file in System.IO.Directory.EnumerateFiles(connections, "*.yaml").OrderBy(f => f, StringComparer.Ordinal))
+        var own = System.IO.Directory.Exists(connections) ? System.IO.Directory.EnumerateFiles(connections, "*.yaml").OrderBy(f => f, StringComparer.Ordinal).ToList() : [];
+        // the group's published data sources (plan 20 O04b), after this instance's own: a name of its own is not replaced
+        var published = Path.Combine(Path.GetDirectoryName(directory) ?? directory, "group", "connections");
+        var names = own.Select(Path.GetFileNameWithoutExtension).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (System.IO.Directory.Exists(published))
+            own.AddRange(System.IO.Directory.EnumerateFiles(published, "*.yaml").Where(f => !names.Contains(Path.GetFileNameWithoutExtension(f))).OrderBy(f => f, StringComparer.Ordinal));
+        foreach (var file in own)
             {
                 string text;
                 using (var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
