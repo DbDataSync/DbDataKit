@@ -222,7 +222,7 @@ public sealed class BuildServerTests : IAsyncLifetime
     [Fact]
     public async Task A_command_that_runs_too_long_is_stopped_and_says_so()
     {
-        var result = await new ChildProcessCommandRunner(TimeSpan.FromMilliseconds(1)).RunAsync(["help", "matrix"], project, CancellationToken.None);
+        var result = await new ChildProcessCommandRunner(TimeSpan.Zero).RunAsync(["help", "matrix"], project, CancellationToken.None);
 
         Assert.Equal(ChildProcessCommandRunner.TimedOut, result.Exit);
         Assert.Contains("longer than the server allows", result.Err);
