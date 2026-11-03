@@ -15,6 +15,7 @@ namespace DbDataKit.Apps;
 /// </summary>
 public static class AppsEndpoints
 {
+    public const string CatalogPath = "/apps/catalog";
     public const string CallbackPath = "/apps/-/callback";
     public const string SessionCookie = "dbdata_apps";
 
@@ -64,6 +65,17 @@ public static class AppsEndpoints
             });
         }
 
+        // The instances the signed-in person may open, for a portal that builds its tiles from a feed (plan 26 section 5). The session cookie decides who is asking; there is no list for the anonymous.
+        app.MapGet(CatalogPath, async (HttpContext context) =>
+        {
+            if (sessions.Find(context.Request.Cookies[SessionCookie]) is not { } session) { await Text(context, 401, "Sign in first."); return; }
+            var entries = instances.List().Where(i => session.RolesOn(i.Name).Count > 0)
+                .Select(i => instances.Resolve(i.Name)).OfType<ResolvedInstance>()
+                .Select(r => new { name = r.Instance.Name, title = TitleOf(r), description = r.Manifest.Description, app = r.Instance.App, version = r.AppVersion.Version, channel = DbDataKit.State.DefinitionStore.Production, launch = LaunchUrl(r.Instance.Name) });
+            context.Response.Headers.CacheControl = "no-store";
+            await context.Response.WriteAsJsonAsync(new { instances = entries });
+        });
+
         app.MapGet(CallbackPath, async (HttpContext context) =>
         {
             var q = context.Request.Query;
@@ -74,8 +86,9 @@ public static class AppsEndpoints
                 context.Response.Cookies.Append(SessionCookie, session.Id, new CookieOptions
                 {
                     HttpOnly = true, Secure = true, Path = "/apps/", Expires = session.ExpiresAtUtc,
-                    // Lax: the browser arrives from the identity home, and a Strict cookie set on that navigation is withheld from the page it redirects to
-                    SameSite = SameSiteMode.Lax,
+                    // None: a portal on another site frames an instance (AP07), and the frame must carry the person's session. Nothing the cookie authorises changes state without the shell's own header (a cross-site page cannot send it: that
+                    // needs a CORS preflight this host never answers), and who may frame the page is `frame-ancestors`. (Lax would do for the sign-in alone: the browser arrives from the home, and Strict is withheld on that navigation.)
+                    SameSite = SameSiteMode.None,
                 });
                 context.Response.Redirect(SafeReturn(result.ReturnUrl));
             }
@@ -94,7 +107,7 @@ public static class AppsEndpoints
             if (resolved is null) { await Text(context, 404, "No such app."); return; }
             if (sessions.Find(context.Request.Cookies[SessionCookie]) is not { } session)
             {
-                context.Response.Redirect((await client.BeginAsync($"/apps/{Uri.EscapeDataString(instance)}/", context.RequestAborted)).AbsoluteUri);
+                context.Response.Redirect((await client.BeginAsync(LaunchUrl(instance), context.RequestAborted)).AbsoluteUri);
                 return;
             }
             if (session.RolesOn(instance).Count == 0)
@@ -102,12 +115,18 @@ public static class AppsEndpoints
                 await Text(context, 403, "You are signed in, but the identity home gives you no role on this app.");
                 return;
             }
-            await Write(context, AppShell.Page(instance, TitleOf(resolved), resolved.Manifest.Chrome == AppChrome.None ? null : HeaderOf(instances, session, instance)));
+            // ?embed serves the app without the header, for a page that frames it; only the origins the instance names may do that
+            var embed = context.Request.Query.ContainsKey("embed");
+            var origins = AppInstanceStore.EmbedOrigins(resolved.Instance.Settings.GetValueOrDefault(AppInstanceStore.EmbedSetting), out _) ?? [];
+            await Write(context, AppShell.Page(instance, TitleOf(resolved), resolved.Manifest.Chrome == AppChrome.None || embed ? null : HeaderOf(instances, session, instance), origins));
         });
         return app;
     }
 
     /// <summary>The person and the menus of the sets the instance belongs to, each listing only what this person may open (their roles at the home decide), so a menu never advertises a link that ends in a refusal.</summary>
+    /// <summary>The stable address that signs a person in and opens the instance.</summary>
+    public static string LaunchUrl(string instance) => $"/apps/{Uri.EscapeDataString(instance)}/?launch";
+
     public static AppShell.Header HeaderOf(AppInstanceStore instances, AppSession session, string instance)
     {
         var menus = new List<AppShell.Menu>();

@@ -44,6 +44,9 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
     public const string AppKind = "app";
     public const string InstanceKind = "app-instance";
     public const string NavigationKind = "app-nav";
+
+    /// <summary>The setting that names the origins allowed to frame an instance (plan 26 section 5): a comma-separated list such as <c>https://portal.example.com</c>. It becomes <c>frame-ancestors</c>; with none, nothing may frame the instance.</summary>
+    public const string EmbedSetting = "embed.allowed_origins";
     public const int MaximumNavigationEntries = 50;
     private const int MaximumSettings = 50;
     private const int MaximumSettingLength = 2000;
@@ -78,9 +81,10 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
         if (instance.Settings.Count > MaximumSettings) throw new AppInstanceException($"An instance has at most {MaximumSettings} settings.");
         foreach (var (key, value) in instance.Settings)
         {
-            if (!AppManifestLoader.NameRule.IsMatch(key)) throw new AppInstanceException($"A setting's name is lower-case letters, digits, '-' and '_'; '{key}' is not.");
+            if (!AppManifestLoader.NameRule.IsMatch(key.Replace('.', '_'))) throw new AppInstanceException($"A setting's name is lower-case letters, digits, '-', '_' and '.'; '{key}' is not.");
             if (value.Length > MaximumSettingLength) throw new AppInstanceException($"The setting '{key}' is longer than {MaximumSettingLength} characters.");
         }
+        if (instance.Settings.TryGetValue(EmbedSetting, out var embed) && EmbedOrigins(embed, out var problem) is null) throw new AppInstanceException(problem!);
         return definitions.Publish(InstanceKind, instance.Name, Write(instance), by, [$"{AppKind}:{instance.App}"], note, channel);
     }
 
@@ -99,6 +103,20 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
         if (app is null) return null;
         var package = AppPackage.Parse(app.Content);
         return new ResolvedInstance(instance, stored.Version, app, AppManifestLoader.Load(package.ManifestYaml).Manifest!, package);
+    }
+
+    /// <summary>The origins of an <c>embed.allowed_origins</c> value, or null with <paramref name="problem"/> set. Each is a bare http(s) origin: no path, no wildcard, nothing that could add a directive to the header.</summary>
+    public static IReadOnlyList<string>? EmbedOrigins(string? value, out string? problem)
+    {
+        problem = null;
+        var origins = new List<string>();
+        foreach (var part in (value ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!Uri.TryCreate(part, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || uri.AbsolutePath != "/" || part.EndsWith('/') || part.Any(c => c is ';' or ' ' or '*' or '\'' or '"' || char.IsControl(c)) || uri.Query.Length > 0 || uri.Fragment.Length > 0 || uri.UserInfo.Length > 0)
+            { problem = $"'{part}' is not an origin for {EmbedSetting}: use scheme, host and optional port, such as https://portal.example.com."; return null; }
+            origins.Add(uri.GetLeftPart(UriPartial.Authority));
+        }
+        return origins;
     }
 
     public DefinitionVersion SaveNavigation(NavigationSet set, string by, string channel = DefinitionStore.Production, string? note = null)

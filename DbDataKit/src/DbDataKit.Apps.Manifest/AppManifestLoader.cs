@@ -30,7 +30,7 @@ public static partial class AppManifestLoader
     public static readonly Regex NameRule = new("^[a-z0-9][a-z0-9_-]{0,63}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>Names an instance may not take: they are the host's own addresses.</summary>
-    public static readonly IReadOnlySet<string> Reserved = new HashSet<string> { "api", "admin", "console", "identity", "apps", "static", "health", "version" };
+    public static readonly IReadOnlySet<string> Reserved = new HashSet<string> { "api", "admin", "console", "identity", "apps", "static", "health", "version", "catalog" };
 
     public static AppManifestLoadResult Load(string yaml, string file = "app.yaml")
     {
