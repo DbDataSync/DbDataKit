@@ -33,6 +33,15 @@ public static class PortalChrome
             Items(instances, portal, spec.Navigation, spec, session, currentApp));
     }
 
+    /// <summary>The portal's home (AP12): one tile for each mounted instance the person holds a role on, in the order of the mounts. The same rule as the menu, so the home never advertises what ends in a refusal.</summary>
+    public static List<AppShell.Tile> Tiles(AppInstanceStore instances, ResolvedInstance portal, AppSession session) =>
+        portal.Manifest.Portal!.Mounts
+            .Where(m => session.RolesOn(m.App).Count > 0)
+            .Select(m => (Mount: m, Member: instances.Resolve(m.App)))
+            .Where(x => x.Member is not null)
+            .Select(x => new AppShell.Tile(x.Member!.Instance.Title ?? x.Member.Manifest.Title ?? x.Member.Instance.Name, x.Member.Manifest.Description, MountUrl(portal.Instance.Name, x.Mount)))
+            .ToList();
+
     private static List<AppShell.NavItem> Items(AppInstanceStore instances, ResolvedInstance portal, IReadOnlyList<PortalNav> entries, PortalSpec spec, AppSession session, string? currentApp)
     {
         var items = new List<AppShell.NavItem>();

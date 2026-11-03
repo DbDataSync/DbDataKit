@@ -133,7 +133,7 @@ public static class AppsEndpoints
                 : framing is not null ? new AppShell.Header(PersonOf(session), [], PortalChrome.Look(instances, framing, session, mount?.App))
                 : HeaderOf(instances, session, instance);
             if (portal is not null && mount is null)
-                await Write(context, AppShell.PortalHome(TitleOf(resolved), header ?? new AppShell.Header(PersonOf(session), [], PortalChrome.Look(instances, portal, session, null)), "Choose an app from the menu.", origins));
+                await Write(context, AppShell.PortalHome(TitleOf(resolved), header ?? new AppShell.Header(PersonOf(session), [], PortalChrome.Look(instances, portal, session, null)), PortalChrome.Tiles(instances, portal, session), origins));
             else
                 await Write(context, AppShell.Page(shown.Instance.Name, TitleOf(shown), header, origins));
         });

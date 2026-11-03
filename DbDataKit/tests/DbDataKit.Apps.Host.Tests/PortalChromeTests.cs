@@ -124,7 +124,7 @@ public sealed class PortalChromeTests : IDisposable
               navigation: [{app: sales, label: "<i>Sales</i>"}]
             """);
 
-        var page = Encoding.UTF8.GetString(AppShell.PortalHome("Acme", new AppShell.Header("Ada", [], PortalChrome.Look(store, portal, Person("sales"), null)), "Choose.").Body);
+        var page = Encoding.UTF8.GetString(AppShell.PortalHome("Acme", new AppShell.Header("Ada", [], PortalChrome.Look(store, portal, Person("sales"), null)), PortalChrome.Tiles(store, portal, Person("sales"))).Body);
 
         Assert.DoesNotContain("<footer", page);
         Assert.DoesNotContain("class=\"who\"", page);
@@ -132,6 +132,21 @@ public sealed class PortalChromeTests : IDisposable
         Assert.DoesNotContain("<i>", page);
         Assert.Contains("&lt;i&gt;Sales&lt;/i&gt;", page);
         Assert.DoesNotContain("portal side", page);
+    }
+
+    [Fact]
+    public void The_home_lists_exactly_the_mounted_instances_the_person_may_open_and_encodes_what_it_prints()
+    {
+        var portal = Portal(Full);
+
+        var tiles = PortalChrome.Tiles(store, portal, Person("hr", "sales"));
+        var page = Encoding.UTF8.GetString(AppShell.PortalHome("Acme", new AppShell.Header("Ada", [], PortalChrome.Look(store, portal, Person("hr", "sales"), null)), tiles).Body);
+
+        Assert.Equal(["SALES", "HR"], tiles.Select(t => t.Title));
+        Assert.Equal(["/apps/acme/sales/", "/apps/acme/hr/"], tiles.Select(t => t.Url));
+        Assert.Contains("class=\"tiles\"", page);
+        Assert.Empty(PortalChrome.Tiles(store, portal, Person("elsewhere")));
+        Assert.Contains("Nothing here is open to you yet.", Encoding.UTF8.GetString(AppShell.PortalHome("Acme", new AppShell.Header("Ada", [], PortalChrome.Look(store, portal, Person(), null)), []).Body));
     }
 
     [Fact]

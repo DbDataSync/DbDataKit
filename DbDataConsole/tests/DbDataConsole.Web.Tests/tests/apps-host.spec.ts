@@ -307,6 +307,9 @@ test('a person signs in and the sandboxed app reads and writes the Store through
   await expect(page.locator('.portal-title')).toHaveText('Alpha Co')
   await expect(page.locator('nav.portal.side a')).toHaveText(['Sales', 'Beta'])
   await expect(page.locator('footer.portal')).toContainText('Alpha Co footer')
+  // the home lists the mounted instances Ada may open: not `hidden`
+  await expect(page.locator('ul.tiles li a')).toHaveText(['Territory notes', 'Territory notes'])
+  await expect(page.locator('ul.tiles li a').first()).toHaveAttribute('href', '/apps/alpha/sales/')
   await page.locator('nav.portal a', { hasText: 'Sales' }).click()
   await expect(page).toHaveURL(`${appsUrl}/apps/alpha/sales/`)
   await expect(page.locator('nav.portal a[aria-current=page]')).toHaveText('Sales')
