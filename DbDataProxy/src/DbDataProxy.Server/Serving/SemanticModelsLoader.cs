@@ -6,7 +6,10 @@ using DbDataProxy.Server.Secrets;
 
 namespace DbDataProxy.Server.Serving;
 
-/// <summary>Reads the catalogs the <c>Semantic</c> section names, when the server starts: a catalog that does not load stops the start and names its file. The published models come after them, and one that does not load is reported and left out.</summary>
+/// <summary>
+/// Reads the catalogs the <c>Semantic</c> section names, when the server starts: a catalog that does not load stops the start and names its file. The published models are the group's, in its state, and are served by
+/// <see cref="PublishedSemanticModels"/> as the definition follower hands them over (a configured name wins).
+/// </summary>
 public static class SemanticModelsLoader
 {
     public static SemanticModels Load(ProxyOptions options, string dataDirectory, SecretsRuntime? secrets = null, Action<string>? warn = null)
@@ -32,8 +35,6 @@ public static class SemanticModelsLoader
                 throw new InvalidOperationException($"Semantic model '{path}' cannot be loaded: {ex.Message}", ex);
             }
         }
-        // the models published through the management API, after the configured ones (a configured name wins)
-        new PublishedSemanticModels(dataDirectory).LoadInto(models, problem => (warn ?? Console.Error.WriteLine)(problem));
         return models;
     }
 
@@ -41,7 +42,7 @@ public static class SemanticModelsLoader
     /// Applies a changed configuration to the models in service: each configured catalog is read again and, if it loads, replaces the one serving; one that does not load is reported and the old one keeps serving.
     /// A model no longer configured stops being served unless a published model has its name. Returns the configured names, to hand back as <paramref name="previous"/> on the next change.
     /// </summary>
-    public static IReadOnlySet<string> Reload(SemanticModels models, ProxyOptions options, string dataDirectory, IReadOnlySet<string> previous, Action<string> warn)
+    public static IReadOnlySet<string> Reload(SemanticModels models, ProxyOptions options, string dataDirectory, IReadOnlySet<string> previous, Action<string> warn, PublishedSemanticModels? published = null)
     {
         DbDataKit.Semantic.Sandbox.Limits = options.Semantic.Combine.ToLimits();
         var configured = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -64,7 +65,8 @@ public static class SemanticModelsLoader
         // a catalog that failed has no name to match, so nothing is taken out of service on a reload with a failure in it
         if (!allLoaded) configured.UnionWith(previous);
         else foreach (var gone in previous.Where(n => !configured.Contains(n))) models.Remove(gone);
-        new PublishedSemanticModels(dataDirectory).LoadInto(models, _ => { });
+        // a published model whose name a configured one held is served once the configured one has gone
+        published?.Refresh();
         return configured;
     }
 }

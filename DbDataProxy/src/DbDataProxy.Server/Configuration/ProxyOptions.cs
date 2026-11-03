@@ -99,6 +99,10 @@ public sealed class ProxyStateOptions
 
     /// <summary>For <c>mssql</c> and <c>postgres</c>: the connection string, with the password as a secret reference (<c>Password=secret:state-db</c>). The Proxy needs a database of its own; a console on the same server uses another.</summary>
     public string ConnectionString { get; set; } = "";
+
+    /// <summary>How often, in seconds, the instance looks for definitions published to its group (plan 20 O03): a publish through another instance is served here this long after at most.</summary>
+    [ConfigKey(Min = 1, Max = 300)]
+    public int DefinitionPollSeconds { get; set; } = 5;
 }
 
 /// <summary>The semantic models this server answers semantic requests and semantic SQL for. Their data is read through the data sources, as the signed-in client, so a client needs access to those.</summary>

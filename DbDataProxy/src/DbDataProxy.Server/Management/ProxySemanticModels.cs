@@ -15,8 +15,9 @@ namespace DbDataProxy.Server.Management;
 /// <summary>
 /// Semantic models through the management API (plan 19, J13): publish a model (its catalog, the data source each of its sources maps to, the connection of an Analysis Services source), list and read them, roll back, remove.
 /// A publish is checked before anything is written: the catalog loads and carries the name of the call, every source maps to a data source that exists (and, for a publishing client, one that client made, so a model never
-/// reaches data its publisher could not), every data source answers, and an Analysis Services connection (Windows only) is a secret reference for a publishing client. The new version is written whole and only then made current; a publish that fails at any
-/// step leaves the version that was serving. Every version is kept, so a rollback is a change of which one is current. A model named in <c>server.yaml</c> is not replaced by a publish.
+/// reaches data its publisher could not), every data source answers, and an Analysis Services connection (Windows only) is a secret reference for a publishing client. The version is a published definition of the group
+/// (plan 20 O03): stored and switched to in one step, served here at once and by every other instance of the group when it next looks; a publish that fails at any step leaves the version that was serving. Every version is
+/// kept, so a rollback is a switch of which one is served. A model named in <c>server.yaml</c> is not replaced by a publish.
 /// </summary>
 public sealed class ProxySemanticModels(
     PublishedSemanticModels store, SemanticModels models, Func<ProxyOptions> options, string configDirectory, Func<DataSourceCatalog> catalog, IAuditLog audit, TimeProvider? clock = null)
@@ -68,7 +69,12 @@ public sealed class ProxySemanticModels(
             var current = store.Current(name);
             var meta = current is { } n ? store.Version(name, n) : null;
             if (owner is not null && meta?.ManagedBy != owner) continue;
-            items.Add(new JsonObject { ["name"] = name, ["current_version"] = current, ["versions"] = store.Versions(name).Count, ["managed_by"] = meta?.ManagedBy, ["served"] = models.Find(name) is not null });
+            items.Add(new JsonObject
+            {
+                ["name"] = name, ["current_version"] = current, ["versions"] = store.Versions(name).Count, ["managed_by"] = meta?.ManagedBy, ["served"] = models.Find(name) is not null,
+                // what this instance serves of it, which lags the group's by a poll at most, and a version it could not load
+                ["served_version"] = store.Served(name), ["failed_version"] = store.Failed(name)?.Version, ["failure"] = store.Failed(name)?.Reason,
+            });
         }
         return new JsonObject { ["models"] = items };
     }
@@ -127,14 +133,8 @@ public sealed class ProxySemanticModels(
             if (problem is not null) return Refused(caller, name, problem);
 
             var version = store.Publish(name, text, Client(caller), Who(caller), new(sources), new(ssas), _clock.GetUtcNow());
-            try { models.Set(store.Load(name, version.Number)); }
-            catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException)
-            {
-                // cannot happen after the check above, but the old version must keep serving if it does
-                if (store.Versions(name).Where(v => v.Number < version.Number).Select(v => v.Number).DefaultIfEmpty(0).Max() is > 0 and var previous) store.Point(name, previous);
-                else store.Delete(name);
-                return Refused(caller, name, "The model did not load once written, so the previous version still serves.", ex.Message);
-            }
+            // served here at once; the other instances of the group serve it when they next look
+            Serve(name);
             Record(caller, "semantic-model publish", name, created ? "created" : "changed");
             return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = version.Number, ["created"] = created });
         }
@@ -217,8 +217,8 @@ public sealed class ProxySemanticModels(
             SemanticModel loaded;
             try { loaded = store.Load(name, target); }
             catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException) { return Refused(caller, name, $"Version {target} does not load, so the current one still serves.", ex.Message); }
-            store.Point(name, target);
-            models.Set(loaded);
+            store.Point(name, target, Who(caller));
+            Serve(name);
             Record(caller, "semantic-model rollback", name, $"to version {target}");
             return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = target, ["from_version"] = current });
         }
@@ -232,13 +232,16 @@ public sealed class ProxySemanticModels(
         await _publishing.WaitAsync();
         try
         {
-            models.Remove(name);
-            store.Delete(name);
+            store.Delete(name, Who(caller));
+            Serve(name);
         }
         finally { _publishing.Release(); }
         Record(caller, "semantic-model remove", name, "removed");
         return ManagementResult.Ok(new JsonObject { ["name"] = name, ["removed"] = true });
     }
+
+    /// <summary>What the group serves under the name, served on this instance now rather than at the next poll.</summary>
+    private void Serve(string name) => store.ServeNow(name);
 
     private string Who(ManagementCaller caller) { var entry = caller.Audit("", null, "", _clock.GetUtcNow()); return entry.UserName ?? entry.UserId; }
 
