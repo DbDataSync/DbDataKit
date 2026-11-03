@@ -22,7 +22,7 @@ public sealed class StateDatabaseTests : IDisposable
         Assert.Equal(
             [
                 "BulkLoadBatches", "ChangeCheckHistory", "ChangeWatermarks", "Invites", "Logs",
-                "NotificationReadState", "Notifications", "PauseEvents", "RunLocks",
+                "NotificationReadState", "Notifications", "OneTimeValues", "PauseEvents", "RunLocks",
                 "Sessions", "TaskRuns", "Tasks",
                 "UserCredentials", "Users", "VerificationResults", "WorkQueue",
             ],

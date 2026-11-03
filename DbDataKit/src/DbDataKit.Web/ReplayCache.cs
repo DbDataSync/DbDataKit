@@ -7,7 +7,7 @@ public interface IReplayCache
     bool TryAdd(string consoleId, string tokenId, DateTimeOffset forgetAfter);
 }
 
-/// <summary>An in-process replay cache. A server that runs as several instances behind one address needs a shared one; the interface is the seam.</summary>
+/// <summary>An in-process replay cache, for a server that runs once. One that runs as several instances behind one address uses <see cref="StateReplayCache"/>.</summary>
 public sealed class MemoryReplayCache(TimeProvider? clock = null, int maxEntries = 100_000) : IReplayCache
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
@@ -32,4 +32,14 @@ public sealed class MemoryReplayCache(TimeProvider? clock = null, int maxEntries
     }
 
     public int Count { get { lock (_gate) return _seen.Count; } }
+}
+
+/// <summary>
+/// The replay cache in the state (<see cref="DbDataKit.State.OneTimeValues"/>), for a server that runs as several instances sharing it (plan 20 O02b): a token one instance accepted is refused by every other.
+/// </summary>
+/// <param name="values">The state's one-time values.</param>
+/// <param name="purpose">Which tokens these are (management calls, key rotations), so one kind's ids never stand for another's.</param>
+public sealed class StateReplayCache(DbDataKit.State.OneTimeValues values, string purpose) : IReplayCache
+{
+    public bool TryAdd(string consoleId, string tokenId, DateTimeOffset forgetAfter) => values.TryClaim(purpose, consoleId + "\n" + tokenId, forgetAfter);
 }

@@ -43,8 +43,12 @@ public sealed class InvitesController(
     PasskeyService passkeys,
     CurrentUser currentUser,
     AuthOptions authOptions,
-    BootstrapInviteLocation bootstrapLocation) : ControllerBase
+    BootstrapInviteLocation bootstrapLocation,
+    OneTimeValues held) : ControllerBase
 {
+    /// <summary>How long a passkey ceremony may take between its two calls.</summary>
+    private static readonly TimeSpan CeremonyLifetime = TimeSpan.FromMinutes(5);
+
     private string RegistrationStateCookie => authOptions.Product.PasskeyRegistrationCookie;
     private string AssertionStateCookie => authOptions.Product.PasskeyAssertionCookie;
 
@@ -103,9 +107,9 @@ public sealed class InvitesController(
 
         var (_, state) = passkeys.BeginRegistration(invite.UserId ?? Guid.NewGuid().ToString("N"), displayName);
 
-        // Held in a short-lived cookie rather than round-tripped through the client: a challenge the
-        // caller supplies is a challenge they can choose, and then the response they send answers a
-        // question they asked themselves.
+        // Held here (in the state, so any instance sharing it can finish the ceremony) and not in the
+        // browser: a challenge the caller supplies is a challenge they can choose, and then the
+        // response they send answers a question they asked themselves. The cookie names it only.
         StoreState(RegistrationStateCookie, state);
         return Json(state);
     }
@@ -124,7 +128,7 @@ public sealed class InvitesController(
         if (!passkeys.Enabled)
             return BadRequest(new { error = "Passkeys are turned off on this deployment." });
 
-        if (Request.Cookies[RegistrationStateCookie] is not { } state)
+        if (TakeState(RegistrationStateCookie) is not { } state)
             return BadRequest(new { error = "This registration was not started here, or has expired. Try again." });
 
         if (invites.Find(code) is not { } invite)
@@ -195,7 +199,9 @@ public sealed class InvitesController(
         if (!passkeys.Enabled)
             return BadRequest(new { error = "Passkeys are turned off on this deployment." });
 
-        if (Request.Cookies[AssertionStateCookie] is not { } state)
+        // Taken, so it answers one assertion: a response captured once cannot be sent again, with this
+        // challenge or any other the caller writes into a cookie.
+        if (TakeState(AssertionStateCookie) is not { } state)
             return BadRequest(new { error = "This sign-in was not started here, or has expired. Try again." });
 
         var user = await passkeys.CompleteAssertionAsync(state, response, cancellationToken);
@@ -222,15 +228,25 @@ public sealed class InvitesController(
         catch (JsonException) { return null; }
     }
 
-    private void StoreState(string name, string state) =>
-        Response.Cookies.Append(name, state, new CookieOptions
+    /// <summary>Keeps a ceremony's state on the server, once, and gives the browser a cookie that names it.</summary>
+    private void StoreState(string name, string state)
+    {
+        var handle = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        var expires = DateTimeOffset.UtcNow + CeremonyLifetime;
+        held.Hold(name, handle, state, expires);
+        Response.Cookies.Append(name, handle, new CookieOptions
         {
             HttpOnly = true,
             SameSite = SameSiteMode.Strict,
             Secure = Request.IsHttps,
-            Expires = DateTimeOffset.UtcNow.AddMinutes(5),
+            Expires = expires,
             Path = "/",
         });
+    }
+
+    /// <summary>The ceremony state the cookie names, removed so it serves once; null when there is none, it has expired, or it was used.</summary>
+    private string? TakeState(string name) =>
+        Request.Cookies[name] is { Length: > 0 } handle ? held.Take(name, handle) : null;
 
     private void IssueSession(UserRecord user)
     {

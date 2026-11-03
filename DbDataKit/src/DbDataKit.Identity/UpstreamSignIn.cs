@@ -44,7 +44,7 @@ public static class UpstreamSignIn
     /// <summary>Negotiates the person's Windows account and signs them in. A browser navigates here (the button), so it is a GET.</summary>
     public const string WindowsPath = "/identity/upstream/windows";
 
-    /// <summary>The Entra client of the home: the one place the sign-ins it has started are remembered until the browser comes back.</summary>
+    /// <summary>The Entra client of the home, which remembers the sign-ins it has started in the state until the browser comes back.</summary>
     internal sealed class EntraClient(OpenIdClient client)
     {
         public OpenIdClient Client { get; } = client;
@@ -56,7 +56,9 @@ public static class UpstreamSignIn
         if (options.Entra is { } entra)
         {
             var redirect = new Uri(options.PublicUrl, EntraCallbackPath).AbsoluteUri;
-            services.AddSingleton(_ => new EntraClient(new OpenIdClient(new OpenIdClientOptions(entra.Authority, entra.ClientId, entra.ClientSecret, redirect), entra.Http?.Invoke() ?? new HttpClient())));
+            // the attempts are in the state, so the tenant may send the browser back to any instance of the home's group
+            services.AddSingleton(sp => new EntraClient(new OpenIdClient(new OpenIdClientOptions(entra.Authority, entra.ClientId, entra.ClientSecret, redirect), entra.Http?.Invoke() ?? new HttpClient(),
+                sp.GetService<TimeProvider>(), new StateOpenIdAttempts(sp.GetRequiredService<OneTimeValues>(), "upstream:entra"))));
         }
     }
 

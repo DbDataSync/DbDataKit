@@ -662,6 +662,9 @@ internal static class Migrations
 
         // One account per person (plan 13a U16): the address key and the address an invitation is for. Appended; nothing above changes.
         IdentitySchema.AccountKeys,
+
+        // A passkey ceremony's challenge, held on the server and used once (plan 20 O02b). Appended.
+        OneTimeSchema.Values,
     ];
 
     /// <summary>The schema, for <see cref="StateDatabase"/> to apply.</summary>

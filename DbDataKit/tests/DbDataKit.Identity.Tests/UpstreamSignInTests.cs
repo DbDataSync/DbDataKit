@@ -30,6 +30,7 @@ public sealed class UpstreamSignInTests : IAsyncLifetime
     private readonly RSA _tenantKey = RSA.Create(2048);
     private readonly KeySigningKeyProtector _protector = new(RandomNumberGenerator.GetBytes(32));
     private WebApplication? _tenant, _home;
+    private readonly List<WebApplication> _others = [];
     private StateDatabase _database = null!;
     private string _authority = null!, _homeUrl = null!;
 
@@ -78,23 +79,30 @@ public sealed class UpstreamSignInTests : IAsyncLifetime
 
     private async Task StartHome(EntraUpstream? entra, WindowsUpstream? windows = null)
     {
-        var port = FreePort();
-        _homeUrl = $"http://127.0.0.1:{port}";
+        (_home, _homeUrl) = await Instance(entra, windows);
+    }
+
+    /// <summary>An instance of the home on the test's state: the first is <see cref="StartHome"/>'s, any other is a second instance of its group.</summary>
+    private async Task<(WebApplication App, string Url)> Instance(EntraUpstream? entra, WindowsUpstream? windows = null)
+    {
+        var url = $"http://127.0.0.1:{FreePort()}";
         var builder = WebApplication.CreateSlimBuilder();
-        builder.WebHost.UseUrls(_homeUrl);
+        builder.WebHost.UseUrls(url);
         builder.Services.AddLogging();
         builder.AddIdentityHome(new IdentityHomeOptions(new Uri(Issuer), _directory, _ => _database, _ => _protector,
             Product, Entra: entra, Windows: windows));
-        _home = builder.Build();
-        _home.MapIdentityHome(_ => { });
-        await _home.StartAsync();
+        var app = builder.Build();
+        app.MapIdentityHome(_ => { });
+        await app.StartAsync();
+        _others.Add(app);
+        return (app, url);
     }
 
     private EntraUpstream Entra(bool trustEmail = false) => new(_authority, "home-app", "tenant-secret", trustEmail);
 
     public async ValueTask DisposeAsync()
     {
-        if (_home is not null) await _home.DisposeAsync();
+        foreach (var app in _others) await app.DisposeAsync();
         if (_tenant is not null) await _tenant.DisposeAsync();
         _tenantKey.Dispose();
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
@@ -179,6 +187,33 @@ public sealed class UpstreamSignInTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_sign_in_started_at_one_instance_of_the_homes_group_is_finished_by_another_and_only_once()
+    {
+        // plan 20 O02b: the attempt is in the state the instances share, so the tenant may send the browser back to any of them
+        await StartHome(Entra());
+        var (_, other) = await Instance(Entra());
+        using var atA = Browser(_homeUrl);
+        using var atB = Browser(other);
+
+        var start = await atA.GetAsync(UpstreamSignIn.EntraPath);
+        var query = System.Web.HttpUtility.ParseQueryString(start.Headers.Location!.Query);
+        _nonce = query["nonce"]!;
+        var callback = UpstreamSignIn.EntraCallbackPath + $"?state={Uri.EscapeDataString(query["state"]!)}&code=code-from-entra";
+        var back = await atB.GetAsync(callback);
+        Assert.Equal(HttpStatusCode.Redirect, back.StatusCode);
+        Assert.NotNull(SessionCookie(back));
+        Assert.Single(new UserStore(_database).List());
+
+        // the attempt is spent: the same return, at either instance, signs nobody in
+        foreach (var browser in new[] { atA, atB })
+        {
+            var replayed = await browser.GetAsync(callback);
+            Assert.Equal(HttpStatusCode.Forbidden, replayed.StatusCode);
+            Assert.Null(SessionCookie(replayed));
+        }
+    }
+
+    [Fact]
     public async Task A_sign_in_the_tenant_refuses_or_that_was_not_started_here_or_is_signed_with_another_key_signs_nobody_in()
     {
         await StartHome(Entra());
@@ -238,6 +273,7 @@ public sealed class UpstreamSignInTests : IAsyncLifetime
             Assert.Equal(HttpStatusCode.Unauthorized, (await browser.GetAsync(UpstreamSignIn.EntraPath)).StatusCode);
         }
         await _home!.DisposeAsync();
+        _others.Remove(_home);
 
         await StartHome(Entra() with { Label = "Sign in with Clearwater <Entra>" }, new WindowsUpstream());
         using var configured = Browser(_homeUrl);

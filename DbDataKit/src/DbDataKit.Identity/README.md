@@ -18,4 +18,6 @@ The identity home (plan 13a U13): who people are and what they may do, for every
 
 - **The admin API** (plan 13a U21, `IdentityAdminApi`): people, groups, role assignments, app clients, external group mappings, tokens and service accounts, transport-agnostic (a host passes the method, the path under `/api/v1/identity/`, the body and whether the caller holds admin), for the management API of whatever hosts the home: the Proxy's management listener, `dbdatakit identity run`'s. `HomeDirectory` gains `Assignments`, `RemoveAssignment`, `MembersOf`, `RemoveGroup`; `OidcClients.Remove` (its refresh tokens revoked).
 
-Not here yet: Entra's group overage, an Entra sign-in that comes back to another instance of a group than the one that started it (the attempt is in memory until O02), the serving layer forwarding a home that runs on its own (O07).
+A group of homes on one SQL Server or PostgreSQL state (plan 20 O02b) works behind any balancer: an Entra sign-in in progress, a passkey ceremony's challenge and the management tokens used are in the state (`OneTimeValues`), each used once.
+
+Not here yet: Entra's group overage, the serving layer forwarding a home that runs on its own (O07).

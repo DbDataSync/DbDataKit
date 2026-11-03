@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using DbDataKit.State;
 
 namespace DbDataKit.Identity;
 
@@ -16,6 +17,47 @@ public sealed record OpenIdClientOptions(string Authority, string ClientId, stri
 
 /// <summary>What the home gave besides who the person is: the refresh token (the means to ask again, and to be told no) and the id token (what proves to the home, at sign-out, whose session to end). Both are secrets.</summary>
 public sealed record HomeGrant(string? RefreshToken, string? IdToken);
+
+/// <summary>A sign-in that has been started: what the browser's return is checked against (the PKCE verifier and the nonce), until when, and where the person was going.</summary>
+public sealed record OpenIdAttempt(string Verifier, string Nonce, DateTimeOffset Expires, string? ReturnUrl);
+
+/// <summary>Where an <see cref="OpenIdClient"/> remembers the sign-ins it has started, by their <c>state</c>. Each is taken once.</summary>
+public interface IOpenIdAttempts
+{
+    void Hold(string state, OpenIdAttempt attempt);
+
+    /// <summary>The attempt, removed; null when there is none (never started here, or already taken).</summary>
+    OpenIdAttempt? Take(string state);
+}
+
+/// <summary>Attempts in this process's memory.</summary>
+public sealed class MemoryOpenIdAttempts(TimeProvider? clock = null) : IOpenIdAttempts
+{
+    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
+    private readonly ConcurrentDictionary<string, OpenIdAttempt> _attempts = new(StringComparer.Ordinal);
+
+    public void Hold(string state, OpenIdAttempt attempt)
+    {
+        var now = _clock.GetUtcNow();
+        foreach (var old in _attempts.Where(a => a.Value.Expires < now).Select(a => a.Key)) _attempts.TryRemove(old, out _);
+        _attempts[state] = attempt;
+    }
+
+    public OpenIdAttempt? Take(string state) => _attempts.TryRemove(state, out var attempt) ? attempt : null;
+}
+
+/// <summary>
+/// Attempts in the state (<see cref="OneTimeValues"/>), so any instance that shares it completes a sign-in another started (plan 20 O02b). The verifier is kept as it is: it is worth nothing without the code, which only the
+/// browser carries, and only until the attempt expires.
+/// </summary>
+/// <param name="values">The state's one-time values.</param>
+/// <param name="purpose">Which client's attempts these are (one state may hold several clients').</param>
+public sealed class StateOpenIdAttempts(OneTimeValues values, string purpose) : IOpenIdAttempts
+{
+    public void Hold(string state, OpenIdAttempt attempt) => values.Hold(purpose, state, JsonSerializer.Serialize(attempt), attempt.Expires);
+
+    public OpenIdAttempt? Take(string state) => values.Take(purpose, state) is { } json ? JsonSerializer.Deserialize<OpenIdAttempt>(json) : null;
+}
 
 /// <summary>A completed sign-in: the person, where they were going, and the grant.</summary>
 public sealed record HomeSignIn(HomeIdentity Identity, string? ReturnUrl, HomeGrant Grant);
@@ -34,27 +76,28 @@ public sealed class OpenIdClientException(string message, bool homeRefused = fal
 /// The relying party of the identity home (plan 13a U14): what a second console, an app host or an agent uses to sign people in through the home instead of keeping users of its own. It sends the browser to the home with a
 /// PKCE challenge and a nonce, and when the browser comes back it trades the code for tokens, checks the id token (ES256, or RS256 for another provider, against the home's published keys, issuer, audience, expiry, nonce) and reads who the person is.
 /// </summary>
-public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, TimeProvider? clock = null)
+/// <param name="options">The home, and this application as registered there.</param>
+/// <param name="http">The client the home is reached with.</param>
+/// <param name="clock">The time; null: the system's.</param>
+/// <param name="attempts">Where a sign-in that has been started is remembered until the browser comes back; null: this process's memory, which is enough for a host that runs once. A host that runs as several instances
+/// behind one address gives <see cref="StateOpenIdAttempts"/>, so the instance the browser comes back to need not be the one it left from.</param>
+public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, TimeProvider? clock = null, IOpenIdAttempts? attempts = null)
 {
     private static readonly TimeSpan AttemptLifetime = TimeSpan.FromMinutes(10);
 
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
-    private readonly ConcurrentDictionary<string, Attempt> _attempts = new(StringComparer.Ordinal);
+    private readonly IOpenIdAttempts _attempts = attempts ?? new MemoryOpenIdAttempts(clock);
     private readonly string _authority = options.Authority.TrimEnd('/');
-
-    private sealed record Attempt(string Verifier, string Nonce, DateTimeOffset Expires, string? ReturnUrl);
 
     /// <summary>Where to send the browser, and the state to remember until it comes back (<paramref name="returnUrl"/> is handed back by <see cref="CompleteAsync"/>).</summary>
     public async Task<Uri> BeginAsync(string? returnUrl, CancellationToken ct)
     {
         var discovery = await DiscoveryAsync(ct);
         var now = _clock.GetUtcNow();
-        foreach (var old in _attempts.Where(a => a.Value.Expires < now).Select(a => a.Key)) _attempts.TryRemove(old, out _);
-
         var verifier = Random(48);
         var state = Random(24);
         var nonce = Random(24);
-        _attempts[state] = new Attempt(verifier, nonce, now + AttemptLifetime, returnUrl);
+        _attempts.Hold(state, new OpenIdAttempt(verifier, nonce, now + AttemptLifetime, returnUrl));
         var challenge = Base64Url.EncodeToString(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
         var query = string.Join('&', new (string, string)[]
         {
@@ -67,7 +110,7 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
     /// <summary>Completes a sign-in from the home's redirect (<paramref name="state"/> and <paramref name="code"/>, or <paramref name="error"/>). A state works once.</summary>
     public async Task<HomeSignIn> CompleteAsync(string? state, string? code, string? error, CancellationToken ct)
     {
-        if (state is null || !_attempts.TryRemove(state, out var attempt) || attempt.Expires < _clock.GetUtcNow()) throw new OpenIdClientException("This sign-in was not started here, or it has taken too long. Start again.");
+        if (state is null || _attempts.Take(state) is not { } attempt || attempt.Expires < _clock.GetUtcNow()) throw new OpenIdClientException("This sign-in was not started here, or it has taken too long. Start again.");
         if (!string.IsNullOrEmpty(error)) throw new OpenIdClientException($"The identity home refused the sign-in ({error}).");
         if (string.IsNullOrEmpty(code)) throw new OpenIdClientException("The identity home sent no code.");
 
