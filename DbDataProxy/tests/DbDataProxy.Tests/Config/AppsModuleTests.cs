@@ -92,7 +92,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Redirect, back.StatusCode);
         var callback = await apps.GetAsync(back.Headers.Location);
         Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
-        Assert.Equal(path, callback.Headers.Location!.OriginalString);
+        Assert.Equal(path + "?launch", callback.Headers.Location!.OriginalString);   // the sign-in returns to the launch address
         var cookie = callback.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith(AppsEndpoints.SessionCookie + "=", StringComparison.Ordinal));
         Assert.Contains("httponly", cookie, StringComparison.OrdinalIgnoreCase);
         return cookie[(AppsEndpoints.SessionCookie.Length + 1)..].Split(';')[0];
