@@ -20,15 +20,32 @@ public static class ProxyState
     /// <summary>How many of the home's scripts there were when the group's trust (<see cref="DbDataKit.Web.Trust.GroupTrustSchema"/>, plan 20 O04) was appended after them.</summary>
     public const int HomeTemplatesBeforeTrust = 9;
 
+    /// <summary>How many of the home's scripts there were when the group's secrets (<see cref="ProxyGroupSchema.Secrets"/>, plan 20 O04b) were appended after them.</summary>
+    public const int HomeTemplatesBeforeSecrets = 9;
+
+    /// <summary>The proxy's own scripts among the identity home's: each after the number of the home's scripts there were when it was added, in the order added (a database knows its scripts by position).</summary>
+    private static readonly (int AfterHome, string Script)[] OwnAmongHome =
+    [
+        (HomeTemplatesBeforeGroup, ProxyGroupSchema.Tables),                        // plan 20 O02: sessions, audit, the group's key check, the running instances
+        (HomeTemplatesBeforeTrust, DbDataKit.Web.Trust.GroupTrustSchema.Tables),    // plan 20 O04a: the group's instance id, paired clients, pairing codes and certificate
+        (HomeTemplatesBeforeSecrets, ProxyGroupSchema.Secrets),                     // plan 20 O04b: the secrets the group's clients keep on it
+    ];
+
     /// <summary>The proxy's tables, in the order they were added.</summary>
     public static StateSchema Schema { get; } = new([
         NotificationSchema.Feed, SavedQuerySchema.Tables, DbDataKit.State.DefinitionSchema.Tables, DbDataKit.State.AppStorageSchema.Tables,
-        .. DbDataKit.Identity.HomeSchema.Templates.Take(HomeTemplatesBeforeGroup),
-        ProxyGroupSchema.Tables,                                                     // plan 20 O02: sessions, audit, the group's key check, the running instances
-        .. DbDataKit.Identity.HomeSchema.Templates.Take(HomeTemplatesBeforeTrust).Skip(HomeTemplatesBeforeGroup),
-        DbDataKit.Web.Trust.GroupTrustSchema.Tables,                                 // plan 20 O04: the group's instance id, paired clients, pairing codes and certificate
-        .. DbDataKit.Identity.HomeSchema.Templates.Skip(HomeTemplatesBeforeTrust),
+        .. Interleave(DbDataKit.Identity.HomeSchema.Templates, OwnAmongHome),
     ]);
+
+    private static IEnumerable<string> Interleave(IReadOnlyList<string> home, (int AfterHome, string Script)[] own)
+    {
+        for (var i = 0; i <= home.Count; i++)
+        {
+            foreach (var (after, script) in own.Where(o => o.AfterHome == i)) yield return script;
+            if (i < home.Count) yield return home[i];
+        }
+        foreach (var (_, script) in own.Where(o => o.AfterHome > home.Count)) yield return script;
+    }
 
     public static string PathIn(string dataDirectory) => Path.Combine(dataDirectory, FileName);
 

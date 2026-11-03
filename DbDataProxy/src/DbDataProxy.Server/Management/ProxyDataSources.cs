@@ -15,9 +15,14 @@ namespace DbDataProxy.Server.Management;
 /// Data sources through the management API (plan 13, P04): list, read, create or change, delete and test the files of <c>connections/</c>. A write is a whole <c>connection/1</c> file, validated with the rest of the configuration as it would be
 /// once written (a file that would make the configuration invalid is refused with the diagnostics and nothing is written), checked against the version the caller read (a stale write is a 409 with the current version), written, committed to the
 /// configuration folder's git history as the person who made it, noted in the audit, and applied at once: the options monitor is told, and the next query sees the change without a restart.
+/// <para>
+/// In a group (plan 20 O04b), a data source a client publishes is the group's: it is kept in the state as a published definition (<see cref="PublishedDataSources"/>), not in this instance's folder or its history, so
+/// every instance serves it. One made by hand stays a file of the instance it was made on.
+/// </para>
 /// </summary>
 public sealed partial class ProxyDataSources(
-    string configDirectory, ProxyManagement validation, Action reload, Func<DataSourceCatalog> catalog, IAuditLog audit, GitCommitService? git, TimeProvider? clock = null, Func<string, PairedClient?>? findClient = null)
+    string configDirectory, ProxyManagement validation, Action reload, Func<DataSourceCatalog> catalog, IAuditLog audit, GitCommitService? git, TimeProvider? clock = null, Func<string, PairedClient?>? findClient = null,
+    DbDataProxy.Server.Serving.PublishedDataSources? published = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly WriteGuard _guard = new();
@@ -26,6 +31,15 @@ public sealed partial class ProxyDataSources(
     private string Folder => Path.Combine(configDirectory, "connections");
 
     private string FileOf(string name) => Path.Combine(Folder, name + ".yaml");
+
+    /// <summary>The data source's file: this instance's own, else the group's published one; null when there is neither.</summary>
+    private string? TextOf(string name) => File.Exists(FileOf(name)) ? File.ReadAllText(FileOf(name)) : published?.Text(name);
+
+    /// <summary>Whether a write to the name goes to the group: a group's instance, no file of its own under the name, and either a client publishing or a data source the group already has.</summary>
+    private bool ToGroup(string name, ManagementCaller caller) =>
+        published is { Enabled: true } && !File.Exists(FileOf(name)) && (!IsAdministrator(caller) || published.Text(name) is not null);
+
+    private string Who(ManagementCaller caller) { var entry = caller.Audit("", null, "", _clock.GetUtcNow()); return entry.UserName ?? entry.UserId; }
 
     /// <summary>The version of a file: the SHA-256 of its text, which a caller names in its next write.</summary>
     public static string VersionOf(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
@@ -41,7 +55,7 @@ public sealed partial class ProxyDataSources(
             return method == "POST" ? await AdoptAsync(name, body, caller, cancellationToken) : ManagementResult.Problem(405, "A data source is adopted with POST.");
 
         // a publishing client reaches only the data sources it made (the owner rules, plan 13 W12); an administrator reaches all
-        var action = method switch { "GET" or "POST" => ObjectAction.Change, "DELETE" => ObjectAction.Delete, _ => File.Exists(FileOf(name)) ? ObjectAction.Change : ObjectAction.Create };
+        var action = method switch { "GET" or "POST" => ObjectAction.Change, "DELETE" => ObjectAction.Delete, _ => TextOf(name) is not null ? ObjectAction.Change : ObjectAction.Create };
         if (Scope(caller, action, name) is { } refused) { Record(caller, $"data-source {method.ToLowerInvariant()}", name, "refused"); return refused; }
 
         if (rest.Length == 2 && rest[1] == "test") return method == "POST" ? await TestAsync(name, cancellationToken) : ManagementResult.Problem(405, "A data source is tested with POST.");
@@ -70,15 +84,26 @@ public sealed partial class ProxyDataSources(
                     ["engine"] = loaded.Definition?.Engine, ["access"] = loaded.Definition?.Access.ToString().ToLowerInvariant(), ["managed_by"] = loaded.Definition?.ManagedBy,
                 });
             }
+        // the group's published data sources, after this instance's own (a name of its own wins)
+        var own = items.Select(i => (string)i!["name"]!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, text) in published?.All() ?? [])
+        {
+            if (own.Contains(name)) continue;
+            var loaded = DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml");
+            if (owner is not null && loaded.Definition?.ManagedBy != owner) continue;
+            items.Add(new JsonObject
+            {
+                ["name"] = name, ["version"] = VersionOf(text), ["valid"] = loaded.Ok, ["engine"] = loaded.Definition?.Engine, ["access"] = loaded.Definition?.Access.ToString().ToLowerInvariant(),
+                ["managed_by"] = loaded.Definition?.ManagedBy, ["group"] = true,
+            });
+        }
         return new JsonObject { ["data_sources"] = items };
     }
 
     private ManagementResult Read(string name)
     {
-        var file = FileOf(name);
-        if (!File.Exists(file)) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
-        var text = File.ReadAllText(file);
-        return ManagementResult.Ok(new JsonObject { ["name"] = name, ["text"] = text, ["version"] = VersionOf(text) });
+        if (TextOf(name) is not { } text) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
+        return ManagementResult.Ok(new JsonObject { ["name"] = name, ["text"] = text, ["version"] = VersionOf(text), ["group"] = !File.Exists(FileOf(name)) });
     }
 
     private sealed record WriteRequest(string? Text, [property: System.Text.Json.Serialization.JsonPropertyName("expected_version")] string? ExpectedVersion);
@@ -112,6 +137,28 @@ public sealed partial class ProxyDataSources(
                 return ManagementResult.Problem(403, "The file names another client in managed_by.");
             }
             if (string.IsNullOrEmpty(sent?.ManagedBy)) text = (text.EndsWith('\n') ? text : text + "\n") + $"managed_by: {client}\n";
+        }
+
+        if (ToGroup(name, caller))
+        {
+            // the group's: in the state, served here at once and by every other instance when it next looks (plan 20 O04b)
+            var was = published!.Text(name);
+            var grouped = await _guard.RunAsync(name, request.ExpectedVersion, () => Task.FromResult(published.Text(name) is { } now ? VersionOf(now) : null), () =>
+            {
+                published.Publish(name, text, Who(caller));
+                return Task.FromResult(VersionOf(text));
+            }, cancellationToken);
+            if (!grouped.Applied)
+            {
+                Record(caller, "data-source write", name, "stale");
+                return new ManagementResult(409, new JsonObject { ["error"] = "The data source changed since it was read; read it again and make the change on that.", ["current_version"] = grouped.CurrentVersion });
+            }
+            Record(caller, "data-source write", name, was is null ? "created" : "changed");
+            return ManagementResult.Ok(new JsonObject
+            {
+                ["name"] = name, ["version"] = grouped.Value, ["created"] = was is null, ["group"] = true,
+                ["diagnostics"] = new JsonArray([.. candidate.Body["diagnostics"]!.AsArray().Select(d => d!.DeepClone())]),
+            });
         }
 
         var file = FileOf(name);
@@ -203,6 +250,21 @@ public sealed partial class ProxyDataSources(
     private async Task<ManagementResult> DeleteAsync(string name, string? expectedVersion, ManagementCaller caller, CancellationToken cancellationToken)
     {
         var file = FileOf(name);
+        if (!File.Exists(file) && published?.Text(name) is not null)
+        {
+            var retired = await _guard.RunAsync(name, expectedVersion, () => Task.FromResult(published.Text(name) is { } now ? VersionOf(now) : null), () =>
+            {
+                published.Retire(name, Who(caller));
+                return Task.FromResult(true);
+            }, cancellationToken);
+            if (!retired.Applied)
+            {
+                Record(caller, "data-source delete", name, "stale");
+                return new ManagementResult(409, new JsonObject { ["error"] = "The data source changed since it was read; read it again.", ["current_version"] = retired.CurrentVersion });
+            }
+            Record(caller, "data-source delete", name, "removed");
+            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["removed"] = true, ["group"] = true });
+        }
         if (!File.Exists(file)) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
         var result = await _guard.RunAsync(name, expectedVersion, () => Task.FromResult(File.Exists(file) ? VersionOf(File.ReadAllText(file)) : null), () =>
         {
@@ -226,7 +288,7 @@ public sealed partial class ProxyDataSources(
     /// </summary>
     private async Task<ManagementResult> TestAsync(string name, CancellationToken cancellationToken)
     {
-        if (!File.Exists(FileOf(name))) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
+        if (TextOf(name) is null) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
         var started = _clock.GetTimestamp();
         try
         {
@@ -260,9 +322,9 @@ public sealed partial class ProxyDataSources(
     private ManagementResult? Scope(ManagementCaller caller, ObjectAction action, string name)
     {
         if (IsAdministrator(caller)) return null;
-        var file = FileOf(name);
-        if (action != ObjectAction.Create && !File.Exists(file)) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
-        ManagedObject? target = action == ObjectAction.Create ? null : new ManagedObject(DbDataKit.Connections.ConnectionDefinitionLoader.Load(File.ReadAllText(file), file).Definition?.ManagedBy);
+        var text = TextOf(name);
+        if (action != ObjectAction.Create && text is null) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
+        ManagedObject? target = action == ObjectAction.Create ? null : new ManagedObject(DbDataKit.Connections.ConnectionDefinitionLoader.Load(text!, name + ".yaml").Definition?.ManagedBy);
         var decision = OwnerScope.Authorize(caller.Token!, action, target);
         return decision.Allowed ? null : ManagementResult.Problem(403, decision.Reason ?? "This client may not do this to that data source.");
     }

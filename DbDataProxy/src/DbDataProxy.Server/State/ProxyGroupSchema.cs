@@ -39,4 +39,17 @@ public static class ProxyGroupSchema
             HeartbeatAtUtc {{key}} NOT NULL
         );
         """;
+
+    /// <summary>
+    /// The secrets the clients of a group keep on it (plan 20 O04b): a Build server's read login for a data source it published, which every instance needs to serve that source. Each value encrypted with the group's key.
+    /// Appended after the group's trust (<see cref="DbDataKit.Web.Trust.GroupTrustSchema"/>).
+    /// </summary>
+    public const string Secrets =
+        """
+        -- A secret a client of the group keeps on it (a published data source's login), by its full name (dbdata:proxy:managed-<client>:<name>); the value encrypted with the group's key, never in the clear.
+        CREATE TABLE GroupSecrets (
+            Name  {{key}} PRIMARY KEY,
+            Value {{text}} NOT NULL
+        );
+        """;
 }

@@ -34,12 +34,15 @@ public sealed class SecretsRuntime
     private readonly ISecretResolver _resolver;
     private readonly ConcurrentDictionary<string, byte> _warned = new(StringComparer.Ordinal);
 
-    public SecretsRuntime(Redactor redactor, IOptionsMonitor<ProxyOptions> options, ILoggerFactory loggerFactory)
+    public SecretsRuntime(Redactor redactor, IOptionsMonitor<ProxyOptions> options, ILoggerFactory loggerFactory, GroupSecretStore? group = null)
     {
         _redactor = redactor;
         _options = options;
         _log = loggerFactory.CreateLogger("DbDataProxy.Secrets");
-        _resolver = new SecretResolverChain(CreateProviders(options.CurrentValue),
+        var providers = CreateProviders(options.CurrentValue);
+        // a group's clients' secrets (plan 20 O04b) are the group's: asked first for their names, and only for them
+        if (group is not null) providers.Insert(0, group);
+        _resolver = new SecretResolverChain(providers,
             new DelegateSecretAudit(line => _log.LogDebug("{Audit}", line)), redactor);
     }
 

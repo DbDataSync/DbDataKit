@@ -181,7 +181,13 @@ public static class ProxyHost
         services.AddSingleton(sp => new DbDataKit.State.DefinitionStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
         services.AddSingleton(sp => new PublishedSemanticModels(sp.GetRequiredService<DbDataKit.State.DefinitionStore>(), sp.GetRequiredService<SemanticModels>(),
             problem => sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Semantic").LogWarning("{Problem}", problem)));
-        services.AddSingleton(sp => new DbDataKit.State.DefinitionFollower(sp.GetRequiredService<DbDataKit.State.DefinitionStore>(), [sp.GetRequiredService<PublishedSemanticModels>()],
+        // the data sources a client publishes to a group (O04b), written where the configuration reads them, which is then read again
+        services.AddSingleton(sp => new PublishedDataSources(sp.GetRequiredService<DbDataKit.State.DefinitionStore>(), sp.GetRequiredService<DbDataKit.State.StateDatabase>(),
+            ResolveDataDirectory(sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue),
+            () => ((IConfigurationRoot)sp.GetRequiredService<IConfiguration>()).Providers.OfType<ProxyConfigDirectoryProvider>().FirstOrDefault()?.ReloadNow(),
+            problem => sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Definitions").LogWarning("{Problem}", problem)));
+        services.AddSingleton(sp => new DbDataKit.State.DefinitionFollower(sp.GetRequiredService<DbDataKit.State.DefinitionStore>(),
+            [sp.GetRequiredService<PublishedDataSources>(), sp.GetRequiredService<PublishedSemanticModels>()],
             (kind, name, version, ex) => sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Definitions").LogWarning("The published {Kind} '{Name}' version {Version} is not served here: {Message}", kind, name, version, ex.Message)));
         services.AddHostedService<DbDataProxy.Server.State.DefinitionFollowerService>();
         services.AddSingleton<IServingServices>(sp => sp.GetRequiredService<ProxyServing>().WithSemantic(sp.GetRequiredService<SemanticModels>()));
@@ -254,6 +260,8 @@ public static class ProxyHost
         builder.Services.AddSingleton(sp => new DbDataProxy.Server.State.SavedQueryStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
         builder.Services.AddSingleton<ProxyEvents>();
         builder.Services.AddSingleton<DbDataProxy.Server.State.GroupSessionKey>();
+        // the secrets a group's clients keep on it (plan 20 O04b); the state is looked up when a client's secret is first asked for, never to open the state itself
+        builder.Services.AddSingleton(sp => new GroupSecretStore(() => sp.GetRequiredService<DbDataKit.State.StateDatabase>(), () => sp.GetRequiredService<DbDataProxy.Server.State.GroupSessionKey>()));
         builder.Services.AddHostedService<DbDataProxy.Server.State.ProxyStateStartup>();
         // this instance's row in the state; a second instance on a SQLite state is refused (plan 20 O02)
         builder.Services.AddSingleton<DbDataProxy.Server.State.ServingInstanceLease>();

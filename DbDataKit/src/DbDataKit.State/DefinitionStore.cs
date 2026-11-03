@@ -217,14 +217,14 @@ public sealed partial class DefinitionStore(StateDatabase database, TimeProvider
     private static void Check(string kind, string name, string channel)
     {
         if (!Word().IsMatch(kind)) throw new ArgumentException("A definition's kind is lowercase letters, digits, dashes and underscores.", nameof(kind));
-        if (!NameWord().IsMatch(name)) throw new ArgumentException("A definition's name is lowercase letters, digits, dots, dashes and underscores.", nameof(name));
+        if (!NameWord().IsMatch(name)) throw new ArgumentException("A definition's name is letters, digits, dots, dashes and underscores.", nameof(name));
         if (!Word().IsMatch(channel)) throw new ArgumentException("A channel's name is lowercase letters, digits, dashes and underscores.", nameof(channel));
     }
 
     [GeneratedRegex("^[a-z0-9][a-z0-9_-]{0,63}$")]
     private static partial Regex Word();
 
-    // a name may carry dots too, as a semantic model's does
-    [GeneratedRegex("^[a-z0-9][a-z0-9_.-]{0,63}$")]
+    // a name may carry dots too, as a semantic model's does, and capitals, as a data source's (a file's name) may
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")]
     private static partial Regex NameWord();
 }
