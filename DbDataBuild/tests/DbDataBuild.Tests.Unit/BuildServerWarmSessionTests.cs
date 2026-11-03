@@ -73,7 +73,8 @@ public sealed class BuildServerWarmSessionTests : IDisposable
     [Fact]
     public async Task A_command_that_runs_too_long_is_stopped_with_its_session_and_the_next_one_starts_fresh()
     {
-        using var runner = new WarmSessionRunner(TimeSpan.FromMilliseconds(1));
+        // zero cancels at once; a millisecond is a timer, and a loaded machine fires it after the child has already answered (seen on Windows CI: exit 1, not 124)
+        using var runner = new WarmSessionRunner(TimeSpan.Zero);
 
         var result = await runner.RunAsync(Check(project), project, CancellationToken.None);
 
