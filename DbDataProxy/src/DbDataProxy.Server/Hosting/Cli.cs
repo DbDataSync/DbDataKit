@@ -18,7 +18,7 @@ public static class Cli
     public static Task<int> RunAsync(string[] args, CliContext context) => Router().RunAsync(args, context);
 
     /// <summary>What <c>ui mcp</c> never offers: secrets (they read standard input, which is the protocol's channel), queries (they return rows; an agent works without data) and adopting (a person's act).</summary>
-    private static readonly string[] NotForAgents = ["secret", "query", "server pair", "server unpair", "datasource adopt", "identity"];   // identity: client secrets and invitations establish trust, as pairing does
+    private static readonly string[] NotForAgents = ["secret", "query", "server pair", "server unpair", "datasource adopt", "identity", "apps"];   // identity: client secrets and invitations establish trust, as pairing does
 
     public static NounRouter Router()
     {
@@ -34,6 +34,7 @@ public static class Cli
         CertNoun(),
         SecretNoun(),
         IdentityCommand.Noun(),
+        AppsCommand.Noun(),
         ConfigNoun(),
         QueryNoun(),
         DbDataKit.Semantic.Cli.SemanticNoun.Create(ProxySemanticSession.ConnectAsync, ProxySemanticSession.Options, ProxySemanticSession.Flags, ProxySemanticSession.Usage),

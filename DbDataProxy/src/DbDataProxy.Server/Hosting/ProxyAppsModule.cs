@@ -27,7 +27,7 @@ public sealed class ProxyAppsModule(IOptionsMonitor<ProxyOptions> options, State
 
     private WebApplication? _app;
 
-    private static async Task<ConsoleSigningKey> SigningKeyAsync(ProxyOptions current, CancellationToken cancellationToken)
+    public static async Task<ConsoleSigningKey> SigningKeyAsync(ProxyOptions current, CancellationToken cancellationToken)
     {
         var store = SecretsRuntime.OpenStore(current);
         using var held = await store.TryResolveAsync(SecretRef.Parse("secret:" + SigningKeySecret), cancellationToken);
@@ -76,9 +76,11 @@ public sealed class ProxyAppsModule(IOptionsMonitor<ProxyOptions> options, State
         var client = new OpenIdClient(
             new OpenIdClientOptions(home.AbsoluteUri, current.Apps.Home.ClientId!, secret, new Uri(PublicUrlOf(current), AppsEndpoints.CallbackPath).AbsoluteUri),
             new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) });
+        var key = await SigningKeyAsync(current, cancellationToken);
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
-        app.MapApps(instances, new AppSite(instances), client, new AppSessions(), stores: current.Apps.Stores, broker: new AppTokenBroker(new ConsoleTokenIssuer(TokenIssuer, await SigningKeyAsync(current, cancellationToken))));
+        app.MapApps(instances, new AppSite(instances), client, new AppSessions(),
+            new AppTokenBroker(new ConsoleTokenIssuer(TokenIssuer, key)), new AppDataGateway(instances, StoresOf(current), new ConsoleIdentity(TokenIssuer, key)));
         app.MapFallback(() => Results.Text("The apps host of this DbDataProxy. An app is at /apps/<instance>/.", "text/plain"));
         await app.StartAsync(cancellationToken);
         _app = app;
@@ -89,6 +91,9 @@ public sealed class ProxyAppsModule(IOptionsMonitor<ProxyOptions> options, State
         !string.IsNullOrWhiteSpace(options.Apps.PublicUrl)
             ? new Uri(options.Apps.PublicUrl.TrimEnd('/') + "/")
             : new UriBuilder(Uri.UriSchemeHttps, options.Tls.Hostnames.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h)) ?? "localhost", options.Apps.Port).Uri;
+
+    /// <summary>The Store servers this host is paired with (<c>dbdataproxy apps store-pair</c>).</summary>
+    public static AppStores StoresOf(ProxyOptions options) => new(Path.Combine(ProxyHost.ResolveDataDirectory(options), "apps", "stores.json"));
 
     private static Uri HomeOf(ProxyOptions options) =>
         new((string.IsNullOrWhiteSpace(options.Apps.Home.Authority) ? ProxyIdentityModule.PublicUrlOf(options).AbsoluteUri : options.Apps.Home.Authority).TrimEnd('/'));

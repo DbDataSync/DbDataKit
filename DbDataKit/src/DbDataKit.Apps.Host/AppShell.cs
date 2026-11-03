@@ -12,7 +12,7 @@ public static class AppShell
     public const string ScriptPath = "/apps/-/shell.js";
 
     /// <summary>
-    /// The token broker's side in the page (plan 26 section 3): a frame asks with <c>postMessage({dbdata: "app/1", type: "token.request", id, server?})</c> and gets <c>{type: "token", id, token, expiresIn, audience}</c> or <c>{type: "error", id, message}</c>.
+    /// The token broker's side in the page (plan 26 section 3): a frame asks with <c>postMessage({dbdata: "app/1", type: "token.request", id})</c> and gets <c>{type: "token", id, token, expiresIn, audience}</c> or <c>{type: "error", id, message}</c>.
     /// Only the app's own frame is answered (the message's source is checked against it), and the request to the host carries a header a cross-site page cannot send.
     /// </summary>
     public const string Script = """
@@ -23,8 +23,7 @@ public static class AppShell
             var m = event.data;
             if (event.source !== frame.contentWindow || !m || m.dbdata !== "app/1" || m.type !== "token.request" || typeof m.id !== "string") return;
             function reply(body) { body.dbdata = "app/1"; body.id = m.id; frame.contentWindow.postMessage(body, "*"); }
-            var ask = typeof m.server === "string" ? { server: m.server } : null;
-            fetch("/apps/" + encodeURIComponent(instance) + "/_token", { method: "POST", credentials: "same-origin", headers: ask ? { "X-DbData-Shell": "1", "Content-Type": "application/json" } : { "X-DbData-Shell": "1" }, body: ask ? JSON.stringify(ask) : undefined })
+            fetch("/apps/" + encodeURIComponent(instance) + "/_token", { method: "POST", credentials: "same-origin", headers: { "X-DbData-Shell": "1" } })
               .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error("The host refused a token (" + r.status + ").")); })
               .then(function (t) { reply({ type: "token", token: t.token, expiresIn: t.expiresIn, audience: t.audience }); })
               .catch(function (e) { reply({ type: "error", message: String(e.message || e) }); });
@@ -46,8 +45,8 @@ public static class AppShell
             <title>{{WebUtility.HtmlEncode(title)}}</title>
             <style>html,body{height:100%;margin:0}iframe{border:0;width:100%;height:100%;display:block}</style>
             </head><body>
-            <script src="{{ScriptPath}}"></script>
             <iframe id="app-frame" data-instance="{{WebUtility.HtmlEncode(instance)}}" title="{{WebUtility.HtmlEncode(title)}}" sandbox="allow-scripts allow-forms allow-popups" src="{{WebUtility.HtmlEncode(bundle)}}"></iframe>
+            <script src="{{ScriptPath}}"></script>
             </body></html>
             """;
         return new AppResponse(200, "text/html; charset=utf-8", new Dictionary<string, string>

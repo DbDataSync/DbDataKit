@@ -10,6 +10,8 @@ dbdatastore server run [--repo <server directory>] [--listen https://127.0.0.1:8
 dbdatastore server pair --max-role <roles> [--repo <server directory>]
 dbdatastore server clients | unpair <client> [--repo <server directory>]
 dbdatastore service install|uninstall|status|start|stop|restart|doctor|unit
+dbdatastore model put --file <model.yaml> [--name <model>] [--repo <server directory>]      # checked first, then saved
+dbdatastore storage create --model <model> [--repo <server directory>]                      # the tables of the model's own copy, on connections/<name>.yaml
 dbdatastore health check [--url <url>]
 ```
 

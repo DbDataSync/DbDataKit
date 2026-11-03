@@ -140,6 +140,10 @@ jobs:
       - name: Build a Proxy
         working-directory: DbDataProxy
         run: dotnet build src/DbDataProxy.Server -c Debug
+      # A real Store, for the apps host story (plan 26, AP05): a sandboxed app reads and writes its tables through the host.
+      - name: Build a Store
+        working-directory: DbDataStore
+        run: dotnet build src/DbDataStore.Server -c Debug
       - name: Install the browser
         working-directory: DbDataConsole/tests/DbDataConsole.Web.Tests
         run: |
