@@ -9,7 +9,7 @@ detailed plan of its own (section 9) once the questions are answered.
 | --- | --- |
 | **DbDataKnowledge** | what agents know: on the back end, to build new objects that fit what exists; on the front end, to answer questions and write queries |
 | **DbDataAgents** | an agent definition: its purpose, the context and knowledge it reads, the tools it may call, the model it uses and how it is tested, for business users on the front end or developers on the back end |
-| **Integrations and custom logic** (working name DbDataIntegrate; section 4.10) | integrations with systems outside the suite's databases (web APIs, file shares, object storage), into the suite and out of it; agents' custom tools; apps' custom server-side logic, including elevated actions that act with the app's permissions rather than the user's; Sync's scripts |
+| **Integrations and custom logic** (working name DbDataIntegrate; section 4.10) | integrations with systems outside the suite's databases (web APIs, file shares, object storage), into the suite and out of it; agents' custom tools; apps' custom server-side logic, including elevated actions that hold the permission to the data, while people hold the permission to run them; Sync's scripts |
 | **DbDataBacklog** (working name; section 5) | backlog, sprint and work management, tied to the suite's own objects |
 
 ## 1. What already exists, and what this plan adds
@@ -197,55 +197,70 @@ of the identity home (plan 16, "Sign-in decisions" item 2).
 must not send production data to a real supplier or create real tickets. Outbound steps in a non-production channel go to the
 connection bound for that channel (a sandbox endpoint) or are refused; they are never silently pointed at production.
 
-### 4.6 Elevated actions: permissions held by the app, not the user
+### 4.6 Elevated actions: permissions held by the action, not the user
 
-**The need (owner, 2026-11-03).** Some workflows should let a person do one specific thing to DbDataStore data that they have no
-permission to do directly. The permission is assigned to the **app**, and the person gets it only by using the app, for that one purpose.
-Examples:
+**The need (owner, 2026-11-03).** Some workflows should let a person make one specific change to DbDataStore data that they have no
+permission to make directly. **The permission to read and write the data is assigned to the action. The person is given permission to
+run the action.** The action checks each request and then applies it or rejects it. Examples:
 
 - a requester may move their own expense claim from *Draft* to *Submitted*, but may not edit the claim after that or write to the claims
   entity at all;
-- an approver may set the status and a comment on a claim, and no other field;
+- an approver may set the status and a comment on a claim, and no other field, and only on claims of their own team;
 - a manager may add a new starter to an HR entity through an onboarding app without general write access to that entity;
 - anyone may see how many tickets are open per team, without being able to read the tickets.
 
+**Not tied to an app.** The action is the unit of permission, so the same elevated action can be called from several apps, from an agent
+acting for a person, or from the command surface, and the person's right to run it is the same everywhere. An app's manifest names the
+actions it calls; it does not grant anything.
+
 **How it fits plan 16's rules.** Plan 16 says an app is untrusted UI, and that an app's token is "never wider than the person". Both
-stay true for the app's **front end**: the code in the browser still holds only the person's own permissions, narrowed by the manifest.
-Elevation exists only in **server-side actions**, which are trusted code (section 4.5). The rule therefore still lives on the server, as
-plan 16 requires; it is written in the action instead of in a role. This is the same pattern as a stored procedure that runs with its
-owner's rights (`EXECUTE AS`, `SECURITY DEFINER`).
+stay true: the app's code in the browser holds only the person's own permissions, narrowed by the manifest. Elevation exists only inside
+**server-side actions**, which are trusted code (section 4.5). The rule therefore still lives on the server, as plan 16 requires; it is
+written in the action instead of in a role. This is the same pattern as a stored procedure that runs with its own rights and is granted
+`EXECUTE` (`EXECUTE AS`, `SECURITY DEFINER`).
 
-**The chain of permissions:**
+**The two grants:**
 
-1. **The app instance has an identity of its own**, an app principal in the identity home, one per instance and per channel.
-2. **Grants are made to the app principal**, as narrowly as DbDataStore's permissions allow: the entities, the operations (read, create,
-   update, change request), and where possible the fields and the row conditions. An administrator and the **data's owner** (the
-   DbDataStore model's owner) approve each grant, with an audit; owner question 11.
-3. **The action declares that it is elevated**, and which of the app's grants it uses. An action that is not marked elevated runs as the
-   person, as before.
-4. **The action names who may call it**: an app role. A person must hold that role in that app instance to run it.
-5. **The action knows who called it.** The caller's identity and attributes (plan 22 section 2) are part of its input, so it can enforce
-   "only your own claims" or "only your team's rows". The declarative form makes the common conditions one line (`where: owner =
-   caller.id`, `from_state: Draft`, `to_state: Submitted`, `fields: [status, comment]`), so most elevated actions need no code.
+1. **To the action: what it may do to the data.** Each elevated action has an identity of its own in the identity home (an action
+   principal), per channel. It is granted, as narrowly as DbDataStore's permissions allow, the entities, the operations (read, create,
+   update, change request), and where possible the fields and row conditions. An administrator and the **data's owner** (the DbDataStore
+   model's owner) approve these grants, with an audit (owner question 11).
+2. **To people: who may run the action.** People and groups are given *run* on the action, in the identity home like any role
+   assignment, so the same directory groups and DbDataStore grants (plan 22 section 2) can be used. Whoever may assign this is owner
+   question 11 too.
+
+An action that is not marked elevated has no grants of its own and runs as the person, as before.
+
+**The action decides: validate, then apply or reject.**
+
+1. **The caller is part of the input.** The action receives the person's identity and attributes (plan 22 section 2), so it can enforce
+   "only your own claims" or "only your team's rows".
+2. **It reads the current state** with its own grants and checks the request against it: the row exists, it is in the right state, the
+   caller is allowed this transition, the new values are acceptable.
+3. **It applies or rejects.** A rejection returns a reason the person (or the agent) can act on, and changes nothing. An application
+   writes through DbDataStore's normal write path in one transaction, so the **model's own validation still runs** after the action's
+   checks: the action can add rules, never skip the model's.
+4. **The declarative form** makes the common checks one line each (`where: owner = caller.id`, `from_state: Draft`, `to_state:
+   Submitted`, `fields: [status, comment]`), so most elevated actions need no code. Checks that need more are a `.csx` body.
 
 **Rules that keep it safe:**
 
-- **A person runs the action; they never get the app's grants.** The front end receives the action's result, shaped by its output schema,
-  never a token or rows the action was not written to return.
-- **No escalation:** an elevated action cannot change grants, roles, app definitions or model structure, and cannot call another
-  elevated action unless its definition names it.
-- **Audit names both:** every write records the app principal that made it, the person who asked, the action and its version. DbDataStore's
-  history shows "Alice, through Expense app *submit-claim* v3". "Who changed what" stays answerable.
+- **A person runs the action; they never get its grants.** They receive the action's result, shaped by its output schema, never a token or
+  rows the action was not written to return.
+- **No escalation:** an elevated action cannot change grants, roles, definitions or model structure, and cannot call another elevated
+  action unless its definition names it.
+- **Audit names both:** every write records the action and its version, its principal, and the person who asked (and the app or agent it
+  came through). DbDataStore's history shows "Alice ran *submit-claim* v3, from the Expense app". "Who changed what" stays answerable.
 - **Approval when published:** an elevated action is trusted code and needs the administrator's approval of that exact version
   (section 4.5, plan 26). A change to its grants or its body is a new version, approved again.
-- **Agents:** an agent acting for a person can call an elevated action only if that person could, and every elevated call asks the person
-  first, whatever the agent definition's approval policy says.
+- **Agents:** an agent acting for a person can call an elevated action only if that person may run it, and every elevated call asks the
+  person first, whatever the agent definition's approval policy says.
 - **Channels:** grants are per channel. In a preview, an elevated write goes to the preview's draft layer (plan 21), never to production.
-- **Limits:** per-caller rate limits, and a refused call is logged with the reason.
+- **Limits:** per-caller rate limits, and every rejection is logged with the reason.
 
 **When not to use it.** If a workflow is "a person proposes, someone with the right role approves", DbDataStore's change requests (plan 15)
-already do that without elevation. Elevated actions are for steps where the workflow itself is the control: a narrow change that people
-make themselves, without anyone approving each one.
+already do that without elevation. Elevated actions are for steps where the action's own checks are the control: a narrow change that
+people make themselves, without anyone approving each one.
 
 **Beyond DbDataStore.** Elevated reads of semantic models (an aggregate without row access) follow the same pattern, but are later work.
 The first version covers DbDataStore entities.
@@ -354,7 +369,7 @@ question 1.**
 | 1 | `agent/1` and one front-end agent: questions over a semantic model in the console's chat, with knowledge generated from the catalog and semantic descriptions, and full-text search | wave 0; plan 22 section 3's catalog search |
 | 2 | Actions: the manifest; Sync's scripts move onto it as hooks; a declarative, `.csx` or SQL action as a tool of an agent and an endpoint for an app, in a child process in the serving layer | wave 1; the serving contract (plan 20 section 10) |
 | 3 | Curated knowledge in DbDataStore (glossary, metrics, verified queries), drafts from agents, evaluation sets; embedding search if chosen | DbDataStore drafts (plan 21); access rules (plan 22 section 2) |
-| 3b | Elevated actions: app principals, grants with field and row conditions, the declarative form, audit of both identities | wave 2; DbDataStore permissions (plan 15); the identity home's service principals (13a U20) |
+| 3b | Elevated actions: action principals, grants to actions with field and row conditions, *run* grants to people, validate then apply or reject, the declarative form, audit of both identities | wave 2; DbDataStore permissions (plan 15); the identity home's service principals (13a U20) |
 | 4 | Flows: outside connections and connectors, inbound and outbound patterns, state, retries, webhooks, monitoring, lineage; back-end agents in workspaces | shared authoring (plan 22 section 1) |
 | 5 | The work tool: models, app, flows, assistant | DbDataStore relationships and documents; the app framework's declarative views |
 
@@ -374,7 +389,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 8 | First audience | front-end agents first (wave 1), since the semantic layer and catalog are closest to ready |
 | 9 | The name of the integrations and custom-logic area | DbDataIntegrate (section 4.10); inside it: connection, connector, action, flow, hook, script |
 | 10 | Outside systems as connections | a new kind in `connection/1`, sharing secrets, channel bindings and the console's view (section 4.4) |
-| 11 | Elevated actions: who approves a grant to an app principal | an administrator and the DbDataStore model's owner, both; recorded with an audit (section 4.6) |
+| 11 | Elevated actions: who approves an action's grants on data, and who may give people *run* on it | grants on data: an administrator and the DbDataStore model's owner, both, with an audit; *run*: the action's owner or an administrator (section 4.6) |
 
 ## 9. Detailed plans to follow
 
@@ -393,8 +408,8 @@ one branch `suite/<id>-<short-name>`, a "Done when" test, as in 13a):
 | Plan | Change |
 | --- | --- |
 | 16 section 1 | the agent runtime loads published `agent/1` definitions; approvals are refined per section 3.3 |
-| 16 section 2 (the app is untrusted UI) and "Sign-in decisions" item 1 (a token never wider than the person) | unchanged for an app's front end; a server-side elevated action may act with the app instance's own grants (section 4.6). The rule stays on the server, written in the action |
-| 15 (DbDataStore permissions) | grants to app principals, with field and row conditions; history and audit record the app principal and the person who asked |
+| 16 section 2 (the app is untrusted UI) and "Sign-in decisions" item 1 (a token never wider than the person) | unchanged for an app's front end; a server-side elevated action holds its own grants on the data, people hold *run* on the action, and it validates each request before applying or rejecting it (section 4.6). The rule stays on the server, written in the action |
+| 15 (DbDataStore permissions) | grants to action principals, with field and row conditions; history and audit record the action, its version and the person who asked |
 | 20 section 4 | new modules: `knowledge` (reads), action calls under `mcp` and `apps`, and webhook receivers |
 | 13 W2, 13a S-series | Sync's scripts become hooks of the integrations area (actions bound to Sync's slots); an old manifest is refused with a message |
 | 22 section 1 | shared authoring gains two project kinds, agents and integrations, and the apps back end hosts them (if question 1 is B) |
