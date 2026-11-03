@@ -9,7 +9,7 @@ detailed plan of its own (section 9) once the questions are answered.
 | --- | --- |
 | **DbDataKnowledge** | what agents know: on the back end, to build new objects that fit what exists; on the front end, to answer questions and write queries |
 | **DbDataAgents** | an agent definition: its purpose, the context and knowledge it reads, the tools it may call, the model it uses and how it is tested, for business users on the front end or developers on the back end |
-| **Integrations and custom logic** (working name DbDataIntegrate; section 4.10) | integrations with systems outside the suite's databases (web APIs, file shares, object storage), into the suite and out of it; agents' custom tools; apps' custom server-side logic, including elevated actions that hold the permission to the data, while people hold the permission to run them; Sync's scripts |
+| **Integrations and custom logic** (working name DbDataAutomations; sections 4.10 and 4.11) | integrations with systems outside the suite's databases (web APIs, file shares, object storage), into the suite and out of it; agents' custom tools; apps' custom server-side logic, including elevated actions that hold the permission to the data, while people hold the permission to run them; Sync's scripts |
 | **DbDataBacklog** (working name; section 5) | backlog, sprint and work management, tied to the suite's own objects |
 
 ## 1. What already exists, and what this plan adds
@@ -91,13 +91,18 @@ in the console's chat, in an app's assistant panel, and for an outside client ov
 
 ### 3.3 Approvals
 
-Plan 16 decided "every action approved as it happens, to be refined later". Agent definitions are where that refinement is written down:
+Plan 16 decided "every action approved as it happens, to be refined later".
 
-- **Proposed default:** steps whose effect class is *reads* run without a prompt. Every write, every change to a definition and every
-  outward-facing step (send, publish, call an outside system) waits for the user. Destructive and outward steps always ask, whatever the
-  definition says.
-- A definition can only make approvals **stricter** than the install's policy, never looser.
-- **Owner question 5.**
+**Decided (owner, 2026-11-03): prompting is configured per action.** Each tool an agent may run (a command, or an action from section 4)
+has its own setting for whether the person is asked before it runs. There is no single rule by effect class.
+
+To settle in the detailed plan (owner question 5):
+
+- the settings (for example: always ask; ask once per conversation; do not ask);
+- where the setting lives: on the action or command itself as its default, on the agent definition per tool, or both, with the agent's
+  setting overriding the action's;
+- defaults: proposed from the effect class (reads do not ask; writes, definition changes, outward-facing steps and elevated actions ask);
+- whether an administrator can set an install-wide floor that no definition can lower (for example, destructive steps always ask).
 
 ### 3.4 Testing and evaluation
 
@@ -106,7 +111,11 @@ Plan 16 decided "every action approved as it happens, to be refined later". Agen
 2. **Quality** is measured with an evaluation set: questions with known good answers, drawn from verified queries (section 2.1). It is
    run against a real model by hand or on a schedule, never as a pull request gate. A published version records its last score.
 
-## 4. Integrations and custom logic (working name DbDataIntegrate)
+## 4. Integrations and custom logic (working name DbDataAutomations)
+
+**Owner, 2026-11-03:** the working name is **DbDataAutomations** until it is decided whether integrations and actions are one area or two
+(section 4.11). Integrations **run in a standalone environment** of their own. This section is written as one area so the parts can be
+seen together; it does not decide the split.
 
 **Scope, as the owner set it (2026-11-03).** "ETL" here means **integration with systems outside the suite's databases**: web APIs,
 file shares, object storage and the like, moving data **into** the suite and **out** of it. Sync already covers database-to-database
@@ -166,7 +175,7 @@ Two-way synchronization with an outside system of record (conflicts, which side 
 
 | Part | Runs in | Why |
 | --- | --- | --- |
-| Flows (scheduled, triggered) | the back end, on an integration server, each run in a child process | data movement, like Sync and Build; a short outage only delays runs |
+| Flows (scheduled, triggered) | **a standalone environment** (owner, 2026-11-03), each run in a child process | they reach outside systems and hold their credentials, so they are kept apart from the rest of the suite; data movement, like Sync and Build, so a short outage only delays runs |
 | Actions called by apps and agents | the serving layer, in a child process (plan 20 principle 5), as the caller | they are runtime calls and must work while the back ends are down |
 | Webhook receivers | the serving layer: verify the signature, store the payload durably in the group's shared state, answer at once | outside systems need a public address; processing happens in a flow, so a back end being down only delays it |
 | Hooks | the product that owns the extension point | as Sync's scripts run today |
@@ -255,8 +264,8 @@ An action that is not marked elevated has no grants of its own and runs as the p
   came through). DbDataStore's history shows "Alice ran *submit-claim* v3, from the Expense app". "Who changed what" stays answerable.
 - **Approval when published:** an elevated action is trusted code and needs the administrator's approval of that exact version
   (section 4.5, plan 26). A change to its grants or its body is a new version, approved again.
-- **Agents:** an agent acting for a person can call an elevated action only if that person may run it, and every elevated call asks the
-  person first, whatever the agent definition's approval policy says.
+- **Agents:** an agent acting for a person can call an elevated action only if that person may run it. Whether the person is asked first
+  is set per action (section 3.3); elevated actions ask by default.
 - **Channels:** grants are per channel. In a preview, an elevated write goes to the preview's draft layer (plan 21), never to production.
 - **Limits:** per-caller rate limits, and every rejection is logged with the reason.
 
@@ -292,12 +301,15 @@ system but writes nothing; a run against the channel's sandbox connection before
 
 ### 4.10 The name (owner question 9)
 
+**Owner, 2026-11-03:** undecided; **DbDataAutomations** is the working name until question 12 is answered. The table stays as the
+candidates.
+
 The owner's concern, 2026-11-03: "Automations" and "Functions" both miss the idea of an **integration**, and "Functions" suggests code
 without side effects. "Scripts" and "functions" are closer to what the suite already has. Candidates:
 
 | Name | For | Against |
 | --- | --- | --- |
-| **DbDataIntegrate** (proposed) | says what most of it is for; a verb, like Sync and Build, with a short executable (`dbdataintegrate`); covers in and out | an agent tool or an app's custom logic with no outside system is a stretch of the word, though most of them do call one |
+| **DbDataIntegrate** | says what most of it is for; a verb, like Sync and Build, with a short executable (`dbdataintegrate`); covers in and out | an agent tool or an app's custom logic with no outside system is a stretch of the word, though most of them do call one |
 | DbDataIntegrations | the same, as a noun; reads naturally in the console ("Integrations") | a long executable name |
 | DbDataBridge | short; suggests a link to outside systems in both directions | says nothing about custom code |
 | DbDataExchange | data going in and out | sounds like data movement only; also the name of other products |
@@ -308,9 +320,21 @@ without side effects. "Scripts" and "functions" are closer to what the suite alr
 
 Inside it, the words are fixed whatever the product is called: **connection** (and connector), **action**, **flow**, **hook**, **script**.
 
+### 4.11 One area or two (owner question 12)
+
+**Open (owner, 2026-11-03):** whether integrations should be **integrated with or isolated from** actions and Sync's scripts.
+
+| Option | What it means | For | Against |
+| --- | --- | --- | --- |
+| **One area** (as this section is written) | connections, actions, flows and hooks share one manifest, one authoring project kind, one engine | one way to write custom logic; an integration's step and an agent's tool are the same thing; one set of trust rules | integrations need a standalone environment and outside credentials, while actions run in the serving layer and hooks inside Sync, so "one area" still runs in three places |
+| **Two areas** | integrations (outside connections, flows, webhooks) on their own, in their standalone environment; actions and hooks (custom logic on suite data, Sync's scripts, elevated actions) as another | isolation matches the runtime: what reaches outside and holds outside credentials is apart from what runs next to the data; each can be named for what it is | two manifests or two project kinds to learn; an action that calls an outside system has to cross from one to the other |
+| **Shared engine, two products** | one definition format and `DbDataKit.Scripting` underneath, but two products with their own names, servers and screens | both of the above's strengths, if the boundary is drawn by where code runs and what it may reach | the boundary needs a clear rule for actions that call outside systems |
+
+The detailed plan for this area answers it first, since the name (question 9) and the server question (1) follow from it.
+
 ## 5. DbDataBacklog: work management
 
-**Name.** "Backlog" names one view of the tool. Candidates: **DbDataWork** (proposed: plain, and it covers backlog, sprints and boards),
+**Name.** **DbDataBacklog** is the working name (owner, 2026-11-03); the final name is undecided. "Backlog" names one view of the tool. Other candidates: DbDataWork (plain, and it covers backlog, sprints and boards),
 DbDataBoard, DbDataTrack, DbDataTasks. DbDataPlan is ruled out, since Build already uses "plan" for its plans. **Owner question 2.**
 
 **Goal.** Backlog, sprint and work management for teams that build on the suite, where a work item can point at the thing it is about.
@@ -360,8 +384,9 @@ is always running. Two ways:
   workspaces, built, tested and published to the serving layer, and the scheduler runs flows. Each keeps its own name, nouns and
   screens.
 
-**Proposed: B**, because the three share almost all of their back-end work and an install with fewer services is easier to run. **Owner
-question 1.**
+**Owner, 2026-11-03: not decided yet; the plans are not specific enough.** What is decided: **integrations run in a standalone
+environment** of their own. Option B was proposed (the three share most of their back-end work, and fewer services are easier to run);
+it is revisited once the detailed plans show what each needs, and after question 12. **Owner question 1.**
 
 ## 7. Order
 
@@ -381,17 +406,18 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 
 | # | Question | Proposed |
 | --- | --- | --- |
-| 1 | Which of these are servers? | Knowledge and the work tool are not (a library, Store models, a module, an app). Agents and integrations share one back-end server with apps (section 6, B) |
-| 2 | The work tool's name | DbDataWork |
+| 1 | Which of these are servers? | **Open** (owner, 2026-11-03: plans not specific enough yet). Decided: integrations run in a standalone environment. Proposed earlier: knowledge and the work tool are not servers; agents share a back end with apps (section 6) |
+| 2 | The work tool's name | **Working name DbDataBacklog** (owner, 2026-11-03); final name undecided |
 | 3 | Languages for scripts | C# `.csx`, SQL and command steps first; Python later, as a second script host |
 | 4 | Embedding search | optional per install; full-text always |
-| 5 | Agent approvals | reads run without asking; writes, definition changes and outward steps ask; a definition may only tighten |
+| 5 | Agent approvals | **Decided** (owner, 2026-11-03): prompting is configured per action. Open: the settings, where they live, defaults, an install-wide floor (section 3.3) |
 | 6 | Unattended agents in flows | read and propose only; changes become drafts or work items |
 | 7 | The work tool's scope | its own items first; links to GitHub pull requests and workspaces; import from Jira or Azure Boards later; no two-way sync |
 | 8 | First audience | front-end agents first (wave 1), since the semantic layer and catalog are closest to ready |
-| 9 | The name of the integrations and custom-logic area | DbDataIntegrate (section 4.10); inside it: connection, connector, action, flow, hook, script |
+| 9 | The name of the integrations and custom-logic area | **Working name DbDataAutomations** (owner, 2026-11-03) until question 12 is answered (section 4.10) |
 | 10 | Outside systems as connections | a new kind in `connection/1`, sharing secrets, channel bindings and the console's view (section 4.4) |
 | 11 | Elevated actions: who approves an action's grants on data, and who may give people *run* on it | grants on data: an administrator and the DbDataStore model's owner, both, with an audit; *run*: the action's owner or an administrator (section 4.6) |
+| 12 | Integrations with or apart from actions and Sync's scripts | **Open**; options in section 4.11 |
 
 ## 9. Detailed plans to follow
 
