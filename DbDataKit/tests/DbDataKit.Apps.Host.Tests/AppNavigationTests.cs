@@ -51,6 +51,14 @@ public sealed class AppNavigationTests : IDisposable
     }
 
     [Fact]
+    public void An_instance_with_a_bad_embed_origin_is_not_saved_and_one_with_a_good_origin_is()
+    {
+        Assert.Contains("embed.allowed_origins", Assert.Throws<AppInstanceException>(() => store.Save(new AppInstance("delta", "notes", Settings: new Dictionary<string, string> { ["embed.allowed_origins"] = "*" }), "ada")).Message);
+        store.Save(new AppInstance("delta", "notes", Settings: new Dictionary<string, string> { ["embed.allowed_origins"] = "https://portal.example.com" }), "ada");
+        Assert.Equal("https://portal.example.com", store.Get("delta")!.Settings["embed.allowed_origins"]);
+    }
+
+    [Fact]
     public void A_set_is_refused_when_it_names_nothing_that_exists_or_names_one_twice()
     {
         Assert.Contains("not an instance", Assert.Throws<AppInstanceException>(() => store.SaveNavigation(new NavigationSet("main", "Main", [new("nope")]), "ada")).Message);
@@ -112,4 +120,43 @@ public sealed class AppNavigationTests : IDisposable
         Assert.Contains("popstate", AppShell.Script);
         Assert.Contains("charAt(1) !== \"/\"", AppShell.Script);   // "//host" is not a route
     }
+}
+
+/// <summary>The portal's side (plan 26, AP07): which origins may frame an instance, and the address a tile links to.</summary>
+public sealed class AppEmbedTests
+{
+    [Fact]
+    public void The_embed_setting_becomes_frame_ancestors_and_without_it_nothing_may_frame()
+    {
+        var framed = AppShell.Page("acme", "A", null, ["https://portal.example.com", "http://localhost:8999"]).Headers["Content-Security-Policy"];
+        var alone = AppShell.Page("acme", "A").Headers["Content-Security-Policy"];
+
+        Assert.EndsWith("frame-ancestors https://portal.example.com http://localhost:8999", framed);
+        Assert.EndsWith("frame-ancestors 'none'", alone);
+    }
+
+    [Theory]
+    [InlineData("https://portal.example.com", 1)]
+    [InlineData("https://a.example.com, http://localhost:8999", 2)]
+    [InlineData("", 0)]
+    [InlineData("https://portal.example.com:8443", 1)]
+    public void Origins_are_taken_as_they_are(string value, int count) => Assert.Equal(count, AppInstanceStore.EmbedOrigins(value, out _)!.Count);
+
+    [Theory]
+    [InlineData("*")]
+    [InlineData("https://*.example.com")]
+    [InlineData("https://portal.example.com/path")]
+    [InlineData("https://portal.example.com/")]
+    [InlineData("portal.example.com")]
+    [InlineData("ftp://portal.example.com")]
+    [InlineData("https://a.example.com; script-src *")]
+    [InlineData("https://user@portal.example.com")]
+    public void Anything_that_is_not_a_bare_origin_is_refused(string value)
+    {
+        Assert.Null(AppInstanceStore.EmbedOrigins(value, out var problem));
+        Assert.Contains("embed.allowed_origins", problem);
+    }
+
+    [Fact]
+    public void The_launch_address_is_stable_and_escaped() => Assert.Equal("/apps/acme/?launch", AppsEndpoints.LaunchUrl("acme"));
 }

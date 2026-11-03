@@ -1,6 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import fs from 'node:fs'
+import http from 'node:http'
 import https from 'node:https'
 import os from 'node:os'
 import path from 'node:path'
@@ -66,6 +67,10 @@ async function addAuthenticator(context: BrowserContext, page: Page) {
     options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
   })
 }
+
+// the origin of an organisation's portal: it may frame `acme`; another origin may not
+const portalOrigin = 'http://localhost:8514'
+const otherOrigin = 'http://localhost:8515'
 
 const manifest = [
   'schemaVersion: 1', 'name: territory-notes', 'title: Territory notes', 'version: 1.0.0', 'entry: index.html', 'roles: [author]',
@@ -173,7 +178,7 @@ test.beforeAll(async () => {
   const paired = run(proxyDll, proxyDirectory, ['apps', 'store-pair', '--url', storeUrl, '--code', code])
   fs.writeFileSync(path.join(appDirectory, 'app.js'), script.replace('__STORE__', paired.id))
   run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', appDirectory])
-  run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', 'acme', '--app', 'territory-notes', '--bind', 'territories=default'])
+  run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', 'acme', '--app', 'territory-notes', '--bind', 'territories=default', '--setting', `embed.allowed_origins=${portalOrigin}`])
   // two more instances and a menu of three: Ada is given a role on beta but not on hidden
   for (const name of ['beta', 'hidden']) run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', name, '--app', 'territory-notes', '--bind', 'territories=default'])
   run(proxyDll, proxyDirectory, ['apps', 'nav-save', '--name', 'main', '--title', 'Main', '--item', 'acme=Acme,beta=Beta,hidden=Hidden'])
@@ -241,17 +246,41 @@ test('a person signs in and the sandboxed app reads and writes the Store through
 
   // the app reports a route and the address follows; the menu leads to another instance and the back button returns to the route
   await app.locator('#go').click()
-  await expect(page).toHaveURL(`${appsUrl}/apps/acme/#/territories/NA`)
+  await expect(page).toHaveURL(`${appsUrl}/apps/acme/?launch#/territories/NA`)   // the sign-in returned to the launch address
   await page.locator('header nav a', { hasText: 'Beta' }).click()
   await expect(page).toHaveURL(`${appsUrl}/apps/beta/`)
   await page.goBack()
-  await expect(page).toHaveURL(`${appsUrl}/apps/acme/#/territories/NA`)
+  await expect(page).toHaveURL(`${appsUrl}/apps/acme/?launch#/territories/NA`)
   await expect(page.frameLocator('#app-frame').locator('#route')).toHaveText('/territories/NA')
 
   // a pasted link opens the app at that route
   await page.goto(`${appsUrl}/apps/beta/`)
   await page.goto(`${appsUrl}/apps/acme/#/territories/NA`)
   await expect(page.frameLocator('#app-frame').locator('#route')).toHaveText('/territories/NA')
+
+  // the catalog lists the instances she may open (not `hidden`), each with the address that launches it
+  const catalog = await page.evaluate(async () => (await fetch('/apps/catalog')).json())
+  expect(catalog.instances.map((i: any) => i.name).sort()).toEqual(['acme', 'beta'])
+  expect(catalog.instances.find((i: any) => i.name === 'acme').launch).toBe('/apps/acme/?launch')
+
+  // the portal's page may frame an instance (and sees no header with ?embed); a page on another origin is refused by the browser
+  // (two small servers stand in for the portals; a page Playwright fulfils itself is not "local" to Chromium and would be blocked from a localhost frame)
+  const portals = [portalOrigin, otherOrigin].map((origin) => {
+    const server = http.createServer((_, res) => { res.setHeader('Content-Type', 'text/html'); res.end(`<iframe id="f" src="${appsUrl}/apps/acme/?embed"></iframe>`) })
+    server.listen(Number(new URL(origin).port))
+    return server
+  })
+  const framed = await context.newPage()
+  await framed.goto(`${portalOrigin}/portal`)
+  await expect.poll(() => framed.frames().map((f) => f.url()).join(' | ')).toContain(`${appsUrl}/apps/acme/`)
+  const inner = framed.frames().find((f) => f.url().startsWith(appsUrl))!
+  await expect(inner.locator('#app-frame')).toHaveAttribute('sandbox', /allow-scripts/)
+  await expect(inner.locator('header')).toHaveCount(0)
+  const refused = await context.newPage()
+  await refused.goto(`${otherOrigin}/portal`)
+  await expect.poll(() => refused.frames().some((f) => f.url().startsWith('chrome-error:'))).toBe(true)
+  expect(refused.frames().some((f) => f.url().startsWith(appsUrl))).toBe(false)
+  for (const server of portals) server.close()
 
   // the row is in the Store's tables
   const client = new pg.Client({ connectionString: toPg(warehouse!) })

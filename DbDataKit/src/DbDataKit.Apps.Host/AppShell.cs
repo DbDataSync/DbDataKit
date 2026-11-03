@@ -67,7 +67,7 @@ public static class AppShell
         ["X-Content-Type-Options"] = "nosniff", ["Cache-Control"] = "no-cache",
     }, Encoding.UTF8.GetBytes(Script));
 
-    public static AppResponse Page(string instance, string title, Header? header = null)
+    public static AppResponse Page(string instance, string title, Header? header = null, IReadOnlyList<string>? embedOrigins = null)
     {
         var bundle = AppSite.BasePath + Uri.EscapeDataString(instance) + "/" + AppSite.BundleFolder;
         var bar = header is null ? "" : HeaderHtml(header);
@@ -87,7 +87,7 @@ public static class AppShell
         return new AppResponse(200, "text/html; charset=utf-8", new Dictionary<string, string>
         {
             // the shell's one script is the token broker; the app's own frame is the only frame
-            ["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+            ["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors " + (embedOrigins is { Count: > 0 } ? string.Join(' ', embedOrigins) : "'none'"),
             ["X-Content-Type-Options"] = "nosniff",
             ["Referrer-Policy"] = "no-referrer",
             ["Cache-Control"] = "no-store",
