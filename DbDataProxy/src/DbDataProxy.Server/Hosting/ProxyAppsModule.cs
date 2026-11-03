@@ -79,7 +79,7 @@ public sealed class ProxyAppsModule(IOptionsMonitor<ProxyOptions> options, State
         var key = await SigningKeyAsync(current, cancellationToken);
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
-        app.MapApps(instances, new AppSite(instances), client, new AppSessions(),
+        app.MapApps(instances, new AppSite(instances), client, new AppSessions(refresh: client.RefreshAsync, refreshAfter: TimeSpan.FromSeconds(current.Apps.RolesRefreshSeconds)),
             new AppTokenBroker(new ConsoleTokenIssuer(TokenIssuer, key)), new AppDataGateway(instances, StoresOf(current), new ConsoleIdentity(TokenIssuer, key)), new AppStorage(state));
         app.MapFallback(() => Results.Text("The apps host of this DbDataProxy. An app is at /apps/<instance>/.", "text/plain"));
         await app.StartAsync(cancellationToken);

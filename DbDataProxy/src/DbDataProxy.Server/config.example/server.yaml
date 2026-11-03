@@ -45,6 +45,7 @@ compression: { mode: arrow, codec: zstd, level: 3, allowClientOverride: true }
 # apps:                                 # the apps host (module "apps"): published apps at https://<host>:8818/apps/<instance>/; https only
 #   address: 0.0.0.0
 #   port: 8818
+#   rolesRefreshSeconds: 300           # how old the home's answer about a person may be before the host asks again (a role taken away stops working within this)
 #   home: { clientId: <id from identity client-add> }   # signs people in through the identity home (this instance's, or home.authority); redirect URI <public url>/apps/-/callback
 # identity: { enabled: true, address: 0.0.0.0, port: 8817, publicUrl: https://identity.example.com }
 # People may also sign in at the home through an Entra ID tenant (an app registered there with the redirect URI <publicUrl>/identity/upstream/entra/callback and the groups claim), and with Windows (Negotiate):

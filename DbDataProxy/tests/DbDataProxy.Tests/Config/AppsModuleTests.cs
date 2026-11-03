@@ -74,7 +74,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
         var identityPort = FreePort();
         app = ProxyHost.Build([
             $"--Proxy:DataDirectory={dataDirectory}", "--Proxy:Modules:0=apps", "--Proxy:Modules:1=identity",
-            "--Proxy:Apps:Address=127.0.0.1", $"--Proxy:Apps:Port={appsPort}", $"--Proxy:Apps:Home:ClientId={clientId}", 
+            "--Proxy:Apps:Address=127.0.0.1", "--Proxy:Apps:RolesRefreshSeconds=1", $"--Proxy:Apps:Port={appsPort}", $"--Proxy:Apps:Home:ClientId={clientId}", 
             "--Proxy:Identity:Address=127.0.0.1", $"--Proxy:Identity:Port={identityPort}", $"--Proxy:Identity:PublicUrl=https://localhost:{identityPort}",
         ]);
         await app.StartAsync();
@@ -120,6 +120,26 @@ public sealed class AppsModuleTests : IAsyncLifetime
         Assert.Contains("src=\"/apps/acme/_app/\"", body);
         Assert.DoesNotContain("allow-same-origin", body);
         Assert.Equal("no-store", string.Join(' ', shell.Headers.GetValues("Cache-Control")));
+    }
+
+    [Fact]
+    public async Task A_role_taken_away_at_the_home_stops_working_within_the_refresh_interval_and_one_given_starts()
+    {
+        appsPort = FreePort();
+        var (clientId, ada, bob, database) = Prepare();
+        var (apps, home) = await StartAsync(clientId);
+        var session = await SignInAsync(apps, home, database, ada, "/apps/acme/");
+        Assert.Equal(HttpStatusCode.OK, (await GetAsync(apps, "/apps/acme/", session)).StatusCode);
+
+        new HomeDirectory(database).AssignApp(AssignmentSubject.User(ada), "acme", ServerRole.None);
+        await Task.Delay(TimeSpan.FromSeconds(1.5));
+
+        // the host asks the home again, with the refresh token, and the home no longer gives her the role
+        Assert.Equal(HttpStatusCode.Forbidden, (await GetAsync(apps, "/apps/acme/", session)).StatusCode);
+
+        new HomeDirectory(database).AssignApp(AssignmentSubject.User(ada), "acme", ServerRole.Viewer);
+        await Task.Delay(TimeSpan.FromSeconds(1.5));
+        Assert.Equal(HttpStatusCode.OK, (await GetAsync(apps, "/apps/acme/", session)).StatusCode);
     }
 
     [Fact]
