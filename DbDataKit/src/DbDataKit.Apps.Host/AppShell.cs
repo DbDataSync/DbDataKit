@@ -86,9 +86,20 @@ public static class AppShell
         return Respond(Document(title, header, frame), embedOrigins);
     }
 
-    /// <summary>A portal's own page (plan 26, AP11): its chrome and no app yet. The home's content is AP12's.</summary>
-    public static AppResponse PortalHome(string title, Header header, string message, IReadOnlyList<string>? embedOrigins = null) =>
-        Respond(Document(title, header, $"<p class=\"note\">{WebUtility.HtmlEncode(message)}</p>"), embedOrigins);
+    /// <summary>One app on a portal's home: where it opens, and what to call it.</summary>
+    public sealed record Tile(string Title, string? Description, string Url);
+
+    /// <summary>A portal's own page (plan 26, AP11, AP12): its chrome and a tile for each app mounted in it that this person may open.</summary>
+    public static AppResponse PortalHome(string title, Header header, IReadOnlyList<Tile> tiles, IReadOnlyList<string>? embedOrigins = null)
+    {
+        var body = tiles.Count == 0
+            ? "<p class=\"note\">Nothing here is open to you yet.</p>"
+            : "<ul class=\"tiles\" style=\"list-style:none;margin:0;padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px\">"
+              + string.Concat(tiles.Select(t => $"<li style=\"border:1px solid #8884;border-radius:8px;padding:12px\"><a href=\"{WebUtility.HtmlEncode(t.Url)}\" style=\"color:inherit;font-weight:600;text-decoration:none\">{WebUtility.HtmlEncode(t.Title)}</a>"
+                  + (string.IsNullOrWhiteSpace(t.Description) ? "" : $"<p style=\"margin:6px 0 0;opacity:.75\">{WebUtility.HtmlEncode(t.Description)}</p>") + "</li>"))
+              + "</ul>";
+        return Respond(Document(title, header, body), embedOrigins);
+    }
 
     private static AppResponse Respond(string html, IReadOnlyList<string>? embedOrigins) =>
         new(200, "text/html; charset=utf-8", new Dictionary<string, string>
