@@ -15,7 +15,7 @@ public sealed record PairingOutcome(PairedClient? Client, string InstanceId, str
 /// The server's half of the pairing exchange (plan 13, W12, steps 3 and 4): checks the code, then records the client with the ceiling the code carried. Pairing a client id that is already paired
 /// replaces its entry (the client has a new key); nothing else about an existing pairing changes without <c>unpair</c>.
 /// </summary>
-public sealed partial class PairingService(string instanceId, Func<string> certificate, PairedClientsFile clients, PairingCodes codes, TimeProvider? clock = null)
+public sealed partial class PairingService(string instanceId, Func<string> certificate, IPairedClientStore clients, IPairingCodeStore codes, TimeProvider? clock = null)
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
@@ -25,7 +25,7 @@ public sealed partial class PairingService(string instanceId, Func<string> certi
     /// <param name="clients">The paired clients.</param>
     /// <param name="codes">The pairing codes waiting to be used.</param>
     /// <param name="clock">The time source.</param>
-    public PairingService(string instanceId, string certificateFingerprint, PairedClientsFile clients, PairingCodes codes, TimeProvider? clock = null)
+    public PairingService(string instanceId, string certificateFingerprint, IPairedClientStore clients, IPairingCodeStore codes, TimeProvider? clock = null)
         : this(instanceId, () => certificateFingerprint, clients, codes, clock)
     {
     }

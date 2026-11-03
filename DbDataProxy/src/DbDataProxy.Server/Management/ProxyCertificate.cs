@@ -12,7 +12,7 @@ namespace DbDataProxy.Server.Management;
 /// The server certificate and the recent failures through the management API (plan 13, P07). The certificate is described (never its key), and a self-signed one can be renewed now: the new one is made the way
 /// <c>dbdataproxy cert renew</c> makes it and put in use at once. <b>Renewing replaces the certificate every paired console has pinned</b>, so each of them must be paired again; the call therefore asks for <c>{"confirm": true}</c>.
 /// </summary>
-public sealed class ProxyCertificate(TlsCertificateHolder holder, Func<ProxyOptions> options, string dataDirectory, RecentFailures failures, IAuditLog audit, TimeProvider? clock = null)
+public sealed class ProxyCertificate(TlsCertificateHolder holder, Func<ProxyOptions> options, string dataDirectory, RecentFailures failures, IAuditLog audit, TimeProvider? clock = null, GroupCertificate? group = null)
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
@@ -74,6 +74,8 @@ public sealed class ProxyCertificate(TlsCertificateHolder holder, Func<ProxyOpti
             return ManagementResult.Problem(500, "The certificate could not be renewed; see the server's log.");
         }
         var next = CertificateProvider.Load(o, dataDirectory, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, _clock);
+        // in a group, the renewed certificate becomes the group's, which the other instances take at their next check
+        if (next is not null && group is { Enabled: true } && o.Tls.Mode == TlsMode.SelfSigned) group.Replace(next);
         if (next is not null) holder.Set(next);
         Record(caller, "certificate renew", next is not null && before is not null && next.Thumbprint != before.Thumbprint ? "renewed" : "unchanged");
         var described = Describe();

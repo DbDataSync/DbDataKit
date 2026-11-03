@@ -460,6 +460,69 @@ public sealed class GroupStateTests : IAsyncLifetime
         }
     }
 
+    [Theory]
+    [InlineData("mssql", "DBKIT_TEST_MSSQL")]
+    [InlineData("postgres", "DBKIT_TEST_POSTGRES")]
+    public async Task A_console_pairs_once_through_any_instance_of_a_group_and_every_instance_is_that_server_with_one_certificate(string engine, string variable)
+    {
+        // plan 20 O04: the group's instance id, paired clients, pairing codes and self-signed certificate are in its state
+        var (state, drop) = ScratchState(engine, variable);
+        try
+        {
+            // the state in server.yaml, as an operator sets a group up, so the command line finds it too
+            var connection = state[1]["--Proxy:State:ConnectionString=".Length..];
+            var dirs = new[] { "a", "b" }.Select(d => Path.Combine(_root, d)).ToArray();
+            foreach (var dir in dirs)
+            {
+                Directory.CreateDirectory(ProxyConfigFile.DirectoryIn(dir));
+                File.WriteAllText(ProxyConfigFile.PathIn(dir), $"schemaVersion: 2\ntls: {{ mode: selfSigned }}\nstate: {{ engine: {engine}, connectionString: '{connection}' }}\n");
+            }
+            var (a, managementA, _) = await ServingInstance(dirs[0], []);
+            var storeA = SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = dirs[0] });
+            foreach (var secret in new[] { GroupSessionKey.Secret, ProxyIdentityModule.SigningKeySecret })
+                using (var key = await storeA.TryResolveAsync(SecretRef.Parse("secret:" + secret)))
+                    await SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = dirs[1] }).SetAsync(SecretName.Parse(secret), key!);
+            var (b, managementB, _) = await ServingInstance(dirs[1], []);
+
+            // one certificate for the group, though each instance would have made its own
+            var thumbprint = a.Services.GetRequiredService<DbDataProxy.Server.Tls.TlsCertificateHolder>().Current!.Thumbprint;
+            Assert.Equal(thumbprint, b.Services.GetRequiredService<DbDataProxy.Server.Tls.TlsCertificateHolder>().Current!.Thumbprint);
+
+            // the operator makes a code on the command line of the first instance's machine; the console redeems it through the second
+            var output = new StringWriter();
+            Assert.Equal(0, await DbDataProxy.Server.Hosting.Cli.RunAsync(["server", "pair", "--max-role", "viewer,operator,admin", "--repo", dirs[0]], new DbDataKit.Cli.CliContext(output, new StringWriter(), TextReader.Null)));
+            var code = System.Text.RegularExpressions.Regex.Match(output.ToString(), @"Pairing code: (\S+)").Groups[1].Value;
+            Assert.False(File.Exists(Path.Combine(dirs[0], "pairing-codes.json")));   // the code waits in the state, not in one instance's folder
+            var console = new ConsoleIdentity("console-1", ConsoleSigningKey.Generate());
+            var paired = await PairingClient.PairAsync(new Uri($"https://127.0.0.1:{managementB}"), code, console);
+
+            // every instance is that one server: the same id, the pinned certificate, and the console's token accepted
+            foreach (var port in new[] { managementA, managementB })
+            {
+                using var http = new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint));
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"https://127.0.0.1:{port}/api/v1/about");
+                request.Headers.Add(ManagementAuthentication.TokenHeader, console.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, "ada", "Ada", ServerRole.Viewer)));
+                var about = await http.SendAsync(request);
+                Assert.True(about.IsSuccessStatusCode, $"{port}: {about.StatusCode}");
+                Assert.Equal(paired.InstanceId, (string)JsonNode.Parse(await about.Content.ReadAsStringAsync())!["instance_id"]!);
+            }
+            var clients = new StringWriter();
+            Assert.Equal(0, await DbDataProxy.Server.Hosting.Cli.RunAsync(["server", "clients", "--repo", dirs[1]], new DbDataKit.Cli.CliContext(clients, new StringWriter(), TextReader.Null)));
+            Assert.Contains("console-1", clients.ToString());
+
+            // the code is spent at every instance
+            await Assert.ThrowsAsync<PairingFailedException>(() => PairingClient.PairAsync(new Uri($"https://127.0.0.1:{managementA}"), code, new ConsoleIdentity("console-2", ConsoleSigningKey.Generate())));
+        }
+        finally
+        {
+            foreach (var app in _apps)
+            {
+                try { await app.StopAsync(); } catch (Exception ex) when (ex is OperationCanceledException or InvalidOperationException) { }
+            }
+            drop();
+        }
+    }
+
     [Fact]
     public async Task The_models_an_instance_published_before_are_read_into_the_groups_state_once()
     {

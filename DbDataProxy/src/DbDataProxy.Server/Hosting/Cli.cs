@@ -51,7 +51,11 @@ public static class Cli
     {
         var at = Array.LastIndexOf(args, "--repo");
         var dataDirectory = at >= 0 && at + 1 < args.Length ? Path.GetFullPath(args[at + 1]) : ProxyConfigFile.ResolveDataDirectory();
-        return new PairingFiles(ProxyConfigFile.PathIn(dataDirectory), Path.Combine(dataDirectory, "pairing-codes.json"));
+        // a group (a SQL Server or PostgreSQL state) keeps its pairings in the state, so a code made here is redeemed through any of its instances (plan 20 O04)
+        var options = ProxyConfiguration.LoadOptions(dataDirectory);
+        options.DataDirectory = dataDirectory;
+        var group = string.Equals(options.State.Engine, DbDataKit.State.StateEngineIds.Sqlite, StringComparison.OrdinalIgnoreCase) ? null : IdentityCommand.OpenState(options);
+        return new PairingFiles(ProxyConfigFile.PathIn(dataDirectory), Path.Combine(dataDirectory, "pairing-codes.json"), group);
     }
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context)

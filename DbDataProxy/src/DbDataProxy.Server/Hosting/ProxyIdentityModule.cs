@@ -22,7 +22,7 @@ namespace DbDataProxy.Server.Hosting;
 /// </para>
 /// </summary>
 public sealed class ProxyIdentityModule(
-    IOptionsMonitor<ProxyOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, ILoggerFactory loggers) : IHostedService, IAsyncDisposable
+    IOptionsMonitor<ProxyOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, ILoggerFactory loggers, GroupCertificate? group = null) : IHostedService, IAsyncDisposable
 {
     /// <summary>The secret that holds the key the signing keys are protected with.</summary>
     public const string SigningKeySecret = "dbdata:proxy:identity:signing-keys";
@@ -50,7 +50,7 @@ public sealed class ProxyIdentityModule(
 
         // the Flight listener loads the certificate when Kestrel starts, which is after the hosted services: the home may be first
         if (certificate.Current is null)
-            certificate.Set(CertificateProvider.Load(current, ProxyHost.ResolveDataDirectory(current), loggers.CreateLogger("Tls"), secrets: secrets));
+            certificate.Set(CertificateProvider.Load(current, ProxyHost.ResolveDataDirectory(current), loggers.CreateLogger("Tls"), secrets: secrets, group: group));
 
         // Its settings are the Proxy's (passed in here), so it reads no settings files of its own and watches none: a file watcher is an inotify instance on Linux, of which a user has 128.
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });

@@ -13,7 +13,7 @@ public static class PairingCodeIssuer
     public const int MaxMinutes = 60;
 
     /// <summary>The answer for the body of a request from a caller who holds <paramref name="allowed"/>: <c>{code, expires, max_role}</c>, or why not.</summary>
-    public static (int Status, JsonObject Body) Issue(PairingCodes codes, bool allowed, string? body)
+    public static (int Status, JsonObject Body) Issue(IPairingCodeStore codes, bool allowed, string? body)
     {
         if (!allowed) return (403, new JsonObject { ["error"] = "This needs the admin role." });
         string? name = null;

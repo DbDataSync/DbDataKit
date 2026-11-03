@@ -73,9 +73,13 @@ public static class ProxyManagementHost
         if (!options.Management.Enabled) return null;
 
         var serverYaml = ProxyConfigFile.PathIn(dataDirectory);
-        var instanceId = ServerIdentity.InstanceId(serverYaml, "proxy", "dbdataproxy server");
-        // the pairing codes wait in the data directory, not in the configuration folder a person keeps under version control
-        var files = new PairingFiles(serverYaml, Path.Combine(dataDirectory, "pairing-codes.json"));
+        // the pairing codes wait in the data directory, not in the configuration folder a person keeps under version control; a group keeps them, its paired clients and its instance id in its state (plan 20 O04)
+        var state = app.Services.GetRequiredService<DbDataKit.State.StateDatabase>();
+        var files = new PairingFiles(serverYaml, Path.Combine(dataDirectory, "pairing-codes.json"), DbDataProxy.Server.State.ProxyState.IsGroup(state) ? state : null);
+        var instanceId = files.InstanceId("proxy", "dbdataproxy server");
+        if (files.Group is not null && GroupIdentity.Differs(instanceId, serverYaml) is { } own)
+            app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management").LogWarning(
+                "{File} names this instance {Own}, and it serves as its group, {Group}: a client paired with {Own} alone pairs again with the group.", serverYaml, own, instanceId, own);
         var clients = files.Clients();
         var configDirectory = ProxyConfigFile.DirectoryIn(dataDirectory);
         var provider = configuration.Providers.OfType<ProxyConfigDirectoryProvider>().Single();
@@ -93,7 +97,7 @@ public static class ProxyManagementHost
         var activity = new ProxyActivity(app.Services.GetRequiredService<SessionStore>(), app.Services.GetRequiredService<ActiveQueries>(), app.Services.GetRequiredService<QueryLimits>(),
             app.Services.GetRequiredService<LoginThrottle>(), () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, audit,
             app.Services.GetRequiredService<DbDataKit.State.NotificationStore>(), app.Services.GetRequiredService<RecentFailures>(), instanceId, ProxyHost.Version);
-        var certificate = new ProxyCertificate(holder, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, dataDirectory, app.Services.GetRequiredService<RecentFailures>(), audit);
+        var certificate = new ProxyCertificate(holder, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, dataDirectory, app.Services.GetRequiredService<RecentFailures>(), audit, group: app.Services.GetRequiredService<GroupCertificate>());
         management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version, dataSources, identities, activity, certificate, git,
             new ProxySecrets(SecretsRuntime.OpenStore(options), audit), files.Codes(),
             new ProxySemanticModels(app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),
