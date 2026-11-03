@@ -104,6 +104,8 @@ public static class AppsEndpoints
     {
         foreach (var (name, value) in response.Headers) context.Response.Headers[name] = value;
         context.Response.StatusCode = response.Status;
+        // a 204 has no content, and no content type to describe it
+        if (response.Status is 204 or 304) return;
         context.Response.ContentType = response.ContentType;
         await context.Response.Body.WriteAsync(response.Body);
     }
