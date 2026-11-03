@@ -159,16 +159,16 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         // 4. and serves it: a person with an account on the Proxy asks for the members of an attribute and reads the database behind the model
         Assert.Equal(["East", "West"], (await MembersAsync("customers.region")).Order().ToArray());
 
-        // 5. publishing again is a change on the version it read: version 2, and the model keeps serving
+        // 5. publishing the same model again is no new version (plan 20 O03: the group's definitions keep one version of the same content), and the model keeps serving
         var again = await AsPerson(HttpMethod.Post, $"/relay/{buildId}/api/v1/projects/retail/proxies/edge/publish-model", new { model = "retail_sales" });
         Assert.True(again.Status == HttpStatusCode.OK, $"publish again: {again.Status} {again.Body}");
-        Assert.Equal(2, (int)again.Body!["version"]!);
+        Assert.Equal(1, (int)again.Body!["version"]!);
         Assert.False((bool)again.Body["created"]!);
         Assert.Equal(2, (await MembersAsync("customers.region")).Count);
 
         // 6. the Proxy's audit says who: the person, and the Build server that acted for them
         var audit = ProxyAudit.Read(proxyDirectory);
         Assert.Contains(audit, a => (string?)a["command"] == "semantic-model publish" && (string?)a["target"] == "retail_sales" && (string?)a["outcome"] == "created" && (string?)a["userId"] == personId);
-        Assert.Contains(audit, a => (string?)a["command"] == "semantic-model publish" && (string?)a["target"] == "retail_sales" && (string?)a["outcome"] == "changed" && (string?)a["userId"] == personId);
+        Assert.Contains(audit, a => (string?)a["command"] == "semantic-model publish" && (string?)a["target"] == "retail_sales" && (string?)a["outcome"] == "unchanged" && (string?)a["userId"] == personId);
     }
 }

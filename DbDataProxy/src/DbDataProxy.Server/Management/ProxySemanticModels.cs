@@ -132,11 +132,14 @@ public sealed class ProxySemanticModels(
             var problem = await CheckSourcesAsync(parsed, sources, ssas, caller, cancellationToken);
             if (problem is not null) return Refused(caller, name, problem);
 
+            var was = store.Current(name);
             var version = store.Publish(name, text, Client(caller), Who(caller), new(sources), new(ssas), _clock.GetUtcNow());
+            // the same catalog and mapping as the version served is no new version (the store's rule, so a retried publish is safe)
+            var unchanged = was == version.Number;
             // served here at once; the other instances of the group serve it when they next look
             Serve(name);
-            Record(caller, "semantic-model publish", name, created ? "created" : "changed");
-            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = version.Number, ["created"] = created });
+            Record(caller, "semantic-model publish", name, created ? "created" : unchanged ? "unchanged" : "changed");
+            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = version.Number, ["created"] = created, ["unchanged"] = unchanged });
         }
         finally { _publishing.Release(); }
     }
