@@ -72,6 +72,13 @@ async function addAuthenticator(context: BrowserContext, page: Page) {
 const portalOrigin = 'http://localhost:8514'
 const otherOrigin = 'http://localhost:8515'
 
+// two portals that mount the same instances and look different (declared: data the shell renders, no script)
+const portalYaml = (name: string, title: string, accent: string, menu: string, footer: boolean, mounts: string) => [
+  'schemaVersion: 1', `name: ${name}`, `title: ${title}`, 'version: 1.0.0', 'kind: portal', 'portal:',
+  `  identity: {title: ${title}, footer: "${title} footer"}`, `  theme: {light: {sui-accent: "${accent}"}}`, `  layout: {menu: ${menu}, footer: ${footer}, header: [person]}`,
+  mounts, '',
+].join('\n')
+
 const manifest = [
   'schemaVersion: 1', 'name: territory-notes', 'title: Territory notes', 'version: 1.0.0', 'entry: index.html', 'roles: [author]',
   'storage: {user: true, instance: true, quota_mb: 5}', 'models:', '  - model: territories', '    entities: {territory: [read, write]}', '',
@@ -79,7 +86,7 @@ const manifest = [
 
 // The app: a page and a script (the policy allows no inline script). It asks the shell for a token, writes a row and reads the rows back through the host, and tries to reach what a sandbox must not.
 const index = '<!doctype html><html><head><meta charset="utf-8"><title>Territory notes</title></head><body><h1>Territory notes</h1>' +
-  '<button id="go">go</button><pre id="route">none</pre><pre id="storage">loading</pre><pre id="rows">loading</pre><pre id="parent-cookie">untested</pre><pre id="own-cookie">untested</pre><pre id="elsewhere">untested</pre><script src="app.js"></script></body></html>\n'
+  '<button id="go">go</button><pre id="route">none</pre><pre id="theme">none</pre><pre id="storage">loading</pre><pre id="rows">loading</pre><pre id="parent-cookie">untested</pre><pre id="own-cookie">untested</pre><pre id="elsewhere">untested</pre><script src="app.js"></script></body></html>\n'
 const script = `
 const out = (id, text) => { document.getElementById(id).textContent = text }
 const waiting = new Map()
@@ -87,6 +94,7 @@ window.addEventListener('message', (event) => {
   const m = event.data
   if (event.source !== window.parent || !m || m.dbdata !== 'app/1') return
   if (m.type === 'navigate') { out('route', m.path); return }
+  if (m.type === 'theme') { out('theme', (m.tokens.light || {})['sui-accent'] || 'none'); return }
   if (!waiting.has(m.id)) return
   waiting.get(m.id)(m); waiting.delete(m.id)
 })
@@ -179,6 +187,18 @@ test.beforeAll(async () => {
   fs.writeFileSync(path.join(appDirectory, 'app.js'), script.replace('__STORE__', paired.id))
   run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', appDirectory])
   run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', 'acme', '--app', 'territory-notes', '--bind', 'territories=default', '--setting', `embed.allowed_origins=${portalOrigin}`])
+  // two portals over the same instances; `hidden` is mounted in the first and Ada has no role on it
+  for (const [name, text] of [
+    ['portal-alpha', portalYaml('portal-alpha', 'Alpha Co', '#ff0000', 'side', true, '  mounts: [{app: acme, path: /sales/}, {app: beta, path: /beta/}, {app: hidden, path: /hidden/}]\n  navigation: [{app: acme, label: Sales}, {app: beta, label: Beta}, {app: hidden, label: Hidden}]')],
+    ['portal-omega', portalYaml('portal-omega', 'Omega Ltd', '#0000ff', 'top', false, '  mounts: [{app: acme, path: /work/}]\n  navigation: [{app: acme, label: Work}]')],
+  ]) {
+    const directory = path.join(os.tmpdir(), `dbdata-e2e-${name}`)
+    fs.rmSync(directory, { recursive: true, force: true })
+    fs.mkdirSync(directory, { recursive: true })
+    fs.writeFileSync(path.join(directory, 'app.yaml'), text)
+    run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', directory])
+    run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', name.replace('portal-', ''), '--app', name])
+  }
   // two more instances and a menu of three: Ada is given a role on beta but not on hidden
   for (const name of ['beta', 'hidden']) run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', name, '--app', 'territory-notes', '--bind', 'territories=default'])
   run(proxyDll, proxyDirectory, ['apps', 'nav-save', '--name', 'main', '--title', 'Main', '--item', 'acme=Acme,beta=Beta,hidden=Hidden'])
@@ -281,6 +301,24 @@ test('a person signs in and the sandboxed app reads and writes the Store through
   await expect.poll(() => refused.frames().some((f) => f.url().startsWith('chrome-error:'))).toBe(true)
   expect(refused.frames().some((f) => f.url().startsWith(appsUrl))).toBe(false)
   for (const server of portals) server.close()
+
+  // a portal draws the same app its own way: its identity, its menu (without `hidden`), the theme handed to the app's frame
+  await page.goto(`${appsUrl}/apps/alpha/`)
+  await expect(page.locator('.portal-title')).toHaveText('Alpha Co')
+  await expect(page.locator('nav.portal.side a')).toHaveText(['Sales', 'Beta'])
+  await expect(page.locator('footer.portal')).toContainText('Alpha Co footer')
+  await page.locator('nav.portal a', { hasText: 'Sales' }).click()
+  await expect(page).toHaveURL(`${appsUrl}/apps/alpha/sales/`)
+  await expect(page.locator('nav.portal a[aria-current=page]')).toHaveText('Sales')
+  await expect(page.frameLocator('#app-frame').locator('#theme')).toHaveText('#ff0000')
+  expect((await page.goto(`${appsUrl}/apps/alpha/hidden/`))!.status()).toBe(403)
+
+  await page.goto(`${appsUrl}/apps/omega/work/`)
+  await expect(page.locator('.portal-title')).toHaveText('Omega Ltd')
+  await expect(page.locator('nav.portal.side')).toHaveCount(0)
+  await expect(page.locator('footer.portal')).toHaveCount(0)
+  await expect(page.frameLocator('#app-frame').locator('#theme')).toHaveText('#0000ff')
+  await expect(page.frameLocator('#app-frame').locator('#rows')).toContainText('rows North America')   // (the insert is refused the second time: the row exists)
 
   // the row is in the Store's tables
   const client = new pg.Client({ connectionString: toPg(warehouse!) })
