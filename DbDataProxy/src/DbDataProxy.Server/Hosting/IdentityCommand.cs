@@ -27,7 +27,7 @@ public static class IdentityCommand
     }
 
     /// <summary>The state database the server uses, opened the same way (the password of a server engine resolved from its reference).</summary>
-    private static StateDatabase Open(CliArgs parsed)
+    internal static StateDatabase Open(CliArgs parsed)
     {
         var options = OptionsOf(parsed);
         var resolver = new SecretResolverChain(SecretsRuntime.CreateProviders(options, SecretsRuntime.OpenStore(options)));

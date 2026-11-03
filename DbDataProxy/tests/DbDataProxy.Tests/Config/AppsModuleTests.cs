@@ -181,6 +181,42 @@ public sealed class AppsModuleTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Forbidden, (await PostTokenAsync(apps, "acme", bobSession)).StatusCode);   // no role on the app, no token
     }
 
+    private async Task<(int Exit, string Out, string Error)> Command(params string[] args)
+    {
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var exit = await DbDataProxy.Server.Hosting.Cli.Router().RunAsync([.. args, "--repo", dataDirectory], new DbDataKit.Cli.CliContext(output, error, TextReader.Null));
+        return (exit, output.ToString(), error.ToString());
+    }
+
+    [Fact]
+    public async Task An_app_published_and_an_instance_saved_at_the_command_line_are_listed_pinned_and_refused_when_wrong()
+    {
+        var app = Path.Combine(dataDirectory, "notes-app");
+        Directory.CreateDirectory(Path.Combine(app, "assets"));
+        File.WriteAllText(Path.Combine(app, "app.yaml"), Manifest);
+        File.WriteAllText(Path.Combine(app, "index.html"), "<html><head></head><body>v1</body></html>");
+        File.WriteAllText(Path.Combine(app, "assets", "app.js"), "1");
+
+        var published = await Command("apps", "publish", "--dir", app, "--note", "first");
+        Assert.Equal(0, published.Exit);
+        Assert.Contains("Published notes version 1 (2 files)", published.Out);   // the manifest is the version's, not one of its files
+
+        Assert.Equal(0, (await Command("apps", "publish", "--dir", app)).Exit);   // a second version
+        var saved = await Command("apps", "instance-save", "--name", "acme", "--app", "notes", "--pin", "1", "--title", "Acme notes", "--setting", "theme=blue", "--bind", "territories=acme-data");
+        Assert.Equal(0, saved.Exit);
+        Assert.Contains("/apps/acme/", saved.Out);
+        Assert.Contains("acme  notes  pinned to 1  Acme notes", (await Command("apps", "instance-list")).Out);
+
+        // refused with the reason, and nothing saved
+        var unknown = await Command("apps", "instance-save", "--name", "bad", "--app", "nothing-published");
+        Assert.NotEqual(0, unknown.Exit);
+        Assert.NotEmpty(unknown.Error);
+        Assert.Equal(2, (await Command("apps", "instance-save", "--name", "bad", "--app", "notes", "--setting", "oops")).Exit);
+        Assert.Equal(1, (await Command("apps", "publish", "--dir", Path.Combine(dataDirectory, "missing"))).Exit);
+        Assert.DoesNotContain("bad  ", (await Command("apps", "instance-list")).Out);
+    }
+
     [Fact]
     public async Task The_data_route_wants_an_apps_token_and_a_paired_store()
     {
