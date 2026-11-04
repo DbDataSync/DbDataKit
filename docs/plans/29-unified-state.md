@@ -116,7 +116,7 @@ with a prefix per module, or a schema per product.
 | Documents | JSON as `nvarchar(max)` / `jsonb` / text, with a `schema` column naming its format and version where it is a definition |
 | Who | `service_id` (which service wrote it) where a database is shared; `created_by` as the identity home's subject id |
 | Optimistic concurrency | a `row_version` integer on tables that several instances update |
-| Retention | **7 days by default** (owner, 2026-11-04) for every table that holds history (runs, logs, notifications, settled dead letters, expired idempotency keys, payloads whose owner is gone), set in days and fractions of days (`0.25` is six hours), up or down, per module and per table, run by one shared job. Tables that hold **current** state (identity, definitions, a checkpoint's current value, Build's structural baseline) have no age limit: their rows go when what they describe goes |
+| Retention | **7 days by default** (owner, 2026-11-04) for every table that holds history except the audit (runs, logs, notifications, settled dead letters, expired idempotency keys, payloads whose owner is gone), set in days and fractions of days (`0.25` is six hours), up or down, per module and per table, run by one shared job. The **audit** is kept until an administrator sets a limit (owner, 2026-11-04). Tables that hold **current** state (identity, definitions, a checkpoint's current value, Build's structural baseline) have no age limit: their rows go when what they describe goes |
 | Large payloads | never a column of an ordinary table: stored in the `payloads` module (section 3.6) and referred to by id |
 
 ### 3.4 The shared modules
@@ -242,8 +242,8 @@ Build already lets the tracking connection be another connection than the data's
 | `state` | a `build_tracking` module in the unified state database: the same logical tables, keyed by connection, in their namespace | none |
 | `both` | **one of the two, named** (`primary: target` by default) | the other, kept up to date by a follower |
 
-The default for a new install is the administrator's to set (plan 28 section 5's posture); `both` with the target as primary keeps today's
-behaviour and adds the unified copy.
+**Default (owner, 2026-11-04): `both`, with the target as primary.** It keeps today's behaviour and adds the unified copy; an
+administrator can choose another setting per connection (plan 28 section 5's posture).
 
 ### 4a.3 How `both` works
 
@@ -275,6 +275,9 @@ Any product can keep state where its work is and still appear in the unified sta
 follower that copies to the other side, divergence detected. Candidates: Sync's change-tracking state when Sync moves to the runner (plan
 28 section 8), and DbDataStore's history, which already lives in the customer's database.
 
+**Sync defaults to `both` when it adopts this pattern** (owner, 2026-11-04). Which side is Sync's primary (its target, as for Build, or
+the unified state) is decided with Sync's state design (plan 28 section 8, item 3).
+
 ## 5. Where the databases are
 
 The structure (sections 3 and 4) is the same whatever the topology. Which services share a database is the administrator's choice
@@ -305,9 +308,9 @@ Each service's login can be limited to the modules it uses, so sharing a databas
 | --- | --- | --- |
 | 1 | The topologies | **Decided** (owner, 2026-11-04): one per service, one per group and one per install, all offered (section 5) |
 | 2 | Namespaces | **Decided** (owner, 2026-11-04): schema and prefix configurable for every namespace, `dbdatakit_` for anything prefixed (section 3.2); several SQLite files supported, not required (section 3.2a) |
-| 3 | Retention defaults | **Decided** (owner, 2026-11-04): 7 days, in days and fractions of days, adjustable up or down per module and table (section 3.3). Open: whether audit takes the 7-day default like other history, or is kept until an administrator sets a limit |
+| 3 | Retention defaults | **Decided** (owner, 2026-11-04): 7 days, in days and fractions of days, adjustable up or down per module and table (section 3.3). The audit is kept until an administrator sets a limit (owner, 2026-11-04) |
 | 4 | Which conventions to apply to existing tables when they move | proposed: all of section 3.3; a moved table is a new table (clean break) |
 | 5 | Large payloads | **Decided** (owner, 2026-11-04): a chunked object store from the start, streamed in and out, never a column of another table (section 3.6). Chunk size 1 MiB by default (owner, 2026-11-04) |
 | 6 | Engines | **Decided for now** (owner, 2026-11-04): SQLite, SQL Server and PostgreSQL; no moving between engines (an export and import is plan 22 section 4's backup work) |
-| 7 | Build's tracking tables | **Decided** (owner, 2026-11-04): both, at the same time. Proposed in section 4a: per connection `target`, `state` or `both`; with `both`, one named primary decides and a follower keeps the other up to date. Open: the default for a new install |
+| 7 | Build's tracking tables | **Decided** (owner, 2026-11-04): both, at the same time. Proposed in section 4a: per connection `target`, `state` or `both`; with `both`, one named primary decides and a follower keeps the other up to date. Default `both`, target primary (owner, 2026-11-04); Sync defaults to `both` when it adopts the pattern |
 | 8 | "Checkpoint" for what the draft called a cursor | **Decided** (owner, 2026-11-04) |

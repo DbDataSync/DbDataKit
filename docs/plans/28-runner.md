@@ -131,7 +131,8 @@ Not part of the new services, and planned separately when taken on.
    act on the runner. The shared libraries carry over unchanged.
 3. **State: to design first** (decision 7). Sync's watermarks, change-tracking positions and staging state; Build's tracking tables, which
    live on the target by design; run history in both. Whether they stay with the product, move to the runner's shared state, or are passed
-   in and out of each run is the first question of that plan.
+   in and out of each run is the first question of that plan. When Sync adopts plan 29's pattern (state with the data and a unified copy), it defaults to
+   keeping both (owner, 2026-11-04).
 4. **Logins split by job.** The back ends keep read access for their interactive work (Build's plan previews, Sync's metadata browsing,
    connection tests); the runner gets the write logins (decision 5).
 
