@@ -63,7 +63,8 @@ running on its schedule; the shared features exist once; and work from several p
 
 A **package**: a manifest (its tasks, their schedules and triggers, the connections each needs, resource limits, the capabilities it
 needs) and its code. Packages are versioned and published per channel; a runner switches to a new version atomically and keeps the last
-good one (plan 20 principle 1).
+good one (plan 20 principle 1). How they are published (one API, artifacts by hash, stage then activate, bindings per channel, each
+runner's status) is [plan 30](30-publishing.md); how their progress is carried across versions is plan 29 section 4.3.
 
 The code is one of these kinds:
 

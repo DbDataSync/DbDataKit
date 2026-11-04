@@ -208,12 +208,53 @@ Sync's `ChangeWatermarks` are the same idea for databases. What makes a checkpoi
 
 | Table | Holds | Notes |
 | --- | --- | --- |
-| `checkpoint` and `checkpoint_history` | each named position and its changes (4.1) | the value is small JSON, so one checkpoint can hold several parts (a time and an id to break ties) |
-| `state` | small named JSON values the task keeps between runs | size-limited; anything large is a payload |
+| `checkpoint` and `checkpoint_history` | each named position and its changes (4.1) | **typed** values, not JSON, in the shape the task declares (4.3); one checkpoint can hold several parts (a time and an id to break ties) and can be kept per key (per customer, per folder) |
+| `state` | small named values the task keeps between runs | typed and declared like checkpoints (4.3); a `json` type exists for the rare value that has no better one; anything large is a payload |
 | `file_ledger` | each file seen: connection, path, size, modified time, content hash, first seen, processed by which run, outcome | "have I processed this file", by hash, so a renamed or re-sent file is recognized |
 | `idempotency` | a key for each outbound write and its result, with an expiry | a retried push does not create a second ticket |
 | `dead_letter` | a record an outside system refused: error, attempts, status (open, replayed, discarded), its body as a payload id | replayed from the console or by a task |
 | `inbox` | received webhooks waiting for a task: source, signature check, received at, taken by which run, the body as a payload id | if the runner receives webhooks (plan 28 question 4) |
+
+### 4.3 Progress across versions: declared, typed, migrated by the runner
+
+**Owner, 2026-11-04:** a new version of an integration may change what its progress looks like, and that needs a **standard versioning
+and migration process**, so no integration rolls its own migration, and none wastes time serializing and deserializing its state.
+
+**Declare the shape, let the runner plan the change** (the same idea as Build, which plans a table change from the declared shape
+against the live one):
+
+1. **A task declares its progress** in the package manifest: each checkpoint and state value, its **type** (text, whole number, decimal,
+   time, date, true/false, bytes as a payload, `json` as a last resort), whether it is kept per key and the key's parts (`per: [customer]`),
+   and a default for a new key.
+2. **The store keeps typed values**, one row per value and key, in typed columns (`value_text`, `value_int`, `value_time`, ...). Nothing
+   is turned into JSON and back; a module's tables never change shape per integration, so no DDL is run for an integration.
+3. **The kit gives typed access.** In .NET the declaration generates typed accessors (`progress.OrdersModified` is a
+   `DateTimeOffset`); the runner protocol carries the same types. A run reads all of its task's progress in one query at start, works on
+   it in memory, and writes what changed in **one statement per commit point**, together with the run's outcome (section 4.1, rule 1).
+4. **The version of the progress is the declaration.** The runner compares the new version's declaration with the old one's and works
+   out the migration itself. The author numbers nothing.
+5. **Standard changes need no code:**
+
+| Change in the declaration | What the runner does |
+| --- | --- |
+| a value added | new keys get the default; existing keys get it too, or start empty if it has none |
+| a value removed | dropped (its history kept for rollback) |
+| a value renamed | moved, when the declaration says `renamed_from` |
+| a type widened (whole number to decimal, date to time) | converted |
+| a type changed otherwise (text to time) | converted with a declared format (`format: "yyyy-MM-dd"`), or refused at staging naming the value |
+| a key part added (`per: [customer]` becomes `per: [customer, region]`) | each existing key copied to the new parts by a declared rule (`fill: all-regions`, or a default), or reset |
+| a value reset on purpose | `reset: true` on that value in this version: the next run starts it from its default (a full reload) |
+
+6. **When it happens:** while the version is **staged** (plan 30 section 3.1) the runner checks the migration and runs it as a dry run,
+   so a change that cannot be made fails the staging, not a run. At **activation** it applies the migration per task, after the task's
+   runs in flight finish, in one transaction with the switch, and per channel at that channel's activation.
+7. **Loss is never silent.** A change that loses progress (a value removed, a reset, a key part dropped) is listed when the version is
+   staged, and activation asks the administrator to confirm it (plan 28 section 5's posture). The values before the migration are kept in
+   `checkpoint_history`, so a **rollback** to the previous version restores them.
+8. **Code only as the exception.** A change the standard rules cannot express (one checkpoint split into two by parsing it) can supply a
+   migration function, which runs at staging over the old values and whose output is checked against the new declaration.
+
+**For Sync later:** its `ChangeWatermarks` are declared checkpoints of this kind, so Sync on the runner uses the same process.
 
 ## 4a. State that lives with the data, and a unified copy
 
