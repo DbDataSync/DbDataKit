@@ -116,7 +116,7 @@ Who may publish what is the pairing's Publisher role and its scope (plan 13 W12,
 
 ## 6. Artifacts: what is published, how it is trusted, how it is served
 
-Proposed (2026-11-04), from the owner's questions.
+Proposed 2026-11-04 from the owner's questions, and **decided by the owner the same day** as written here.
 
 ### 6.1 Compiled code and its source, both
 
@@ -198,7 +198,7 @@ but every file request costs database reads and the whole package's decoding; it
 | 1 | How long versions and their artifacts are kept | **Decided** (owner, 2026-11-04): kept until an administrator prunes them, through an **API and a console screen that show the current state**: per definition and channel, the active, staged and previous versions, each instance's status, what is no longer served, and what pruning would remove. An artifact goes when no kept version names it |
 | 2 | Activation at a set time | **Not now** (owner, 2026-11-04); maybe a later feature |
 | 3 | Promotion from a test group to a production group | **Decided** (owner, 2026-11-04): a deploy of the same version to the other group. Artifacts are sent by hash, so nothing the production group already has is sent again; bindings are that group's own |
-| 4 | Compiled code with its source (6.1) | proposed: both; the compiled code runs, recompiling on the instance an option, off by default |
-| 5 | Signatures (6.2) | proposed: Ed25519 over the manifest, a trust store per group, approvals signed too, required by default |
-| 6 | Packages with the version (6.3) | proposed: whole `.nupkg` closure as artifacts; feed resolution on the instance an option |
-| 7 | Apps (6.4) | proposed: file by file by hash, one version commit, a local disk cache filled at preparation, served from disk |
+| 4 | Compiled code with its source (6.1) | **Decided** (owner, 2026-11-04): both; the compiled code runs, recompiling on the instance an option, off by default |
+| 5 | Signatures (6.2) | **Decided** (owner, 2026-11-04): Ed25519 over the manifest, a trust store per group, approvals signed too, required by default |
+| 6 | Packages with the version (6.3) | **Decided** (owner, 2026-11-04): whole `.nupkg` closure as artifacts; feed resolution on the instance an option |
+| 7 | Apps (6.4) | **Decided** (owner, 2026-11-04): file by file by hash, one version commit, a local disk cache filled at preparation, served from disk |
