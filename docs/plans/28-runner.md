@@ -1,7 +1,7 @@
 # Plan 28: the runner, a published-to service for scheduled and batch work
 
-Status: **proposed, high level** (2026-11-04, from the owner's direction in the plan 27 discussion). Not sliced. Its first consumer is the
-integrations product of [plan 27](27-knowledge-agents-integrations-work.md) section 4. Moving Sync and Build onto it is later work,
+Status: **proposed, high level** (2026-11-04, from the owner's direction in the plan 27 discussion). Not sliced. Its first consumer is
+DbDataIntegration ([plan 27](27-knowledge-agents-integrations-work.md) section 4). Moving Sync and Build onto it is later work,
 planned separately (section 8).
 
 ## 1. What it is
@@ -13,7 +13,7 @@ writes them again.
 
 ```
           authoring back ends (definitions, code, packages)
-   integrations · later DbDataSync and DbDataBuild · others
+   DbDataIntegration · later DbDataSync and DbDataBuild · others
           │ publish                         │ publish
           ▼                                 ▼
    serving layer (interactive)        runner (scheduled and batch)
@@ -26,10 +26,10 @@ running on its schedule; the shared features exist once; and work from several p
 
 ## 2. Decisions (owner, 2026-11-04)
 
-1. **Start with integrations.** The runner's first and only consumer at first is the integrations product (plan 27 section 4). Sync and
+1. **Start with integrations.** The runner's first and only consumer at first is DbDataIntegration (plan 27 section 4). Sync and
    Build are considered for later migrations (section 8).
-2. **Integrations are a product of their own that publishes to the runner.** The runner is just the runner; it is not the integrations
-   product, and it is not named for it.
+2. **Integrations are a product of their own, DbDataIntegration, that publishes to the runner.** The runner is just the runner; it is
+   not DbDataIntegration, and it is not named for it.
 3. **One pool can run any task; administrators decide the security posture.** Administrators configure their environment (network egress,
    firewalls, the accounts the runners use) and their runners to match the posture they want. The suite does not refuse a configuration
    because it could be a security concern. See section 5.
@@ -54,7 +54,7 @@ running on its schedule; the shared features exist once; and work from several p
 | Retries and timeouts | new | per task; back-off for errors a connection classifies as temporary (`ConnectionFailure`) |
 | Logs and metrics | new, on the run model | structured, secrets redacted (the shared redactor) |
 | Run history, health, notifications, retention | `DbDataKit.Monitoring` (13a M04, M05, M10) | the console's monitoring view (M11) shows runner groups like any server |
-| Task state: cursors, watermarks, a ledger of processed files, idempotency keys | new | what integrations need to rerun without losing or repeating work |
+| Task state: cursors, watermarks, a ledger of processed files, idempotency keys, refused records | new: the progress store, a module of the runner group's state database ([plan 29](29-unified-state.md) section 4) | what integrations need to rerun without losing or repeating work |
 | Connections and secrets, bound per channel | `connection/1`, the secret store (plan 13 W13), channels (plan 21) | outside systems as a connection kind is plan 27 question 10 |
 | Run lineage | `DbDataKit.Lineage` (plan 18) | outside systems as nodes |
 | Alerts by email, Teams, Slack, webhook | the delivery service (plan 22 section 5, not built) | |
@@ -108,7 +108,7 @@ For the runner, that means:
 
 ## 6. Groups and availability
 
-As serving groups (plan 20 section 6): runners in a **group** share state on SQL Server or PostgreSQL through `DbDataKit.State`; leases on
+As serving groups (plan 20 section 6): runners in a **group** share state (in the structure of plan 29) on SQL Server or PostgreSQL through `DbDataKit.State`; leases on
 the work queue let any runner take any task; a runner that stops loses its leases and its tasks are taken by another. The console pairs
 with the group; a product that publishes to it pairs as a Publisher (plan 13 W12). SQLite is for a single runner only.
 
@@ -154,7 +154,7 @@ Not part of the new services, and planned separately when taken on.
 | 2 | The protocol's transport | standard input and output, a local socket, or gRPC (section 4.1) |
 | 3 | Notebooks | which .NET notebook kernel, how a headless run reports each cell, what is kept from a run (outputs, a rendered copy) |
 | 4 | Webhooks | received by the serving layer and handed over, or by runners directly (section 7) |
-| 5 | Task state | in the runner group's shared state, in the package's own connection, or either |
+| 5 | Task state | **Decided** (owner, 2026-11-04): a state database for progress; designed as the `runner_progress` module of the unified state structure (plan 29 section 4) |
 | 6 | Process limits | job objects on Windows, cgroups on Linux; a separate OS account per package, or one account per runner |
 | 7 | Routing | whether labels are only an administrator's tool, or packages may require a label |
 | 8 | State for Sync and Build | section 8, item 3; designed before that migration starts |

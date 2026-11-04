@@ -9,7 +9,7 @@ detailed plan of its own (section 9) once the questions are answered.
 | --- | --- |
 | **DbDataKnowledge** | what agents know: on the back end, to build new objects that fit what exists; on the front end, to answer questions and write queries |
 | **DbDataAgents** | an agent definition: its purpose, the context and knowledge it reads, the tools it may call, the model it uses and how it is tested, for business users on the front end or developers on the back end |
-| **Integrations** (name open; section 4) | a product of its own: integrations with systems outside the suite's databases (web APIs, file shares, object storage), into the suite and out of it, as ordinary code published to the runner ([plan 28](28-runner.md)) |
+| **DbDataIntegration** (section 4) | a product of its own: integrations with systems outside the suite's databases (web APIs, file shares, object storage), into the suite and out of it, as ordinary code published to the runner ([plan 28](28-runner.md)) |
 | **Actions** (section 4.4) | scripts in apps and agents as well as Sync, on one shared script format: agents' custom tools and apps' custom server-side logic, including elevated actions that hold the permission to the data while people hold the permission to run them |
 | **DbDataBacklog** (working name; section 5) | backlog, sprint and work management, tied to the suite's own objects |
 
@@ -116,13 +116,13 @@ To settle in the detailed plan (owner question 5):
 
 **Decided (owner, 2026-11-04)**, after comparing extending Sync's scripting with a separate integration service:
 
-1. **Integrations are a product of their own** (name open, section 4.11). It **publishes to the runner** ([plan 28](28-runner.md)), a
+1. **Integrations are a product of their own, DbDataIntegration** (section 4.11). It **publishes to the runner** ([plan 28](28-runner.md)), a
    service for scheduled and batch work that runs each task in a separate process by default, the way products publish to the serving
    layer.
 2. **Integrations are ordinary code** with shared run-time services (logging, retry, state, lineage, scheduling), not a generic engine
    configured for every case (section 4.1).
 3. **Actions are scripts in apps and agents, as well as in Sync**, on one shared script format (section 4.4). They run in the serving
-   layer; they are not part of the integrations product.
+   layer; they are not part of DbDataIntegration.
 4. **Sync and Build may move onto the runner later**, in a migration planned separately (plan 28 section 8). It is not part of these new
    products.
 
@@ -149,7 +149,7 @@ integrations would gain from Sync's change tracking, but it is better to write o
 - **An integration is a package of tasks** published to the runner: a manifest (tasks, schedules, triggers, the connections each needs)
   and code in any of the runner's kinds (plan 28 section 4: a `.csx` script, a compiled .NET project with NuGet dependencies, any
   executable speaking the runner protocol, or a .NET notebook orchestrating a project's APIs).
-- **The integration product** is where integrations are authored, built, tested, versioned and published: the back end for them, on
+- **DbDataIntegration** is where integrations are authored, built, tested, versioned and published: the back end for them, on
   shared authoring (plan 22 section 1).
 - **Templates, not an engine.** Common cases ("pull pages from a REST API into a staging table", "pick up CSV files from a share") are
   project templates that generate ordinary code an author then owns.
@@ -327,22 +327,14 @@ compiled by the same engine.
 Recorded HTTP responses and a fake file share in unit tests, as plan 25 does for model providers; a dry run that reads the outside
 system but writes nothing; a run against the channel's sandbox connection before a version is promoted.
 
-### 4.11 The integrations product's name (owner question 9)
+### 4.11 The name: DbDataIntegration
 
-**Open.** DbDataAutomations was the working name while integrations and actions were one area (owner, 2026-11-03). Now that they are two
-products on a shared runtime, the integrations product needs a name of its own, and the runner is just the runner (plan 28). The owner's
-concern still holds: the name should capture **integration**. Candidates:
+**Decided (owner, 2026-11-04): DbDataIntegration.** DbDataAutomations was the working name while integrations and actions were one area.
+Others considered: DbDataIntegrate, DbDataIntegrations, DbDataBridge, DbDataExchange, DbDataConnect. The words inside are fixed:
+**connection**, **integration** (a package), **task**, **action**, **script**.
 
-| Name | For | Against |
-| --- | --- | --- |
-| DbDataIntegrate | a verb, like Sync and Build, with a short executable (`dbdataintegrate`); covers in and out | |
-| DbDataIntegrations | the same, as a noun; reads naturally in the console ("Integrations") | a long executable name |
-| DbDataAutomations | the working name | suggests orchestration more than integration |
-| DbDataBridge | short; suggests a link to outside systems in both directions | less obvious than "integrate" |
-| DbDataExchange | data going in and out | used by other products |
-| DbDataConnect | outward-facing | confused with the suite's connections |
-
-The words inside are fixed whatever the name: **connection**, **integration** (a package), **task**, **action**, **script**.
+Its progress (cursors, processed files, idempotency keys, refused records) is kept in a state database, the runner's progress store
+([plan 29](29-unified-state.md) section 4).
 
 ## 5. DbDataBacklog: work management
 
@@ -385,7 +377,7 @@ question 7.**
 | --- | --- | --- | --- |
 | Knowledge | curated technical knowledge in git; index builds | `knowledge` module: search, show, access-filtered | screens for collections, drafts and approvals |
 | Agents | agent projects in workspaces; evaluation runs | front-end agents in the `mcp` module; chat in apps | the console's chat; providers, models, limits, transcripts |
-| Integrations | the integrations product: projects in workspaces, builds, tests, publishing; tasks **run on the runner** (plan 28) | (nothing of its own; webhooks are plan 28 question 4) | connections and their bindings, approvals of trusted versions; runs and schedules through the runner |
+| DbDataIntegration | projects in workspaces, builds, tests, publishing; tasks **run on the runner** (plan 28) | (nothing of its own; webhooks are plan 28 question 4) | connections and their bindings, approvals of trusted versions; runs and schedules through the runner |
 | Actions | actions in app and agent projects; Sync's scripts in Sync | **action calls** from apps and agents: declarative in process, code in warm worker processes | approvals of trusted versions, grants of elevated actions |
 | Runner (plan 28) | | | runner groups, runs, schedules, pause and run-now |
 | Work | (nothing of its own) | the work app on the `store` and `apps` modules | the app's administration like any app |
@@ -400,7 +392,7 @@ question 7.**
 
 **Owner, 2026-11-03: not decided yet; the plans are not specific enough.** Decided since (2026-11-04): **integrations are a product of
 their own that publishes to the runner**, and the runner is a service of its own (plan 28). What remains open is whether agents share a
-back end with apps, and whether the integrations product's back end is shared with them (option B) or stands alone. **Owner question 1.**
+back end with apps, and whether DbDataIntegration's back end is shared with them (option B) or stands alone. **Owner question 1.**
 
 ## 7. Order
 
@@ -411,7 +403,7 @@ back end with apps, and whether the integrations product's back end is shared wi
 | 2 | Actions: the shared script format; Sync's scripts move onto it; a `.csx` or SQL action as a tool of an agent and an endpoint for an app, in warm worker processes in the serving layer | wave 1; the serving contract (plan 20 section 10) |
 | 3 | Curated knowledge in DbDataStore (glossary, metrics, verified queries), drafts from agents, evaluation sets; embedding search if chosen | DbDataStore drafts (plan 21); access rules (plan 22 section 2) |
 | 3b | Elevated actions: action principals, grants to actions with field and row conditions, *run* grants to people, validate then apply or reject, the declarative form, audit of both identities | wave 2; DbDataStore permissions (plan 15); the identity home's service principals (13a U20) |
-| 4 | The runner (plan 28), then the integrations product: outside connections, the integration kit, templates, inbound and outbound patterns, webhooks; actions that enqueue integration tasks; back-end agents in workspaces | shared authoring (plan 22 section 1) |
+| 4 | The runner (plan 28) with its progress store on the unified state structure (plan 29), then DbDataIntegration: outside connections, the integration kit, templates, inbound and outbound patterns, webhooks; actions that enqueue integration tasks; back-end agents in workspaces | shared authoring (plan 22 section 1) |
 | 5 | The work tool: models, app, integration tasks, assistant | DbDataStore relationships and documents; the app framework's declarative views |
 
 Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbDataStore models as soon as DbDataStore can hold them.
@@ -420,7 +412,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 
 | # | Question | Proposed |
 | --- | --- | --- |
-| 1 | Which of these are servers? | **Partly decided** (owner, 2026-11-04): integrations are a product of their own, publishing to the runner, a service of its own (plan 28). Open: whether agents and the integrations product share a back end with apps; proposed earlier: knowledge and the work tool are not servers (section 6) |
+| 1 | Which of these are servers? | **Partly decided** (owner, 2026-11-04): integrations are a product of their own, publishing to the runner, a service of its own (plan 28). Open: whether agents and DbDataIntegration share a back end with apps; proposed earlier: knowledge and the work tool are not servers (section 6) |
 | 2 | The work tool's name | **Working name DbDataBacklog** (owner, 2026-11-03); final name undecided |
 | 3 | Languages and packaging | **Decided for integrations** (owner, 2026-11-04): `.csx` scripts, compiled .NET projects, any executable through the runner protocol, and hybrids such as a .NET notebook over a project (plan 28 section 4). Actions: `.csx`, SQL, command calls and declarative elevated forms |
 | 4 | Embedding search | optional per install; full-text always |
@@ -428,7 +420,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 6 | Unattended agents in integration tasks | read and propose only; changes become drafts or work items |
 | 7 | The work tool's scope | its own items first; links to GitHub pull requests and workspaces; import from Jira or Azure Boards later; no two-way sync |
 | 8 | First audience | front-end agents first (wave 1), since the semantic layer and catalog are closest to ready |
-| 9 | The integrations product's name | **Open** (section 4.11); DbDataAutomations was the working name for the combined area |
+| 9 | The integrations product's name | **Decided** (owner, 2026-11-04): DbDataIntegration (section 4.11) |
 | 10 | Outside systems as connections | a new kind in `connection/1`, sharing secrets, channel bindings and the console's view (section 4.6) |
 | 11 | Elevated actions: who approves an action's grants on data, and who may give people *run* on it | grants on data: an administrator and the DbDataStore model's owner, both, with an audit; *run*: the action's owner or an administrator (section 4.5) |
 | 12 | Integrations with or apart from actions and Sync's scripts | **Decided** (owner, 2026-11-04): apart. Integrations are a product publishing to the runner; actions share one script format with Sync (section 4) |
@@ -441,11 +433,12 @@ one branch `suite/<id>-<short-name>`, a "Done when" test, as in 13a):
 | Plan | Area | New slice letter (not yet used) |
 | --- | --- | --- |
 | [28](28-runner.md) | The runner (written at high level, 2026-11-04) | to choose when sliced (13a and plans 19 to 26 already use A B C D E F G H J K L M N O P Q R S T U V W X Y Z and AP; D and Q are decision and step numbers, the rest slices) |
-| 29 | DbDataKnowledge | |
-| 30 | DbDataAgents | |
-| 31 | The integrations product | |
-| 32 | Actions: the shared script format, callable and elevated actions | |
-| 33 | The work tool | |
+| [29](29-unified-state.md) | One structure for the suite's state databases (written at high level, 2026-11-04) | |
+| 30 | DbDataKnowledge | |
+| 31 | DbDataAgents | |
+| 32 | DbDataIntegration | |
+| 33 | Actions: the shared script format, callable and elevated actions | |
+| 34 | The work tool | |
 | later | Sync and Build on the runner (plan 28 section 8), after its state design | |
 
 ## 10. What this changes in other plans (once approved)
