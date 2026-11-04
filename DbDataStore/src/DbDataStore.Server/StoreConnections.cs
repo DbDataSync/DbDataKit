@@ -40,6 +40,23 @@ public sealed class StoreConnections(string directory, ISecretResolver? secrets 
         return definition;
     }
 
+    /// <summary>
+    /// The connection's engine and the whole connection string with its write login, for publishing the model's storage to a serving group (plan 20 O10), where it is kept as a secret. It holds a password: it goes over the
+    /// pinned channel to the group's own encrypted store and nowhere else.
+    /// </summary>
+    public async Task<(string Engine, string ConnectionString)> WriteConnectionStringAsync(string name, CancellationToken cancellationToken)
+    {
+        var definition = Load(name);
+        if (!providers.TryGet(definition.Engine, out var provider)) throw new StoreConnectionException($"{name}.yaml names the engine '{definition.Engine}', which a model's storage does not support; use sqlserver or postgres.");
+        try
+        {
+            using var login = await new LoginResolver(secretResolver, Application).ResolveAsync(definition, LoginRole.Write, cancellationToken).ConfigureAwait(false)
+                ?? throw new StoreConnectionException($"{name}.yaml has no login for the server to write with: give it a write_login or an auth, or set DBDATA_DBDATASTORE_{name.ToUpperInvariant().Replace('-', '_')}_WRITE.");
+            return (provider.Engine.Value, provider.Composer.Compose(new ConnectionContext { Definition = definition, Login = login, Role = LoginRole.Write }));
+        }
+        catch (SecretNotFoundException ex) { throw new StoreConnectionException($"{name}.yaml needs a secret the server cannot find: {ex.Message}"); }
+    }
+
     public async Task<DbConnection> OpenAsync(string name, CancellationToken cancellationToken)
     {
         var definition = Load(name);

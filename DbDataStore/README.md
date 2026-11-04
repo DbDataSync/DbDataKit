@@ -12,8 +12,15 @@ dbdatastore server clients | unpair <client> [--repo <server directory>]
 dbdatastore service install|uninstall|status|start|stop|restart|doctor|unit
 dbdatastore model put --file <model.yaml> [--name <model>] [--repo <server directory>]      # checked first, then saved
 dbdatastore storage create --model <model> [--repo <server directory>]                      # the tables of the model's own copy, on connections/<name>.yaml
+dbdatastore proxy add <name> --url <https address> --code <code> [--repo <server directory>]   # pair with a serving group as a publishing client
+dbdatastore proxy list | remove <name> [--repo <server directory>]
+dbdatastore model publish <model> --proxy <name> [--repo <server directory>]                 # the model, its rules and its connection, to every instance of the group
 dbdatastore health check [--url <url>]
 ```
+
+## Publishing to the serving layer
+
+Reads and writes of master data are served by the serving layer (plan 20), from the models this server publishes to it (O10), so they go on with this server stopped. Pair once with the serving group as a publishing client, with a code its administrator made (`dbdataproxy server pair --max-role publisher`): `dbdatastore proxy add edge --url https://serving.example:8815 --code <code>`. `dbdatastore model publish <model> --proxy edge` then sends three things, each on the version the group has: the write login of the model's connection (kept by the group as its secret, encrypted with its key), a data source of the same name that refers to it, and the model naming that data source. Every instance of the group serves the version published and enforces its rules; one that cannot load a version keeps the one it had. Changing the structure stays here: plan it, have it approved, change the tables, then publish again. The model's approval settings go with it; permissions per entity are not in `model/1` yet.
 
 The server's directory is `--repo`, or `DBDATASTORE_SERVER_DIR`, or a folder under the user's local application data (`%ProgramData%\DbDataStore\server` for the Windows service). It holds `server.yaml` (the instance id and the clients paired with it),
 the pairing codes, and the self-signed certificate (`tls.pfx` and its password file, readable only by the account that runs the server). A client pins the certificate's fingerprint when it pairs.

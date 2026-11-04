@@ -26,7 +26,7 @@ public sealed record ManagementResult(int Status, JsonNode Body)
 /// </list>
 /// A secret is never part of an answer: the settings are shown the way <c>config show</c> shows them, and the sentinel test puts a value in every place a secret can be and looks for it in every answer.
 /// </summary>
-public sealed partial class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null, ProxyActivity? activity = null, ProxyCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, ProxySecrets? secrets = null, IPairingCodeStore? pairingCodes = null, ProxySemanticModels? semanticModels = null, Func<IReadOnlyList<PairedClient>>? pairedClients = null, DbDataKit.Identity.IdentityAdminApi? identityAdmin = null)
+public sealed partial class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null, ProxyActivity? activity = null, ProxyCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, ProxySecrets? secrets = null, IPairingCodeStore? pairingCodes = null, ProxySemanticModels? semanticModels = null, Func<IReadOnlyList<PairedClient>>? pairedClients = null, DbDataKit.Identity.IdentityAdminApi? identityAdmin = null, ProxyEntityModels? entityModels = null)
 {
     public const string Prefix = "/api/v1";
 
@@ -89,6 +89,14 @@ public sealed partial class ProxyManagement(IConfigurationRoot configuration, st
             if (!caller.Holds(ServerRole.Admin) && !caller.Holds(ServerRole.Publisher)) return Denied(ServerRole.Admin);
             var rest = route.Length > (Prefix + "/semantic-models").Length ? route[(Prefix + "/semantic-models/").Length..].Split('/') : [];
             return await semanticModels.HandleAsync(method, rest, body, caller, cancellationToken);
+        }
+        if (route == Prefix + "/entity-models" || route.StartsWith(Prefix + "/entity-models/", StringComparison.Ordinal))
+        {
+            if (entityModels is null) return ManagementResult.Problem(404, "There is no such call.");
+            // a DbDataStore server publishes as a publishing client, within the owner rules ProxyEntityModels applies; an administrator does everything (plan 20 O10)
+            if (!caller.Holds(ServerRole.Admin) && !caller.Holds(ServerRole.Publisher)) return Denied(ServerRole.Admin);
+            var rest = route.Length > (Prefix + "/entity-models").Length ? route[(Prefix + "/entity-models/").Length..].Split('/') : [];
+            return await entityModels.HandleAsync(method, rest, body, caller, cancellationToken);
         }
         if (route == Prefix + "/secrets" || route.StartsWith(Prefix + "/secrets/", StringComparison.Ordinal))
         {
