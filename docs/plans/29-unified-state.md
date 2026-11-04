@@ -317,7 +317,7 @@ follower that copies to the other side, divergence detected. Candidates: Sync's 
 28 section 8), and DbDataStore's history, which already lives in the customer's database.
 
 **Sync defaults to `both` when it adopts this pattern** (owner, 2026-11-04). Its state moves into the unified state's modules and is also
-kept on the target (plan 28 section 8, item 3). Its primary is proposed to be the target, as for Build.
+kept on the target (plan 28 section 8, item 3). Its primary is the target, as for Build (owner, 2026-11-04).
 
 ## 5. Where the databases are
 

@@ -319,10 +319,10 @@ compiled by the same engine.
 ### 4.9 Agents in integrations, and agents writing them
 
 - **An integration task can ask an agent** (triage a failed load and suggest a fix, summarize a change, match supplier names to
-  customer records). The task runs on a schedule with nobody watching, so nobody can answer a prompt. **Proposed (2026-11-04):** the
+  customer records). The task runs on a schedule with nobody watching, so nobody can answer a prompt. **Decided (owner, 2026-11-04):** the
   per-action prompting setting decides (section 3.3). An action set to *do not ask* runs unattended; an action that would ask a person
   becomes a **proposal** instead: a draft change, a work item (section 5) or a notification for someone to approve later. An administrator
-  decides what is safe unattended by setting actions to *do not ask*. **Owner question 6.**
+  decides what is safe unattended by setting actions to *do not ask*.
 - **Agents can write integrations and actions**, from the templates, in a workspace like any author, with each step prompted as its
   action is configured (section 3.3); publishing still needs the administrator's approval of trusted code.
 
@@ -421,7 +421,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 3 | Languages and packaging | **Decided for integrations** (owner, 2026-11-04): `.csx` scripts, compiled .NET projects, any executable through the runner protocol, and hybrids such as a .NET notebook over a project (plan 28 section 4). Actions: `.csx`, SQL, command calls and declarative elevated forms |
 | 4 | Embedding search | optional per install; full-text always |
 | 5 | Agent approvals | **Decided** (owner, 2026-11-03): prompting is configured per action. Open: the settings, where they live, defaults, an install-wide floor (section 3.3) |
-| 6 | Unattended agents in integration tasks | proposed: actions set to *do not ask* run; actions that would ask become proposals (drafts, work items, notifications) (section 4.9) |
+| 6 | Unattended agents in integration tasks | **Decided** (owner, 2026-11-04): actions set to *do not ask* run; actions that would ask become proposals (drafts, work items, notifications) (section 4.9) |
 | 7 | The work tool's scope | its own items first; links to GitHub pull requests and workspaces; import from Jira or Azure Boards later; no two-way sync |
 | 8 | First audience | front-end agents first (wave 1), since the semantic layer and catalog are closest to ready |
 | 9 | The integrations product's name | **Decided** (owner, 2026-11-04): DbDataIntegration (section 4.11) |

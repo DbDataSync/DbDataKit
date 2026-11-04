@@ -136,7 +136,7 @@ Not part of the new services, and planned separately when taken on.
 3. **State (decided, owner, 2026-11-04).** Sync's state (watermarks, change-tracking positions, staging state, run history) and Build's
    tracking tables move into **modules of the unified state database** (plan 29), and are **also kept on the target**: `both` is the default
    for each (plan 29 section 4a), with one named primary for decisions and a follower keeping the other side up to date. Build's primary is
-   the target. Sync's primary is proposed to be the target as well, so a restored target rewinds Sync's watermarks with the data it loaded.
+   the target. Sync's primary is the target as well (owner, 2026-11-04), so a restored target rewinds Sync's watermarks with the data it loaded.
    Sync's watermarks become declared checkpoints (plan 29 section 4.3). What is left for that plan is the detail of moving each table.
 4. **Logins split by job.** The back ends keep read access for their interactive work (Build's plan previews, Sync's metadata browsing,
    connection tests); the runner gets the write logins (decision 5).
@@ -163,4 +163,4 @@ Not part of the new services, and planned separately when taken on.
 | 5 | Task state | **Decided** (owner, 2026-11-04): a state database for progress; designed as the `runner_progress` module of the unified state structure (plan 29 section 4) |
 | 6 | Process limits | **Decided** (owner, 2026-11-04): job objects on Windows, cgroups on Linux; one low-privilege account per runner by default, an account per package as an option |
 | 7 | Routing | **Decided** (owner, 2026-11-04): labels are an administrator's tool, and a package may require one ("needs outside network"); a version whose required label no runner has does not activate, and the console says why |
-| 8 | State for Sync and Build | **Decided** (owner, 2026-11-04): modules of the unified state database and also on the target, `both` by default (section 8, item 3). Open: Sync's primary, proposed the target |
+| 8 | State for Sync and Build | **Decided** (owner, 2026-11-04): modules of the unified state database and also on the target, `both` by default (section 8, item 3). Sync's primary is the target, as Build's |
