@@ -116,7 +116,7 @@ with a prefix per module, or a schema per product.
 | Documents | JSON as `nvarchar(max)` / `jsonb` / text, with a `schema` column naming its format and version where it is a definition |
 | Who | `service_id` (which service wrote it) where a database is shared; `created_by` as the identity home's subject id |
 | Optimistic concurrency | a `row_version` integer on tables that several instances update |
-| Retention | each module declares its retention per table (days, or "keep"), run by one shared job |
+| Retention | **7 days by default** (owner, 2026-11-04) for every table that holds history (runs, logs, notifications, settled dead letters, expired idempotency keys, payloads whose owner is gone), set in days and fractions of days (`0.25` is six hours), up or down, per module and per table, run by one shared job. Tables that hold **current** state (identity, definitions, a checkpoint's current value, Build's structural baseline) have no age limit: their rows go when what they describe goes |
 | Large payloads | never a column of an ordinary table: stored in the `payloads` module (section 3.6) and referred to by id |
 
 ### 3.4 The shared modules
@@ -215,6 +215,66 @@ Sync's `ChangeWatermarks` are the same idea for databases. What makes a checkpoi
 | `dead_letter` | a record an outside system refused: error, attempts, status (open, replayed, discarded), its body as a payload id | replayed from the console or by a task |
 | `inbox` | received webhooks waiting for a task: source, signature check, received at, taken by which run, the body as a payload id | if the runner receives webhooks (plan 28 question 4) |
 
+## 4a. State that lives with the data, and a unified copy
+
+**Owner, 2026-11-04:** a unified state is desirable, and state kept on the target with the data is desirable, so the suite supports
+**both at the same time**. Build's tracking tables are the first case.
+
+### 4a.1 Why Build keeps state on the target
+
+Build's tracking tables (`DbDataBuild/DESIGN.md` section 12) are not only a run log. Build plans from them: the last recorded shape of
+each object is the baseline for drift detection (`schema_version`), blocks and their acknowledgements gate a plan (`block_log`), loaded
+intervals drive history consistency (`operation_interval`), an interrupted apply resumes from them (`migration_log`, `ddl_log`), and the
+metadata documents (`metadata_current`, `object_info`, `metadata_dependency`) are read in the warehouse by people and tools. Kept on the
+target, that state:
+
+- **travels with the data:** a restored backup or a copied database carries the history that matches its structure;
+- **works without a server:** the Build CLI on a laptop plans against a target with nothing else running;
+- **is readable where the data is,** by anyone with access to the warehouse.
+
+Build already lets the tracking connection be another connection than the data's ("central tracking"); unified state generalizes that.
+
+### 4a.2 Three settings, per connection
+
+| Setting | Authoritative record | Copy |
+| --- | --- | --- |
+| `target` (today) | the tracking schema on the target (or the project's tracking connection) | none |
+| `state` | a `build_tracking` module in the unified state database: the same logical tables, keyed by connection, in their namespace | none |
+| `both` | **one of the two, named** (`primary: target` by default) | the other, kept up to date by a follower |
+
+The default for a new install is the administrator's to set (plan 28 section 5's posture); `both` with the target as primary keeps today's
+behaviour and adds the unified copy.
+
+### 4a.3 How `both` works
+
+1. **One side is authoritative for decisions.** Build plans, blocks and resumes from the **primary** only. Two stores are never both
+   consulted for a decision, so they can never disagree mid-plan.
+2. **The primary is written as today**, synchronously, inside the apply's tracking gate ("started" before a step, the outcome after).
+3. **A follower copies to the other side.** The tracking tables are append-only by design, so the follower reads the rows added since
+   its own checkpoint (section 4.1: the same idea, for the suite's own state) and writes them, idempotently, keyed by connection and the
+   row's own key or time. A copy that is down or slow never stops or slows a deploy or a refresh; it catches up.
+4. **Divergence is detected, not hidden.** If the primary goes back in time (a target restored from a backup), the follower finds the
+   copy ahead of it, marks that connection's copy as **diverged**, and the console shows it with the point where they part. An
+   administrator chooses what to do (keep the copy's later history as an archive, or reset the copy to match), as a recorded action.
+5. **Copies of a database are recognized.** A development copy of a warehouse carries production's tracking rows. Rows are copied
+   under the connection's **identity** (the server and database it really is, plan 18 section 4), not only its name, so a copy's history
+   is never mixed into production's.
+6. **Switching the primary** (target to state, or back) is an explicit, recorded operation that first brings the new primary up to date,
+   then changes the setting.
+
+### 4a.4 What the unified copy gives
+
+- the `runs` module reads Build's runs from it, with Sync's and the runner's, in one query (plan 13 W10's monitoring view);
+- the catalog (plan 22 section 3) and DbDataKnowledge (plan 27) read Build's metadata documents for every connection in one place;
+- retention, backup and access are the unified state's (sections 3.3 and 5), while the target keeps its own copy for as long as Build's
+  rules say.
+
+### 4a.5 The same pattern elsewhere
+
+Any product can keep state where its work is and still appear in the unified state: a primary written where the product needs it, a
+follower that copies to the other side, divergence detected. Candidates: Sync's change-tracking state when Sync moves to the runner (plan
+28 section 8), and DbDataStore's history, which already lives in the customer's database.
+
 ## 5. Where the databases are
 
 The structure (sections 3 and 4) is the same whatever the topology. Which services share a database is the administrator's choice
@@ -245,9 +305,9 @@ Each service's login can be limited to the modules it uses, so sharing a databas
 | --- | --- | --- |
 | 1 | The topologies | **Decided** (owner, 2026-11-04): one per service, one per group and one per install, all offered (section 5) |
 | 2 | Namespaces | **Decided** (owner, 2026-11-04): schema and prefix configurable for every namespace, `dbdatakit_` for anything prefixed (section 3.2); several SQLite files supported, not required (section 3.2a) |
-| 3 | Retention defaults | proposed: per module, in its definition; runs and logs 90 days, audit kept, progress kept while the package exists |
+| 3 | Retention defaults | **Decided** (owner, 2026-11-04): 7 days, in days and fractions of days, adjustable up or down per module and table (section 3.3). Open: whether audit takes the 7-day default like other history, or is kept until an administrator sets a limit |
 | 4 | Which conventions to apply to existing tables when they move | proposed: all of section 3.3; a moved table is a new table (clean break) |
-| 5 | Large payloads | **Decided** (owner, 2026-11-04): a chunked object store from the start, streamed in and out, never a column of another table (section 3.6). Open: the default chunk size (1 MiB proposed) |
-| 6 | Engines | proposed: SQLite, SQL Server and PostgreSQL, as today; no moving between engines (an export and import is plan 22 section 4's backup work) |
-| 7 | Build's tracking tables | proposed: stay on the target; the `runs` module reads them, as Monitoring does today |
-| 8 | "Checkpoint" for what the draft called a cursor | proposed (section 4.1) |
+| 5 | Large payloads | **Decided** (owner, 2026-11-04): a chunked object store from the start, streamed in and out, never a column of another table (section 3.6). Chunk size 1 MiB by default (owner, 2026-11-04) |
+| 6 | Engines | **Decided for now** (owner, 2026-11-04): SQLite, SQL Server and PostgreSQL; no moving between engines (an export and import is plan 22 section 4's backup work) |
+| 7 | Build's tracking tables | **Decided** (owner, 2026-11-04): both, at the same time. Proposed in section 4a: per connection `target`, `state` or `both`; with `both`, one named primary decides and a follower keeps the other up to date. Open: the default for a new install |
+| 8 | "Checkpoint" for what the draft called a cursor | **Decided** (owner, 2026-11-04) |
