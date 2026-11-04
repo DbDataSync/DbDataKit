@@ -66,6 +66,31 @@ public static class StoreData
     private static readonly System.Text.RegularExpressions.Regex DataPath = new(
         @"^/api/v1/models/(?<model>[^/]+)(/instances/[^/]+)?/(entities/(?<entity>[^/]+)/rows?|changes)$", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Compiled);
 
+    private static readonly System.Text.RegularExpressions.Regex ModelDataPath = new(
+        @"^/api/v1/models/(?<model>[^/]+)(/instances/[^/]+)?/(entities/[^/]+/rows?|changes|requests(/.*)?|migrate|storage/create)$", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// One data path per model (plan 20 O10b, owner decision 2026-11-04): a model published to a serving group is read and written there, by its published version, and this server refuses its rows, changes and change
+    /// requests (409, naming the groups), so one definition is ever enforced on its tables. Its structure moves only by publishing (which migrates the tables as its first step), so applying a migration or creating its tables
+    /// here is refused too; a dry-run migration, which changes nothing, still answers. Unpublishing it from every group gives the data path back.
+    /// </summary>
+    public static IApplicationBuilder UsePublishedModels(this IApplicationBuilder app, string directory) => app.Use(async (context, next) =>
+    {
+        var match = ModelDataPath.Match(context.Request.Path.Value ?? "");
+        var dryRun = context.Request.Path.Value!.EndsWith("/migrate", StringComparison.Ordinal) && !string.Equals(context.Request.Query["apply"], "true", StringComparison.OrdinalIgnoreCase);
+        if (match.Success && !dryRun && new StorePublications(directory).Of(match.Groups["model"].Value) is { Count: > 0 } groups)
+        {
+            var model = match.Groups["model"].Value;
+            await Results.Json(new
+            {
+                error = $"The model '{model}' is published to {string.Join(", ", groups)}, where it is read and written by its published version; publish it to change it (dbdatastore model publish {model}), unpublish it to read and write it here.",
+                groups,
+            }, statusCode: StatusCodes.Status409Conflict).ExecuteAsync(context);
+            return;
+        }
+        await next();
+    });
+
     /// <summary>
     /// A token with a scope (an app's, plan 26 section 3) reaches the row reads and the changes endpoint and nothing else: not models, instances, storage, migration or change requests. A read must be in the scope;
     /// the changes endpoint checks each change's entity itself (<see cref="OutsideScope"/>), since the entities are in the body.
