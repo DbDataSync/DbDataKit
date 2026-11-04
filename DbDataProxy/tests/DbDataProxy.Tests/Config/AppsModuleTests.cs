@@ -72,6 +72,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
     private async Task<(HttpClient Apps, HttpClient Home)> StartAsync(string clientId)
     {
         var identityPort = FreePort();
+        while (identityPort == appsPort) identityPort = FreePort();   // a port given back is free to be handed out again, to the second listener too
         app = ProxyHost.Build([
             $"--Proxy:DataDirectory={dataDirectory}", "--Proxy:Modules:0=apps", "--Proxy:Modules:1=identity",
             "--Proxy:Apps:Address=127.0.0.1", "--Proxy:Apps:RolesRefreshSeconds=1", $"--Proxy:Apps:Port={appsPort}", $"--Proxy:Apps:Home:ClientId={clientId}", 
@@ -258,6 +259,45 @@ public sealed class AppsModuleTests : IAsyncLifetime
         approvals.Revoke(approval.Id, "grace");
         Assert.Equal(HttpStatusCode.Forbidden, (await GetAsync(apps, "/apps/acme/", session)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await PostTokenAsync(apps, "acme", session)).StatusCode);
+    }
+
+    [Fact]
+    public async Task The_origins_an_administrator_approves_become_the_apps_policy_and_nothing_else_does()
+    {
+        appsPort = FreePort();
+        var (clientId, _, _, database) = Prepare();
+        var definitions = new DefinitionStore(database);
+        new AppInstanceStore(definitions).PublishApp(new AppPackage(Manifest + "trust: trusted\negress:\n  connect: [\"https://api.contoso.com\", \"https://other.contoso.com\"]\n", new Dictionary<string, byte[]> { ["index.html"] = "<html></html>"u8.ToArray() }), "ada");
+        var (apps, _) = await StartAsync(clientId);
+        string Policy() => apps.GetAsync("/apps/acme/_app/index.html").GetAwaiter().GetResult().Headers.GetValues("Content-Security-Policy").Single();
+
+        Assert.DoesNotContain("contoso", Policy());                                                                         // asked, not approved
+        var approvals = new AppApprovalStore(definitions);
+        Assert.Throws<AppInstanceException>(() => approvals.Approve("notes", 2, "grace", egress: AppApprovalStore.ParseEgress("connect=https://evil.example")));   // an approval cannot widen
+        approvals.Approve("notes", 2, "grace", egress: AppApprovalStore.ParseEgress("connect=https://api.contoso.com"));
+        var policy = Policy();
+
+        Assert.Contains("https://api.contoso.com", policy);
+        Assert.DoesNotContain("other.contoso.com", policy);                                                                // asked and not approved
+        Assert.Throws<AppInstanceException>(() => AppApprovalStore.ParseEgress("fetch=https://x"));
+    }
+
+    [Fact]
+    public async Task Validate_reports_addresses_of_other_hosts_the_manifest_does_not_ask_for()
+    {
+        var app = Path.Combine(dataDirectory, "leaky-app");
+        Directory.CreateDirectory(app);
+        File.WriteAllText(Path.Combine(app, "app.yaml"), Manifest);
+        File.WriteAllText(Path.Combine(app, "index.html"), "<html>\n<script src=\"https://cdn.evil.example/x.js\"></script></html>");
+
+        var result = await Command("apps", "validate", "--dir", app);
+
+        Assert.True(result.Exit == 0, result.Error);
+        Assert.Contains("index.html:2  https://cdn.evil.example", result.Out);
+        File.WriteAllText(Path.Combine(app, "index.html"), "<html></html>");
+        Assert.Contains("reach no other host", (await Command("apps", "validate", "--dir", app)).Out);
+        File.WriteAllText(Path.Combine(app, "app.yaml"), "name: Bad Name\n");
+        Assert.NotEqual(0, (await Command("apps", "validate", "--dir", app)).Exit);
     }
 
     [Fact]
