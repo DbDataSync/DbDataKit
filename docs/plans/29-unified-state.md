@@ -213,7 +213,7 @@ Sync's `ChangeWatermarks` are the same idea for databases. What makes a checkpoi
 | `file_ledger` | each file seen: connection, path, size, modified time, content hash, first seen, processed by which run, outcome | "have I processed this file", by hash, so a renamed or re-sent file is recognized |
 | `idempotency` | a key for each outbound write and its result, with an expiry | a retried push does not create a second ticket |
 | `dead_letter` | a record an outside system refused: error, attempts, status (open, replayed, discarded), its body as a payload id | replayed from the console or by a task |
-| `inbox` | received webhooks waiting for a task: source, signature check, received at, taken by which run, the body as a payload id | if the runner receives webhooks (plan 28 question 4) |
+| `inbox` | received webhooks waiting for a task: source, signature check, received at, taken by which run, the body as a payload id | filled by the serving layer, which receives webhooks (plan 28 section 7) |
 
 ### 4.3 Progress across versions: declared, typed, migrated by the runner
 
@@ -316,8 +316,8 @@ Any product can keep state where its work is and still appear in the unified sta
 follower that copies to the other side, divergence detected. Candidates: Sync's change-tracking state when Sync moves to the runner (plan
 28 section 8), and DbDataStore's history, which already lives in the customer's database.
 
-**Sync defaults to `both` when it adopts this pattern** (owner, 2026-11-04). Which side is Sync's primary (its target, as for Build, or
-the unified state) is decided with Sync's state design (plan 28 section 8, item 3).
+**Sync defaults to `both` when it adopts this pattern** (owner, 2026-11-04). Its state moves into the unified state's modules and is also
+kept on the target (plan 28 section 8, item 3). Its primary is proposed to be the target, as for Build.
 
 ## 5. Where the databases are
 
@@ -350,7 +350,7 @@ Each service's login can be limited to the modules it uses, so sharing a databas
 | 1 | The topologies | **Decided** (owner, 2026-11-04): one per service, one per group and one per install, all offered (section 5) |
 | 2 | Namespaces | **Decided** (owner, 2026-11-04): schema and prefix configurable for every namespace, `dbdatakit_` for anything prefixed (section 3.2); several SQLite files supported, not required (section 3.2a) |
 | 3 | Retention defaults | **Decided** (owner, 2026-11-04): 7 days, in days and fractions of days, adjustable up or down per module and table (section 3.3). The audit is kept until an administrator sets a limit (owner, 2026-11-04) |
-| 4 | Which conventions to apply to existing tables when they move | proposed: all of section 3.3; a moved table is a new table (clean break) |
+| 4 | Which conventions to apply to existing tables when they move | **Decided** (owner, 2026-11-04): all of section 3.3; a moved table is a new table (clean break) |
 | 5 | Large payloads | **Decided** (owner, 2026-11-04): a chunked object store from the start, streamed in and out, never a column of another table (section 3.6). Chunk size 1 MiB by default (owner, 2026-11-04) |
 | 6 | Engines | **Decided for now** (owner, 2026-11-04): SQLite, SQL Server and PostgreSQL; no moving between engines (an export and import is plan 22 section 4's backup work) |
 | 7 | Build's tracking tables | **Decided** (owner, 2026-11-04): both, at the same time. Proposed in section 4a: per connection `target`, `state` or `both`; with `both`, one named primary decides and a follower keeps the other up to date. Default `both`, target primary (owner, 2026-11-04); Sync defaults to `both` when it adopts the pattern |

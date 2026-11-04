@@ -203,12 +203,13 @@ are agents' custom tools and apps' custom server-side logic (owner, 2026-11-04: 
   above).
 - **Long or outward work goes to the runner.** An action that needs an outside system or a long job enqueues an integration task (plan
   28 section 7) and returns; the result comes back as a status, a DbDataStore change or a notification.
-- **Life cycle.** Actions for apps and agents are authored in workspaces, versioned, approved and published (plans 21, 22, 26). Whether
-  Sync's scripts move to the same life cycle or stay in Sync's configuration repository is for the detailed plan.
+- **Life cycle.** Actions for apps and agents are authored in workspaces, versioned, approved and published (plans 21, 22, 26). Sync's
+  scripts **stay in Sync's configuration repository for now** (owner, 2026-11-04), on the shared script format, and move to the publish
+  life cycle when Sync moves to the runner (plan 28 section 8).
 
 ### 4.5 Elevated actions: permissions held by the action, not the user
 
-**Confirmed by the owner (2026-11-03)** as written here; who approves the grants is still owner question 11.
+**Confirmed by the owner (2026-11-03)** as written here; who approves the grants was decided on 2026-11-04 (question 11).
 
 **The need (owner, 2026-11-03).** Some workflows should let a person make one specific change to DbDataStore data that they have no
 permission to make directly. **The permission to read and write the data is assigned to the action. The person is given permission to
@@ -235,10 +236,10 @@ written in the action instead of in a role. This is the same pattern as a stored
 1. **To the action: what it may do to the data.** Each elevated action has an identity of its own in the identity home (an action
    principal), per channel. It is granted, as narrowly as DbDataStore's permissions allow, the entities, the operations (read, create,
    update, change request), and where possible the fields and row conditions. An administrator and the **data's owner** (the DbDataStore
-   model's owner) approve these grants, with an audit (owner question 11).
+   model's owner) approve these grants, with an audit (decided, owner, 2026-11-04).
 2. **To people: who may run the action.** People and groups are given *run* on the action, in the identity home like any role
-   assignment, so the same directory groups and DbDataStore grants (plan 22 section 2) can be used. Whoever may assign this is owner
-   question 11 too.
+   assignment, so the same directory groups and DbDataStore grants (plan 22 section 2) can be used. The action's owner or an administrator
+   assigns it (decided, owner, 2026-11-04).
 
 An action that is not marked elevated has no grants of its own and runs as the person, as before.
 
@@ -258,9 +259,10 @@ An action that is not marked elevated has no grants of its own and runs as the p
 
 - **A person runs the action; they never get its grants.** They receive the action's result, shaped by its output schema, never a token or
   rows the action was not written to return.
-- **No escalation:** an elevated action cannot change grants, roles, definitions or model structure, and cannot call another elevated
-  action unless its definition names it.
-- **Audit names both:** every write records the action and its version, its principal, and the person who asked (and the app or agent it
+- **No escalation, by default:** an elevated action cannot change grants, roles, definitions or model structure, and cannot call another
+  elevated action unless its definition names it. An administrator can lift this for one action, as a recorded choice (owner,
+  2026-11-04, following the security posture).
+- **Audit names both, always** (owner, 2026-11-04: fixed, not a default an administrator can change): every write records the action and its version, its principal, and the person who asked (and the app or agent it
   came through). DbDataStore's history shows "Alice ran *submit-claim* v3, from the Expense app". "Who changed what" stays answerable.
 - **Approval when published:** an elevated action is trusted code and needs the administrator's approval of that exact version
   (section 4.7, plan 26). A change to its grants or its body is a new version, approved again.
@@ -278,7 +280,7 @@ The first version covers DbDataStore entities.
 
 ### 4.6 Connections to outside systems
 
-**Proposed:** an outside system is a **connection** like a database, a new kind in the existing `connection/1` format rather than a
+**Decided (owner, 2026-11-04):** an outside system is a **connection** like a database, a new kind in the existing `connection/1` format rather than a
 second format. It then shares what connections already have: secret references for keys, passwords and OAuth refresh tokens (plan 13
 W13); per-channel binding, so a preview never reaches production by accident (plan 21); and the console's connections view. Sign-in
 methods to cover: API key, basic, OAuth 2 client credentials, OAuth 2 authorization code with stored refresh tokens, client
@@ -316,9 +318,11 @@ compiled by the same engine.
 
 ### 4.9 Agents in integrations, and agents writing them
 
-- **An integration task can ask an agent** (triage a failed load, summarize a change, match records). No user is there to approve each
-  action, so by default an unattended agent step **only reads and proposes**: what it would change becomes a draft or a work item
-  (section 5). **Owner question 6.**
+- **An integration task can ask an agent** (triage a failed load and suggest a fix, summarize a change, match supplier names to
+  customer records). The task runs on a schedule with nobody watching, so nobody can answer a prompt. **Proposed (2026-11-04):** the
+  per-action prompting setting decides (section 3.3). An action set to *do not ask* runs unattended; an action that would ask a person
+  becomes a **proposal** instead: a draft change, a work item (section 5) or a notification for someone to approve later. An administrator
+  decides what is safe unattended by setting actions to *do not ask*. **Owner question 6.**
 - **Agents can write integrations and actions**, from the templates, in a workspace like any author, with each step prompted as its
   action is configured (section 3.3); publishing still needs the administrator's approval of trusted code.
 
@@ -412,17 +416,17 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 
 | # | Question | Proposed |
 | --- | --- | --- |
-| 1 | Which of these are servers? | **Partly decided** (owner, 2026-11-04): integrations are a product of their own, publishing to the runner, a service of its own (plan 28). Open: whether agents and DbDataIntegration share a back end with apps; proposed earlier: knowledge and the work tool are not servers (section 6) |
+| 1 | Which of these are servers? | **Partly decided** (owner, 2026-11-04): integrations are a product of their own, publishing to the runner, a service of its own (plan 28). Open until the detailed plans show what each back end needs (owner, 2026-11-04): whether agents and DbDataIntegration share a back end with apps; proposed earlier: knowledge and the work tool are not servers (section 6) |
 | 2 | The work tool's name | **Working name DbDataBacklog** (owner, 2026-11-03); final name undecided |
 | 3 | Languages and packaging | **Decided for integrations** (owner, 2026-11-04): `.csx` scripts, compiled .NET projects, any executable through the runner protocol, and hybrids such as a .NET notebook over a project (plan 28 section 4). Actions: `.csx`, SQL, command calls and declarative elevated forms |
 | 4 | Embedding search | optional per install; full-text always |
 | 5 | Agent approvals | **Decided** (owner, 2026-11-03): prompting is configured per action. Open: the settings, where they live, defaults, an install-wide floor (section 3.3) |
-| 6 | Unattended agents in integration tasks | read and propose only; changes become drafts or work items |
+| 6 | Unattended agents in integration tasks | proposed: actions set to *do not ask* run; actions that would ask become proposals (drafts, work items, notifications) (section 4.9) |
 | 7 | The work tool's scope | its own items first; links to GitHub pull requests and workspaces; import from Jira or Azure Boards later; no two-way sync |
 | 8 | First audience | front-end agents first (wave 1), since the semantic layer and catalog are closest to ready |
 | 9 | The integrations product's name | **Decided** (owner, 2026-11-04): DbDataIntegration (section 4.11) |
-| 10 | Outside systems as connections | a new kind in `connection/1`, sharing secrets, channel bindings and the console's view (section 4.6) |
-| 11 | Elevated actions: who approves an action's grants on data, and who may give people *run* on it | grants on data: an administrator and the DbDataStore model's owner, both, with an audit; *run*: the action's owner or an administrator (section 4.5) |
+| 10 | Outside systems as connections | **Decided** (owner, 2026-11-04): a new kind in `connection/1`, sharing secrets, channel bindings and the console's view (section 4.6) |
+| 11 | Elevated actions: who approves an action's grants on data, and who may give people *run* on it | **Decided** (owner, 2026-11-04): grants on data: an administrator and the DbDataStore model's owner, both, with an audit; *run*: the action's owner or an administrator (section 4.5) |
 | 12 | Integrations with or apart from actions and Sync's scripts | **Decided** (owner, 2026-11-04): apart. Integrations are a product publishing to the runner; actions share one script format with Sync (section 4) |
 
 ## 9. Detailed plans to follow

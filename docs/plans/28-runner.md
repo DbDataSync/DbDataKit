@@ -1,4 +1,4 @@
-# Plan 28: the runner, a published-to service for scheduled and batch work
+# Plan 28: DbDataRunner, a published-to service for scheduled and batch work
 
 Status: **proposed, high level** (2026-11-04, from the owner's direction in the plan 27 discussion). Not sliced. Its first consumer is
 DbDataIntegration ([plan 27](27-knowledge-agents-integrations-work.md) section 4). Moving Sync and Build onto it is later work,
@@ -86,7 +86,9 @@ never sees it.
 - **From the runner:** cancel, with a grace period.
 - **End:** an outcome (succeeded, failed with a classified failure, partly succeeded), counts and outputs.
 
-The transport (standard input and output, a local socket, or gRPC) is for the detailed plan.
+**Transport (owner, 2026-11-04): gRPC over a local socket** (a named pipe on Windows, a Unix domain socket on Linux). Standard input and
+output would compete with the task's own output and cannot carry payload streams well; gRPC gives typed messages and streaming in any
+language, and the socket keeps it on the machine.
 
 ## 5. Pools and the security posture
 
@@ -119,8 +121,9 @@ An action in the serving layer (plan 27 section 4.4) that needs work done outsid
 long job, **enqueues a task** on the runner and returns. The result comes back as a status, a DbDataStore change or a notification. This
 keeps long and outward work off the serving layer by default; an administrator may still allow an action to do it directly (section 5).
 
-Webhooks from outside systems arrive at a public address. Whether the serving layer receives and stores them for the runner, or a runner
-listens itself, is open (section 10).
+**Webhooks (owner, 2026-11-04): received by the serving layer**, which is already the public endpoint. It checks the signature, stores the
+body as a payload, and adds an entry to the runner's inbox (plan 29 section 4.2), which a task takes. Runners need no inbound access from
+outside unless an administrator chooses otherwise.
 
 ## 8. Later: Sync and Build on the runner
 
@@ -130,10 +133,11 @@ Not part of the new services, and planned separately when taken on.
    integration publishes its project and dependencies, so the runner hosts them as one more kind of package (decision 6).
 2. **Schedulers move.** Sync's scheduler (13a M03) and the Build server's (M08) become the runner's; the console's pause and run-now (M11)
    act on the runner. The shared libraries carry over unchanged.
-3. **State: to design first** (decision 7). Sync's watermarks, change-tracking positions and staging state; Build's tracking tables, which
-   live on the target by design; run history in both. Whether they stay with the product, move to the runner's shared state, or are passed
-   in and out of each run is the first question of that plan. When Sync adopts plan 29's pattern (state with the data and a unified copy), it defaults to
-   keeping both (owner, 2026-11-04).
+3. **State (decided, owner, 2026-11-04).** Sync's state (watermarks, change-tracking positions, staging state, run history) and Build's
+   tracking tables move into **modules of the unified state database** (plan 29), and are **also kept on the target**: `both` is the default
+   for each (plan 29 section 4a), with one named primary for decisions and a follower keeping the other side up to date. Build's primary is
+   the target. Sync's primary is proposed to be the target as well, so a restored target rewinds Sync's watermarks with the data it loaded.
+   Sync's watermarks become declared checkpoints (plan 29 section 4.3). What is left for that plan is the detail of moving each table.
 4. **Logins split by job.** The back ends keep read access for their interactive work (Build's plan previews, Sync's metadata browsing,
    connection tests); the runner gets the write logins (decision 5).
 
@@ -152,11 +156,11 @@ Not part of the new services, and planned separately when taken on.
 
 | # | Question | Notes |
 | --- | --- | --- |
-| 1 | The name and executable | "the runner" for now (`dbdatarunner`?) |
-| 2 | The protocol's transport | standard input and output, a local socket, or gRPC (section 4.1) |
-| 3 | Notebooks | which .NET notebook kernel, how a headless run reports each cell, what is kept from a run (outputs, a rendered copy) |
-| 4 | Webhooks | received by the serving layer and handed over, or by runners directly (section 7) |
+| 1 | The name and executable | **Decided** (owner, 2026-11-04): DbDataRunner, `dbdatarunner` |
+| 2 | The protocol's transport | **Decided** (owner, 2026-11-04): gRPC over a local socket (section 4.1) |
+| 3 | Notebooks | **Deferred** (owner, 2026-11-04): decided when the notebook kind is built, after scripts and compiled projects; before then, check that the chosen kernel (the owner's example, ClrKernel) is maintained and runs headless |
+| 4 | Webhooks | **Decided** (owner, 2026-11-04): the serving layer receives them and hands them to the runner's inbox (section 7) |
 | 5 | Task state | **Decided** (owner, 2026-11-04): a state database for progress; designed as the `runner_progress` module of the unified state structure (plan 29 section 4) |
-| 6 | Process limits | job objects on Windows, cgroups on Linux; a separate OS account per package, or one account per runner |
-| 7 | Routing | whether labels are only an administrator's tool, or packages may require a label |
-| 8 | State for Sync and Build | section 8, item 3; designed before that migration starts |
+| 6 | Process limits | **Decided** (owner, 2026-11-04): job objects on Windows, cgroups on Linux; one low-privilege account per runner by default, an account per package as an option |
+| 7 | Routing | **Decided** (owner, 2026-11-04): labels are an administrator's tool, and a package may require one ("needs outside network"); a version whose required label no runner has does not activate, and the console says why |
+| 8 | State for Sync and Build | **Decided** (owner, 2026-11-04): modules of the unified state database and also on the target, `both` by default (section 8, item 3). Open: Sync's primary, proposed the target |
