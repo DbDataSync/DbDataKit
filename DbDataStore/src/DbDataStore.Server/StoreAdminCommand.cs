@@ -15,9 +15,11 @@ public static class StoreAdminCommand
     [
         new Verb("put", "Save a model/1 file as a model of this server (it is checked first; the name is the file's name unless --name is given)", EffectClass.RepoFilesOnly, $"--file <model.yaml> [--name <model>] {Where}", PutAsync,
             DataSchemas.Object([("name", DataSchemas.String), ("created", DataSchemas.Boolean)], "name", "created")),
-        new Verb("publish", "Publish a model, with the login and data source of its connection, to a serving group this server is paired with (plan 20 O10): every instance then serves it and enforces its rules", EffectClass.TargetWrites,
-            $"<model> --proxy <name> {Where}", PublishAsync,
-            DataSchemas.Object([("model", DataSchemas.String), ("proxy", DataSchemas.String), ("version", DataSchemas.Integer), ("unchanged", DataSchemas.Boolean)], "model", "proxy", "version", "unchanged")),
+        new Verb("publish", "Make the model as it is now available (plan 20 O10b): its tables are brought to it, this server's copy is pinned to it, and it is sent to its serving groups (or the one --proxy names), which then serve it and enforce its rules; --dry-run says what would change", EffectClass.TargetWrites,
+            $"<model> [--proxy <name>] [--dry-run] {Where}", PublishAsync,
+            DataSchemas.Object([("model", DataSchemas.String), ("released_version", DataSchemas.String), ("dry_run", DataSchemas.Boolean), ("statements", DataSchemas.Integer), ("groups", DataSchemas.StringList)], "model", "released_version", "dry_run", "statements", "groups")),
+        new Verb("unpublish", "Take a model off a serving group; once it is on none, this server reads and writes it again", EffectClass.TargetWrites, $"<model> --proxy <name> {Where}", UnpublishAsync,
+            DataSchemas.Object([("model", DataSchemas.String), ("proxy", DataSchemas.String)], "model", "proxy")),
     ]);
 
     public static Noun Proxy() => new("proxy", "The serving groups this server publishes its models to",
@@ -33,15 +35,17 @@ public static class StoreAdminCommand
 
     private static async Task<int> PublishAsync(string[] args, CliContext context)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "proxy", "repo" });
-        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1 || parsed.Get("proxy") is not { Length: > 0 } proxy)
+        var parsed = CliArgs.Parse(args, new HashSet<string> { "dry-run" }, new HashSet<string> { "proxy", "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1)
         {
-            await context.Error.WriteLineAsync($"Usage: model publish <model> --proxy <name> {Where}");
+            await context.Error.WriteLineAsync($"Usage: model publish <model> [--proxy <name>] [--dry-run] {Where}");
             return CliExit.Usage;
         }
         var model = parsed.Words[0];
+        var dryRun = parsed.Has("dry-run");
         // the operator on the server's machine: the person the group's audit names
-        var result = await StorePublisher.For(DirectoryOf(parsed)).PublishAsync(model, proxy, "local:" + Environment.UserName, Environment.UserName, context.Cancellation);
+        var result = await StorePublisher.For(DirectoryOf(parsed)).PublishAsync(model, parsed.Get("proxy") is { Length: > 0 } proxy ? [proxy] : [], "local:" + Environment.UserName, Environment.UserName, dryRun, context.Cancellation);
+        foreach (var statement in result.Detail?["statements"]?.AsArray() ?? []) await context.Out.WriteLineAsync($"  {(string?)statement!["description"]}");
         if (!result.Ok)
         {
             await context.Error.WriteLineAsync(result.Message);
@@ -49,9 +53,26 @@ public static class StoreAdminCommand
         }
         await context.Out.WriteLineAsync(result.Message);
         context.Data["model"] = model;
+        context.Data["released_version"] = (string?)result.Detail?["released_version"] ?? "";
+        context.Data["dry_run"] = dryRun;
+        context.Data["statements"] = result.Detail?["statements"]?.AsArray().Count ?? 0;
+        context.Data["groups"] = (result.Detail?["groups"]?.AsArray() ?? []).Select(g => (string)g!["proxy"]!).ToList();
+        return CliExit.Ok;
+    }
+
+    private static async Task<int> UnpublishAsync(string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "proxy", "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1 || parsed.Get("proxy") is not { Length: > 0 } proxy)
+        {
+            await context.Error.WriteLineAsync($"Usage: model unpublish <model> --proxy <name> {Where}");
+            return CliExit.Usage;
+        }
+        var result = await StorePublisher.For(DirectoryOf(parsed)).UnpublishAsync(parsed.Words[0], proxy, "local:" + Environment.UserName, Environment.UserName, context.Cancellation);
+        if (!result.Ok) { await context.Error.WriteLineAsync(result.Message); return CliExit.Failure; }
+        await context.Out.WriteLineAsync(result.Message);
+        context.Data["model"] = parsed.Words[0];
         context.Data["proxy"] = proxy;
-        context.Data["version"] = (int?)result.Detail?["version"] ?? 0;
-        context.Data["unchanged"] = (bool?)result.Detail?["unchanged"] ?? false;
         return CliExit.Ok;
     }
 
@@ -155,6 +176,11 @@ public static class StoreAdminCommand
         if (!StoreModels.IsValidName(name) || !File.Exists(StoreModels.FileOf(directory, name))) { await context.Error.WriteLineAsync($"There is no model '{name}'."); return CliExit.Failure; }
         var check = StoreModels.Check(name, await File.ReadAllTextAsync(StoreModels.FileOf(directory, name)));
         if (!check.Ok) { await context.Error.WriteLineAsync($"{name}.yaml is not a valid model."); return CliExit.Failure; }
+        if (new StorePublications(directory).Of(name) is { Count: > 0 } groups)
+        {
+            await context.Error.WriteLineAsync($"The model '{name}' is published to {string.Join(", ", groups)}: its tables move only by publishing it (dbdatastore model publish {name}).");
+            return CliExit.Failure;
+        }
         var model = check.Model!;
         try
         {
