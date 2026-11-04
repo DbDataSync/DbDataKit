@@ -1,6 +1,7 @@
 # Plan 29: one structure for the suite's state databases
 
-Status: **proposed, high level** (2026-11-04, at the owner's request: "start designing a more unified state database structure"). Not
+Status: **proposed, high level** (2026-11-04, at the owner's request: "start designing a more unified state database structure";
+revised the same day with the owner's notes on topologies, configurable namespaces, SQLite files and large payloads). Not
 sliced. The first new user is the runner's progress store (plan 28) for DbDataIntegration (plan 27).
 
 **State** here means what the suite's own services keep to run: identity, sessions, pairings, published definitions, schedules, the
@@ -47,11 +48,15 @@ A **module** is a set of tables owned by one library, with **its own version** a
 holds several modules, and records each one's version in one table:
 
 ```
-dbdata_modules
-  module          -- 'identity', 'scheduling', 'runs', 'runner.progress', 'sync', ...
+dbdatakit_modules
+  module          -- 'identity', 'scheduling', 'runs', 'runner_progress', 'sync', ...
+  scope           -- whose copy it is: the install, a group, or one service (section 3.2)
+  schema, prefix  -- where its tables are (section 3.2), so any service that shares the database can find them
   version         -- the last migration applied
   applied_at, applied_by  -- the service and its version that applied it
 ```
+
+The registry table itself lives in the `dbdatakit` schema (on SQLite, the table `dbdatakit_modules`), and that too is configurable.
 
 - A service declares the modules it needs. Opening the database applies each module's missing migrations, in module order, then in each
   module's own order. **No interleaving**, and a library adds a migration to its module without any product changing.
@@ -61,17 +66,45 @@ dbdata_modules
 - **Clean break** (plan 13): a database with today's single version number is refused with a message naming the database. It is not
   converted.
 
-### 3.2 Names: a namespace per module
+### 3.2 Names: a namespace per module, configurable
 
-Every table belongs to its module's namespace:
+**Owner, 2026-11-04:** the schema and the prefix must be configurable for every namespace, and anything the suite prefixes starts with
+`dbdatakit_`.
 
-| Engine | Rendered as |
-| --- | --- |
-| SQL Server, PostgreSQL | a database schema per module: `identity.users`, `runs.run`, `runner_progress.cursor` |
-| SQLite | a prefix: `identity__users`, `runs__run` (SQLite has no schemas within a file) |
+A **namespace** is one copy of one module: the module, and its **scope** (the whole install, one group, or one service). Two serving
+groups that share one database each have their own namespace for the modules that are per group (sessions, the group's trust), and share
+the install's namespace for the modules that are per install (identity, when the install chooses one home).
 
-Templates name tables as `{module}.{table}`, rendered by the dialect. Two services can then share one database without name clashes, and
-an administrator can grant a login rights on one module's schema only.
+Each namespace has two settings, both configurable by the administrator:
+
+| Setting | What it does | Default on SQL Server and PostgreSQL | Default on SQLite |
+| --- | --- | --- | --- |
+| `schema` | the database schema its tables are created in | `dbdatakit_<module>` | none (SQLite has no schemas in a file; see section 3.2a for files) |
+| `prefix` | put before each table name | none | `dbdatakit_<module>_` |
+
+A scope other than the install adds its name: the default for a group's sessions is the schema `dbdatakit_sessions_<group>` (or the
+prefix `dbdatakit_sessions_<group>_`). Any arrangement an administrator prefers works, for example one schema `dbdatakit` for everything
+with a prefix per module, or a schema per product.
+
+- **Configured where the service is configured** (its `server.yaml` state section), per namespace, with the defaults above for anything
+  not named.
+- **Recorded in `dbdatakit_modules`**, so a service that shares the database (the console reading every service's runs, for example) finds
+  a namespace without being told.
+- **Checked when the database is opened:** names valid for the engine (PostgreSQL allows 63 characters, SQL Server 128), and no two
+  namespaces rendering to the same table. A clash or a name that is too long stops the start with a message naming the setting.
+- **Templates never write a table name.** They write `{table:users}`, and the dialect renders it from the namespace's schema and prefix.
+- **Rights per namespace:** with a schema each, a service's login can be granted only the namespaces it uses.
+
+### 3.2a SQLite files
+
+**Owner, 2026-11-04:** several files are supported but not required; not a priority unless contention is a concern.
+
+- **Default: one file per service**, every namespace in it, as today.
+- **Option:** a namespace may name its own file, attached when the database is opened (`ATTACH`), for a module that writes heavily (the
+  runner's progress, run logs) so its writes do not wait on another module's. SQLite allows one writer per file at a time, so this is the
+  remedy if contention appears.
+- **One limit to keep in mind:** in WAL mode SQLite commits a transaction atomically in each file, not across files. Modules that must
+  commit together (a checkpoint and its run's outcome, section 4) stay in one file; the module definitions say which.
 
 ### 3.3 Common conventions
 
@@ -84,7 +117,7 @@ an administrator can grant a login rights on one module's schema only.
 | Who | `service_id` (which service wrote it) where a database is shared; `created_by` as the identity home's subject id |
 | Optimistic concurrency | a `row_version` integer on tables that several instances update |
 | Retention | each module declares its retention per table (days, or "keep"), run by one shared job |
-| Large payloads | kept in the row up to a limit; above it, in a payload table in chunks, or an object store (question 5) |
+| Large payloads | never a column of an ordinary table: stored in the `payloads` module (section 3.6) and referred to by id |
 
 ### 3.4 The shared modules
 
@@ -99,6 +132,7 @@ an administrator can grant a login rights on one module's schema only.
 | `audit` | new, shared | who did what, through what (a person, an agent, an action), when | Proxy's management audit; elevated actions' records (plan 27 section 4.5) |
 | `lineage` | `DbDataKit.Lineage` | nodes, edges, run lineage, versions | `LineageSchema` |
 | `app_storage` | `DbDataKit.State`, used by the apps host | per-instance app storage (plan 26 section 2a) | `AppStorageSchema` |
+| `payloads` | `DbDataKit.State` | large values in chunks, read and written as streams (section 3.6) | large columns in other tables |
 
 ### 3.5 Modules for the new products
 
@@ -113,31 +147,84 @@ an administrator can grant a login rights on one module's schema only.
 Product modules (`sync`, `serving`, `console`, `build`) hold what is truly one product's: Sync's watermarks and change-check history,
 saved queries, console settings.
 
+### 3.6 Large payloads: a chunked object store
+
+**Owner, 2026-11-04:** size is not the concern; modern databases hold large values well. The concerns are **streaming** data in and
+out without holding it all in memory, and **accidental queries** that select a large column across many rows. If a chunked object store is
+the most consistent answer, start there.
+
+It is. A large value in an ordinary column fails both concerns in different ways per engine: SQL Server streams `varbinary(max)` only
+with sequential access, PostgreSQL's `bytea` is read whole unless it is a separate large object with its own life cycle, SQLite streams
+only through its blob handle; and any `SELECT *` on the table reads every value. So the suite keeps large values in one module of their
+own:
+
+```
+payloads.payload  -- id, size, sha256, media type, created_at, created_by, owner (module and row it belongs to), state (writing, complete)
+payloads.chunk    -- payload_id, sequence, data (one chunk, 1 MiB by default, configurable)
+```
+
+- **One stream API** (`OpenWrite`, `OpenRead`, in `DbDataKit.State`): a writer sends chunks as they arrive and marks the payload complete
+  with its size and hash at the end; a reader reads chunk by chunk. Memory use is one chunk, on every engine, with the same code.
+- **No large column anywhere else.** Other modules store a payload id. A query on a module's table can never pull megabytes by accident,
+  and the payload tables are only read through the stream API.
+- **Integrity:** the hash is checked on read; a payload left in *writing* (a writer that died) is removed by retention.
+- **Life cycle:** each payload names its owner; when the owning row goes, so does the payload, through the same retention job.
+- **Back ends:** the database's chunk tables by default. The same API can later write to a file system or an object store (S3, Azure Blob)
+  for installs that want large files out of the database; the payload row stays in the database either way.
+- **Small documents stay inline:** a definition's JSON or a small state value is an ordinary column with a size limit set by its module.
+
 ## 4. The progress store (first user)
 
 What DbDataIntegration tasks need to rerun without losing or repeating work (plan 27 section 4.3). Kept by the runner, reached through the
 runner protocol (plan 28 section 4.1), so a task never holds a login to it. Every row is keyed by the **package, the channel and the
 task**, so a preview's progress never mixes with production's.
 
+### 4.1 Checkpoints (what the first draft called cursors)
+
+A **checkpoint** is where a task got to in an outside source, saved so the next run carries on from there instead of starting over. The
+draft called it a "cursor"; "checkpoint" avoids confusion with a database cursor. Examples:
+
+| Source | What the checkpoint holds | The next run asks for |
+| --- | --- | --- |
+| an API that filters by time | the last modified time seen: `2026-11-04T09:15:00Z` | "orders changed since 09:15" |
+| an API with change tokens (Microsoft Graph delta queries, Salesforce, many others) | the token the API returned last time | "changes since this token" |
+| an event feed or queue | the last sequence number or offset processed | "events after 1 042 377" |
+| a paged export that takes several runs | the page or continuation token reached | "the next page after this one" |
+| a folder listed by name or date | the last file name or time handled | files after it (the file ledger, 4.3, catches the rest) |
+
+Sync's `ChangeWatermarks` are the same idea for databases. What makes a checkpoint more than a saved value:
+
+1. **It moves only when the data is safely landed.** A task reads from the old checkpoint, writes what it read, and saves the new
+   checkpoint **in the same step that records the work as done**. A run that fails half way leaves the checkpoint where it was, so the
+   next run reads that part again (and the idempotency keys and file ledger stop it from writing twice). Saving it first would lose data on
+   a failure; saving it much later would repeat work.
+2. **One writer at a time.** It is read and written with a `row_version`, so two overlapping runs of one task cannot both move it; the
+   second is refused and retried.
+3. **It has a history.** Each change is kept (old value, new value, run, time), so an operator can see how far a task got and **rewind**
+   it ("reload everything since Monday") from the console, as an audited action.
+4. **It is per channel**, so a preview starting from scratch does not move production's position.
+
+### 4.2 The tables
+
 | Table | Holds | Notes |
 | --- | --- | --- |
-| `cursor` | a named position: a watermark, a page token, a last-modified time | read and written with `row_version`, so two runs of one task cannot both move it; written in the same step as the run's outcome where the task allows |
-| `state` | small named JSON values the task keeps between runs | size-limited |
+| `checkpoint` and `checkpoint_history` | each named position and its changes (4.1) | the value is small JSON, so one checkpoint can hold several parts (a time and an id to break ties) |
+| `state` | small named JSON values the task keeps between runs | size-limited; anything large is a payload |
 | `file_ledger` | each file seen: connection, path, size, modified time, content hash, first seen, processed by which run, outcome | "have I processed this file", by hash, so a renamed or re-sent file is recognized |
 | `idempotency` | a key for each outbound write and its result, with an expiry | a retried push does not create a second ticket |
-| `dead_letter` | a record an outside system refused: payload, error, attempts, status (open, replayed, discarded) | replayed from the console or by a task |
-| `inbox` | received webhooks waiting for a task: source, signature check, payload, received at, taken by which run | if the runner receives webhooks (plan 28 question 4) |
+| `dead_letter` | a record an outside system refused: error, attempts, status (open, replayed, discarded), its body as a payload id | replayed from the console or by a task |
+| `inbox` | received webhooks waiting for a task: source, signature check, received at, taken by which run, the body as a payload id | if the runner receives webhooks (plan 28 question 4) |
 
 ## 5. Where the databases are
 
 The structure (sections 3 and 4) is the same whatever the topology. Which services share a database is the administrator's choice
-(plan 28 section 5's posture), with a default:
+(plan 28 section 5's posture), with a default. **The owner confirmed all three (2026-11-04).**
 
 | Topology | What it is | For | Against |
 | --- | --- | --- | --- |
 | **One per service** (default for a single instance) | each service its own SQLite file, as today | nothing to set up; a service's failure stays its own | cross-product views are pulled and merged; several files to back up |
 | **One per group** (required for groups) | a serving group's or a runner group's instances share one SQL Server or PostgreSQL database | scale-out and availability (plan 20 section 6) | one more database per group |
-| **One per install** (option) | every service uses one SQL Server or PostgreSQL database, each in its own modules | one backup (plan 22 section 4); the console reads runs, audit and notifications for every service with one query; one identity module | a shared dependency: that database's outage stops every service; upgrades of a module must suit every service that uses it (N and N-1 per module) |
+| **One per install** (option; confirmed by the owner, 2026-11-04) | every service uses one SQL Server or PostgreSQL database, each in its own modules | one backup (plan 22 section 4); the console reads runs, audit and notifications for every service with one query; one identity module | a shared dependency: that database's outage stops every service; upgrades of a module must suit every service that uses it (N and N-1 per module) |
 
 Each service's login can be limited to the modules it uses, so sharing a database does not mean sharing everything.
 
@@ -154,12 +241,13 @@ Each service's login can be limited to the modules it uses, so sharing a databas
 
 ## 7. Questions for the owner
 
-| # | Question | Proposed |
+| # | Question | Status |
 | --- | --- | --- |
-| 1 | The default topology, and whether "one per install" is offered | one per service for a single instance, one per group for groups, one per install as an option the administrator chooses |
-| 2 | Namespaces on SQLite | a table-name prefix (`module__table`); attached database files per module are the alternative |
-| 3 | Retention defaults | per module, in its definition; runs and logs 90 days, audit kept, progress kept while the package exists |
-| 4 | Which conventions to apply to existing tables when they move | all of section 3.3; a moved table is a new table (clean break) |
-| 5 | Large payloads (dead letters, webhook bodies, files) | in the row up to 1 MB; chunks in a payload table above that; an object store later |
-| 6 | Engines | SQLite, SQL Server and PostgreSQL, as today; no moving between engines (an export and import is plan 22 section 4's backup work) |
-| 7 | Build's tracking tables | stay on the target; the `runs` module reads them, as Monitoring does today |
+| 1 | The topologies | **Decided** (owner, 2026-11-04): one per service, one per group and one per install, all offered (section 5) |
+| 2 | Namespaces | **Decided** (owner, 2026-11-04): schema and prefix configurable for every namespace, `dbdatakit_` for anything prefixed (section 3.2); several SQLite files supported, not required (section 3.2a) |
+| 3 | Retention defaults | proposed: per module, in its definition; runs and logs 90 days, audit kept, progress kept while the package exists |
+| 4 | Which conventions to apply to existing tables when they move | proposed: all of section 3.3; a moved table is a new table (clean break) |
+| 5 | Large payloads | **Decided** (owner, 2026-11-04): a chunked object store from the start, streamed in and out, never a column of another table (section 3.6). Open: the default chunk size (1 MiB proposed) |
+| 6 | Engines | proposed: SQLite, SQL Server and PostgreSQL, as today; no moving between engines (an export and import is plan 22 section 4's backup work) |
+| 7 | Build's tracking tables | proposed: stay on the target; the `runs` module reads them, as Monitoring does today |
+| 8 | "Checkpoint" for what the draft called a cursor | proposed (section 4.1) |

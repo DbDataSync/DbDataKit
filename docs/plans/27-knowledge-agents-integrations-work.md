@@ -175,7 +175,7 @@ the protocol directly.
 | Service | What the code gets |
 | --- | --- |
 | Connections | outside connections (section 4.6) and suite connections, resolved with their secrets and bound per channel |
-| State | cursors and watermarks, a ledger of processed files keyed by name and hash, idempotency keys for pushes, so a rerun neither loses nor repeats work |
+| State | checkpoints (where a task got to in a source, plan 29 section 4.1), a ledger of processed files keyed by name and hash, idempotency keys for pushes, so a rerun neither loses nor repeats work |
 | Retry | policies with back-off for errors a connection classifies as temporary; rate limits per connection; a store for records an outside system refused, and replay from the last good point |
 | Logging and metrics | structured logs and run metrics in the runner's run record, secrets redacted |
 | Lineage | "read from" and "wrote to" calls that record outside systems as lineage nodes (plan 18) |
@@ -333,7 +333,7 @@ system but writes nothing; a run against the channel's sandbox connection before
 Others considered: DbDataIntegrate, DbDataIntegrations, DbDataBridge, DbDataExchange, DbDataConnect. The words inside are fixed:
 **connection**, **integration** (a package), **task**, **action**, **script**.
 
-Its progress (cursors, processed files, idempotency keys, refused records) is kept in a state database, the runner's progress store
+Its progress (checkpoints, processed files, idempotency keys, refused records) is kept in a state database, the runner's progress store
 ([plan 29](29-unified-state.md) section 4).
 
 ## 5. DbDataBacklog: work management

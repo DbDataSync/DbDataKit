@@ -54,7 +54,7 @@ running on its schedule; the shared features exist once; and work from several p
 | Retries and timeouts | new | per task; back-off for errors a connection classifies as temporary (`ConnectionFailure`) |
 | Logs and metrics | new, on the run model | structured, secrets redacted (the shared redactor) |
 | Run history, health, notifications, retention | `DbDataKit.Monitoring` (13a M04, M05, M10) | the console's monitoring view (M11) shows runner groups like any server |
-| Task state: cursors, watermarks, a ledger of processed files, idempotency keys, refused records | new: the progress store, a module of the runner group's state database ([plan 29](29-unified-state.md) section 4) | what integrations need to rerun without losing or repeating work |
+| Task state: checkpoints (where a task got to in a source), a ledger of processed files, idempotency keys, refused records | new: the progress store, a module of the runner group's state database ([plan 29](29-unified-state.md) section 4) | what integrations need to rerun without losing or repeating work |
 | Connections and secrets, bound per channel | `connection/1`, the secret store (plan 13 W13), channels (plan 21) | outside systems as a connection kind is plan 27 question 10 |
 | Run lineage | `DbDataKit.Lineage` (plan 18) | outside systems as nodes |
 | Alerts by email, Teams, Slack, webhook | the delivery service (plan 22 section 5, not built) | |
