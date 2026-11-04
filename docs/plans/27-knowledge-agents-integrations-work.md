@@ -1,7 +1,7 @@
 # Plan 27: knowledge, agents, integrations and work management
 
-Status: **proposed, high level** (2026-11-03; the custom-code and integration area reworked the same day after the owner
-set its scope). Four new areas the owner asked for. This page decides their shape and how they fit together
+Status: **proposed, high level** (2026-11-03; integrations and actions reworked on 2026-11-04 after the owner's decisions, with the
+runner in [plan 28](28-runner.md)). Four new areas the owner asked for. This page decides their shape and how they fit together
 and with plans 16, 20, 22, 25 and 26. It lists the questions only the owner can answer (section 8). Not sliced yet: each area gets a
 detailed plan of its own (section 9) once the questions are answered.
 
@@ -9,7 +9,8 @@ detailed plan of its own (section 9) once the questions are answered.
 | --- | --- |
 | **DbDataKnowledge** | what agents know: on the back end, to build new objects that fit what exists; on the front end, to answer questions and write queries |
 | **DbDataAgents** | an agent definition: its purpose, the context and knowledge it reads, the tools it may call, the model it uses and how it is tested, for business users on the front end or developers on the back end |
-| **Integrations and custom logic** (working name DbDataAutomations; sections 4.10 and 4.11) | integrations with systems outside the suite's databases (web APIs, file shares, object storage), into the suite and out of it; agents' custom tools; apps' custom server-side logic, including elevated actions that hold the permission to the data, while people hold the permission to run them; Sync's scripts |
+| **Integrations** (name open; section 4) | a product of its own: integrations with systems outside the suite's databases (web APIs, file shares, object storage), into the suite and out of it, as ordinary code published to the runner ([plan 28](28-runner.md)) |
+| **Actions** (section 4.4) | scripts in apps and agents as well as Sync, on one shared script format: agents' custom tools and apps' custom server-side logic, including elevated actions that hold the permission to the data while people hold the permission to run them |
 | **DbDataBacklog** (working name; section 5) | backlog, sprint and work management, tied to the suite's own objects |
 
 ## 1. What already exists, and what this plan adds
@@ -21,8 +22,8 @@ The four areas are mostly new *definitions* on machinery the suite has or has pl
 | A tool for every feature | the command surface (`DbDataKit.Cli`: command specs, effect classes, JSON schemas, generated MCP tools; plan 13 W4a); "no feature without a command spec" (plan 16 section 1) | tools that are not commands: actions (section 4) |
 | An agent runtime | plan 16 section 1: `DbDataKit.Agents` on `Microsoft.Extensions.AI`, approvals, acting as the user, transcripts (**not built**); testing with a scripted fake and recordings (plan 25 section 2) | the **agent definition** as a versioned, published object (section 3) |
 | What agents know | catalog and glossary on the lineage graph (plan 22 section 3); semantic models (plan 14); Build metadata and `project agent-kit`; DbDataStore models (plan 15) | curated knowledge, verified queries, retrieval, and access rules on what an agent may read (section 2) |
-| Custom code | `DbDataKit.Scripting` (Roslyn `.csx` with `#r "nuget:"`, built, used by Sync's scripts, libraries and drivers) | integration with outside systems, and one definition of custom code for every product (section 4) |
-| Schedules, runs, alerts | `DbDataKit.Scheduling`, `DbDataKit.Monitoring` (plan 13 W10), the delivery service (plan 22 section 5) | none: integration flows use them as Build and Sync do |
+| Custom code | `DbDataKit.Scripting` (Roslyn `.csx` with `#r "nuget:"`, built, used by Sync's scripts, libraries and drivers) | integrations with outside systems as their own product, a shared script format for actions, and the runner (section 4, plan 28) |
+| Schedules, runs, alerts | `DbDataKit.Scheduling`, `DbDataKit.Monitoring` (plan 13 W10), the delivery service (plan 22 section 5) | the runner hosts them for integrations (plan 28) |
 | Authoring and publishing | shared authoring (plan 22 section 1: workspaces, editor, commit, merge, publish); the serving layer runs from published definitions (plan 20) | agents and integrations as new kinds of authored project (section 6) |
 | Managed business data with history, approval and forms | DbDataStore (plan 15), apps and portals (plans 16, 26) | the work-management model and its app (section 5) |
 
@@ -73,7 +74,7 @@ in the console's chat, in an app's assistant panel, and for an outside client ov
 | Audience | **front end** (business users: answer questions, write and run queries, fill in forms) or **back end** (developers: build models, replications, Store models, apps, integrations) |
 | Instructions | the agent's own instructions, in files in its project |
 | Knowledge | which knowledge collections and kinds it searches (section 2), and context it always gets (for example "the Sales semantic model") |
-| Tools | an allow-list of commands and actions (section 4), named by spec; never wider than its user's roles |
+| Tools | an allow-list of commands and actions (section 4.4), named by spec; never wider than its user's roles |
 | Model | provider and model, or "the install's default", chosen from the providers an administrator allows (plan 16 section 1) |
 | Approvals | which effect classes need the user's approval at each step (section 3.3) |
 | Limits | turns, tool calls, tokens and cost per conversation |
@@ -111,102 +112,101 @@ To settle in the detailed plan (owner question 5):
 2. **Quality** is measured with an evaluation set: questions with known good answers, drawn from verified queries (section 2.1). It is
    run against a real model by hand or on a schedule, never as a pull request gate. A published version records its last score.
 
-## 4. Integrations and custom logic (working name DbDataAutomations)
+## 4. Integrations, actions and the runner
 
-**Owner, 2026-11-03:** the working name is **DbDataAutomations** until it is decided whether integrations and actions are one area or two
-(section 4.11). Integrations **run in a standalone environment** of their own. This section is written as one area so the parts can be
-seen together; it does not decide the split.
+**Decided (owner, 2026-11-04)**, after comparing extending Sync's scripting with a separate integration service:
+
+1. **Integrations are a product of their own** (name open, section 4.11). It **publishes to the runner** ([plan 28](28-runner.md)), a
+   service for scheduled and batch work that runs each task in a separate process by default, the way products publish to the serving
+   layer.
+2. **Integrations are ordinary code** with shared run-time services (logging, retry, state, lineage, scheduling), not a generic engine
+   configured for every case (section 4.1).
+3. **Actions are scripts in apps and agents, as well as in Sync**, on one shared script format (section 4.4). They run in the serving
+   layer; they are not part of the integrations product.
+4. **Sync and Build may move onto the runner later**, in a migration planned separately (plan 28 section 8). It is not part of these new
+   products.
+
+This answers owner question 12 (one area or two): two products and a shared runtime, with the script format shared between actions and
+Sync.
 
 **Scope, as the owner set it (2026-11-03).** "ETL" here means **integration with systems outside the suite's databases**: web APIs,
 file shares, object storage and the like, moving data **into** the suite and **out** of it. Sync already covers database-to-database
-work, so this area is the counterpart for everything that is not a database. The same machinery also gives agents their custom tools and
-apps their custom server-side logic, and it is where Sync's existing scripts belong.
+work, so integrations are the counterpart for everything that is not a database.
 
-**Definition.** One area that holds every piece of custom logic the suite runs, and every integration with a system that is not one of
-the suite's databases. It is made of five things:
+**Security posture (owner, 2026-11-04), for this plan and the suite.** We provide simple, clear options, guardrails and defaults, but
+administrators decide what the system does. We do not block a choice because it could be a security concern; we make it **explicit and
+clear** to the person making it, and **default to secure** where we can (plan 28 section 5). Every rule in this section that limits what
+code may do is therefore a **secure default** an administrator can change with a recorded, confirmed choice, unless the detailed plan
+shows it cannot be (an audit record, for example, is always written).
 
-| Building block | What it is | Examples |
-| --- | --- | --- |
-| **External connection** | how to reach an outside system: its address, how it signs in, its limits | a REST API with OAuth 2 client credentials; an SFTP server with a key; an SMB share; an S3 bucket or Azure Blob container; a mailbox; Microsoft Graph for SharePoint and OneDrive |
-| **Connector** | a reusable template for a kind of system, so a connection is filled in rather than written | "REST with OAuth 2 and page tokens", "OData", "SFTP", "SMB", "S3"; later named systems (Salesforce, ServiceNow, Dynamics) |
-| **Action** | one typed operation: an input schema, an output schema, an effect class, and a body. It is allowed to have side effects; that is its point | create a ticket in ServiceNow; send a file to a supplier; look up an address; recalculate a price for an app |
-| **Flow** | an integration run with a trigger, steps, state and monitoring, in one direction or both | pull orders from a web shop every 15 minutes into a staging table; pick up CSV files from a share; push approved customers from DbDataStore to a CRM; send a monthly extract to a partner's SFTP |
-| **Hook** | an action bound to an extension point of a product, called with that point's interface | Sync's scripts today (its slots); later Build's hooks, a DbDataStore write, an app event |
+### 4.1 Integrations: code first
 
-**A body** (of an action or a flow step) is one of:
+**Why code (owner, 2026-11-04).** A generic system cannot handle enough variety. Sources and targets come in many file formats (JSON,
+CSV and TSV, XML, Excel, fixed width, compressed or encrypted files) and are sent or fetched over HTTP, SFTP, FTPS, SCP and CIFS/SMB, each
+with its own sign-in, paging, naming, partial files and acknowledgements. Extending Sync to cover them would be possible, and some
+integrations would gain from Sync's change tracking, but it is better to write ordinary code and give it common support. So:
 
-1. **Declarative**, preferred where it fits: an HTTP request template, pagination, a mapping from the response to rows, a file pattern and
-   a format. It needs no code, is validated against a schema, and is the safest thing for an agent to write (the same reasoning as apps'
-   declarative views and Sync's descriptor drivers).
-2. **A script**: `.csx` on `DbDataKit.Scripting` (built), with packages through the allow-list and lock file. Python later (owner
-   question 3).
-3. **SQL**, against one of the suite's connections.
-4. **A command call**: any command on the command surface (run a Sync replication, a Build refresh plan, a DbDataStore write).
+- **An integration is a package of tasks** published to the runner: a manifest (tasks, schedules, triggers, the connections each needs)
+  and code in any of the runner's kinds (plan 28 section 4: a `.csx` script, a compiled .NET project with NuGet dependencies, any
+  executable speaking the runner protocol, or a .NET notebook orchestrating a project's APIs).
+- **The integration product** is where integrations are authored, built, tested, versioned and published: the back end for them, on
+  shared authoring (plan 22 section 1).
+- **Templates, not an engine.** Common cases ("pull pages from a REST API into a staging table", "pick up CSV files from a share") are
+  project templates that generate ordinary code an author then owns.
 
-"Script" stays the word for a code file, as in Sync today. "Function" is not used for these, since it suggests a computation without side
-effects, and SQL and Build already use it for something else.
-
-### 4.1 Directions and patterns
+### 4.2 Directions and patterns
 
 | Pattern | What it does | Where data lands or comes from |
 | --- | --- | --- |
-| **Inbound pull** | read an API or a share on a schedule, incrementally | DbDataStore entities (validated writes, history), staging tables in a suite connection (through `DbDataKit.Transfer`) for Build to model, or DbDataStore documents for files |
-| **Inbound push** | an outside system calls a webhook | the same destinations; the webhook is received by the serving layer (section 4.3) |
+| **Inbound pull** | read an API or a share on a schedule, incrementally | DbDataStore entities through the store module's API (validated writes, history, audit), staging tables in a suite connection (through `DbDataKit.Transfer`) for Build to model, or DbDataStore documents for files |
+| **Inbound push** | an outside system calls a webhook | the same destinations; where webhooks are received is plan 28 question 4 |
 | **Outbound push** ("reverse ETL") | send suite data to an outside system on a schedule or on change | from a semantic query, a DbDataStore read, or a table or view a Build model owns |
-| **Outbound file** | write an extract to a share, SFTP or object storage | the same sources; formats CSV, JSON, XML, Excel, Parquet, fixed width |
-| **On demand** | an action called by a person, an app or an agent | whatever the action does; this is how agents get custom tools and apps get custom logic |
-| **Orchestration** | a flow whose steps run Sync and Build and checks, so a pipeline across products has one schedule and one run record | commands; no data moves through the flow itself |
+| **Outbound file** | write an extract to a share, SFTP or object storage | the same sources |
+| **Requested** | a task an action enqueues (section 4.4): create a ticket, send a document | whatever the task does |
+| **Chained** | an integration task that starts when another run ends | runs on the same runner; Sync and Build runs join when they move (plan 28 section 8) |
 
 Two-way synchronization with an outside system of record (conflicts, which side wins) is a later step, decided per system.
 
-### 4.2 What every flow gets
+### 4.3 The integration kit
 
-- **State:** cursors and watermarks for incremental pulls, a ledger of files already processed, idempotency keys for pushes, so a rerun
-  neither loses nor repeats work.
-- **Failure handling:** retries with back-off for errors the connection classifies as passing, a dead-letter store for records an outside
-  system refused, and a replay of a failed run from its last good point.
-- **Triggers:** a schedule (`DbDataKit.Scheduling`), the end of another run, a DbDataStore change, a webhook, a file arriving, or by hand.
-- **Monitoring** (`DbDataKit.Monitoring`): runs, outcomes, rows and files in and out, overdue and failed runs, alerts through the
-  delivery service (plan 22 section 5).
-- **Lineage** (plan 18): an outside system is a node, so "where did this column come from" and "who receives this table" include the
-  APIs and shares on either side.
+What every integration gets, so none writes it again. The .NET kit wraps the runner protocol (plan 28 section 4.1); other languages use
+the protocol directly.
 
-### 4.3 Where it runs
+| Service | What the code gets |
+| --- | --- |
+| Connections | outside connections (section 4.6) and suite connections, resolved with their secrets and bound per channel |
+| State | cursors and watermarks, a ledger of processed files keyed by name and hash, idempotency keys for pushes, so a rerun neither loses nor repeats work |
+| Retry | policies with back-off for errors a connection classifies as temporary; rate limits per connection; a store for records an outside system refused, and replay from the last good point |
+| Logging and metrics | structured logs and run metrics in the runner's run record, secrets redacted |
+| Lineage | "read from" and "wrote to" calls that record outside systems as lineage nodes (plan 18) |
+| Landing data | rows to a staging table (`DbDataKit.Transfer`); rows to DbDataStore through its API; files to DbDataStore documents |
+| Change detection | Sync's ideas as a library: row hashing and comparison with the last run, for sources with no change feed |
+| Clients, as libraries | HTTP with authentication, SFTP and SCP, FTPS, SMB; readers and writers for CSV and TSV, JSON and JSON Lines, XML, Excel, Parquet. Vetted packages, wrapped thinly, never a framework the code has to fit |
+| Testing | recorded HTTP responses, a fake file share, a dry run that reads but writes nothing (section 4.10) |
 
-| Part | Runs in | Why |
-| --- | --- | --- |
-| Flows (scheduled, triggered) | **a standalone environment** (owner, 2026-11-03), each run in a child process | they reach outside systems and hold their credentials, so they are kept apart from the rest of the suite; data movement, like Sync and Build, so a short outage only delays runs |
-| Actions called by apps and agents | the serving layer, in a child process (plan 20 principle 5), as the caller | they are runtime calls and must work while the back ends are down |
-| Webhook receivers | the serving layer: verify the signature, store the payload durably in the group's shared state, answer at once | outside systems need a public address; processing happens in a flow, so a back end being down only delays it |
-| Hooks | the product that owns the extension point | as Sync's scripts run today |
+Schedules, triggers, monitoring, notifications and retention come from the runner itself (plan 28 section 3).
 
-### 4.4 Connections to outside systems
+### 4.4 Actions: scripts in apps, agents and Sync
 
-**Proposed:** an outside system is a **connection** like a database, a new kind in the existing `connection/1` format rather than a
-second format. It then shares what connections already have: secret references for keys, passwords and OAuth refresh tokens (plan 13
-W13); per-channel binding, so a preview never reaches production (plan 21); and the console's connections view. Sign-in methods to
-cover: API key, basic, OAuth 2 client credentials, OAuth 2 authorization code with stored refresh tokens, client certificates, SSH keys,
-Windows (SMB with Kerberos). **Owner question 10.**
+**An action is one typed operation**: an input schema, an output schema, an effect class, and a body. It may have side effects. Actions
+are agents' custom tools and apps' custom server-side logic (owner, 2026-11-04: scripts within apps and agents, in addition to Sync).
 
-### 4.5 Trust, isolation and channels
+- **One script format.** Sync's script manifest (`scripts/<name>.yaml`: a name, a `kind`, a language of C# or SQL, declared parameters,
+  beside its code and lock file) is generalized and moved to shared code. It gains input and output schemas, an effect class and the
+  caller's context. Sync's slots stay kinds of it, run by Sync's engine as today; apps and agents add a *callable* kind.
+- **A body** is a `.csx` script, SQL against a suite connection, a call to a command, or, for elevated actions, a declarative form
+  (section 4.5).
+- **A callable action is a tool by construction.** It has a spec like a command, so the command surface turns it into an MCP tool, a
+  tool an agent definition can allow, and an endpoint apps call through the serving layer, under the same access rules.
+- **Callable actions run in the serving layer.** Declarative ones run in process. Code runs by default in a pool of worker processes kept
+  warm, with time and memory limits and no outside network access; an administrator can change these defaults (the security posture
+  above).
+- **Long or outward work goes to the runner.** An action that needs an outside system or a long job enqueues an integration task (plan
+  28 section 7) and returns; the result comes back as a status, a DbDataStore change or a notification.
+- **Life cycle.** Actions for apps and agents are authored in workspaces, versioned, approved and published (plans 21, 22, 26). Whether
+  Sync's scripts move to the same life cycle or stay in Sync's configuration repository is for the detailed plan.
 
-`DbDataKit.Scripting`'s syntax guard is not a security boundary, so integration code is **trusted code**:
-
-- written by people with the Author role, in a workspace, reviewed and merged;
-- a published version is approved by an administrator, with an audit, as plan 26 does for trusted apps;
-- run in a child process with limits (time, memory);
-- **outside network access only to the hosts its connections name**: the egress allow-list idea of plan 26 section 2b, applied to
-  integrations;
-- packages only through the resolver's allow-list and lock file (13a S12).
-
-An action called by a person runs **as that person**, so access rules apply to its reads, unless it is an elevated action (section 4.6). A scheduled flow runs as a **service account**
-of the identity home (plan 16, "Sign-in decisions" item 2).
-
-**Channels (plan 21).** Writes are never inherited from production, and that matters more here than anywhere: a flow in a preview channel
-must not send production data to a real supplier or create real tickets. Outbound steps in a non-production channel go to the
-connection bound for that channel (a sandbox endpoint) or are refused; they are never silently pointed at production.
-
-### 4.6 Elevated actions: permissions held by the action, not the user
+### 4.5 Elevated actions: permissions held by the action, not the user
 
 **Confirmed by the owner (2026-11-03)** as written here; who approves the grants is still owner question 11.
 
@@ -226,7 +226,7 @@ actions it calls; it does not grant anything.
 
 **How it fits plan 16's rules.** Plan 16 says an app is untrusted UI, and that an app's token is "never wider than the person". Both
 stay true: the app's code in the browser holds only the person's own permissions, narrowed by the manifest. Elevation exists only inside
-**server-side actions**, which are trusted code (section 4.5). The rule therefore still lives on the server, as plan 16 requires; it is
+**server-side actions**, which are trusted code (section 4.7). The rule therefore still lives on the server, as plan 16 requires; it is
 written in the action instead of in a role. This is the same pattern as a stored procedure that runs with its own rights and is granted
 `EXECUTE` (`EXECUTE AS`, `SECURITY DEFINER`).
 
@@ -263,7 +263,7 @@ An action that is not marked elevated has no grants of its own and runs as the p
 - **Audit names both:** every write records the action and its version, its principal, and the person who asked (and the app or agent it
   came through). DbDataStore's history shows "Alice ran *submit-claim* v3, from the Expense app". "Who changed what" stays answerable.
 - **Approval when published:** an elevated action is trusted code and needs the administrator's approval of that exact version
-  (section 4.5, plan 26). A change to its grants or its body is a new version, approved again.
+  (section 4.7, plan 26). A change to its grants or its body is a new version, approved again.
 - **Agents:** an agent acting for a person can call an elevated action only if that person may run it. Whether the person is asked first
   is set per action (section 3.3); elevated actions ask by default.
 - **Channels:** grants are per channel. In a preview, an elevated write goes to the preview's draft layer (plan 21), never to production.
@@ -276,61 +276,73 @@ people make themselves, without anyone approving each one.
 **Beyond DbDataStore.** Elevated reads of semantic models (an aggregate without row access) follow the same pattern, but are later work.
 The first version covers DbDataStore entities.
 
-### 4.7 Not a third data engine
+### 4.6 Connections to outside systems
+
+**Proposed:** an outside system is a **connection** like a database, a new kind in the existing `connection/1` format rather than a
+second format. It then shares what connections already have: secret references for keys, passwords and OAuth refresh tokens (plan 13
+W13); per-channel binding, so a preview never reaches production by accident (plan 21); and the console's connections view. Sign-in
+methods to cover: API key, basic, OAuth 2 client credentials, OAuth 2 authorization code with stored refresh tokens, client
+certificates, SSH keys, Windows (SMB with Kerberos). **Owner question 10.**
+
+### 4.7 Trust, isolation and channels
+
+`DbDataKit.Scripting`'s syntax guard is not a security boundary, so integration code and action code are **trusted code**. The defaults:
+
+- written by people with the Author role, in a workspace, reviewed and merged;
+- a published version is approved by an administrator, with an audit, as plan 26 does for trusted apps;
+- run in a separate process with time and memory limits;
+- packages only from the allow-listed sources, pinned in a lock file (13a S12).
+
+Outside network access is the administrator's to configure, in the environment and on the runners (plan 28 section 5): the runner reports
+what a runner can reach, and the console shows it. Actions in the serving layer have no outside access by default.
+
+An action called by a person runs **as that person**, so access rules apply to its reads, unless it is an elevated action (section 4.5).
+A scheduled integration task runs as a **service account** of the identity home (plan 16, "Sign-in decisions" item 2).
+
+**Channels (plan 21).** Writes are never inherited from production, and that matters more here than anywhere: an integration in a preview
+channel must not send production data to a real supplier or create real tickets by accident. By default, an outbound step in a
+non-production channel uses the connection bound for that channel (a sandbox endpoint), or is refused when there is none. An administrator
+can bind a production endpoint to a non-production channel, as an explicit, recorded choice.
+
+### 4.8 Not a third data engine
 
 Sync replicates between databases and Build models inside them. An integration covers what is outside them. A database-to-database copy
-is a Sync replication, and a transformation inside the warehouse is a Build model; an integration calls them, it does not redo them. The
-detailed plan names what Sync's own extension points keep, so there is one obvious place for each job.
+is a Sync replication, and a transformation inside the warehouse is a Build model. An integration does not redo them; once they run on
+the runner (plan 28 section 8), an integration task can be chained with them.
 
-**What it changes for Sync** (a clean break is allowed, never a silent one): Sync's scripts become hooks (actions bound to Sync's slots).
-The manifest gains input and output schemas, and an old manifest is refused with a message naming the file. Drivers stay Sync's,
+**What it changes for Sync** (a clean break is allowed, never a silent one): Sync's scripts move to the shared script format (section
+4.4). The manifest gains input and output schemas, and an old manifest is refused with a message naming the file. Drivers stay Sync's,
 compiled by the same engine.
 
-### 4.8 Agents in flows, and agents writing integrations
+### 4.9 Agents in integrations, and agents writing them
 
-- **A flow step can ask an agent** (triage a failed load, summarize a change, match records). No user is there to approve each action,
-  so an unattended agent step **may only read and propose**: what it would change becomes a draft or a work item (section 5).
-  **Owner question 6.**
-- **Agents can write integrations**, preferring declarative bodies, in a workspace like any author, with each step approved; publishing
-  still needs the administrator's approval of trusted code.
+- **An integration task can ask an agent** (triage a failed load, summarize a change, match records). No user is there to approve each
+  action, so by default an unattended agent step **only reads and proposes**: what it would change becomes a draft or a work item
+  (section 5). **Owner question 6.**
+- **Agents can write integrations and actions**, from the templates, in a workspace like any author, with each step prompted as its
+  action is configured (section 3.3); publishing still needs the administrator's approval of trusted code.
 
-### 4.9 Testing
+### 4.10 Testing
 
 Recorded HTTP responses and a fake file share in unit tests, as plan 25 does for model providers; a dry run that reads the outside
 system but writes nothing; a run against the channel's sandbox connection before a version is promoted.
 
-### 4.10 The name (owner question 9)
+### 4.11 The integrations product's name (owner question 9)
 
-**Owner, 2026-11-03:** undecided; **DbDataAutomations** is the working name until question 12 is answered. The table stays as the
-candidates.
-
-The owner's concern, 2026-11-03: "Automations" and "Functions" both miss the idea of an **integration**, and "Functions" suggests code
-without side effects. "Scripts" and "functions" are closer to what the suite already has. Candidates:
+**Open.** DbDataAutomations was the working name while integrations and actions were one area (owner, 2026-11-03). Now that they are two
+products on a shared runtime, the integrations product needs a name of its own, and the runner is just the runner (plan 28). The owner's
+concern still holds: the name should capture **integration**. Candidates:
 
 | Name | For | Against |
 | --- | --- | --- |
-| **DbDataIntegrate** | says what most of it is for; a verb, like Sync and Build, with a short executable (`dbdataintegrate`); covers in and out | an agent tool or an app's custom logic with no outside system is a stretch of the word, though most of them do call one |
+| DbDataIntegrate | a verb, like Sync and Build, with a short executable (`dbdataintegrate`); covers in and out | |
 | DbDataIntegrations | the same, as a noun; reads naturally in the console ("Integrations") | a long executable name |
-| DbDataBridge | short; suggests a link to outside systems in both directions | says nothing about custom code |
-| DbDataExchange | data going in and out | sounds like data movement only; also the name of other products |
-| DbDataActions | fits agent tools, app logic and hooks; matches the "action" building block | weak for scheduled file and API pulls |
-| DbDataFlows | fits scheduled pipelines | weak for on-demand actions; "flow" is used by many products |
+| DbDataAutomations | the working name | suggests orchestration more than integration |
+| DbDataBridge | short; suggests a link to outside systems in both directions | less obvious than "integrate" |
+| DbDataExchange | data going in and out | used by other products |
 | DbDataConnect | outward-facing | confused with the suite's connections |
-| DbDataScripts | matches what Sync calls them today | undersells declarative integrations and the typed, callable side |
 
-Inside it, the words are fixed whatever the product is called: **connection** (and connector), **action**, **flow**, **hook**, **script**.
-
-### 4.11 One area or two (owner question 12)
-
-**Open (owner, 2026-11-03):** whether integrations should be **integrated with or isolated from** actions and Sync's scripts.
-
-| Option | What it means | For | Against |
-| --- | --- | --- | --- |
-| **One area** (as this section is written) | connections, actions, flows and hooks share one manifest, one authoring project kind, one engine | one way to write custom logic; an integration's step and an agent's tool are the same thing; one set of trust rules | integrations need a standalone environment and outside credentials, while actions run in the serving layer and hooks inside Sync, so "one area" still runs in three places |
-| **Two areas** | integrations (outside connections, flows, webhooks) on their own, in their standalone environment; actions and hooks (custom logic on suite data, Sync's scripts, elevated actions) as another | isolation matches the runtime: what reaches outside and holds outside credentials is apart from what runs next to the data; each can be named for what it is | two manifests or two project kinds to learn; an action that calls an outside system has to cross from one to the other |
-| **Shared engine, two products** | one definition format and `DbDataKit.Scripting` underneath, but two products with their own names, servers and screens | both of the above's strengths, if the boundary is drawn by where code runs and what it may reach | the boundary needs a clear rule for actions that call outside systems |
-
-The detailed plan for this area answers it first, since the name (question 9) and the server question (1) follow from it.
+The words inside are fixed whatever the name: **connection**, **integration** (a package), **task**, **action**, **script**.
 
 ## 5. DbDataBacklog: work management
 
@@ -349,7 +361,7 @@ DbDataBoard, DbDataTrack, DbDataTasks. DbDataPlan is ruled out, since Build alre
 | Attachments | DbDataStore documents |
 | The screens: backlog, board, sprint, item | an app (plan 26) on the shared framework, with declarative grid, form and board views; a portal for teams that want it alone |
 | Notifications and digests | the delivery service (plan 22 section 5) |
-| Automatic items: a failed run, a check that blocks, an approval waiting | flows (section 4) |
+| Automatic items: a failed run, a check that blocks, an approval waiting | integration tasks on the runner (section 4) |
 | An assistant: write and split items, estimate, plan a sprint, summarize a sprint | an agent definition (section 3) |
 
 This also tests the platform: anything the work tool needs and the suite lacks is a gap in DbDataStore or the app framework, fixed there.
@@ -373,20 +385,22 @@ question 7.**
 | --- | --- | --- | --- |
 | Knowledge | curated technical knowledge in git; index builds | `knowledge` module: search, show, access-filtered | screens for collections, drafts and approvals |
 | Agents | agent projects in workspaces; evaluation runs | front-end agents in the `mcp` module; chat in apps | the console's chat; providers, models, limits, transcripts |
-| Integrations | connections, actions, flows and hooks in workspaces; **flow runs** on an integration server | **action calls** from apps and agents, in child processes; **webhook receivers** | connections and their bindings, approvals of trusted versions, runs, schedules |
+| Integrations | the integrations product: projects in workspaces, builds, tests, publishing; tasks **run on the runner** (plan 28) | (nothing of its own; webhooks are plan 28 question 4) | connections and their bindings, approvals of trusted versions; runs and schedules through the runner |
+| Actions | actions in app and agent projects; Sync's scripts in Sync | **action calls** from apps and agents: declarative in process, code in warm worker processes | approvals of trusted versions, grants of elevated actions |
+| Runner (plan 28) | | | runner groups, runs, schedules, pause and run-now |
 | Work | (nothing of its own) | the work app on the `store` and `apps` modules | the app's administration like any app |
 
-**Back-end servers.** Agents and integrations each need somewhere to author, build, test and publish, and flows need a scheduler that
-is always running. Two ways:
+**Back-end servers.** Agents and integrations each need somewhere to author, build, test and publish; scheduling is the runner's
+(plan 28). Two ways:
 
 - **A.** One back-end server per product (agents, integrations), the shape of every other product.
 - **B.** One back-end server for authored code: apps (plan 22's DbDataApps back end), agents and integrations are all projects authored in
-  workspaces, built, tested and published to the serving layer, and the scheduler runs flows. Each keeps its own name, nouns and
+  workspaces, built, tested and published (apps and agents to the serving layer, integrations to the runner). Each keeps its own name, nouns and
   screens.
 
-**Owner, 2026-11-03: not decided yet; the plans are not specific enough.** What is decided: **integrations run in a standalone
-environment** of their own. Option B was proposed (the three share most of their back-end work, and fewer services are easier to run);
-it is revisited once the detailed plans show what each needs, and after question 12. **Owner question 1.**
+**Owner, 2026-11-03: not decided yet; the plans are not specific enough.** Decided since (2026-11-04): **integrations are a product of
+their own that publishes to the runner**, and the runner is a service of its own (plan 28). What remains open is whether agents share a
+back end with apps, and whether the integrations product's back end is shared with them (option B) or stands alone. **Owner question 1.**
 
 ## 7. Order
 
@@ -394,11 +408,11 @@ it is revisited once the detailed plans show what each needs, and after question
 | --- | --- | --- |
 | 0 | What plan 16's agents need: the suite-wide command spec test, `DbDataKit.Agents` with the scripted fake, the provider proof against the four providers | 13a W4a work; plan 25 section 2 |
 | 1 | `agent/1` and one front-end agent: questions over a semantic model in the console's chat, with knowledge generated from the catalog and semantic descriptions, and full-text search | wave 0; plan 22 section 3's catalog search |
-| 2 | Actions: the manifest; Sync's scripts move onto it as hooks; a declarative, `.csx` or SQL action as a tool of an agent and an endpoint for an app, in a child process in the serving layer | wave 1; the serving contract (plan 20 section 10) |
+| 2 | Actions: the shared script format; Sync's scripts move onto it; a `.csx` or SQL action as a tool of an agent and an endpoint for an app, in warm worker processes in the serving layer | wave 1; the serving contract (plan 20 section 10) |
 | 3 | Curated knowledge in DbDataStore (glossary, metrics, verified queries), drafts from agents, evaluation sets; embedding search if chosen | DbDataStore drafts (plan 21); access rules (plan 22 section 2) |
 | 3b | Elevated actions: action principals, grants to actions with field and row conditions, *run* grants to people, validate then apply or reject, the declarative form, audit of both identities | wave 2; DbDataStore permissions (plan 15); the identity home's service principals (13a U20) |
-| 4 | Flows: outside connections and connectors, inbound and outbound patterns, state, retries, webhooks, monitoring, lineage; back-end agents in workspaces | shared authoring (plan 22 section 1) |
-| 5 | The work tool: models, app, flows, assistant | DbDataStore relationships and documents; the app framework's declarative views |
+| 4 | The runner (plan 28), then the integrations product: outside connections, the integration kit, templates, inbound and outbound patterns, webhooks; actions that enqueue integration tasks; back-end agents in workspaces | shared authoring (plan 22 section 1) |
+| 5 | The work tool: models, app, integration tasks, assistant | DbDataStore relationships and documents; the app framework's declarative views |
 
 Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbDataStore models as soon as DbDataStore can hold them.
 
@@ -406,18 +420,18 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 
 | # | Question | Proposed |
 | --- | --- | --- |
-| 1 | Which of these are servers? | **Open** (owner, 2026-11-03: plans not specific enough yet). Decided: integrations run in a standalone environment. Proposed earlier: knowledge and the work tool are not servers; agents share a back end with apps (section 6) |
+| 1 | Which of these are servers? | **Partly decided** (owner, 2026-11-04): integrations are a product of their own, publishing to the runner, a service of its own (plan 28). Open: whether agents and the integrations product share a back end with apps; proposed earlier: knowledge and the work tool are not servers (section 6) |
 | 2 | The work tool's name | **Working name DbDataBacklog** (owner, 2026-11-03); final name undecided |
-| 3 | Languages for scripts | C# `.csx`, SQL and command steps first; Python later, as a second script host |
+| 3 | Languages and packaging | **Decided for integrations** (owner, 2026-11-04): `.csx` scripts, compiled .NET projects, any executable through the runner protocol, and hybrids such as a .NET notebook over a project (plan 28 section 4). Actions: `.csx`, SQL, command calls and declarative elevated forms |
 | 4 | Embedding search | optional per install; full-text always |
 | 5 | Agent approvals | **Decided** (owner, 2026-11-03): prompting is configured per action. Open: the settings, where they live, defaults, an install-wide floor (section 3.3) |
-| 6 | Unattended agents in flows | read and propose only; changes become drafts or work items |
+| 6 | Unattended agents in integration tasks | read and propose only; changes become drafts or work items |
 | 7 | The work tool's scope | its own items first; links to GitHub pull requests and workspaces; import from Jira or Azure Boards later; no two-way sync |
 | 8 | First audience | front-end agents first (wave 1), since the semantic layer and catalog are closest to ready |
-| 9 | The name of the integrations and custom-logic area | **Working name DbDataAutomations** (owner, 2026-11-03) until question 12 is answered (section 4.10) |
-| 10 | Outside systems as connections | a new kind in `connection/1`, sharing secrets, channel bindings and the console's view (section 4.4) |
-| 11 | Elevated actions: who approves an action's grants on data, and who may give people *run* on it | grants on data: an administrator and the DbDataStore model's owner, both, with an audit; *run*: the action's owner or an administrator (section 4.6) |
-| 12 | Integrations with or apart from actions and Sync's scripts | **Open**; options in section 4.11 |
+| 9 | The integrations product's name | **Open** (section 4.11); DbDataAutomations was the working name for the combined area |
+| 10 | Outside systems as connections | a new kind in `connection/1`, sharing secrets, channel bindings and the console's view (section 4.6) |
+| 11 | Elevated actions: who approves an action's grants on data, and who may give people *run* on it | grants on data: an administrator and the DbDataStore model's owner, both, with an audit; *run*: the action's owner or an administrator (section 4.5) |
+| 12 | Integrations with or apart from actions and Sync's scripts | **Decided** (owner, 2026-11-04): apart. Integrations are a product publishing to the runner; actions share one script format with Sync (section 4) |
 
 ## 9. Detailed plans to follow
 
@@ -426,23 +440,26 @@ one branch `suite/<id>-<short-name>`, a "Done when" test, as in 13a):
 
 | Plan | Area | New slice letter (not yet used) |
 | --- | --- | --- |
-| 28 | DbDataKnowledge | to choose when sliced (13a and plans 19 to 26 already use A B C D E F G H J K L M N O P Q R S T U V W X Y Z and AP; D and Q are decision and step numbers, the rest slices) |
-| 29 | DbDataAgents | |
-| 30 | Integrations and custom logic | |
-| 31 | The work tool | |
+| [28](28-runner.md) | The runner (written at high level, 2026-11-04) | to choose when sliced (13a and plans 19 to 26 already use A B C D E F G H J K L M N O P Q R S T U V W X Y Z and AP; D and Q are decision and step numbers, the rest slices) |
+| 29 | DbDataKnowledge | |
+| 30 | DbDataAgents | |
+| 31 | The integrations product | |
+| 32 | Actions: the shared script format, callable and elevated actions | |
+| 33 | The work tool | |
+| later | Sync and Build on the runner (plan 28 section 8), after its state design | |
 
 ## 10. What this changes in other plans (once approved)
 
 | Plan | Change |
 | --- | --- |
 | 16 section 1 | the agent runtime loads published `agent/1` definitions; approvals are refined per section 3.3 |
-| 16 section 2 (the app is untrusted UI) and "Sign-in decisions" item 1 (a token never wider than the person) | unchanged for an app's front end; a server-side elevated action holds its own grants on the data, people hold *run* on the action, and it validates each request before applying or rejecting it (section 4.6). The rule stays on the server, written in the action |
+| 16 section 2 (the app is untrusted UI) and "Sign-in decisions" item 1 (a token never wider than the person) | unchanged for an app's front end; a server-side elevated action holds its own grants on the data, people hold *run* on the action, and it validates each request before applying or rejecting it (section 4.5). The rule stays on the server, written in the action |
 | 15 (DbDataStore permissions) | grants to action principals, with field and row conditions; history and audit record the action, its version and the person who asked |
-| 20 section 4 | new modules: `knowledge` (reads), action calls under `mcp` and `apps`, and webhook receivers |
-| 13 W2, 13a S-series | Sync's scripts become hooks of the integrations area (actions bound to Sync's slots); an old manifest is refused with a message |
-| 22 section 1 | shared authoring gains two project kinds, agents and integrations, and the apps back end hosts them (if question 1 is B) |
+| 20 section 4 | new modules: `knowledge` (reads), and action calls under `mcp` and `apps`; the runner (plan 28) as the scheduled and batch counterpart |
+| 13 W2, 13a S-series | Sync's script manifest becomes the shared script format, used by apps and agents too; an old manifest is refused with a message |
+| 22 section 1 | shared authoring gains project kinds for agents and integrations, and actions inside app and agent projects |
 | 22 section 3 | catalog search becomes part of knowledge search |
-| 21 | outbound integration steps in a non-production channel use that channel's connection or are refused (section 4.5) |
+| 21 | by default, outbound integration steps in a non-production channel use that channel's connection or are refused; an administrator may choose otherwise, recorded (section 4.7) |
 | 18 | outside systems become lineage nodes |
 | 06 and `connection/1` | a kind for outside systems (if question 10 is agreed) |
 | 25 section 2 | adds evaluation sets beside the behaviour tests |
