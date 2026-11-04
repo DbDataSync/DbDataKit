@@ -12,3 +12,5 @@ The write path of master data models (plan 19 Z04, plan 15 section 5), on the ta
 - **A delete** that leaves a row pointing at it is `referenced`.
 - **Every rule broken is reported** in one `WriteRefusedException` (`RuleViolation`: rule, entity, attribute, key, a sentence), and then nothing is written.
 - **Audit**: each change writes a record in the model's `_audit` table in the same transaction: id (UUID v7), time, who, the entity and key, the action, the versions, and the row before and after as JSON.
+
+`RowJson` is the JSON of rows, changes and refusals on the wire, and `ChangeApproval` says whose writes wait and who decides: a DbDataStore server and the serving layer's `store` module (plan 20 O08) both use them, so a client of either is written once.

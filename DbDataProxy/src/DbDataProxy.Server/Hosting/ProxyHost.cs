@@ -210,6 +210,7 @@ public static class ProxyHost
         // the identity home (plan 20, O06): a listener and a web application of its own, only when asked for
         if (ProxyModules.Has(options, ProxyModules.Identity)) services.AddHostedService<ProxyIdentityModule>();
         if (ProxyModules.Has(options, ProxyModules.Apps)) services.AddHostedService<ProxyAppsModule>();
+        if (ProxyModules.Has(options, ProxyModules.Store)) services.AddHostedService<ProxyStoreModule>();
 
         // The shared providers: one registry, one composer, one failure model per engine. With Proxy:LogDriverErrors the providers keep the
         // (redacted) driver text of failed connections on the failure, for the local log only.
