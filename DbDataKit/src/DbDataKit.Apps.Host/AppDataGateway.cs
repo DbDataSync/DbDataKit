@@ -15,7 +15,7 @@ internal sealed class ReusableTokens : IReplayCache
 /// forwards the call to the paired Store with a token of its own for that Store, carrying the person, the app and the scope of the manifest's <c>models</c>, so the Store enforces the scope as well. The Store is never reached by the browser,
 /// needs no CORS or public address, and the app never holds a token the Store accepts. Only row reads and the changes endpoint are forwarded.
 /// </summary>
-public sealed class AppDataGateway(AppInstanceStore instances, AppStores stores, ConsoleIdentity self, TimeProvider? clock = null)
+public sealed class AppDataGateway(AppInstanceStore instances, AppStores stores, ConsoleIdentity self, TimeProvider? clock = null, AppApprovalStore? approvals = null)
 {
     private static readonly Regex DataPath = new(@"^api/v1/models/(?<model>[^/]+)(?<instance>/instances/[^/]+)?/(entities/[^/]+/rows?|changes)$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
@@ -31,6 +31,8 @@ public sealed class AppDataGateway(AppInstanceStore instances, AppStores stores,
     public async Task<AppResponse> ForwardAsync(string instance, string storeId, string path, string method, string query, string? authorization, string? contentType, byte[] body, CancellationToken ct)
     {
         if (instances.Resolve(instance) is not { } resolved) return Refuse(404, "No such app.");
+        // a token lives five minutes: an approval revoked in that time still stops the data
+        if (resolved.Manifest.Trust == AppTrust.Trusted && (approvals is null || approvals.Gate(resolved) is { Allowed: false })) return Refuse(403, $"'{resolved.Manifest.Name}' asks to be trusted and no approval stands for this version.");
         var validated = new ConsoleTokenValidator(AppInstanceAudience.Of(instance), _self, new ReusableTokens(), clock).Validate(authorization is { } h && h.StartsWith("Bearer ", StringComparison.Ordinal) ? h[7..] : null);
         if (validated.Token is not { } token) return Refuse(401, "A token for this app is needed.");
         if (stores.Find(storeId) is not { } store) return Refuse(404, "No such store.");

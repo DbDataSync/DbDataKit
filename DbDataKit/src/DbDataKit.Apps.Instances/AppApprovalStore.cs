@@ -48,5 +48,12 @@ public sealed class AppApprovalStore(DefinitionStore definitions, TimeProvider? 
     public IReadOnlyList<AppApproval> All() =>
         [.. definitions.CurrentOfKind(Kind).Select(v => JsonSerializer.Deserialize<AppApproval>(v.Content, Json)!).OrderBy(a => a.ApprovedAt)];
 
+    /// <summary>The gate of plan 26 section 2a for a resolved instance: a sandboxed app always passes; a trusted one needs an approval that stands for the exact bytes it runs. The approval is returned for the audit, the refusal says what is missing.</summary>
+    public AppGateResult Gate(ResolvedInstance resolved)
+    {
+        var (bundle, manifest) = Hashes(resolved.Package);
+        return AppApprovals.Gate(resolved.Manifest, ForApp(resolved.Manifest.Name), bundle, manifest);
+    }
+
     public IReadOnlyList<AppApproval> ForApp(string app) => [.. All().Where(a => a.App == app)];
 }
