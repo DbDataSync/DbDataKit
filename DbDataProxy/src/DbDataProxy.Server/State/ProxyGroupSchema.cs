@@ -52,4 +52,28 @@ public static class ProxyGroupSchema
             Value {{text}} NOT NULL
         );
         """;
+
+    /// <summary>
+    /// The change requests of the group's store module (plan 20 O08): a write that waits for a person, kept where any instance can list, approve or reject it, with the store's server stopped. Appended after the group's
+    /// secrets.
+    /// </summary>
+    public const string ChangeRequests =
+        """
+        -- A write to a published entity model that waits for a person: the model, who proposed it (and whether as an agent), the changes as proposed (JSON, applied unchanged when approved), and the decision.
+        CREATE TABLE StoreChangeRequests (
+            Id             {{key}} PRIMARY KEY,
+            Model          {{key}} NOT NULL,
+            State          {{key}} NOT NULL,
+            ProposedBy     {{key}} NOT NULL,
+            ProposedByName {{text}} NULL,
+            ByAgent        {{int}} NOT NULL,
+            ProposedAtUtc  {{key}} NOT NULL,
+            Description    {{text}} NULL,
+            Changes        {{text}} NOT NULL,
+            DecidedBy      {{key}} NULL,
+            DecidedAtUtc   {{key}} NULL,
+            Note           {{text}} NULL
+        );
+        CREATE INDEX IX_StoreChangeRequests_Model ON StoreChangeRequests(Model, State);
+        """;
 }

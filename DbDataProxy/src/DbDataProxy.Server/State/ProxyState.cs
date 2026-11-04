@@ -29,6 +29,7 @@ public static class ProxyState
         (HomeTemplatesBeforeGroup, ProxyGroupSchema.Tables),                        // plan 20 O02: sessions, audit, the group's key check, the running instances
         (HomeTemplatesBeforeTrust, DbDataKit.Web.Trust.GroupTrustSchema.Tables),    // plan 20 O04a: the group's instance id, paired clients, pairing codes and certificate
         (HomeTemplatesBeforeSecrets, ProxyGroupSchema.Secrets),                     // plan 20 O04b: the secrets the group's clients keep on it
+        (HomeTemplatesBeforeSecrets, ProxyGroupSchema.ChangeRequests),              // plan 20 O08: the store module's change requests
     ];
 
     /// <summary>The proxy's tables, in the order they were added.</summary>

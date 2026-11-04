@@ -6,8 +6,9 @@ public static class ProxyModules
     public const string FlightSql = "flightsql";
     public const string Identity = "identity";
     public const string Apps = "apps";
+    public const string Store = "store";
 
-    public static readonly IReadOnlyList<string> Known = [FlightSql, Identity, Apps];
+    public static readonly IReadOnlyList<string> Known = [FlightSql, Identity, Apps, Store];
 
     /// <summary>True when the instance serves the module: it is listed in <c>Modules</c>, or (for the identity home) <c>Identity.Enabled</c> is set.</summary>
     public static bool Has(ProxyOptions options, string module) =>

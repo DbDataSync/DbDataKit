@@ -26,39 +26,8 @@ public static class StoreData
         return author.Allowed ? author : ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin) is { Allowed: true } admin ? admin : author;
     }
 
-    private static JsonNode? ToJson(object? value) => value switch
-    {
-        null => null,
-        DateTimeOffset d => JsonValue.Create(d.ToString("O")),
-        DateTime d => JsonValue.Create(d.ToString("O")),
-        decimal d => JsonValue.Create(d),
-        byte[] b => JsonValue.Create(Convert.ToBase64String(b)),
-        string or bool or int or long or short or double => JsonSerializer.SerializeToNode(value),
-        _ => JsonValue.Create(value.ToString()),
-    };
-
-    private static JsonObject Row(StoredRow row)
-    {
-        var values = new JsonObject();
-        foreach (var (key, value) in row.Values) values[key] = ToJson(value);
-        return new JsonObject
-        {
-            ["values"] = values,
-            ["version"] = row.Version,
-            ["valid_from"] = row.ValidFrom?.ToString("O"),
-            ["valid_to"] = row.ValidTo?.ToString("O"),
-        };
-    }
-
-    private static JsonObject KeyJson(IReadOnlyDictionary<string, object?> key)
-    {
-        var node = new JsonObject();
-        foreach (var (name, value) in key) node[name] = ToJson(value);
-        return node;
-    }
-
-    private static Dictionary<string, object?> ObjectOf(JsonNode? node) =>
-        node is JsonObject o ? o.ToDictionary(p => p.Key, p => p.Value is null ? null : (object?)JsonSerializer.Deserialize<JsonElement>(p.Value.ToJsonString())) : [];
+    // the wire format is the shared one (DbDataKit.Store.RowJson), so the serving layer's store module answers the same (plan 20 O08)
+    private static JsonObject Row(StoredRow row) => RowJson.Row(row);
 
     /// <summary>
     /// The model a request is about. A copy that has been made or migrated runs the version of the model it was made or migrated at, so a copy that is behind keeps working while the model moves on (plan 26, Z13);
@@ -76,14 +45,7 @@ public static class StoreData
     private static IResult Fail(Exception ex) => ex switch
     {
         StoreConnectionException => Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status502BadGateway),
-        WriteRefusedException refused => Results.Json(new JsonObject
-        {
-            ["error"] = "The change breaks the model's rules, so nothing was written.",
-            ["violations"] = new JsonArray(refused.Violations.Select(v => (JsonNode)new JsonObject
-            {
-                ["rule"] = v.Rule, ["entity"] = v.Entity, ["attribute"] = v.Attribute, ["key"] = KeyJson(v.Key), ["message"] = v.Message,
-            }).ToArray()),
-        }, statusCode: StatusCodes.Status422UnprocessableEntity),
+        WriteRefusedException refused => Results.Json(RowJson.Refusal(refused), statusCode: StatusCodes.Status422UnprocessableEntity),
         VersionConflictException conflict => Results.Json(new { error = conflict.Message, expected_version = conflict.Expected, current_version = conflict.Current }, statusCode: StatusCodes.Status409Conflict),
         RowNotFoundException => Results.NotFound(new { error = ex.Message }),
         StoreNotSupportedException or StorageException => Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status422UnprocessableEntity),
@@ -407,19 +369,8 @@ public static class StoreData
 
     private static (List<RowChange>? Changes, IResult? Problem) ParseChanges(JsonArray list)
     {
-        var changes = new List<RowChange>();
-        foreach (var item in list)
-        {
-            if (item is not JsonObject c || (string?)c["entity"] is not { } entity || !Enum.TryParse<RowAction>((string?)c["action"], true, out var action))
-                return (null, Results.BadRequest(new { error = "Each change needs an \"entity\" and an \"action\" of insert, update or delete." }));
-            DateTimeOffset? from = c["effective_from"] is { } f && DateTimeOffset.TryParse((string?)f, out var parsed) ? parsed : null;
-            var values = ObjectOf(c["values"]);
-            var key = ObjectOf(c["key"]);
-            long? version = c["expected_version"] is { } v ? (long)v : null;
-            if (action != RowAction.Insert && version is null) return (null, Results.BadRequest(new { error = "An update or delete needs \"expected_version\"." }));
-            changes.Add(new RowChange(action, entity, action == RowAction.Insert ? new Dictionary<string, object?>() : key, version, values) { EffectiveFrom = from });
-        }
-        return (changes, null);
+        var (changes, problem) = RowJson.Changes(list);
+        return (changes, problem is null ? null : Results.BadRequest(new { error = problem }));
     }
 
     /// <summary>

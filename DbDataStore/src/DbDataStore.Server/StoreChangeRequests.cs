@@ -38,11 +38,10 @@ public static class StoreChangeRequests
     public static bool IsAgent(ValidatedToken token) => token.SubjectId.StartsWith(AgentPrefix, StringComparison.Ordinal);
 
     /// <summary>True when this caller's write waits for approval: an agent's, unless the model lets agents write directly; anyone's, when the model asks for approval of changes.</summary>
-    public static bool Needs(DataModel model, ValidatedToken caller) =>
-        IsAgent(caller) ? model.Agents == AgentWrites.Request : model.Approval != ApprovalLevel.None;
+    public static bool Needs(DataModel model, ValidatedToken caller) => DbDataKit.Store.ChangeApproval.Needs(model, IsAgent(caller));
 
     /// <summary>The role that approves a request on this model: an administrator for an owner's approval, an author otherwise.</summary>
-    public static ServerRole Approver(DataModel model) => model.Approval == ApprovalLevel.Owner ? ServerRole.Admin : ServerRole.Author;
+    public static ServerRole Approver(DataModel model) => DbDataKit.Store.ChangeApproval.AdministratorDecides(model) ? ServerRole.Admin : ServerRole.Author;
 
     private static string FolderOf(string directory, string model, string instance) => Path.Combine(directory, Folder, model, instance);
 
