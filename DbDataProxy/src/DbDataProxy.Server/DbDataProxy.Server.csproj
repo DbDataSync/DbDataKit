@@ -22,6 +22,7 @@
     <DbDataKitReference Include="Connections.FlightSql" />   <!-- an upstream Flight SQL server as a data source; plan 13a, P12 -->
     <DbDataKitReference Include="Connections.Postgres" />   <!-- PostgreSQL data sources; plan 13a, P12 -->
     <DbDataKitReference Include="Connections.DuckDb" />
+    <DbDataKitReference Include="Store" />   <!-- the master data models a DbDataStore server publishes to the group, and their write path; plan 20 O10, O08 -->
     <DbDataKitReference Include="Config.Yaml" />
     <DbDataKitReference Include="Config" />
     <DbDataKitReference Include="Config.Hosting" />

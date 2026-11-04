@@ -186,8 +186,11 @@ public static class ProxyHost
             ResolveDataDirectory(sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue),
             () => ((IConfigurationRoot)sp.GetRequiredService<IConfiguration>()).Providers.OfType<ProxyConfigDirectoryProvider>().FirstOrDefault()?.ReloadNow(),
             problem => sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Definitions").LogWarning("{Problem}", problem)));
+        // the master data models a DbDataStore server publishes to the group (O10)
+        services.AddSingleton(sp => new PublishedEntityModels(sp.GetRequiredService<DbDataKit.State.DefinitionStore>(),
+            problem => sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Definitions").LogWarning("{Problem}", problem)));
         services.AddSingleton(sp => new DbDataKit.State.DefinitionFollower(sp.GetRequiredService<DbDataKit.State.DefinitionStore>(),
-            [sp.GetRequiredService<PublishedDataSources>(), sp.GetRequiredService<PublishedSemanticModels>()],
+            [sp.GetRequiredService<PublishedDataSources>(), sp.GetRequiredService<PublishedSemanticModels>(), sp.GetRequiredService<PublishedEntityModels>()],
             (kind, name, version, ex) => sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Definitions").LogWarning("The published {Kind} '{Name}' version {Version} is not served here: {Message}", kind, name, version, ex.Message)));
         services.AddHostedService<DbDataProxy.Server.State.DefinitionFollowerService>();
         services.AddSingleton<IServingServices>(sp => sp.GetRequiredService<ProxyServing>().WithSemantic(sp.GetRequiredService<SemanticModels>()));
