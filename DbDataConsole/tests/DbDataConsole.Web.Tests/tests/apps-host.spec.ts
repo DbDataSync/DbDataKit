@@ -319,6 +319,11 @@ test('a person signs in and the sandboxed app reads and writes the Store through
   await expect(page.frameLocator('#app-frame').locator('#theme')).toHaveText('#ff0000')
   expect((await page.goto(`${appsUrl}/apps/alpha/hidden/`))!.status()).toBe(403)
 
+  // the about page lists the manifest's data access, and asks for no consent
+  await page.goto(`${appsUrl}/apps/acme/_about`)
+  await expect(page.locator('ul.access li')).toHaveText(['territories.territory: read and write'])
+  await expect(page.locator('dl.about')).toContainText('sandboxed')
+
   await page.goto(`${appsUrl}/apps/omega/work/`)
   await expect(page.locator('.portal-title')).toHaveText('Omega Ltd')
   await expect(page.locator('nav.portal.side')).toHaveCount(0)

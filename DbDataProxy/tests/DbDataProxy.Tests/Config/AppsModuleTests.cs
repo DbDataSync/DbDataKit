@@ -238,6 +238,30 @@ public sealed class AppsModuleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_trusted_app_is_approved_by_someone_else_listed_and_revoked_at_the_command_line()
+    {
+        var app = Path.Combine(dataDirectory, "trusted-app");
+        Directory.CreateDirectory(app);
+        File.WriteAllText(Path.Combine(app, "app.yaml"), Manifest.Replace("name: notes", "name: vault") + "trust: trusted\n");
+        File.WriteAllText(Path.Combine(app, "index.html"), "<html><body>v1</body></html>");
+        Assert.Equal(0, (await Command("apps", "publish", "--dir", app)).Exit);
+
+        var author = await Command("apps", "approve", "--app", "vault", "--version", "1", "--by", Environment.UserName);   // the publisher is the author
+        Assert.NotEqual(0, author.Exit);
+        Assert.Contains("cannot approve", author.Error);
+        var approved = await Command("apps", "approve", "--app", "vault", "--version", "1", "--by", "grace", "--note", "reviewed");
+        Assert.Equal(0, approved.Exit);
+        var listed = (await Command("apps", "approval-list")).Out;
+        Assert.Contains("vault 1.0.0  approved by grace", listed);
+        Assert.DoesNotContain("revoked", listed);
+
+        var id = System.Text.RegularExpressions.Regex.Match(listed, "apr_[0-9a-f]+").Value;
+        Assert.Equal(0, (await Command("apps", "approval-revoke", "--id", id, "--by", "grace")).Exit);
+        Assert.Contains("revoked", (await Command("apps", "approval-list")).Out);
+        Assert.NotEqual(0, (await Command("apps", "approval-revoke", "--id", "apr_nothing", "--by", "grace")).Exit);
+    }
+
+    [Fact]
     public async Task The_data_route_wants_an_apps_token_and_a_paired_store()
     {
         appsPort = FreePort();
