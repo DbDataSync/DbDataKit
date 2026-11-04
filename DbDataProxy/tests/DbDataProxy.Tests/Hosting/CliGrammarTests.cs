@@ -30,7 +30,7 @@ public sealed class CliGrammarTests
               cert        The server's TLS certificate
               secret      The encrypted secret store, secret references and protected values
               identity    The identity home this proxy serves: register consoles and apps, invite people, give them roles
-              apps        The apps host this proxy serves: the stores it forwards app data to
+              apps        The apps host this proxy serves: its apps, instances and navigation sets
               config      The server's own configuration
               query       A client for smoke-testing a running proxy
               semantic    A served semantic model: what it offers, a query on it, what a query would run, the values of an attribute

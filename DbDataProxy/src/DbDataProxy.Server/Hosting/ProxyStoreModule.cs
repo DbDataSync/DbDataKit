@@ -1,11 +1,7 @@
-using System.Data.Common;
 using System.Net;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using DbDataKit.Identity;
 using DbDataKit.Secrets;
 using DbDataKit.State;
-using DbDataKit.Store;
 using DbDataKit.Web.Trust;
 using DbDataProxy.Server.Configuration;
 using DbDataProxy.Server.Secrets;
@@ -20,7 +16,8 @@ namespace DbDataProxy.Server.Hosting;
 /// The <c>store</c> module of the serving layer (plan 20 O08a): master data read and written through the models a DbDataStore server published to the group (O10), straight to the model's tables, so it goes on with the store's
 /// server stopped. On an HTTPS listener of its own, with the paths a DbDataStore server answers (<c>/api/v1/models/{model}/entities/{entity}/row|rows</c>, <c>/changes</c>, <c>/requests</c>), so a client is written once:
 /// a row read now, as of a date or with its history; a page of rows; a batch of changes through <see cref="ModelWriter"/> (every rule, version check and audit row; a refusal names each rule broken); and a change request,
-/// in the group's state, when the model asks for approval of the caller's writes. The callers are the identity home's people and service accounts (<see cref="StoreCallers"/>).
+/// in the group's state, when the model asks for approval of the caller's writes. The callers are the identity home's people and service accounts (<see cref="StoreCallers"/>). What each call may do is <see cref="GroupStoreApi"/>'s,
+/// which the apps host answers an app's data calls with too (O08c).
 /// </summary>
 public sealed class ProxyStoreModule(IOptionsMonitor<ProxyOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, PublishedEntityModels models, ILoggerFactory loggers,
     GroupCertificate? group = null) : IHostedService, IAsyncDisposable
@@ -50,12 +47,15 @@ public sealed class ProxyStoreModule(IOptionsMonitor<ProxyOptions> options, Stat
         });
         var app = builder.Build();
         var callers = new StoreCallers(state, ServerIdOf(current, state), await HomeTokensAsync(current, cancellationToken));
-        var requests = new GroupChangeRequests(state);
         app.MapGet("/health/live", () => Results.Text("Healthy"));
-        Map(app, callers, requests);
+        Map(app, callers, ApiOf(options, state, secrets, models));
         await app.StartAsync(cancellationToken);
         _app = app;
     }
+
+    /// <summary>The group's store for this instance: what the module's listener and the apps host's data calls answer with.</summary>
+    public static GroupStoreApi ApiOf(IOptionsMonitor<ProxyOptions> options, StateDatabase state, SecretsRuntime secrets, PublishedEntityModels models) =>
+        new(() => options.CurrentValue, secrets, models, new GroupChangeRequests(state));
 
     /// <summary>The group's server id, which the home's roles name (<c>server:&lt;id&gt;</c>): the instance id every instance of the group shares (O04a).</summary>
     public static string ServerIdOf(ProxyOptions options, StateDatabase state)
@@ -75,171 +75,41 @@ public sealed class ProxyStoreModule(IOptionsMonitor<ProxyOptions> options, Stat
             ProxyIdentityModule.PublicUrlOf(current).AbsoluteUri);
     }
 
-    private void Map(WebApplication app, StoreCallers callers, GroupChangeRequests requests)
+    private void Map(WebApplication app, StoreCallers callers, GroupStoreApi api)
     {
         const string prefix = "/api/v1/models";
 
-        // who is calling, with the role a call needs, and the model it is about as this instance serves it
-        (StoreCaller? Caller, IResult? Problem) Who(HttpContext context, ServerRole needs)
+        // who is calling; what they may do is the API's to say, the same for the apps host's calls
+        async Task<IResult> As(HttpContext context, Func<StoreCaller, Task<StoreAnswer>> call)
         {
             if (callers.Authenticate(context.Request.Headers.Authorization.ToString()) is not { } caller)
-                return (null, Results.Json(new { error = "A token of the identity home is needed (a personal access token, or an access token it issued)." }, statusCode: StatusCodes.Status401Unauthorized));
-            if (!caller.Holds(needs) && !caller.Holds(ServerRole.Admin))
-                return (null, Results.Json(new { error = $"This needs the {needs.ToString().ToLowerInvariant()} role on this group." }, statusCode: StatusCodes.Status403Forbidden));
-            return (caller, null);
+                return Results.Json(new { error = "A token of the identity home is needed (a personal access token, or an access token it issued)." }, statusCode: StatusCodes.Status401Unauthorized);
+            var answer = await call(caller);
+            return Results.Json(answer.Body, statusCode: answer.Status);
         }
-        (ServedEntityModel? Model, IResult? Problem) Served(string name, string? entity = null)
+        static IReadOnlyDictionary<string, string> Query(HttpContext context) => context.Request.Query.ToDictionary(q => q.Key, q => q.Value.ToString(), StringComparer.Ordinal);
+        static async Task<byte[]> Body(HttpContext context)
         {
-            if (models.Find(name) is not { } served) return (null, Results.NotFound(new { error = $"No entity model '{name}' is published to this group." }));
-            if (entity is not null && served.Model.Entity(entity) is null) return (null, Results.NotFound(new { error = $"The model '{name}' has no entity '{entity}'." }));
-            return (served, null);
+            using var buffer = new MemoryStream();
+            await context.Request.Body.CopyToAsync(buffer, context.RequestAborted);
+            return buffer.ToArray();
         }
 
-        app.MapGet(prefix, (HttpContext context) =>
-        {
-            var (_, problem) = Who(context, ServerRole.Viewer);
-            if (problem is not null) return problem;
-            return Results.Json(new JsonObject
-            {
-                ["models"] = new JsonArray([.. models.All.OrderBy(m => m.Model.Name, StringComparer.Ordinal).Select(m => (JsonNode)new JsonObject
-                {
-                    ["name"] = m.Model.Name, ["title"] = m.Model.Title, ["version"] = m.Version, ["entities"] = new JsonArray([.. m.Model.Entities.Select(e => (JsonNode)e.Name)]),
-                })]),
-            });
-        });
-
-        // one row by its key: ?key.<attribute>=<value>; ?as_of=<time> the version that held then; ?history=true every version
-        app.MapGet(prefix + "/{name}/entities/{entity}/row", async (string name, string entity, HttpContext context) =>
-        {
-            var (_, denied) = Who(context, ServerRole.Viewer);
-            if (denied is not null) return denied;
-            var (served, missing) = Served(name, entity);
-            if (missing is not null) return missing;
-            var key = context.Request.Query.Where(q => q.Key.StartsWith("key.", StringComparison.Ordinal)).ToDictionary(q => q.Key[4..], q => (object?)q.Value.ToString());
-            return await WithWriter(served!, context, async writer =>
-            {
-                if (context.Request.Query["history"] == "true")
-                    return Results.Json(new JsonObject { ["versions"] = new JsonArray([.. (await writer.HistoryAsync(entity, key, context.RequestAborted)).Select(r => (JsonNode)RowJson.Row(r))]) });
-                StoredRow? row;
-                if (context.Request.Query["as_of"].ToString() is { Length: > 0 } asOf)
-                {
-                    if (!DateTimeOffset.TryParse(asOf, null, System.Globalization.DateTimeStyles.AssumeUniversal, out var moment)) return Results.BadRequest(new { error = $"'{asOf}' is not a time." });
-                    row = await writer.GetAsOfAsync(entity, key, moment, context.RequestAborted);
-                }
-                else row = await writer.GetAsync(entity, key, context.RequestAborted);
-                return row is null ? Results.NotFound(new { error = $"`{entity}` has no such row." }) : Results.Json(RowJson.Row(row));
-            });
-        });
-
-        // a page of rows in key order: ?limit=100&offset=0
-        app.MapGet(prefix + "/{name}/entities/{entity}/rows", async (string name, string entity, HttpContext context) =>
-        {
-            var (_, denied) = Who(context, ServerRole.Viewer);
-            if (denied is not null) return denied;
-            var (served, missing) = Served(name, entity);
-            if (missing is not null) return missing;
-            if (!int.TryParse(context.Request.Query["limit"].ToString() is { Length: > 0 } l ? l : "100", out var limit) || !int.TryParse(context.Request.Query["offset"].ToString() is { Length: > 0 } o ? o : "0", out var offset))
-                return Results.BadRequest(new { error = "limit and offset are whole numbers." });
-            return await WithWriter(served!, context, async writer =>
-                Results.Json(new JsonObject { ["rows"] = new JsonArray([.. (await writer.ListAsync(entity, limit, offset, context.RequestAborted)).Select(r => (JsonNode)RowJson.Row(r))]), ["limit"] = limit, ["offset"] = offset }));
-        });
-
-        // { "changes": [...], "description": "..." }: written at once, or kept as a change request (202) when the model asks for approval of this caller's writes
-        app.MapPost(prefix + "/{name}/changes", async (string name, HttpContext context) =>
-        {
-            var (caller, denied) = Who(context, ServerRole.Author);
-            if (denied is not null) return denied;
-            var (served, missing) = Served(name);
-            if (missing is not null) return missing;
-            JsonNode? body;
-            try { body = await JsonNode.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted); }
-            catch (JsonException) { return Results.BadRequest(new { error = "The body is not JSON." }); }
-            if (body?["changes"] is not JsonArray list || list.Count == 0) return Results.BadRequest(new { error = "The body needs a non-empty \"changes\" array." });
-            var (changes, bad) = RowJson.Changes(list);
-            if (bad is not null) return Results.BadRequest(new { error = bad });
-            if (ChangeApproval.Needs(served!.Model, caller!.IsAgent))
-            {
-                var request = requests.Propose(name, caller, (string?)body["description"], (JsonArray)JsonNode.Parse(list.ToJsonString())!);
-                return Results.Json(request.ToJson(withChanges: false), statusCode: StatusCodes.Status202Accepted);
-            }
-            return await WithWriter(served, context, async writer =>
-            {
-                await writer.ApplyAsync(changes!, new WriteActor(caller.UserId, caller.Name), context.RequestAborted);
-                return Results.Json(new { applied = changes!.Count });
-            });
-        });
-
+        app.MapGet(prefix, (Func<HttpContext, Task<IResult>>)(context => As(context, caller => Task.FromResult(api.List(caller)))));
+        app.MapGet(prefix + "/{name}/entities/{entity}/row", (string name, string entity, HttpContext context) =>
+            As(context, caller => api.RowAsync(caller, name, entity, Query(context), context.RequestAborted)));
+        app.MapGet(prefix + "/{name}/entities/{entity}/rows", (string name, string entity, HttpContext context) =>
+            As(context, caller => api.RowsAsync(caller, name, entity, Query(context), context.RequestAborted)));
+        app.MapPost(prefix + "/{name}/changes", (string name, HttpContext context) =>
+            As(context, async caller => await api.ChangesAsync(caller, name, await Body(context), mayWrite: null, context.RequestAborted)));
         app.MapGet(prefix + "/{name}/requests", (string name, HttpContext context) =>
-        {
-            var (_, denied) = Who(context, ServerRole.Viewer);
-            if (denied is not null) return denied;
-            var wanted = context.Request.Query["state"].ToString();
-            if (wanted.Length > 0 && wanted is not (GroupChangeRequest.Pending or GroupChangeRequest.Approved or GroupChangeRequest.Rejected)) return Results.BadRequest(new { error = "state is pending, approved or rejected." });
-            return Results.Json(new JsonObject { ["requests"] = new JsonArray([.. requests.List(name, wanted.Length > 0 ? wanted : null).Select(r => (JsonNode)r.ToJson(withChanges: false))]) });
-        });
-
+            As(context, caller => Task.FromResult(api.Requests(caller, name, context.Request.Query["state"].ToString()))));
         app.MapGet(prefix + "/{name}/requests/{id}", (string name, string id, HttpContext context) =>
-        {
-            var (_, denied) = Who(context, ServerRole.Viewer);
-            if (denied is not null) return denied;
-            return requests.Find(name, id) is { } request ? Results.Json(request.ToJson()) : Results.NotFound(new { error = "There is no such change request." });
-        });
-
-        async Task<IResult> Decide(string name, string id, HttpContext context, bool approve)
-        {
-            var (served, missing) = Served(name);
-            if (missing is not null) return missing;
-            var (caller, denied) = Who(context, ChangeApproval.AdministratorDecides(served!.Model) ? ServerRole.Admin : ServerRole.Author);
-            if (denied is not null) return denied;
-            if (caller!.IsAgent) return Results.Json(new { error = "An agent cannot decide a change request." }, statusCode: StatusCodes.Status403Forbidden);
-            if (requests.Find(name, id) is not { } request) return Results.NotFound(new { error = "There is no such change request." });
-            if (request.State != GroupChangeRequest.Pending) return Results.Json(new { error = $"This change request was already {request.State}." }, statusCode: StatusCodes.Status409Conflict);
-            JsonNode? body = null;
-            if (context.Request.ContentLength is > 0)
-            {
-                try { body = await JsonNode.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted); }
-                catch (JsonException) { return Results.BadRequest(new { error = "The body is not JSON." }); }
-            }
-            var note = (string?)body?["note"];
-            if (!approve)
-                return requests.Decide(request, GroupChangeRequest.Rejected, caller, note) ? Results.Json(requests.Find(name, id)!.ToJson(withChanges: false))
-                    : Results.Json(new { error = "This change request was decided meanwhile." }, statusCode: StatusCodes.Status409Conflict);
-            var (changes, bad) = RowJson.Changes(request.Changes);
-            if (bad is not null) return Results.BadRequest(new { error = bad });
-            return await WithWriter(served, context, async writer =>
-            {
-                await writer.ApplyAsync(changes!, new WriteActor(caller.UserId, $"{caller.Name ?? caller.UserId}, approving {request.ProposedByName ?? request.ProposedBy}'s change request {request.Id}"), context.RequestAborted);
-                requests.Decide(request, GroupChangeRequest.Approved, caller, note);
-                return Results.Json(requests.Find(name, id)!.ToJson(withChanges: false));
-            });
-        }
-        app.MapPost(prefix + "/{name}/requests/{id}/approve", (string name, string id, HttpContext context) => Decide(name, id, context, approve: true));
-        app.MapPost(prefix + "/{name}/requests/{id}/reject", (string name, string id, HttpContext context) => Decide(name, id, context, approve: false));
-    }
-
-    /// <summary>Opens the model's data source (published with it, O04b) and runs <paramref name="work"/> with a writer on the model's tables; the writer's refusals become the answers a DbDataStore server gives.</summary>
-    private async Task<IResult> WithWriter(ServedEntityModel served, HttpContext context, Func<ModelWriter, Task<IResult>> work)
-    {
-        var current = options.CurrentValue;
-        if (!current.DataSources.TryGetValue(served.DataSource, out var source))
-            return Results.Json(new { error = $"The data source '{served.DataSource}' the model's tables are on is not served here." }, statusCode: StatusCodes.Status502BadGateway);
-        var engine = source.Provider.ToLowerInvariant() switch { "sqlserver" => "sqlserver", "postgres" => "postgres", _ => null };
-        if (engine is null) return Results.Json(new { error = $"The data source '{served.DataSource}' is {source.Provider}; a model's tables are on SQL Server or PostgreSQL." }, statusCode: StatusCodes.Status502BadGateway);
-        string text;
-        try { text = secrets.ResolveConnectionString($"Proxy:DataSources:{served.DataSource}:ConnectionString", source.ConnectionString, source.Provider) ?? source.ConnectionString; }
-        catch (Exception ex) when (ex is SecretNotFoundException or InvalidOperationException)
-        { return Results.Json(new { error = $"The login of the data source '{served.DataSource}' cannot be found here." }, statusCode: StatusCodes.Status502BadGateway); }
-        try
-        {
-            await using DbConnection connection = engine == "sqlserver" ? new Microsoft.Data.SqlClient.SqlConnection(text) : new Npgsql.NpgsqlConnection(text);
-            await connection.OpenAsync(context.RequestAborted);
-            return await work(new ModelWriter(served.Model, connection, engine, schema: served.Model.Name));
-        }
-        catch (WriteRefusedException refused) { return Results.Json(RowJson.Refusal(refused), statusCode: StatusCodes.Status422UnprocessableEntity); }
-        catch (VersionConflictException conflict) { return Results.Json(new { error = conflict.Message, expected_version = conflict.Expected, current_version = conflict.Current }, statusCode: StatusCodes.Status409Conflict); }
-        catch (RowNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
-        catch (Exception ex) when (ex is StoreNotSupportedException or DbDataKit.DataModel.Storage.StorageException) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status422UnprocessableEntity); }
-        catch (DbException) { return Results.Json(new { error = $"The database of the data source '{served.DataSource}' could not be reached." }, statusCode: StatusCodes.Status502BadGateway); }
+            As(context, caller => Task.FromResult(api.Request(caller, name, id))));
+        app.MapPost(prefix + "/{name}/requests/{id}/approve", (string name, string id, HttpContext context) =>
+            As(context, async caller => await api.DecideAsync(caller, name, id, await Body(context), approve: true, context.RequestAborted)));
+        app.MapPost(prefix + "/{name}/requests/{id}/reject", (string name, string id, HttpContext context) =>
+            As(context, async caller => await api.DecideAsync(caller, name, id, await Body(context), approve: false, context.RequestAborted)));
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)

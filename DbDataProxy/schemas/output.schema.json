@@ -457,7 +457,7 @@
       "then": {
         "properties": {
           "data": {
-            "$ref": "#/$defs/data_apps_store_list_partial"
+            "$ref": "#/$defs/data_apps_store_list"
           }
         }
       }
@@ -503,7 +503,7 @@
       "then": {
         "properties": {
           "data": {
-            "$ref": "#/$defs/data_apps_store_pair_partial"
+            "$ref": "#/$defs/data_apps_store_pair"
           }
         }
       }
@@ -3066,107 +3066,11 @@
     },
     "data_apps_store_list": {
       "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "stores": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "url": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              },
-              "fingerprint": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "url",
-              "name",
-              "fingerprint"
-            ]
-          }
-        }
-      },
-      "required": [
-        "stores"
-      ]
-    },
-    "data_apps_store_list_partial": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "stores": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "url": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              },
-              "fingerprint": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "url",
-              "name",
-              "fingerprint"
-            ]
-          }
-        }
-      }
+      "additionalProperties": false
     },
     "data_apps_store_pair": {
       "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "url": {
-          "type": "string"
-        },
-        "fingerprint": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "url",
-        "fingerprint"
-      ]
-    },
-    "data_apps_store_pair_partial": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "url": {
-          "type": "string"
-        },
-        "fingerprint": {
-          "type": "string"
-        }
-      }
+      "additionalProperties": false
     },
     "data_apps_store_remove": {
       "type": "object",
