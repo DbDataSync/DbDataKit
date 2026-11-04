@@ -111,6 +111,24 @@ public sealed class AppDataGatewayTests : IDisposable
     }
 
     [Fact]
+    public async Task A_trusted_apps_data_calls_stop_when_no_approval_stands_for_its_version()
+    {
+        var definitions = new DefinitionStore(new StateDatabase(Path.Combine(folder, "state.db"), new StateSchema([DefinitionSchema.Tables])));
+        instances.PublishApp("schemaVersion: 1\nname: vault\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\ntrust: trusted\nmodels:\n  - model: territories\n    entities: {territory: [read]}\n", "ada");
+        instances.Save(new AppInstance("acme", "vault"), "ada");
+        var approvals = new AppApprovalStore(definitions);
+        var gated = new AppDataGateway(instances, data, host, approvals: approvals);
+        Task<AppResponse> Read() => gated.ForwardAsync("acme", "api/v1/models/territories/entities/territory/rows", "GET", "", "Bearer " + AppToken(), [], default);
+
+        Assert.Equal(403, (await Read()).Status);
+        var approval = approvals.Approve("vault", 1, "grace");
+        Assert.Equal(200, (await Read()).Status);
+        approvals.Revoke(approval.Id, "grace");
+        Assert.Equal(403, (await Read()).Status);   // within the token's five minutes
+        Assert.Single(data.Seen);
+    }
+
+    [Fact]
     public async Task A_missing_foreign_or_other_instances_token_is_refused_before_anything_is_asked()
     {
         const string Path = "api/v1/models/territories/entities/territory/rows";

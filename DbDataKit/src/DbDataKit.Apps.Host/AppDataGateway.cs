@@ -39,7 +39,7 @@ public interface IAppData
 /// with the store's server stopped and a model in development is never what an app sees. The browser reaches nothing else, needs no CORS but this route's, and the app never holds a token anything else accepts. Only row reads
 /// and the changes endpoint are answered.
 /// </summary>
-public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, ConsoleIdentity self, TimeProvider? clock = null)
+public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, ConsoleIdentity self, TimeProvider? clock = null, AppApprovalStore? approvals = null)
 {
     private static readonly Regex DataPath = new(@"^api/v1/models/(?<model>[^/]+)(/instances/(?<copy>[^/]+))?/(entities/(?<entity>[^/]+)/(?<kind>rows?)|(?<kind>changes))$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
@@ -57,6 +57,8 @@ public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, Co
     public async Task<AppResponse> ForwardAsync(string instance, string path, string method, string query, string? authorization, byte[] body, CancellationToken ct)
     {
         if (instances.Resolve(instance) is not { } resolved) return Refuse(404, "No such app.");
+        // a token lives five minutes: an approval revoked in that time still stops the data
+        if (resolved.Manifest.Trust == AppTrust.Trusted && (approvals is null || approvals.Gate(resolved) is { Allowed: false })) return Refuse(403, $"'{resolved.Manifest.Name}' asks to be trusted and no approval stands for this version.");
         var validated = new ConsoleTokenValidator(AppInstanceAudience.Of(instance), _self, new ReusableTokens(), clock).Validate(authorization is { } h && h.StartsWith("Bearer ", StringComparison.Ordinal) ? h[7..] : null);
         if (validated.Token is not { } token) return Refuse(401, "A token for this app is needed.");
 

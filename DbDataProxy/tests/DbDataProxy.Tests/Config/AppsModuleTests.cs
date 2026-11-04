@@ -238,6 +238,29 @@ public sealed class AppsModuleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_trusted_app_runs_only_while_an_approval_stands_for_its_version()
+    {
+        appsPort = FreePort();
+        var (clientId, ada, _, database) = Prepare();
+        var definitions = new DefinitionStore(database);
+        new AppInstanceStore(definitions).PublishApp(new AppPackage(Manifest + "trust: trusted\n", new Dictionary<string, byte[]> { ["index.html"] = "<html></html>"u8.ToArray() }), "ada");   // version 2 asks to be trusted
+        var (apps, home) = await StartAsync(clientId);
+        var session = await SignInAsync(apps, home, database, ada, "/apps/acme/");
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await GetAsync(apps, "/apps/acme/", session)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await PostTokenAsync(apps, "acme", session)).StatusCode);
+
+        var approvals = new AppApprovalStore(definitions);
+        var approval = approvals.Approve("notes", 2, "grace");
+        Assert.Equal(HttpStatusCode.OK, (await GetAsync(apps, "/apps/acme/", session)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await PostTokenAsync(apps, "acme", session)).StatusCode);
+
+        approvals.Revoke(approval.Id, "grace");
+        Assert.Equal(HttpStatusCode.Forbidden, (await GetAsync(apps, "/apps/acme/", session)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await PostTokenAsync(apps, "acme", session)).StatusCode);
+    }
+
+    [Fact]
     public async Task A_trusted_app_is_approved_by_someone_else_listed_and_revoked_at_the_command_line()
     {
         var app = Path.Combine(dataDirectory, "trusted-app");
