@@ -28,6 +28,12 @@ public static class AppsCommand
             DataSchemas.Object([("name", DataSchemas.String), ("version", DataSchemas.Integer)], "name", "version")),
         new Verb("nav-list", "The navigation sets and their members", EffectClass.OfflineOnly, Where, NavListAsync,
             DataSchemas.Object([("sets", DataSchemas.ListOf(DataSchemas.Object([("name", DataSchemas.String), ("title", DataSchemas.String), ("instances", DataSchemas.ListOf(DataSchemas.String))], "name", "title", "instances")))], "sets")),
+        new Verb("approve", "Approve one version of a trusted app, as the person who reviewed it (not its author); the approval is for that version's exact bytes and ends when a new version is published", EffectClass.RepoFilesOnly,
+            $"--app <app> --version <n> --by <approver> [--note <text>] {Where}", ApproveAsync,
+            DataSchemas.Object([("id", DataSchemas.String), ("app", DataSchemas.String), ("version", DataSchemas.String)], "id", "app", "version")),
+        new Verb("approval-list", "The approvals on record, with who gave them and whether they still stand", EffectClass.OfflineOnly, Where, ApprovalListAsync,
+            DataSchemas.Object([("approvals", DataSchemas.ListOf(DataSchemas.Object([("id", DataSchemas.String), ("app", DataSchemas.String), ("version", DataSchemas.String), ("approved_by", DataSchemas.String), ("revoked", DataSchemas.Boolean)], "id", "app", "version", "approved_by", "revoked")))], "approvals")),
+        new Verb("approval-revoke", "End an approval; the app stops running as trusted. The record stays", EffectClass.RepoFilesOnly, $"--id <approval id> --by <name> {Where}", ApprovalRevokeAsync, DataSchemas.None),
         // apps reach the group's published models now (plan 20 O08c); the verbs that paired a Store say so rather than vanish
         new Verb("store-pair", "Gone: an app's data is the group's published models, so the apps host pairs with no Store", EffectClass.OfflineOnly, Where, GoneAsync, DataSchemas.None),
         new Verb("store-list", "Gone: an app's data is the group's published models, so the apps host pairs with no Store", EffectClass.OfflineOnly, Where, GoneAsync, DataSchemas.None),
@@ -168,6 +174,61 @@ public static class AppsCommand
         if (sets.Count == 0) await context.Out.WriteLineAsync("No navigation set is published. Make one with: apps nav-save --name <set> --title <text> --item <instance>,<instance>");
         context.Data["sets"] = sets.Select(s => new Dictionary<string, object?> { ["name"] = s.Name, ["title"] = s.Title, ["instances"] = s.Entries.Select(e => e.Instance).ToList() }).ToList();
         return CliExit.Ok;
+    }
+
+    private static async Task<int> ApproveAsync(string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "app", "version", "by", "note", "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("app") is not { Length: > 0 } app || !int.TryParse(parsed.Get("version"), out var version) || parsed.Get("by") is not { Length: > 0 } by)
+        {
+            await context.Error.WriteLineAsync($"Usage: apps approve --app <app> --version <n> --by <approver> [--note <text>] {Where}");
+            return CliExit.Usage;
+        }
+        try
+        {
+            var approval = new AppApprovalStore(new DefinitionStore(IdentityCommand.Open(parsed))).Approve(app, version, by, parsed.Get("note"));
+            await context.Out.WriteLineAsync($"Approved {app} {approval.Version} ({approval.Id}) as {by}.");
+            context.Data["id"] = approval.Id;
+            context.Data["app"] = approval.App;
+            context.Data["version"] = approval.Version;
+            return CliExit.Ok;
+        }
+        catch (AppInstanceException ex)
+        {
+            await context.Error.WriteLineAsync(ex.Message);
+            return CliExit.Failure;
+        }
+    }
+
+    private static async Task<int> ApprovalListAsync(string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
+        var all = new AppApprovalStore(new DefinitionStore(IdentityCommand.Open(parsed))).All();
+        foreach (var a in all) await context.Out.WriteLineAsync($"{a.Id}  {a.App} {a.Version}  approved by {a.ApprovedBy} on {a.ApprovedAt:yyyy-MM-dd}{(a.RevokedAt is null ? "" : "  revoked")}");
+        if (all.Count == 0) await context.Out.WriteLineAsync("No approval is on record. Approve a trusted app's version with: apps approve --app <app> --version <n> --by <approver>");
+        context.Data["approvals"] = all.Select(a => new Dictionary<string, object?> { ["id"] = a.Id, ["app"] = a.App, ["version"] = a.Version, ["approved_by"] = a.ApprovedBy, ["revoked"] = a.RevokedAt is not null }).ToList();
+        return CliExit.Ok;
+    }
+
+    private static async Task<int> ApprovalRevokeAsync(string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "id", "by", "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("id") is not { Length: > 0 } id || parsed.Get("by") is not { Length: > 0 } by)
+        {
+            await context.Error.WriteLineAsync($"Usage: apps approval-revoke --id <approval id> --by <name> {Where}");
+            return CliExit.Usage;
+        }
+        try
+        {
+            new AppApprovalStore(new DefinitionStore(IdentityCommand.Open(parsed))).Revoke(id, by);
+            await context.Out.WriteLineAsync($"Revoked {id}.");
+            return CliExit.Ok;
+        }
+        catch (AppInstanceException ex)
+        {
+            await context.Error.WriteLineAsync(ex.Message);
+            return CliExit.Failure;
+        }
     }
 
     /// <summary>The message of the store-* verbs since the group serves apps' data (plan 20 O08c).</summary>

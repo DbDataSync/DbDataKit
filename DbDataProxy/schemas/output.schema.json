@@ -52,6 +52,144 @@
       "if": {
         "properties": {
           "command": {
+            "const": "apps approval-list"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_approval_list"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "apps approval-list"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_approval_list_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "apps approval-revoke"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_approval_revoke"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "apps approval-revoke"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_approval_revoke"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "apps approve"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_approve"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "apps approve"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_approve_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "apps instance-list"
           },
           "ok": {
@@ -2580,6 +2718,122 @@
     }
   ],
   "$defs": {
+    "data_apps_approval_list": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "approvals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "app": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "approved_by": {
+                "type": "string"
+              },
+              "revoked": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "app",
+              "version",
+              "approved_by",
+              "revoked"
+            ]
+          }
+        }
+      },
+      "required": [
+        "approvals"
+      ]
+    },
+    "data_apps_approval_list_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "approvals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "app": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "approved_by": {
+                "type": "string"
+              },
+              "revoked": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "app",
+              "version",
+              "approved_by",
+              "revoked"
+            ]
+          }
+        }
+      }
+    },
+    "data_apps_approval_revoke": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "data_apps_approve": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "app",
+        "version"
+      ]
+    },
+    "data_apps_approve_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
     "data_apps_instance_list": {
       "type": "object",
       "additionalProperties": false,

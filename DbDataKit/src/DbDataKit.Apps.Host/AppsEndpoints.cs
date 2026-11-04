@@ -19,9 +19,22 @@ public static class AppsEndpoints
     public const string CallbackPath = "/apps/-/callback";
     public const string SessionCookie = "dbdata_apps";
 
-    public static IEndpointRouteBuilder MapApps(this IEndpointRouteBuilder app, AppInstanceStore instances, AppSite site, OpenIdClient client, AppSessions sessions, AppTokenBroker broker, AppDataGateway? data = null, AppStorage? storage = null)
+    public static IEndpointRouteBuilder MapApps(this IEndpointRouteBuilder app, AppInstanceStore instances, AppSite site, OpenIdClient client, AppSessions sessions, AppTokenBroker broker, AppDataGateway? data = null, AppStorage? storage = null, AppApprovalStore? approvals = null)
     {
         app.MapGet("/apps/{instance}/_app/{**path}", async (HttpContext context, string instance, string? path) => await Write(context, site.Get(instance, path ?? "")));
+
+        // what the app can reach and who approved it; for anyone who may open the app
+        app.MapGet("/apps/{instance}/_about", async (HttpContext context, string instance) =>
+        {
+            if (instances.Resolve(instance) is not { } resolved) { await Text(context, 404, "No such app."); return; }
+            if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session)
+            {
+                context.Response.Redirect((await client.BeginAsync(context.Request.Path.Value!, context.RequestAborted)).AbsoluteUri);
+                return;
+            }
+            if (session.RolesOn(instance).Count == 0) { await Text(context, 403, "The identity home gives you no role on this app."); return; }
+            await Write(context, AppAbout.Page(resolved, approvals?.ForApp(resolved.Manifest.Name) ?? [], TitleOf(resolved)));
+        });
 
         app.MapGet(AppShell.ScriptPath, async (HttpContext context) => await Write(context, AppShell.ScriptResponse()));
 
