@@ -56,8 +56,8 @@ Kept in the `definitions` module (plan 29 section 3.4), one copy per target grou
   keeps the old one and reports `failed`.
 - **Publish with `stage`**: the version is staged. Every instance of the group prepares it (for the runner: resolve packages, compile,
   load, migrate progress in a dry run; for the serving layer: build the model or the app) and reports `ready` or `failed`. **Activation**
-  then makes it active everywhere at once. It happens when an operator activates it, automatically when every instance is ready, or at a
-  set time; the publisher chooses, within the kind's defaults.
+  then makes it active everywhere at once. It happens when an operator activates it, or automatically when every instance is ready; the
+  publisher chooses, within the kind's defaults. **No activation at a set time** for now (owner, 2026-11-04); a later feature if wanted.
 - **Defaults:** serving kinds `serve` (as today); runner kinds `stage`, activated automatically when every runner is ready.
 - **A failed preparation never activates silently.** The console shows which instances failed and why; an administrator can activate
   anyway (the instances that failed keep the previous version and say so), as a recorded choice.
@@ -114,10 +114,91 @@ their checks become the kinds' validators. The Build server's `ProxyPublishing` 
 
 Who may publish what is the pairing's Publisher role and its scope (plan 13 W12, `OwnerScope`), as today.
 
-## 6. Questions
+## 6. Artifacts: what is published, how it is trusted, how it is served
 
-| # | Question | Proposed |
+Proposed (2026-11-04), from the owner's questions.
+
+### 6.1 Compiled code and its source, both
+
+**What happens today:** a `.csx` script is compiled where it runs (`CsxCompiler`, cached on disk by a key over the text, the
+references and Roslyn's version), and its packages are resolved there (`PackageResolver`, from the feeds the configuration names).
+
+**Proposed:** code is **built where it is published** (the DbDataIntegration or apps back end, or CI), and a version carries **both**:
+
+- **the compiled assemblies**, which is what runs: no compiler and no package feed on the runner or serving instance, faster preparation,
+  and what was approved is exactly what runs;
+- **the source**, kept beside them: the console shows and compares what a version contains, a reviewer reads what was approved, and an
+  administrator can rebuild it to check the build (section 6.2).
+
+A `.csx` script is compiled at publish time too, with the same compiler. Compiled code depends on the host's contract assemblies and the
+.NET runtime, so the manifest records the versions it was built against; an instance that cannot load it (a runner upgraded since)
+**fails the staging with a message** asking for a republish. Recompiling from the source on the instance is an option an administrator can
+turn on (the security posture), off by default.
+
+### 6.2 Signatures: proof that a version came from a trusted publisher
+
+A hash proves a file is the one the manifest names; it does not prove who wrote the manifest. Anyone who can write to a state database
+(a database administrator, an attacker with that login) could add a version with matching hashes. So:
+
+- **The publisher signs the version's manifest**, which lists every artifact's path and SHA-256, with its own key: Ed25519, as the update
+  system already signs releases (`DbDataKit.Update`'s `Crypto`, `ReleaseVerifier`).
+- **Each target group keeps a trust store:** which publishers' public keys it trusts, for which kinds. A publisher's key is registered when
+  it pairs as a Publisher (plan 13 W12), and can be rotated or revoked from the console.
+- **Every instance verifies** the signature when it prepares a version, and every file's hash when it fills its local cache (6.4). A
+  version that fails either is refused, and the previous one keeps running.
+- **Approvals are signed too.** An administrator's approval of trusted code (plans 26, 27 section 4.7) is a second signature, over the same
+  manifest, with that person's key from the identity home, so "who approved what runs" is provable as well as recorded.
+- **Defaults:** signatures required for every kind. An administrator can allow unsigned versions for a kind (for example in a test
+  group), as a recorded choice.
+- **Reproducible builds as an extra check:** compiled with `Deterministic` builds, the source in a version can be rebuilt and compared byte
+  for byte. Offered as a console action, not required.
+
+What signing does not protect against is a compromised publisher, whose key signs whatever it is given; that is what the approval
+signature and the review in a workspace are for.
+
+### 6.3 Packages published with the version
+
+**Proposed: yes.** A version carries the **`.nupkg` files of its whole package closure** as artifacts, by hash:
+
+- the runner needs **no access to a package feed** (air-gapped installs work) and does **no resolution** at activation;
+- the bytes that run are the bytes that were reviewed and approved; the lock file's hashes (13a S12) and NuGet's own hash match them;
+- a package shared by many versions or many integrations is **stored once** (content addressing).
+
+Whole packages rather than the extracted files for one platform, so one version serves a group with Windows and Linux runners: each
+instance extracts the assets for its own runtime identifier into its cache, as `DbDataKit.Scripting` does today. Resolving from a feed on
+the instance stays possible as an administrator's option.
+
+### 6.4 How an app is published and served
+
+**Today:** an app version is one definition whose content is a JSON document holding the manifest and every file in base64 (up to
+16 MB, `AppPackage`). Each request for a file resolves the instance (`AppInstanceStore.Resolve`): it reads the instance and the app version
+from the state database, parses the whole package, decodes every file and loads the manifest, then answers with that one file. Correct,
+but every file request costs database reads and the whole package's decoding; it does not scale past small apps.
+
+**Proposed:**
+
+1. **Published file by file, committed as one version.** The publisher sends the manifest with the list of files (path, hash, size,
+   media type), uploads only the files the target does not already have (`HEAD`, then `PUT` by hash), and then publishes the version in one
+   call. An app that changes one file sends one file.
+2. **Each instance keeps a local cache on disk**, keyed by hash, under its data directory, filled when it **prepares** the version
+   (verifying each hash and the signature). The cache is disposable: deleting it only means the next preparation fills it again from the
+   state database.
+3. **Prepared once, not per request:** while preparing, the instance builds an in-memory index of the version (path to hash, media type,
+   size), writes the entry document with its `<base href>` already inserted, and stores compressed copies (Brotli, gzip) of text files.
+4. **Served from disk:** a file is sent straight from the cache (the server's send-file path), with the hash as a strong `ETag`, a
+   `304` for a matching `If-None-Match`, long caching for files whose names carry a hash, and `no-cache` for the entry document. The
+   state database is not read to serve a file.
+5. **One artifact cache for everything:** the same local cache holds apps' files, compiled assemblies and packages, on serving instances and
+   runners, with eviction of hashes no prepared version uses.
+
+## 7. Questions
+
+| # | Question | Status |
 | --- | --- | --- |
-| 1 | How long versions and their artifacts are kept | versions are current state, kept (plan 29 section 3.3); an administrator can prune versions no channel serves and older than a limit; an artifact goes when no kept version names it |
-| 2 | Activation at a set time | yes, for runner kinds, as a scheduled activation in the runner's schedules |
-| 3 | Promotion across groups (a test group to a production group) | a publish of the same version, artifacts by hash (nothing is re-sent that the target has), bindings per group |
+| 1 | How long versions and their artifacts are kept | **Decided** (owner, 2026-11-04): kept until an administrator prunes them, through an **API and a console screen that show the current state**: per definition and channel, the active, staged and previous versions, each instance's status, what is no longer served, and what pruning would remove. An artifact goes when no kept version names it |
+| 2 | Activation at a set time | **Not now** (owner, 2026-11-04); maybe a later feature |
+| 3 | Promotion from a test group to a production group | **Decided** (owner, 2026-11-04): a deploy of the same version to the other group. Artifacts are sent by hash, so nothing the production group already has is sent again; bindings are that group's own |
+| 4 | Compiled code with its source (6.1) | proposed: both; the compiled code runs, recompiling on the instance an option, off by default |
+| 5 | Signatures (6.2) | proposed: Ed25519 over the manifest, a trust store per group, approvals signed too, required by default |
+| 6 | Packages with the version (6.3) | proposed: whole `.nupkg` closure as artifacts; feed resolution on the instance an option |
+| 7 | Apps (6.4) | proposed: file by file by hash, one version commit, a local disk cache filled at preparation, served from disk |
