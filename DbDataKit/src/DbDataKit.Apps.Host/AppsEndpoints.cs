@@ -52,7 +52,7 @@ public static class AppsEndpoints
 
         if (data is not null)
         {
-            app.MapMethods("/apps/{instance}/_data/{store}/{**path}", ["GET", "POST", "OPTIONS"], async (HttpContext context, string instance, string store, string? path) =>
+            app.MapMethods("/apps/{instance}/_data/{**path}", ["GET", "POST", "OPTIONS"], async (HttpContext context, string instance, string? path) =>
             {
                 if (HttpMethods.IsOptions(context.Request.Method))
                 {
@@ -61,7 +61,7 @@ public static class AppsEndpoints
                 }
                 using var body = new MemoryStream();
                 await context.Request.Body.CopyToAsync(body, context.RequestAborted);
-                await Write(context, await data.ForwardAsync(instance, store, path ?? "", context.Request.Method, context.Request.QueryString.Value ?? "", context.Request.Headers.Authorization, context.Request.ContentType, body.ToArray(), context.RequestAborted));
+                await Write(context, await data.ForwardAsync(instance, path ?? "", context.Request.Method, context.Request.QueryString.Value ?? "", context.Request.Headers.Authorization, body.ToArray(), context.RequestAborted));
             });
         }
 

@@ -238,7 +238,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task The_data_route_wants_an_apps_token_and_a_paired_store()
+    public async Task The_data_route_wants_an_apps_token_and_answers_from_the_groups_published_models()
     {
         appsPort = FreePort();
         var (clientId, ada, _, database) = Prepare();
@@ -246,16 +246,18 @@ public sealed class AppsModuleTests : IAsyncLifetime
         var session = await SignInAsync(apps, home, database, ada, "/apps/acme/");
 
         // no token (a session cookie is no credential here), and the preflight of a browser call from the sandboxed frame
-        Assert.Equal(HttpStatusCode.Unauthorized, (await GetAsync(apps, "/apps/acme/_data/store-1/api/v1/models/territories/entities/territory/rows", session)).StatusCode);
-        var preflight = await apps.SendAsync(new HttpRequestMessage(HttpMethod.Options, "/apps/acme/_data/store-1/api/v1/models/territories/changes"));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await GetAsync(apps, "/apps/acme/_data/api/v1/models/territories/entities/territory/rows", session)).StatusCode);
+        var preflight = await apps.SendAsync(new HttpRequestMessage(HttpMethod.Options, "/apps/acme/_data/api/v1/models/territories/changes"));
         Assert.Equal(HttpStatusCode.NoContent, preflight.StatusCode);
         Assert.Equal("*", string.Join(' ', preflight.Headers.GetValues("Access-Control-Allow-Origin")));
 
-        // a token the broker made, for a store nobody paired
+        // a token the broker made, for a model nobody published to the group; and the path of a paired store, which is gone
         var token = (string)JsonNode.Parse(await (await PostTokenAsync(apps, "acme", session)).Content.ReadAsStringAsync())!["token"]!;
-        var request = new HttpRequestMessage(HttpMethod.Get, "/apps/acme/_data/store-1/api/v1/models/territories/entities/territory/rows");
-        request.Headers.Add("Authorization", "Bearer " + token);
-        Assert.Equal(HttpStatusCode.NotFound, (await apps.SendAsync(request)).StatusCode);
+        HttpRequestMessage Get(string path) => new(HttpMethod.Get, path) { Headers = { { "Authorization", "Bearer " + token } } };
+        var missing = await apps.SendAsync(Get("/apps/acme/_data/api/v1/models/territories/entities/territory/rows"));
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        Assert.Contains("published to this group", await missing.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Gone, (await apps.SendAsync(Get("/apps/acme/_data/store-1/api/v1/models/territories/entities/territory/rows"))).StatusCode);
     }
 
     [Fact]
