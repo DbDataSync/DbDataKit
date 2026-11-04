@@ -150,6 +150,27 @@ public sealed class PortalChromeTests : IDisposable
     }
 
     [Fact]
+    public void An_app_in_a_slot_is_a_sandboxed_frame_of_its_own_and_only_for_a_person_who_may_open_it()
+    {
+        var portal = Portal("""
+              mounts: [{app: sales, path: /sales/}, {app: hr, path: /hr/}]
+              slots: {header: sales, aside: hr, footer: sales}
+            """);
+
+        string Page(AppSession who) => Encoding.UTF8.GetString(AppShell.PortalHome("Acme", new AppShell.Header("Ada", [], PortalChrome.Look(store, portal, who, null)), []).Body);
+        var both = Page(Person("sales", "hr"));
+        var onlySales = Page(Person("sales"));
+
+        Assert.Contains("class=\"slot slot-header\" data-instance=\"sales\"", both);
+        Assert.Contains("class=\"slot slot-aside\" data-instance=\"hr\"", both);
+        Assert.Contains("class=\"slot slot-footer\" data-instance=\"sales\"", both);
+        Assert.DoesNotContain("class=\"slot slot-aside\"", onlySales);
+        Assert.DoesNotContain("allow-same-origin", both);
+        // the broker script comes after the last frame, so it finds every slot
+        Assert.True(both.LastIndexOf("<iframe", StringComparison.Ordinal) < both.IndexOf("<script", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void A_mount_is_found_by_its_path_and_an_unknown_path_is_not_a_mount()
     {
         var spec = Portal(Full).Manifest.Portal!;

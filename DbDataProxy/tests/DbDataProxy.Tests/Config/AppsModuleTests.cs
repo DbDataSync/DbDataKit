@@ -181,7 +181,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
         Assert.Contains("data-instance=\"acme\"", shell);
         var script = await apps.GetAsync(AppShell.ScriptPath);
         Assert.Equal(HttpStatusCode.OK, script.StatusCode);
-        Assert.Contains("event.source !== frame.contentWindow", await script.Content.ReadAsStringAsync());   // only the app's own frame is answered
+        Assert.Contains("f.contentWindow === event.source", await script.Content.ReadAsStringAsync());   // only the app's own frame is answered
 
         var response = await PostTokenAsync(apps, "acme", session);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

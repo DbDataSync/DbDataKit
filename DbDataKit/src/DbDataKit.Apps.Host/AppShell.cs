@@ -20,7 +20,10 @@ public static class AppShell
 
     /// <summary>A portal's identity, theme, layout and menu as the page draws them (see <see cref="PortalChrome"/>).</summary>
     public sealed record PortalLook(string Title, string? LogoUrl, string? FaviconUrl, string? FooterText, string? SupportLink, string ThemeCss, string ThemeJson,
-        bool SideMenu, bool Footer, PortalWidth Width, bool ShowPerson, IReadOnlyList<NavItem> Navigation);
+        bool SideMenu, bool Footer, PortalWidth Width, bool ShowPerson, IReadOnlyList<NavItem> Navigation, IReadOnlyDictionary<string, SlotApp>? Slots = null);
+
+    /// <summary>An app a portal mounts in one of its slots (header, footer, aside, home): the instance and its title. Only apps the person holds a role on are here.</summary>
+    public sealed record SlotApp(string Instance, string Title);
 
     /// <summary>The shell's header: who is signed in and the menus of the sets the instance belongs to. Null where the app's manifest says <c>chrome: none</c>. With a <see cref="Portal"/> the portal's menu and look replace the sets.</summary>
     public sealed record Header(string Person, IReadOnlyList<Menu> Menus, PortalLook? Portal = null);
@@ -36,23 +39,29 @@ public static class AppShell
     /// </summary>
     public const string Script = """
         (function () {
-          var frame = document.getElementById("app-frame");
-          var instance = frame.getAttribute("data-instance");
           var route = null;
           function valid(p) { return typeof p === "string" && p.length <= 512 && p.charAt(0) === "/" && p.charAt(1) !== "/" && !/[\u0000-\u001f\u007f]/.test(p); }
           function fromAddress() { var h = decodeURIComponent(location.hash.slice(1)); return valid(h) ? h : null; }
-          function tell(path) { frame.contentWindow.postMessage({ dbdata: "app/1", type: "navigate", path: path }, "*"); }
-          frame.addEventListener("load", function () {
-            var theme = frame.getAttribute("data-theme");
-            if (theme) frame.contentWindow.postMessage({ dbdata: "app/1", type: "theme", tokens: JSON.parse(theme) }, "*");
-            route = fromAddress(); if (route) tell(route);
+          // the page's frames: #app-frame is the page's app (it owns the address); each frame.slot is a portal slot, an app of its own with its own token
+          var frames = Array.prototype.slice.call(document.querySelectorAll("iframe[data-instance]"));
+          var main = document.getElementById("app-frame");
+          function tell(path) { if (main) main.contentWindow.postMessage({ dbdata: "app/1", type: "navigate", path: path }, "*"); }
+          frames.forEach(function (frame) {
+            frame.addEventListener("load", function () {
+              var theme = frame.getAttribute("data-theme");
+              if (theme) frame.contentWindow.postMessage({ dbdata: "app/1", type: "theme", tokens: JSON.parse(theme) }, "*");
+              if (frame === main) { route = fromAddress(); if (route) tell(route); }
+            });
           });
           window.addEventListener("popstate", function () { var p = fromAddress(); if (p && p !== route) { route = p; tell(p); } });
           window.addEventListener("message", function (event) {
             var m = event.data;
-            if (event.source !== frame.contentWindow || !m || m.dbdata !== "app/1") return;
+            var frame = frames.filter(function (f) { return f.contentWindow === event.source; })[0];
+            if (!frame || !m || m.dbdata !== "app/1") return;
+            var instance = frame.getAttribute("data-instance");
             if (m.type === "route") {
-              if (valid(m.path) && m.path !== route) { route = m.path; history.pushState(null, "", "#" + encodeURI(m.path)); }
+              // only the page's own app moves the address; a slot's route is its own business
+              if (frame === main && valid(m.path) && m.path !== route) { route = m.path; history.pushState(null, "", "#" + encodeURI(m.path)); }
               return;
             }
             if (m.type === "storage" && typeof m.id === "string") {
@@ -82,7 +91,7 @@ public static class AppShell
     {
         var bundle = AppSite.BasePath + Uri.EscapeDataString(instance) + "/" + AppSite.BundleFolder;
         var theme = header?.Portal is { } look ? $" data-theme=\"{WebUtility.HtmlEncode(look.ThemeJson)}\"" : "";
-        var frame = $"<iframe id=\"app-frame\" data-instance=\"{WebUtility.HtmlEncode(instance)}\"{theme} title=\"{WebUtility.HtmlEncode(title)}\" sandbox=\"allow-scripts allow-forms allow-popups\" src=\"{WebUtility.HtmlEncode(bundle)}\"></iframe>\n<script src=\"{ScriptPath}\"></script>";
+        var frame = $"<iframe id=\"app-frame\" data-instance=\"{WebUtility.HtmlEncode(instance)}\"{theme} title=\"{WebUtility.HtmlEncode(title)}\" sandbox=\"allow-scripts allow-forms allow-popups\" src=\"{WebUtility.HtmlEncode(bundle)}\"></iframe>";
         return Respond(Document(title, header, frame), embedOrigins);
     }
 
@@ -98,7 +107,7 @@ public static class AppShell
               + string.Concat(tiles.Select(t => $"<li style=\"border:1px solid #8884;border-radius:8px;padding:12px\"><a href=\"{WebUtility.HtmlEncode(t.Url)}\" style=\"color:inherit;font-weight:600;text-decoration:none\">{WebUtility.HtmlEncode(t.Title)}</a>"
                   + (string.IsNullOrWhiteSpace(t.Description) ? "" : $"<p style=\"margin:6px 0 0;opacity:.75\">{WebUtility.HtmlEncode(t.Description)}</p>") + "</li>"))
               + "</ul>";
-        return Respond(Document(title, header, body), embedOrigins);
+        return Respond(Document(title, header, (header.Portal is { } look ? SlotFrame(look, "home") : "") + body), embedOrigins);
     }
 
     private static AppResponse Respond(string html, IReadOnlyList<string>? embedOrigins) =>
@@ -127,6 +136,7 @@ public static class AppShell
             </head><body>
             {{bar}}
             {{content}}
+            <script src="{{ScriptPath}}"></script>
             </body></html>
             """;
     }
@@ -139,12 +149,13 @@ public static class AppShell
         if (look.LogoUrl is not null) head.Append("<img class=\"logo\" alt=\"\" src=\"").Append(WebUtility.HtmlEncode(look.LogoUrl)).Append("\">");
         head.Append("<span class=\"portal-title\">").Append(WebUtility.HtmlEncode(look.Title)).Append("</span>");
         if (!look.SideMenu) head.Append(nav);
+        head.Append(SlotFrame(look, "header"));
         if (look.ShowPerson) head.Append("<span class=\"who\">").Append(WebUtility.HtmlEncode(header.Person)).Append("</span>");
         head.Append("</header>");
         var footer = new StringBuilder();
         if (look.Footer)
         {
-            footer.Append("<footer class=\"portal\">").Append(WebUtility.HtmlEncode(look.FooterText ?? ""));
+            footer.Append("<footer class=\"portal\">").Append(WebUtility.HtmlEncode(look.FooterText ?? "")).Append(SlotFrame(look, "footer"));
             if (look.SupportLink is { } support) footer.Append(" <a href=\"").Append(WebUtility.HtmlEncode(support)).Append("\" rel=\"noopener noreferrer\">Support</a>");
             footer.Append("</footer>");
         }
@@ -160,16 +171,24 @@ public static class AppShell
             ul{list-style:none;margin:0;padding:0}nav.portal ul{display:flex;gap:12px;align-items:center;flex-wrap:wrap}nav.portal.side ul{flex-direction:column;align-items:stretch;gap:4px}nav.portal.side{padding:12px 16px;border-right:1px solid #8884;min-width:160px}
             nav.portal a{color:var(--sui-accent,inherit);text-decoration:none;padding:4px 0}nav.portal a[aria-current=page]{font-weight:600;border-bottom:2px solid currentColor}nav.portal .group>span{opacity:.6}nav.portal .group ul{padding-left:12px}nav.portal [role=separator]{border-top:1px solid #8884;margin:4px 0}
             .row{display:flex;flex:1;min-height:0}main{flex:1;display:flex;flex-direction:column;max-width:var(--portal-width);margin:0 auto;width:100%;min-width:0}.note{padding:16px}
+            iframe.slot{flex:none;width:auto}iframe.slot-header{height:40px;width:260px}iframe.slot-footer{height:36px;width:100%;display:block}iframe.slot-aside{width:280px;border-left:1px solid #8884}iframe.slot-home{height:320px;width:100%;flex:none}
             footer.portal{padding:8px 16px;border-top:1px solid #8884;opacity:.75}footer.portal a{color:inherit}</style>
             </head><body class="{{(look.SideMenu ? "side" : "top")}}">
             {{head}}
             <div class="row">{{(look.SideMenu ? nav : "")}}<main>
             {{content}}
-            </main></div>
+            </main>{{SlotFrame(look, "aside")}}</div>
             {{footer}}
+            <script src="{{ScriptPath}}"></script>
             </body></html>
             """;
     }
+
+    /// <summary>A slot's app as a sandboxed frame of its own: the same sandbox, the same broker (its token is for its own instance only), the portal's theme. It cannot reach this page, the session or the app next to it.</summary>
+    private static string SlotFrame(PortalLook look, string slot) =>
+        look.Slots is { } slots && slots.TryGetValue(slot, out var app)
+            ? $"<iframe class=\"slot slot-{slot}\" data-instance=\"{WebUtility.HtmlEncode(app.Instance)}\" data-theme=\"{WebUtility.HtmlEncode(look.ThemeJson)}\" title=\"{WebUtility.HtmlEncode(app.Title)}\" sandbox=\"allow-scripts allow-forms allow-popups\" src=\"{WebUtility.HtmlEncode(AppSite.BasePath + Uri.EscapeDataString(app.Instance) + "/" + AppSite.BundleFolder)}\"></iframe>"
+            : "";
 
     private static string NavHtml(IReadOnlyList<NavItem> items, bool sideMenu)
     {
