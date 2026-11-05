@@ -86,14 +86,21 @@ one as such.
 
 **The index:** the `knowledge` module of the unified state (plan 29), rebuilt from the sources:
 
-| Engine | Full-text search | Embedding search (owner question 4) |
-| --- | --- | --- |
-| PostgreSQL | built in (`tsvector`) | with the `pgvector` extension |
-| SQL Server | full-text indexes (an optional feature of the install) | the vector type of SQL Server 2025; not on 2022, the version the suite tests on most |
-| SQLite | built in (FTS5) | with an extension (`sqlite-vec`) |
+**Decided (owner, 2026-11-05): knowledge search uses vector search on SQL Server and PostgreSQL**, and the suite's SQL Server test engine
+moves to SQL Server 2025.
 
-Full-text works everywhere (on SQL Server only where full-text is installed, otherwise a simpler search the module provides); embeddings
-are an option where the engine has them. Access rules filter results (section 2.2), and a reference found for an agent is only one its
+| Engine | Vector search | Full-text search, beside it |
+| --- | --- | --- |
+| PostgreSQL | the `pgvector` extension | built in (`tsvector`) |
+| SQL Server | the vector type of SQL Server 2025 (so knowledge search needs 2025 or later) | full-text indexes, an optional feature (on Linux a separate package, `mssql-server-fts`) |
+| SQLite (single instance) | open (question 4): an extension (`sqlite-vec`), or full text only | built in (FTS5) |
+
+Vectors come from an **embedding model**, a model provider connection (section 3.7) bound per channel, so it can be a local model where
+data must not leave the install. Every item is embedded when it is indexed, and every query when it is asked.
+
+**For the test environment** (a slice of its own, verified in CI): the `mssql` and `mssql-target` profiles move to SQL Server 2025, with
+SQL Server Agent kept on for Sync's CDC; the `postgres` profile gains `pgvector`; the suites that pin 2022 in their text (Build's CI
+comments and `CLAUDE.md`) say 2025. Access rules filter results (section 2.2), and a reference found for an agent is only one its
 person may see.
 
 ## 3. DbDataAgents
@@ -808,7 +815,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 1 | Which of these are servers? | **Partly decided** (owner, 2026-11-04): integrations are a product of their own, publishing to the runner, a service of its own (plan 28). Open until the detailed plans show what each back end needs (owner, 2026-11-04): whether agents and DbDataIntegration share a back end with apps; proposed earlier: knowledge and the work tool are not servers (section 6) |
 | 2 | The work tool's name | **Working name DbDataBacklog** (owner, 2026-11-03); final name undecided |
 | 3 | Languages and packaging | **Decided for integrations** (owner, 2026-11-04): `.csx` scripts, compiled .NET projects, any executable through the runner protocol, and hybrids such as a .NET notebook over a project (plan 28 section 4). Actions: `.csx`, SQL, command calls and declarative elevated forms |
-| 4 | Embedding search | optional per install; full-text always |
+| 4 | Embedding search | **Decided** (owner, 2026-11-05): vector search on SQL Server (2025) and PostgreSQL (`pgvector`), with an embedding model connection bound per channel. Open: SQLite (an extension, or full text only); what an install with no embedding model does |
 | 5 | Agent approvals | **Decided** (owner, 2026-11-03): prompting is configured per action. Proposed 2026-11-05 (section 3.3): 5a the three settings, 5b layers (action default, install policy with a minimum, agent definition; the strictest applies), 5c defaults from traits. **Decided** (owner, 2026-11-05): reading definitions and reading data are separate traits |
 | 6 | Unattended agents in integration tasks | **Decided** (owner, 2026-11-04): actions set to *do not ask* run; actions that would ask become proposals (drafts, work items, notifications) (section 4.9) |
 | 7 | The work tool's scope | its own items first; links to GitHub pull requests and workspaces; import from Jira or Azure Boards later; no two-way sync |
@@ -827,7 +834,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 20 | An agent's reach: the person's access, narrowed by the agent's scopes and the install policy, enforced by the serving layer | proposed (section 3.6) |
 | 21 | How scopes are written: on the item (YAML front matter, or the same fields on a record), folder defaults and implicit scope by place, subjects named as the catalog names them, agents and the install policy narrowing or adding, one library checking it | **Decided** (owner, 2026-11-05), items 1 to 5 of section 3.5c |
 | 22 | Install-wide instructions for one or several products: products and the install as subjects, an install knowledge project published like other definitions, policy settings apart from policy text, given broad to narrow with guardrails not overridable | **Decided** (owner, 2026-11-05) (section 3.5c, item 6) |
-| 23 | Knowledge stores: sources (git files and generated first; DbDataStore records, documents, outside systems later) giving one shape, provenance kept, unreviewed sources as references only; the index in the unified state, full text everywhere, embeddings where the engine has them | proposed (section 2.4) |
+| 23 | Knowledge stores: sources (git files and generated first; DbDataStore records, documents, outside systems later) giving one shape, provenance kept, unreviewed sources as references only; the index in the unified state | proposed (section 2.4); the index's search decided under question 4 |
 | 24 | Agents as git projects (`agent.yml`, instructions, knowledge, skills, tests), checked at build, published as the `agent` kind; run-time state in the `agents` module | proposed (section 3.10) |
 | 25 | Memories: conversation, the person's (theirs only), the work's (with the workspace or item); shared learning goes through knowledge, never memory | proposed (section 3.11) |
 | 26 | Subagents: declared, never wider than the parent, their own context, same prompting, counted to the parent, depth two, nested in the transcript | proposed (section 3.12) |
