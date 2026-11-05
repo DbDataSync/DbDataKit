@@ -66,7 +66,7 @@ It is **not** a new server. **Owner question 1.**
 
 ### 2.4 Knowledge stores
 
-Proposed (2026-11-05). Where knowledge is kept (section 2.1) is open; this separates the question in two: where items are **kept and
+**Decided (owner, 2026-11-05).** Where knowledge is kept (section 2.1) is open; this separates the question in two: where items are **kept and
 edited** (sources), and where they are **searched** (the index). Every source gives items in one shape (the `knowledge: 1` fields of
 section 3.5c), so agents, scopes, budgets and the record of what a turn was given do not care where an item came from.
 
@@ -89,16 +89,21 @@ one as such.
 **Decided (owner, 2026-11-05): knowledge search uses vector search on SQL Server and PostgreSQL**, and the suite's SQL Server test engine
 moves to SQL Server 2025.
 
-| Engine | Vector search | Full-text search, beside it |
+| Engine | Vector search | Full-text search (not used at first) |
 | --- | --- | --- |
 | PostgreSQL | the `pgvector` extension | built in (`tsvector`) |
 | SQL Server | the vector type of SQL Server 2025 (so knowledge search needs 2025 or later) | full-text indexes, an optional feature (on Linux a separate package, `mssql-server-fts`) |
-| SQLite (single instance) | open (question 4): an extension (`sqlite-vec`), or full text only | built in (FTS5) |
+| SQLite (single instance) | the `sqlite-vec` extension (owner, 2026-11-05) | built in (FTS5) |
+
+**Vector search only, to start (owner, 2026-11-05).** Full-text search is not built at first. An install, channel or engine without
+vector search (no embedding model bound, an engine without the extension) has **no knowledge search**: references are not found, and the
+console says why. Instructions and guardrails bound by scope are not affected, since they are given by scope, not found by search.
 
 Vectors come from an **embedding model**, a model provider connection (section 3.7) bound per channel, so it can be a local model where
 data must not leave the install. Every item is embedded when it is indexed, and every query when it is asked.
 
-**For the test environment** (a slice of its own, verified in CI): the `mssql` and `mssql-target` profiles move to SQL Server 2025, with
+**For the test environment** (planned, owner, 2026-11-05; done and tested together with the owner, not yet; most products have already
+been tested on SQL Server 2025): the `mssql` and `mssql-target` profiles move to SQL Server 2025, with
 SQL Server Agent kept on for Sync's CDC; the `postgres` profile gains `pgvector`; the suites that pin 2022 in their text (Build's CI
 comments and `CLAUDE.md`) say 2025. Access rules filter results (section 2.2), and a reference found for an agent is only one its
 person may see.
@@ -175,9 +180,19 @@ request, the plan. Every approval and refusal is recorded (section 3.8).
 ### 3.4 Testing and evaluation
 
 1. **Behaviour** is tested as in plan 25 section 2: a scripted fake model, recorded provider responses, golden transcripts, approval
-   gates.
-2. **Quality** is measured with an evaluation set: questions with known good answers, drawn from verified queries (section 2.1). It is
-   run against a real model by hand or on a schedule, never as a pull request gate. A published version records its last score.
+   gates. These run in CI on every pull request, with no model provider.
+2. **Quality** is measured with an **evaluation set** (proposed, 2026-11-06): cases in the agent's `tests/evaluation/`, each a task, the
+   fixtures it starts from, and what a good result is.
+   - **Checked by the suite where it can be:** the right tools were called; a query returns the expected rows; for a back-end agent, the
+     workspace it leaves behind compiles (`project compile`), its tests pass (`project tests run`), and its plan has no surprises. Most
+     back-end cases can be judged without a model.
+   - **Judged by a model only for free text**, against a written rubric, by a fixed judge model bound like any other (section 3.7), and
+     shown as a judgement, not a fact.
+   - **Run on the runner** (plan 28) as a task, against a channel's bindings, by hand or on a schedule; never as a pull request gate,
+     since it needs a real model and costs money. Each run records the agent version, the knowledge versions it was given, the model, the
+     score per case and the cost.
+   - **Promotion:** a version records its last score. An administrator can require a minimum score before a version is promoted to a
+     channel, as a recorded choice; by default it is shown, not required.
 
 ### 3.5 What an agent has in context: instructions, guardrails and knowledge
 
@@ -221,8 +236,11 @@ conversation. A higher layer wins over a lower one where they conflict.
 - **Instructions and guardrails need approval** by the subject's owner, since they change what agents do; references follow the
   knowledge's own rules.
 - **A change to a bound instruction changes agents without republishing them.** That is the point for business owners, but it bypasses
-  the agent's evaluation. What to do about that **needs further discussion** (owner, 2026-11-05); running the evaluation sets of the
-  agents it reaches automatically was proposed and is not agreed (owner question 27-19).
+  the agent's evaluation (owner question 27-19, still open). Running the evaluation sets of the agents it reaches automatically was
+  proposed and is not agreed. Proposed instead (2026-11-06): **knowledge goes through channels like every other definition** (plan 21,
+  plan 30). A changed item is published to a test channel first, where the agents of that channel see it; their evaluation sets can be run
+  there (by hand, or on a schedule an administrator sets); then the item is promoted to production. The approval shows which agents the
+  item reaches. Nothing reaches production agents without being promoted.
 
 ### 3.5a A worked example
 
@@ -415,7 +433,7 @@ threshold.
 
 ### 3.10 How an agent is stored
 
-Proposed (2026-11-05). **An agent is a project in git**, authored in a workspace like any other (plan 22 section 1), built, checked and
+**Decided (owner, 2026-11-05).** **An agent is a project in git**, authored in a workspace like any other (plan 22 section 1), built, checked and
 published as the `agent` kind (plan 30). What it learns and does at run time is **not** in git; that is state.
 
 ```
@@ -456,7 +474,7 @@ calls and approvals (the audit, 3.8), memories (3.11), usage and cost.
 
 ### 3.11 Memories
 
-Proposed (2026-11-05). What an agent keeps from one conversation to the next, in four kinds, each with its own owner and reach:
+**Decided (owner, 2026-11-05).** What an agent keeps from one conversation to the next, in four kinds, each with its own owner and reach:
 
 | Kind | Example | Kept where | Who sees it | Lasts |
 | --- | --- | --- | --- | --- |
@@ -475,7 +493,7 @@ Proposed (2026-11-05). What an agent keeps from one conversation to the next, in
 
 ### 3.12 Subagents
 
-Proposed (2026-11-05). An agent can hand part of its work to another agent, for three reasons: **specialization** (a Build agent asks a
+**Decided (owner, 2026-11-05).** An agent can hand part of its work to another agent, for three reasons: **specialization** (a Build agent asks a
 semantic-model agent to design the measures), **a clean context** (a subagent reads forty files and returns a two-paragraph summary, so the
 main conversation stays small), and **parallel work**.
 
@@ -491,7 +509,7 @@ main conversation stays small), and **parallel work**.
 
 ### 3.13 Skills
 
-Proposed (2026-11-05). A **skill** is a packaged capability an agent picks up when the task needs it: a `SKILL.md` with a name, a
+**Decided (owner, 2026-11-05).** A **skill** is a packaged capability an agent picks up when the task needs it: a `SKILL.md` with a name, a
 description and instructions, optional resource files (templates, examples, schemas), and optionally the actions it relies on (named,
 not code: code stays an action, under section 4.7's trust rules). Build's agent kit is already one: `DbDataBuild.Cli/AgentKit/SKILL.md`
 has the name and description in its header.
@@ -507,6 +525,46 @@ each of its skills' **names and descriptions** (cheap), and it loads a skill's *
 - **Recorded:** a loaded skill, with its version, is part of the turn's record.
 - **Outside agents too:** a published skill can be exported in the format outside agents read, as `dbdatabuild project agent-kit` does
   today, so internal and outside agents learn from the same text.
+
+### 3.14 Conversations across versions
+
+Proposed (2026-11-06). A conversation **stays on the agent version it started with**, the way a run stays on its package version (plan 30
+section 3.5). When a newer version is active and the person comes back to an open conversation, the agent says so and offers to carry on
+with the new version; each turn records the version it ran on. A version that is rolled back because it misbehaved can be **ended**:
+open conversations on it are closed with a message, as an administrator's recorded choice.
+
+### 3.15 When a model provider fails
+
+Proposed (2026-11-06). A model slot can be bound to an ordered list of connections in a channel (a primary and a fallback). A provider error
+is retried with back-off, then the next connection is used, and the turn records which model answered. A fallback is only ever one the
+install policy allows for that agent (a tenant-only install never falls back to a cloud provider). With no model left, the conversation
+stops with a message; nothing is half-run, since tool calls only start after the model has answered.
+
+### 3.16 Where people talk to agents
+
+Proposed (2026-11-06):
+
+| Surface | Agents | First? |
+| --- | --- | --- |
+| **The console's chat** | back-end agents, and agents for administrators | **yes**, with the back-end agent |
+| **An app's assistant panel** (plan 16 section 2) | front-end agents the app's manifest names | with the front-end agents |
+| **MCP, for outside clients** | the commands and actions as tools, as today; later, a published agent offered as one tool ("ask the sales agent") | tools now; agents later |
+| **Teams, Slack, email** | front-end agents, reached through an integration (section 4) | later |
+
+Every surface signs the person in through the identity home, so who they are, what they may touch and what they are asked are the same
+everywhere.
+
+### 3.17 Untrusted content
+
+Proposed (2026-11-06), from plan 16's rule that tool results are data, not instructions:
+
+- **Only the assembly gives instructions** (section 3.5). Tool results, rows, documents, web pages, files in a workspace and messages from
+  outside systems are given to the model **marked as data**, with where they came from.
+- **Unreviewed sources stay references** (section 2.4) and are marked as such.
+- **What could do harm still asks**, whatever the content said: the prompting minimums of the install policy (section 3.3) are enforced by
+  the runtime, so text that tells the agent to send, delete or publish something cannot skip the person.
+- **Answers are checked:** a view an agent returns must validate against its schema (plan 16 section 2a: inline data only, no URLs), and
+  links in an answer are shown, never fetched by the suite on the person's behalf.
 
 ## 4. Integrations, actions and the runner
 
@@ -815,7 +873,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 1 | Which of these are servers? | **Partly decided** (owner, 2026-11-04): integrations are a product of their own, publishing to the runner, a service of its own (plan 28). Open until the detailed plans show what each back end needs (owner, 2026-11-04): whether agents and DbDataIntegration share a back end with apps; proposed earlier: knowledge and the work tool are not servers (section 6) |
 | 2 | The work tool's name | **Working name DbDataBacklog** (owner, 2026-11-03); final name undecided |
 | 3 | Languages and packaging | **Decided for integrations** (owner, 2026-11-04): `.csx` scripts, compiled .NET projects, any executable through the runner protocol, and hybrids such as a .NET notebook over a project (plan 28 section 4). Actions: `.csx`, SQL, command calls and declarative elevated forms |
-| 4 | Embedding search | **Decided** (owner, 2026-11-05): vector search on SQL Server (2025) and PostgreSQL (`pgvector`), with an embedding model connection bound per channel. Open: SQLite (an extension, or full text only); what an install with no embedding model does |
+| 4 | Embedding search | **Decided** (owner, 2026-11-05): vector search only, to start, on SQL Server 2025, PostgreSQL (`pgvector`) and SQLite (`sqlite-vec`), with an embedding model connection bound per channel; without vector search there is no knowledge search (section 2.4) |
 | 5 | Agent approvals | **Decided** (owner, 2026-11-03): prompting is configured per action. Proposed 2026-11-05 (section 3.3): 5a the three settings, 5b layers (action default, install policy with a minimum, agent definition; the strictest applies), 5c defaults from traits. **Decided** (owner, 2026-11-05): reading definitions and reading data are separate traits |
 | 6 | Unattended agents in integration tasks | **Decided** (owner, 2026-11-04): actions set to *do not ask* run; actions that would ask become proposals (drafts, work items, notifications) (section 4.9) |
 | 7 | The work tool's scope | its own items first; links to GitHub pull requests and workspaces; import from Jira or Azure Boards later; no two-way sync |
@@ -834,11 +892,17 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 20 | An agent's reach: the person's access, narrowed by the agent's scopes and the install policy, enforced by the serving layer | proposed (section 3.6) |
 | 21 | How scopes are written: on the item (YAML front matter, or the same fields on a record), folder defaults and implicit scope by place, subjects named as the catalog names them, agents and the install policy narrowing or adding, one library checking it | **Decided** (owner, 2026-11-05), items 1 to 5 of section 3.5c |
 | 22 | Install-wide instructions for one or several products: products and the install as subjects, an install knowledge project published like other definitions, policy settings apart from policy text, given broad to narrow with guardrails not overridable | **Decided** (owner, 2026-11-05) (section 3.5c, item 6) |
-| 23 | Knowledge stores: sources (git files and generated first; DbDataStore records, documents, outside systems later) giving one shape, provenance kept, unreviewed sources as references only; the index in the unified state | proposed (section 2.4); the index's search decided under question 4 |
-| 24 | Agents as git projects (`agent.yml`, instructions, knowledge, skills, tests), checked at build, published as the `agent` kind; run-time state in the `agents` module | proposed (section 3.10) |
-| 25 | Memories: conversation, the person's (theirs only), the work's (with the workspace or item); shared learning goes through knowledge, never memory | proposed (section 3.11) |
-| 26 | Subagents: declared, never wider than the parent, their own context, same prompting, counted to the parent, depth two, nested in the transcript | proposed (section 3.12) |
-| 27 | Skills: offered by name and description, loaded when needed; in an agent's project or published as the `skill` kind; Build's agent kit the first | proposed (section 3.13) |
+| 23 | Knowledge stores: sources (git files and generated first; DbDataStore records, documents, outside systems later) giving one shape, provenance kept, unreviewed sources as references only; the index in the unified state | **Decided** (owner, 2026-11-05) (section 2.4); the index's search decided under question 4 |
+| 24 | Agents as git projects (`agent.yml`, instructions, knowledge, skills, tests), checked at build, published as the `agent` kind; run-time state in the `agents` module | **Decided** (owner, 2026-11-05) (section 3.10) |
+| 25 | Memories: conversation, the person's (theirs only), the work's (with the workspace or item); shared learning goes through knowledge, never memory | **Decided** (owner, 2026-11-05) (section 3.11) |
+| 26 | Subagents: declared, never wider than the parent, their own context, same prompting, counted to the parent, depth two, nested in the transcript | **Decided** (owner, 2026-11-05) (section 3.12) |
+| 27 | Skills: offered by name and description, loaded when needed; in an agent's project or published as the `skill` kind; Build's agent kit the first | **Decided** (owner, 2026-11-05) (section 3.13) |
+| 28 | Evaluation: cases checked by the suite where possible, a judge model only for free text, run on the runner, scores recorded per version, a minimum score optional for promotion | proposed (section 3.4) |
+| 29 | Knowledge changes go through channels, so production agents only see promoted knowledge (the alternative to automatic evaluation runs, for question 19) | proposed (section 3.5) |
+| 30 | A conversation stays on the agent version it started with | proposed (section 3.14) |
+| 31 | Model fallback within what the install policy allows | proposed (section 3.15) |
+| 32 | Surfaces: the console's chat first, then apps, MCP and messaging | proposed (section 3.16) |
+| 33 | Untrusted content marked as data; harm still asks; answers checked | proposed (section 3.17) |
 
 ## 9. Detailed plans to follow
 
