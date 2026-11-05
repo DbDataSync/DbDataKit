@@ -50,9 +50,8 @@ section's design is gone through. Nothing else in this plan depends on it.
 
 1. **Search and show, as commands.** `knowledge search`, `knowledge show`, `knowledge related` on the command surface, so the console, MCP
    clients and embedded agents use the same tools. They extend plan 22's `catalog search` and `catalog show` rather than sitting beside them.
-2. **Retrieval in two parts.** Full-text search always, on the state database's engine. Semantic (embedding) search optional, through
-   `Microsoft.Extensions.AI`'s embedding abstraction and a vector index (PostgreSQL with pgvector, SQL Server's vector type, DuckDB's
-   vector extension). An install without a model provider still has full-text search. **Owner question 4.**
+2. **Retrieval by vector search** (decided, owner, 2026-11-05; section 2.4): through `Microsoft.Extensions.AI`'s embedding abstraction
+   and the engine's vector support. Without vector search there is no knowledge search; full-text search is not built at first.
 3. **Access rules apply to knowledge.** An item about a table, a model or an entity is visible only to someone who may read that object.
    This uses the policy engine of plan 22 section 2, so an agent cannot learn through knowledge what its user could not query.
 4. **Served by the serving layer** as a `knowledge` module (reads only), published from the back end like every other definition (plan 20
@@ -278,7 +277,7 @@ The back-end agent, in a workspace on the Build project `sales-warehouse`. The p
 | Loaded directly (instructions, guardrails) | Retrieved (references) |
 | --- | --- |
 | short rules that must always apply where their scope applies: conventions, definitions of terms, policy | long or occasional material: how-tos, history of a dimension, known data issues, past decisions, documents |
-| chosen by **scope**: exact, the same every time | chosen by **search**: full text (and embeddings if the install has them, question 4), ranked, cut to the room left |
+| chosen by **scope**: exact, the same every time | chosen by **search**: vector search (section 2.4), ranked, cut to the room left |
 | counted against the budget when the agent is published (below) | fills whatever room is left on each turn |
 
 The agent can also search itself, with `knowledge search` and `knowledge show` as tools, when it needs more than the excerpts it was given.
