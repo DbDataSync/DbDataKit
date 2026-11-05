@@ -418,7 +418,9 @@ connections. Whether a provider is cloud or local is part of the connection, so 
 
 ### 3.7a Embedding models, including one on the local CPU
 
-Proposed (2026-11-06), from the owner's question. Knowledge search needs an embedding model (section 2.4). It is a model provider
+**Decided (owner, 2026-11-06).** The built-in kind is the embedded one; Ollama and OpenAI-compatible local servers are supported and
+unit tested too, and **double as stand-ins for the public OpenAI API in tests**: a suite can talk to a local OpenAI-compatible server
+where it would otherwise need a hosted provider (beside plan 25's recorded responses). Knowledge search needs an embedding model (section 2.4). It is a model provider
 connection like any other, with **purpose: embeddings**, bound to the install's embedding slot per channel. Three ways to have one that
 runs on the machine's own CPU, with no data leaving it:
 
@@ -909,7 +911,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 11 | Elevated actions: who approves an action's grants on data, and who may give people *run* on it | **Decided** (owner, 2026-11-04): grants on data: an administrator and the DbDataStore model's owner, both, with an audit; *run*: the action's owner or an administrator (section 4.5) |
 | 12 | Integrations with or apart from actions and Sync's scripts | **Decided** (owner, 2026-11-04): apart. Integrations are a product publishing to the runner; actions share one script format with Sync (section 4) |
 | 13 | `agent` as a published kind (plan 30), with its model as a slot bound per channel | **Decided** (owner, 2026-11-06) (sections 3.1, 3.7) |
-| 14 | Where agents run | **Open** (owner, 2026-11-06): to talk through, in particular whether unattended agents and evaluation runs belong on the runner (section 3.2) |
+| 14 | Where agents run | **Partly decided** (owner, 2026-11-06): evaluation runs belong in the console, on a runner embedded in it (plan 28 section 6a, proposed). Open: unattended agent steps of integration tasks (on the runner, or turns run by the serving layer) |
 | 15 | Model providers as a kind of connection | **Decided** (owner, 2026-11-06) (section 3.7) |
 | 16 | Transcripts | **Decided** (owner, 2026-11-05): tool calls, approvals and context given are audit, always kept; conversation text is history, 30 days by default (section 3.8) |
 | 17 | Limits and cost | **Decided** (owner, 2026-11-06) (section 3.9) |
@@ -929,7 +931,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 31 | Model fallback within what the install policy allows | **Decided** (owner, 2026-11-06) (section 3.15) |
 | 32 | Surfaces: the console's chat first, then apps, MCP and messaging | **Decided** (owner, 2026-11-06) (section 3.16) |
 | 33 | Untrusted content marked as data; harm still asks; answers checked | **Decided** (owner, 2026-11-06) (section 3.17) |
-| 34 | Embedding models: a connection with purpose embeddings; built in (ONNX Runtime, in process), Ollama, or a local OpenAI-compatible server for the local CPU; one model per index, rebuilt on change | proposed (section 3.7a) |
+| 34 | Embedding models: a connection with purpose embeddings; built in (ONNX Runtime, in process), Ollama, or a local OpenAI-compatible server for the local CPU; one model per index, rebuilt on change | **Decided** (owner, 2026-11-06); local servers also stand in for the public OpenAI API in tests (section 3.7a) |
 
 ## 9. Detailed plans to follow
 

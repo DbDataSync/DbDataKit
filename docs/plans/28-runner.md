@@ -141,6 +141,32 @@ Not part of the new services, and planned separately when taken on.
 4. **Logins split by job.** The back ends keep read access for their interactive work (Build's plan previews, Sync's metadata browsing,
    connection tests); the runner gets the write logins (decision 5).
 
+## 6a. A runner embedded in the console
+
+Proposed (2026-11-06), from the owner's suggestion. The runner engine is a library (`DbDataKit.Runner`), hosted by `dbdatarunner server`;
+the console hosts **a copy of it** as well, as a runner group of one instance, named `console`, with its own state in the console's
+state database (plan 29 modules, scope "console").
+
+**What it is for:**
+
+| Work | Why the console |
+| --- | --- |
+| **Evaluation runs** (plan 27 section 3.4) | the owner's choice: evaluations belong where back-end agents run and where people read the results; the console's runner schedules and records them, with the runner's limits, retries and run records |
+| **System tasks of the console and the install**: retention of the console's own state, the pruning an administrator starts from the versions screen (plan 30), index rebuilds an administrator asks for | a default home for housekeeping that has no product of its own, with no extra install |
+| **Development**: DbDataIntegration packages in a development or preview channel, and later Sync and Build runs (once they run on the runner, section 8) | the single-machine and developer setups (plan 23) get a working runner with nothing more to install |
+
+**Rules that keep production off it by default** (the security posture, section 5):
+
+- It accepts, by default, **only non-production channels and the console's own task kinds** (evaluations, system tasks). An administrator
+  can let it run production packages (a small install where the console's machine does everything), as an explicit, recorded choice, and
+  the console then warns that production schedules stop when the console does.
+- **The same isolation as any runner:** every task in its own process, under a low-privilege account that is not the console's own, with
+  time and memory limits, so a task never runs with the console's administrative rights.
+- **A cap on what it runs at once**, so a heavy run cannot slow the console's screens.
+- **Its version is the console's**, so a package it accepts must be compatible with the console's release (plan 24's N and N-1).
+- **A product's own housekeeping stays with the product.** Retention of a serving group's or a product server's state runs in that
+  server, so it keeps running while the console is down.
+
 ## 9. What this changes in other plans
 
 | Plan | Change |
@@ -164,3 +190,4 @@ Not part of the new services, and planned separately when taken on.
 | 6 | Process limits | **Decided** (owner, 2026-11-04): job objects on Windows, cgroups on Linux; one low-privilege account per runner by default, an account per package as an option |
 | 7 | Routing | **Decided** (owner, 2026-11-04): labels are an administrator's tool, and a package may require one ("needs outside network"); a version whose required label no runner has does not activate, and the console says why |
 | 8 | State for Sync and Build | **Decided** (owner, 2026-11-04): modules of the unified state database and also on the target, `both` by default (section 8, item 3). Sync's primary is the target, as Build's |
+| 9 | A runner embedded in the console (section 6a) | proposed: evaluation runs, system tasks and development work; production only by an administrator's recorded choice |
