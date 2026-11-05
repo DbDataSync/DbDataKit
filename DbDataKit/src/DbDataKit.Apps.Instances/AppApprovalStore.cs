@@ -55,5 +55,25 @@ public sealed class AppApprovalStore(DefinitionStore definitions, TimeProvider? 
         return AppApprovals.Gate(resolved.Manifest, ForApp(resolved.Manifest.Name), bundle, manifest);
     }
 
+    /// <summary>The outside origins an instance may reach: what the standing approval of its version allows, and nothing for a sandboxed app (it asks for none, and an approval cannot widen it).</summary>
+    public AppEgress ApprovedEgress(ResolvedInstance resolved) => Gate(resolved).Approval?.Egress ?? AppEgress.None;
+
+    /// <summary>Reads <c>connect=https://api.x.com,img=https://cdn.x.com</c> (a directive's key, then an origin; repeat a key for more), or says what is wrong.</summary>
+    public static AppEgress ParseEgress(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return AppEgress.None;
+        var lists = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        var keys = AppEgress.None.Directives().Select(d => d.Key).ToHashSet(StringComparer.Ordinal);
+        foreach (var part in text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var at = part.IndexOf('=');
+            if (at <= 0 || !keys.Contains(part[..at])) throw new AppInstanceException($"'{part}' is not <directive>=<origin>; the directives are {string.Join(", ", keys)}.");
+            if (!lists.TryGetValue(part[..at], out var list)) lists[part[..at]] = list = [];
+            list.Add(part[(at + 1)..]);
+        }
+        IReadOnlyList<string> Of(string key) => lists.TryGetValue(key, out var l) ? l : [];
+        return new AppEgress(Of("connect"), Of("script"), Of("style"), Of("img"), Of("font"), Of("media"), Of("frame"), Of("form"));
+    }
+
     public IReadOnlyList<AppApproval> ForApp(string app) => [.. All().Where(a => a.App == app)];
 }

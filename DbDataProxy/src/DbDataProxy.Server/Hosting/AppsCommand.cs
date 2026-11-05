@@ -29,11 +29,14 @@ public static class AppsCommand
         new Verb("nav-list", "The navigation sets and their members", EffectClass.OfflineOnly, Where, NavListAsync,
             DataSchemas.Object([("sets", DataSchemas.ListOf(DataSchemas.Object([("name", DataSchemas.String), ("title", DataSchemas.String), ("instances", DataSchemas.ListOf(DataSchemas.String))], "name", "title", "instances")))], "sets")),
         new Verb("approve", "Approve one version of a trusted app, as the person who reviewed it (not its author); the approval is for that version's exact bytes and ends when a new version is published", EffectClass.RepoFilesOnly,
-            $"--app <app> --version <n> --by <approver> [--note <text>] {Where}", ApproveAsync,
+            $"--app <app> --version <n> --by <approver> [--egress <directive>=<origin>[,...]] [--note <text>] {Where}", ApproveAsync,
             DataSchemas.Object([("id", DataSchemas.String), ("app", DataSchemas.String), ("version", DataSchemas.String)], "id", "app", "version")),
         new Verb("approval-list", "The approvals on record, with who gave them and whether they still stand", EffectClass.OfflineOnly, Where, ApprovalListAsync,
             DataSchemas.Object([("approvals", DataSchemas.ListOf(DataSchemas.Object([("id", DataSchemas.String), ("app", DataSchemas.String), ("version", DataSchemas.String), ("approved_by", DataSchemas.String), ("revoked", DataSchemas.Boolean)], "id", "app", "version", "approved_by", "revoked")))], "approvals")),
         new Verb("approval-revoke", "End an approval; the app stops running as trusted. The record stays", EffectClass.RepoFilesOnly, $"--id <approval id> --by <name> {Where}", ApprovalRevokeAsync, DataSchemas.None),
+        new Verb("validate", "Check an app folder before publishing: its manifest, its files, and the addresses of other hosts in its built files that the manifest does not ask for (advice; the host's policy is what enforces)", EffectClass.OfflineOnly,
+            "--dir <folder> [--manifest <file, default <folder>/app.yaml>]", ValidateAsync,
+            DataSchemas.Object([("app", DataSchemas.String), ("outside", DataSchemas.ListOf(DataSchemas.Object([("file", DataSchemas.String), ("line", DataSchemas.Integer), ("origin", DataSchemas.String)], "file", "line", "origin")))], "app", "outside")),
         // apps reach the group's published models now (plan 20 O08c); the verbs that paired a Store say so rather than vanish
         new Verb("store-pair", "Gone: an app's data is the group's published models, so the apps host pairs with no Store", EffectClass.OfflineOnly, Where, GoneAsync, DataSchemas.None),
         new Verb("store-list", "Gone: an app's data is the group's published models, so the apps host pairs with no Store", EffectClass.OfflineOnly, Where, GoneAsync, DataSchemas.None),
@@ -176,17 +179,46 @@ public static class AppsCommand
         return CliExit.Ok;
     }
 
+    private static async Task<int> ValidateAsync(string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "dir", "manifest", "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("dir") is not { Length: > 0 } dir)
+        {
+            await context.Error.WriteLineAsync("Usage: apps validate --dir <folder> [--manifest <file>]");
+            return CliExit.Usage;
+        }
+        var folder = Path.GetFullPath(dir);
+        var manifestPath = parsed.Get("manifest") is { Length: > 0 } m ? Path.GetFullPath(m) : Path.Combine(folder, "app.yaml");
+        if (!Directory.Exists(folder) || !File.Exists(manifestPath))
+        {
+            await context.Error.WriteLineAsync(!Directory.Exists(folder) ? $"{folder} is not a folder." : $"{manifestPath} does not exist.");
+            return CliExit.Failure;
+        }
+        var load = AppManifestLoader.Load(File.ReadAllText(manifestPath));
+        if (!load.Ok)
+        {
+            foreach (var d in load.Diagnostics) await context.Error.WriteLineAsync(d.Message);
+            return CliExit.Failure;
+        }
+        var outside = AppChecks.OutsideUrls(folder, load.Manifest!.Egress ?? AppEgress.None);
+        foreach (var o in outside) await context.Out.WriteLineAsync($"{o.File}:{o.Line}  {o.Origin} is not in the manifest's egress; the browser will block it unless the manifest asks and an administrator approves.");
+        await context.Out.WriteLineAsync(outside.Count == 0 ? $"{load.Manifest.Name} {load.Manifest.Version}: the manifest is valid and the files reach no other host." : $"{load.Manifest.Name} {load.Manifest.Version}: the manifest is valid; {outside.Count} outside address(es) found.");
+        context.Data["app"] = load.Manifest.Name;
+        context.Data["outside"] = outside.Select(o => new Dictionary<string, object?> { ["file"] = o.File, ["line"] = o.Line, ["origin"] = o.Origin }).ToList();
+        return CliExit.Ok;
+    }
+
     private static async Task<int> ApproveAsync(string[] args, CliContext context)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "app", "version", "by", "note", "repo" });
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "app", "version", "by", "note", "egress", "repo" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("app") is not { Length: > 0 } app || !int.TryParse(parsed.Get("version"), out var version) || parsed.Get("by") is not { Length: > 0 } by)
         {
-            await context.Error.WriteLineAsync($"Usage: apps approve --app <app> --version <n> --by <approver> [--note <text>] {Where}");
+            await context.Error.WriteLineAsync($"Usage: apps approve --app <app> --version <n> --by <approver> [--egress <directive>=<origin>[,...]] [--note <text>] {Where}");
             return CliExit.Usage;
         }
         try
         {
-            var approval = new AppApprovalStore(new DefinitionStore(IdentityCommand.Open(parsed))).Approve(app, version, by, parsed.Get("note"));
+            var approval = new AppApprovalStore(new DefinitionStore(IdentityCommand.Open(parsed))).Approve(app, version, by, parsed.Get("note"), egress: AppApprovalStore.ParseEgress(parsed.Get("egress")));
             await context.Out.WriteLineAsync($"Approved {app} {approval.Version} ({approval.Id}) as {by}.");
             context.Data["id"] = approval.Id;
             context.Data["app"] = approval.App;
