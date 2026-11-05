@@ -129,7 +129,7 @@ in the console's chat, in an app's assistant panel, and for an outside client ov
 
 ### 3.2 Where it runs
 
-**Proposed (2026-11-05):** one runtime library, `DbDataKit.Agents` (plan 16 section 1), loading a published `agent/1` (a plan 30 kind),
+**Open** (owner, 2026-11-06: to talk through). Proposed 2026-11-05: one runtime library, `DbDataKit.Agents` (plan 16 section 1), loading a published `agent/1` (a plan 30 kind),
 in three hosts:
 
 | Agent | Runs in | Acts as |
@@ -147,7 +147,7 @@ which outside agents already use over MCP.
 ### 3.3 Approvals: prompting per action
 
 **Decided (owner, 2026-11-03): prompting is configured per action**, for every tool an agent may run (a command, or an action from
-section 4). Proposed 2026-11-05:
+section 4). The settings, layers and defaults below were **decided by the owner on 2026-11-06**:
 
 **27-5a, the settings:** *ask* (every call waits for the person), *ask once per conversation* (after the first approval it runs without
 asking for the rest of the conversation), *do not ask* (runs at once; the only setting that runs in an unattended task, section 4.9).
@@ -180,7 +180,7 @@ request, the plan. Every approval and refusal is recorded (section 3.8).
 
 1. **Behaviour** is tested as in plan 25 section 2: a scripted fake model, recorded provider responses, golden transcripts, approval
    gates. These run in CI on every pull request, with no model provider.
-2. **Quality** is measured with an **evaluation set** (proposed, 2026-11-06): cases in the agent's `tests/evaluation/`, each a task, the
+2. **Quality** is measured with an **evaluation set** (decided, owner, 2026-11-06; where runs happen waits on question 14): cases in the agent's `tests/evaluation/`, each a task, the
    fixtures it starts from, and what a good result is.
    - **Checked by the suite where it can be:** the right tools were called; a query returns the expected rows; for a back-end agent, the
      workspace it leaves behind compiles (`project compile`), its tests pass (`project tests run`), and its plan has no surprises. Most
@@ -195,7 +195,7 @@ request, the plan. Every approval and refusal is recorded (section 3.8).
 
 ### 3.5 What an agent has in context: instructions, guardrails and knowledge
 
-Proposed (2026-11-05), from the owner's question: what decides an agent's instructions, guardrails and permissions, and are they files
+**Decided (owner, 2026-11-06)**, proposed 2026-11-05, from the owner's question: what decides an agent's instructions, guardrails and permissions, and are they files
 in version control or bound by rules?
 
 **Both, by who owns them, and with one rule above the rest: anything that must hold is enforced by the runtime, never only written in
@@ -235,8 +235,8 @@ conversation. A higher layer wins over a lower one where they conflict.
 - **Instructions and guardrails need approval** by the subject's owner, since they change what agents do; references follow the
   knowledge's own rules.
 - **A change to a bound instruction changes agents without republishing them.** That is the point for business owners, but it bypasses
-  the agent's evaluation (owner question 27-19, still open). Running the evaluation sets of the agents it reaches automatically was
-  proposed and is not agreed. Proposed instead (2026-11-06): **knowledge goes through channels like every other definition** (plan 21,
+  the agent's evaluation (owner question 27-19). Running the evaluation sets of the agents it reaches automatically was
+  proposed and is not agreed. Decided instead (owner, 2026-11-06): **knowledge goes through channels like every other definition** (plan 21,
   plan 30). A changed item is published to a test channel first, where the agents of that channel see it; their evaluation sets can be run
   there (by hand, or on a schedule an administrator sets); then the item is promoted to production. The approval shows which agents the
   item reaches. Nothing reaches production agents without being promoted.
@@ -411,10 +411,37 @@ person's own access is an **elevated action** (section 4.5), which holds its own
 
 ### 3.7 Model providers
 
-**Proposed (2026-11-05):** a model provider is a kind of connection in `connection/1`, like an outside system (question 10): its endpoint,
+**Decided (owner, 2026-11-06):** a model provider is a kind of connection in `connection/1`, like an outside system (question 10): its endpoint,
 its key as a secret reference, the models it allows and their prices, bound per channel. An agent names a model slot; each channel binds
 it, so a test channel can use a local or cheaper model. An install that must keep data in its tenant binds only Microsoft Foundry
 connections. Whether a provider is cloud or local is part of the connection, so the install policy can tell them apart (3.6, 3.3).
+
+### 3.7a Embedding models, including one on the local CPU
+
+Proposed (2026-11-06), from the owner's question. Knowledge search needs an embedding model (section 2.4). It is a model provider
+connection like any other, with **purpose: embeddings**, bound to the install's embedding slot per channel. Three ways to have one that
+runs on the machine's own CPU, with no data leaving it:
+
+| Kind | What it is | What the administrator does |
+| --- | --- | --- |
+| **Built in** | the suite runs a small embedding model itself, in process, with ONNX Runtime and the model's tokenizer; no other service | choose one of the models the suite offers; its files are a published artifact (plan 30), so an offline install gets them from its own state |
+| **Ollama** | a local Ollama server with an embedding model pulled | install Ollama, `ollama pull` a model, add a connection with its address (`http://localhost:11434`) and the model name |
+| **Any local server with an OpenAI-compatible endpoint** | llama.cpp's server, Foundry Local, and others | add a connection with its address and model name |
+
+Hosted providers (OpenAI, Microsoft Foundry) are connections of the same purpose. Anthropic offers no embedding endpoint of its own, so an
+install that uses Anthropic for chat binds another connection for embeddings.
+
+**In the console:** Connections, New, Model provider; choose the kind; for built in, choose the model; **Test** embeds a sample sentence
+and shows that it answered and the number of dimensions; then bind it to the embedding slot of each channel. The index is built in the
+background, and the console shows its progress.
+
+**One model per index.** Items and questions must be embedded by the same model, so the index records the model and its number of
+dimensions (the vector columns are sized by it: `VECTOR(n)` on SQL Server, `vector(n)` on PostgreSQL). Changing the bound model rebuilds the
+index in the background; search keeps using the old index until the new one is complete. A channel bound to a different model has an
+index of its own.
+
+**To check when it is built:** which small models to offer built in, and their licences; how fast they embed on a typical server CPU; that
+Foundry Local serves embedding models.
 
 ### 3.8 Transcripts and the audit
 
@@ -426,7 +453,7 @@ Kept in the `agents` module of the unified state (plan 29), large tool results a
 
 ### 3.9 Limits and cost
 
-Proposed (2026-11-05): per conversation, per person and per install, on turns, tool calls, tokens and cost. Cost is the provider's reported
+**Decided (owner, 2026-11-06):** per conversation, per person and per install, on turns, tool calls, tokens and cost. Cost is the provider's reported
 usage times the price on the connection (3.7). A limit reached stops the conversation with a message; administrators are told at a
 threshold.
 
@@ -527,21 +554,21 @@ each of its skills' **names and descriptions** (cheap), and it loads a skill's *
 
 ### 3.14 Conversations across versions
 
-Proposed (2026-11-06). A conversation **stays on the agent version it started with**, the way a run stays on its package version (plan 30
+**Decided (owner, 2026-11-06).** A conversation **stays on the agent version it started with**, the way a run stays on its package version (plan 30
 section 3.5). When a newer version is active and the person comes back to an open conversation, the agent says so and offers to carry on
 with the new version; each turn records the version it ran on. A version that is rolled back because it misbehaved can be **ended**:
 open conversations on it are closed with a message, as an administrator's recorded choice.
 
 ### 3.15 When a model provider fails
 
-Proposed (2026-11-06). A model slot can be bound to an ordered list of connections in a channel (a primary and a fallback). A provider error
+**Decided (owner, 2026-11-06).** A model slot can be bound to an ordered list of connections in a channel (a primary and a fallback). A provider error
 is retried with back-off, then the next connection is used, and the turn records which model answered. A fallback is only ever one the
 install policy allows for that agent (a tenant-only install never falls back to a cloud provider). With no model left, the conversation
 stops with a message; nothing is half-run, since tool calls only start after the model has answered.
 
 ### 3.16 Where people talk to agents
 
-Proposed (2026-11-06):
+**Decided (owner, 2026-11-06):**
 
 | Surface | Agents | First? |
 | --- | --- | --- |
@@ -555,7 +582,7 @@ everywhere.
 
 ### 3.17 Untrusted content
 
-Proposed (2026-11-06), from plan 16's rule that tool results are data, not instructions:
+**Decided (owner, 2026-11-06)**, from plan 16's rule that tool results are data, not instructions:
 
 - **Only the assembly gives instructions** (section 3.5). Tool results, rows, documents, web pages, files in a workspace and messages from
   outside systems are given to the model **marked as data**, with where they came from.
@@ -873,7 +900,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 2 | The work tool's name | **Working name DbDataBacklog** (owner, 2026-11-03); final name undecided |
 | 3 | Languages and packaging | **Decided for integrations** (owner, 2026-11-04): `.csx` scripts, compiled .NET projects, any executable through the runner protocol, and hybrids such as a .NET notebook over a project (plan 28 section 4). Actions: `.csx`, SQL, command calls and declarative elevated forms |
 | 4 | Embedding search | **Decided** (owner, 2026-11-05): vector search only, to start, on SQL Server 2025, PostgreSQL (`pgvector`) and SQLite (`sqlite-vec`), with an embedding model connection bound per channel; without vector search there is no knowledge search (section 2.4) |
-| 5 | Agent approvals | **Decided** (owner, 2026-11-03): prompting is configured per action. Proposed 2026-11-05 (section 3.3): 5a the three settings, 5b layers (action default, install policy with a minimum, agent definition; the strictest applies), 5c defaults from traits. **Decided** (owner, 2026-11-05): reading definitions and reading data are separate traits |
+| 5 | Agent approvals | **Decided** (owner, 2026-11-03): prompting is configured per action. **Decided** (owner, 2026-11-06) (section 3.3): 5a the three settings, 5b layers (action default, install policy with a minimum, agent definition; the strictest applies), 5c defaults from traits. **Decided** (owner, 2026-11-05): reading definitions and reading data are separate traits |
 | 6 | Unattended agents in integration tasks | **Decided** (owner, 2026-11-04): actions set to *do not ask* run; actions that would ask become proposals (drafts, work items, notifications) (section 4.9) |
 | 7 | The work tool's scope | its own items first; links to GitHub pull requests and workspaces; import from Jira or Azure Boards later; no two-way sync |
 | 8 | First audience | **Decided** (owner, 2026-11-05): the **back-end** agent first, because it unlocks building apps (section 3.2) |
@@ -881,14 +908,14 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 10 | Outside systems as connections | **Decided** (owner, 2026-11-04): a new kind in `connection/1`, sharing secrets, channel bindings and the console's view (section 4.6) |
 | 11 | Elevated actions: who approves an action's grants on data, and who may give people *run* on it | **Decided** (owner, 2026-11-04): grants on data: an administrator and the DbDataStore model's owner, both, with an audit; *run*: the action's owner or an administrator (section 4.5) |
 | 12 | Integrations with or apart from actions and Sync's scripts | **Decided** (owner, 2026-11-04): apart. Integrations are a product publishing to the runner; actions share one script format with Sync (section 4) |
-| 13 | `agent` as a published kind (plan 30), with its model as a slot bound per channel | proposed (sections 3.1, 3.7) |
-| 14 | Where agents run: back end in the console, front end in the serving layer, unattended in the runner | proposed (section 3.2) |
-| 15 | Model providers as a kind of connection | proposed (section 3.7) |
+| 13 | `agent` as a published kind (plan 30), with its model as a slot bound per channel | **Decided** (owner, 2026-11-06) (sections 3.1, 3.7) |
+| 14 | Where agents run | **Open** (owner, 2026-11-06): to talk through, in particular whether unattended agents and evaluation runs belong on the runner (section 3.2) |
+| 15 | Model providers as a kind of connection | **Decided** (owner, 2026-11-06) (section 3.7) |
 | 16 | Transcripts | **Decided** (owner, 2026-11-05): tool calls, approvals and context given are audit, always kept; conversation text is history, 30 days by default (section 3.8) |
-| 17 | Limits and cost | proposed (section 3.9) |
-| 18 | Context: four homes, roles (reference, instruction, guardrail) and scopes on knowledge, assembly in a fixed order, hard guardrails enforced by the runtime, a budget for what is always loaded | proposed (sections 3.5 to 3.5b); where curated knowledge is kept is not decided (section 2.1) |
-| 19 | What to do when a change to a bound instruction changes agents without their evaluation | **Open, needs discussion** (owner, 2026-11-05); automatic evaluation runs were proposed and are not agreed (section 3.5) |
-| 20 | An agent's reach: the person's access, narrowed by the agent's scopes and the install policy, enforced by the serving layer | proposed (section 3.6) |
+| 17 | Limits and cost | **Decided** (owner, 2026-11-06) (section 3.9) |
+| 18 | Context: four homes, roles (reference, instruction, guardrail) and scopes on knowledge, assembly in a fixed order, hard guardrails enforced by the runtime, a budget for what is always loaded | **Decided** (owner, 2026-11-06) (sections 3.5 to 3.5b); where curated knowledge is kept is not decided (section 2.1) |
+| 19 | What to do when a change to a bound instruction changes agents without their evaluation | **Decided** (owner, 2026-11-06): knowledge goes through channels (question 29); automatic evaluation runs are not used |
+| 20 | An agent's reach: the person's access, narrowed by the agent's scopes and the install policy, enforced by the serving layer | **Decided** (owner, 2026-11-06) (section 3.6) |
 | 21 | How scopes are written: on the item (YAML front matter, or the same fields on a record), folder defaults and implicit scope by place, subjects named as the catalog names them, agents and the install policy narrowing or adding, one library checking it | **Decided** (owner, 2026-11-05), items 1 to 5 of section 3.5c |
 | 22 | Install-wide instructions for one or several products: products and the install as subjects, an install knowledge project published like other definitions, policy settings apart from policy text, given broad to narrow with guardrails not overridable | **Decided** (owner, 2026-11-05) (section 3.5c, item 6) |
 | 23 | Knowledge stores: sources (git files and generated first; DbDataStore records, documents, outside systems later) giving one shape, provenance kept, unreviewed sources as references only; the index in the unified state | **Decided** (owner, 2026-11-05) (section 2.4); the index's search decided under question 4 |
@@ -896,12 +923,13 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 25 | Memories: conversation, the person's (theirs only), the work's (with the workspace or item); shared learning goes through knowledge, never memory | **Decided** (owner, 2026-11-05) (section 3.11) |
 | 26 | Subagents: declared, never wider than the parent, their own context, same prompting, counted to the parent, depth two, nested in the transcript | **Decided** (owner, 2026-11-05) (section 3.12) |
 | 27 | Skills: offered by name and description, loaded when needed; in an agent's project or published as the `skill` kind; Build's agent kit the first | **Decided** (owner, 2026-11-05) (section 3.13) |
-| 28 | Evaluation: cases checked by the suite where possible, a judge model only for free text, run on the runner, scores recorded per version, a minimum score optional for promotion | proposed (section 3.4) |
-| 29 | Knowledge changes go through channels, so production agents only see promoted knowledge (the alternative to automatic evaluation runs, for question 19) | proposed (section 3.5) |
-| 30 | A conversation stays on the agent version it started with | proposed (section 3.14) |
-| 31 | Model fallback within what the install policy allows | proposed (section 3.15) |
-| 32 | Surfaces: the console's chat first, then apps, MCP and messaging | proposed (section 3.16) |
-| 33 | Untrusted content marked as data; harm still asks; answers checked | proposed (section 3.17) |
+| 28 | Evaluation: cases checked by the suite where possible, a judge model only for free text, run on the runner (where, pending question 14), scores recorded per version, a minimum score optional for promotion | **Decided** (owner, 2026-11-06) (section 3.4) |
+| 29 | Knowledge changes go through channels, so production agents only see promoted knowledge (the alternative to automatic evaluation runs, for question 19) | **Decided** (owner, 2026-11-06) (section 3.5) |
+| 30 | A conversation stays on the agent version it started with | **Decided** (owner, 2026-11-06) (section 3.14) |
+| 31 | Model fallback within what the install policy allows | **Decided** (owner, 2026-11-06) (section 3.15) |
+| 32 | Surfaces: the console's chat first, then apps, MCP and messaging | **Decided** (owner, 2026-11-06) (section 3.16) |
+| 33 | Untrusted content marked as data; harm still asks; answers checked | **Decided** (owner, 2026-11-06) (section 3.17) |
+| 34 | Embedding models: a connection with purpose embeddings; built in (ONNX Runtime, in process), Ollama, or a local OpenAI-compatible server for the local CPU; one model per index, rebuilt on change | proposed (section 3.7a) |
 
 ## 9. Detailed plans to follow
 
