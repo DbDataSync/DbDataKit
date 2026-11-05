@@ -109,7 +109,7 @@ person may see.
 
 ### 2.5 Business knowledge: edited in forms, kept in git
 
-Proposed (2026-11-05, revised 2026-11-06 after the owner's question: business users cannot reach the Workspace server or, in most
+**Decided (owner, 2026-11-06)**; proposed 2026-11-05, revised 2026-11-06 after the owner's question: business users cannot reach the Workspace server or, in most
 installs, the console). The owner's direction: git suits knowledge that administrators and developers publish; DbDataStore is not the
 place for business users' knowledge, because DbDataStore holds the data structures people author inside the system, not the system's own
 structures. Business knowledge describes and steers the system, so it belongs with the other definitions, in git.
@@ -145,6 +145,26 @@ runner's inbox, plan 28 section 7).
 
 So knowledge has **one storage model** (files in git, in projects on the Workspace server) with two ways in: workspaces for developers
 and administrators, and the knowledge app for business users, whose suggestions reach git through the edge.
+
+### 2.6 How knowledge is published and read
+
+Proposed (2026-11-06), from the owner's question.
+
+1. **A knowledge project is published like any other definition** (plan 30), as the kind `knowledge-project`, to the serving group: one
+   version per merged commit, each file an artifact by its hash, signed by the Workspace server, per channel.
+2. **The serving layer's `knowledge` module serves it.** When a version is **staged**, the module reads its files, checks every item
+   (format, scopes, owners) and embeds the items that changed (by hash; an unchanged file is not embedded again) into that channel's index
+   in its state (plan 29). **Activation** switches the channel to the new items and index at once, so a search never sees half a version.
+3. **Everything reads through the module, never the state database directly:** the knowledge app (section 2.5), front-end agents in the
+   serving layer, and the `knowledge search` and `knowledge show` commands, each under its caller's access rules.
+4. **Agents elsewhere call it too:** back-end agents in the console and unattended agents in runner tasks call the serving layer's
+   knowledge API, as their person or service account. Knowledge is published in one place and indexed once.
+5. **Two things that are not the published copy:**
+   - **A workspace's own changes.** A back-end agent working on a branch also reads the knowledge files of that branch from the Workspace
+     server, laid over the published ones, so an instruction it is editing applies to its own work before it is merged.
+   - **Generated knowledge** is not published by a knowledge project. The module derives it from the other definitions published to the
+     same serving group (semantic models, DbDataStore models, app manifests, data sources), as their subscriber, and indexes it with the
+     same rules.
 
 ## 3. DbDataAgents
 
@@ -981,8 +1001,9 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 32 | Surfaces: the console's chat first, then apps, MCP and messaging | **Decided** (owner, 2026-11-06) (section 3.16) |
 | 33 | Untrusted content marked as data; harm still asks; answers checked | **Decided** (owner, 2026-11-06) (section 3.17) |
 | 34 | Embedding models: a connection with purpose embeddings; built in (ONNX Runtime, in process), Ollama, or a local OpenAI-compatible server for the local CPU; one model per index, rebuilt on change | **Decided** (owner, 2026-11-06); local servers also stand in for the public OpenAI API in tests (section 3.7a) |
-| 35 | Business knowledge: not DbDataStore; kept in git in the `knowledge: 1` format; business users edit in a knowledge app served by the serving layer; suggestions and approvals are records at the edge that the Workspace server collects, commits, merges and publishes through channels; agents suggest the same way | proposed (section 2.5, revised 2026-11-06) |
-| 36 | The glossary and verified queries (plan 22 section 3 put the glossary in DbDataStore) move with business knowledge | proposed (section 2.5) |
+| 35 | Business knowledge: not DbDataStore; kept in git in the `knowledge: 1` format; business users edit in a knowledge app served by the serving layer; suggestions and approvals are records at the edge that the Workspace server collects, commits, merges and publishes through channels; agents suggest the same way | **Decided** (owner, 2026-11-06) (section 2.5, revised 2026-11-06) |
+| 36 | The glossary and verified queries (plan 22 section 3 put the glossary in DbDataStore) move with business knowledge | **Decided** (owner, 2026-11-06) (section 2.5) |
+| 37 | Knowledge projects published as `knowledge-project` to the serving group; the `knowledge` module checks and embeds at staging and switches at activation; all readers go through it; workspace changes laid over for back-end agents; generated knowledge derived from other published definitions | proposed (section 2.6) |
 
 ## 9. Detailed plans to follow
 

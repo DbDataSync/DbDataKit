@@ -109,7 +109,7 @@ their checks become the kinds' validators. The Build server's `ProxyPublishing` 
 
 | Target | Kinds | Publishers |
 | --- | --- | --- |
-| Serving group | `semantic-model`, `data-source`, `app`, `app-instance`, `navigation`; later `agent`, `action`, knowledge collections, DbDataStore entity models and rules | Build, the apps back end, DbDataStore |
+| Serving group | `semantic-model`, `data-source`, `app`, `app-instance`, `navigation`; later `agent`, `action`, `skill`, `knowledge-project` (plan 27 section 2.6), DbDataStore entity models and rules | Build, the apps back end, DbDataStore |
 | Runner group | `integration`; later Sync's replication sets, Build's refresh plans, engine runtimes (plan 28 section 8) | DbDataIntegration; later Sync and Build |
 
 Who may publish what is the pairing's Publisher role and its scope (plan 13 W12, `OwnerScope`), as today.
