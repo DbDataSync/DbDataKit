@@ -109,28 +109,42 @@ person may see.
 
 ### 2.5 Business knowledge: edited in forms, kept in git
 
-Proposed (2026-11-05). The owner's direction: git suits knowledge that administrators and developers publish; DbDataStore is not the place
-for business users' knowledge, because DbDataStore holds the data structures people author inside the system, not the system's own
-structures. Business knowledge is the system's own structure (it describes and steers the system), so it belongs with the other
-definitions.
+Proposed (2026-11-05, revised 2026-11-06 after the owner's question: business users cannot reach the Workspace server or, in most
+installs, the console). The owner's direction: git suits knowledge that administrators and developers publish; DbDataStore is not the
+place for business users' knowledge, because DbDataStore holds the data structures people author inside the system, not the system's own
+structures. Business knowledge describes and steers the system, so it belongs with the other definitions, in git.
 
-**Proposed: the Workspace server (section 6) offers a knowledge editor for people who do not use git, and keeps what they write in git.**
+**The problem.** End users reach only the serving layer (plan 20); the Workspace server and the console stay on the private side. So a
+business user can neither open a workspace nor reach the Workspace server, yet their changes must end up as commits there.
 
-- **What a business user sees:** a list of the items they own or may suggest changes to; a form per item (title, text, role, what it is
-  about, who it is for); **Suggest a change**; the item's **history** and a comparison of two versions; the state of their suggestion
-  (waiting for approval, approved, published to test, in production).
-- **What happens underneath:** each suggestion is a branch and a commit in a knowledge project the Workspace server keeps; approval by the
-  item's owner is a merge; the merged item is published to a test channel and then promoted (plan 27 question 29). The format is the same
-  `knowledge: 1` file as everywhere (section 3.5c), so developers can edit the same project in a workspace if they want to, and one
-  history covers both.
-- **Small changes do not collide:** a suggestion touches one item; if someone else changed that item meanwhile, the form says so and
-  shows both, instead of a merge conflict.
-- **Ownership per item** comes from its `owner:` (a group of the identity home), not from rights on the repository, so a person may own a
-  few items in a project without being able to change the rest.
-- **Backup and moves** are git's: the project can push to a remote like any other (plan 22 section 4).
+**Proposed: the edge accepts and records suggestions; the Workspace server picks them up.** This is the pattern the suite already uses for
+DbDataStore's change requests (approved in the serving layer, plan 20 decision 3) and for webhooks (received by the serving layer into the
+runner's inbox, plan 28 section 7).
 
-So knowledge has **one storage model** (files in git, in projects) with two ways in: a workspace and an editor for developers and
-administrators, and forms for business users. Documents and outside systems stay references (section 2.4).
+1. **Where business users see and edit knowledge: a knowledge app**, shipped with the suite and served by the serving layer like any app
+   (plan 26), so it is reachable wherever the person's other apps are. It shows the items the person may see (access-filtered, section
+   2.2), in production and in test, with their history; a form per item; **Suggest a change**; and the state of each suggestion. The same
+   screens appear in the console for administrators and developers.
+2. **A suggestion is a record at the edge**: the item, the proposed text and fields, the version it was based on, who suggested it, why.
+   It is written to the serving group's shared state (a `knowledge_suggestions` table of the `knowledge` module, plan 29), so it is
+   stored even when the Workspace server is down.
+3. **The Workspace server collects suggestions.** It is paired with the serving group as a Publisher already (plan 30); it follows the
+   suggestions the way instances follow definitions, by an event log it polls, and turns each into a branch and a commit in the knowledge
+   project, with the suggester as the commit's author. The serving group never calls the Workspace server, so nothing at the edge waits on
+   it.
+4. **Owners approve where they work: in the knowledge app.** An approval is also a record at the edge, signed with the approver's key from
+   the identity home (plan 30 section 6.2). The Workspace server sees it, merges the branch, and publishes the item to the test channel; a
+   second approval (or an administrator's rule) promotes it to production. Each step's state shows in the app: waiting for approval,
+   approved, waiting for the Workspace server, in test, in production.
+5. **When the item changed meanwhile:** the suggestion carries the version it was based on. If the item has moved on, the Workspace server
+   marks the suggestion **needs another look**, and the app shows the suggestion beside the current text, instead of a merge conflict.
+6. **Agents suggest the same way.** An agent's proposed knowledge (the "learned" kind, section 2.1) is a suggestion through a tool
+   (`knowledge suggest`), with its prompting setting, so people and agents have one path and one review.
+7. **Ownership per item** comes from its `owner:` (a group of the identity home); who may suggest changes to an item is set per project
+   (anyone who can see it, by default), so a person may own a few items without rights on the rest.
+
+So knowledge has **one storage model** (files in git, in projects on the Workspace server) with two ways in: workspaces for developers
+and administrators, and the knowledge app for business users, whose suggestions reach git through the edge.
 
 ## 3. DbDataAgents
 
@@ -967,7 +981,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 32 | Surfaces: the console's chat first, then apps, MCP and messaging | **Decided** (owner, 2026-11-06) (section 3.16) |
 | 33 | Untrusted content marked as data; harm still asks; answers checked | **Decided** (owner, 2026-11-06) (section 3.17) |
 | 34 | Embedding models: a connection with purpose embeddings; built in (ONNX Runtime, in process), Ollama, or a local OpenAI-compatible server for the local CPU; one model per index, rebuilt on change | **Decided** (owner, 2026-11-06); local servers also stand in for the public OpenAI API in tests (section 3.7a) |
-| 35 | Business knowledge: not DbDataStore; edited in forms in the Workspace server, kept in git in the same `knowledge: 1` format, approved by each item's owner, published through channels | proposed (section 2.5) |
+| 35 | Business knowledge: not DbDataStore; kept in git in the `knowledge: 1` format; business users edit in a knowledge app served by the serving layer; suggestions and approvals are records at the edge that the Workspace server collects, commits, merges and publishes through channels; agents suggest the same way | proposed (section 2.5, revised 2026-11-06) |
 | 36 | The glossary and verified queries (plan 22 section 3 put the glossary in DbDataStore) move with business knowledge | proposed (section 2.5) |
 
 ## 9. Detailed plans to follow
