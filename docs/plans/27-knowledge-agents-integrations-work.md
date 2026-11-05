@@ -64,6 +64,38 @@ Knowledge has no runtime of its own beyond an index and a module. **Proposed:** 
 with the suite, a shared library (`DbDataKit.Knowledge`: the index, retrieval, the access filter), a serving module, and console screens.
 It is **not** a new server. **Owner question 1.**
 
+### 2.4 Knowledge stores
+
+Proposed (2026-11-05). Where knowledge is kept (section 2.1) is open; this separates the question in two: where items are **kept and
+edited** (sources), and where they are **searched** (the index). Every source gives items in one shape (the `knowledge: 1` fields of
+section 3.5c), so agents, scopes, budgets and the record of what a turn was given do not care where an item came from.
+
+**Sources:**
+
+| Source | Suits | Edited by | Changes reviewed by | First? |
+| --- | --- | --- | --- | --- |
+| **Files in git**: a project's `knowledge/` folder, the install knowledge project, an agent's project | technical knowledge, conventions, policy text, anything developers own | the console's editor in a workspace, or any editor | a merge, like code | **yes**: the back-end agent comes first, and it needs nothing else |
+| **Generated** from definitions and the catalog | tables, columns, models, members, lineage, descriptions | nobody: derived when a definition is published | the definition's own review | **yes**, with the catalog (plan 22 section 3) |
+| **DbDataStore records** | business knowledge owned by people who do not use git: glossary, metric definitions, verified queries | forms in the console or an app | DbDataStore's approval and history | later, when DbDataStore has what it needs (plan 15) |
+| **Documents**: files in DbDataStore's documents (plan 15 section 6), with text extracted | specifications, policies, manuals | Office, over WebDAV | the document's own owner | later; references only |
+| **Outside systems** (a wiki, SharePoint, Confluence) through an integration (section 4) | knowledge that already lives elsewhere | in that system | that system | later; copied in by an integration task on a schedule, read-only here, references only unless an owner promotes an item |
+
+Rules for every source: each item keeps its **provenance** (source, path or id, version), the record of a turn names it, and items from a
+source no one reviews (documents, outside systems) can be **references only**, never instructions or guardrails, until an owner approves
+one as such.
+
+**The index:** the `knowledge` module of the unified state (plan 29), rebuilt from the sources:
+
+| Engine | Full-text search | Embedding search (owner question 4) |
+| --- | --- | --- |
+| PostgreSQL | built in (`tsvector`) | with the `pgvector` extension |
+| SQL Server | full-text indexes (an optional feature of the install) | the vector type of SQL Server 2025; not on 2022, the version the suite tests on most |
+| SQLite | built in (FTS5) | with an extension (`sqlite-vec`) |
+
+Full-text works everywhere (on SQL Server only where full-text is installed, otherwise a simpler search the module provides); embeddings
+are an option where the engine has them. Access rules filter results (section 2.2), and a reference found for an agent is only one its
+person may see.
+
 ## 3. DbDataAgents
 
 **Goal.** An agent is a **definition**, versioned and published like an app, not a prompt pasted into a chat. The same definition runs
@@ -249,7 +281,7 @@ means:
 
 ### 3.5c How scopes are written, and who owns them
 
-**Decided (owner, 2026-11-05)** as written in items 1 to 5; item 6 is proposed. It follows conventions the suite already has: Build's folder defaults
+**Decided (owner, 2026-11-05)**, items 1 to 6. It follows conventions the suite already has: Build's folder defaults
 (`_dbdatabuild.yml`, nearest wins), its selectors (`tag:`, `property:`, `+model`), the strict YAML reader with diagnostics naming file and
 line, and lineage's stable identities for subjects (plan 18 section 4).
 
@@ -309,7 +341,7 @@ agents each item reaches. It runs:
 A subject that later disappears (a model dropped) leaves its items **orphaned**: they reach nobody, and the console lists them for their
 owners.
 
-**6. Install-wide instructions, for one product or several** (proposed, 2026-11-05). The subjects above are all objects inside a
+**6. Install-wide instructions, for one product or several** (decided, owner, 2026-11-05). The subjects above are all objects inside a
 product, so "every agent working on Build or Sync in this install uses our naming standard" needs two more things:
 
 - **Products and the install as subjects:** `product: build` (or `sync`, `store`, `integration`, `apps`, `serving`, `runner`,
@@ -373,6 +405,101 @@ Kept in the `agents` module of the unified state (plan 29), large tool results a
 Proposed (2026-11-05): per conversation, per person and per install, on turns, tool calls, tokens and cost. Cost is the provider's reported
 usage times the price on the connection (3.7). A limit reached stops the conversation with a message; administrators are told at a
 threshold.
+
+### 3.10 How an agent is stored
+
+Proposed (2026-11-05). **An agent is a project in git**, authored in a workspace like any other (plan 22 section 1), built, checked and
+published as the `agent` kind (plan 30). What it learns and does at run time is **not** in git; that is state.
+
+```
+agents/build-helper/
+  agent.yml                 # the definition (agent: 1)
+  instructions/role.md      # its own instructions
+  knowledge/                # knowledge about this agent's work; implicit scope: this agent
+  skills/                   # skills of its own (3.13); shared ones are referred to by name
+  tests/conversations/      # scripted conversations (plan 25)
+  tests/evaluation/         # questions with known good answers (section 3.4)
+```
+
+```yaml
+agent: 1
+name: build-helper
+title: Build helper
+audience: back-end
+model: { slot: default }                  # bound per channel (3.7)
+instructions: [instructions/role.md]
+skills: [dbdatabuild]                     # Build's agent kit, as a skill (3.13)
+tools:
+  - command: project compile              # prompting from its traits (3.3)
+  - command: connection deploy
+    prompting: ask
+scopes: { build-projects: all }           # within the person's own access (3.6)
+knowledge: { from: [install, project] }
+memory: { person: true, workspace: true } # 3.11
+subagents: [semantic-modeler]             # 3.12
+limits: { turns: 60, cost: 5.00 }
+```
+
+**Building it** checks what can be checked before anyone talks to it: every tool, skill and subagent exists, every scope resolves, the
+always-given set fits the budget (3.5b), the scripted conversations pass. **Publishing** stores the definition and its files as
+artifacts by hash, signed (plan 30 section 6), with the model and connections bound per channel.
+
+**At run time, in the `agents` module of the unified state:** conversations and their turns, the record of what each turn was given, tool
+calls and approvals (the audit, 3.8), memories (3.11), usage and cost.
+
+### 3.11 Memories
+
+Proposed (2026-11-05). What an agent keeps from one conversation to the next, in four kinds, each with its own owner and reach:
+
+| Kind | Example | Kept where | Who sees it | Lasts |
+| --- | --- | --- | --- | --- |
+| **The conversation** | what was said and done so far | the conversation's turns | the person, and auditors | history (30 days by default); when it grows past the budget, older turns are summarized, and the summary is recorded |
+| **The person's** | "I work on the EMEA warehouse"; "show SQL Server examples" | the `agents` module, per person and agent | **only that person**, who can list, edit and delete it | until the person deletes it |
+| **The work's** | notes on a branch: "the region fact is half done; the backfill question is open" | with the workspace (plan 22), or a work item (section 5) | whoever works on that workspace or item | as long as the workspace or item |
+| **Shared** | "the orders table is late every Monday" | **not a memory**: proposed as knowledge (a draft for an owner to approve, section 2.1) | everyone the item's scope reaches, once approved | as knowledge |
+
+- **Written through a tool** (`memory remember`, `memory forget`), with its own prompting setting, so a person sees what is kept.
+- **Read through the same assembly** as everything else: memories are given after the agent's instructions and before references,
+  inside the budget, and recorded in the turn.
+- **Never secrets**, and nothing an agent read from data the person could not see anyway; a memory is the person's, so it carries no one
+  else's access.
+- **Nothing silently shared:** anything that would change what *other* people's agents do goes through knowledge and its approval.
+- An administrator can turn each kind off per agent or per install.
+
+### 3.12 Subagents
+
+Proposed (2026-11-05). An agent can hand part of its work to another agent, for three reasons: **specialization** (a Build agent asks a
+semantic-model agent to design the measures), **a clean context** (a subagent reads forty files and returns a two-paragraph summary, so the
+main conversation stays small), and **parallel work**.
+
+- **Declared:** an agent lists the agents it may call (`subagents:`); each appears to it as a tool.
+- **Never wider:** a subagent acts as the same person, and its reach is the person's access narrowed by the **parent's** scopes and then
+  its own. A subagent cannot do what its parent could not.
+- **Its own context:** it gets its own instructions, skills and scoped knowledge by the usual assembly, plus only what the parent passes
+  in the call, not the parent's whole conversation.
+- **Same prompting:** its actions ask the person as their settings say, through the parent's conversation; unattended, section 4.9's rule.
+- **Counted to the parent:** turns, tokens and cost count against the parent conversation's limits; depth is limited (two levels by
+  default).
+- **Recorded inside the parent's transcript**, as a nested part, so the audit reads as one conversation.
+
+### 3.13 Skills
+
+Proposed (2026-11-05). A **skill** is a packaged capability an agent picks up when the task needs it: a `SKILL.md` with a name, a
+description and instructions, optional resource files (templates, examples, schemas), and optionally the actions it relies on (named,
+not code: code stays an action, under section 4.7's trust rules). Build's agent kit is already one: `DbDataBuild.Cli/AgentKit/SKILL.md`
+has the name and description in its header.
+
+**How it differs from knowledge:** an instruction is given whenever its scope applies. A skill is **offered**: every turn the agent sees
+each of its skills' **names and descriptions** (cheap), and it loads a skill's **body** when it decides the task needs it, through a tool
+(`skill load`). So an agent can have many skills without filling its context.
+
+- **Where skills live:** inside an agent's project (for that agent), or published on their own as the `skill` kind (plan 30) and named
+  by agents that use them; a product can ship skills with its release (Build's, first).
+- **Budget:** descriptions count against the always-given budget; when an agent is published, its largest skill body must also fit in
+  the room left, so loading any one skill never forces instructions out.
+- **Recorded:** a loaded skill, with its version, is part of the turn's record.
+- **Outside agents too:** a published skill can be exported in the format outside agents read, as `dbdatabuild project agent-kit` does
+  today, so internal and outside agents learn from the same text.
 
 ## 4. Integrations, actions and the runner
 
@@ -699,7 +826,12 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 19 | What to do when a change to a bound instruction changes agents without their evaluation | **Open, needs discussion** (owner, 2026-11-05); automatic evaluation runs were proposed and are not agreed (section 3.5) |
 | 20 | An agent's reach: the person's access, narrowed by the agent's scopes and the install policy, enforced by the serving layer | proposed (section 3.6) |
 | 21 | How scopes are written: on the item (YAML front matter, or the same fields on a record), folder defaults and implicit scope by place, subjects named as the catalog names them, agents and the install policy narrowing or adding, one library checking it | **Decided** (owner, 2026-11-05), items 1 to 5 of section 3.5c |
-| 22 | Install-wide instructions for one or several products: products and the install as subjects, an install knowledge project published like other definitions, policy settings apart from policy text, given broad to narrow with guardrails not overridable | proposed (section 3.5c, item 6) |
+| 22 | Install-wide instructions for one or several products: products and the install as subjects, an install knowledge project published like other definitions, policy settings apart from policy text, given broad to narrow with guardrails not overridable | **Decided** (owner, 2026-11-05) (section 3.5c, item 6) |
+| 23 | Knowledge stores: sources (git files and generated first; DbDataStore records, documents, outside systems later) giving one shape, provenance kept, unreviewed sources as references only; the index in the unified state, full text everywhere, embeddings where the engine has them | proposed (section 2.4) |
+| 24 | Agents as git projects (`agent.yml`, instructions, knowledge, skills, tests), checked at build, published as the `agent` kind; run-time state in the `agents` module | proposed (section 3.10) |
+| 25 | Memories: conversation, the person's (theirs only), the work's (with the workspace or item); shared learning goes through knowledge, never memory | proposed (section 3.11) |
+| 26 | Subagents: declared, never wider than the parent, their own context, same prompting, counted to the parent, depth two, nested in the transcript | proposed (section 3.12) |
+| 27 | Skills: offered by name and description, loaded when needed; in an agent's project or published as the `skill` kind; Build's agent kit the first | proposed (section 3.13) |
 
 ## 9. Detailed plans to follow
 

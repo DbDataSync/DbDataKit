@@ -134,6 +134,30 @@ Revenue in the Sales model means **net revenue**: gross sales minus returns minu
   reference always given (`always:`, which counts against its budget), and the install policy can give an item to every agent.
 - **A subject that disappears** (a model dropped) leaves its items reaching nobody; the console lists them for their owners.
 
+### Instructions for a whole product, or the whole install
+
+Some instructions are about a product rather than one object in it ("every agent working on Build or Sync uses our naming standard").
+Those use two more subjects, `product:` (`build`, `sync`, `store`, `integration`, `apps`, `serving`, `runner`, `console`, or a list) and
+`install: true`, and live in the **install's knowledge project**, a git project of its own, edited through workspaces in the console. Its
+folders set their scope by place:
+
+```
+install-knowledge/
+  _knowledge.yml                  # defaults: about the whole install
+  shared/
+  build/_knowledge.yml            # defaults: about product build
+  build/naming.md
+  sync-and-build/_knowledge.yml   # defaults: about products build and sync
+  policy/                         # the administrators' text, as guardrails
+```
+
+- **Policy settings and policy text are kept apart.** The install policy holds settings (prompting minimums, limits, data rules); text that
+  administrators want agents to read is a guardrail in `policy/`.
+- **Broad to narrow.** Scoped items are given from the broadest (the install) to the narrowest (one measure), and narrower ones refine
+  broader ones. Guardrails are given apart, as policy, and a narrower instruction does not override them.
+- **Contradictions are a review question.** The suite cannot tell that two texts disagree, so approving an item shows the other items
+  with the same or a broader scope beside it.
+
 ## What an agent may touch is not part of its context
 
 Permissions are never written as instructions. What an agent can read or change is enforced by the serving layer on every call: the
