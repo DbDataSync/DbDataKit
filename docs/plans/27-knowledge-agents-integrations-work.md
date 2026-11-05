@@ -168,7 +168,7 @@ Proposed (2026-11-06), from the owner's question.
 
 ### 2.7 Generated knowledge
 
-Proposed (2026-11-06). Knowledge the suite derives from its own definitions, so nothing already described in a definition is typed again.
+**Decided (owner, 2026-11-06).** Knowledge the suite derives from its own definitions, so nothing already described in a definition is typed again.
 
 **Principles:**
 
@@ -1058,11 +1058,11 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 35 | Business knowledge: not DbDataStore; kept in git in the `knowledge: 1` format; business users edit in a knowledge app served by the serving layer; suggestions and approvals are records at the edge that the Workspace server collects, commits, merges and publishes through channels; agents suggest the same way | **Decided** (owner, 2026-11-06) (section 2.5, revised 2026-11-06) |
 | 36 | The glossary and verified queries (plan 22 section 3 put the glossary in DbDataStore) move with business knowledge | **Decided** (owner, 2026-11-06) (section 2.5) |
 | 37 | Knowledge projects published as `knowledge-project` to the serving group; the `knowledge` module checks and embeds at staging and switches at activation; all readers go through it; workspace changes laid over for back-end agents; generated knowledge derived from other published definitions | proposed (section 2.6) |
-| 38 | Generated knowledge: derived from published definitions per channel, one item per subject, references by default, refreshed at staging and switched at activation; lineage and volatile facts through tools, not the index | proposed (section 2.7) |
-| 39 | Build publishes its metadata documents to the serving group as a `build-metadata` kind | proposed (section 2.7) |
-| 40 | Column values as knowledge only by opt-in, indexed under the column's access rules | proposed (section 2.7) |
-| 41 | Descriptions added to semantic-model members and DbDataStore fields; suggested descriptions become changes to the definition's project when it is on the Workspace server | proposed (section 2.7) |
-| 42 | The catalog is search over generated knowledge | proposed (section 2.7) |
+| 38 | Generated knowledge: derived from published definitions per channel, one item per subject, references by default, refreshed at staging and switched at activation; lineage and volatile facts through tools, not the index | **Decided** (owner, 2026-11-06) (section 2.7) |
+| 39 | Build publishes its metadata documents to the serving group as a `build-metadata` kind | **Decided** (owner, 2026-11-06) (section 2.7) |
+| 40 | Column values as knowledge only by opt-in, indexed under the column's access rules | **Decided** (owner, 2026-11-06) (section 2.7) |
+| 41 | Descriptions added to semantic-model members and DbDataStore fields; suggested descriptions become changes to the definition's project when it is on the Workspace server | **Decided** (owner, 2026-11-06) (section 2.7) |
+| 42 | The catalog is search over generated knowledge | **Decided** (owner, 2026-11-06) (section 2.7) |
 
 ## 9. Detailed plans to follow
 
