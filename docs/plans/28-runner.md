@@ -143,9 +143,13 @@ Not part of the new services, and planned separately when taken on.
 
 ## 6a. A runner embedded in the console
 
-Proposed (2026-11-06), from the owner's suggestion. The runner engine is a library (`DbDataKit.Runner`), hosted by `dbdatarunner server`;
+**Decided (owner, 2026-11-06)**, from the owner's suggestion. The runner engine is a library (`DbDataKit.Runner`), hosted by `dbdatarunner server`;
 the console hosts **a copy of it** as well, as a runner group of one instance, named `console`, with its own state in the console's
 state database (plan 29 modules, scope "console").
+
+**Agents on a runner** (plan 27 section 3.2, decided 2026-11-06): an unattended agent step runs in the task's own process with the
+agent runtime as a library; the agent definition is published with the package as a dependency, and its model connection is a slot of
+the package. Evaluation runs are tasks on this embedded runner.
 
 **What it is for:**
 
@@ -190,4 +194,4 @@ state database (plan 29 modules, scope "console").
 | 6 | Process limits | **Decided** (owner, 2026-11-04): job objects on Windows, cgroups on Linux; one low-privilege account per runner by default, an account per package as an option |
 | 7 | Routing | **Decided** (owner, 2026-11-04): labels are an administrator's tool, and a package may require one ("needs outside network"); a version whose required label no runner has does not activate, and the console says why |
 | 8 | State for Sync and Build | **Decided** (owner, 2026-11-04): modules of the unified state database and also on the target, `both` by default (section 8, item 3). Sync's primary is the target, as Build's |
-| 9 | A runner embedded in the console (section 6a) | proposed: evaluation runs, system tasks and development work; production only by an administrator's recorded choice |
+| 9 | A runner embedded in the console (section 6a) | **Decided** (owner, 2026-11-06): evaluation runs, system tasks and development work; production only by an administrator's recorded choice |

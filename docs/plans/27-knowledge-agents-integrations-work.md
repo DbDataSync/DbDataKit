@@ -129,14 +129,20 @@ in the console's chat, in an app's assistant panel, and for an outside client ov
 
 ### 3.2 Where it runs
 
-**Open** (owner, 2026-11-06: to talk through). Proposed 2026-11-05: one runtime library, `DbDataKit.Agents` (plan 16 section 1), loading a published `agent/1` (a plan 30 kind),
-in three hosts:
+**Decided (owner, 2026-11-06)**, choosing what adds the least: one runtime library, `DbDataKit.Agents` (plan 16 section 1), loading a
+published `agent/1` (a plan 30 kind), wherever the work is:
 
 | Agent | Runs in | Acts as |
 | --- | --- | --- |
-| **Back end** (developers) | the console, where developers already work | the signed-in person, in an authoring workspace (a branch, plan 22 section 1); never on a published definition |
-| **Front end** (business users, app assistants, outside MCP clients) | the serving layer's `mcp` module, so it works while the back ends are down | the signed-in person |
-| **Unattended** (a step of an integration task) | the task's process on the runner | the task's service account, with section 4.9's rule |
+| **Back end**, interactive (developers) | the console, where developers already work | the signed-in person, in an authoring workspace (a branch, plan 22 section 1); never on a published definition |
+| **Front end**, interactive (business users, app assistants, outside MCP clients) | the serving layer's `mcp` module, so it works while the back ends are down | the signed-in person |
+| **Unattended** (a step of an integration task) | the task's own process, on the runner that runs the task | the task's service account, with section 4.9's rule |
+| **Evaluation runs** (section 3.4) | a task on the runner embedded in the console (plan 28 section 6a) | a service account, against a channel's bindings |
+
+For the runner cases, the agent runtime is a library in the task's process, like the integration kit; the agent definition is a
+dependency of the package and is published with it; its model connection is one of the package's slots, bound per channel (plan 30);
+and its tools are the suite's APIs, called as the task's service account. No new interface is needed between the runner and the serving
+layer.
 
 Keys and model calls stay on the server, never in the browser (plan 16).
 
@@ -180,14 +186,14 @@ request, the plan. Every approval and refusal is recorded (section 3.8).
 
 1. **Behaviour** is tested as in plan 25 section 2: a scripted fake model, recorded provider responses, golden transcripts, approval
    gates. These run in CI on every pull request, with no model provider.
-2. **Quality** is measured with an **evaluation set** (decided, owner, 2026-11-06; where runs happen waits on question 14): cases in the agent's `tests/evaluation/`, each a task, the
+2. **Quality** is measured with an **evaluation set** (decided, owner, 2026-11-06): cases in the agent's `tests/evaluation/`, each a task, the
    fixtures it starts from, and what a good result is.
    - **Checked by the suite where it can be:** the right tools were called; a query returns the expected rows; for a back-end agent, the
      workspace it leaves behind compiles (`project compile`), its tests pass (`project tests run`), and its plan has no surprises. Most
      back-end cases can be judged without a model.
    - **Judged by a model only for free text**, against a written rubric, by a fixed judge model bound like any other (section 3.7), and
      shown as a judgement, not a fact.
-   - **Run on the runner** (plan 28) as a task, against a channel's bindings, by hand or on a schedule; never as a pull request gate,
+   - **Run on the runner embedded in the console** (plan 28 section 6a) as a task, against a channel's bindings, by hand or on a schedule; never as a pull request gate,
      since it needs a real model and costs money. Each run records the agent version, the knowledge versions it was given, the model, the
      score per case and the cost.
    - **Promotion:** a version records its last score. An administrator can require a minimum score before a version is promoted to a
@@ -911,7 +917,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 11 | Elevated actions: who approves an action's grants on data, and who may give people *run* on it | **Decided** (owner, 2026-11-04): grants on data: an administrator and the DbDataStore model's owner, both, with an audit; *run*: the action's owner or an administrator (section 4.5) |
 | 12 | Integrations with or apart from actions and Sync's scripts | **Decided** (owner, 2026-11-04): apart. Integrations are a product publishing to the runner; actions share one script format with Sync (section 4) |
 | 13 | `agent` as a published kind (plan 30), with its model as a slot bound per channel | **Decided** (owner, 2026-11-06) (sections 3.1, 3.7) |
-| 14 | Where agents run | **Partly decided** (owner, 2026-11-06): evaluation runs belong in the console, on a runner embedded in it (plan 28 section 6a, proposed). Open: unattended agent steps of integration tasks (on the runner, or turns run by the serving layer) |
+| 14 | Where agents run | **Decided** (owner, 2026-11-06): back end in the console, front end in the serving layer, unattended steps in the task's process on its runner, evaluation runs on the console's embedded runner (section 3.2) |
 | 15 | Model providers as a kind of connection | **Decided** (owner, 2026-11-06) (section 3.7) |
 | 16 | Transcripts | **Decided** (owner, 2026-11-05): tool calls, approvals and context given are audit, always kept; conversation text is history, 30 days by default (section 3.8) |
 | 17 | Limits and cost | **Decided** (owner, 2026-11-06) (section 3.9) |
@@ -925,7 +931,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 25 | Memories: conversation, the person's (theirs only), the work's (with the workspace or item); shared learning goes through knowledge, never memory | **Decided** (owner, 2026-11-05) (section 3.11) |
 | 26 | Subagents: declared, never wider than the parent, their own context, same prompting, counted to the parent, depth two, nested in the transcript | **Decided** (owner, 2026-11-05) (section 3.12) |
 | 27 | Skills: offered by name and description, loaded when needed; in an agent's project or published as the `skill` kind; Build's agent kit the first | **Decided** (owner, 2026-11-05) (section 3.13) |
-| 28 | Evaluation: cases checked by the suite where possible, a judge model only for free text, run on the runner (where, pending question 14), scores recorded per version, a minimum score optional for promotion | **Decided** (owner, 2026-11-06) (section 3.4) |
+| 28 | Evaluation: cases checked by the suite where possible, a judge model only for free text, run on the console's embedded runner, scores recorded per version, a minimum score optional for promotion | **Decided** (owner, 2026-11-06) (section 3.4) |
 | 29 | Knowledge changes go through channels, so production agents only see promoted knowledge (the alternative to automatic evaluation runs, for question 19) | **Decided** (owner, 2026-11-06) (section 3.5) |
 | 30 | A conversation stays on the agent version it started with | **Decided** (owner, 2026-11-06) (section 3.14) |
 | 31 | Model fallback within what the install policy allows | **Decided** (owner, 2026-11-06) (section 3.15) |
