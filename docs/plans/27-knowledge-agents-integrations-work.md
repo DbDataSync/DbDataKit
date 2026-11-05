@@ -247,6 +247,68 @@ means:
   agent it would push over its budget;
 - **at run time**, references and old conversation are what give way, never instructions.
 
+### 3.5c How scopes are written, and who owns them
+
+Proposed (2026-11-05), from the owner's question. It follows conventions the suite already has: Build's folder defaults
+(`_dbdatabuild.yml`, nearest wins), its selectors (`tag:`, `property:`, `+model`), the strict YAML reader with diagnostics naming file and
+line, and lineage's stable identities for subjects (plan 18 section 4).
+
+**1. The item carries its own scope.** Who owns the knowledge owns its scope; there is no separate central rules file to keep in step. For
+an item kept as a file, the scope is a YAML header at the top of the Markdown (front matter):
+
+```markdown
+---
+knowledge: 1                      # the format and its version (strict: an unknown key is refused, naming the file and line)
+title: Revenue means net revenue
+role: instruction                 # instruction | guardrail | reference
+about:                            # what it is about: any one of these puts it in scope
+  - semantic-model: Sales
+    measure: revenue              # narrows the entry above: this measure, not the whole model
+for:                              # who it is for: each key narrows; leave a key out for "all"
+  audience: [front-end, back-end]
+owner: finance-data               # a group of the identity home; approves changes to it
+---
+Revenue in the Sales model means **net revenue**: gross sales minus returns minus discounts. ...
+```
+
+The same fields are the record's fields if an item is kept somewhere other than a file; where knowledge is kept (section 2.1) is still
+open, and the format does not depend on it.
+
+**2. Defaults by place.** A folder of knowledge can hold `_knowledge.yml` with `defaults:` for everything beneath it, nearest wins, as
+Build's `_dbdatabuild.yml` does. And **knowledge kept inside the project it is about needs no `about:` at all**: a file in a Build
+project's `knowledge/` folder is about that project, reviewed and versioned with it. So K1 of the worked example is just a sentence in
+`sales-warehouse/knowledge/naming.md` with `role: instruction`.
+
+**3. Subjects are named the way the catalog names them** and are checked against it:
+
+| Entry | Means |
+| --- | --- |
+| `build-project: sales-warehouse` (optionally `folder: models/marts`, `model: marts.dim_region`) | that project, that folder of it, that model |
+| `semantic-model: Sales` (optionally `measure:`, `dimension:`) | that semantic model, or one member |
+| `store-model: Customers` (optionally `field:`) | a DbDataStore model |
+| `connection: warehouse`, `app: expenses`, `integration: orders-feed` | those objects |
+| `tag: finance`, `property: tier=1` | anything with that tag or property, as Build's selectors |
+
+An entry with several keys narrows (that measure of that model); several entries widen (any of them). An item applies when **something
+in play is its subject or is inside it**: an item about a project applies whenever anything in the project is in play; an item about one
+measure only when that measure is.
+
+**4. Agents and administrators can narrow or add, without editing the items:**
+
+- **an agent definition** can limit what it draws on (`knowledge: { from: [...], exclude: [...] }`), and can ask for a reference to be
+  always given (`always: [...]`), which then counts against its budget (section 3.5b);
+- **the install policy** can give an item to every agent, or to an audience, whatever the item's own `for:` says.
+
+**5. Who checks it: one library.** `DbDataKit.Knowledge` reads the format, resolves every subject against the catalog, and works out which
+agents each item reaches. It runs:
+
+- when an item is saved or approved: an unknown key, an unknown subject or a bad role is refused with its file and line;
+- when an agent is published or promoted: its always-given set and its budget (section 3.5b);
+- on every turn: what is in play, and so what is given.
+
+A subject that later disappears (a model dropped) leaves its items **orphaned**: they reach nobody, and the console lists them for their
+owners.
+
 ### 3.6 What an agent may touch
 
 Permissions are never instructions. An agent's reach is the **intersection** of:
@@ -604,6 +666,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 18 | Context: four homes, roles (reference, instruction, guardrail) and scopes on knowledge, assembly in a fixed order, hard guardrails enforced by the runtime, a budget for what is always loaded | proposed (sections 3.5 to 3.5b); where curated knowledge is kept is not decided (section 2.1) |
 | 19 | What to do when a change to a bound instruction changes agents without their evaluation | **Open, needs discussion** (owner, 2026-11-05); automatic evaluation runs were proposed and are not agreed (section 3.5) |
 | 20 | An agent's reach: the person's access, narrowed by the agent's scopes and the install policy, enforced by the serving layer | proposed (section 3.6) |
+| 21 | How scopes are written: on the item (YAML front matter, or the same fields on a record), folder defaults and implicit scope by place, subjects named as the catalog names them, agents and the install policy narrowing or adding, one library checking it | proposed (section 3.5c) |
 
 ## 9. Detailed plans to follow
 
