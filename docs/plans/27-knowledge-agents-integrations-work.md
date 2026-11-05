@@ -40,9 +40,9 @@ section's design is gone through. Nothing else in this plan depends on it.
 | Kind | Examples | Comes from | Kept as |
 | --- | --- | --- | --- |
 | **Generated** | tables, columns, types, relationships, keys, lineage, semantic members and their descriptions, DbDataStore entities, app manifests, value samples and profiles | the definitions and the catalog (plan 22 section 3); never typed twice | derived, refreshed when a definition is published |
-| **Curated, business** | glossary terms, metric definitions, business rules ("an active customer is..."), known data issues | business owners | DbDataStore entities, with history and approval (the glossary of plan 22 section 3 is one of them) |
-| **Curated, technical** | naming conventions, modelling patterns, "how we build a slowly changing dimension here", review checklists | developers | files in a git project, reviewed like code |
-| **Verified queries** | a question, the semantic query or SQL that answers it, who verified it and when | people, or an agent's answer a person approved | DbDataStore entities; also the test set for front-end agents (section 3.4) |
+| **Curated, business** | glossary terms, metric definitions, business rules ("an active customer is..."), known data issues | business owners | **not DbDataStore** (owner, 2026-11-05: DbDataStore holds data structures people author inside the system, not the system's own structures); proposed: the Workspace server's knowledge editor, kept in git (section 2.5) |
+| **Curated, technical** | naming conventions, modelling patterns, "how we build a slowly changing dimension here", review checklists | developers and administrators | files in a git project, reviewed like code (**decided**, owner, 2026-11-05) |
+| **Verified queries** | a question, the semantic query or SQL that answers it, who verified it and when | people, or an agent's answer a person approved | as curated business knowledge (section 2.5); also the test set for front-end agents (section 3.4) |
 | **Documents** | specifications, policies, meeting notes | DbDataStore documents (plan 15 section 6), with extraction | the document plus its extracted text |
 | **Learned** | an agent proposes a new term, a correction or a verified query while working | agents | a DbDataStore **draft** (plan 21), kept only once a person approves it, as with agent-built mappings (plan 25 section 3) |
 
@@ -75,7 +75,7 @@ section 3.5c), so agents, scopes, budgets and the record of what a turn was give
 | --- | --- | --- | --- | --- |
 | **Files in git**: a project's `knowledge/` folder, the install knowledge project, an agent's project | technical knowledge, conventions, policy text, anything developers own | the console's editor in a workspace, or any editor | a merge, like code | **yes**: the back-end agent comes first, and it needs nothing else |
 | **Generated** from definitions and the catalog | tables, columns, models, members, lineage, descriptions | nobody: derived when a definition is published | the definition's own review | **yes**, with the catalog (plan 22 section 3) |
-| **DbDataStore records** | business knowledge owned by people who do not use git: glossary, metric definitions, verified queries | forms in the console or an app | DbDataStore's approval and history | later, when DbDataStore has what it needs (plan 15) |
+| **The Workspace server's knowledge editor** (section 2.5, proposed) | business knowledge owned by people who do not use git: glossary, metric definitions, business rules, verified queries | forms in the console; git underneath, never shown | the item's owner, through a change request | after the git files, with the front-end agents |
 | **Documents**: files in DbDataStore's documents (plan 15 section 6), with text extracted | specifications, policies, manuals | Office, over WebDAV | the document's own owner | later; references only |
 | **Outside systems** (a wiki, SharePoint, Confluence) through an integration (section 4) | knowledge that already lives elsewhere | in that system | that system | later; copied in by an integration task on a schedule, read-only here, references only unless an owner promotes an item |
 
@@ -106,6 +106,31 @@ been tested on SQL Server 2025): the `mssql` and `mssql-target` profiles move to
 SQL Server Agent kept on for Sync's CDC; the `postgres` profile gains `pgvector`; the suites that pin 2022 in their text (Build's CI
 comments and `CLAUDE.md`) say 2025. Access rules filter results (section 2.2), and a reference found for an agent is only one its
 person may see.
+
+### 2.5 Business knowledge: edited in forms, kept in git
+
+Proposed (2026-11-05). The owner's direction: git suits knowledge that administrators and developers publish; DbDataStore is not the place
+for business users' knowledge, because DbDataStore holds the data structures people author inside the system, not the system's own
+structures. Business knowledge is the system's own structure (it describes and steers the system), so it belongs with the other
+definitions.
+
+**Proposed: the Workspace server (section 6) offers a knowledge editor for people who do not use git, and keeps what they write in git.**
+
+- **What a business user sees:** a list of the items they own or may suggest changes to; a form per item (title, text, role, what it is
+  about, who it is for); **Suggest a change**; the item's **history** and a comparison of two versions; the state of their suggestion
+  (waiting for approval, approved, published to test, in production).
+- **What happens underneath:** each suggestion is a branch and a commit in a knowledge project the Workspace server keeps; approval by the
+  item's owner is a merge; the merged item is published to a test channel and then promoted (plan 27 question 29). The format is the same
+  `knowledge: 1` file as everywhere (section 3.5c), so developers can edit the same project in a workspace if they want to, and one
+  history covers both.
+- **Small changes do not collide:** a suggestion touches one item; if someone else changed that item meanwhile, the form says so and
+  shows both, instead of a merge conflict.
+- **Ownership per item** comes from its `owner:` (a group of the identity home), not from rights on the repository, so a person may own a
+  few items in a project without being able to change the rest.
+- **Backup and moves** are git's: the project can push to a remote like any other (plan 22 section 4).
+
+So knowledge has **one storage model** (files in git, in projects) with two ways in: a workspace and an editor for developers and
+administrators, and forms for business users. Documents and outside systems stay references (section 2.4).
 
 ## 3. DbDataAgents
 
@@ -882,9 +907,13 @@ question 7.**
   workspaces, built, tested and published (apps and agents to the serving layer, integrations to the runner). Each keeps its own name, nouns and
   screens.
 
-**Owner, 2026-11-03: not decided yet; the plans are not specific enough.** Decided since (2026-11-04): **integrations are a product of
-their own that publishes to the runner**, and the runner is a service of its own (plan 28). What remains open is whether agents share a
-back end with apps, and whether DbDataIntegration's back end is shared with them (option B) or stands alone. **Owner question 1.**
+**Decided (owner, 2026-11-05): option B, as one Workspace server.** The apps back end of plan 22 (DbDataApps) becomes a **unified
+Workspace server** where authoring happens: workspaces (git branches), builds in sandboxed child processes (the .NET SDK for integrations
+and actions, bun with vendored packages for apps), tests, the publisher's signing key, and Publisher pairings with serving and runner
+groups. It hosts app, agent, integration, skill and knowledge projects, each kind keeping its own name, command nouns and screens. **Build
+and Sync move into it eventually** (once their runs are on the runner, plan 28 section 8), to reduce the number of services and the size
+of the architecture. Runtime stays elsewhere: the serving layer, the runner, the console for back-end agents. The product name is to be
+set.
 
 ## 7. Order
 
@@ -893,7 +922,7 @@ back end with apps, and whether DbDataIntegration's back end is shared with them
 | 0 | What plan 16's agents need: the suite-wide command spec test, `DbDataKit.Agents` with the scripted fake, the provider proof against the four providers | 13a W4a work; plan 25 section 2 |
 | 1 | `agent/1` and the **back-end agent** (owner, 2026-11-05): in the console, working in an authoring workspace on a Build project, with Build's agent kit as its instructions, prompting per action and the traits, context assembly from git files | wave 0; shared authoring (plan 22 section 1) |
 | 2 | Actions: the shared script format; Sync's scripts move onto it; a `.csx` or SQL action as a tool of an agent and an endpoint for an app, in warm worker processes in the serving layer | wave 1; the serving contract (plan 20 section 10) |
-| 3 | Front-end agents in the serving layer; curated knowledge in DbDataStore (glossary, metrics, verified queries), drafts from agents, evaluation sets; embedding search if chosen | DbDataStore drafts (plan 21); access rules (plan 22 section 2) |
+| 3 | Front-end agents in the serving layer; curated business knowledge in the Workspace server's knowledge editor (glossary, metrics, verified queries), drafts from agents, evaluation sets; embedding search if chosen | DbDataStore drafts (plan 21); access rules (plan 22 section 2) |
 | 3b | Elevated actions: action principals, grants to actions with field and row conditions, *run* grants to people, validate then apply or reject, the declarative form, audit of both identities | wave 2; DbDataStore permissions (plan 15); the identity home's service principals (13a U20) |
 | 4 | The runner (plan 28) with its progress store on the unified state structure (plan 29), then DbDataIntegration: outside connections, the integration kit, templates, inbound and outbound patterns, webhooks; actions that enqueue integration tasks; back-end agents in workspaces | shared authoring (plan 22 section 1) |
 | 5 | The work tool: models, app, integration tasks, assistant | DbDataStore relationships and documents; the app framework's declarative views |
@@ -904,7 +933,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 
 | # | Question | Proposed |
 | --- | --- | --- |
-| 1 | Which of these are servers? | **Partly decided** (owner, 2026-11-04): integrations are a product of their own, publishing to the runner, a service of its own (plan 28). Open until the detailed plans show what each back end needs (owner, 2026-11-04): whether agents and DbDataIntegration share a back end with apps; proposed earlier: knowledge and the work tool are not servers (section 6) |
+| 1 | Which of these are servers? | **Decided** (owner, 2026-11-05): one **Workspace server** for authoring (the apps back end, broadened) hosting app, agent, integration, skill and knowledge projects, with Build and Sync moving into it eventually; DbDataRunner a service of its own; knowledge, actions and the work tool are not servers (section 6). Open: the Workspace server's product name |
 | 2 | The work tool's name | **Working name DbDataBacklog** (owner, 2026-11-03); final name undecided |
 | 3 | Languages and packaging | **Decided for integrations** (owner, 2026-11-04): `.csx` scripts, compiled .NET projects, any executable through the runner protocol, and hybrids such as a .NET notebook over a project (plan 28 section 4). Actions: `.csx`, SQL, command calls and declarative elevated forms |
 | 4 | Embedding search | **Decided** (owner, 2026-11-05): vector search only, to start, on SQL Server 2025, PostgreSQL (`pgvector`) and SQLite (`sqlite-vec`), with an embedding model connection bound per channel; without vector search there is no knowledge search (section 2.4) |
@@ -926,7 +955,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 20 | An agent's reach: the person's access, narrowed by the agent's scopes and the install policy, enforced by the serving layer | **Decided** (owner, 2026-11-06) (section 3.6) |
 | 21 | How scopes are written: on the item (YAML front matter, or the same fields on a record), folder defaults and implicit scope by place, subjects named as the catalog names them, agents and the install policy narrowing or adding, one library checking it | **Decided** (owner, 2026-11-05), items 1 to 5 of section 3.5c |
 | 22 | Install-wide instructions for one or several products: products and the install as subjects, an install knowledge project published like other definitions, policy settings apart from policy text, given broad to narrow with guardrails not overridable | **Decided** (owner, 2026-11-05) (section 3.5c, item 6) |
-| 23 | Knowledge stores: sources (git files and generated first; DbDataStore records, documents, outside systems later) giving one shape, provenance kept, unreviewed sources as references only; the index in the unified state | **Decided** (owner, 2026-11-05) (section 2.4); the index's search decided under question 4 |
+| 23 | Knowledge stores: sources (git files and generated first; the Workspace server's knowledge editor, documents, outside systems later) giving one shape, provenance kept, unreviewed sources as references only; the index in the unified state | **Decided** (owner, 2026-11-05) (section 2.4); the index's search decided under question 4 |
 | 24 | Agents as git projects (`agent.yml`, instructions, knowledge, skills, tests), checked at build, published as the `agent` kind; run-time state in the `agents` module | **Decided** (owner, 2026-11-05) (section 3.10) |
 | 25 | Memories: conversation, the person's (theirs only), the work's (with the workspace or item); shared learning goes through knowledge, never memory | **Decided** (owner, 2026-11-05) (section 3.11) |
 | 26 | Subagents: declared, never wider than the parent, their own context, same prompting, counted to the parent, depth two, nested in the transcript | **Decided** (owner, 2026-11-05) (section 3.12) |
@@ -938,6 +967,8 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 32 | Surfaces: the console's chat first, then apps, MCP and messaging | **Decided** (owner, 2026-11-06) (section 3.16) |
 | 33 | Untrusted content marked as data; harm still asks; answers checked | **Decided** (owner, 2026-11-06) (section 3.17) |
 | 34 | Embedding models: a connection with purpose embeddings; built in (ONNX Runtime, in process), Ollama, or a local OpenAI-compatible server for the local CPU; one model per index, rebuilt on change | **Decided** (owner, 2026-11-06); local servers also stand in for the public OpenAI API in tests (section 3.7a) |
+| 35 | Business knowledge: not DbDataStore; edited in forms in the Workspace server, kept in git in the same `knowledge: 1` format, approved by each item's owner, published through channels | proposed (section 2.5) |
+| 36 | The glossary and verified queries (plan 22 section 3 put the glossary in DbDataStore) move with business knowledge | proposed (section 2.5) |
 
 ## 9. Detailed plans to follow
 
@@ -965,8 +996,8 @@ one branch `suite/<id>-<short-name>`, a "Done when" test, as in 13a):
 | 15 (DbDataStore permissions) | grants to action principals, with field and row conditions; history and audit record the action, its version and the person who asked |
 | 20 section 4 | new modules: `knowledge` (reads), and action calls under `mcp` and `apps`; the runner (plan 28) as the scheduled and batch counterpart |
 | 13 W2, 13a S-series | Sync's script manifest becomes the shared script format, used by apps and agents too; an old manifest is refused with a message |
-| 22 section 1 | shared authoring gains project kinds for agents and integrations, and actions inside app and agent projects |
-| 22 section 3 | catalog search becomes part of knowledge search |
+| 22 section 1 | the apps back end becomes the Workspace server (section 6): shared authoring gains project kinds for agents, integrations, skills and knowledge, and actions inside app and agent projects; Build and Sync move in eventually |
+| 22 section 3 | catalog search becomes part of knowledge search; the glossary is business knowledge (section 2.5), not a DbDataStore entity |
 | 21 | by default, outbound integration steps in a non-production channel use that channel's connection or are refused; an administrator may choose otherwise, recorded (section 4.7) |
 | 18 | outside systems become lineage nodes |
 | 06 and `connection/1` | a kind for outside systems (if question 10 is agreed) |
