@@ -6,6 +6,7 @@ using DbDataKit.Web.Trust;
 using DbDataKit.State;
 using DbDataProxy.Server.Configuration;
 using DbDataProxy.Server.Secrets;
+using DbDataProxy.Server.Serving;
 using DbDataProxy.Server.Tls;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Options;
@@ -15,9 +16,9 @@ namespace DbDataProxy.Server.Hosting;
 /// <summary>
 /// The <c>apps</c> module of the serving layer (plan 26, AP05): the published apps of the group's state, each instance served by subpath (<c>/apps/&lt;instance&gt;/</c>) on a listener of its own, with the Proxy's certificate.
 /// Like the identity home it is a web application of its own inside the process, so its pipeline never touches the Flight or management listeners. It serves an instance's bundle with the egress policy of its manifest
-/// (<see cref="AppSite"/>); what an app does with data goes through the store and identity modules with a token, not through this listener. A person is signed in through the identity home (<see cref="OpenIdClient"/>) and needs a role on <c>app:&lt;instance&gt;</c> to see the shell page; the token broker is the next slice (AP05c).
+/// (<see cref="AppSite"/>); an app's data calls (<c>/apps/&lt;instance&gt;/_data/...</c>) are answered by the group's published entity models in this process (<see cref="GroupAppData"/>, plan 20 O08c), so the store module's listener need not be on. A person is signed in through the identity home (<see cref="OpenIdClient"/>) and needs a role on <c>app:&lt;instance&gt;</c> to see the shell page; the token broker is the next slice (AP05c).
 /// </summary>
-public sealed class ProxyAppsModule(IOptionsMonitor<ProxyOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, ILoggerFactory loggers, GroupCertificate? group = null) : IHostedService, IAsyncDisposable
+public sealed class ProxyAppsModule(IOptionsMonitor<ProxyOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, PublishedEntityModels models, ILoggerFactory loggers, GroupCertificate? group = null) : IHostedService, IAsyncDisposable
 {
     /// <summary>The secret that holds the seed of the key the apps host signs its app tokens with: made on the first start, and copied to every other instance of a group.</summary>
     public const string SigningKeySecret = "dbdata:proxy:apps:signing-key";
@@ -81,7 +82,7 @@ public sealed class ProxyAppsModule(IOptionsMonitor<ProxyOptions> options, State
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
         app.MapApps(instances, new AppSite(instances, name => instances.Resolve(name) is { } r ? approvals.ApprovedEgress(r) : AppEgress.None), client, new AppSessions(refresh: client.RefreshAsync, refreshAfter: TimeSpan.FromSeconds(current.Apps.RolesRefreshSeconds)),
-            new AppTokenBroker(new ConsoleTokenIssuer(TokenIssuer, key)), new AppDataGateway(instances, StoresOf(current), new ConsoleIdentity(TokenIssuer, key), approvals: approvals), new AppStorage(state), approvals);
+            new AppTokenBroker(new ConsoleTokenIssuer(TokenIssuer, key)), new AppDataGateway(instances, new GroupAppData(ProxyStoreModule.ApiOf(options, state, secrets, models)), new ConsoleIdentity(TokenIssuer, key), approvals: approvals), new AppStorage(state), approvals);
         app.MapFallback(() => Results.Text("The apps host of this DbDataProxy. An app is at /apps/<instance>/.", "text/plain"));
         await app.StartAsync(cancellationToken);
         _app = app;
@@ -92,9 +93,6 @@ public sealed class ProxyAppsModule(IOptionsMonitor<ProxyOptions> options, State
         !string.IsNullOrWhiteSpace(options.Apps.PublicUrl)
             ? new Uri(options.Apps.PublicUrl.TrimEnd('/') + "/")
             : new UriBuilder(Uri.UriSchemeHttps, options.Tls.Hostnames.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h)) ?? "localhost", options.Apps.Port).Uri;
-
-    /// <summary>The Store servers this host is paired with (<c>dbdataproxy apps store-pair</c>).</summary>
-    public static AppStores StoresOf(ProxyOptions options) => new(Path.Combine(ProxyHost.ResolveDataDirectory(options), "apps", "stores.json"));
 
     private static Uri HomeOf(ProxyOptions options) =>
         new((string.IsNullOrWhiteSpace(options.Apps.Home.Authority) ? ProxyIdentityModule.PublicUrlOf(options).AbsoluteUri : options.Apps.Home.Authority).TrimEnd('/'));
