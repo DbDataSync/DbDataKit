@@ -166,6 +166,60 @@ Proposed (2026-11-06), from the owner's question.
      same serving group (semantic models, DbDataStore models, app manifests, data sources), as their subscriber, and indexes it with the
      same rules.
 
+### 2.7 Generated knowledge
+
+Proposed (2026-11-06). Knowledge the suite derives from its own definitions, so nothing already described in a definition is typed again.
+
+**Principles:**
+
+- **Derived, never edited.** A generated item is rendered from a definition by a fixed template; to change it, change the definition.
+- **References by default.** Generated items are found by search; a curated instruction can bind to the same subject when something must
+  always be given (section 3.5).
+- **Exactly what is served.** The `knowledge` module subscribes to the definitions published to its serving group (section 2.6), per
+  channel, so a channel's generated knowledge is that channel's definitions, no more and no less.
+- **Small items, one per subject.** One item per model, column, measure, attribute or app, so no chunking is needed and a search finds the
+  exact thing.
+
+**What is derived, from what:**
+
+| Published definition | Items | From its fields |
+| --- | --- | --- |
+| `semantic-model` | the model; each measure, attribute and hierarchy; each saved query | names, synonyms, formats, how a measure aggregates, the entities and relationships; a saved query's description and its semantic SQL (a reference, not a verified query, until someone verifies it) |
+| `build-metadata` (new kind: Build publishes its metadata documents to the serving group, per project and connection, as it publishes them to its tracking store today) | each model and each of its columns | title, description, tags, properties, model kind, columns and types, keys, what it reads and what reads it |
+| DbDataStore models | each model and field | names, types, validation rules, relationships |
+| `data-source` | each data source | its engine and what it exposes |
+| `app`, `agent`, `skill` | each one | title, description; for an app, the models it uses; for an agent or skill, what it is for (so a person or an agent can find the right one) |
+
+**Lineage** is not indexed as a graph: each item names its direct upstream and downstream, and the full graph is a tool (`lineage show`).
+**Volatile facts** (freshness, last run, row counts) are not indexed either; they change too often, and tools return them live.
+
+**Values are not knowledge by default.** Distinct values of a column (region codes, product lines) help agents match "Northeast" to `NE`,
+but they are data. A column can opt in (`knowledge: values` on a Build column or a semantic attribute, for small sets of values); its
+values are then indexed with **the column's own access rules** (plan 22 section 2), so a person never finds a value through knowledge that
+they could not query.
+
+**Item shape and scope.** A generated item has the `knowledge: 1` shape: role *reference*, about its own subject, owned by the
+definition's owner, with provenance naming the definition, its version and the channel. Its id is stable (`generated:semantic-model:Sales/measure:revenue`),
+so a curated item can name it, and a search result can be followed to the definition.
+
+**Access.** A generated item is visible to whoever may read its subject: a semantic model's items to those who may query the model, a
+column hidden from a person by a column rule hidden from them as well.
+
+**Refresh.** When a source definition's version is staged in a channel, its items are rendered again; only those whose text changed are
+embedded again; activation switches them with the definition; a retired definition's items go with it.
+
+**Filling the gaps.** Generated knowledge is only as good as the descriptions it is rendered from:
+
+- semantic-model measures, attributes and hierarchies gain a `description` (they have synonyms and formats, but no description today);
+  DbDataStore model fields gain one too;
+- the console shows what is undescribed ("12 measures in Sales have no description");
+- a business user can **suggest a description** from the knowledge app (section 2.5). When the definition's project is on the Workspace
+  server, the suggestion becomes a change to that project (a commit to the model's file, approved by its owner); until then, it becomes a
+  curated item about the same subject.
+
+**The catalog** (plan 22 section 3) is this: search over generated knowledge, with the lineage tool beside it. `catalog search` and
+`catalog show` become `knowledge search` and `knowledge show` filtered to generated items.
+
 ## 3. DbDataAgents
 
 **Goal.** An agent is a **definition**, versioned and published like an app, not a prompt pasted into a chat. The same definition runs
@@ -1004,6 +1058,11 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 35 | Business knowledge: not DbDataStore; kept in git in the `knowledge: 1` format; business users edit in a knowledge app served by the serving layer; suggestions and approvals are records at the edge that the Workspace server collects, commits, merges and publishes through channels; agents suggest the same way | **Decided** (owner, 2026-11-06) (section 2.5, revised 2026-11-06) |
 | 36 | The glossary and verified queries (plan 22 section 3 put the glossary in DbDataStore) move with business knowledge | **Decided** (owner, 2026-11-06) (section 2.5) |
 | 37 | Knowledge projects published as `knowledge-project` to the serving group; the `knowledge` module checks and embeds at staging and switches at activation; all readers go through it; workspace changes laid over for back-end agents; generated knowledge derived from other published definitions | proposed (section 2.6) |
+| 38 | Generated knowledge: derived from published definitions per channel, one item per subject, references by default, refreshed at staging and switched at activation; lineage and volatile facts through tools, not the index | proposed (section 2.7) |
+| 39 | Build publishes its metadata documents to the serving group as a `build-metadata` kind | proposed (section 2.7) |
+| 40 | Column values as knowledge only by opt-in, indexed under the column's access rules | proposed (section 2.7) |
+| 41 | Descriptions added to semantic-model members and DbDataStore fields; suggested descriptions become changes to the definition's project when it is on the Workspace server | proposed (section 2.7) |
+| 42 | The catalog is search over generated knowledge | proposed (section 2.7) |
 
 ## 9. Detailed plans to follow
 
