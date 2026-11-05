@@ -73,37 +73,62 @@ in the console's chat, in an app's assistant panel, and for an outside client ov
 | Identity | name, description, owner, version |
 | Audience | **front end** (business users: answer questions, write and run queries, fill in forms) or **back end** (developers: build models, replications, Store models, apps, integrations) |
 | Instructions | the agent's own instructions, in files in its project |
-| Knowledge | which knowledge collections and kinds it searches (section 2), and context it always gets (for example "the Sales semantic model") |
-| Tools | an allow-list of commands and actions (section 4.4), named by spec; never wider than its user's roles |
-| Model | provider and model, or "the install's default", chosen from the providers an administrator allows (plan 16 section 1) |
-| Approvals | which effect classes need the user's approval at each step (section 3.3) |
+| Knowledge | which knowledge it may search and which it always gets, by the binding rules of section 3.5 |
+| Scopes | the semantic models, DbDataStore entities and operations it may use (section 3.6); narrows the person's own access, never widens it |
+| Tools | an allow-list of commands and actions (section 4.4), named by spec, each with its prompting setting (section 3.3); never wider than its user's roles |
+| Model | a model **slot**, bound per channel to a provider connection and model (section 3.7) |
 | Limits | turns, tool calls, tokens and cost per conversation |
 | Output | which view kinds it may return (plan 16 section 2a: tables, matrix grids, Vega-Lite) |
 | Tests | scripted conversations and an evaluation set (section 3.4) |
 
 ### 3.2 Where it runs
 
-- **The runtime is `DbDataKit.Agents`**, plan 16 section 1 as written. This plan adds loading a published `agent/1` into that runtime.
-- **Front-end agents run in the serving layer** (the `mcp` module, plan 20), so they work while the back ends are down, and they reach
-  data as the signed-in user.
-- **Back-end agents work in an authoring workspace** (plan 22 section 1): a branch, edits, a build and preview, then a commit and merge the
-  user approves. They never change a published definition directly.
-- **Keys and model calls stay on the server**, never in the browser (plan 16).
+**Proposed (2026-11-05):** one runtime library, `DbDataKit.Agents` (plan 16 section 1), loading a published `agent/1` (a plan 30 kind),
+in three hosts:
 
-### 3.3 Approvals
+| Agent | Runs in | Acts as |
+| --- | --- | --- |
+| **Back end** (developers) | the console, where developers already work | the signed-in person, in an authoring workspace (a branch, plan 22 section 1); never on a published definition |
+| **Front end** (business users, app assistants, outside MCP clients) | the serving layer's `mcp` module, so it works while the back ends are down | the signed-in person |
+| **Unattended** (a step of an integration task) | the task's process on the runner | the task's service account, with section 4.9's rule |
 
-Plan 16 decided "every action approved as it happens, to be refined later".
+Keys and model calls stay on the server, never in the browser (plan 16).
 
-**Decided (owner, 2026-11-03): prompting is configured per action.** Each tool an agent may run (a command, or an action from section 4)
-has its own setting for whether the person is asked before it runs. There is no single rule by effect class.
+**First (owner, 2026-11-05): the back-end agent**, because it unlocks building apps, which the front-end agents then live in. It starts
+from what exists: Build's command surface and its agent kit (`dbdatabuild project agent-kit`, `DbDataBuild.Cli/AgentKit/SKILL.md`),
+which outside agents already use over MCP.
 
-To settle in the detailed plan (owner question 5):
+### 3.3 Approvals: prompting per action
 
-- the settings (for example: always ask; ask once per conversation; do not ask);
-- where the setting lives: on the action or command itself as its default, on the agent definition per tool, or both, with the agent's
-  setting overriding the action's;
-- defaults: proposed from the effect class (reads do not ask; writes, definition changes, outward-facing steps and elevated actions ask);
-- whether an administrator can set an install-wide floor that no definition can lower (for example, destructive steps always ask).
+**Decided (owner, 2026-11-03): prompting is configured per action**, for every tool an agent may run (a command, or an action from
+section 4). Proposed 2026-11-05:
+
+**27-5a, the settings:** *ask* (every call waits for the person), *ask once per conversation* (after the first approval it runs without
+asking for the rest of the conversation), *do not ask* (runs at once; the only setting that runs in an unattended task, section 4.9).
+
+**27-5b, who sets it, in layers:** the command's or action's own default (its author, in its spec); the install policy (an administrator
+can set any action's setting and a minimum no agent can go below); the agent definition, per tool, within that minimum. The strictest of
+the three applies.
+
+**27-5c, defaults from the traits of what it does.** Today's effect classes are Build's (offline only, repository files only, target
+read-only, target writes, target data writes, tracking tables only) and cannot say "sends something outside" or "uses elevated grants".
+They become **traits**, suite-wide, that a command or action declares in any combination, each with a default:
+
+| Trait | Default prompting | Why it is its own trait |
+| --- | --- | --- |
+| **reads definitions** (models, catalogs, project files, metadata) | do not ask | describes the system, not its contents |
+| **reads data** (rows from a semantic query, a DbDataStore read, a sample) | do not ask | **owner, 2026-11-05: kept apart from reading definitions.** Data read by an agent is sent to its model provider, so an administrator can treat it differently: ask, or refuse it for agents bound to a cloud provider (section 3.7), and the audit can tell the two apart |
+| writes definitions or files | ask once per conversation | |
+| writes data | ask | |
+| changes structure | ask | |
+| deletes | ask | |
+| outward (outside systems, email, notifications) | ask | |
+| elevated (uses an action's own grants, section 4.5) | ask | |
+
+The MCP generator (`DbDataKit.Cli/Mcp.cs`), which today knows only "reads" or "does not", uses the traits too.
+
+**What the person sees when asked:** the command's own preview (plan 16): what it reads or changes, its traits, and for a plan or a change
+request, the plan. Every approval and refusal is recorded (section 3.8).
 
 ### 3.4 Testing and evaluation
 
@@ -111,6 +136,84 @@ To settle in the detailed plan (owner question 5):
    gates.
 2. **Quality** is measured with an evaluation set: questions with known good answers, drawn from verified queries (section 2.1). It is
    run against a real model by hand or on a schedule, never as a pull request gate. A published version records its last score.
+
+### 3.5 What an agent has in context: instructions, guardrails and knowledge
+
+Proposed (2026-11-05), from the owner's question: what decides an agent's instructions, guardrails and permissions, and are they files
+in version control or bound by rules?
+
+**Both, by who owns them, and with one rule above the rest: anything that must hold is enforced by the runtime, never only written in
+a prompt.** A model can ignore a sentence. So:
+
+- **Hard guardrails** are enforced outside the model: permissions and access rules (section 3.6), prompting and approvals (3.3), the
+  view schemas an answer must validate against, limits (3.9), what reaches outside, the plan files Build refuses to apply when edited.
+- **Instructions** (soft) are text the model reads: how to work, what words mean, style, what to ask the person. Build's agent kit shows
+  the mix today: its "rules that are never negotiable" are instructions, and the ones that matter most are also enforced (a plan file
+  carries its own hash; the agent never holds the write login).
+
+**Where context comes from, in four homes:**
+
+| Home | Owned by | Kept as | Examples |
+| --- | --- | --- | --- |
+| **The platform** | the suite | in the product's code, versioned with it | tool results are data, not instructions; never print a secret; how to read a command's JSON document |
+| **The install policy** | administrators | a published definition, kind `agent-policy` (plan 30), edited in the console | "always say an answer is generated"; data rules for agents on cloud providers; prompting minimums |
+| **The agent** | its developers | files in the agent's project in git, reviewed and published | its role, how it works, its tool list and scopes; for the back-end agent, Build's agent kit |
+| **Knowledge bound to subjects** | the subject's owners | curated knowledge (section 2.1): technical items as files in git, business items as DbDataStore entities with approval | "revenue in the Sales model means net revenue"; "every dimension in this project has an unknown member"; naming conventions for a schema |
+
+**Binding by rule, not by copying.** Every knowledge item (from git or from DbDataStore) has:
+
+1. **a role:** *reference* (found by search when relevant), *instruction* (always given when its scope applies) or *guardrail* (an
+   instruction marked as policy, shown as such; when a check exists for it, the check is what enforces it);
+2. **a scope:** the subjects it is about, and who it is for: a semantic model, an entity, a Build project or a folder of it, a connection,
+   an app, a tag, an audience (front or back end), an agent, a channel.
+
+**Assembly, the same for every turn, in a fixed order:** the platform's rules, the install policy, the agent's instructions, then the
+instructions and guardrails whose scope matches what is in play (the models in the agent's scopes, the app it is in, the project its
+workspace is on, the objects the conversation has touched), then references found by search within the remaining budget, then the
+conversation. A higher layer wins over a lower one where they conflict.
+
+- **Instructions are never cut silently.** If the bound instructions do not fit the model's budget, the agent's publish or promotion is
+  refused naming them, rather than dropping some at run time.
+- **Every turn records what it was given:** which items, at which versions (section 3.8), so "why did the agent say that" can be answered
+  and a conversation replayed.
+- **Instructions and guardrails need approval** by the subject's owner, since they change what agents do; references follow the
+  knowledge's own rules.
+- **A change to a bound instruction changes agents without republishing them.** That is the point for business owners, but it bypasses
+  the agent's evaluation. Proposed: such a change runs the evaluation sets of the agents it reaches (on the runner) and shows the result
+  beside the approval (owner question 27-19).
+
+### 3.6 What an agent may touch
+
+Permissions are never instructions. An agent's reach is the **intersection** of:
+
+1. **the person's own access**: roles, and the row and column rules of plan 22 section 2 (an unattended agent: its service account's);
+2. **the agent's scopes**: the semantic models, DbDataStore entities and operations (read, write, change request) its definition names,
+   as an app's manifest does (plan 16, "Sign-in decisions" item 1: the token's scopes come from the definition);
+3. **the install policy**, which can narrow further (no data reads for agents on a cloud provider, for example).
+
+The serving layer enforces this on every call, through the token's audience and scopes, as it does for apps. The only way past the
+person's own access is an **elevated action** (section 4.5), which holds its own grants and checks each request itself.
+
+### 3.7 Model providers
+
+**Proposed (2026-11-05):** a model provider is a kind of connection in `connection/1`, like an outside system (question 10): its endpoint,
+its key as a secret reference, the models it allows and their prices, bound per channel. An agent names a model slot; each channel binds
+it, so a test channel can use a local or cheaper model. An install that must keep data in its tenant binds only Microsoft Foundry
+connections. Whether a provider is cloud or local is part of the connection, so the install policy can tell them apart (3.6, 3.3).
+
+### 3.8 Transcripts and the audit
+
+Kept in the `agents` module of the unified state (plan 29), large tool results as payloads.
+
+- **The audit, always kept:** every tool call, its arguments and outcome, every approval and refusal, and the context items given (3.5),
+  each naming the person and the agent and its version (owner, 2026-11-05: these are audit records).
+- **The conversation text** is history, with the default retention of 30 days (plan 29 section 3.3), adjustable.
+
+### 3.9 Limits and cost
+
+Proposed (2026-11-05): per conversation, per person and per install, on turns, tool calls, tokens and cost. Cost is the provider's reported
+usage times the price on the connection (3.7). A limit reached stops the conversation with a message; administrators are told at a
+threshold.
 
 ## 4. Integrations, actions and the runner
 
@@ -403,9 +506,9 @@ back end with apps, and whether DbDataIntegration's back end is shared with them
 | Wave | What | Needs |
 | --- | --- | --- |
 | 0 | What plan 16's agents need: the suite-wide command spec test, `DbDataKit.Agents` with the scripted fake, the provider proof against the four providers | 13a W4a work; plan 25 section 2 |
-| 1 | `agent/1` and one front-end agent: questions over a semantic model in the console's chat, with knowledge generated from the catalog and semantic descriptions, and full-text search | wave 0; plan 22 section 3's catalog search |
+| 1 | `agent/1` and the **back-end agent** (owner, 2026-11-05): in the console, working in an authoring workspace on a Build project, with Build's agent kit as its instructions, prompting per action and the traits, context assembly from git files | wave 0; shared authoring (plan 22 section 1) |
 | 2 | Actions: the shared script format; Sync's scripts move onto it; a `.csx` or SQL action as a tool of an agent and an endpoint for an app, in warm worker processes in the serving layer | wave 1; the serving contract (plan 20 section 10) |
-| 3 | Curated knowledge in DbDataStore (glossary, metrics, verified queries), drafts from agents, evaluation sets; embedding search if chosen | DbDataStore drafts (plan 21); access rules (plan 22 section 2) |
+| 3 | Front-end agents in the serving layer; curated knowledge in DbDataStore (glossary, metrics, verified queries), drafts from agents, evaluation sets; embedding search if chosen | DbDataStore drafts (plan 21); access rules (plan 22 section 2) |
 | 3b | Elevated actions: action principals, grants to actions with field and row conditions, *run* grants to people, validate then apply or reject, the declarative form, audit of both identities | wave 2; DbDataStore permissions (plan 15); the identity home's service principals (13a U20) |
 | 4 | The runner (plan 28) with its progress store on the unified state structure (plan 29), then DbDataIntegration: outside connections, the integration kit, templates, inbound and outbound patterns, webhooks; actions that enqueue integration tasks; back-end agents in workspaces | shared authoring (plan 22 section 1) |
 | 5 | The work tool: models, app, integration tasks, assistant | DbDataStore relationships and documents; the app framework's declarative views |
@@ -420,14 +523,22 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 2 | The work tool's name | **Working name DbDataBacklog** (owner, 2026-11-03); final name undecided |
 | 3 | Languages and packaging | **Decided for integrations** (owner, 2026-11-04): `.csx` scripts, compiled .NET projects, any executable through the runner protocol, and hybrids such as a .NET notebook over a project (plan 28 section 4). Actions: `.csx`, SQL, command calls and declarative elevated forms |
 | 4 | Embedding search | optional per install; full-text always |
-| 5 | Agent approvals | **Decided** (owner, 2026-11-03): prompting is configured per action. Open: the settings, where they live, defaults, an install-wide floor (section 3.3) |
+| 5 | Agent approvals | **Decided** (owner, 2026-11-03): prompting is configured per action. Proposed 2026-11-05 (section 3.3): 5a the three settings, 5b layers (action default, install policy with a minimum, agent definition; the strictest applies), 5c defaults from traits. **Decided** (owner, 2026-11-05): reading definitions and reading data are separate traits |
 | 6 | Unattended agents in integration tasks | **Decided** (owner, 2026-11-04): actions set to *do not ask* run; actions that would ask become proposals (drafts, work items, notifications) (section 4.9) |
 | 7 | The work tool's scope | its own items first; links to GitHub pull requests and workspaces; import from Jira or Azure Boards later; no two-way sync |
-| 8 | First audience | front-end agents first (wave 1), since the semantic layer and catalog are closest to ready |
+| 8 | First audience | **Decided** (owner, 2026-11-05): the **back-end** agent first, because it unlocks building apps (section 3.2) |
 | 9 | The integrations product's name | **Decided** (owner, 2026-11-04): DbDataIntegration (section 4.11) |
 | 10 | Outside systems as connections | **Decided** (owner, 2026-11-04): a new kind in `connection/1`, sharing secrets, channel bindings and the console's view (section 4.6) |
 | 11 | Elevated actions: who approves an action's grants on data, and who may give people *run* on it | **Decided** (owner, 2026-11-04): grants on data: an administrator and the DbDataStore model's owner, both, with an audit; *run*: the action's owner or an administrator (section 4.5) |
 | 12 | Integrations with or apart from actions and Sync's scripts | **Decided** (owner, 2026-11-04): apart. Integrations are a product publishing to the runner; actions share one script format with Sync (section 4) |
+| 13 | `agent` as a published kind (plan 30), with its model as a slot bound per channel | proposed (sections 3.1, 3.7) |
+| 14 | Where agents run: back end in the console, front end in the serving layer, unattended in the runner | proposed (section 3.2) |
+| 15 | Model providers as a kind of connection | proposed (section 3.7) |
+| 16 | Transcripts | **Decided** (owner, 2026-11-05): tool calls, approvals and context given are audit, always kept; conversation text is history, 30 days by default (section 3.8) |
+| 17 | Limits and cost | proposed (section 3.9) |
+| 18 | Context: four homes, roles (reference, instruction, guardrail) and scopes on knowledge, assembly in a fixed order, hard guardrails enforced by the runtime | proposed (section 3.5) |
+| 19 | A change to a bound instruction runs the evaluation sets of the agents it reaches | proposed (section 3.5) |
+| 20 | An agent's reach: the person's access, narrowed by the agent's scopes and the install policy, enforced by the serving layer | proposed (section 3.6) |
 
 ## 9. Detailed plans to follow
 

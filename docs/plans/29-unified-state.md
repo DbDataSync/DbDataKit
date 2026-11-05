@@ -116,7 +116,7 @@ with a prefix per module, or a schema per product.
 | Documents | JSON as `nvarchar(max)` / `jsonb` / text, with a `schema` column naming its format and version where it is a definition |
 | Who | `service_id` (which service wrote it) where a database is shared; `created_by` as the identity home's subject id |
 | Optimistic concurrency | a `row_version` integer on tables that several instances update |
-| Retention | **7 days by default** (owner, 2026-11-04) for every table that holds history except the audit (runs, logs, notifications, settled dead letters, expired idempotency keys, payloads whose owner is gone), set in days and fractions of days (`0.25` is six hours), up or down, per module and per table, run by one shared job. The **audit** is kept until an administrator sets a limit (owner, 2026-11-04). Tables that hold **current** state (identity, definitions, a checkpoint's current value, Build's structural baseline) have no age limit: their rows go when what they describe goes |
+| Retention | **30 days by default** (owner, 2026-11-05; 7 days before) for every table that holds history except the audit (runs, logs, notifications, settled dead letters, expired idempotency keys, payloads whose owner is gone), set in days and fractions of days (`0.25` is six hours), up or down, per module and per table, run by one shared job. The **audit** is kept until an administrator sets a limit (owner, 2026-11-04). Tables that hold **current** state (identity, definitions, a checkpoint's current value, Build's structural baseline) have no age limit: their rows go when what they describe goes |
 | Large payloads | never a column of an ordinary table: stored in the `payloads` module (section 3.6) and referred to by id |
 
 ### 3.4 The shared modules
@@ -349,7 +349,7 @@ Each service's login can be limited to the modules it uses, so sharing a databas
 | --- | --- | --- |
 | 1 | The topologies | **Decided** (owner, 2026-11-04): one per service, one per group and one per install, all offered (section 5) |
 | 2 | Namespaces | **Decided** (owner, 2026-11-04): schema and prefix configurable for every namespace, `dbdatakit_` for anything prefixed (section 3.2); several SQLite files supported, not required (section 3.2a) |
-| 3 | Retention defaults | **Decided** (owner, 2026-11-04): 7 days, in days and fractions of days, adjustable up or down per module and table (section 3.3). The audit is kept until an administrator sets a limit (owner, 2026-11-04) |
+| 3 | Retention defaults | **Decided** (owner, 2026-11-04, raised to 30 days on 2026-11-05): 30 days, in days and fractions of days, adjustable up or down per module and table (section 3.3). The audit is kept until an administrator sets a limit (owner, 2026-11-04) |
 | 4 | Which conventions to apply to existing tables when they move | **Decided** (owner, 2026-11-04): all of section 3.3; a moved table is a new table (clean break) |
 | 5 | Large payloads | **Decided** (owner, 2026-11-04): a chunked object store from the start, streamed in and out, never a column of another table (section 3.6). Chunk size 1 MiB by default (owner, 2026-11-04) |
 | 6 | Engines | **Decided for now** (owner, 2026-11-04): SQLite, SQL Server and PostgreSQL; no moving between engines (an export and import is plan 22 section 4's backup work) |
