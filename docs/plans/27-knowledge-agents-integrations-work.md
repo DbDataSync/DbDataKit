@@ -187,6 +187,9 @@ conversation. A higher layer wins over a lower one where they conflict.
 
 ### 3.5a A worked example
 
+Explained for readers, outside this plan, in [`docs/agents/context.md`](../agents/context.md) and
+[`docs/agents/context-window.md`](../agents/context-window.md), in the console's help format, to register once agents are built.
+
 The back-end agent, in a workspace on the Build project `sales-warehouse`. The person asks: "add a monthly revenue fact by region".
 
 **The knowledge that exists** (wherever it is kept):

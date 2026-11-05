@@ -1,0 +1,4 @@
+# The pages of the agents help, in the order of its index (the console's module docs format: one "slug: Title" a line).
+# Not registered with the console yet: agents are not built (plan 27).
+context: What an agent knows
+context-window: The model's space and the instruction budget
