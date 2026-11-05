@@ -249,7 +249,7 @@ means:
 
 ### 3.5c How scopes are written, and who owns them
 
-Proposed (2026-11-05), from the owner's question. It follows conventions the suite already has: Build's folder defaults
+**Decided (owner, 2026-11-05)** as written in items 1 to 5; item 6 is proposed. It follows conventions the suite already has: Build's folder defaults
 (`_dbdatabuild.yml`, nearest wins), its selectors (`tag:`, `property:`, `+model`), the strict YAML reader with diagnostics naming file and
 line, and lineage's stable identities for subjects (plan 18 section 4).
 
@@ -308,6 +308,38 @@ agents each item reaches. It runs:
 
 A subject that later disappears (a model dropped) leaves its items **orphaned**: they reach nobody, and the console lists them for their
 owners.
+
+**6. Install-wide instructions, for one product or several** (proposed, 2026-11-05). The subjects above are all objects inside a
+product, so "every agent working on Build or Sync in this install uses our naming standard" needs two more things:
+
+- **Products and the install as subjects:** `product: build` (or `sync`, `store`, `integration`, `apps`, `serving`, `runner`,
+  `console`), a list of them (`product: [build, sync]`), or `install: true` for everything. A product is in play when the agent works on
+  something of it: a workspace on a Build project, a Build command, a Sync replication it reads.
+- **A home for them: the install's knowledge project.** A git project of its own, authored like any other through workspaces in the
+  console (plan 22 section 1), with folders that set their scope by place through `_knowledge.yml` defaults:
+
+```
+install-knowledge/
+  _knowledge.yml            # defaults: { about: [{ install: true }] }
+  shared/                   # everything in the install
+  build/_knowledge.yml      # defaults: { about: [{ product: build }] }
+  build/naming.md
+  sync-and-build/_knowledge.yml   # defaults: { about: [{ product: [build, sync] }] }
+  policy/                   # the administrators' text: role guardrail, owner: administrators
+```
+
+It is published like other definitions (plan 30) to wherever agents run: the console for back-end agents, the serving group for front-end
+ones. If knowledge ends up kept somewhere other than files (section 2.1), this home follows that decision.
+
+**Policy settings and policy text, apart.** The install policy (`agent-policy`) keeps what is not text: prompting minimums, limits, data
+rules for cloud providers. What administrators want agents to *read* ("always say an answer was generated") is a knowledge item in the
+install project's `policy/` folder, with `role: guardrail` and the administrators as owner, so all text an agent reads is written,
+scoped, checked and recorded one way.
+
+**Broad to narrow.** Scoped items are given from the broadest to the narrowest (install, product, project, folder, model, member), and
+the agent is told that narrower ones refine broader ones. Guardrails are given in a section of their own, marked as policy, and a narrower
+instruction does not override them. Whether two texts contradict each other cannot be worked out automatically; it is a review question
+when an item is approved, and the approval shows the other items with the same or a broader scope beside it.
 
 ### 3.6 What an agent may touch
 
@@ -666,7 +698,8 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 18 | Context: four homes, roles (reference, instruction, guardrail) and scopes on knowledge, assembly in a fixed order, hard guardrails enforced by the runtime, a budget for what is always loaded | proposed (sections 3.5 to 3.5b); where curated knowledge is kept is not decided (section 2.1) |
 | 19 | What to do when a change to a bound instruction changes agents without their evaluation | **Open, needs discussion** (owner, 2026-11-05); automatic evaluation runs were proposed and are not agreed (section 3.5) |
 | 20 | An agent's reach: the person's access, narrowed by the agent's scopes and the install policy, enforced by the serving layer | proposed (section 3.6) |
-| 21 | How scopes are written: on the item (YAML front matter, or the same fields on a record), folder defaults and implicit scope by place, subjects named as the catalog names them, agents and the install policy narrowing or adding, one library checking it | proposed (section 3.5c) |
+| 21 | How scopes are written: on the item (YAML front matter, or the same fields on a record), folder defaults and implicit scope by place, subjects named as the catalog names them, agents and the install policy narrowing or adding, one library checking it | **Decided** (owner, 2026-11-05), items 1 to 5 of section 3.5c |
+| 22 | Install-wide instructions for one or several products: products and the install as subjects, an install knowledge project published like other definitions, policy settings apart from policy text, given broad to narrow with guardrails not overridable | proposed (section 3.5c, item 6) |
 
 ## 9. Detailed plans to follow
 

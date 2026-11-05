@@ -101,6 +101,39 @@ What the agent is given:
 Searching for references and giving the best few as excerpts is a simple form of what is often called retrieval-augmented generation
 (RAG). An agent can also search for itself, with `knowledge search` and `knowledge show` as tools, when the excerpts are not enough.
 
+## Writing a knowledge file
+
+A knowledge item kept as a file is Markdown with a short YAML header that says what it is and what it is about:
+
+```markdown
+---
+knowledge: 1                 # the format and its version
+title: Revenue means net revenue
+role: instruction            # instruction | guardrail | reference
+about:                       # what it is about: any one entry puts it in scope
+  - semantic-model: Sales
+    measure: revenue         # narrows the entry: this measure, not the whole model
+for:                         # who it is for: each key narrows; leave a key out for "all"
+  audience: [front-end, back-end]
+owner: finance-data          # the group that approves changes to it
+---
+Revenue in the Sales model means **net revenue**: gross sales minus returns minus discounts.
+```
+
+- **An unknown key, an unknown subject or a role that does not exist is refused** when the file is saved or approved, with the file and
+  line.
+- **Subjects are named the way the catalog names them:** `build-project:` (with `folder:` or `model:` to narrow it), `semantic-model:` (with
+  `measure:` or `dimension:`), `store-model:` (with `field:`), `connection:`, `app:`, `integration:`, and `tag:` or `property:` for
+  anything that carries that tag or property.
+- **Keys in one entry narrow it; several entries widen it.** An item applies when something in play is its subject or is inside it: an
+  item about a project applies whenever anything in that project is in play, an item about one measure only when that measure is.
+- **Most files need little header.** A folder can hold `_knowledge.yml` with `defaults:` for everything beneath it (the nearest one wins,
+  as with Build's `_dbdatabuild.yml`), and a file in a Build project's `knowledge/` folder is about that project without saying so. The naming
+  rule of the example above is just `role: instruction` and one sentence, in `sales-warehouse/knowledge/naming.md`.
+- **Agents and administrators can adjust without editing items:** an agent can limit what it draws on (`from:`, `exclude:`) or have a
+  reference always given (`always:`, which counts against its budget), and the install policy can give an item to every agent.
+- **A subject that disappears** (a model dropped) leaves its items reaching nobody; the console lists them for their owners.
+
 ## What an agent may touch is not part of its context
 
 Permissions are never written as instructions. What an agent can read or change is enforced by the serving layer on every call: the
