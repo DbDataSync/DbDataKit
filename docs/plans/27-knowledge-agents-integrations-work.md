@@ -220,6 +220,49 @@ embedded again; activation switches them with the definition; a retired definiti
 **The catalog** (plan 22 section 3) is this: search over generated knowledge, with the lineage tool beside it. `catalog search` and
 `catalog show` become `knowledge search` and `knowledge show` filtered to generated items.
 
+### 2.8 Chunking long items
+
+Proposed (2026-11-06). Vector search compares a question with pieces of text, so a long item is split into **chunks**, each embedded and
+found on its own. What is and is not chunked:
+
+| Item | Chunked? | Why |
+| --- | --- | --- |
+| generated items (section 2.7) | no | already one small item per subject |
+| instructions and guardrails | **never** | always given whole; one that does not fit the budget is refused at publish (section 3.5b) |
+| short references (one screen of text) | no | the item is the chunk |
+| long references: how-tos, specifications, documents, pages from outside systems | **yes** | a question matches a part of them, not the whole |
+
+**1. Split by structure first, then by size.** Markdown is split at its headings, so a chunk is a section; a section that is still too
+long is split at paragraphs, then at sentences; a table or a code block is never cut in the middle. Extracted documents (plan 15 section
+6) keep their structure the same way: headings, paragraphs, tables as Markdown tables, and page numbers for citing.
+
+**2. The size comes from the embedding model.** Each embedding model has a largest input it reads; its connection says what it is
+(section 3.7a). Chunks aim at a share of it (proposed: about half, and at most about 500 tokens, since smaller chunks match questions more
+precisely), with a small overlap between neighbouring pieces of one section (proposed: one or two sentences) so a sentence cut at a boundary
+is still found. Binding a different embedding model can change the sizes; the index is rebuilt for it anyway (one model per index).
+
+**3. Each chunk carries where it sits.** Before it is embedded, a chunk is prefixed with its item's title and its heading path
+("Backfilling an incremental model > Choosing the range"), so a chunk that says "set it to the first missing day" is still found by a
+question about backfills. The prefix is part of what is embedded, not of what is stored as the chunk's text.
+
+**4. What the agent is given.** A search returns chunks, then:
+
+- chunks of one item are grouped, so one item does not fill the results (proposed: at most three chunks per item, best first);
+- each result is the chunk's text with its item's title, heading path, source and version, so the agent can cite it;
+- adjacent chunks of the same section are joined into one excerpt;
+- the agent can ask for more with `knowledge show <item> [--section <heading>]`, which returns a whole section or the whole item.
+
+**5. Refresh is per chunk.** A chunk's id comes from its item and its position in the headings, and it records the hash of its text. When
+an item changes, it is split again and only the chunks whose text changed are embedded again, so editing one section of a long how-to
+re-embeds that section.
+
+**6. Access and scope come from the item.** A chunk is visible to whoever may see its item, and is in scope where its item is. Nothing is
+decided per chunk.
+
+**7. An item can say how it is split**, for the cases the defaults get wrong: `chunking: none` (keep it whole: a short glossary that must
+stay together), `chunking: { split: heading-level-2 }` (split only at level-two headings). The install sets the defaults per source; an
+item's own setting wins.
+
 ## 3. DbDataAgents
 
 **Goal.** An agent is a **definition**, versioned and published like an app, not a prompt pasted into a chat. The same definition runs
@@ -1063,6 +1106,10 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 40 | Column values as knowledge only by opt-in, indexed under the column's access rules | **Decided** (owner, 2026-11-06) (section 2.7) |
 | 41 | Descriptions added to semantic-model members and DbDataStore fields; suggested descriptions become changes to the definition's project when it is on the Workspace server | **Decided** (owner, 2026-11-06) (section 2.7) |
 | 42 | The catalog is search over generated knowledge | **Decided** (owner, 2026-11-06) (section 2.7) |
+| 43 | What is chunked: long references only; generated items, short references, instructions and guardrails never | proposed (section 2.8) |
+| 44 | How: by structure first (headings, paragraphs, sentences; tables and code kept whole), sized from the embedding model, small overlap, title and heading path prefixed before embedding | proposed (section 2.8) |
+| 45 | What the agent gets: grouped per item (at most three), joined when adjacent, with title, heading path and source; `knowledge show` for a section or the whole item | proposed (section 2.8) |
+| 46 | Refresh per chunk by hash; access and scope from the item; `chunking:` settings per item over install defaults | proposed (section 2.8) |
 
 ## 9. Detailed plans to follow
 
