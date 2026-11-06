@@ -222,7 +222,7 @@ embedded again; activation switches them with the definition; a retired definiti
 
 ### 2.8 Chunking long items
 
-Proposed (2026-11-06). Vector search compares a question with pieces of text, so a long item is split into **chunks**, each embedded and
+**Decided (owner, 2026-11-06).** Vector search compares a question with pieces of text, so a long item is split into **chunks**, each embedded and
 found on its own. What is and is not chunked:
 
 | Item | Chunked? | Why |
@@ -1106,10 +1106,10 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 40 | Column values as knowledge only by opt-in, indexed under the column's access rules | **Decided** (owner, 2026-11-06) (section 2.7) |
 | 41 | Descriptions added to semantic-model members and DbDataStore fields; suggested descriptions become changes to the definition's project when it is on the Workspace server | **Decided** (owner, 2026-11-06) (section 2.7) |
 | 42 | The catalog is search over generated knowledge | **Decided** (owner, 2026-11-06) (section 2.7) |
-| 43 | What is chunked: long references only; generated items, short references, instructions and guardrails never | proposed (section 2.8) |
-| 44 | How: by structure first (headings, paragraphs, sentences; tables and code kept whole), sized from the embedding model, small overlap, title and heading path prefixed before embedding | proposed (section 2.8) |
-| 45 | What the agent gets: grouped per item (at most three), joined when adjacent, with title, heading path and source; `knowledge show` for a section or the whole item | proposed (section 2.8) |
-| 46 | Refresh per chunk by hash; access and scope from the item; `chunking:` settings per item over install defaults | proposed (section 2.8) |
+| 43 | What is chunked: long references only; generated items, short references, instructions and guardrails never | **Decided** (owner, 2026-11-06) (section 2.8) |
+| 44 | How: by structure first (headings, paragraphs, sentences; tables and code kept whole), sized from the embedding model, small overlap, title and heading path prefixed before embedding | **Decided** (owner, 2026-11-06) (section 2.8) |
+| 45 | What the agent gets: grouped per item (at most three), joined when adjacent, with title, heading path and source; `knowledge show` for a section or the whole item | **Decided** (owner, 2026-11-06) (section 2.8) |
+| 46 | Refresh per chunk by hash; access and scope from the item; `chunking:` settings per item over install defaults | **Decided** (owner, 2026-11-06) (section 2.8) |
 
 ## 9. Detailed plans to follow
 
