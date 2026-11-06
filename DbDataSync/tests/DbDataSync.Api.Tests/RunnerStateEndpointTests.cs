@@ -97,6 +97,30 @@ public sealed class RunnerStateEndpointTests : IClassFixture<TestApiFactory>
     /// The whole <see cref="IRunnerState"/> surface over a real socket, checked against what the owner
     /// actually recorded. This is the test that says a runner loses nothing by not opening the file.
     /// </summary>
+    /// <summary>A runner buffers its log lines and sends them in batches, often at the very end of the run.
+    /// Each line has to be recorded with the time it happened, not the time its batch arrived.</summary>
+    [Fact]
+    public async Task A_log_batch_keeps_each_lines_own_timestamp()
+    {
+        var logs = _factory.Services.GetRequiredService<LogWriter>();
+        var runId = Guid.NewGuid();
+        var first = DateTimeOffset.UtcNow.AddMinutes(-30);
+        var second = first.AddMinutes(7);
+        using var client = Client(_token.Value);
+
+        var response = await client.PostAsJsonAsync($"{StateProtocol.Route}/log-batch", new LogBatchRequest(
+        [
+            new LogRequest(runId, LogSeverity.Info, "started", first),
+            new LogRequest(runId, LogSeverity.Info, "finished", second),
+        ]));
+        response.EnsureSuccessStatusCode();
+        logs.Flush();
+
+        var recorded = logs.GetLogs(runId);
+        Assert.Equal(first, recorded.Single(l => l.Message == "started").TimestampUtc);
+        Assert.Equal(second, recorded.Single(l => l.Message == "finished").TimestampUtc);
+    }
+
     [Fact]
     public void The_remote_implementation_does_the_same_thing_as_the_local_one()
     {

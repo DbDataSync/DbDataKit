@@ -15,8 +15,8 @@ import type { ReadHold } from '../../api/types'
  *
  * `'loading'` is phase 134's addition — `ReadHold.Loading`, set while an initial load's Bulk Load is in
  * flight (a position has been captured but is not yet the live watermark). It clears on its own once the
- * batch completes, so unlike `position-expired` it needs no recovery affordance in the dialog — see
- * `MappingReadStateDialog`'s own doc for why that file is otherwise untouched by this phase.
+ * batch completes. A batch that fails never completes, so the dialog also lets an operator leave it by
+ * choosing an intent (`MappingReadStateDialog`'s `loading`).
  */
 export type HoldState =
   | 'replication-disabled'
