@@ -48,6 +48,8 @@ public sealed partial class StateModule
         IReadOnlyList<RetentionRule>? retention = null,
         IReadOnlyList<PayloadOwner>? payloadOwners = null)
     {
+        if (name == "default")
+            throw new ArgumentException("'default' is the namespace settings' word for every module, so no module is named that.", nameof(name));
         if (!NamePattern.IsMatch(name))
             throw new ArgumentException($"A module name is lower case letters, digits and underscores, starting with a letter; '{name}' is not.", nameof(name));
         ArgumentNullException.ThrowIfNull(migrations);
