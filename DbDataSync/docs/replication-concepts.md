@@ -155,6 +155,12 @@ bulkLoad:
   pass.
 - Nothing is staged, so a hook's `{{staging}}` has no table to name.
 
+**Engine support.** Only SQL Server has a direct-load writer so far. PostgreSQL, MySQL / MariaDB and Oracle
+still stage first (PostgreSQL's staging is already a binary `COPY`, MySQL's and Oracle's batched inserts);
+each needs its own writer that implements `IPassThroughWriter`, and the `PassThrough` cache is engine-neutral
+and ready for them. Choosing `PassThrough` on one of those engines fails with "Target driver does not support
+staging kind 'PassThrough'". The per-engine table is in the [README](../README.md).
+
 `SupportsReconciliation` is what the reader/writer pickers use to show which writers reconcile —
 covered in [Getting started](getting-started.md).
 
