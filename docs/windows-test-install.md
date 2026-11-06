@@ -25,9 +25,10 @@ Pick one route per machine and do not mix them (they share a folder).
 ```powershell
 scoop install -g https://github.com/DbDataSync/DbDataKit/releases/download/dbdatakit/dist/dbdatakit.json
 scoop install -g https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/dbdatasync.json
-dbdatakit help
 dbdatasync version
 ```
+
+Open a new terminal afterwards so the PATH change is seen; both programs should then be found.
 
 Each manifest is pinned to `2026.11.6.837` and checks the zip's SHA256. A global install puts the programs under
 `C:\ProgramData\scoop\apps\` and shims on the machine PATH. Both manifests have no `persist` entries; settings and data live in
