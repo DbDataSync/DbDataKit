@@ -45,7 +45,8 @@ public sealed partial class StateModule
         StateScopeKind scope,
         IReadOnlyList<string> migrations,
         IEnumerable<StateModule>? dependsOn = null,
-        IReadOnlyList<RetentionRule>? retention = null)
+        IReadOnlyList<RetentionRule>? retention = null,
+        IReadOnlyList<PayloadOwner>? payloadOwners = null)
     {
         if (!NamePattern.IsMatch(name))
             throw new ArgumentException($"A module name is lower case letters, digits and underscores, starting with a letter; '{name}' is not.", nameof(name));
@@ -56,6 +57,7 @@ public sealed partial class StateModule
         Migrations = [.. migrations];
         DependsOn = [.. dependsOn ?? []];
         Retention = [.. retention ?? []];
+        PayloadOwners = [.. payloadOwners ?? []];
 
         foreach (var dependency in DependsOn)
         {
@@ -76,6 +78,9 @@ public sealed partial class StateModule
 
     /// <summary>What history this module keeps and for how long (plan 29 section 3.3); empty for a module that holds only current state.</summary>
     public IReadOnlyList<RetentionRule> Retention { get; }
+
+    /// <summary>The tables of this module whose rows own payloads, so retention can remove the payloads of rows that are gone.</summary>
+    public IReadOnlyList<PayloadOwner> PayloadOwners { get; }
 
     /// <summary>The version a database is at when every migration of this module has been applied.</summary>
     public int Version => Migrations.Count;

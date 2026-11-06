@@ -143,6 +143,23 @@ public sealed partial class StateLayout
                 Claim(Qualify(schema, bare), $"the index '{index}' of the module '{module.Name}'", SettingName(module, "prefix"));
             }
 
+            foreach (var rule in module.Retention)
+            {
+                if (!tables.ContainsKey(rule.Table))
+                    throw new InvalidOperationException($"The module '{module.Name}' has a retention rule for the table '{rule.Table}', which none of its migrations create.");
+                foreach (var child in rule.Children ?? [])
+                {
+                    if (!tables.ContainsKey(child.Table))
+                        throw new InvalidOperationException($"The retention rule for '{module.Name}.{rule.Table}' names the child table '{child.Table}', which none of the module's migrations create.");
+                }
+            }
+
+            foreach (var owner in module.PayloadOwners)
+            {
+                if (!tables.ContainsKey(owner.Table))
+                    throw new InvalidOperationException($"The module '{module.Name}' says its table '{owner.Table}' owns payloads, and none of its migrations create it.");
+            }
+
             var ns = new StateNamespace(module, scopeName, schema, prefix, tables);
             namespaces.Add(ns);
             layout._byModule[module.Name] = ns;

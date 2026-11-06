@@ -68,6 +68,8 @@ public sealed class PostgresStateDialect : StateDialect
 
     public override string Uuid => "UUID";
 
+    public override string UuidAsText(string column) => $"CAST({column} AS TEXT)";
+
     public override string Time => "TIMESTAMPTZ";
 
     public override string Json => "JSONB";

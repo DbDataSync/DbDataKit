@@ -114,6 +114,9 @@ public abstract class StateDialect
     /// <summary>Bytes: <c>VARBINARY(MAX)</c>, <c>BYTEA</c>, <c>BLOB</c>. Large values do not belong in an ordinary table at all (the payloads module, plan 29 section 3.6).</summary>
     public abstract string Blob { get; }
 
+    /// <summary>An expression that reads a UUID column as the lower-case text the state layer stores references to rows as (<see cref="StateValues"/>).</summary>
+    public virtual string UuidAsText(string column) => column;
+
     /// <summary>
     /// How a column is added to an existing table. SQLite and Postgres write <c>ADD COLUMN</c>; SQL
     /// Server writes <c>ADD</c> and rejects the keyword. One word, and it is the whole of the

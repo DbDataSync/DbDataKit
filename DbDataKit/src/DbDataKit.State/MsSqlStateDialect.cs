@@ -157,6 +157,8 @@ public sealed class MsSqlStateDialect : StateDialect
 
     public override string Uuid => "UNIQUEIDENTIFIER";
 
+    public override string UuidAsText(string column) => $"LOWER(CAST({column} AS NVARCHAR(36)))";
+
     public override string Time => "DATETIMEOFFSET(7)";
 
     public override string Json => "NVARCHAR(MAX)";
