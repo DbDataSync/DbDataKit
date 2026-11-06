@@ -178,7 +178,9 @@ public static class RunnerStateEndpoints
         group.MapPost("/log-batch", (LogBatchRequest r) =>
         {
             foreach (var entry in r.Entries)
-                state.Log(entry.RunId, entry.Level, entry.Message);
+                // The runner's own timestamp: it buffers lines and sends them in batches, so stamping them
+                // here would give a whole batch (often a whole run) the time it arrived.
+                state.Log(entry.RunId, entry.Level, entry.Message, entry.TimestampUtc);
             return Results.Ok();
         });
     }
