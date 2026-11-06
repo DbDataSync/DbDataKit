@@ -94,6 +94,9 @@ moves to SQL Server 2025.
 | SQL Server | the vector type of SQL Server 2025 (so knowledge search needs 2025 or later) | full-text indexes, an optional feature (on Linux a separate package, `mssql-server-fts`) |
 | SQLite (single instance) | the `sqlite-vec` extension (owner, 2026-11-05) | built in (FTS5) |
 
+**`sqlite-vec`** (its native library per platform, loaded by `Microsoft.Data.Sqlite`) is added during the knowledge-index work, not in the
+test-environment slice (owner, 2026-11-06).
+
 **Vector search only, to start (owner, 2026-11-05).** Full-text search is not built at first. An install, channel or engine without
 vector search (no embedding model bound, an engine without the extension) has **no knowledge search**: references are not found, and the
 console says why. Instructions and guardrails bound by scope are not affected, since they are given by scope, not found by search.
@@ -901,9 +904,34 @@ stops with a message; nothing is half-run, since tool calls only start after the
 | **An app's assistant panel** (plan 16 section 2) | front-end agents the app's manifest names | with the front-end agents |
 | **MCP, for outside clients** | the commands and actions as tools, as today; later, a published agent offered as one tool ("ask the sales agent") | tools now; agents later |
 | **Teams, Slack, email** | front-end agents, reached through an integration (section 4) | later |
+| **An Excel add-in** (section 3.16a, proposed) | published agents in a task pane, with data-source tools that put results into the workbook | with the front-end agents |
 
 Every surface signs the person in through the identity home, so who they are, what they may touch and what they are asked are the same
 everywhere.
+
+### 3.16a An Excel add-in
+
+Proposed (2026-11-06), from the owner: published agents may also need an Excel app that provides agent and data-source tools. Excel is
+already a client of the serving layer through WebDAV (documents), XMLA (PivotTables) and Power Query (feeds) (plan 16, "Sign-in decisions"
+item 3); none of those gives a person an agent, or a way to pick a semantic model and drop its numbers into a sheet. An **Office add-in for
+Excel** would:
+
+| Part | Does |
+| --- | --- |
+| **Agent pane** | a task pane with a published front-end agent, as in an app's assistant panel; the agent's tools include the workbook (read the selected range, write a table to a sheet), each with its prompting setting |
+| **Data-source tools** | browse the semantic models and saved and verified queries the person may use (with `@dbdatakit/knowledge-ui`'s search and subject panel), run one, and insert the result as an Excel table that remembers its query |
+| **Refresh** | refresh a table, or all of them, from their queries, under the person's own access rules at the time of the refresh |
+| **Functions, later** | Excel custom functions over saved and verified queries (a cell formula that returns a query's value) |
+
+- **Served like any app:** the add-in's pages are an app of the serving layer (plan 26), and its manifest is what an administrator deploys
+  to people's Excel (centrally, or by sideloading for a trial).
+- **Sign-in through the identity home:** the add-in opens the home's own sign-in page in Office's sign-in dialog and gets the same scoped
+  token an app gets (plan 16, "Sign-in decisions" item 1); where the install uses Entra, Office's single sign-on can be accepted the way
+  Power Query's Entra tokens are (item 3).
+- **The workbook is a surface, not a store:** what the add-in writes into a sheet is a copy at that moment; the rules and the data stay on
+  the server.
+- **To check when it is built:** the manifest format to use, Office's sign-in options on Windows, Mac and the web, and custom functions'
+  limits. None of this has been tried in this repository; plan 14 R7's Excel VM recordings are where it would be verified.
 
 ### 3.17 Untrusted content
 
@@ -1256,7 +1284,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | --- | --- | --- |
 | 1 | Which of these are servers? | **Decided** (owner, 2026-11-05): one **Workspace server** for authoring (the apps back end, broadened) hosting app, agent, integration, skill and knowledge projects, with Build and Sync moving into it eventually; DbDataRunner a service of its own; knowledge, actions and DbDataBacklog are not servers (DbDataBacklog's runtime is a serving-layer module with its own state module, section 5.1) (section 6). Its name: **DbDataWorkspace** (owner, 2026-11-06) |
 | 2 | The work tool's name | **Decided** (owner, 2026-11-06): DbDataBacklog |
-| 3 | Languages and packaging | **Decided for integrations** (owner, 2026-11-04): `.csx` scripts, compiled .NET projects, any executable through the runner protocol, and hybrids such as a .NET notebook over a project (plan 28 section 4). Actions: `.csx`, SQL, command calls and declarative elevated forms |
+| 3 | Languages and packaging | **Decided for integrations** (owner, 2026-11-04): `.csx` scripts, compiled .NET projects, any executable through the runner protocol, and hybrids such as a .NET notebook over a project (plan 28 section 4). Actions: `.csx`, SQL, command calls and declarative elevated forms; **Python for actions is left out for now** (owner, 2026-11-06) |
 | 4 | Embedding search | **Decided** (owner, 2026-11-05): vector search only, to start, on SQL Server 2025, PostgreSQL (`pgvector`) and SQLite (`sqlite-vec`), with an embedding model connection bound per channel; without vector search there is no knowledge search (section 2.4) |
 | 5 | Agent approvals | **Decided** (owner, 2026-11-03): prompting is configured per action. **Decided** (owner, 2026-11-06) (section 3.3): 5a the three settings, 5b layers (action default, install policy with a minimum, agent definition; the strictest applies), 5c defaults from traits. **Decided** (owner, 2026-11-05): reading definitions and reading data are separate traits |
 | 6 | Unattended agents in integration tasks | **Decided** (owner, 2026-11-04): actions set to *do not ask* run; actions that would ask become proposals (drafts, work items, notifications) (section 4.9) |
@@ -1314,6 +1342,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 58 | Data, documents' contents and operational records stay with their own systems; one search box asks several sources and groups the results | **Decided** (owner, 2026-11-06) (section 2.11) |
 | 59 | DbDataBacklog's core structure is the application's own (a `backlog` state module and a serving-layer module), created on install; DbDataStore only augments it | **Decided** (owner, 2026-11-06) (section 5.1) |
 | 60 | Custom attributes for any object type through DbDataStore; the core structure stays the owning product's | **Decided** (owner, 2026-11-06) as a rule; and how, with extension models keyed by object identity (section 5.4) |
+| 61 | An Excel add-in: an agent pane, data-source tools that insert query results as refreshable tables, custom functions later; served as an app, signed in through the identity home | proposed (section 3.16a) |
 
 ## 9. Detailed plans to follow
 
