@@ -47,7 +47,7 @@ public sealed class SessionStore(StateDatabase database)
     /// The user behind a session id, or null. Expiry is enforced here rather than by a sweep, so a
     /// session that outlives its row's deletion schedule is still refused.
     /// </summary>
-    public UserRecord? Resolve(string sessionId, UserStore users)
+    public UserRecord? Resolve(string sessionId, IUserAccounts users)
     {
         var userId = database.Retry(() =>
         {
