@@ -148,7 +148,7 @@ and administrators, and the knowledge app for business users, whose suggestions 
 
 ### 2.6 How knowledge is published and read
 
-Proposed (2026-11-06), from the owner's question.
+**Decided (owner, 2026-11-06)**, from the owner's question.
 
 1. **A knowledge project is published like any other definition** (plan 30), as the kind `knowledge-project`, to the serving group: one
    version per merged commit, each file an artifact by its hash, signed by the Workspace server, per channel.
@@ -1290,7 +1290,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 34 | Embedding models: a connection with purpose embeddings; built in (ONNX Runtime, in process), Ollama, or a local OpenAI-compatible server for the local CPU; one model per index, rebuilt on change | **Decided** (owner, 2026-11-06); local servers also stand in for the public OpenAI API in tests (section 3.7a) |
 | 35 | Business knowledge: not DbDataStore; kept in git in the `knowledge: 1` format; business users edit in a knowledge app served by the serving layer; suggestions and approvals are records at the edge that the Workspace server collects, commits, merges and publishes through channels; agents suggest the same way | **Decided** (owner, 2026-11-06) (section 2.5, revised 2026-11-06) |
 | 36 | The glossary and verified queries (plan 22 section 3 put the glossary in DbDataStore) move with business knowledge | **Decided** (owner, 2026-11-06) (section 2.5) |
-| 37 | Knowledge projects published as `knowledge-project` to the serving group; the `knowledge` module checks and embeds at staging and switches at activation; all readers go through it; workspace changes laid over for back-end agents; generated knowledge derived from other published definitions | proposed (section 2.6) |
+| 37 | Knowledge projects published as `knowledge-project` to the serving group; the `knowledge` module checks and embeds at staging and switches at activation; all readers go through it; workspace changes laid over for back-end agents; generated knowledge derived from other published definitions | **Decided** (owner, 2026-11-06) (section 2.6) |
 | 38 | Generated knowledge: derived from published definitions per channel, one item per subject, references by default, refreshed at staging and switched at activation; lineage and volatile facts through tools, not the index | **Decided** (owner, 2026-11-06) (section 2.7) |
 | 39 | Build publishes its metadata documents to the serving group as a `build-metadata` kind | **Decided** (owner, 2026-11-06) (section 2.7) |
 | 40 | Column values as knowledge only by opt-in, indexed under the column's access rules | **Decided** (owner, 2026-11-06) (section 2.7) |
