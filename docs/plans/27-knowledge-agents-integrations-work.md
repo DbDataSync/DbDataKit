@@ -263,6 +263,70 @@ decided per chunk.
 stay together), `chunking: { split: heading-level-2 }` (split only at level-two headings). The install sets the defaults per source; an
 item's own setting wins.
 
+### 2.9 Verified queries
+
+Proposed (2026-11-06). A **verified query** is a question people ask, the query that answers it, and someone's word that the answer is
+right. It builds on what exists: saved queries in a semantic model's catalog (plan 19 J26) and people's own saved queries kept by the
+serving layer, with versions, shares and a promote-to-model action (J27).
+
+**1. The item.** Business knowledge, so it is a `knowledge: 1` file in a knowledge project (section 2.5), of the kind `verified-query`:
+
+```markdown
+---
+knowledge: 1
+kind: verified-query
+title: Net revenue by region, last quarter
+about: [{ semantic-model: Sales }]
+owner: finance-data
+questions:                          # how people ask it; each is embedded and searched
+  - What was net revenue by region last quarter?
+  - Revenue per region for the previous quarter
+query:                              # pinned: the text as it was verified, never a pointer to something that can change
+  semantic-sql: |
+    SELECT region, revenue FROM Sales WHERE quarter = :quarter
+  parameters:
+    quarter: { means: "the quarter before the current one" }
+verified:
+  by: user:maria
+  at: 2026-11-06
+  against: semantic-model:Sales@14   # the model version it was checked against
+---
+Revenue here is net revenue (gross minus returns minus discounts). Regions follow the 2025 split (EU and MEA).
+```
+
+- **The query is pinned**, copied into the item when it is verified. A person's own saved query can change or be deleted, so a verified
+  query never just points at one. It may also name a model-level saved query (`saved-query: Sales/revenue_by_region@3`) when the answer is
+  one, by version.
+- **What is verified is the query's logic, not its numbers.** Run by different people, it applies each one's own access rules (plan 22
+  section 2), so a regional manager and the finance director get different rows from the same verified query.
+
+**2. How one is made.** Through the suggestion path of section 2.5, so the owner of the model's knowledge approves it:
+
+- **From an answer:** in the knowledge app, the console, or an agent's conversation, a person who sees a query and its result can choose
+  **Verify this answer**, giving the question as they would ask it. The suggestion carries the query, its parameters, the model version and a
+  preview of the result.
+- **From an agent:** an agent can suggest one (`knowledge suggest`, with its prompting setting) after a person confirms its answer.
+- **By hand:** developers and analysts write the file in a workspace.
+
+**3. How agents use them.**
+
+- **Found by the question.** The `questions:` are what is embedded, so a person's question is matched against how others asked it.
+- **Given as a verified example**, marked as such, with who verified it and when. The agent can run it directly (`query run-verified
+  <id>` with the parameters filled in) or adapt it; either way the turn records which verified query it used.
+- **Shown to the person as verified:** an answer that came from a verified query says so ("verified by Maria, 6 November"), and one adapted
+  from it says that instead.
+
+**4. They are the front-end agents' evaluation set.** Each verified query is a case (section 3.4): the question goes to the agent, the
+agent's query and the verified query are both run, as the same service account against the same data, and their **rows are compared**. No
+judge model is needed for these cases, and the set grows as people verify answers.
+
+**5. When the model changes.** When a new version of the semantic model is staged, the `knowledge` module checks each verified query about
+it: it still parses, its members still exist, its result has the same columns. One that fails is marked **needs re-verification**: it is
+still found, but no longer given as verified, and its owner is told. A model change is never blocked by its verified queries; the console
+lists what needs another look.
+
+**6. Access.** A verified query is visible to whoever may query its model, and running it applies that person's rules (item 1).
+
 ## 3. DbDataAgents
 
 **Goal.** An agent is a **definition**, versioned and published like an app, not a prompt pasted into a chat. The same definition runs
@@ -1110,6 +1174,11 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 44 | How: by structure first (headings, paragraphs, sentences; tables and code kept whole), sized from the embedding model, small overlap, title and heading path prefixed before embedding | **Decided** (owner, 2026-11-06) (section 2.8) |
 | 45 | What the agent gets: grouped per item (at most three), joined when adjacent, with title, heading path and source; `knowledge show` for a section or the whole item | **Decided** (owner, 2026-11-06) (section 2.8) |
 | 46 | Refresh per chunk by hash; access and scope from the item; `chunking:` settings per item over install defaults | **Decided** (owner, 2026-11-06) (section 2.8) |
+| 47 | Verified queries: a `verified-query` knowledge item (questions, a pinned query with its parameters, who verified it, against which model version); the logic is verified, rows follow each person's rules | proposed (section 2.9) |
+| 48 | Made through the suggestion path: "Verify this answer" from any surface, from an agent after a person confirms, or by hand | proposed (section 2.9) |
+| 49 | Used by agents: found by the question, given as a verified example, run directly or adapted, shown to the person as verified | proposed (section 2.9) |
+| 50 | Verified queries are the front-end agents' evaluation cases, judged by comparing rows | proposed (section 2.9) |
+| 51 | Checked when the model changes; failures marked "needs re-verification", never blocking the model | proposed (section 2.9) |
 
 ## 9. Detailed plans to follow
 
