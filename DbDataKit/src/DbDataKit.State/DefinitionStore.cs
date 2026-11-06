@@ -23,7 +23,7 @@ public sealed class DefinitionNotFoundException(string message) : Exception(mess
 /// validates first and switches the channel in the same transaction, so a version that fails validation is never stored and the old one keeps serving; the previous version is kept for <see cref="Rollback"/>. The store
 /// is the state database and nothing else, so every instance that shares it serves the same versions, the publisher need not be running, and <see cref="Changes"/> tells an instance what moved since it last looked.
 /// </summary>
-public sealed partial class DefinitionStore(StateDatabase database, TimeProvider? clock = null)
+public sealed partial class DefinitionStore(StateDatabase database, TimeProvider? clock = null) : IDefinitionSource
 {
     public const string Production = "prod";
 
