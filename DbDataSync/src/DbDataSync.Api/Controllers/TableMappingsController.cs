@@ -173,6 +173,12 @@ public sealed class TableMappingsController(
         var previousHold = watermarks.GetReadState(replicationName, mappingName, sourceTable)?.Hold ?? ReadHold.None;
         watermarks.SetReadIntentAndHold(replicationName, mappingName, sourceTable, request.Intent, request.Hold);
 
+        // Leaving Loading by hand. Ordinarily it clears itself when the initial load's batch completes, but
+        // a load that failed never does, and this is the only way out: the batch it was waiting on is
+        // abandoned, so it must not later promote its old position over this choice.
+        if (previousHold == ReadHold.Loading && request.Hold != ReadHold.Loading)
+            watermarks.ClearPendingLoad(replicationName, mappingName, sourceTable);
+
         if (request.Hold != previousHold && (request.Hold == ReadHold.Paused || previousHold == ReadHold.Paused))
         {
             taskRunStore.SetMappingHold(

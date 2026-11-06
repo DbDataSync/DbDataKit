@@ -46,6 +46,11 @@ export function MappingReadStateDialog({
 }) {
   const recovering = currentHold === 'PositionExpired'
   const paused = currentHold === 'Paused'
+  // `Loading` is held while an initial load is in flight and clears itself when that load completes. A load
+  // that failed never completes, so nothing clears it — choosing an intent here is the way out, and it
+  // clears the hold. Every other hold is preserved by an intent change, as before.
+  const loading = currentHold === 'Loading'
+  const holdAfterIntent: ReadHold = loading ? 'None' : currentHold
   const [draft, setDraft] = useState<ReadIntent>(currentIntent)
   // Non-null only while the ChangesFromLatest confirmation is open — a second, explicit step, because
   // that intent is deliberate data loss and a bare "are you sure" does not say what is being lost.
@@ -70,7 +75,7 @@ export function MappingReadStateDialog({
     // Preserves whatever hold is already on this row (usually None; Paused if an operator is changing
     // the intent of a mapping they have paused without also resuming it) — this dialog only ever
     // changes the intent outside of the recovery path.
-    onConfirm({ intent: draft, hold: currentHold })
+    onConfirm({ intent: draft, hold: holdAfterIntent })
   }
 
   return (
@@ -108,10 +113,17 @@ export function MappingReadStateDialog({
               onRunVerification={onRunVerification}
               busy={busy}
               onBack={() => setConfirmingDataLoss(false)}
-              onConfirm={() => onConfirm({ intent: 'ChangesFromLatest', hold: currentHold })}
+              onConfirm={() => onConfirm({ intent: 'ChangesFromLatest', hold: holdAfterIntent })}
             />
           ) : (
             <>
+              {loading && (
+                <div className="banner warn" role="status" data-testid="read-state-loading-note">
+                  This table is waiting on an initial load, so change processing is held. If that load
+                  failed, or you loaded the table another way, choose what its next pass does and set it
+                  — that ends the wait. Choosing Initial load starts a fresh load.
+                </div>
+              )}
               <span className="hint">
                 What this mapping's next pass does. Takes effect for the next scheduled pass, not one
                 already running.
@@ -136,7 +148,7 @@ export function MappingReadStateDialog({
                 <button
                   type="button"
                   className={`btn ${draft === 'ChangesFromLatest' ? 'btn-danger' : 'btn-primary'}`}
-                  disabled={busy || draft === currentIntent}
+                  disabled={busy || (draft === currentIntent && !loading)}
                   onClick={continueOrConfirm}
                   data-testid="read-state-confirm"
                 >

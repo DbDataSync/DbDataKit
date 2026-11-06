@@ -129,6 +129,34 @@ public sealed class MappingReadStateTests(TestApiFactory factory) : IClassFixtur
         Assert.Equal(ReadHold.None, state.Hold);
     }
 
+    /// <summary>
+    /// A first-pass initial load that fails leaves the mapping in <c>Loading</c> with its batch never to
+    /// complete — and nothing else clears it. Choosing a new intent with the hold cleared is the way out, and
+    /// it must also forget the abandoned batch so that batch cannot later promote its old position.
+    /// </summary>
+    [Fact]
+    public async Task LeavingLoadingByHand_ClearsTheHold_AndForgetsThePendingLoad()
+    {
+        var (replication, mapping) = await SetUpAsync();
+        var key = WatermarkKey.Build(
+            new SourceTableRef { ConnectionName = "src", Database = "App", Schema = "dbo", Table = "Orders" },
+            DbDataSync.Core.Sql.MsSqlDialect.Instance);
+        var watermarks = factory.Services.GetRequiredService<ChangeWatermarkStore>();
+        watermarks.SetPendingLoad(replication, mapping, key, "ABC123", null, "failed-batch");
+        Assert.Equal(ReadHold.Loading, watermarks.GetReadState(replication, mapping, key)!.Hold);
+
+        (await SetReadStateAsync(replication, mapping, ReadIntent.ChangesFromEarliest, ReadHold.None))
+            .EnsureSuccessStatusCode();
+
+        var state = watermarks.GetReadState(replication, mapping, key)!;
+        Assert.Equal(ReadHold.None, state.Hold);
+        Assert.Equal(ReadIntent.ChangesFromEarliest, state.Intent);
+
+        // The abandoned batch no longer promotes anything if it ever completes.
+        Assert.False(watermarks.PromotePendingLoad("failed-batch"));
+        Assert.Null(watermarks.GetReadState(replication, mapping, key)!.Watermark);
+    }
+
     /// <summary>The one call that moves both at once: an operator recovering from a hold sets a fresh
     /// intent and clears the hold together, never in a request that could leave one half done.</summary>
     [Fact]

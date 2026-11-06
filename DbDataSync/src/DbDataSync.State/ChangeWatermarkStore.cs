@@ -271,6 +271,29 @@ public sealed class ChangeWatermarkStore(StateDatabase database)
         });
 
     /// <summary>
+    /// Forgets a pending initial load — the position it captured and the batch it was waiting on — without
+    /// promoting it. For an operator who is leaving <see cref="ReadHold.Loading"/> by hand (the load failed,
+    /// or the table was loaded another way): left in place, the stale batch id would promote the old
+    /// position over whatever the operator chose if that batch ever completed.
+    /// </summary>
+    public void ClearPendingLoad(string taskName, string mappingName, string sourceTable) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(connection, """
+                UPDATE ChangeWatermarks
+                SET PendingWatermark = NULL, PendingWatermarkTimeUtc = NULL, PendingBulkLoadBatchId = NULL,
+                    UpdatedAtUtc = $now
+                WHERE TaskName = $task AND MappingName = $mapping AND SourceTable = $table;
+                """);
+            cmd.Bind(database, "task", taskName);
+            cmd.Bind(database, "mapping", mappingName);
+            cmd.Bind(database, "table", sourceTable);
+            cmd.Bind(database, "now", DateTimeOffset.UtcNow.ToString("O"));
+            cmd.ExecuteNonQuery();
+        });
+
+    /// <summary>
     /// The "one act" phase 134's design calls for, once a Bulk Load batch a mapping was waiting on
     /// reaches <c>BulkLoadState.Completed</c> (never on <c>CompletedWithFailures</c> — see the caller):
     /// the pending position becomes the live one, the hold clears, and the intent flips to
