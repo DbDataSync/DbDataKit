@@ -104,8 +104,9 @@ console says why. Instructions and guardrails bound by scope are not affected, s
 Vectors come from an **embedding model**, a model provider connection (section 3.7) bound per channel, so it can be a local model where
 data must not leave the install. Every item is embedded when it is indexed, and every query when it is asked.
 
-**For the test environment** (planned, owner, 2026-11-05; done and tested together with the owner, not yet; most products have already
-been tested on SQL Server 2025): the `mssql` and `mssql-target` profiles move to SQL Server 2025, with
+**For the test environment** (planned, owner, 2026-11-05; **changed in `testenv/` on 2026-11-06 but not yet run**: the sandbox that made
+the change had no Docker daemon, so the engines still have to be started and every suite run against them by the owner or in CI; most
+products have already been tested on SQL Server 2025): the `mssql` and `mssql-target` profiles move to SQL Server 2025, with
 SQL Server Agent kept on for Sync's CDC; the `postgres` profile gains `pgvector`; the suites that pin 2022 in their text (Build's CI
 comments and `CLAUDE.md`) say 2025. Access rules filter results (section 2.2), and a reference found for an agent is only one its
 person may see.

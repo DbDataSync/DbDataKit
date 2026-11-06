@@ -8,7 +8,7 @@ dbdatabuild is a .NET 10 CLI that builds analytics tables and views on SQL Serve
 scripts/fetch-native.sh                        # once: the published polyglot library (docs/native-library.md)
 dotnet build                                   # warnings are errors
 dotnet test tests/DbDataBuild.Tests.Unit       # no database needed; about 15 seconds
-../testenv/testenv.sh up mssql postgres    # the shared engines (SQL Server 2022 and PostgreSQL 17, ports 14330 and 15432), loopback only. The slow ones are profiles of the same file: `mssql2025` (probes and one load, at database compatibility levels 170 and 160), `oracle`, `spark` and `bigquery` (only probed for their dialect), `flight` and `flight-tls` (two Arrow Flight SQL servers, plain and TLS, as origins); the nightly full run starts all of them
+../testenv/testenv.sh up mssql postgres    # the shared engines (SQL Server 2025 and PostgreSQL 17, ports 14330 and 15432), loopback only. The slow ones are profiles of the same file: `mssql2025` (probes and one load, at database compatibility levels 170 and 160), `oracle`, `spark` and `bigquery` (only probed for their dialect), `flight` and `flight-tls` (two Arrow Flight SQL servers, plain and TLS, as origins); the nightly full run starts all of them
 eval "$(../testenv/testenv.sh env dbdatabuild)"
 dotnet test tests/DbDataBuild.Tests.Conformance   # real engines, about 6 minutes in all; skipped without the env vars; groups: --filter "Group=apply", "Group=templates", "Group!=apply&Group!=templates&Group!=release" (the quick one), "Group=release" (sample projects with the rewrites off), "DisplayName~oracle"
 ../testenv/testenv.sh down

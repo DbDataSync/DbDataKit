@@ -38,7 +38,7 @@ engines), `scripts/` (repository checks). `DbDataKit.slnx` lists every project; 
 ## Tests and checks
 
 - Repository: `python3 -I -m unittest discover -s scripts/tests`, `python3 -I scripts/check_package_versions.py`, `python3 -I scripts/check_solution.py`.
-- Engines: `testenv/testenv.sh up mssql postgres`, then `eval "$(testenv/testenv.sh env <product>)"`. Build's slow engines (SQL Server 2025, Oracle,
+- Engines (SQL Server 2025; PostgreSQL 17 with pgvector): `testenv/testenv.sh up mssql postgres`, then `eval "$(testenv/testenv.sh env <product>)"`. Build's slow engines (SQL Server 2025, Oracle,
   Spark, BigQuery, Flight SQL) are profiles too (`mssql2025`, `oracle`, `spark`, `bigquery`, `flight`, `flight-tls`; `up all` starts everything).
 - Shared libraries and Proxy use xunit v3 on the Microsoft Testing Platform (run the built test executable if `dotnet test` cannot start the host);
   Sync and Build use xunit v2.
