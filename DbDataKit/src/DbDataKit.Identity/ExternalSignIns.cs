@@ -15,7 +15,7 @@ public sealed record ExternalIdentity(string Source, string Subject, string? Nam
 /// A person arriving at the home from an external provider (plan 13a U18): the home's user for them (one account per person, U16's rules: the credential finds the account, else a verified address does, else a new account with no roles of
 /// its own), and the groups they carry, recorded so <see cref="HomeDirectory.MapExternalGroup"/> mappings give them roles. The host starts its session for the returned user and the provider's tokens carry the roles.
 /// </summary>
-public sealed class ExternalSignIns(UserStore users, HomeDirectory directory)
+public sealed class ExternalSignIns(IUserAccounts users, HomeDirectory directory)
 {
     /// <summary>The user for this sign-in. Throws <see cref="AccountConflictException"/> when the person's verified address belongs to another account that already has a credential from this source.</summary>
     public UserRecord SignIn(ExternalIdentity identity)

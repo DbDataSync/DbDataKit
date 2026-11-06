@@ -48,11 +48,13 @@ public sealed class AccessTokenException(string message) : Exception(message);
 /// and a password (WebDAV, XMLA, Power Query), and accounts for unattended work. A token is <c>ddk_&lt;id&gt;_&lt;secret&gt;</c>; only a hash of the secret is kept. The user name that goes with it is the person's address,
 /// the service account's name, or the user id; a token used with anyone else's name is refused, so a leaked token is not also a list of whose it is.
 /// </summary>
-public sealed partial class AccessTokens(StateDatabase database, UserStore users, AccessTokenPolicy? policy = null, TimeProvider? clock = null) : IPasswordCredentials
+public sealed partial class AccessTokens(StateDatabase database, IUserAccounts users, AccessTokenPolicy? policy = null, TimeProvider? clock = null) : IPasswordCredentials
 {
+    private const string Module = IdentityModule.Name;
+
     private const string Prefix = "ddk_";
     private readonly AccessTokenPolicy _policy = policy ?? AccessTokenPolicy.Default;
-    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
+    private readonly TimeProvider _clock = clock ?? database.Time;
 
     public AccessTokenPolicy Policy => _policy;
 
@@ -83,14 +85,14 @@ public sealed partial class AccessTokens(StateDatabase database, UserStore users
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "INSERT INTO AccessTokens (Id, UserId, Name, SecretHash, CreatedAtUtc, CreatedBy, ExpiresAtUtc) VALUES ($id, $user, $name, $hash, $at, $by, $expires);");
+            using var cmd = database.Command(Module, connection, "INSERT INTO {table:access_token} (id, account_id, name, secret_hash, created_at, created_by, expires_at) VALUES ($id, $user, $name, $hash, $at, $by, $expires);");
             cmd.Bind(database, "id", id);
             cmd.Bind(database, "user", user.Id);
             cmd.Bind(database, "name", record.Name);
             cmd.Bind(database, "hash", Hash(secret));
-            cmd.Bind(database, "at", now.ToString("O"));
+            cmd.Bind(database, "at", now);
             cmd.Bind(database, "by", createdBy);
-            cmd.Bind(database, "expires", expires is { } e ? e.ToString("O") : DBNull.Value);
+            cmd.Bind(database, "expires", expires, System.Data.DbType.DateTimeOffset);
             cmd.ExecuteNonQuery();
         });
         return new NewAccessToken(record, $"{Prefix}{id}_{secret}");
@@ -100,8 +102,8 @@ public sealed partial class AccessTokens(StateDatabase database, UserStore users
     public IReadOnlyList<AccessTokenRecord> List(string? userId = null) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection,
-            "SELECT Id, UserId, Name, CreatedAtUtc, CreatedBy, ExpiresAtUtc, RevokedAtUtc, LastUsedAtUtc FROM AccessTokens" + (userId is null ? "" : " WHERE UserId = $user") + " ORDER BY CreatedAtUtc DESC, Id;");
+        using var cmd = database.Command(Module, connection,
+            "SELECT id, account_id, name, created_at, created_by, expires_at, revoked_at, last_used_at FROM {table:access_token}" + (userId is null ? "" : " WHERE account_id = $user") + " ORDER BY created_at DESC, id;");
         if (userId is not null) cmd.Bind(database, "user", userId);
         using var reader = cmd.ExecuteReader();
         var list = new List<AccessTokenRecord>();
@@ -112,7 +114,7 @@ public sealed partial class AccessTokens(StateDatabase database, UserStore users
     public AccessTokenRecord? Get(string id) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "SELECT Id, UserId, Name, CreatedAtUtc, CreatedBy, ExpiresAtUtc, RevokedAtUtc, LastUsedAtUtc FROM AccessTokens WHERE Id = $id;");
+        using var cmd = database.Command(Module, connection, "SELECT id, account_id, name, created_at, created_by, expires_at, revoked_at, last_used_at FROM {table:access_token} WHERE id = $id;");
         cmd.Bind(database, "id", id);
         using var reader = cmd.ExecuteReader();
         return reader.Read() ? Record(reader) : null;
@@ -122,8 +124,8 @@ public sealed partial class AccessTokens(StateDatabase database, UserStore users
     public bool Revoke(string id, string? ownerId = null) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "UPDATE AccessTokens SET RevokedAtUtc = $at WHERE Id = $id AND RevokedAtUtc IS NULL" + (ownerId is null ? "" : " AND UserId = $owner") + ";");
-        cmd.Bind(database, "at", _clock.GetUtcNow().ToString("O"));
+        using var cmd = database.Command(Module, connection, "UPDATE {table:access_token} SET revoked_at = $at WHERE id = $id AND revoked_at IS NULL" + (ownerId is null ? "" : " AND account_id = $owner") + ";");
+        cmd.Bind(database, "at", _clock.GetUtcNow());
         cmd.Bind(database, "id", id);
         if (ownerId is not null) cmd.Bind(database, "owner", ownerId);
         return cmd.ExecuteNonQuery() == 1;
@@ -144,23 +146,23 @@ public sealed partial class AccessTokens(StateDatabase database, UserStore users
         var row = database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "SELECT UserId, SecretHash, ExpiresAtUtc, RevokedAtUtc FROM AccessTokens WHERE Id = $id;");
+            using var cmd = database.Command(Module, connection, "SELECT account_id, secret_hash, expires_at, revoked_at FROM {table:access_token} WHERE id = $id;");
             cmd.Bind(database, "id", id);
             using var reader = cmd.ExecuteReader();
-            return reader.Read() ? (reader.GetString(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2), reader.IsDBNull(3) ? null : reader.GetString(3)) : ((string, string, string?, string?)?)null;
+            return reader.Read() ? (reader.GetString(0), reader.GetString(1), reader.NullableTime(2), reader.NullableTime(3)) : ((string, string, DateTimeOffset?, DateTimeOffset?)?)null;
         });
         if (row is not var (userId, hash, expires, revoked)) return null;
         if (!CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(Hash(secret)), Encoding.ASCII.GetBytes(hash))) return null;
         var now = _clock.GetUtcNow();
-        if (revoked is not null || expires is not null && DateTimeOffset.Parse(expires, System.Globalization.CultureInfo.InvariantCulture) <= now) return null;
+        if (revoked is not null || expires is { } at && at <= now) return null;
         var user = users.Get(userId);
         if (user is null || !user.Enabled || !IsUserName(user, userName.Trim())) return null;
 
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "UPDATE AccessTokens SET LastUsedAtUtc = $at WHERE Id = $id;");
-            cmd.Bind(database, "at", now.ToString("O"));
+            using var cmd = database.Command(Module, connection, "UPDATE {table:access_token} SET last_used_at = $at WHERE id = $id;");
+            cmd.Bind(database, "at", now);
             cmd.Bind(database, "id", id);
             cmd.ExecuteNonQuery();
         });
@@ -188,12 +190,12 @@ public sealed partial class AccessTokens(StateDatabase database, UserStore users
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "INSERT INTO ServiceAccounts (UserId, Name, Description, CreatedBy, CreatedAtUtc) VALUES ($user, $name, $description, $by, $at);");
+            using var cmd = database.Command(Module, connection, "INSERT INTO {table:service_account} (account_id, name, description, created_by, created_at) VALUES ($user, $name, $description, $by, $at);");
             cmd.Bind(database, "user", account.UserId);
             cmd.Bind(database, "name", name);
-            cmd.Bind(database, "description", account.Description is null ? DBNull.Value : account.Description);
+            cmd.Bind(database, "description", account.Description, System.Data.DbType.String);
             cmd.Bind(database, "by", createdBy);
-            cmd.Bind(database, "at", account.CreatedAtUtc.ToString("O"));
+            cmd.Bind(database, "at", account.CreatedAtUtc);
             cmd.ExecuteNonQuery();
         });
         return account;
@@ -201,9 +203,9 @@ public sealed partial class AccessTokens(StateDatabase database, UserStore users
 
     public IReadOnlyList<ServiceAccount> ServiceAccounts() => ReadAccounts(null, null);
 
-    public ServiceAccount? FindServiceAccount(string name) => ReadAccounts("Name = $v", (name ?? "").Trim().ToLowerInvariant()).FirstOrDefault();
+    public ServiceAccount? FindServiceAccount(string name) => ReadAccounts("name = $v", (name ?? "").Trim().ToLowerInvariant()).FirstOrDefault();
 
-    public ServiceAccount? ServiceAccountOf(string userId) => ReadAccounts("UserId = $v", userId).FirstOrDefault();
+    public ServiceAccount? ServiceAccountOf(string userId) => ReadAccounts("account_id = $v", userId).FirstOrDefault();
 
     /// <summary>Removes a service account: its tokens are revoked and its user disabled (the user stays, so the audit still names it).</summary>
     public bool RemoveServiceAccount(string name)
@@ -214,7 +216,7 @@ public sealed partial class AccessTokens(StateDatabase database, UserStore users
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "DELETE FROM ServiceAccounts WHERE UserId = $user;");
+            using var cmd = database.Command(Module, connection, "DELETE FROM {table:service_account} WHERE account_id = $user;");
             cmd.Bind(database, "user", account.UserId);
             cmd.ExecuteNonQuery();
         });
@@ -224,20 +226,19 @@ public sealed partial class AccessTokens(StateDatabase database, UserStore users
     private IReadOnlyList<ServiceAccount> ReadAccounts(string? where, string? value) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "SELECT UserId, Name, Description, CreatedBy, CreatedAtUtc FROM ServiceAccounts" + (where is null ? "" : " WHERE " + where) + " ORDER BY Name;");
+        using var cmd = database.Command(Module, connection, "SELECT account_id, name, description, created_by, created_at FROM {table:service_account}" + (where is null ? "" : " WHERE " + where) + " ORDER BY name;");
         if (value is not null) cmd.Bind(database, "v", value);
         using var reader = cmd.ExecuteReader();
         var list = new List<ServiceAccount>();
         while (reader.Read())
-            list.Add(new ServiceAccount(reader.GetString(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetString(3), Time(reader.GetString(4))));
+            list.Add(new ServiceAccount(reader.GetString(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetString(3), reader.Time(4)));
         return (IReadOnlyList<ServiceAccount>)list;
     });
 
     private static AccessTokenRecord Record(System.Data.Common.DbDataReader r) => new(
-        r.GetString(0), r.GetString(1), r.GetString(2), Time(r.GetString(3)), r.GetString(4),
-        r.IsDBNull(5) ? null : Time(r.GetString(5)), r.IsDBNull(6) ? null : Time(r.GetString(6)), r.IsDBNull(7) ? null : Time(r.GetString(7)));
+        r.GetString(0), r.GetString(1), r.GetString(2), r.Time(3), r.GetString(4),
+        r.NullableTime(5), r.NullableTime(6), r.NullableTime(7));
 
-    private static DateTimeOffset Time(string text) => DateTimeOffset.Parse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind);
 
     private static string Hash(string secret) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(secret))).ToLowerInvariant();
 }

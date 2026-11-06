@@ -13,7 +13,7 @@ public sealed class AppNavigationTests : IDisposable
     public AppNavigationTests()
     {
         Directory.CreateDirectory(folder);
-        store = new AppInstanceStore(new DefinitionStore(new StateDatabase(Path.Combine(folder, "state.db"), new StateSchema([DefinitionSchema.Tables]))));
+        store = new AppInstanceStore(new DefinitionStore(StateDatabase.OpenModules(Path.Combine(folder, "state.db"), [DefinitionsModule.Module])));
         Publish("notes", "none");
         Publish("tasks", "shell");
         foreach (var name in new[] { "alpha", "beta", "gamma" }) store.Save(new AppInstance(name, name == "gamma" ? "tasks" : "notes", Title: name.ToUpperInvariant()), "ada");

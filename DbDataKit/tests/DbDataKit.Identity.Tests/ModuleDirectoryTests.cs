@@ -7,12 +7,12 @@ public sealed class ModuleDirectoryTests : IDisposable
     private readonly DbDataKit.State.Tests.StateEngines _engines = new();
     public void Dispose() => _engines.Dispose();
 
-    private sealed record Home(DbDataKit.State.IdentityUserStore Users, ModuleHomeDirectory Directory);
+    private sealed record Home(DbDataKit.State.IdentityUserStore Users, HomeDirectory Directory);
 
     private Home Open(string engine)
     {
         var database = _engines.Provision(engine).Open([DbDataKit.State.IdentityModule.Module]);
-        return new Home(new DbDataKit.State.IdentityUserStore(database), new ModuleHomeDirectory(database));
+        return new Home(new DbDataKit.State.IdentityUserStore(database), new HomeDirectory(database));
     }
 
 

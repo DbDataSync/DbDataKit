@@ -13,7 +13,7 @@ public sealed class PortalChromeTests : IDisposable
     public PortalChromeTests()
     {
         Directory.CreateDirectory(folder);
-        store = new AppInstanceStore(new DefinitionStore(new StateDatabase(Path.Combine(folder, "state.db"), new StateSchema([DefinitionSchema.Tables]))));
+        store = new AppInstanceStore(new DefinitionStore(StateDatabase.OpenModules(Path.Combine(folder, "state.db"), [DefinitionsModule.Module])));
         store.PublishApp(new AppPackage("schemaVersion: 1\nname: notes\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\n", new Dictionary<string, byte[]> { ["index.html"] = "<!doctype html>"u8.ToArray() }), "ada");
         foreach (var name in new[] { "sales", "hr", "secret" }) store.Save(new AppInstance(name, "notes", Title: name.ToUpperInvariant()), "ada");
     }

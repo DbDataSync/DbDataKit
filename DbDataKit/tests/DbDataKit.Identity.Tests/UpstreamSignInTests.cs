@@ -51,7 +51,7 @@ public sealed class UpstreamSignInTests : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         Directory.CreateDirectory(_directory);
-        _database = new StateDatabase(Path.Combine(_directory, "state.db"), HomeSchema.Schema);
+        _database = StateDatabase.OpenModules(Path.Combine(_directory, "state.db"), IdentityHomeState.Modules);
 
         var port = FreePort();
         _authority = $"http://127.0.0.1:{port}/tenant-1/v2.0";
@@ -165,9 +165,9 @@ public sealed class UpstreamSignInTests : IAsyncLifetime
         Assert.Equal(IdentityHome.SignInPath + "?returnUrl=" + Uri.EscapeDataString(authorize), callback.Headers.Location!.OriginalString);
         var cookie = SessionCookie(callback);
         Assert.NotNull(cookie);
-        var ada = Assert.Single(new UserStore(_database).List());
+        var ada = Assert.Single(new IdentityUserStore(_database).List());
         Assert.Equal("ada@clearwater.example.invalid", ada.Email);
-        Assert.Contains(new UserStore(_database).CredentialsOf(ada.Id), c => c.Method == ExternalSources.CredentialMethod(ExternalSources.Entra) && c.Subject == "entra-oid-ada");
+        Assert.Contains(new IdentityUserStore(_database).CredentialsOf(ada.Id), c => c.Method == ExternalSources.CredentialMethod(ExternalSources.Entra) && c.Subject == "entra-oid-ada");
 
         // the console's authorize request now answers with a code, and the home's id token carries the role the Entra group maps to
         var again = new HttpRequestMessage(HttpMethod.Get, authorize);
@@ -202,7 +202,7 @@ public sealed class UpstreamSignInTests : IAsyncLifetime
         var back = await atB.GetAsync(callback);
         Assert.Equal(HttpStatusCode.Redirect, back.StatusCode);
         Assert.NotNull(SessionCookie(back));
-        Assert.Single(new UserStore(_database).List());
+        Assert.Single(new IdentityUserStore(_database).List());
 
         // the attempt is spent: the same return, at either instance, signs nobody in
         foreach (var browser in new[] { atA, atB })
@@ -237,14 +237,14 @@ public sealed class UpstreamSignInTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Forbidden, badSignature.StatusCode);
         Assert.Null(SessionCookie(badSignature));
 
-        Assert.Empty(new UserStore(_database).List());
+        Assert.Empty(new IdentityUserStore(_database).List());
     }
 
     [Fact]
     public async Task An_address_the_tenant_is_not_trusted_for_links_no_account_and_a_disabled_person_is_refused()
     {
         await StartHome(Entra(trustEmail: false));
-        var users = new UserStore(_database);
+        var users = new IdentityUserStore(_database);
         var grace = users.CreateUser("Grace Hopper", "ada@clearwater.example.invalid", UserRole.Admin, emailVerified: true);
 
         using var browser = Browser(_homeUrl);
@@ -325,7 +325,7 @@ public sealed class UpstreamSignInTests : IAsyncLifetime
         Assert.StartsWith(IdentityHome.SignInPath + "?returnUrl=", signedIn.Headers.Location!.OriginalString);
         Assert.NotNull(SessionCookie(signedIn));
 
-        var users = new UserStore(_database);
+        var users = new IdentityUserStore(_database);
         var user = users.FindByCredential(CredentialMethods.Windows, me.User!.Value);
         Assert.NotNull(user);
         var directory = new HomeDirectory(_database);

@@ -11,17 +11,19 @@ public sealed record ServerRolesOf(ServerRole Roles, IReadOnlyDictionary<string,
 /// <summary>Groups and the roles assigned to users and groups. The union of a user's own assignments and those of every group the user is in is what the user holds.</summary>
 public sealed class HomeDirectory(StateDatabase database)
 {
+    private const string Module = IdentityModule.Name;
+
     public GroupRecord CreateGroup(string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        var group = new GroupRecord(Guid.NewGuid().ToString("N"), name.Trim());
+        var group = new GroupRecord(database.NewId().ToString("N"), name.Trim());
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "INSERT INTO Groups (Id, Name, CreatedAtUtc) VALUES ($id, $name, $at);");
+            using var cmd = database.Command(Module, connection, "INSERT INTO {table:user_group} (id, name, created_at) VALUES ($id, $name, $at);");
             cmd.Bind(database, "id", group.Id);
             cmd.Bind(database, "name", group.Name);
-            cmd.Bind(database, "at", DateTimeOffset.UtcNow.ToString("O"));
+            cmd.Bind(database, "at", database.Time.GetUtcNow());
             cmd.ExecuteNonQuery();
         });
         return group;
@@ -30,7 +32,7 @@ public sealed class HomeDirectory(StateDatabase database)
     public IReadOnlyList<GroupRecord> Groups() => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "SELECT Id, Name FROM Groups ORDER BY Name;");
+        using var cmd = database.Command(Module, connection, "SELECT id, name FROM {table:user_group} ORDER BY name;");
         using var reader = cmd.ExecuteReader();
         var list = new List<GroupRecord>();
         while (reader.Read()) list.Add(new GroupRecord(reader.GetString(0), reader.GetString(1)));
@@ -40,7 +42,7 @@ public sealed class HomeDirectory(StateDatabase database)
     public void AddMember(string groupId, string userId) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "INSERT INTO GroupMembers (Slot, GroupId, UserId) VALUES ($slot, $g, $u);");
+        using var cmd = database.Command(Module, connection, "INSERT INTO {table:group_member} (slot, group_id, account_id) VALUES ($slot, $g, $u);");
         cmd.Bind(database, "slot", SlotOf(groupId, userId));
         cmd.Bind(database, "g", groupId);
         cmd.Bind(database, "u", userId);
@@ -50,7 +52,7 @@ public sealed class HomeDirectory(StateDatabase database)
     public void RemoveMember(string groupId, string userId) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "DELETE FROM GroupMembers WHERE GroupId = $g AND UserId = $u;");
+        using var cmd = database.Command(Module, connection, "DELETE FROM {table:group_member} WHERE group_id = $g AND account_id = $u;");
         cmd.Bind(database, "g", groupId);
         cmd.Bind(database, "u", userId);
         cmd.ExecuteNonQuery();
@@ -59,7 +61,7 @@ public sealed class HomeDirectory(StateDatabase database)
     public IReadOnlyList<GroupRecord> GroupsOf(string userId) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "SELECT g.Id, g.Name FROM Groups g JOIN GroupMembers m ON m.GroupId = g.Id WHERE m.UserId = $u ORDER BY g.Name;");
+        using var cmd = database.Command(Module, connection, "SELECT g.id, g.name FROM {table:user_group} g JOIN {table:group_member} m ON m.group_id = g.id WHERE m.account_id = $u ORDER BY g.name;");
         cmd.Bind(database, "u", userId);
         using var reader = cmd.ExecuteReader();
         var list = new List<GroupRecord>();
@@ -71,7 +73,7 @@ public sealed class HomeDirectory(StateDatabase database)
     public IReadOnlyList<string> MembersOf(string groupId) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "SELECT UserId FROM GroupMembers WHERE GroupId = $g ORDER BY UserId;");
+        using var cmd = database.Command(Module, connection, "SELECT account_id FROM {table:group_member} WHERE group_id = $g ORDER BY account_id;");
         cmd.Bind(database, "g", groupId);
         using var reader = cmd.ExecuteReader();
         var list = new List<string>();
@@ -84,13 +86,13 @@ public sealed class HomeDirectory(StateDatabase database)
     {
         using var connection = database.OpenConnection();
         using var transaction = connection.BeginTransaction();
-        foreach (var sql in new[] { "DELETE FROM GroupMembers WHERE GroupId = $g;", "DELETE FROM RoleAssignments WHERE SubjectKind = 'group' AND SubjectId = $g;" })
+        foreach (var sql in new[] { "DELETE FROM {table:group_member} WHERE group_id = $g;", "DELETE FROM {table:role_assignment} WHERE subject_kind = 'group' AND subject_id = $g;" })
         {
-            using var cmd = database.Command(connection, transaction, sql);
+            using var cmd = database.Command(Module, connection, transaction, sql);
             cmd.Bind(database, "g", groupId);
             cmd.ExecuteNonQuery();
         }
-        using var group = database.Command(connection, transaction, "DELETE FROM Groups WHERE Id = $g;");
+        using var group = database.Command(Module, connection, transaction, "DELETE FROM {table:user_group} WHERE id = $g;");
         group.Bind(database, "g", groupId);
         var removed = group.ExecuteNonQuery() == 1;
         transaction.Commit();
@@ -101,7 +103,7 @@ public sealed class HomeDirectory(StateDatabase database)
     public IReadOnlyList<RoleAssignment> Assignments() => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "SELECT Id, SubjectKind, SubjectId, Scope, Target, Project, Roles FROM RoleAssignments ORDER BY Scope, Target, Project, SubjectKind, SubjectId;");
+        using var cmd = database.Command(Module, connection, "SELECT id, subject_kind, subject_id, scope, target, project, roles FROM {table:role_assignment} ORDER BY scope, target, project, subject_kind, subject_id;");
         using var reader = cmd.ExecuteReader();
         var list = new List<RoleAssignment>();
         while (reader.Read())
@@ -116,7 +118,7 @@ public sealed class HomeDirectory(StateDatabase database)
     public bool RemoveAssignment(string id) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "DELETE FROM RoleAssignments WHERE Id = $id;");
+        using var cmd = database.Command(Module, connection, "DELETE FROM {table:role_assignment} WHERE id = $id;");
         cmd.Bind(database, "id", id);
         return cmd.ExecuteNonQuery() == 1;
     });
@@ -148,17 +150,17 @@ public sealed class HomeDirectory(StateDatabase database)
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using (var delete = database.Command(connection, "DELETE FROM GroupMappings WHERE Slot = $slot;"))
+            using (var delete = database.Command(Module, connection, "DELETE FROM {table:group_mapping} WHERE slot = $slot;"))
             {
                 delete.Bind(database, "slot", slot);
                 delete.ExecuteNonQuery();
             }
             if (roles == ServerRole.None) return;
-            using var cmd = database.Command(connection, """
-                INSERT INTO GroupMappings (Id, Slot, Source, ExternalGroup, ExternalKey, Scope, Target, Project, Roles, CreatedAtUtc)
+            using var cmd = database.Command(Module, connection, """
+                INSERT INTO {table:group_mapping} (id, slot, source, external_group, external_key, scope, target, project, roles, created_at)
                 VALUES ($id, $slot, $source, $group, $key, $scope, $target, $project, $roles, $at);
                 """);
-            cmd.Bind(database, "id", Guid.NewGuid().ToString("N"));
+            cmd.Bind(database, "id", database.NewId().ToString("N"));
             cmd.Bind(database, "slot", slot);
             cmd.Bind(database, "source", source);
             cmd.Bind(database, "group", group.Trim());
@@ -167,7 +169,7 @@ public sealed class HomeDirectory(StateDatabase database)
             cmd.Bind(database, "target", target);
             cmd.Bind(database, "project", projectKey);
             cmd.Bind(database, "roles", string.Join(',', ServerRoles.Names(roles)));
-            cmd.Bind(database, "at", DateTimeOffset.UtcNow.ToString("O"));
+            cmd.Bind(database, "at", database.Time.GetUtcNow());
             cmd.ExecuteNonQuery();
         });
     }
@@ -176,7 +178,7 @@ public sealed class HomeDirectory(StateDatabase database)
     public bool RemoveExternalMapping(string id) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "DELETE FROM GroupMappings WHERE Id = $id;");
+        using var cmd = database.Command(Module, connection, "DELETE FROM {table:group_mapping} WHERE id = $id;");
         cmd.Bind(database, "id", id);
         return cmd.ExecuteNonQuery() == 1;
     });
@@ -184,7 +186,7 @@ public sealed class HomeDirectory(StateDatabase database)
     public IReadOnlyList<ExternalGroupMapping> ExternalMappings() => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "SELECT Id, Source, ExternalGroup, Scope, Target, Project, Roles FROM GroupMappings ORDER BY Source, ExternalKey, Scope, Target, Project;");
+        using var cmd = database.Command(Module, connection, "SELECT id, source, external_group, scope, target, project, roles FROM {table:group_mapping} ORDER BY source, external_key, scope, target, project;");
         using var reader = cmd.ExecuteReader();
         var list = new List<ExternalGroupMapping>();
         while (reader.Read())
@@ -207,16 +209,16 @@ public sealed class HomeDirectory(StateDatabase database)
         {
             using var connection = database.OpenConnection();
             using var transaction = connection.BeginTransaction();
-            using (var delete = database.Command(connection, transaction, "DELETE FROM ExternalMemberships WHERE UserId = $u AND Source = $source;"))
+            using (var delete = database.Command(Module, connection, transaction, "DELETE FROM {table:external_membership} WHERE account_id = $u AND source = $source;"))
             {
                 delete.Bind(database, "u", userId);
                 delete.Bind(database, "source", source);
                 delete.ExecuteNonQuery();
             }
-            var at = DateTimeOffset.UtcNow.ToString("O");
+            var at = database.Time.GetUtcNow();
             foreach (var key in keys)
             {
-                using var insert = database.Command(connection, transaction, "INSERT INTO ExternalMemberships (Slot, UserId, Source, ExternalKey, SeenAtUtc) VALUES ($slot, $u, $source, $key, $at);");
+                using var insert = database.Command(Module, connection, transaction, "INSERT INTO {table:external_membership} (slot, account_id, source, external_key, seen_at) VALUES ($slot, $u, $source, $key, $at);");
                 insert.Bind(database, "slot", SlotOf(userId, source, key));
                 insert.Bind(database, "u", userId);
                 insert.Bind(database, "source", source);
@@ -232,7 +234,7 @@ public sealed class HomeDirectory(StateDatabase database)
     public IReadOnlyList<(string Source, string Group)> ExternalGroupsOf(string userId) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "SELECT Source, ExternalKey FROM ExternalMemberships WHERE UserId = $u ORDER BY Source, ExternalKey;");
+        using var cmd = database.Command(Module, connection, "SELECT source, external_key FROM {table:external_membership} WHERE account_id = $u ORDER BY source, external_key;");
         cmd.Bind(database, "u", userId);
         using var reader = cmd.ExecuteReader();
         var list = new List<(string, string)>();
@@ -249,11 +251,11 @@ public sealed class HomeDirectory(StateDatabase database)
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, """
-                INSERT INTO RoleAssignments (Id, Slot, SubjectKind, SubjectId, Scope, Target, Project, Roles)
+            using var cmd = database.Command(Module, connection, """
+                INSERT INTO {table:role_assignment} (id, slot, subject_kind, subject_id, scope, target, project, roles)
                 VALUES ($id, $slot, $kind, $subject, $scope, $target, $project, $roles);
                 """);
-            cmd.Bind(database, "id", Guid.NewGuid().ToString("N"));
+            cmd.Bind(database, "id", database.NewId().ToString("N"));
             cmd.Bind(database, "slot", SlotOf(subject.Kind, subject.Id, scope, target, projectKey));
             cmd.Bind(database, "kind", subject.Kind);
             cmd.Bind(database, "subject", subject.Id);
@@ -271,7 +273,7 @@ public sealed class HomeDirectory(StateDatabase database)
     private void Unassign(AssignmentSubject subject, string scope, string target, string project) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "DELETE FROM RoleAssignments WHERE SubjectKind = $kind AND SubjectId = $subject AND Scope = $scope AND Target = $target AND Project = $project;");
+        using var cmd = database.Command(Module, connection, "DELETE FROM {table:role_assignment} WHERE subject_kind = $kind AND subject_id = $subject AND scope = $scope AND target = $target AND project = $project;");
         cmd.Bind(database, "kind", subject.Kind);
         cmd.Bind(database, "subject", subject.Id);
         cmd.Bind(database, "scope", scope);
@@ -290,12 +292,12 @@ public sealed class HomeDirectory(StateDatabase database)
     public IReadOnlyDictionary<string, IReadOnlyList<string>> AllRoles(string userId) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, """
-            SELECT Scope, Target, Project, Roles FROM RoleAssignments
-            WHERE (SubjectKind = 'user' AND SubjectId = $u) OR (SubjectKind = 'group' AND SubjectId IN (SELECT GroupId FROM GroupMembers WHERE UserId = $u))
+        using var cmd = database.Command(Module, connection, """
+            SELECT scope, target, project, roles FROM {table:role_assignment}
+            WHERE (subject_kind = 'user' AND subject_id = $u) OR (subject_kind = 'group' AND subject_id IN (SELECT group_id FROM {table:group_member} WHERE account_id = $u))
             UNION ALL
-            SELECT m.Scope, m.Target, m.Project, m.Roles FROM GroupMappings m
-            WHERE EXISTS (SELECT 1 FROM ExternalMemberships e WHERE e.UserId = $u AND e.Source = m.Source AND e.ExternalKey = m.ExternalKey);
+            SELECT m.scope, m.target, m.project, m.roles FROM {table:group_mapping} m
+            WHERE EXISTS (SELECT 1 FROM {table:external_membership} e WHERE e.account_id = $u AND e.source = m.source AND e.external_key = m.external_key);
             """);
         cmd.Bind(database, "u", userId);
         using var reader = cmd.ExecuteReader();
@@ -312,14 +314,14 @@ public sealed class HomeDirectory(StateDatabase database)
     private ServerRolesOf Held(string userId, string scope, string target, string? projectScope, string? projectTarget) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, """
-            SELECT Scope, Project, Roles FROM RoleAssignments
-            WHERE Target = $target AND (Scope = $scope OR Scope = $projectScope)
-              AND ((SubjectKind = 'user' AND SubjectId = $u) OR (SubjectKind = 'group' AND SubjectId IN (SELECT GroupId FROM GroupMembers WHERE UserId = $u)))
+        using var cmd = database.Command(Module, connection, """
+            SELECT scope, project, roles FROM {table:role_assignment}
+            WHERE target = $target AND (scope = $scope OR scope = $projectScope)
+              AND ((subject_kind = 'user' AND subject_id = $u) OR (subject_kind = 'group' AND subject_id IN (SELECT group_id FROM {table:group_member} WHERE account_id = $u)))
             UNION ALL
-            SELECT m.Scope, m.Project, m.Roles FROM GroupMappings m
-            WHERE m.Target = $target AND (m.Scope = $scope OR m.Scope = $projectScope)
-              AND EXISTS (SELECT 1 FROM ExternalMemberships e WHERE e.UserId = $u AND e.Source = m.Source AND e.ExternalKey = m.ExternalKey);
+            SELECT m.scope, m.project, m.roles FROM {table:group_mapping} m
+            WHERE m.target = $target AND (m.scope = $scope OR m.scope = $projectScope)
+              AND EXISTS (SELECT 1 FROM {table:external_membership} e WHERE e.account_id = $u AND e.source = m.source AND e.external_key = m.external_key);
             """);
         cmd.Bind(database, "u", userId);
         cmd.Bind(database, "target", projectTarget ?? target);

@@ -9,10 +9,16 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DbDataKit.Identity;
 
+/// <summary>What a host of the identity home needs in its state database: the <c>identity</c> module (plan 29a Q09, Q16), which holds everything an install's people are.</summary>
+public static class IdentityHomeState
+{
+    public static IReadOnlyList<StateModule> Modules { get; } = [IdentityModule.Module];
+}
+
 /// <summary>What a host of the identity home supplies: where it is reached, where its state is, how its signing keys are protected.</summary>
 /// <param name="PublicUrl">The address every console, app and browser reaches the home at. Its scheme, host and port are the token issuer and the origin a passkey is bound to, so they must not change when the home moves.</param>
 /// <param name="FirstRunDirectory">Where the first-run invitation (<see cref="BootstrapInvite.FileName"/>) is written while the home has no user.</param>
-/// <param name="State">The state database that holds the home (<see cref="HomeSchema.Templates"/> applied to it).</param>
+/// <param name="State">The state database that holds the home (the <c>identity</c> module, <see cref="IdentityModule.Module"/>, built into it).</param>
 /// <param name="Protector">Protects the private half of the signing keys at rest. Every instance that shares the state must be given the same one.</param>
 /// <param name="Auth">The product name of the home's own sign-in: its configuration section, cookie and scheme.</param>
 /// <param name="InvitePage">Serve the home's own invitation page at <c>/invite</c> (the address the first-run invitation names). A host that serves the console's web app beside the home passes false and its <c>/invite</c> screen is used.</param>
@@ -65,13 +71,13 @@ public static class IdentityHome
             _ => options.FirstRunDirectory);
         if (options.Windows is not null) authentication.AddNegotiate();
         UpstreamSignIn.Register(services, options);
-        services.AddSingleton(sp => new AccessTokens(options.State(sp), sp.GetRequiredService<UserStore>(), options.Tokens, sp.GetService<TimeProvider>()));
+        services.AddSingleton(sp => new AccessTokens(options.State(sp), sp.GetRequiredService<IUserAccounts>(), options.Tokens, sp.GetService<TimeProvider>()));
         // a user name and a personal access token, for clients that can send nothing else (the session handler tries it on Authorization: Basic)
         services.AddSingleton<IPasswordCredentials>(sp => sp.GetRequiredService<AccessTokens>());
         services.AddSingleton(sp => new HomeDirectory(options.State(sp)));
         services.AddSingleton(sp => new OidcClients(options.State(sp)));
         services.AddSingleton(sp => new SigningKeys(options.State(sp), options.Protector(sp)));
-        services.AddSingleton(sp => new OpenIdProvider(options.State(sp), sp.GetRequiredService<UserStore>(), sp.GetRequiredService<HomeDirectory>(),
+        services.AddSingleton(sp => new OpenIdProvider(options.State(sp), sp.GetRequiredService<IUserAccounts>(), sp.GetRequiredService<HomeDirectory>(),
             sp.GetRequiredService<OidcClients>(), sp.GetRequiredService<SigningKeys>(), options.Issuer, sp.GetService<TimeProvider>()));
         return builder;
     }
@@ -96,7 +102,7 @@ public static class IdentityHome
         var open = app.MapGroup("");
         open.AllowAnonymous();
         var auth = app.Services.GetRequiredService<AuthOptions>();
-        var sessions = app.Services.GetRequiredService<SessionStore>();
+        var sessions = app.Services.GetRequiredService<ISessionStore>();
         open.MapOpenIdProvider(app.Services.GetRequiredService<OpenIdProvider>(), app.Services.GetRequiredService<SigningKeys>(), new OpenIdHostOptions(
             c => c.User.FindFirst(options.Auth.UserIdClaim)?.Value,
             SignInPath,

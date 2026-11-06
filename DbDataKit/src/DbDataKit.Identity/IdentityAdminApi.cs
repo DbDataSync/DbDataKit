@@ -31,7 +31,7 @@ public sealed class IdentityAdminApi(StateDatabase state, string publicUrl, Acce
 {
     public const string Prefix = "/api/v1/identity";
 
-    private readonly UserStore _users = new(state);
+    private readonly IdentityUserStore _users = new(state);
     private readonly HomeDirectory _directory = new(state);
     private readonly OidcClients _clients = new(state);
     private AccessTokens Tokens => new(state, _users, tokenPolicy);
@@ -135,7 +135,7 @@ public sealed class IdentityAdminApi(StateDatabase state, string publicUrl, Acce
     {
         if (Text(body, "email") is not { } email) return IdentityAdminResult.Problem(400, "An invitation is for an address: give \"email\".");
         if (!Enum.TryParse<UserRole>(Text(body, "role") ?? nameof(UserRole.Viewer), ignoreCase: true, out var role)) return IdentityAdminResult.Problem(400, "The role is admin or viewer.");
-        var minted = new InviteStore(state).Create(role, null, createdByUserId: null, email: email);
+        var minted = new IdentityInviteStore(state).Create(role, null, createdByUserId: null, email: email);
         // the code goes in the fragment, which a browser never sends to a server and an access log never records
         return IdentityAdminResult.Ok(new JsonObject
         {
@@ -147,7 +147,7 @@ public sealed class IdentityAdminApi(StateDatabase state, string publicUrl, Acce
     {
         if (_users.Get(id) is null) return NotFound("person");
         _users.SetEnabled(id, false);
-        new SessionStore(state).DeleteAllFor(id);
+        new IdentitySessionStore(state).DeleteAllFor(id);
         foreach (var token in Tokens.List(id).Where(t => t.RevokedAtUtc is null)) Tokens.Revoke(token.Id);
         return IdentityAdminResult.NoContent();
     }

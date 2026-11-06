@@ -9,6 +9,8 @@ public sealed record OidcClient(string ClientId, string Name, IReadOnlyList<stri
 /// <summary>The applications that sign in through the home. A confidential client has a secret (shown once, kept as a hash); a public one has none and relies on PKCE.</summary>
 public sealed class OidcClients(StateDatabase database)
 {
+    private const string Module = IdentityModule.Name;
+
     /// <summary>Registers a client. Returns the secret once for a confidential client, null for a public one.</summary>
     public (OidcClient Client, string? Secret) Register(string name, IReadOnlyList<string> redirectUris, bool confidential, IReadOnlyList<string>? postLogoutRedirectUris = null)
     {
@@ -21,15 +23,15 @@ public sealed class OidcClients(StateDatabase database)
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "INSERT INTO OidcClients (ClientId, Name, SecretHash, RedirectUris, CreatedAtUtc) VALUES ($id, $name, $secret, $uris, $at);");
+            using var cmd = database.Command(Module, connection, "INSERT INTO {table:oidc_client} (client_id, name, secret_hash, redirect_uris, created_at) VALUES ($id, $name, $secret, $uris, $at);");
             cmd.Bind(database, "id", client.ClientId);
             cmd.Bind(database, "name", name);
             cmd.Bind(database, "secret", secret is null ? DBNull.Value : Hash(secret));
             cmd.Bind(database, "uris", string.Join('\n', redirectUris));
-            cmd.Bind(database, "at", DateTimeOffset.UtcNow.ToString("O"));
+            cmd.Bind(database, "at", database.Time.GetUtcNow());
             cmd.ExecuteNonQuery();
             if (postLogoutRedirectUris.Count == 0) return;
-            using var logout = database.Command(connection, "INSERT INTO OidcClientLogout (ClientId, PostLogoutRedirectUris) VALUES ($id, $uris);");
+            using var logout = database.Command(Module, connection, "INSERT INTO {table:oidc_client_logout} (client_id, post_logout_redirect_uris) VALUES ($id, $uris);");
             logout.Bind(database, "id", client.ClientId);
             logout.Bind(database, "uris", string.Join('\n', postLogoutRedirectUris));
             logout.ExecuteNonQuery();
@@ -44,18 +46,18 @@ public sealed class OidcClients(StateDatabase database)
     {
         using var connection = database.OpenConnection();
         using var transaction = connection.BeginTransaction();
-        using (var revoke = database.Command(connection, transaction, "UPDATE RefreshTokens SET RevokedAtUtc = $at WHERE ClientId = $id AND RevokedAtUtc IS NULL;"))
+        using (var revoke = database.Command(Module, connection, transaction, "UPDATE {table:refresh_token} SET revoked_at = $at WHERE client_id = $id AND revoked_at IS NULL;"))
         {
-            revoke.Bind(database, "at", DateTimeOffset.UtcNow.ToString("O"));
+            revoke.Bind(database, "at", database.Time.GetUtcNow());
             revoke.Bind(database, "id", clientId);
             revoke.ExecuteNonQuery();
         }
-        using (var logout = database.Command(connection, transaction, "DELETE FROM OidcClientLogout WHERE ClientId = $id;"))
+        using (var logout = database.Command(Module, connection, transaction, "DELETE FROM {table:oidc_client_logout} WHERE client_id = $id;"))
         {
             logout.Bind(database, "id", clientId);
             logout.ExecuteNonQuery();
         }
-        using var cmd = database.Command(connection, transaction, "DELETE FROM OidcClients WHERE ClientId = $id;");
+        using var cmd = database.Command(Module, connection, transaction, "DELETE FROM {table:oidc_client} WHERE client_id = $id;");
         cmd.Bind(database, "id", clientId);
         var removed = cmd.ExecuteNonQuery() == 1;
         transaction.Commit();
@@ -68,7 +70,7 @@ public sealed class OidcClients(StateDatabase database)
         var ids = database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "SELECT ClientId FROM OidcClients ORDER BY CreatedAtUtc, ClientId;");
+            using var cmd = database.Command(Module, connection, "SELECT client_id FROM {table:oidc_client} ORDER BY created_at, client_id;");
             using var reader = cmd.ExecuteReader();
             var found = new List<string>();
             while (reader.Read()) found.Add(reader.GetString(0));
@@ -89,14 +91,14 @@ public sealed class OidcClients(StateDatabase database)
     private (OidcClient Client, string? SecretHash)? Read(string clientId) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "SELECT ClientId, Name, SecretHash, RedirectUris FROM OidcClients WHERE ClientId = $id;");
+        using var cmd = database.Command(Module, connection, "SELECT client_id, name, secret_hash, redirect_uris FROM {table:oidc_client} WHERE client_id = $id;");
         cmd.Bind(database, "id", clientId);
         using var reader = cmd.ExecuteReader();
         if (!reader.Read()) return ((OidcClient, string?)?)null;
         var hash = reader.IsDBNull(2) ? null : reader.GetString(2);
         var (id, name, uris) = (reader.GetString(0), reader.GetString(1), reader.GetString(3).Split('\n'));
         reader.Close();
-        using var logout = database.Command(connection, "SELECT PostLogoutRedirectUris FROM OidcClientLogout WHERE ClientId = $id;");
+        using var logout = database.Command(Module, connection, "SELECT post_logout_redirect_uris FROM {table:oidc_client_logout} WHERE client_id = $id;");
         logout.Bind(database, "id", clientId);
         var after = logout.ExecuteScalar() is string text ? text.Split('\n') : [];
         return (new OidcClient(id, name, uris, hash is not null, after), hash);

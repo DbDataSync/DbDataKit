@@ -29,7 +29,7 @@ public sealed class ModuleHomeStoresTests : IDisposable
     public void A_client_registers_authenticates_and_is_removed_with_its_refresh_tokens_revoked(string engine)
     {
         var database = Open(engine);
-        var clients = new ModuleOidcClients(database);
+        var clients = new OidcClients(database);
 
         var (confidential, secret) = clients.Register("console", ["https://console.example/cb"], confidential: true, ["https://console.example/bye"]);
         _clock.Advance(TimeSpan.FromSeconds(1));   // clients list in the order they were registered
@@ -56,7 +56,7 @@ public sealed class ModuleHomeStoresTests : IDisposable
     public void Signing_keys_are_kept_protected_rotate_and_a_retired_one_leaves_the_jwks(string engine)
     {
         var database = Open(engine);
-        var keys = new ModuleSigningKeys(database, new MaskProtector());
+        var keys = new SigningKeys(database, new MaskProtector());
 
         var first = keys.Current();
         Assert.Equal(first.Kid, keys.Current().Kid);                 // the same key until it is rotated
@@ -87,7 +87,7 @@ public sealed class ModuleHomeStoresTests : IDisposable
     {
         var database = Open(engine);
         var users = new IdentityUserStore(database);
-        var tokens = new ModuleAccessTokens(database, users);
+        var tokens = new AccessTokens(database, users);
         var ada = users.CreateUser("Ada", null, UserRole.Admin);
 
         var made = tokens.Create(ada.Id, "ci", createdBy: ada.Id, lifetime: TimeSpan.FromDays(30));
@@ -117,7 +117,7 @@ public sealed class ModuleHomeStoresTests : IDisposable
     {
         var database = Open(engine);
         var users = new IdentityUserStore(database);
-        var tokens = new ModuleAccessTokens(database, users);
+        var tokens = new AccessTokens(database, users);
 
         var account = tokens.CreateServiceAccount("nightly-deploy", "runs the deploy", "ada");
         var made = tokens.Create(account.UserId, "main", "ada", noExpiry: true);
@@ -137,7 +137,7 @@ public sealed class ModuleHomeStoresTests : IDisposable
     {
         var database = Open(engine);
         var users = new IdentityUserStore(database);
-        var directory = new ModuleHomeDirectory(database);
+        var directory = new HomeDirectory(database);
         var ada = users.CreateUser("Ada", null, UserRole.Viewer);
         var bob = users.CreateUser("Bob", null, UserRole.Viewer);
         directory.MapExternalGroup(ExternalSources.Entra, "  Data-Team ", "build-1", ServerRole.Author);
@@ -160,7 +160,7 @@ public sealed class ModuleHomeStoresTests : IDisposable
     {
         var database = Open(engine);
         var users = new IdentityUserStore(database);
-        var directory = new ModuleHomeDirectory(database);
+        var directory = new HomeDirectory(database);
         var ada = users.CreateUser("Ada", null, UserRole.Viewer);
         var group = directory.CreateGroup("operators");
         directory.AddMember(group.Id, ada.Id);

@@ -12,7 +12,7 @@ public interface IDefinitionSubscriber
     void Apply(string name, DefinitionVersion? current);
 }
 
-/// <summary>What a <see cref="DefinitionFollower"/> reads: the definitions a channel serves and the log of what moved. Both <see cref="DefinitionStore"/> and the module's <see cref="ModuleDefinitionStore"/> are one.</summary>
+/// <summary>What a <see cref="DefinitionFollower"/> reads: the definitions a channel serves and the log of what moved. Both <see cref="DefinitionStore"/> and the module's <see cref="DefinitionStore"/> are one.</summary>
 public interface IDefinitionSource
 {
     long LatestEventId();

@@ -17,6 +17,9 @@ public sealed record StateScope(string? Group = null, string? Service = null)
 {
     public static StateScope Install { get; } = new();
 
+    /// <summary>A single instance on its own database: one group and one service, both named <c>main</c>. What a SQLite state is, and what a test that has no second group needs.</summary>
+    public static StateScope Standalone { get; } = new(Group: "main", Service: "main");
+
     /// <summary>The name the scope contributes to a namespace, or null for the install scope.</summary>
     public string? NameFor(StateScopeKind kind, string module) => kind switch
     {

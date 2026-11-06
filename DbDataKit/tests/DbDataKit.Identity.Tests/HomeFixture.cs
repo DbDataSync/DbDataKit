@@ -8,7 +8,7 @@ internal sealed class HomeFixture : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "ddk-identity-" + Guid.NewGuid().ToString("N"));
 
     public StateDatabase Database { get; }
-    public UserStore Users { get; }
+    public IdentityUserStore Users { get; }
     public HomeDirectory Directory { get; }
     public OidcClients Clients { get; }
     public SigningKeys Keys { get; }
@@ -16,8 +16,8 @@ internal sealed class HomeFixture : IDisposable
     public HomeFixture()
     {
         System.IO.Directory.CreateDirectory(_directory);
-        Database = new StateDatabase(Path.Combine(_directory, "state.db"), HomeSchema.Schema);
-        Users = new UserStore(Database);
+        Database = StateDatabase.OpenModules(Path.Combine(_directory, "state.db"), IdentityHomeState.Modules);
+        Users = new IdentityUserStore(Database);
         Directory = new HomeDirectory(Database);
         Clients = new OidcClients(Database);
         Keys = new SigningKeys(Database, new MaskProtector());

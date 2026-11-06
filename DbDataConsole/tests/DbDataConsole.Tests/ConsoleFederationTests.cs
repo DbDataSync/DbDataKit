@@ -53,8 +53,8 @@ public sealed class ConsoleFederationTests : IAsyncLifetime
         // the identity home
         var homePort = FreePort();
         homeUrl = $"http://127.0.0.1:{homePort}";
-        var db = new StateDatabase(Path.Combine(root, "home.db"), HomeSchema.Schema);
-        var users = new UserStore(db);
+        var db = StateDatabase.OpenModules(Path.Combine(root, "home.db"), DbDataKit.Identity.IdentityHomeState.Modules);
+        var users = new IdentityUserStore(db);
         directory = new HomeDirectory(db);
         var clients = new OidcClients(db);
         var keys = new SigningKeys(db, new Mask());
@@ -344,7 +344,7 @@ public sealed class ConsoleFederationTests : IAsyncLifetime
         var (sessionA, _) = await SignIn(consoleA, ada.Id);
         // another account on this console holds an address the home now gives Ada, verified (plan 13a U16)
         appA.Services.GetRequiredService<IUserAccounts>().CreateUser("Local Lovelace", "ada.work@example.invalid", UserRole.Viewer, emailVerified: true);
-        new UserStore(new StateDatabase(Path.Combine(root, "home.db"), HomeSchema.Schema)).SetVerifiedEmail(ada.Id, "ada.work@example.invalid");
+        new IdentityUserStore(StateDatabase.OpenModules(Path.Combine(root, "home.db"), DbDataKit.Identity.IdentityHomeState.Modules)).SetVerifiedEmail(ada.Id, "ada.work@example.invalid");
         Assert.Equal(HttpStatusCode.OK, await EchoStatus(consoleA, sessionA!, ServerAId));       // not before the interval
         clockA.Offset = PastTheInterval;
         Assert.Equal(HttpStatusCode.Unauthorized, await EchoStatus(consoleA, sessionA!, ServerAId));

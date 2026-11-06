@@ -48,6 +48,10 @@ public partial class StateDatabase
     /// <summary>The clock for every time the state layer writes itself (the registry's <c>applied_at</c>, retention, ids); tests give it a fake one.</summary>
     public TimeProvider Time { get; }
 
+    /// <summary>A SQLite file built from <paramref name="modules"/>, for the process described by <paramref name="scope"/> (<see cref="StateScope.Standalone"/> when omitted).</summary>
+    public static StateDatabase OpenModules(string sqliteFilePath, IEnumerable<StateModule> modules, StateScope? scope = null, TimeProvider? time = null) =>
+        new(sqliteFilePath, StateLayout.Create(StateEngineIds.Sqlite, modules, scope ?? StateScope.Standalone), null, time);
+
     /// <summary>A SQLite file built from modules.</summary>
     public StateDatabase(string sqliteFilePath, StateLayout layout, string? appliedBy = null, TimeProvider? time = null)
         : this(StateEngineIds.Sqlite, SqliteConnectionString(sqliteFilePath), layout, appliedBy, time)
