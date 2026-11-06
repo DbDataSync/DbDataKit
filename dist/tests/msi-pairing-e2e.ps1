@@ -70,7 +70,7 @@ try {
   Write-Host '=== the console is closed to anyone not signed in, and can invite the first administrator'
   $status = try { (Invoke-WebRequest "$consoleUrl/api/users" -SkipCertificateCheck -SkipHttpErrorCheck).StatusCode } catch { $_.Exception.Response.StatusCode.value__ }
   Assert ($status -eq 401) "/api/users answers 401 (got $status)"
-  $invite = Run $console @('user', 'invite', '--url', $consoleUrl, '--repo', $consoleDirData)
+  $invite = Run $console @('user', 'invite', '--email', 'admin@example.test', '--url', $consoleUrl, '--repo', $consoleDirData)
   Assert ($invite -match '/invite#') 'an invitation link is made'
 }
 finally {
