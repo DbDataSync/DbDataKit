@@ -120,7 +120,40 @@ anywhere including ODBC/JDBC).
 | `Snapshot` | No — can't | Appends every staged row, timestamped. No comparison, no delete — for a target whose whole job is keeping what used to be there. |
 | `Scd2` | No — deliberately not | The historized writer: keeps every version of every key rather than just the current one, via `DS_ValidFrom`/`DS_ValidTo`/`DS_IsCurrent`. Needs a reader that reports deletes to ever close a version for a deleted key — paired with one that doesn't, a deleted source row just stays current forever, which the writer picker says plainly. |
 | `MsSqlMergeReconcile` / `MergeReconcile` | **Yes** | Inserts, updates, *and* deletes target rows in scope but absent from the change set — what lets a `BatchReload` converge. |
+| `MsSqlBulkInsert` | **Yes** | Loads straight into the target with `SqlBulkCopy` — nothing staged. Paired with the `PassThrough` cache; see [Loading straight into the target](#loading-straight-into-the-target). |
 | `MsSqlDeleteInsert` / `DeleteInsert` | **Yes** | Delete everything in scope, insert the staged set. No primary key needed — nothing is joined row by row. The portable option: what makes `Watermark` mode useful even on an engine with no delete-aware change source, when paired with a segmented reload. |
+
+#### Loading straight into the target
+
+For a full load or reload of a large table, staging is a second copy of the data: written to a temporary
+table, then written again into the target. On SQL Server, pair the **`PassThrough`** cache with the
+**`MsSqlBulkInsert`** writer and the rows go from the reader into the target once, with `SqlBulkCopy`:
+
+```yaml
+bulkLoad:
+  cache:
+    kind: PassThrough
+  writer:
+    kind: MsSqlBulkInsert
+    options:
+      clear: Truncate        # Delete (default) | Truncate
+      transaction: "true"    # "true" (default) | "false"
+```
+
+- **`clear`** — what happens to the target before the load. `Delete` removes the rows in this pass's scope:
+  the whole table when unsegmented, only the segment when segmented. `Truncate` runs `TRUNCATE TABLE`,
+  which is far cheaper but has no scope, so it is refused for a segmented load (each segment would wipe the
+  previous one's rows) and for a table a foreign key references (SQL Server does not allow it) — both
+  failures say to use `Delete`.
+- **`transaction`** — `true`: the clear and the load commit together, so a failed load leaves the previous
+  rows and readers never see an empty table, at the cost of holding locks for the whole load. `false`: a
+  failure leaves the table cleared or partly loaded until the next run.
+- The two go together: `PassThrough` only works with a writer that loads directly, and `MsSqlBulkInsert`
+  only works with `PassThrough`; any other pairing fails the pass before anything is read.
+- It reconciles, so like every reconciling writer it belongs on the **Bulk Load** pipeline (or behind a
+  reload reader), not behind an incremental reader. It inserts only: a row that is not an insert fails the
+  pass.
+- Nothing is staged, so a hook's `{{staging}}` has no table to name.
 
 `SupportsReconciliation` is what the reader/writer pickers use to show which writers reconcile —
 covered in [Getting started](getting-started.md).
