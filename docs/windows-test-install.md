@@ -44,13 +44,19 @@ service **stopped**: `DbDataKitConsole` and `DbDataSync`. They are unsigned, so 
 
 ## 2. The console
 
+> **Every `dbdatakit` command that touches the console's data needs the same folder** (`server run`, `user`, `instance`). A command
+> without `--repo` and without `DBDATAKIT_CONSOLE_DIR` uses `%LOCALAPPDATA%\dbdatakit\console` instead, which is not the folder
+> `server run` serves, so a pairing made there never shows in the web app. Either pass `--repo` every time, as below, or set the
+> variable once for the account: `[Environment]::SetEnvironmentVariable('DBDATAKIT_CONSOLE_DIR', 'C:\ProgramData\DbDataKit\console', 'User')`
+> (a new terminal picks it up).
+
 ```powershell
 dbdatakit server run --repo C:\ProgramData\DbDataKit\console
 ```
 
 It listens on `https://localhost:8480`, makes a self-signed certificate in that folder, and with no user yet writes an invitation to
 `FIRST-RUN.txt` there and to the log. Open `https://localhost:8480/invite#<code>` **once** on the machine and register a passkey: that
-person is the first administrator. (`dbdatakit user invite` prints a new invitation if the first has expired.) To reach it from
+person is the first administrator. (`dbdatakit user invite --repo C:\ProgramData\DbDataKit\console` prints a new invitation if the first has expired.) To reach it from
 another machine add `--listen https://test-sync.example.com:8480`.
 
 ## 3. Sync, started for the first time
@@ -72,8 +78,8 @@ On the Sync machine, in a second window:
 
 ```powershell
 dbdatasync server pair
-dbdatakit instance add https://test-sync.example.com:5080 --code <the code it printed>
-dbdatakit instance list
+dbdatakit instance add https://test-sync.example.com:5080 --code <the code it printed> --repo C:\ProgramData\DbDataKit\console
+dbdatakit instance list --repo C:\ProgramData\DbDataKit\console
 ```
 
 The code is single-use and lasts a few minutes. The console pins Sync's certificate when it pairs. Then open the console, **Servers**,
