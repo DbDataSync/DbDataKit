@@ -1152,20 +1152,25 @@ DbDataBoard, DbDataTrack, DbDataTasks. DbDataPlan is ruled out, since Build alre
 
 **Goal.** Backlog, sprint and work management for teams that build on the suite, where a work item can point at the thing it is about.
 
-### 5.1 Built on the suite, not beside it
+### 5.1 Its own data structure, augmented by DbDataStore
 
-**Proposed:** the work tool is a **solution** made from the other parts, and adds no new server:
+**Decided (owner, 2026-11-06)**, replacing an earlier proposal that built it on DbDataStore models: **the core data structure is part of
+the application itself.** DbDataBacklog is set up when it is installed and configured, while DbDataStore models are authored after all of
+the other configuration, so the backlog cannot depend on them. DbDataStore can **augment** its data (custom fields), never hold its core.
 
 | Part | Built with |
 | --- | --- |
-| Work items, epics, sprints, boards, comments, links, states and their transitions | DbDataStore models shipped with the suite: history, approval, audit and access rules come with them |
-| Attachments | DbDataStore documents |
-| The screens: backlog, board, sprint, item | an app (plan 26) on the shared framework, with declarative grid, form and board views; a portal for teams that want it alone |
+| Work items, epics, sprints, boards, comments, links, states and their transitions | **the application's own structure**: a `backlog` module of the unified state (plan 29), owned by the backlog library, created on install and migrated with each release like any other module |
+| Its rules (who may move an item to which state, required fields, what a transition does) | the backlog library, served by a `backlog` module of the serving layer (its API), so the app is a client of it like any other app |
+| Attachments | the payload store (plan 29 section 3.6) |
+| Custom fields | DbDataStore extension models attached to the work item type (section 5.4); optional, added after install |
+| The screens: backlog, board, sprint, item | an app shipped with the suite (plan 26), served by the serving layer; a portal for teams that want it alone |
 | Notifications and digests | the delivery service (plan 22 section 5) |
 | Automatic items: a failed run, a check that blocks, an approval waiting | integration tasks on the runner (section 4) |
 | An assistant: write and split items, estimate, plan a sprint, summarize a sprint | an agent definition (section 3) |
 
-This also tests the platform: anything the work tool needs and the suite lacks is a gap in DbDataStore or the app framework, fixed there.
+It is still **not a server of its own**: its runtime is a module of the serving layer and its state a module of the serving group's
+state, as the knowledge module's is.
 
 ### 5.2 What makes it worth having in this suite
 
@@ -1179,6 +1184,25 @@ This also tests the platform: anything the work tool needs and the suite lacks i
 
 Whether it replaces Jira or Azure Boards for its users, or links to them (import, two-way sync), changes its size a lot. **Owner
 question 7.**
+
+### 5.4 Custom attributes for any object type
+
+**Decided (owner, 2026-11-06)**, as a rule for the whole suite: the same holds for every object type, not only work items. An object's core
+structure belongs to the product that owns it; **DbDataStore can augment any object type with custom attributes**.
+
+Proposed (2026-11-06) for how:
+
+- **An extension model** is a DbDataStore model attached to an object type (`work-item`, `semantic-model`, `build-model`, `app`,
+  `connection`, ...): its fields are the custom attributes, and each record is keyed by the object's stable identity (the same identity
+  the catalog and lineage use, plan 18 section 4).
+- **The object's own screens show its custom attributes**, edited with DbDataStore's validation, history and audit, under DbDataStore's
+  permissions; the shared Store controls (`@dbdatakit/store-ui`) render them.
+- **They never change what the product does.** A custom attribute cannot make a work item skip a state or a model build differently; the
+  owning product's rules stay its own.
+- **An object that goes leaves its attributes orphaned**, listed for their owners, as knowledge items are (section 3.5c).
+- **Two kinds of attribute, kept apart:** properties written in a definition (Build's `tags` and `properties`, in git, versioned with the
+  definition) and custom attributes kept in DbDataStore (edited by business users at run time). Search and generated knowledge (section 2.7)
+  can show both, labelled.
 
 ## 6. How the four fit the suite's layers
 
@@ -1217,7 +1241,7 @@ of the architecture. Runtime stays elsewhere: the serving layer, the runner, the
 | 3 | Front-end agents in the serving layer; curated business knowledge in the Workspace server's knowledge editor (glossary, metrics, verified queries), drafts from agents, evaluation sets; embedding search if chosen | DbDataStore drafts (plan 21); access rules (plan 22 section 2) |
 | 3b | Elevated actions: action principals, grants to actions with field and row conditions, *run* grants to people, validate then apply or reject, the declarative form, audit of both identities | wave 2; DbDataStore permissions (plan 15); the identity home's service principals (13a U20) |
 | 4 | The runner (plan 28) with its progress store on the unified state structure (plan 29), then DbDataIntegration: outside connections, the integration kit, templates, inbound and outbound patterns, webhooks; actions that enqueue integration tasks; back-end agents in workspaces | shared authoring (plan 22 section 1) |
-| 5 | The work tool: models, app, integration tasks, assistant | DbDataStore relationships and documents; the app framework's declarative views |
+| 5 | DbDataBacklog: its `backlog` modules (state and serving), the app, integration tasks, the assistant; custom fields once DbDataStore's extension models exist | the app framework's views; the delivery service |
 
 Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbDataStore models as soon as DbDataStore can hold them.
 
@@ -1225,7 +1249,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 
 | # | Question | Proposed |
 | --- | --- | --- |
-| 1 | Which of these are servers? | **Decided** (owner, 2026-11-05): one **Workspace server** for authoring (the apps back end, broadened) hosting app, agent, integration, skill and knowledge projects, with Build and Sync moving into it eventually; DbDataRunner a service of its own; knowledge, actions and the work tool are not servers (section 6). Its name: **DbDataWorkspace** (owner, 2026-11-06) |
+| 1 | Which of these are servers? | **Decided** (owner, 2026-11-05): one **Workspace server** for authoring (the apps back end, broadened) hosting app, agent, integration, skill and knowledge projects, with Build and Sync moving into it eventually; DbDataRunner a service of its own; knowledge, actions and DbDataBacklog are not servers (DbDataBacklog's runtime is a serving-layer module with its own state module, section 5.1) (section 6). Its name: **DbDataWorkspace** (owner, 2026-11-06) |
 | 2 | The work tool's name | **Decided** (owner, 2026-11-06): DbDataBacklog |
 | 3 | Languages and packaging | **Decided for integrations** (owner, 2026-11-04): `.csx` scripts, compiled .NET projects, any executable through the runner protocol, and hybrids such as a .NET notebook over a project (plan 28 section 4). Actions: `.csx`, SQL, command calls and declarative elevated forms |
 | 4 | Embedding search | **Decided** (owner, 2026-11-05): vector search only, to start, on SQL Server 2025, PostgreSQL (`pgvector`) and SQLite (`sqlite-vec`), with an embedding model connection bound per channel; without vector search there is no knowledge search (section 2.4) |
@@ -1283,6 +1307,8 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 56 | Definitions of every kind (reports, semantic models, agents, apps, integrations and the rest) are searchable as generated knowledge in the same index; packages not served by the serving group publish their description to it | **Decided** (owner, 2026-11-06) (section 2.11) |
 | 57 | Source code and files are not in the knowledge index; workspace search on the Workspace server, exact text, per repository and branch | **Decided** (owner, 2026-11-06) (section 2.11) |
 | 58 | Data, documents' contents and operational records stay with their own systems; one search box asks several sources and groups the results | **Decided** (owner, 2026-11-06) (section 2.11) |
+| 59 | DbDataBacklog's core structure is the application's own (a `backlog` state module and a serving-layer module), created on install; DbDataStore only augments it | **Decided** (owner, 2026-11-06) (section 5.1) |
+| 60 | Custom attributes for any object type through DbDataStore; the core structure stays the owning product's | **Decided** (owner, 2026-11-06) as a rule; how (extension models keyed by object identity) proposed (section 5.4) |
 
 ## 9. Detailed plans to follow
 
@@ -1316,4 +1342,5 @@ one branch `suite/<id>-<short-name>`, a "Done when" test, as in 13a):
 | 18 | outside systems become lineage nodes |
 | 06 and `connection/1` | a kind for outside systems (if question 10 is agreed) |
 | 25 section 2 | adds evaluation sets beside the behaviour tests |
-| 26 | the work tool is the first app the suite ships |
+| 26 | DbDataBacklog is the first app the suite ships, with its own modules (section 5.1) |
+| 15 | DbDataStore gains extension models: custom attributes for any object type, keyed by the object's identity (section 5.4) |
