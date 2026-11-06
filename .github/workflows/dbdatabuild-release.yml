@@ -26,6 +26,12 @@ on:
         description: Publish as a prerelease (-beta suffix on the version, prerelease flag on the GitHub Release).
         type: boolean
         default: false
+      snapshot:
+        description: >-
+          Publish as a snapshot: a prerelease (-snapshot.g<sha> suffix) cut from any branch or commit with none of the release guards (not
+          on main, no green CI run, no conformance gate). `sha` empty means the commit this run was dispatched against. Not with beta.
+        type: boolean
+        default: false
       sha:
         description: The commit to release. Empty means the newest commit on main. It must be on main.
         type: string
@@ -43,6 +49,12 @@ on:
     inputs:
       beta:
         description: Publish as a prerelease (-beta suffix on the version, prerelease flag on the GitHub Release).
+        type: boolean
+        default: false
+      snapshot:
+        description: >-
+          Publish as a snapshot: a prerelease (-snapshot.g<sha> suffix) cut from any branch or commit with none of the release guards (not
+          on main, no green CI run, no conformance gate). `sha` empty means the commit this run was dispatched against. Not with beta.
         type: boolean
         default: false
       sha:
@@ -84,16 +96,23 @@ jobs:
         working-directory: .
         env:
           WANTED: ${{ inputs.sha }}
+          SNAPSHOT: ${{ inputs.snapshot }}
         run: |
-          if [ "$GITHUB_REF_NAME" != "main" ]; then
-            echo "::error::dbdatabuild-release.yml must be dispatched against 'main' (got '$GITHUB_REF_NAME'); pass -f sha=<commit> to release an older commit."
-            exit 1
-          fi
-          git fetch origin main
-          sha=$(git rev-parse "${WANTED:-origin/main}^{commit}")
-          if ! git merge-base --is-ancestor "$sha" origin/main; then
-            echo "::error::$sha is not on main. Only commits on main are released."
-            exit 1
+          if [ "$SNAPSHOT" = "true" ]; then
+            # A snapshot is cut from any branch or commit, with none of the release guards: the commit this run was dispatched against, or `sha`.
+            sha=$(git rev-parse "${WANTED:-HEAD}^{commit}")
+            echo "snapshot of $sha, dispatched against $GITHUB_REF_NAME"
+          else
+            if [ "$GITHUB_REF_NAME" != "main" ]; then
+              echo "::error::dbdatabuild-release.yml must be dispatched against 'main' (got '$GITHUB_REF_NAME'); pass -f sha=<commit> to release an older commit, or -f snapshot=true to cut a snapshot from this branch."
+              exit 1
+            fi
+            git fetch origin main
+            sha=$(git rev-parse "${WANTED:-origin/main}^{commit}")
+            if ! git merge-base --is-ancestor "$sha" origin/main; then
+              echo "::error::$sha is not on main. Only commits on main are released (a snapshot can be cut from anywhere: -f snapshot=true)."
+              exit 1
+            fi
           fi
           echo "releasing $sha"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
@@ -103,6 +122,8 @@ jobs:
         shell: bash
         env:
           BETA: ${{ inputs.beta }}
+          SNAPSHOT: ${{ inputs.snapshot }}
+          PICKED_SHA: ${{ steps.pick.outputs.sha }}
           WANTED_VERSION: ${{ inputs.version }}
         run: |
           IFS=. read -r y m d hm <<< "$(date -u +%Y.%m.%d.%H%M)"
@@ -112,14 +133,19 @@ jobs:
             version="${version}-beta"
             prerelease=true
           fi
+          if [ "$SNAPSHOT" = "true" ]; then
+            if [ "$BETA" = "true" ]; then echo "::error::choose beta or snapshot, not both"; exit 1; fi
+            version="${version}-snapshot.g${PICKED_SHA:0:7}"
+            prerelease=true
+          fi
           # A version handed in (by suite-release.yml) wins over the clock; it must be CalVer, and -beta decides the prerelease flag.
           if [ -n "$WANTED_VERSION" ]; then
             case "$WANTED_VERSION" in
               [0-9][0-9][0-9][0-9].*.*.*) ;;
-              *) echo "::error::'$WANTED_VERSION' is not a CalVer version (YYYY.M.D.HHmm[-beta])"; exit 1 ;;
+              *) echo "::error::'$WANTED_VERSION' is not a CalVer version (YYYY.M.D.HHmm[-beta|-snapshot])"; exit 1 ;;
             esac
             version="$WANTED_VERSION"
-            case "$version" in *-beta) prerelease=true ;; *) prerelease=false ;; esac
+            case "$version" in *-beta|*-snapshot|*-snapshot.*) prerelease=true ;; *) prerelease=false ;; esac
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
@@ -127,12 +153,15 @@ jobs:
   # A release is built only after every conformance group has passed on every engine, on the commit being released.
   conformance-full:
     needs: guard
+    if: ${{ !inputs.snapshot }}
     uses: ./.github/workflows/dbdatabuild-conformance-full.yml
     with:
       ref: ${{ needs.guard.outputs.sha }}
 
   build:
     needs: [guard, conformance-full]
+    # A snapshot skips the conformance gate, so that job is skipped; anything else needs it to have passed.
+    if: ${{ !cancelled() && needs.guard.result == 'success' && (needs.conformance-full.result == 'success' || needs.conformance-full.result == 'skipped') }}
     strategy:
       fail-fast: false
       matrix:
@@ -192,6 +221,9 @@ jobs:
 
   release:
     needs: [guard, build]
+    # GitHub skips a job whose chain of needs holds a skipped job, even when the job in between has its own `if`. A snapshot skips conformance-full, so
+    # without this the release (and the dry run's artifact) would be skipped too.
+    if: ${{ !cancelled() && needs.guard.result == 'success' && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:

@@ -46,6 +46,7 @@ class VersionTests(unittest.TestCase):
         self.assertEqual(msi.msi_version("2026.1.1.0"), "26.1.1440")
         self.assertEqual(msi.msi_version("2026.12.31.2359"), "26.12.46079")   # still under the 65535 ceiling
         self.assertEqual(msi.msi_version("2026.10.19.509-beta"), "26.10.27669")
+        self.assertEqual(msi.msi_version("2026.10.19.509-snapshot.gabc1234"), "26.10.27669")
 
     def test_versions_sort_in_release_order(self):
         order = ["2026.10.19.509", "2026.10.19.1200", "2026.10.20.0", "2026.11.1.5", "2026.12.31.2359", "2027.1.1.0"]

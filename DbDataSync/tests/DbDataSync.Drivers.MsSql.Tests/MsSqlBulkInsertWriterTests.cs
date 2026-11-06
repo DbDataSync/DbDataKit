@@ -128,6 +128,17 @@ public sealed class MsSqlBulkInsertWriterTests(MsSqlTestDatabase db) : IClassFix
     }
 
     [Fact]
+    public async Task Truncate_OfAWholeTableLoad_WorksWhenTheWorkItemCarriesAFullSegment()
+    {
+        // An unsegmented Bulk Load is dispatched with an explicit "full" segment, not with no segment.
+        await ExecuteAsync($"INSERT dbo.[{_targetTable}] VALUES (99,'XX','stale');");
+
+        await LoadAsync(new() { [MsSqlBulkInsertWriter.ClearOption] = "Truncate" }, new FullSegment());
+
+        Assert.Equal([1, 2, 3], await TargetIdsAsync());
+    }
+
+    [Fact]
     public async Task Truncate_OfASegmentedLoad_IsRefused_BeforeAnythingIsDeleted()
     {
         await ExecuteAsync($"INSERT dbo.[{_targetTable}] VALUES (20,'US','keep');");
