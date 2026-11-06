@@ -69,7 +69,7 @@ public sealed class StateMigratorTests : IDisposable
     public void Reopening_applies_nothing_and_an_appended_migration_is_applied_alone(string engine)
     {
         var location = _engines.Provision(engine);
-        var clock = new Clock(DateTimeOffset.Parse("2026-01-01T00:00:00Z"));
+        var clock = new StateTestClock(DateTimeOffset.Parse("2026-01-01T00:00:00Z"));
         var first = location.Open([Parts(Things())], time: clock);
         var before = Registry(first);
 
@@ -174,15 +174,5 @@ public sealed class StateMigratorTests : IDisposable
         Assert.Equal(1, Count(main, "SELECT COUNT(*) FROM {table:sessions.session}"));
         Assert.Equal(0, Count(eu, "SELECT COUNT(*) FROM {table:sessions.session}"));
         Assert.Equal(2, Count(eu, "SELECT COUNT(*) FROM " + eu.Layout!.Registry));
-    }
-
-    /// <summary>A clock the test moves.</summary>
-    internal sealed class Clock(DateTimeOffset now) : TimeProvider
-    {
-        private DateTimeOffset _now = now;
-
-        public void Advance(TimeSpan by) => _now += by;
-
-        public override DateTimeOffset GetUtcNow() => _now;
     }
 }

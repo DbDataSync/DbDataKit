@@ -105,7 +105,7 @@ public sealed class NotificationFeedStoreTests : IDisposable
     [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
     public void The_retention_job_removes_notifications_after_thirty_days_and_keeps_positions(string engine)
     {
-        var clock = new StateMigratorTests.Clock(DateTimeOffset.Parse("2026-11-06T00:00:00Z"));
+        var clock = new StateTestClock(DateTimeOffset.Parse("2026-11-06T00:00:00Z"));
         var database = Open(engine, clock);
         var store = new NotificationFeedStore(database, "sync");
         store.Raise(NotificationKinds.CertificateExpiring, "old");
@@ -123,7 +123,7 @@ public sealed class NotificationFeedStoreTests : IDisposable
     [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
     public void Pruning_removes_old_notifications_and_null_keeps_everything(string engine)
     {
-        var clock = new StateMigratorTests.Clock(DateTimeOffset.Parse("2026-11-06T00:00:00Z"));
+        var clock = new StateTestClock(DateTimeOffset.Parse("2026-11-06T00:00:00Z"));
         var store = new NotificationFeedStore(Open(engine, clock), "sync");
         store.Raise(NotificationKinds.CertificateExpiring, "old");
         clock.Advance(TimeSpan.FromDays(30));

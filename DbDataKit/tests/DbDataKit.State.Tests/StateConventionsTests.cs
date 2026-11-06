@@ -128,7 +128,7 @@ public sealed class StateConventionsTests : IDisposable
     [Fact]
     public void New_ids_are_version_7_and_follow_the_clock()
     {
-        var clock = new StateMigratorTests.Clock(DateTimeOffset.Parse("2026-11-06T00:00:00Z"));
+        var clock = new StateTestClock(DateTimeOffset.Parse("2026-11-06T00:00:00Z"));
         using var engines = new StateEngines();
         var database = engines.Provision(StateEngineIds.Sqlite).Open([Module("CREATE TABLE {table:t} (id {{uuid}} PRIMARY KEY);")], time: clock);
 

@@ -5,53 +5,66 @@ using DbDataKit.State;
 
 namespace DbDataKit.Lineage;
 
-/// <summary>The tables of <see cref="LineageStore"/>, a fragment a product includes in its <see cref="StateSchema"/>. Keys are the fixed-length hashes of the identities, which are long.</summary>
-public static class LineageSchema
+/// <summary>
+/// The <c>lineage</c> module (plan 29 section 3.4, plan 18): the design graph of each owner and the runs along its edges. One copy per install; <c>service</c> and <c>owner</c> are in every
+/// key, so a console that keeps one graph per server it pulls from and a server that keeps its own share the tables. Keys are the fixed-length hashes of the identities, which are long.
+/// </summary>
+public static class LineageModule
 {
-    public const string Tables =
-        """
-        -- The design lineage of one server: its nodes and edges, replaced whole when a definition changes, and the version (a fingerprint) of what was last stored.
-        CREATE TABLE LineageNodes (
-            Service {{key}} NOT NULL,
-            Owner {{key}} NOT NULL,
-            NodeHash {{key}} NOT NULL,
-            NodeId {{text}} NOT NULL,
-            Kind {{key}} NOT NULL,
-            Name {{text}} NOT NULL,
-            UnknownUpstream {{int}} NOT NULL,
-            PropertiesJson {{text}} NULL,
-            PRIMARY KEY (Service, Owner, NodeHash)
-        );
-        CREATE TABLE LineageEdges (
-            Service {{key}} NOT NULL,
-            Owner {{key}} NOT NULL,
-            EdgeHash {{key}} NOT NULL,
-            FromId {{text}} NOT NULL,
-            ToId {{text}} NOT NULL,
-            Kind {{key}} NOT NULL,
-            Granularity {{key}} NOT NULL,
-            Confidence {{key}} NOT NULL,
-            Detail {{text}} NULL,
-            PRIMARY KEY (Service, Owner, EdgeHash)
-        );
-        CREATE TABLE LineageVersions (
-            Service {{key}} NOT NULL,
-            Owner {{key}} NOT NULL,
-            Version {{key}} NOT NULL,
-            UpdatedUtc {{text}} NOT NULL,
-            PRIMARY KEY (Service, Owner)
-        );
-        -- The run lineage: what flowed along an edge, when and how it ended. Kept by the server's retention for run detail, and dropped with its edge.
-        CREATE TABLE LineageRuns (
-            Service {{key}} NOT NULL,
-            Owner {{key}} NOT NULL,
-            EdgeHash {{key}} NOT NULL,
-            AtUtc {{key}} NOT NULL,
-            Outcome {{key}} NOT NULL,
-            Rows {{int}} NULL,
-            PRIMARY KEY (Service, Owner, EdgeHash, AtUtc)
-        );
-        """;
+    public const string Name = "lineage";
+
+    public static StateModule Module { get; } = new(
+        Name,
+        StateScopeKind.Install,
+        [
+            """
+            -- The design lineage of one server: its nodes and edges, replaced whole when a definition changes, and the version (a fingerprint) of what was last stored.
+            CREATE TABLE {table:node} (
+                service          {{key}} NOT NULL,
+                owner            {{key}} NOT NULL,
+                node_hash        {{key}} NOT NULL,
+                node_id          {{text}} NOT NULL,
+                kind             {{key}} NOT NULL,
+                name             {{text}} NOT NULL,
+                unknown_upstream {{bool}} NOT NULL,
+                properties       {{json}} NULL,
+                PRIMARY KEY (service, owner, node_hash)
+            );
+
+            CREATE TABLE {table:edge} (
+                service      {{key}} NOT NULL,
+                owner        {{key}} NOT NULL,
+                edge_hash    {{key}} NOT NULL,
+                from_id      {{text}} NOT NULL,
+                to_id        {{text}} NOT NULL,
+                kind         {{key}} NOT NULL,
+                granularity  {{key}} NOT NULL,
+                confidence   {{key}} NOT NULL,
+                detail       {{text}} NULL,
+                PRIMARY KEY (service, owner, edge_hash)
+            );
+
+            CREATE TABLE {table:design_version} (
+                service     {{key}} NOT NULL,
+                owner       {{key}} NOT NULL,
+                version     {{key}} NOT NULL,
+                updated_at  {{time}} NOT NULL,
+                PRIMARY KEY (service, owner)
+            );
+
+            -- The run lineage: what flowed along an edge, when and how it ended. Removed by retention, and with its edge when the design graph is replaced.
+            CREATE TABLE {table:run} (
+                service      {{key}} NOT NULL,
+                owner        {{key}} NOT NULL,
+                edge_hash    {{key}} NOT NULL,
+                happened_at  {{time}} NOT NULL,
+                outcome      {{key}} NOT NULL,
+                row_count    {{int}} NULL,
+                PRIMARY KEY (service, owner, edge_hash, happened_at)
+            );
+            """,
+        ],
+        retention: [new RetentionRule("run", "happened_at")]);
 }
 
 /// <summary>
@@ -60,6 +73,8 @@ public static class LineageSchema
 /// </summary>
 public sealed class LineageStore(StateDatabase database, string service)
 {
+    private const string Module = LineageModule.Name;
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     /// <summary>Makes the owner's design graph this one. False when it already was (nothing was written).</summary>
@@ -72,29 +87,29 @@ public sealed class LineageStore(StateDatabase database, string service)
         {
             using var connection = database.OpenConnection();
             using var transaction = connection.BeginTransaction();
-            foreach (var table in new[] { "LineageNodes", "LineageEdges", "LineageVersions" })
+            foreach (var table in new[] { "node", "edge", "design_version" })
             {
-                using var delete = database.Command(connection, transaction, $"DELETE FROM {table} WHERE Service = $service AND Owner = $owner;");
+                using var delete = database.Command(Module, connection, transaction, $"DELETE FROM {{table:{table}}} WHERE service = $service AND owner = $owner;");
                 Bind(delete, owner);
                 delete.ExecuteNonQuery();
             }
             foreach (var node in graph.Nodes)
             {
-                using var insert = database.Command(connection, transaction,
-                    "INSERT INTO LineageNodes (Service, Owner, NodeHash, NodeId, Kind, Name, UnknownUpstream, PropertiesJson) VALUES ($service, $owner, $hash, $id, $kind, $name, $unknown, $properties);");
+                using var insert = database.Command(Module, connection, transaction,
+                    "INSERT INTO {table:node} (service, owner, node_hash, node_id, kind, name, unknown_upstream, properties) VALUES ($service, $owner, $hash, $id, $kind, $name, $unknown, CAST($properties AS {{json}}));");
                 Bind(insert, owner);
                 insert.Bind(database, "hash", LineageEdge.Hash(node.Id));
                 insert.Bind(database, "id", node.Id);
                 insert.Bind(database, "kind", node.Kind.ToString());
                 insert.Bind(database, "name", node.Name);
-                insert.Bind(database, "unknown", node.UnknownUpstream ? 1L : 0L);
-                insert.Bind(database, "properties", node.PropertyMap.Count == 0 ? null : JsonSerializer.Serialize(node.PropertyMap, Json));
+                insert.Bind(database, "unknown", node.UnknownUpstream);
+                insert.Bind(database, "properties", node.PropertyMap.Count == 0 ? null : JsonSerializer.Serialize(node.PropertyMap, Json), System.Data.DbType.String);
                 insert.ExecuteNonQuery();
             }
             foreach (var edge in graph.Edges)
             {
-                using var insert = database.Command(connection, transaction,
-                    "INSERT INTO LineageEdges (Service, Owner, EdgeHash, FromId, ToId, Kind, Granularity, Confidence, Detail) VALUES ($service, $owner, $hash, $from, $to, $kind, $granularity, $confidence, $detail);");
+                using var insert = database.Command(Module, connection, transaction,
+                    "INSERT INTO {table:edge} (service, owner, edge_hash, from_id, to_id, kind, granularity, confidence, detail) VALUES ($service, $owner, $hash, $from, $to, $kind, $granularity, $confidence, $detail);");
                 Bind(insert, owner);
                 insert.Bind(database, "hash", edge.KeyHash);
                 insert.Bind(database, "from", edge.From);
@@ -102,21 +117,21 @@ public sealed class LineageStore(StateDatabase database, string service)
                 insert.Bind(database, "kind", edge.Kind.ToString());
                 insert.Bind(database, "granularity", edge.Granularity.ToString());
                 insert.Bind(database, "confidence", edge.Confidence.ToString());
-                insert.Bind(database, "detail", edge.Detail);
+                insert.Bind(database, "detail", edge.Detail, System.Data.DbType.String);
                 insert.ExecuteNonQuery();
             }
             // the runs of an edge that is gone are gone with it
-            using (var prune = database.Command(connection, transaction,
-                "DELETE FROM LineageRuns WHERE Service = $service AND Owner = $owner AND EdgeHash NOT IN (SELECT EdgeHash FROM LineageEdges WHERE Service = $service AND Owner = $owner);"))
+            using (var prune = database.Command(Module, connection, transaction,
+                "DELETE FROM {table:run} WHERE service = $service AND owner = $owner AND edge_hash NOT IN (SELECT edge_hash FROM {table:edge} WHERE service = $service AND owner = $owner);"))
             {
                 Bind(prune, owner);
                 prune.ExecuteNonQuery();
             }
-            using (var stamp = database.Command(connection, transaction, "INSERT INTO LineageVersions (Service, Owner, Version, UpdatedUtc) VALUES ($service, $owner, $version, $at);"))
+            using (var stamp = database.Command(Module, connection, transaction, "INSERT INTO {table:design_version} (service, owner, version, updated_at) VALUES ($service, $owner, $version, $at);"))
             {
                 Bind(stamp, owner);
                 stamp.Bind(database, "version", version);
-                stamp.Bind(database, "at", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+                stamp.Bind(database, "at", database.Time.GetUtcNow());
                 stamp.ExecuteNonQuery();
             }
             transaction.Commit();
@@ -129,7 +144,7 @@ public sealed class LineageStore(StateDatabase database, string service)
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "SELECT Version FROM LineageVersions WHERE Service = $service AND Owner = $owner;");
+            using var cmd = database.Command(Module, connection, "SELECT version FROM {table:design_version} WHERE service = $service AND owner = $owner;");
             Bind(cmd, owner);
             return cmd.ExecuteScalar() as string;
         });
@@ -140,16 +155,16 @@ public sealed class LineageStore(StateDatabase database, string service)
         {
             using var connection = database.OpenConnection();
             var nodes = new List<LineageNode>();
-            using (var cmd = database.Command(connection, "SELECT NodeId, Kind, Name, UnknownUpstream, PropertiesJson FROM LineageNodes WHERE Service = $service AND Owner = $owner;"))
+            using (var cmd = database.Command(Module, connection, "SELECT node_id, kind, name, unknown_upstream, properties FROM {table:node} WHERE service = $service AND owner = $owner;"))
             {
                 Bind(cmd, owner);
                 using var reader = cmd.ExecuteReader();
                 while (reader.Read())
-                    nodes.Add(new LineageNode(reader.GetString(0), Enum.Parse<NodeKind>(reader.GetString(1)), reader.GetString(2), Convert.ToInt64(reader.GetValue(3), CultureInfo.InvariantCulture) != 0,
+                    nodes.Add(new LineageNode(reader.GetString(0), Enum.Parse<NodeKind>(reader.GetString(1)), reader.GetString(2), reader.Bool(3),
                         reader.IsDBNull(4) ? null : JsonSerializer.Deserialize<Dictionary<string, string>>(reader.GetString(4), Json)));
             }
             var edges = new List<LineageEdge>();
-            using (var cmd = database.Command(connection, "SELECT FromId, ToId, Kind, Granularity, Confidence, Detail FROM LineageEdges WHERE Service = $service AND Owner = $owner;"))
+            using (var cmd = database.Command(Module, connection, "SELECT from_id, to_id, kind, granularity, confidence, detail FROM {table:edge} WHERE service = $service AND owner = $owner;"))
             {
                 Bind(cmd, owner);
                 using var reader = cmd.ExecuteReader();
@@ -167,7 +182,7 @@ public sealed class LineageStore(StateDatabase database, string service)
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using (var exists = database.Command(connection, "SELECT COUNT(*) FROM LineageEdges WHERE Service = $service AND Owner = $owner AND EdgeHash = $hash;"))
+            using (var exists = database.Command(Module, connection, "SELECT COUNT(*) FROM {table:edge} WHERE service = $service AND owner = $owner AND edge_hash = $hash;"))
             {
                 Bind(exists, owner);
                 exists.Bind(database, "hash", hash);
@@ -175,19 +190,19 @@ public sealed class LineageStore(StateDatabase database, string service)
                     throw new InvalidOperationException($"The design graph of '{owner}' has no {run.Kind} edge from '{run.From}' to '{run.To}', so a run along it is not recorded.");
             }
             // a second run in the same instant replaces the first
-            using (var delete = database.Command(connection, "DELETE FROM LineageRuns WHERE Service = $service AND Owner = $owner AND EdgeHash = $hash AND AtUtc = $at;"))
+            using (var delete = database.Command(Module, connection, "DELETE FROM {table:run} WHERE service = $service AND owner = $owner AND edge_hash = $hash AND happened_at = $at;"))
             {
                 Bind(delete, owner);
                 delete.Bind(database, "hash", hash);
-                delete.Bind(database, "at", Stamp(run.At));
+                delete.Bind(database, "at", run.At);
                 delete.ExecuteNonQuery();
             }
-            using var insert = database.Command(connection, "INSERT INTO LineageRuns (Service, Owner, EdgeHash, AtUtc, Outcome, Rows) VALUES ($service, $owner, $hash, $at, $outcome, $rows);");
+            using var insert = database.Command(Module, connection, "INSERT INTO {table:run} (service, owner, edge_hash, happened_at, outcome, row_count) VALUES ($service, $owner, $hash, $at, $outcome, $rows);");
             Bind(insert, owner);
             insert.Bind(database, "hash", hash);
-            insert.Bind(database, "at", Stamp(run.At));
+            insert.Bind(database, "at", run.At);
             insert.Bind(database, "outcome", run.Outcome.ToString());
-            insert.Bind(database, "rows", run.Rows);
+            insert.Bind(database, "rows", run.Rows, System.Data.DbType.Int64);
             insert.ExecuteNonQuery();
         });
     }
@@ -199,14 +214,14 @@ public sealed class LineageStore(StateDatabase database, string service)
         return database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "SELECT EdgeHash, AtUtc, Outcome, Rows FROM LineageRuns WHERE Service = $service AND Owner = $owner ORDER BY EdgeHash, AtUtc;");
+            using var cmd = database.Command(Module, connection, "SELECT edge_hash, happened_at, outcome, row_count FROM {table:run} WHERE service = $service AND owner = $owner ORDER BY edge_hash, happened_at;");
             Bind(cmd, owner);
             using var reader = cmd.ExecuteReader();
             var latest = new Dictionary<string, EdgeRun>(StringComparer.Ordinal);
             while (reader.Read())
             {
                 if (!edges.TryGetValue(reader.GetString(0), out var edge)) continue;
-                latest[edge.Key] = new EdgeRun(edge.From, edge.To, edge.Kind, DateTimeOffset.Parse(reader.GetString(1), CultureInfo.InvariantCulture), Enum.Parse<RunOutcome>(reader.GetString(2)),
+                latest[edge.Key] = new EdgeRun(edge.From, edge.To, edge.Kind, reader.Time(1), Enum.Parse<RunOutcome>(reader.GetString(2)),
                     reader.IsDBNull(3) ? null : Convert.ToInt64(reader.GetValue(3), CultureInfo.InvariantCulture));
             }
             return latest;
@@ -218,13 +233,11 @@ public sealed class LineageStore(StateDatabase database, string service)
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "DELETE FROM LineageRuns WHERE Service = $service AND Owner = $owner AND AtUtc < $before;");
+            using var cmd = database.Command(Module, connection, "DELETE FROM {table:run} WHERE service = $service AND owner = $owner AND happened_at < $before;");
             Bind(cmd, owner);
-            cmd.Bind(database, "before", Stamp(before));
+            cmd.Bind(database, "before", before);
             return cmd.ExecuteNonQuery();
         });
-
-    private static string Stamp(DateTimeOffset at) => at.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ", CultureInfo.InvariantCulture);
 
     private void Bind(DbCommand cmd, string owner)
     {

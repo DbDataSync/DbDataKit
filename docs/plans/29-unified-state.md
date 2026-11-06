@@ -1,6 +1,6 @@
 # Plan 29: one structure for the suite's state databases
 
-Status: **proposed, high level** (2026-11-04, at the owner's request: "start designing a more unified state database structure";
+Status: **direction decided; mechanism built, modules being converted** (2026-11-06: sliced in [plan 29a](29a-state-slices.md); the mechanism, payloads, retention and the notifications, definitions, audit and lineage modules are built, the products have not moved yet). Proposed 2026-11-04, at the owner's request: "start designing a more unified state database structure";
 revised the same day with the owner's notes on topologies, configurable namespaces, SQLite files and large payloads). Not
 sliced. The first new user is the runner's progress store (plan 28) for DbDataIntegration (plan 27).
 

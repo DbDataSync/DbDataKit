@@ -26,9 +26,9 @@ public sealed class RetentionTests : IDisposable
             new RetentionRule("audit", "recorded_at", DefaultDays: null),
         ]);
 
-    private (StateDatabase Database, StateMigratorTests.Clock Clock) Open(string engine)
+    private (StateDatabase Database, StateTestClock Clock) Open(string engine)
     {
-        var clock = new StateMigratorTests.Clock(Start);
+        var clock = new StateTestClock(Start);
         return (_engines.Provision(engine).Open([History(), PayloadStore.Module], time: clock), clock);
     }
 
@@ -180,7 +180,7 @@ public sealed class RetentionTests : IDisposable
     [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
     public void Payloads_a_dead_writer_left_and_payloads_whose_owner_is_gone_are_removed_with_their_chunks(string engine)
     {
-        var clock = new StateMigratorTests.Clock(Start);
+        var clock = new StateTestClock(Start);
         var database = _engines.Provision(engine).Open([Owner()], time: clock);
         var store = new PayloadStore(database, chunkSize: 1024);
         var data = new byte[3000];

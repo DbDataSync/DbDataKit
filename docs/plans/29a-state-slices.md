@@ -68,7 +68,7 @@ old structure is refused with a message naming it, never converted.
 | Q11 | **`scheduling`** (schedules, job state, pauses, work queue, leases, run locks) from the Build server's and Sync's copies | Q05 | M | the queue's cross-engine tests (one in-flight row per mapping) pass on the module, with the partial-index predicate |
 | Q12 | **`runs`** (`DbDataKit.Monitoring`): the one run model, outcome, counts, classified failure, logs | Q11 | M | a Build run and a Sync run read back through one query; logs paged by id |
 | Q13 | **`audit`** (new, shared; kept until a limit is set) from Proxy's management audit | Q05 | S | who/what/through-what recorded and read back; no retention rule by default (test) | **Status: done on SQLite and PostgreSQL; SQL Server not run** (session branch). `AuditModule`, `AuditLog`: structured entries (actor, who asked, what it came through, verb, target, outcome, a JSON detail that never holds a value), read newest first with filters, recordable inside the caller's transaction, append-only (no update or delete exists). Proxy's `ManagementAudit` (one text entry) moves onto it in Q16. |
-| Q14 | **`lineage`** from `LineageSchema` | Q05 | S | the lineage store tests pass on the module |
+| Q14 | **`lineage`** from `LineageSchema` | Q05 | S | the lineage store tests pass on the module | **Status: done on SQLite and PostgreSQL; SQL Server not run** (session branch). No product used the lineage store yet, so it moved outright: `LineageModule` replaces `LineageSchema`, `LineageStore` is on `{table:}`, runs have a 30-day retention rule. |
 
 ## Q-C. The products move (one clean break each; the old database is refused with a message)
 

@@ -12,7 +12,27 @@ public sealed class LineageStoreTests : IDisposable
 
     public static TheoryData<string> Engines => StateEngines.Engines;
 
-    private LineageStore Open(string engine, string service = "dbdatabuild") => new(_engines.Open(engine, new StateSchema([LineageSchema.Tables])), service);
+    private LineageStore Open(string engine, string service = "dbdatabuild") => new(_engines.Provision(engine).Open([LineageModule.Module]), service);
+
+    [Fact]
+    public void The_module_follows_the_conventions() => Assert.Empty(StateConventions.Violations(LineageModule.Module));
+
+    [Theory, MemberData(nameof(Engines))]
+    public void The_retention_job_removes_runs_after_thirty_days_and_keeps_the_design_graph(string engine)
+    {
+        var clock = new StateTestClock(new DateTimeOffset(2026, 11, 6, 0, 0, 0, TimeSpan.Zero));
+        var database = _engines.Provision(engine).Open([LineageModule.Module], time: clock);
+        var store = new LineageStore(database, "dbdatabuild");
+        store.Replace("build", LineageGraphTests.Fixture());
+        store.AddRun("build", new EdgeRun("src", "stage", EdgeKind.Replicates, clock.GetUtcNow(), RunOutcome.Succeeded, 10));
+        clock.Advance(TimeSpan.FromDays(40));
+        store.AddRun("build", new EdgeRun("src", "stage", EdgeKind.Replicates, clock.GetUtcNow(), RunOutcome.Failed));
+
+        new RetentionJob(database).Run();
+
+        Assert.Equal(RunOutcome.Failed, Assert.Single(store.LatestRuns("build")).Value.Outcome);
+        Assert.Equal(6, store.Load("build").Nodes.Count);
+    }
 
     [Theory, MemberData(nameof(Engines))]
     public void A_graph_is_stored_and_read_back_whole(string engine)
@@ -52,7 +72,7 @@ public sealed class LineageStoreTests : IDisposable
     [Theory, MemberData(nameof(Engines))]
     public void One_database_keeps_the_graphs_of_several_owners_and_services_apart(string engine)
     {
-        var database = _engines.Open(engine, new StateSchema([LineageSchema.Tables]));
+        var database = _engines.Provision(engine).Open([LineageModule.Module]);
         var build = new LineageStore(database, "dbdatabuild");
         var sync = new LineageStore(database, "dbdatasync");
         build.Replace("one", LineageGraphTests.Fixture());

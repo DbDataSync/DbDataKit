@@ -296,7 +296,8 @@ public static class StateCommandExtensions
     {
         var parameter = command.CreateParameter();
         parameter.ParameterName = database.Dialect.ParameterName(name);
-        parameter.Value = StateValues.ForParameter(database.Dialect, value) ?? DBNull.Value;
+        // the convention types (plan 29 section 3.3) are written in their one shape only on a database built from modules; the older structure keeps handing the provider what it was given
+        parameter.Value = (database.Layout is null ? value : StateValues.ForParameter(database.Dialect, value)) ?? DBNull.Value;
         if (type is not null)
             parameter.DbType = type.Value;
         command.Parameters.Add(parameter);

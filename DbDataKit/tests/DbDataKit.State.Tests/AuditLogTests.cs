@@ -48,7 +48,7 @@ public sealed class AuditLogTests : IDisposable
     [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
     public void A_query_narrows_by_actor_target_verb_service_and_time(string engine)
     {
-        var clock = new StateMigratorTests.Clock(DateTimeOffset.Parse("2026-11-06T00:00:00Z"));
+        var clock = new StateTestClock(DateTimeOffset.Parse("2026-11-06T00:00:00Z"));
         var database = Open(engine, clock);
         var sync = new AuditLog(database, "sync");
         var proxy = new AuditLog(database, "proxy");
@@ -86,7 +86,7 @@ public sealed class AuditLogTests : IDisposable
     [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
     public void The_audit_is_kept_until_a_limit_is_set(string engine)
     {
-        var clock = new StateMigratorTests.Clock(DateTimeOffset.Parse("2026-11-06T00:00:00Z"));
+        var clock = new StateTestClock(DateTimeOffset.Parse("2026-11-06T00:00:00Z"));
         var database = Open(engine, clock);
         var log = new AuditLog(database, "console");
         log.Record(new AuditEntry("person", "ada", "grant.add"));

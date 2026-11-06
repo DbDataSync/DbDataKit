@@ -124,3 +124,13 @@ public sealed class StateEngines : IDisposable
         }
     }
 }
+
+/// <summary>A clock a test moves: what the state layer reads as "now" (<see cref="StateDatabase.Time"/>).</summary>
+public sealed class StateTestClock(DateTimeOffset now) : TimeProvider
+{
+    private DateTimeOffset _now = now;
+
+    public void Advance(TimeSpan by) => _now += by;
+
+    public override DateTimeOffset GetUtcNow() => _now;
+}
