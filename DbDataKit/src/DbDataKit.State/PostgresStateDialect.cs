@@ -66,6 +66,16 @@ public sealed class PostgresStateDialect : StateDialect
 
     public override string Integer => "BIGINT";
 
+    public override string Uuid => "UUID";
+
+    public override string Time => "TIMESTAMPTZ";
+
+    public override string Json => "JSONB";
+
+    public override string Bool => "BOOLEAN";
+
+    public override string Blob => "BYTEA";
+
     public override int GetSchemaVersion(DbConnection connection)
     {
         using var ensure = connection.CreateCommand();
@@ -90,5 +100,45 @@ public sealed class PostgresStateDialect : StateDialect
         parameter.Value = version;
         cmd.Parameters.Add(parameter);
         cmd.ExecuteNonQuery();
+    }
+
+    public override string? CreateSchema(string schema) => $"CREATE SCHEMA IF NOT EXISTS {schema};";
+
+    public override bool TableExists(DbConnection connection, string qualifiedName)
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT to_regclass(@name) IS NOT NULL;";
+        var parameter = cmd.CreateParameter();
+        parameter.ParameterName = "@name";
+        parameter.Value = qualifiedName;
+        cmd.Parameters.Add(parameter);
+        return Convert.ToBoolean(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>A session-level advisory lock on a constant key: released when the connection closes even if the process dies.</summary>
+    public override IDisposable? AcquireMigrationLock(DbConnection connection)
+    {
+        Run(connection, "SELECT pg_advisory_lock(7270034281);");
+        return new Release(connection);
+    }
+
+    public override string? FindLegacySchemaVersion(DbConnection connection)
+    {
+        if (!TableExists(connection, "schemaversion")) return null;
+        using var read = connection.CreateCommand();
+        read.CommandText = "SELECT Version FROM SchemaVersion LIMIT 1;";
+        return $"the table SchemaVersion holds version {read.ExecuteScalar()}";
+    }
+
+    private static void Run(DbConnection connection, string sql)
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        cmd.ExecuteNonQuery();
+    }
+
+    private sealed class Release(DbConnection connection) : IDisposable
+    {
+        public void Dispose() => Run(connection, "SELECT pg_advisory_unlock(7270034281);");
     }
 }

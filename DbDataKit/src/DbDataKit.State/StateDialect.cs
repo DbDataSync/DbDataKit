@@ -98,6 +98,22 @@ public abstract class StateDialect
 
     public abstract string Integer { get; }
 
+    // ---- The convention types (plan 29 section 3.3), one token each in a template ----
+
+    /// <summary>A UUID: <c>UNIQUEIDENTIFIER</c>, <c>UUID</c>, and on SQLite lower-case text (<see cref="StateCommandExtensions.Bind"/> writes it that way). Ids are UUID v7.</summary>
+    public abstract string Uuid { get; }
+
+    /// <summary>A UTC instant: <c>DATETIMEOFFSET(7)</c>, <c>TIMESTAMPTZ</c>, and on SQLite fixed-width ISO 8601 text, which sorts as time does. Columns of this type are named <c>*_at</c>.</summary>
+    public abstract string Time { get; }
+
+    /// <summary>A JSON document: <c>NVARCHAR(MAX)</c>, <c>JSONB</c>, <c>TEXT</c>. Never part of a key. Written as <c>CAST($doc AS {{json}})</c>, which PostgreSQL needs to take text into a <c>jsonb</c> column.</summary>
+    public abstract string Json { get; }
+
+    public abstract string Bool { get; }
+
+    /// <summary>Bytes: <c>VARBINARY(MAX)</c>, <c>BYTEA</c>, <c>BLOB</c>. Large values do not belong in an ordinary table at all (the payloads module, plan 29 section 3.6).</summary>
+    public abstract string Blob { get; }
+
     /// <summary>
     /// How a column is added to an existing table. SQLite and Postgres write <c>ADD COLUMN</c>; SQL
     /// Server writes <c>ADD</c> and rejects the keyword. One word, and it is the whole of the
@@ -140,4 +156,33 @@ public abstract class StateDialect
     /// </para>
     /// </summary>
     public virtual bool ShouldRetry(Exception exception) => false;
+
+    // ---- What the module migrator needs (plan 29a Q02) ----
+
+    /// <summary>The statement that creates a schema that does not exist yet; null on an engine with no schemas in a database (SQLite).</summary>
+    public virtual string? CreateSchema(string schema) => null;
+
+    /// <summary>Whether a table exists. <paramref name="qualifiedName"/> is the rendered name, schema included where there is one.</summary>
+    public abstract bool TableExists(DbConnection connection, string qualifiedName);
+
+    /// <summary>
+    /// Takes the lock that keeps two services opening one database from migrating it at once, for as long as the result lives; null where the engine needs none (see
+    /// <see cref="MigratesInOneTransaction"/>).
+    /// </summary>
+    public virtual IDisposable? AcquireMigrationLock(DbConnection connection) => null;
+
+    /// <summary>
+    /// True where the whole migration is one transaction that takes the write lock when it begins (SQLite), so a second process waits and then finds the work done. False where a
+    /// lock is taken first and each migration is its own transaction.
+    /// </summary>
+    public virtual bool MigratesInOneTransaction => false;
+
+    /// <summary>Begins the migration's transaction, taking the write lock at once where the engine has only one writer.</summary>
+    public virtual DbTransaction BeginMigrationTransaction(DbConnection connection) => connection.BeginTransaction();
+
+    /// <summary>
+    /// What the database says if it was made by the old structure, one schema version for the whole database (plan 29 section 3.1's clean break): a description of the marker
+    /// found, or null for a database that was never used that way.
+    /// </summary>
+    public abstract string? FindLegacySchemaVersion(DbConnection connection);
 }

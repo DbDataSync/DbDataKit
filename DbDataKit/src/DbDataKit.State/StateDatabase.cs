@@ -35,7 +35,51 @@ public partial class StateDatabase
 
     public StateDialect Dialect { get; }
 
-    private readonly StateSchema _schema;
+    private readonly StateSchema? _schema;
+
+    private readonly string _appliedBy;
+
+    /// <summary>
+    /// Where the database's modules are (plan 29): null for a database built from a <see cref="StateSchema"/> (the structure being replaced, kept until every product has
+    /// moved), set for one built from modules.
+    /// </summary>
+    public StateLayout? Layout { get; }
+
+    /// <summary>The clock for every time the state layer writes itself (the registry's <c>applied_at</c>, retention, ids); tests give it a fake one.</summary>
+    public TimeProvider Time { get; }
+
+    /// <summary>A SQLite file built from modules.</summary>
+    public StateDatabase(string sqliteFilePath, StateLayout layout, string? appliedBy = null, TimeProvider? time = null)
+        : this(StateEngineIds.Sqlite, SqliteConnectionString(sqliteFilePath), layout, appliedBy, time)
+    {
+    }
+
+    /// <summary>
+    /// A database built from modules (plan 29): opening it applies each module's missing migrations and records them in the registry, or refuses with a message naming the
+    /// database (an old one, a module newer than this service, an edited migration).
+    /// </summary>
+    /// <param name="layout">From <see cref="StateLayout.Create"/>, for the same <paramref name="engine"/>.</param>
+    /// <param name="appliedBy">Who is recorded as applying a migration: the service and its version. Defaults to the entry assembly.</param>
+    public StateDatabase(string engine, string connectionString, StateLayout layout, string? appliedBy = null, TimeProvider? time = null)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+        if (layout.Engine != engine)
+            throw new ArgumentException($"The layout was made for the engine {layout.Engine}, and the database is {engine}.", nameof(layout));
+        Dialect = StateDialect.For(engine);
+        _connectionString = connectionString;
+        Layout = layout;
+        Time = time ?? TimeProvider.System;
+        _appliedBy = appliedBy ?? DefaultAppliedBy();
+
+        using var connection = OpenRawConnection();
+        EnsureSchema(connection);
+    }
+
+    private static string DefaultAppliedBy()
+    {
+        var name = System.Reflection.Assembly.GetEntryAssembly()?.GetName();
+        return name?.Name is { } n ? $"{n} {name.Version}" : "unknown";
+    }
 
     /// <summary>A SQLite file.</summary>
     public StateDatabase(string sqliteFilePath, StateSchema schema)
@@ -49,6 +93,8 @@ public partial class StateDatabase
         Dialect = StateDialect.For(engine);
         _connectionString = connectionString;
         _schema = schema;
+        Time = TimeProvider.System;
+        _appliedBy = "";
 
         using var connection = OpenRawConnection();
         EnsureSchema(connection);
@@ -94,7 +140,10 @@ public partial class StateDatabase
     public DbConnection OpenConnection()
     {
         var connection = OpenRawConnection();
-        EnsureSchema(connection);
+        // A server engine is verified once, when the database is opened (a pooled connection to a server is not subject to the file problem described above);
+        // the older structure keeps re-checking on every open on every engine.
+        if (Layout is null || Dialect.Engine == StateEngineIds.Sqlite)
+            EnsureSchema(connection);
         return connection;
     }
 
@@ -110,8 +159,18 @@ public partial class StateDatabase
     /// A command whose <c>$name</c> placeholders have been rewritten for this engine — what every
     /// store creates instead of calling <c>connection.CreateCommand()</c> directly.
     /// </summary>
-    public DbCommand Command(DbConnection connection, string sql)
+    public DbCommand Command(DbConnection connection, string sql) => Command(connection, sql, module: null);
+
+    /// <summary>
+    /// The same for a store of one module, whose statements may say <c>{table:name}</c> for the module's own tables as well as <c>{table:module.name}</c>; a database built from
+    /// modules renders those, and the convention type tokens (<c>CAST($doc AS {{json}})</c>), before the placeholders are rewritten.
+    /// </summary>
+    public DbCommand Command(string module, DbConnection connection, string sql) => Command(connection, sql, module);
+
+    private DbCommand Command(DbConnection connection, string sql, string? module)
     {
+        if (Layout is not null)
+            sql = StateTemplates.Render(Layout.Render(sql, module), Dialect);
         var command = connection.CreateCommand();
         command.CommandText = Dialect.Engine == StateEngineIds.Sqlite
             ? sql
@@ -125,6 +184,33 @@ public partial class StateDatabase
         var command = Command(connection, sql);
         command.Transaction = transaction;
         return command;
+    }
+
+    public DbCommand Command(string module, DbConnection connection, DbTransaction? transaction, string sql)
+    {
+        var command = Command(module, connection, sql);
+        command.Transaction = transaction;
+        return command;
+    }
+
+    /// <summary>A new id (plan 29 section 3.3): a UUID v7, time-ordered, taken from <see cref="Time"/> so a test's clock orders them.</summary>
+    public Guid NewId() => Guid.CreateVersion7(Time.GetUtcNow());
+
+    /// <summary>
+    /// An update guarded by the row's <c>row_version</c> (plan 29 section 3.3), for a table several instances write: sets <paramref name="set"/>, adds one to the version, and applies
+    /// only if the row is still at <paramref name="expectedVersion"/>. False says another writer got there first; the caller reads again and retries or gives up.
+    /// </summary>
+    /// <param name="module">The module whose <c>{table:name}</c> the statement may use unqualified.</param>
+    /// <param name="table">The table's name within the module.</param>
+    /// <param name="set">Assignments without <c>row_version</c>: <c>value_text = $value, updated_at = $now</c>.</param>
+    /// <param name="where">The row's key condition: <c>key = $key</c>.</param>
+    /// <param name="bind">Binds the parameters <paramref name="set"/> and <paramref name="where"/> use.</param>
+    public bool UpdateVersioned(string module, DbConnection connection, DbTransaction? transaction, string table, string set, string where, long expectedVersion, Action<DbCommand> bind)
+    {
+        using var command = Command(module, connection, transaction, $"UPDATE {{table:{table}}} SET {set}, row_version = row_version + 1 WHERE {where} AND row_version = $expected_row_version;");
+        bind(command);
+        command.Bind(this, "expected_row_version", expectedVersion);
+        return command.ExecuteNonQuery() == 1;
     }
 
     /// <summary>Caps a result set — <c>LIMIT</c>, or SQL Server's <c>OFFSET/FETCH</c>. Interpolated
@@ -163,7 +249,13 @@ public partial class StateDatabase
 
     private void EnsureSchema(DbConnection connection)
     {
-        var scripts = _schema.ScriptsFor(Dialect);
+        if (Layout is not null)
+        {
+            StateMigrator.Apply(connection, this, Layout, _appliedBy);
+            return;
+        }
+
+        var scripts = _schema!.ScriptsFor(Dialect);
         var currentVersion = Dialect.GetSchemaVersion(connection);
 
         for (var i = currentVersion; i < scripts.Count; i++)
@@ -204,7 +296,7 @@ public static class StateCommandExtensions
     {
         var parameter = command.CreateParameter();
         parameter.ParameterName = database.Dialect.ParameterName(name);
-        parameter.Value = value ?? DBNull.Value;
+        parameter.Value = StateValues.ForParameter(database.Dialect, value) ?? DBNull.Value;
         if (type is not null)
             parameter.DbType = type.Value;
         command.Parameters.Add(parameter);

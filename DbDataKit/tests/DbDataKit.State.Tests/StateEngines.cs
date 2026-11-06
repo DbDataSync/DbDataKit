@@ -37,14 +37,43 @@ public sealed class StateEngines : IDisposable
     /// <summary>The standard schema every shared store needs.</summary>
     public static StateSchema Schema { get; } = new([IdentitySchema.Accounts, IdentitySchema.Invites, NotificationSchema.Feed, IdentitySchema.AccountKeys]);
 
-    public StateDatabase Open(string engine, StateSchema? schema = null)
+    /// <summary>A scratch database that can be opened more than once, with the old structure or with modules.</summary>
+    public sealed class Location(string engine, string target)
     {
-        schema ??= Schema;
+        public string Engine { get; } = engine;
+
+        /// <summary>The file, for SQLite; a connection string for the others.</summary>
+        public string Target { get; } = target;
+
+        public StateDatabase Open(StateSchema schema) =>
+            Engine == StateEngineIds.Sqlite ? new StateDatabase(Target, schema) : new StateDatabase(Engine, Target, schema);
+
+        public StateDatabase Open(IEnumerable<StateModule> modules, StateScope? scope = null, StateNamespaceSettings? settings = null, TimeProvider? time = null, string? appliedBy = null)
+        {
+            var layout = StateLayout.Create(Engine, modules, scope, settings);
+            return Engine == StateEngineIds.Sqlite ? new StateDatabase(Target, layout, appliedBy, time) : new StateDatabase(Engine, Target, layout, appliedBy, time);
+        }
+
+        /// <summary>Runs a statement on the scratch database outside the state layer, to look at or damage what it wrote.</summary>
+        public object? Scalar(string sql)
+        {
+            using var connection = StateDialect.For(Engine).CreateConnection(Engine == StateEngineIds.Sqlite ? $"Data Source={Target};Pooling=False" : Target);
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            return command.ExecuteScalar();
+        }
+    }
+
+    public StateDatabase Open(string engine, StateSchema? schema = null) => Provision(engine).Open(schema ?? Schema);
+
+    public Location Provision(string engine)
+    {
         if (engine == StateEngineIds.Sqlite)
         {
             var dir = Directory.CreateTempSubdirectory("dbdatakit-state-");
             _cleanups.Add(() => Directory.Delete(dir.FullName, recursive: true));
-            return new StateDatabase(Path.Combine(dir.FullName, "state.db"), schema);
+            return new Location(engine, Path.Combine(dir.FullName, "state.db"));
         }
 
         var server = Server(engine);
@@ -73,7 +102,7 @@ public sealed class StateEngines : IDisposable
         var connectionString = engine == StateEngineIds.MsSql
             ? new SqlConnectionStringBuilder(server) { InitialCatalog = name }.ConnectionString
             : new NpgsqlConnectionStringBuilder(server) { Database = name }.ConnectionString;
-        return new StateDatabase(engine, connectionString, schema);
+        return new Location(engine, connectionString);
     }
 
     private static void Execute(string engine, string connectionString, string sql)

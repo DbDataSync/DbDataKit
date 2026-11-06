@@ -11,13 +11,20 @@ namespace DbDataKit.State;
 public static class StateTemplates
 {
     public static string Render(string template, StateDialect dialect) => DropIndexToken.Replace(
-        template
+        IdentityToken.Replace(template, match => dialect.IdentityKey(match.Groups["column"].Value))
             .Replace("{{text}}", dialect.Text)
             .Replace("{{key}}", dialect.KeyText)
             .Replace("{{int}}", dialect.Integer)
-            .Replace("{{addcolumn}}", dialect.AddColumn)
-            .Replace("{{identity:Id}}", dialect.IdentityKey("Id")),
+            .Replace("{{uuid}}", dialect.Uuid)
+            .Replace("{{time}}", dialect.Time)
+            .Replace("{{json}}", dialect.Json)
+            .Replace("{{bool}}", dialect.Bool)
+            .Replace("{{blob}}", dialect.Blob)
+            .Replace("{{addcolumn}}", dialect.AddColumn),
         match => dialect.DropIndex(match.Groups["index"].Value, match.Groups["table"].Value));
+
+    /// <summary><c>{{identity:column}}</c>: an auto-assigned integer key under any column name (the modules write lower-case ones).</summary>
+    private static readonly Regex IdentityToken = new(@"\{\{identity:(?<column>\w+)\}\}");
 
     /// <summary><c>{{dropindex:IndexName:TableName}}</c> — the table is part of the token because SQL
     /// Server needs it and the other two do not, so the schema has to state it either way.</summary>

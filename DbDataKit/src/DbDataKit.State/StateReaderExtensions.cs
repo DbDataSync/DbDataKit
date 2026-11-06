@@ -28,4 +28,16 @@ public static class StateReaderExtensions
 
     public static long? NullableInt64(this DbDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) ? null : reader.Int64(ordinal);
+
+    // The convention types (plan 29 section 3.3): whatever the engine stored, the caller gets the .NET type back.
+
+    public static Guid Uuid(this DbDataReader reader, int ordinal) => StateValues.ToGuid(reader.GetValue(ordinal));
+
+    public static Guid? NullableUuid(this DbDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.Uuid(ordinal);
+
+    public static DateTimeOffset Time(this DbDataReader reader, int ordinal) => StateValues.ToTime(reader.GetValue(ordinal));
+
+    public static DateTimeOffset? NullableTime(this DbDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.Time(ordinal);
+
+    public static bool Bool(this DbDataReader reader, int ordinal) => Convert.ToBoolean(reader.GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
 }

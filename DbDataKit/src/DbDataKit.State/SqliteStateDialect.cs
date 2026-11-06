@@ -49,6 +49,16 @@ public sealed class SqliteStateDialect : StateDialect
 
     public override string Integer => "INTEGER";
 
+    public override string Uuid => "TEXT";
+
+    public override string Time => "TEXT";
+
+    public override string Json => "TEXT";
+
+    public override string Bool => "INTEGER";
+
+    public override string Blob => "BLOB";
+
     public override int GetSchemaVersion(DbConnection connection)
     {
         using var cmd = connection.CreateCommand();
@@ -87,4 +97,26 @@ public sealed class SqliteStateDialect : StateDialect
     // needs an application-level retry.
     public override bool ShouldRetry(Exception exception) =>
         exception is SqliteException { SqliteErrorCode: 5 or 6 };
+
+    public override bool MigratesInOneTransaction => true;
+
+    public override DbTransaction BeginMigrationTransaction(DbConnection connection) =>
+        ((SqliteConnection)connection).BeginTransaction(deferred: false);
+
+    public override bool TableExists(DbConnection connection, string qualifiedName)
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = $name;";
+        var parameter = cmd.CreateParameter();
+        parameter.ParameterName = "$name";
+        parameter.Value = qualifiedName;
+        cmd.Parameters.Add(parameter);
+        return cmd.ExecuteScalar() is not null;
+    }
+
+    public override string? FindLegacySchemaVersion(DbConnection connection)
+    {
+        var version = GetSchemaVersion(connection);
+        return version > 0 ? $"PRAGMA user_version is {version}" : null;
+    }
 }
