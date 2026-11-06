@@ -1,7 +1,7 @@
 # Trying the suite release on a Windows test server
 
 A step-by-step for installing the console (`dbdatakit`) and DbDataSync from the first suite release, on a Windows machine that is not
-your live Sync server. It is written from the release's files and the code on `main`; **nothing here has been run on Windows yet**.
+your live Sync server. It is written from the release's files and the code on `main`; **only the global Scoop install and its machine variables have been confirmed on Windows** (by the owner, 2026-11-06).
 Each step marked *untested* is the first time anyone does it, so write down what happens.
 
 There are two builds to choose from (Proxy and Build have the same versions; they are not needed for this test):
@@ -27,7 +27,7 @@ Every release file is on <https://github.com/DbDataSync/DbDataKit/releases>. The
 
 Pick one route per machine and do not mix them (they share a folder).
 
-**Scoop, global** (*untested*):
+**Scoop, global** (confirmed on a Windows test server, 2026-11-06):
 
 ```powershell
 scoop install -g https://github.com/DbDataSync/DbDataKit/releases/download/dbdatakit/dist-snapshot/dbdatakit.json
@@ -46,7 +46,7 @@ I downloaded both zips and the hashes match. A global install puts the programs 
 > service registered against that folder points at a path that `scoop update` replaces. For this test run both in a console window
 > (steps 2 and 3). If you want services, use the MSI instead.
 
-A global install also sets machine-wide environment variables (*untested*; the manifest does it with a Scoop `post_install` step that
+A global install also sets machine-wide environment variables (confirmed on a Windows test server, 2026-11-06; the manifest does it with a Scoop `post_install` step that
 runs only for `-g`): `DBDATAKIT_CONSOLE_DIR` to `C:\ProgramData\DbDataKit\console` and `DbDataSync__App__RepoRoot` to
 `C:\ProgramData\DbDataSync`. In a **new** elevated terminal check them:
 
@@ -129,7 +129,7 @@ Do these against a **copy** of your old folder, never the live one. The full lis
 
 ## 6. Known gaps in this release
 
-- **Everything above is untested on Windows**, including the Scoop routes and both certificate steps.
+- **Only the global Scoop install and its machine variables have been run on Windows** (owner, 2026-11-06). Everything else here, the console and Sync first runs, both certificate steps, pairing and the MSI route, is untested.
 - **The container images for the console and Proxy were not published** (the registry refused the push). Windows installs do not use
   them.
 - **One Build test is skipped on SQL Server** (`docs/plans/13c-follow-ups.md`, T16): a plan run with `--parallel 1` took about 7.4 s
