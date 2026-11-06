@@ -319,7 +319,7 @@ public sealed class IdentityModuleTests : IAsyncLifetime
     public async Task The_management_api_administers_the_home_this_proxy_serves_and_says_so_when_it_serves_none()
     {
         // the same admin API as identity run's (13a U21), under the management API's prefix; the local channel's caller holds every role
-        var database = new StateDatabase(Path.Combine(dataDirectory, "admin-test.db"), HomeSchema.Schema);
+        var database = StateDatabase.OpenModules(Path.Combine(dataDirectory, "admin-test.db"), DbDataKit.Identity.IdentityHomeState.Modules);
         Directory.CreateDirectory(dataDirectory);
         var configuration = new ConfigurationBuilder().Build();
         var served = new DbDataProxy.Server.Management.ProxyManagement(configuration, dataDirectory, "proxy-1", "test", identityAdmin: new IdentityAdminApi(database, "https://identity.example.invalid/"));

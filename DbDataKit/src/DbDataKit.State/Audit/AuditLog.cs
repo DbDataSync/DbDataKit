@@ -67,7 +67,7 @@ public sealed record AuditEvent(
 public sealed record AuditRecord(long Id, string ServiceId, DateTimeOffset At, AuditEvent Entry);
 
 /// <summary>Which entries to read; every field narrows.</summary>
-public sealed record AuditQuery(long? BeforeId = null, string? ActorId = null, string? TargetKind = null, string? TargetId = null, string? Verb = null, string? ServiceId = null, DateTimeOffset? From = null, DateTimeOffset? To = null, int Limit = 100);
+public sealed record AuditQuery(long? BeforeId = null, string? ActorId = null, string? TargetKind = null, string? TargetId = null, string? Verb = null, string? VerbPrefix = null, string? ServiceId = null, DateTimeOffset? From = null, DateTimeOffset? To = null, int Limit = 100);
 
 /// <summary>
 /// Writes and reads the audit for one service (<paramref name="serviceId"/> is recorded on every entry, so services that share a database share one audit). Something that must be
@@ -127,6 +127,7 @@ public sealed partial class AuditLog(StateDatabase database, string serviceId)
         Add(query.TargetKind is not null, "target_kind = $target_kind");
         Add(query.TargetId is not null, "target_id = $target_id");
         Add(query.Verb is not null, "verb = $verb");
+        Add(query.VerbPrefix is not null, "verb LIKE $verb_prefix ESCAPE '\\'");
         Add(query.ServiceId is not null, "service_id = $service");
         Add(query.From is not null, "happened_at >= $from");
         Add(query.To is not null, "happened_at < $to");
@@ -142,6 +143,7 @@ public sealed partial class AuditLog(StateDatabase database, string serviceId)
             if (query.TargetKind is { } targetKind) cmd.Bind(database, "target_kind", targetKind);
             if (query.TargetId is { } targetId) cmd.Bind(database, "target_id", targetId);
             if (query.Verb is { } verb) cmd.Bind(database, "verb", verb);
+            if (query.VerbPrefix is { } prefix) cmd.Bind(database, "verb_prefix", prefix.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal) + "%");
             if (query.ServiceId is { } service) cmd.Bind(database, "service", service);
             if (query.From is { } from) cmd.Bind(database, "from", from);
             if (query.To is { } to) cmd.Bind(database, "to", to);

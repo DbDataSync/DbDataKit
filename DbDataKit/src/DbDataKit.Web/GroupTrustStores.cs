@@ -8,8 +8,8 @@ namespace DbDataKit.Web.Trust;
 /// <summary>
 /// The <c>trust</c> module (plan 29 section 3.4): what makes a group of instances one server to the clients paired with it (plan 20 O04). Kept per group: the group's settings (its
 /// instance id, the wrong pairing attempts since the last good one, the certificate a self-signed group presents), the clients paired with it, the pairing codes waiting, and the group's
-/// key check and the secrets its clients keep on it (a published data source's login, encrypted with the group's key, never in the clear). Replaces <see cref="GroupTrustSchema"/> and
-/// Proxy's group tables when the serving layer moves (plan 29a Q16); DbDataStore's pairings follow in Q18.
+/// key check and the secrets its clients keep on it (a published data source's login, encrypted with the group's key, never in the clear). Replaced the older
+/// trust tables and Proxy's group tables when the serving layer moved (plan 29a Q16); DbDataStore's pairings follow in Q18.
 /// </summary>
 public static class TrustModule
 {
@@ -64,7 +64,7 @@ public static class TrustModule
 }
 
 /// <summary>A group's settings on the <c>trust</c> module: the same behaviour as <see cref="GroupSettings"/>.</summary>
-public sealed class ModuleGroupSettings(StateDatabase database) : IGroupSettings
+public sealed class GroupSettings(StateDatabase database) : IGroupSettings
 {
     private const string Module = TrustModule.Name;
 
@@ -96,7 +96,7 @@ public sealed class ModuleGroupSettings(StateDatabase database) : IGroupSettings
 }
 
 /// <summary>The clients paired with a group, on the <c>trust</c> module: the same behaviour as <see cref="StatePairedClients"/>, including reading the clients the instance's <c>server.yaml</c> lists.</summary>
-public sealed class ModulePairedClients(StateDatabase database, PairedClientsFile? file = null) : IPairedClientStore
+public sealed class StatePairedClients(StateDatabase database, PairedClientsFile? file = null) : IPairedClientStore
 {
     private const string Module = TrustModule.Name;
 
@@ -155,7 +155,7 @@ public sealed class ModulePairedClients(StateDatabase database, PairedClientsFil
 }
 
 /// <summary>The pairing codes of a group, on the <c>trust</c> module: the same behaviour as <see cref="StatePairingCodes"/>. Only a code's hash is kept, and <see cref="PairingCodes.MaxFailures"/> wrong attempts in a row throw every waiting code away.</summary>
-public sealed class ModulePairingCodes(StateDatabase database) : IPairingCodeStore
+public sealed class StatePairingCodes(StateDatabase database) : IPairingCodeStore
 {
     private const string Module = TrustModule.Name;
     private const string FailuresSetting = "pairing-failures";
@@ -200,7 +200,7 @@ public sealed class ModulePairingCodes(StateDatabase database) : IPairingCodeSto
     private PairingGrant? Spend(Func<string, bool>? matches, bool withKey)
     {
         var hit = matches is null ? null : Waiting().FirstOrDefault(w => matches(w.Hash));
-        var settings = new ModuleGroupSettings(database);
+        var settings = new GroupSettings(database);
         if (hit is not null)
         {
             // the delete decides: of two instances redeeming the same code at once, one removes it
@@ -232,7 +232,7 @@ public sealed class ModulePairingCodes(StateDatabase database) : IPairingCodeSto
     }
 
     /// <summary>Counts a wrong attempt (or clears the count), whichever instance it reached; the count after.</summary>
-    private static int Failures(ModuleGroupSettings settings, bool reset)
+    private static int Failures(GroupSettings settings, bool reset)
     {
         for (var attempt = 0; attempt < 10; attempt++)
         {

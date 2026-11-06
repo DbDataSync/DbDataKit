@@ -61,6 +61,9 @@ public sealed class AuditLogTests : IDisposable
         Assert.Single(sync.Read(new AuditQuery(ActorId: "grace")));
         Assert.Equal(2, sync.Read(new AuditQuery(TargetKind: "task", TargetId: "crm")).Count);
         Assert.Equal(2, sync.Read(new AuditQuery(Verb: "task.pause")).Count);
+        Assert.Equal(2, sync.Read(new AuditQuery(VerbPrefix: "task.")).Count);       // a prefix, with the LIKE wildcards in it taken literally
+        Assert.Empty(sync.Read(new AuditQuery(VerbPrefix: "t_sk.")));
+        Assert.Empty(sync.Read(new AuditQuery(VerbPrefix: "%")));
         Assert.Equal(2, sync.Read(new AuditQuery(ServiceId: "proxy")).Count);
         Assert.Equal(2, sync.Read(new AuditQuery(From: DateTimeOffset.Parse("2026-11-07T00:00:00Z"))).Count);
         Assert.Single(sync.Read(new AuditQuery(To: DateTimeOffset.Parse("2026-11-06T12:00:00Z"))));

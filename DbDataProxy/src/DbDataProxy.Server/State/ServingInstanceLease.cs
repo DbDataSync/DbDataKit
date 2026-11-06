@@ -56,11 +56,11 @@ public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingIns
         var rows = state.Retry(() =>
         {
             using var connection = state.OpenConnection();
-            using var cmd = state.Command(connection, "SELECT InstanceKey, Host, ProcessId, StartedAtUtc, HeartbeatAtUtc FROM ServingInstances;");
+            using var cmd = state.Command("serving", connection, "SELECT instance_key, host, process_id, started_at, heartbeat_at FROM {table:serving_instance};");
             using var reader = cmd.ExecuteReader();
             var list = new List<Row>();
             while (reader.Read())
-                list.Add(new Row(reader.GetString(0), reader.GetString(1), Convert.ToInt32(reader.GetValue(2), CultureInfo.InvariantCulture), Time(reader.GetString(3)), Time(reader.GetString(4))));
+                list.Add(new Row(reader.GetString(0), reader.GetString(1), Convert.ToInt32(reader.GetValue(2), CultureInfo.InvariantCulture), reader.Time(3), reader.Time(4)));
             return list;
         });
         return [.. rows.Where(r => now - r.Heartbeat < Stale && (r.Host != Environment.MachineName || Running(r.ProcessId)))];
@@ -78,21 +78,21 @@ public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingIns
         using var connection = state.OpenConnection();
         if (insert)
         {
-            using var cmd = state.Command(connection, "INSERT INTO ServingInstances (InstanceKey, Host, ProcessId, StartedAtUtc, HeartbeatAtUtc) VALUES ($key, $host, $pid, $at, $at);");
+            using var cmd = state.Command("serving", connection, "INSERT INTO {table:serving_instance} (instance_key, host, process_id, started_at, heartbeat_at) VALUES ($key, $host, $pid, $at, $at);");
             cmd.Bind(state, "key", _key);
             cmd.Bind(state, "host", Environment.MachineName);
             cmd.Bind(state, "pid", Environment.ProcessId);
-            cmd.Bind(state, "at", Stamp(now));
+            cmd.Bind(state, "at", now);
             cmd.ExecuteNonQuery();
             // rows of instances that are gone (a crash) are dropped by whoever starts next
-            using var stale = state.Command(connection, "DELETE FROM ServingInstances WHERE HeartbeatAtUtc < $stale;");
-            stale.Bind(state, "stale", Stamp(now - Stale - Stale));
+            using var stale = state.Command("serving", connection, "DELETE FROM {table:serving_instance} WHERE heartbeat_at < $stale;");
+            stale.Bind(state, "stale", now - Stale - Stale);
             stale.ExecuteNonQuery();
         }
         else
         {
-            using var cmd = state.Command(connection, "UPDATE ServingInstances SET HeartbeatAtUtc = $at WHERE InstanceKey = $key;");
-            cmd.Bind(state, "at", Stamp(now));
+            using var cmd = state.Command("serving", connection, "UPDATE {table:serving_instance} SET heartbeat_at = $at WHERE instance_key = $key;");
+            cmd.Bind(state, "at", now);
             cmd.Bind(state, "key", _key);
             cmd.ExecuteNonQuery();
         }
@@ -107,7 +107,7 @@ public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingIns
             state.Retry(() =>
             {
                 using var connection = state.OpenConnection();
-                using var cmd = state.Command(connection, "DELETE FROM ServingInstances WHERE InstanceKey = $key;");
+                using var cmd = state.Command("serving", connection, "DELETE FROM {table:serving_instance} WHERE instance_key = $key;");
                 cmd.Bind(state, "key", _key);
                 cmd.ExecuteNonQuery();
             });
@@ -126,7 +126,5 @@ public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingIns
 
     public void Dispose() => _timer?.Dispose();
 
-    private static string Stamp(DateTimeOffset at) => at.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
 
-    private static DateTimeOffset Time(string text) => DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
 }
